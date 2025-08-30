@@ -1,0 +1,1 @@
+This folder is where all of the static resources files should go.s

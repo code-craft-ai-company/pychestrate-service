@@ -1,0 +1,271 @@
+#!/usr/bin/env python3
+'''
+    The 'rehome-repository' script is used to setup the development environment for a package.  It walks through the 'workspaces'
+    folder and creates a '.vscode' project file for each '.template'.  It replaces macros in the '.template' files when it creates
+    the corresponding '.vscode'.   It also creates an .env file that sets custome development environment variables for the end user.
+
+    The rehome-repository script can be extended by creating a 'rehome_repository_ext.py' module and by implementing one of the
+    following folders:
+
+    Example extension module (<repository_home>/repository-setup/rehome_repository_ext.py)
+
+        from collections import OrderedDict
+        from io import RawIOBase
+
+
+        def macro_lookup_ext(macro_lookup: OrderedDict) -> None:
+            """
+                Called in order to update and customize the macro lookup dictionary with updated template macros.
+            """
+            return
+
+        def python_path_ext(python_path: str) -> str:
+            """
+                Called with the value that will be set for PYTHON_PATH.  When called this function should either
+                prepend or append the 'python_path' string and then return the modified path.
+            """
+            return python_path
+
+        def development_environment_ext(envf: RawIOBase) -> None:
+            """
+                Called with a writable file that is open for writing to the '.env' file.  This method is used
+                to write custom environment variables.
+            """
+            return
+
+'''
+
+import argparse
+import collections
+import configparser
+import os
+import platform
+import sys
+import subprocess
+
+PROJECT_NAME="(Not Set)"
+REPOSITORY_NAME="(Not Set)"
+
+THIS_DIR = os.path.abspath(os.path.dirname(__file__))
+THIS_MODULE = sys.modules[__name__]
+
+REPOSITORY_FOLDER = os.path.abspath(os.path.join(THIS_DIR, ".."))
+REPOSITORY_CONFIG_FILE = os.path.abspath(os.path.join(THIS_DIR, "repository-config.ini"))
+REPOSITORY_CACHE_FOLDER = os.path.abspath(os.path.join(REPOSITORY_FOLDER, ".cache"))
+REPOSITORY_ENVIRONMENT_FILE = os.path.join(REPOSITORY_FOLDER, ".env")
+REPOSITORY_SERVICE_FOLDER = os.path.abspath(os.path.join(REPOSITORY_FOLDER, "service"))
+REPOSITORY_SOURCE_FOLDER = os.path.abspath(os.path.join(REPOSITORY_FOLDER, "source"))
+
+REPOSITORY_PACKAGES_FOLDER = os.path.abspath(os.path.join(REPOSITORY_FOLDER, "source", "packages"))
+REPOSITORY_TOOLS_FOLDER = os.path.abspath(os.path.join(REPOSITORY_FOLDER, "source", "tools"))
+
+HOME_FOLDER = os.path.expanduser("~")
+CONFIG_FOLDER = os.path.join(HOME_FOLDER, "mjr")
+
+WORKSPACES_FOLDER = os.path.join(REPOSITORY_FOLDER, "workspaces")
+
+# The PYTHON_VERSION can be pinned in the repository config
+PYTHON_VERSION = None
+
+if os.path.exists(REPOSITORY_CONFIG_FILE):
+    config = configparser.ConfigParser()
+    config.read(REPOSITORY_CONFIG_FILE)
+    if "DEFAULT" in config:
+        default_config = config["DEFAULT"]
+
+        if "PROJECT_NAME" in default_config:
+            PROJECT_NAME = default_config["PROJECT_NAME"]
+
+        if "REPOSITORY_NAME" in default_config:
+            REPOSITORY_NAME = default_config["REPOSITORY_NAME"]
+
+        if "PYTHON_VERSION" in default_config:
+            PYTHON_VERSION = default_config["PYTHON_VERSION"]
+
+# Standardized Python Version
+if PYTHON_VERSION is None:
+    PYTHON_VERSION = "python{}.{}".format(*(platform.python_version_tuple()[:2]))
+
+pyres = None
+if platform.system() != "Windows":
+    pyres = subprocess.run("{} -c \"print('test')\"".format(PYTHON_VERSION), shell=True)
+else:
+    pyres = subprocess.run("python -c \"print('test')\"", shell=True)
+    
+if pyres.returncode != 0:
+    print("The required python version '{}' does not appear to be installed.".format(PYTHON_VERSION), file=sys.stderr)
+    exit(1)
+
+VENV_FOLDER = os.path.join(REPOSITORY_FOLDER, ".venv")
+VENV_BIN_FOLDER = os.path.join(VENV_FOLDER, "bin")
+VENV_PYTHON_BINARY = os.path.join(VENV_BIN_FOLDER, "python")
+VENV_ACTIVATE_SCRIPT = os.path.join(VENV_BIN_FOLDER, "activate")
+
+
+VENV_SITEPACKAGES_FOLDER = None
+if platform.system() != "Windows":
+    VENV_SITEPACKAGES_FOLDER = os.path.join(VENV_FOLDER, "lib", PYTHON_VERSION, "site-packages")
+else:
+    VENV_SITEPACKAGES_FOLDER = os.path.join(VENV_FOLDER, "Lib", PYTHON_VERSION, "site-packages")
+
+
+macro_lookup_ext = None
+python_path_ext = None
+development_environment_ext = None
+
+try:
+    import rehome_repository_ext
+
+    if hasattr(rehome_repository_ext, "development_environment_ext"):
+        development_environment_ext = rehome_repository_ext.development_environment_ext
+
+    if hasattr(rehome_repository_ext, "macro_lookup_ext"):
+        macro_lookup_ext = rehome_repository_ext.macro_lookup_ext
+    
+    if hasattr(rehome_repository_ext, "python_path_ext"):
+        python_path_ext = rehome_repository_ext.python_path_ext
+
+except ImportError as imperr:
+    pass
+
+
+def replace_macros(template_line: str):
+    """
+        Perform a simple replacement any macros found in the template line passed to us.
+    """
+
+    macro_lookup = collections.OrderedDict()
+
+    macro_lookup[r"${TMPLT:HOME}"] = HOME_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:HOME_CONFIG}"] = CONFIG_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:PYTHON_VERSION}"] = PYTHON_VERSION.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:REPOSITORY_FOLDER}"] = REPOSITORY_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:REPOSITORY_ENVIRONMENT_FILE}"] = REPOSITORY_ENVIRONMENT_FILE.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:REPOSITORY_PACKAGES_FOLDER}"] = REPOSITORY_PACKAGES_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:REPOSITORY_SERVICE_FOLDER}"] = REPOSITORY_PACKAGES_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:REPOSITORY_TOOLS_FOLDER}"] = REPOSITORY_TOOLS_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:VENV_FOLDER}"] = VENV_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:VENV_BIN_FOLDER}"] = VENV_BIN_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:VENV_PYTHON_BINARY}"] = VENV_PYTHON_BINARY.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:VENV_ACTIVATE_SCRIPT}"] = VENV_ACTIVATE_SCRIPT.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:VENV_SITEPACKAGES_FOLDER}"] = VENV_SITEPACKAGES_FOLDER.replace("\\", "\\\\")
+    macro_lookup[r"${TMPLT:WORKSPACES_FOLDER}"] = WORKSPACES_FOLDER.replace("\\", "\\\\")
+
+    if macro_lookup_ext is not None:
+        macro_lookup_ext(macro_lookup)
+
+    filled_line = template_line
+
+    macrolist = macro_lookup.keys()
+
+    for macro in macrolist:
+        rvalue = macro_lookup[macro]
+        filled_line = filled_line.replace(macro, rvalue)
+
+    return filled_line
+
+
+def generate_directories():
+
+    if not os.path.exists(REPOSITORY_CACHE_FOLDER):
+        os.makedirs(REPOSITORY_CACHE_FOLDER)
+
+    return
+
+
+def generate_python_path():
+
+    python_path = "{}/testroots/testbase:{}/packages:{}/service:{}".format(
+        REPOSITORY_SOURCE_FOLDER,
+        REPOSITORY_SOURCE_FOLDER,
+        REPOSITORY_SOURCE_FOLDER,
+        VENV_SITEPACKAGES_FOLDER)
+
+    if python_path_ext is not None:
+        python_path = python_path_ext(python_path)
+
+    return python_path
+
+
+def generate_development_env_file():
+
+    env_file = "{}/.env".format(REPOSITORY_FOLDER)
+    with open(env_file, 'w') as envf:
+        envf.write("PYTHON_VERSION=\"{}\"".format(PYTHON_VERSION))
+        envf.write(os.linesep)
+ 
+        python_path = generate_python_path()
+        envf.write("PYTHONPATH=\"{}\"".format(python_path))
+        envf.write(os.linesep)
+        envf.write(os.linesep)
+        
+        envf.write('REPOSITORY_FOLDER="{}"'.format(REPOSITORY_FOLDER))
+        envf.write(os.linesep)
+        envf.write(os.linesep)
+
+        if development_environment_ext is not None:
+            development_environment_ext(envf)
+
+        envf.write(os.linesep)
+
+    return
+
+
+def generate_vscode_workspace_files():
+    # Go through all of the VSCODE workspace templates and generate the 'code-workspace' files homed to the
+    # location of this cloned repository
+
+    print("Scanning workspaces folder:")
+    print(WORKSPACES_FOLDER)
+    print("")
+
+    workspace_template_files = []
+    
+    for root, _, files in os.walk(WORKSPACES_FOLDER):
+        for np in files:
+            np_full = os.path.join(root, np)
+            if os.path.isfile(np_full):
+                _, npext = os.path.splitext(np_full)
+                if npext == ".template":
+                    workspace_template_files.append(np_full)
+
+    for template_file in workspace_template_files:
+
+        template_file_base, _ = os.path.splitext(os.path.basename(template_file))
+        template_dir = os.path.dirname(template_file)
+        workspace_file = os.path.join(template_dir, "{}.code-workspace".format(template_file_base))
+
+        print("Processing template: {}".format(template_file))
+
+        with open(template_file, 'r') as tf:
+            template_lines = tf.read().splitlines(True)
+
+            with open(workspace_file, 'w') as wf:
+                print("Generating code-workspace: {}".format(workspace_file))
+                for tline in template_lines:
+                    fline = replace_macros(tline)
+                    wf.write(fline)
+
+    return
+
+
+def rehome_repository_main():
+
+    parser = argparse.ArgumentParser(
+                    prog='rehome-repository',
+                    description='Configures a repository for operations in a new location.')
+
+    parser.add_argument('--skip-workspaces', default=False, dest='skip_workspaces', action='store_true',
+        help="Indicates that VS Code workspaces should not be created.")
+    args = parser.parse_args()
+
+    generate_directories()
+    generate_development_env_file()
+
+    if not args.skip_workspaces:
+        generate_vscode_workspace_files()
+
+    return
+
+if __name__ == "__main__":
+    rehome_repository_main()
