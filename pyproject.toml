@@ -1,6 +1,6 @@
 [tool.poetry]
-name = "<package name>"
-description = "<package description>"
+name = "pychestrate-service"
+description = "Automation Mojo - Pychestrate Service"
 version = "0.0.1"
 authors = []
 readme = "README.md"
@@ -17,12 +17,21 @@ packages = [{include="mojo", from="source/packages"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-flask = ">=3.0.3"
-flask-restx = ">=1.3.0"
-gunicorn = ">=22.0.0"
-flask-oidc = ">=2.1.1"
-okta = ">=2.9.5"
-mojo-runtime = ">=1.3.15"
+authlib = "^1.6.0"
+flask = "^2.2.3"
+flask-restx = "^1.1.0"
+sqlalchemy = "^2.0.30"
+sqlalchemy-utils = "^0.41.2"
+gunicorn = "^20.1.0"
+itsdangerous = "<2.0.1"
+automojo-errors = { git = "https://github.com/automationmojo/automojo-errors.git", branch = "main" }
+automojo-runtime = { git = "https://github.com/automationmojo/automojo-runtime.git", branch = "main" }
+automojo-credentials = { git = "https://github.com/automationmojo/automojo-credentials.git", branch = "main" }
+automojo-dataprofiles = { git = "https://github.com/automationmojo/automojo-dataprofiles.git", branch = "main" }
+pychestrate-core = { git = "https://github.com/automationmojo/pychestrate-core.git", branch = "main" }
+authlib-provider-support = "^0.0.1"
+psycopg2-binary = "^2.9.10"
+aiosmtpd = "^1.4.6"
 
 [tool.poetry.group.dev.dependencies]
 myst-parser = "^0.18.1"
