@@ -3,22 +3,7 @@ AI Agents working in this repository should refer to themselves as an agent name
 
 
 # Project Overview
-This folder contains the source code for the 'Automation Mojo' website.  The 'Automation Mojo' website acts as the public presence
-for the company.  The website is divided into a public site and private site.
-
-
-## Public Site
-The public site of the site performs the following functions:
-
-* Provides information to potential clients about the company and the products and services that Automation Mojo offers
-* Provides access to public documentation for the products that Automation Mojo offers
-
-## Private Site
-The private site requires a login in order to obtain access to its contents.  The login for the private site is on the public site.  The private
-site performs the following functions:
-
-* Provides access to private documentation for the products that Automation Mojo offers
-* Provides access to the 'automojo-*' python packages that are available to clients that have purchased a subscription to the Automation Kit software package
+This folder contains the source code for the 'Automation Mojo - Pychestrate' web service. The 'Automation Mojo - Pychestrate' website acts as the user interface for the 'Pychestrate' continuous integration and orchestration system.
 
 ## Implementation
 The website along with its REST API interface is written in python and is based on the Flask web framework and Flask-RestX.

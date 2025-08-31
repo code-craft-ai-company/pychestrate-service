@@ -1,1 +1,0 @@
-This folder is where all of the flask template files that are used render page responses should go.
