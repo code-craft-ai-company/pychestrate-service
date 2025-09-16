@@ -56,7 +56,7 @@ app.register_blueprint(redirect_apidoc)
 # install our service into NGINX and use Green Unicorn, the service
 # is launch by Green Unicorn by referencing the 'app' instance in
 # this module.
-def service_pycis_backend_main():
+def pychestrate_website_main():
     debug_mode = environment.DEBUG
 
     # We dont want to pass the debug flag if we are using
@@ -69,4 +69,4 @@ def service_pycis_backend_main():
     return
 
 if __name__ == "__main__":
-    service_pycis_backend_main()
+    pychestrate_website_main()
