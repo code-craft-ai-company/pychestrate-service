@@ -6,9 +6,9 @@
     ],
     "settings": {
         "python.defaultInterpreterPath": "${TMPLT:REPOSITORY_FOLDER}/.venv/bin/${TMPLT:PYTHON_VERSION}",
-        "python.envFile": "${TMPLT:REPOSITORY_FOLDER}/.cache/development.env",
+        "python.envFile": "${TMPLT:REPOSITORY_FOLDER}/.env",
         "terminal.integrated.env.linux": {
-            "PYTHONPATH": "${TMPLT:REPOSITORY_FOLDER}/source/packages:${TMPLT:REPOSITORY_FOLDER}/source/service"
+            "PYTHONPATH": "${TMPLT:REPOSITORY_FOLDER}/source/packages:${TMPLT:REPOSITORY_FOLDER}/source/site:${TMPLT:REPOSITORY_FOLDER}/.venv/lib/${TMPLT:PYTHON_VERSION}/site-packages"
         },
         "terminal.integrated.profiles.linux": {
             "virtual-env": {
@@ -18,7 +18,7 @@
         "python.analysis.extraPaths": [
             "${TMPLT:REPOSITORY_FOLDER}/.venv/lib/${TMPLT:PYTHON_VERSION}/site-packages",
             "${TMPLT:REPOSITORY_FOLDER}/source/packages",
-            "${TMPLT:REPOSITORY_FOLDER}/source/service"
+            "${TMPLT:REPOSITORY_FOLDER}/source/site"
         ],
         "python.terminal.activateEnvInCurrentTerminal": true
     }
