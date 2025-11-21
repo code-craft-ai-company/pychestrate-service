@@ -17,6 +17,7 @@ The following is a list of folders that are can be found in the root folder of t
 - deployment - A folder that contains scripts used to deploy the project or website
 - development - A folder used to store developer scripts, script such as the 'setup-environment' script.
 - repository-setup - A folder that contains the machine setup, 'rehome-repository' script and repository config files.
+- specs - The root folder for code specification files such as design.md, requirements.md, tasks.md and others.
 - source - The folder that contains the project source code
 - workspaces - The workspaces folder stores vscode workspace template files '*.template' and '*.code-workspace' files.  The '*.template' are checked in and contain macros that can be used by the 'repository-setup/rehome-repository' script to create a '*.code-workspace' file that contains paths that have been re-homed based on where the repository was checked out to on the local users hard drive.
 
@@ -26,7 +27,7 @@ There are also some files located in the root of the repository folder.
 - .gitignore - File indicating files and folders that git should ignore
 - LICENSE.txt - A file that specifies the licensing terms of the source code contained in the repository.
 - Makefile - A Makefile that contains targets for building and publishing the packages in the repository.
-- poetry.lock - The poetry lock file associated with the python package for this folder.
+- poetry.lock - The poetrsy lock file associated with the python package for this folder.
 - poetry.toml - A poetry project settings file.
 - pyproject.toml - A file that describes the package contained in the folder and its dependencies
 - README.md - A file that is the readme associated with the project.

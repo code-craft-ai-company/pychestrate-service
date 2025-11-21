@@ -22,6 +22,63 @@ Zen of Python testing
 * If the implementation is hard to explain, follow or maintain, try thinking of another way
 * If the implementation is easy to explain, follow or maintain, it may be a good idea
 
+
+Semicolons
+==========
+Do not terminate lines of code with semi-colons, and do not use semicolons to put two statemens on the same line.
+
+Functions
+=========
+* Function names should be snake case
+* All functions parameters should have type hints
+* Functions should have annotated return types
+
+Methods
+=======
+* Method names should be snake case
+* Instance methods should use 'self' as the first Argument
+* Class methods should use 'cls' as the first Argument
+* All method parameters should have type hints
+* Methods should have annotated return types
+
+
+Default Values for Functions or Methods
+=======================================
+Mutable values should not be used as a default value for a function or method parameter.  This is because
+python creates a single instance for mutable defaults that it shares among all the callers of a method.  Using
+a mutable default value means that modifications made to the value inside the function by one call effect all
+other subsequent calls.  The following example shows how modifying a list in a function effects every call to
+the function.
+
+.. code-block:: python
+    
+    import random
+
+    def add_and_print_list(items=[]):
+       items.append(random.randint(1, 10))
+       print(items)
+       return
+    
+    add_and_print_list()
+    add_and_print_list()
+
+The second call to `add_and_print_list` will print the numbers added to the list from the first call.  This
+is because default values to callables are only created once and shared by all function users.  When you want
+to use a Mutable instance as a default value, one way to do this is to pass `None` or `...` as the default
+and then create an instance for the Mutable inside of the function, for example.
+
+.. code-block:: python
+
+    def some_function(items: List[str] = None):
+
+        if items is None:
+            items = []
+
+        # TODO: Do something with the list
+
+        return
+
+
 Class Variable Initialization
 =============================
 
@@ -54,10 +111,67 @@ The following is **NOT** allowed:
         def set_to_blah(self):
             self._c = "blahblah"  # No initialization in constructor
 
+
+Decision Expressions
+====================
+Shortcut 'True/False' expressions should NOT be used.  Example:
+
+.. code-block:: python
+
+    if somelist:
+        print(somelist[0])
+
+Shortcut expressions do not provide sufficient debugging information when a failure occurs.  There are
+two error conditiions that could effect the print statement, somelist could be 'None' or it could be an
+empty list.  When an expression is not-explicit error conditions get blended together.  'True/False' expressions
+for decisions must be explicit for all cases.  For example:
+
+.. code-block:: python
+
+    if somelist is not None:
+        if len(somelist) > 0:
+            print(somelist[0])
+        else:
+           errmsg = "The parameter 'somelist' should not be empty.
+           raise ValueError(errmsg)
+    else:
+        errmsg = "The parameter 'somelist' should not have been 'None'"
+        raise ValueError(errmsg)
+
+
+Decorator Usage
+===============
+Python decorators should only be used to:
+
+* Add metadata to a function or method
+
+.. code-block:: python
+
+    @priority(1)
+    def test_something():
+        return
+
+* Register a function or method with a mapping system
+
+.. code-block:: python
+
+    @app.route("/")
+    def index():
+       return
+
+The two types of decorator uses above DO NOT modify the behavior of the wrapped function.  Python decorators
+are a form of top-level code that are applied when modules are parsed and types and functions are created.
+Decorators that modify the behavior of functions such as the '@retry', are locked to a function extremely early
+and cannot be removed or parameterized in calls.  In this sense the decorator breaks the ability of the caller
+and callable to form a contract of behavior base on parameters.
+
+NOTE: Decorators that wrap functions and add behavior cannot be removed so the behavior they add cannot be removed.
+
+
 Documentation Comments
 ======================
-Documentation comments in this project should use the sphinx syntax of documentation comments.
 
+Documentation comments in this project should use the sphinx syntax of documentation comments.
 
 All documentation comments for classes, functions and methods should:
 
