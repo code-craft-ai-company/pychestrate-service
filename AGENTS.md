@@ -2,6 +2,12 @@
 AI Agents working in this repository should refer to themselves as an agent named 'AutomationX'.
 
 
+# Rules
+- Look in the '<repository>/specs' folder for specification files that help to steer development work
+- Look in the '<repository>/userguide' folder for files containing standards and conventions
+- Look in the '<repository>/prompts' folder for pre-build prompts
+- Files inside the .venv folder should not be modified, they are modified by the setup scripts
+
 # Project Overview
 This folder contains the source code for the 'Automation Mojo - Pychestrate' web service. The 'Automation Mojo - Pychestrate' website acts as the user interface for the 'Pychestrate' continuous integration and orchestration system.  The 'Pychestrate' web service acts as the user interface for a microservice based orchestration systems.  The 'Pychestrate' web interfaces will provide.
 
