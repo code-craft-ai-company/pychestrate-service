@@ -1,51 +1,31 @@
-=======================
-python-package-template
-=======================
-This is a template repository that can be used to quickly create a python package project.
+===================
+pychestrate-service
+===================
 
-=========================
-Features of this Template
-=========================
-* Machine Setup
-* Virtual Environment Setup (Poetry)
-* PyPi Publishing
-* Sphinx Documentation
+Automation Mojo - Pychestrate Service
 
-========================
-How to Use This Template
-========================
-- Click the 'Use this template' button
-- Fill in the information to create your repository
-- Checkout your new repository
-- Change the following in 'repository-config.ini'
+Overview
+========
+pychestrate-service is a core component of the Automation Mojo technology stack. It provides robust, reusable foundation code designed to enable and orchestrate complex software automation tasks.
 
-  #. 'PROJECT NAME'
-  #. 'REPOSITORY_NAME'
+Installation
+============
+Using Poetry:
 
-- If you have machine dependencies to add, put them in 'setup-ubuntu-machine'
-- Modify the pyproject.toml file with the correct package-name, author, publishing information, etc.
-- Rename the VSCODE workspace file 'mv workspaces/default-workspace.template workspaces/(project name).template'
-- Replace the README.rst file with your own README
-- Add your dependencies with python poetry 'poetry add (dependency name)'
-- Drop your package code in 'source/packages'
-- Drop your REST api code in 'source/service/restapis'
-- Drop any web UI code in 'source/service/website'
-- Rename the file that is the main entrypoint for the web service
+.. code-block:: bash
 
-=================
-Code Organization
-=================
-* .vscode - Common tasks and debug configurations
-* development - This is where the runtime environment scripts are located
-* repository-setup - Scripts for homing your repository and to your checkout and machine setup
-* userguide - Where you put your user guide
-* source/packages - Put your root folder here 'source/packages/(root-module-folder)'
-* source/sphinx - This is the Sphinx documentation folder
-* workspaces - This is where you add VSCode workspaces templates and where workspaces show up when homed.
+    poetry add pychestrate-service
 
-==========
+Development
+===========
+This repository provides a standard Poetry environment.
+
+1. Activate virtual environment:
+   Run `poetry shell` and `poetry install`
+2. Test Execution:
+   Run `poetry run pytest`
+
 References
 ==========
-
-- `User Guide <userguide/userguide.rst>
+- `User Guide <userguide/userguide.rst>`
 - `Coding Standards <userguide/10-00-coding-standards.rst>`
