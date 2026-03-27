@@ -1,72 +1,64 @@
-
 import logging
 import os
+import sys
 
-from flask import Flask, url_for
-from flask_restx import apidoc
-
-from aqueue import environment
-
-# Setup the automation kit as a service for configuration and logging
-# by importing the 'service' environment module
-import akit.environment.service
-
-from restapis import register_rest_blueprints
-#from website import register_website_blueprints
+from automojo.webworks.webapplication import establish_webapp_persona
+from automojo.webworks.asgi.application import create_asgi_application
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import HTMLResponse
 
 DIR_THIS = os.path.dirname(__file__)
-DIR_STATIC = os.path.join(DIR_THIS, "website", "static")
-DIR_TEMPLATES = os.path.join(DIR_THIS, "website", "templates")
 
 logger = logging.getLogger("scms")
 
-app = Flask(__name__, template_folder=DIR_TEMPLATES, static_folder=DIR_STATIC)
-app.config.SWAGGER_UI_JSONEDITOR = True
-app.config.TEMPLATES_AUTO_RELOAD = True
+app = establish_webapp_persona(
+    name="pychestrate",
+    logger_name="scms",
+    log_basename="pychestrate"
+)
 
-if environment.DEVELOPER_MODE:
-    app.debug = True
+@app.attach_route("/", methods=["GET"])
+def hello_world(request: Request) -> HTMLResponse:
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Pychestrate SCM</title>
+        <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f7fa; color: #333; }
+            header { background-color: #2c3e50; color: white; padding: 1rem 2rem; }
+            .container { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+            .card { background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+            h1 { margin-top: 0; }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>⚙️ Pychestrate SCM</h1>
+        </header>
+        <div class="container">
+            <div class="card">
+                <h2>Welcome to Pychestrate</h2>
+                <p>The Software Configuration Management system powered by Automation Mojo WebWorks.</p>
+                <p>This is the initial web interface scaffolding.</p>
+                <hr>
+                <p><em>Status:</em> Online and Orchestrating.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
-# Prevent flask-restplus from registering docs so we
-# can customize the route
-app.extensions.setdefault("restplus", {
-    "apidoc_registered": True
-})
+# Export the ASGI application for uvicorn/gunicorn
+asgi_app = create_asgi_application(app)
 
-# Register the URL route blueprints
-register_rest_blueprints(app, "api")
-#register_website_blueprints(app)
-
-# Setup route redirect for the documentation
-redirect_apidoc = apidoc.Apidoc('restplus_doc', apidoc.__name__,
-    template_folder='templates',
-    static_folder='static',
-    static_url_path='/api/swaggerui')
-
-@redirect_apidoc.add_app_template_global
-def swagger_static(filename):
-    static_url = url_for('restplus_doc.static', filename=filename )
-    logger.critical("filename: %s" % filename)
-    return static_url
-
-app.register_blueprint(redirect_apidoc)
-
-# =================================================================
-# This main entry point is utilized for debug runs only, when we
-# install our service into NGINX and use Green Unicorn, the service
-# is launch by Green Unicorn by referencing the 'app' instance in
-# this module.
 def pychestrate_website_main():
-    debug_mode = environment.DEBUG
-
-    # We dont want to pass the debug flag if we are using
-    # Visual Studio Code for debugging
-    if environment.DEVELOPER_MODE:
-        debug_mode = False
-
-    app.run(port=8888, debug=debug_mode)
-
-    return
+    import uvicorn
+    # When run directly for development
+    uvicorn.run(asgi_app, host="0.0.0.0", port=8888)
 
 if __name__ == "__main__":
     pychestrate_website_main()
