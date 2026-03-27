@@ -1,9 +1,9 @@
 import logging
 import os
-import sys
 
 from automojo.webworks.webapplication import establish_webapp_persona
-from automojo.webworks.asgi.application import create_asgi_application
+from automojo.webworks.wsgi.application import create_wsgi_application
+from automojo.webworks.wsgi.server import run_server
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import HTMLResponse
 
@@ -52,13 +52,12 @@ def hello_world(request: Request) -> HTMLResponse:
     """
     return HTMLResponse(content=html_content)
 
-# Export the ASGI application for uvicorn/gunicorn
-asgi_app = create_asgi_application(app)
-
 def pychestrate_website_main():
-    import uvicorn
-    # When run directly for development
-    uvicorn.run(asgi_app, host="0.0.0.0", port=8888)
+    app.startup()
+    wsgi_app = create_wsgi_application(config={"handler": app.dispatcher})
+    
+    print("Starting native WebWorks WSGI Server on 127.0.0.1:8888")
+    run_server(app=wsgi_app, host="127.0.0.1", port=8888, workers=1, threads=1)
 
 if __name__ == "__main__":
     pychestrate_website_main()
