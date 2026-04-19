@@ -1,0 +1,98 @@
+{% extends "config/base.html" %}
+
+{% block title %}Audit Logs - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Audit Logs</h2>
+    <p>Review security events and system activity</p>
+</div>
+
+<div class="card" style="margin-bottom: 20px;">
+    <form method="get" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Event Type</label>
+            <select name="event_type" class="form-control" style="width: 200px;">
+                <option value="">All Events</option>
+                {% for event_type in all_event_types %}
+                <option value="{{ event_type }}" {% if selected_event_type == event_type %}selected{% endif %}>
+                    {{ event_type }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">User ID</label>
+            <input type="text" name="user_id" class="form-control" placeholder="User ID" 
+                   value="{{ filter_user_id or '' }}" style="width: 150px;">
+        </div>
+        
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Start Date</label>
+            <input type="datetime-local" name="start_date" class="form-control" 
+                   value="{{ start_date or '' }}" style="width: 200px;">
+        </div>
+        
+        <div>
+            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">End Date</label>
+            <input type="datetime-local" name="end_date" class="form-control" 
+                   value="{{ end_date or '' }}" style="width: 200px;">
+        </div>
+        
+        <div>
+            <button type="submit" class="btn btn-secondary">
+                <span class="material-icons">filter_list</span> Filter
+            </button>
+            <a href="{{ url_for('config.audit_log_list') }}" class="btn btn-secondary">Clear</a>
+        </div>
+    </form>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Timestamp</th>
+            <th>Event Type</th>
+            <th>User</th>
+            <th>Target User</th>
+            <th>Client IP</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for log in logs %}
+        <tr>
+            <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td><span class="badge badge-info">{{ log.event_type.value }}</span></td>
+            <td>{{ log.username or log.user_id or '-' }}</td>
+            <td>{{ log.target_username or log.target_user_id or '-' }}</td>
+            <td>{{ log.client_ip or '-' }}</td>
+            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                {% if log.details %}
+                {{ log.details | tojson }}
+                {% else %}
+                -
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="6" style="text-align: center; color: #6c757d;">No audit logs found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="pagination" style="margin-top: 20px;">
+    {% if page > 1 %}
+    <a href="{{ url_for('config.audit_log_list', page=page-1, event_type=selected_event_type, user_id=filter_user_id, start_date=start_date, end_date=end_date) }}">&laquo; Previous</a>
+    {% endif %}
+    
+    <span style="padding: 8px 12px;">Page {{ page }}</span>
+    
+    {% if logs | length == per_page %}
+    <a href="{{ url_for('config.audit_log_list', page=page+1, event_type=selected_event_type, user_id=filter_user_id, start_date=start_date, end_date=end_date) }}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endblock %}

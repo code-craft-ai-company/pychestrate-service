@@ -1,0 +1,38 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Tags - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Tags</h2>
+    <p>Resource tags for filtering and organization</p>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Created</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for tag in tags %}
+        <tr>
+            <td><span class="badge badge-info">{{ tag.name }}</span></td>
+            <td>{{ tag.description or '-' }}</td>
+            <td>{{ tag.created_at.strftime('%Y-%m-%d %H:%M') if tag.created_at else '-' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="3" style="text-align: center; color: #6c757d;">No tags found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="margin-top: 20px; color: #6c757d;">
+    Tags are created automatically when assigned to resources. 
+    <a href="{{ url_for('resources.resource_list') }}">Manage resources</a> to add or remove tags.
+</p>
+{% endblock %}

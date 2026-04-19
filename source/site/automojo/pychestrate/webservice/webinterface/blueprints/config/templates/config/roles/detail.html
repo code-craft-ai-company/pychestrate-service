@@ -1,0 +1,62 @@
+{% extends "config/base.html" %}
+
+{% block title %}{{ role.name }} - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Role: {{ role.name }}</h2>
+    <p>View role details and permissions</p>
+</div>
+
+<div class="card" style="max-width: 600px;">
+    <table style="width: 100%;">
+        <tr>
+            <td style="padding: 10px 0; font-weight: 500; width: 150px;">Name</td>
+            <td style="padding: 10px 0;">{{ role.name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px 0; font-weight: 500;">Description</td>
+            <td style="padding: 10px 0;">{{ role.description or '-' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 10px 0; font-weight: 500;">Type</td>
+            <td style="padding: 10px 0;">
+                {% if role.is_system %}
+                <span class="badge badge-info">System Role</span>
+                {% else %}
+                <span class="badge badge-success">Custom Role</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td style="padding: 10px 0; font-weight: 500;">Created</td>
+            <td style="padding: 10px 0;">{{ role.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+    </table>
+</div>
+
+<div class="card" style="max-width: 600px; margin-top: 20px;">
+    <div class="card-header">Permissions ({{ role.permissions | length }})</div>
+    {% if role.permissions %}
+    <ul style="margin: 0; padding-left: 20px;">
+        {% for permission in role.permissions %}
+        <li style="padding: 5px 0;">
+            {{ permission.name }}
+            {% if permission.description %}<span style="color: #6c757d;"> - {{ permission.description }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p style="color: #6c757d;">No permissions assigned</p>
+    {% endif %}
+</div>
+
+<div style="display: flex; gap: 10px; margin-top: 20px;">
+    {% if not role.is_system %}
+    <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-primary">
+        <span class="material-icons">edit</span> Edit Role
+    </a>
+    {% endif %}
+    <a href="{{ url_for('config.role_list') }}" class="btn btn-secondary">Back to List</a>
+</div>
+{% endblock %}

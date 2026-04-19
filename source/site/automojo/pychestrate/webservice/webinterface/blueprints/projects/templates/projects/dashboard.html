@@ -1,0 +1,69 @@
+{% extends "projects/base.html" %}
+
+{% block title %}Projects Dashboard - Pychestrate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Projects Dashboard</h2>
+    <p>Overview of your projects and recent activity</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px;">
+    <div class="card">
+        <div class="card-header">
+            <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">folder</span>
+            Your Projects
+        </div>
+        <div style="font-size: 2rem; font-weight: 600; color: #1a1a2e;">{{ projects|length }}</div>
+        <p style="color: #6c757d; margin: 5px 0 0;">Projects you have access to</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Recent Projects</span>
+        <a href="{{ url_for('projects.project_create') }}" class="btn btn-primary btn-sm">
+            <span class="material-icons">add</span> New Project
+        </a>
+    </div>
+    
+    {% if projects %}
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Description</th>
+                <th>Owner</th>
+                <th>Last Activity</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for project in projects %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" style="font-weight: 500;">
+                        {{ project.name }}
+                    </a>
+                </td>
+                <td>{{ project.description[:50] }}{% if project.description|length > 50 %}...{% endif %}</td>
+                <td>{{ project.owner_username }}</td>
+                <td>{{ project.last_activity_at.strftime('%Y-%m-%d %H:%M') if project.last_activity_at else 'N/A' }}</td>
+                <td>
+                    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="btn btn-sm btn-secondary">View</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: #6c757d; padding: 40px;">
+        No projects yet. <a href="{{ url_for('projects.project_create') }}">Create your first project</a>
+    </p>
+    {% endif %}
+</div>
+
+<a href="{{ url_for('projects.project_list') }}" class="btn btn-secondary">
+    <span class="material-icons">list</span> View All Projects
+</a>
+{% endblock %}

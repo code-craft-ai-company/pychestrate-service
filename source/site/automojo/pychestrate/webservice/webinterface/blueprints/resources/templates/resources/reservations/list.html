@@ -1,0 +1,119 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Reservations - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Reservations</h2>
+    <p>Future resource reservations</p>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <select name="resource_id" class="form-control" style="width: 200px;">
+            <option value="">All Resources</option>
+            {% for resource in resources %}
+            <option value="{{ resource.id }}" {% if selected_resource_id == resource.id %}selected{% endif %}>{{ resource.name }}</option>
+            {% endfor %}
+        </select>
+        
+        <input type="datetime-local" name="start_after" class="form-control" value="{{ start_after }}" style="width: 200px;">
+        <span>to</span>
+        <input type="datetime-local" name="end_before" class="form-control" value="{{ end_before }}" style="width: 200px;">
+        
+        <button type="submit" class="btn btn-secondary">
+            <span class="material-icons">filter_list</span> Filter
+        </button>
+        
+        <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">Clear</a>
+    </form>
+    
+    <div style="margin-left: auto;">
+        <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-primary">
+            <span class="material-icons">add</span> Create Reservation
+        </a>
+    </div>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Resource</th>
+            <th>User</th>
+            <th>Job ID</th>
+            <th>Start Time</th>
+            <th>End Time</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for res in reservations %}
+        <tr>
+            <td><a href="{{ url_for('resources.reservation_detail', reservation_id=res.id) }}">{{ res.id }}</a></td>
+            <td><a href="{{ url_for('resources.resource_detail', resource_id=res.resource_id) }}">{{ res.resource_name }}</a></td>
+            <td>{{ res.username }}</td>
+            <td>{{ res.job_id or '-' }}</td>
+            <td>{{ res.start_time.strftime('%Y-%m-%d %H:%M') if res.start_time else '-' }}</td>
+            <td>{{ res.end_time.strftime('%Y-%m-%d %H:%M') if res.end_time else '-' }}</td>
+            <td>
+                {% set mode = res.mode.value if res.mode.value else res.mode %}
+                {% if mode == 'exclusive' %}
+                <span class="badge badge-danger">Exclusive</span>
+                {% else %}
+                <span class="badge badge-info">Shared</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if res.status == 'pending' %}
+                <span class="badge badge-warning">Pending</span>
+                {% elif res.status == 'active' %}
+                <span class="badge badge-success">Active</span>
+                {% elif res.status == 'completed' %}
+                <span class="badge badge-secondary">Completed</span>
+                {% elif res.status == 'cancelled' %}
+                <span class="badge badge-danger">Cancelled</span>
+                {% else %}
+                <span class="badge badge-secondary">{{ res.status }}</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if res.status == 'pending' %}
+                <a href="{{ url_for('resources.reservation_edit', reservation_id=res.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                <form action="{{ url_for('resources.reservation_cancel', reservation_id=res.id) }}" method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Cancel this reservation?')">Cancel</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="9" style="text-align: center; color: #6c757d;">No reservations found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('resources.reservation_list', page=page-1, resource_id=selected_resource_id, start_after=start_after, end_before=end_before) }}">&laquo; Previous</a>
+    {% endif %}
+    
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ url_for('resources.reservation_list', page=p, resource_id=selected_resource_id, start_after=start_after, end_before=end_before) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    
+    {% if page < total_pages %}
+    <a href="{{ url_for('resources.reservation_list', page=page+1, resource_id=selected_resource_id, start_after=start_after, end_before=end_before) }}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

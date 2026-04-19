@@ -1,0 +1,1 @@
+# Automojo tests package

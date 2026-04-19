@@ -1,0 +1,14 @@
+{% extends "projects/base.html" %}
+
+{% block title %}Page Not Found - Pychestrate{% endblock %}
+
+{% block content %}
+<div style="text-align: center; padding: 60px 20px;">
+    <span class="material-icons" style="font-size: 80px; color: #6c757d;">search_off</span>
+    <h2 style="margin: 20px 0 10px;">Page Not Found</h2>
+    <p style="color: #6c757d; margin-bottom: 30px;">The page you're looking for doesn't exist or has been moved.</p>
+    <a href="{{ url_for('projects.dashboard') }}" class="btn btn-primary">
+        <span class="material-icons">home</span> Go to Dashboard
+    </a>
+</div>
+{% endblock %}

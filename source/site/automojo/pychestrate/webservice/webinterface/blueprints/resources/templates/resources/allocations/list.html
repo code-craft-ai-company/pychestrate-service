@@ -1,0 +1,109 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Active Allocations - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Active Allocations</h2>
+    <p>Currently checked out resources</p>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <select name="resource_id" class="form-control" style="width: 200px;">
+            <option value="">All Resources</option>
+            {% for resource in resources %}
+            <option value="{{ resource.id }}" {% if selected_resource_id == resource.id %}selected{% endif %}>{{ resource.name }}</option>
+            {% endfor %}
+        </select>
+        
+        <input type="text" name="job_id" class="form-control" placeholder="Job ID" 
+               value="{{ selected_job_id }}" style="width: 150px;">
+        
+        <button type="submit" class="btn btn-secondary">
+            <span class="material-icons">filter_list</span> Filter
+        </button>
+        
+        <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">Clear</a>
+    </form>
+    
+    <div style="margin-left: auto;">
+        <a href="{{ url_for('resources.allocation_history') }}" class="btn btn-secondary">
+            <span class="material-icons">history</span> View History
+        </a>
+    </div>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Resource</th>
+            <th>User</th>
+            <th>Job ID</th>
+            <th>Mode</th>
+            <th>Checkout Time</th>
+            <th>Expected Checkin</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alloc in allocations %}
+        <tr>
+            <td><a href="{{ url_for('resources.allocation_detail', allocation_id=alloc.id) }}">{{ alloc.id }}</a></td>
+            <td><a href="{{ url_for('resources.resource_detail', resource_id=alloc.resource_id) }}">{{ alloc.resource_name }}</a></td>
+            <td>{{ alloc.username }}</td>
+            <td>{{ alloc.job_id or '-' }}</td>
+            <td>
+                {% set mode = alloc.mode.value if alloc.mode.value else alloc.mode %}
+                {% if mode == 'exclusive' %}
+                <span class="badge badge-danger">Exclusive</span>
+                {% else %}
+                <span class="badge badge-info">Shared</span>
+                {% endif %}
+            </td>
+            <td>{{ alloc.checkout_time.strftime('%Y-%m-%d %H:%M') if alloc.checkout_time else '-' }}</td>
+            <td>{{ alloc.expected_checkin.strftime('%Y-%m-%d %H:%M') if alloc.expected_checkin else '-' }}</td>
+            <td>
+                {% if alloc.user_id == g.current_user_id %}
+                <form action="{{ url_for('resources.allocation_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Check in this resource?')">Checkin</button>
+                </form>
+                {% else %}
+                <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="reason" value="Administrative force checkin">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Force check in this resource?')">Force Checkin</button>
+                </form>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8" style="text-align: center; color: #6c757d;">No active allocations</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('resources.allocation_list', page=page-1, resource_id=selected_resource_id, job_id=selected_job_id) }}">&laquo; Previous</a>
+    {% endif %}
+    
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ url_for('resources.allocation_list', page=p, resource_id=selected_resource_id, job_id=selected_job_id) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    
+    {% if page < total_pages %}
+    <a href="{{ url_for('resources.allocation_list', page=page+1, resource_id=selected_resource_id, job_id=selected_job_id) }}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

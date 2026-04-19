@@ -1,0 +1,57 @@
+{% extends "projects/base.html" %}
+
+{% block title %}Test Specifications - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('projects.project_list') }}">Projects</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.test_job_list', project_id=project.id) }}">Tests</a>
+    <span>/</span>
+    <span>Specifications</span>
+</div>
+
+<div class="page-header">
+    <h2>Test Specifications</h2>
+    <p>Manage test configurations</p>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Framework</th>
+            <th>Repository</th>
+            <th>Version</th>
+            <th>Timeout</th>
+            <th>Updated</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for spec in specs %}
+        <tr>
+            <td>
+                <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=spec.id) }}" style="font-weight: 500;">
+                    {{ spec.name }}
+                </a>
+            </td>
+            <td><span class="badge badge-secondary">{{ spec.framework.value }}</span></td>
+            <td>{{ spec.repository_name or 'N/A' }}</td>
+            <td>v{{ spec.version }}</td>
+            <td>{{ spec.timeout_minutes }}m</td>
+            <td>{{ spec.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+                <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=spec.id) }}" class="btn btn-sm btn-secondary">View</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align: center; color: #6c757d;">No test specifications found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

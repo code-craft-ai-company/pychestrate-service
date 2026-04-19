@@ -1,0 +1,112 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Allocation History - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Allocation History</h2>
+    <p>Historical record of resource allocations</p>
+</div>
+
+<div class="filter-bar">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <select name="resource_id" class="form-control" style="width: 200px;">
+            <option value="">All Resources</option>
+            {% for resource in resources %}
+            <option value="{{ resource.id }}" {% if selected_resource_id == resource.id %}selected{% endif %}>{{ resource.name }}</option>
+            {% endfor %}
+        </select>
+        
+        <input type="date" name="start_date" class="form-control" value="{{ start_date }}" style="width: 150px;">
+        <span>to</span>
+        <input type="date" name="end_date" class="form-control" value="{{ end_date }}" style="width: 150px;">
+        
+        <button type="submit" class="btn btn-secondary">
+            <span class="material-icons">filter_list</span> Filter
+        </button>
+        
+        <a href="{{ url_for('resources.allocation_history') }}" class="btn btn-secondary">Clear</a>
+    </form>
+    
+    <div style="margin-left: auto;">
+        <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
+            <span class="material-icons">assignment</span> Active Allocations
+        </a>
+    </div>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Resource</th>
+            <th>User</th>
+            <th>Job ID</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Checkout</th>
+            <th>Checkin</th>
+            <th>Duration</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for alloc in allocations %}
+        <tr>
+            <td><a href="{{ url_for('resources.allocation_detail', allocation_id=alloc.id) }}">{{ alloc.id }}</a></td>
+            <td><a href="{{ url_for('resources.resource_detail', resource_id=alloc.resource_id) }}">{{ alloc.resource_name }}</a></td>
+            <td>{{ alloc.username }}</td>
+            <td>{{ alloc.job_id or '-' }}</td>
+            <td>
+                {% set mode = alloc.mode.value if alloc.mode.value else alloc.mode %}
+                {% if mode == 'exclusive' %}
+                <span class="badge badge-danger">Exclusive</span>
+                {% else %}
+                <span class="badge badge-info">Shared</span>
+                {% endif %}
+            </td>
+            <td>
+                {% set status = alloc.status.value if alloc.status.value else alloc.status %}
+                {% if status == 'active' %}
+                <span class="badge badge-success">Active</span>
+                {% elif status == 'released' %}
+                <span class="badge badge-secondary">Released</span>
+                {% elif status == 'expired' %}
+                <span class="badge badge-warning">Expired</span>
+                {% elif status == 'forced' %}
+                <span class="badge badge-danger">Forced</span>
+                {% else %}
+                <span class="badge badge-secondary">{{ status }}</span>
+                {% endif %}
+            </td>
+            <td>{{ alloc.checkout_time.strftime('%Y-%m-%d %H:%M') if alloc.checkout_time else '-' }}</td>
+            <td>{{ alloc.actual_checkin.strftime('%Y-%m-%d %H:%M') if alloc.actual_checkin else '-' }}</td>
+            <td>{{ alloc.duration_minutes }} min</td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="9" style="text-align: center; color: #6c757d;">No allocation history found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="{{ url_for('resources.allocation_history', page=page-1, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">&laquo; Previous</a>
+    {% endif %}
+    
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ url_for('resources.allocation_history', page=p, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+    
+    {% if page < total_pages %}
+    <a href="{{ url_for('resources.allocation_history', page=page+1, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,172 @@
+{% extends "resources/base.html" %}
+
+{% block title %}{{ resource.name }} - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>{{ resource.name }}</h2>
+    <p>Resource details and allocation status</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+    <div>
+        <div class="card">
+            <div class="card-header">Resource Information</div>
+            <table class="data-table" style="margin-top: 0;">
+                <tr>
+                    <th style="width: 150px;">ID</th>
+                    <td>{{ resource.id }}</td>
+                </tr>
+                <tr>
+                    <th>Name</th>
+                    <td>{{ resource.name }}</td>
+                </tr>
+                <tr>
+                    <th>Type</th>
+                    <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+                </tr>
+                <tr>
+                    <th>Pool</th>
+                    <td>{{ resource.pool_name or 'Default' }}</td>
+                </tr>
+                <tr>
+                    <th>Description</th>
+                    <td>{{ resource.description or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Health Status</th>
+                    <td>
+                        {% set status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+                        {% if status == 'online' %}
+                        <span class="badge badge-success">Online</span>
+                        {% elif status == 'offline' %}
+                        <span class="badge badge-danger">Offline</span>
+                        {% elif status == 'degraded' %}
+                        <span class="badge badge-warning">Degraded</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Maintenance</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>Capacity</th>
+                    <td>{{ resource.current_allocations }}/{{ resource.capacity }} allocated</td>
+                </tr>
+                <tr>
+                    <th>Tags</th>
+                    <td>
+                        {% for tag in resource.tags %}
+                        <span class="badge badge-info">{{ tag }}</span>
+                        {% else %}
+                        <span style="color: #6c757d;">No tags</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>Created</th>
+                    <td>{{ resource.created_at.strftime('%Y-%m-%d %H:%M:%S') if resource.created_at else '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Updated</th>
+                    <td>{{ resource.updated_at.strftime('%Y-%m-%d %H:%M:%S') if resource.updated_at else '-' }}</td>
+                </tr>
+            </table>
+        </div>
+        
+        {% if resource.metadata %}
+        <div class="card">
+            <div class="card-header">Metadata</div>
+            <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; margin: 0;">{{ resource.metadata | tojson(indent=2) }}</pre>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-header">Active Allocations</div>
+            {% if active_allocations %}
+            <table class="data-table" style="margin-top: 0;">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>User</th>
+                        <th>Job ID</th>
+                        <th>Mode</th>
+                        <th>Checkout Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for alloc in active_allocations %}
+                    <tr>
+                        <td>{{ alloc.id }}</td>
+                        <td>{{ alloc.username }}</td>
+                        <td>{{ alloc.job_id or '-' }}</td>
+                        <td>{{ alloc.mode.value if alloc.mode.value else alloc.mode }}</td>
+                        <td>{{ alloc.checkout_time.strftime('%Y-%m-%d %H:%M:%S') if alloc.checkout_time else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: #6c757d; margin: 0;">No active allocations</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div>
+        <div class="card">
+            <div class="card-header">Actions</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <a href="{{ url_for('resources.resource_edit', resource_id=resource.id) }}" class="btn btn-secondary">
+                    <span class="material-icons">edit</span> Edit Resource
+                </a>
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-secondary">
+                    <span class="material-icons">monitor_heart</span> Health History
+                </a>
+                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Delete this resource?')">
+                        <span class="material-icons">delete</span> Delete Resource
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        {% set status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+        {% if status in ['online', 'degraded'] and resource.current_allocations < resource.capacity %}
+        <div class="card">
+            <div class="card-header">Checkout Resource</div>
+            <form method="post" action="{{ url_for('resources.resource_checkout', resource_id=resource.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                
+                <div class="form-group">
+                    <label for="job_id">Job ID (optional)</label>
+                    <input type="text" id="job_id" name="job_id" class="form-control">
+                </div>
+                
+                <div class="form-group">
+                    <label for="mode">Allocation Mode</label>
+                    <select id="mode" name="mode" class="form-control">
+                        <option value="exclusive">Exclusive</option>
+                        <option value="shared">Shared</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="timeout_minutes">Timeout (minutes)</label>
+                    <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" min="1">
+                    <p class="form-text">Leave empty for no timeout</p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reason">Reason</label>
+                    <input type="text" id="reason" name="reason" class="form-control">
+                </div>
+                
+                <button type="submit" class="btn btn-success" style="width: 100%;">
+                    <span class="material-icons">assignment_turned_in</span> Checkout
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

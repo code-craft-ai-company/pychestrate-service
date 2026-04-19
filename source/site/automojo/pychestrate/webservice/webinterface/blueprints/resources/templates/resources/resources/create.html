@@ -1,0 +1,86 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Create Resource - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Create Resource</h2>
+    <p>Add a new trackable resource to the system</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group">
+            <label for="name">Resource Name *</label>
+            <input type="text" id="name" name="name" class="form-control" required
+                   value="{{ form_data.name if form_data else '' }}"
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]*">
+            <p class="form-text">Alphanumeric characters, underscores, hyphens, and periods only</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="resource_type">Resource Type *</label>
+            <select id="resource_type" name="resource_type" class="form-control" required>
+                <option value="device" {% if form_data and form_data.resource_type == 'device' %}selected{% endif %}>Device</option>
+                <option value="ip_address" {% if form_data and form_data.resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
+                <option value="port" {% if form_data and form_data.resource_type == 'port' %}selected{% endif %}>Port</option>
+                <option value="credential" {% if form_data and form_data.resource_type == 'credential' %}selected{% endif %}>Credential</option>
+                <option value="generic" {% if not form_data or form_data.resource_type == 'generic' %}selected{% endif %}>Generic</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="pool_id">Resource Pool</label>
+            <select id="pool_id" name="pool_id" class="form-control">
+                <option value="">Default Pool</option>
+                {% for pool in pools %}
+                <option value="{{ pool.id }}" {% if form_data and form_data.pool_id|string == pool.id|string %}selected{% endif %}>{{ pool.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="3">{{ form_data.description if form_data else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="capacity">Capacity</label>
+            <input type="number" id="capacity" name="capacity" class="form-control" min="1" 
+                   value="{{ form_data.capacity if form_data else '1' }}">
+            <p class="form-text">Number of concurrent allocations allowed (1 for exclusive resources)</p>
+        </div>
+        
+        {% if all_tags %}
+        <div class="form-group">
+            <label>Tags</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                {% for tag in all_tags %}
+                <label style="font-weight: normal;">
+                    <input type="checkbox" name="tags" value="{{ tag.name }}"
+                           {% if form_data and tag.name in form_data.getlist('tags') %}checked{% endif %}>
+                    {{ tag.name }}
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="form-group">
+            <label for="metadata">Metadata (JSON)</label>
+            <textarea id="metadata" name="metadata" class="form-control" rows="4" 
+                      placeholder='{"key": "value"}'>{{ form_data.metadata if form_data else '{}' }}</textarea>
+            <p class="form-text">Optional key-value metadata in JSON format</p>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary">
+                <span class="material-icons">save</span> Create Resource
+            </button>
+            <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

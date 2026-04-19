@@ -1,0 +1,62 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Edit {{ pool.name }} - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Edit IP Pool</h2>
+    <p>Modify settings for {{ pool.name }}</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group">
+            <label>Pool Name</label>
+            <input type="text" class="form-control" value="{{ pool.name }}" disabled>
+            <p class="form-text">Pool name cannot be changed</p>
+        </div>
+        
+        <div class="form-group">
+            <label>CIDR Range</label>
+            <input type="text" class="form-control" value="{{ pool.cidr }}" disabled>
+            <p class="form-text">CIDR range cannot be changed</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="gateway">Gateway</label>
+            <input type="text" id="gateway" name="gateway" class="form-control"
+                   value="{{ pool.gateway or '' }}"
+                   placeholder="192.168.1.1">
+        </div>
+        
+        <div class="form-group">
+            <label for="dns_servers">DNS Servers</label>
+            <input type="text" id="dns_servers" name="dns_servers" class="form-control"
+                   value="{{ pool.dns_servers | join(', ') if pool.dns_servers else '' }}"
+                   placeholder="8.8.8.8, 8.8.4.4">
+            <p class="form-text">Comma-separated list of DNS server addresses</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="reserved_ips">Reserved IPs</label>
+            <textarea id="reserved_ips" name="reserved_ips" class="form-control" rows="3"
+                      placeholder="192.168.1.1, 192.168.1.2">{{ pool.reserved_ips | join(', ') if pool.reserved_ips else '' }}</textarea>
+            <p class="form-text">Comma-separated list of IPs to exclude from allocation</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="3">{{ pool.description or '' }}</textarea>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary">
+                <span class="material-icons">save</span> Save Changes
+            </button>
+            <a href="{{ url_for('resources.ip_pool_detail', pool_id=pool.id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

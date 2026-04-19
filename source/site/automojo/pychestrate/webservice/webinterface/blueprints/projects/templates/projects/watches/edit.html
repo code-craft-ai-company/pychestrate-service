@@ -1,0 +1,106 @@
+{% extends "projects/base.html" %}
+
+{% block title %}Edit {{ watch.name }} - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('projects.project_list') }}">Projects</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.watch_list', project_id=project.id) }}">Watches</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}">{{ watch.name }}</a>
+    <span>/</span>
+    <span>Edit</span>
+</div>
+
+<div class="page-header">
+    <h2>Edit Watch</h2>
+    <p>Modify watch configuration</p>
+</div>
+
+<div class="card">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" class="form-control" required 
+                   value="{{ watch.name }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ watch.description or '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+            <label for="repository_id">Repository</label>
+            <select id="repository_id" name="repository_id" class="form-control" required>
+                {% for repo in repositories %}
+                <option value="{{ repo.id }}" {% if watch.repository_id == repo.id %}selected{% endif %}>
+                    {{ repo.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="event_type">Event Type</label>
+            <select id="event_type" name="event_type" class="form-control" required>
+                {% for event_type in event_types %}
+                <option value="{{ event_type }}" {% if watch.event_type.value == event_type %}selected{% endif %}>
+                    {{ event_type }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="branch_pattern">Branch Pattern</label>
+            <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
+                   value="{{ watch.branch_pattern or '' }}"
+                   placeholder="e.g., main, feature/*, release-*">
+            <span class="form-text">Use * as wildcard. Leave empty to match all branches.</span>
+        </div>
+        
+        <div class="form-group">
+            <label for="action_type">Action Type</label>
+            <select id="action_type" name="action_type" class="form-control" required>
+                {% for action_type in action_types %}
+                <option value="{{ action_type }}" {% if watch.action_type.value == action_type %}selected{% endif %}>
+                    {{ action_type }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="action_spec_id">Build Specification (for build actions)</label>
+            <select id="action_spec_id" name="action_spec_id" class="form-control">
+                <option value="">Select a build spec</option>
+                {% for spec in build_specs %}
+                <option value="{{ spec.id }}" {% if watch.action_spec_id == spec.id %}selected{% endif %}>
+                    {{ spec.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="enabled" value="true" {% if watch.enabled %}checked{% endif %}>
+                Enabled
+            </label>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary">
+                <span class="material-icons">save</span> Save Changes
+            </button>
+            <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Health Config - {{ resource.name }} - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Configure Health Check</h2>
+    <p>Set up automated health monitoring for {{ resource.name }}</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="enabled" {% if config and config.enabled %}checked{% endif %}>
+                Enable Health Checks
+            </label>
+        </div>
+        
+        <div class="form-group">
+            <label for="probe_url">Probe URL</label>
+            <input type="text" id="probe_url" name="probe_url" class="form-control"
+                   value="{{ config.probe_url if config else '' }}"
+                   placeholder="https://example.com/health">
+            <p class="form-text">HTTP(S) URL to probe for health status (expects 2xx response)</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="probe_command">Probe Command</label>
+            <input type="text" id="probe_command" name="probe_command" class="form-control"
+                   value="{{ config.probe_command if config else '' }}"
+                   placeholder="ping -c 1 hostname">
+            <p class="form-text">Shell command to execute (exit code 0 = healthy)</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="interval_seconds">Check Interval (seconds)</label>
+            <input type="number" id="interval_seconds" name="interval_seconds" class="form-control" min="10"
+                   value="{{ config.interval_seconds if config else 60 }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="timeout_seconds">Timeout (seconds)</label>
+            <input type="number" id="timeout_seconds" name="timeout_seconds" class="form-control" min="1"
+                   value="{{ config.timeout_seconds if config else 10 }}">
+        </div>
+        
+        <div class="form-group">
+            <label for="failure_threshold">Failure Threshold</label>
+            <input type="number" id="failure_threshold" name="failure_threshold" class="form-control" min="1"
+                   value="{{ config.failure_threshold if config else 3 }}">
+            <p class="form-text">Number of consecutive failures before marking unhealthy</p>
+        </div>
+        
+        <div class="form-group">
+            <label for="success_threshold">Success Threshold</label>
+            <input type="number" id="success_threshold" name="success_threshold" class="form-control" min="1"
+                   value="{{ config.success_threshold if config else 1 }}">
+            <p class="form-text">Number of consecutive successes before marking healthy</p>
+        </div>
+        
+        <div style="display: flex; gap: 10px;">
+            <button type="submit" class="btn btn-primary">
+                <span class="material-icons">save</span> Save Configuration
+            </button>
+            <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

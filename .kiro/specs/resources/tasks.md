@@ -1,0 +1,405 @@
+# Implementation Plan: Resource Management
+
+## Overview
+
+This implementation plan breaks down the Resource Management module into discrete coding tasks. The implementation follows the existing Flask/Flask-RestX patterns in the Pychestrate codebase, using SQLAlchemy for persistence and the testbase framework for testing.
+
+## Existing Implementation Notes
+
+The following components from system-configuration will be leveraged:
+
+### Core Package (`source/packages/automojo/pychestrate/core/`)
+- **orm.py**: Base models, User, Role, Permission models
+- **managers/**: UserManager, SecurityManager, AuditLogger
+- **dbconnection.py**: PostgreSQL connection factory
+- **dbio.py**: Database helper functions
+
+### Web Service (`source/site/automojo/pychestrate/webservice/`)
+- **restapi/versions/v1/config/**: REST API patterns and authentication decorators
+- **webinterface/blueprints/config/**: Web interface patterns with Vue.js/Bootstrap
+
+## Tasks
+
+- [x] 1. Set up project structure and core models
+  - [x] 1.1 Create ORM models for ResourcePool, Tag, and association tables
+    - Add ResourcePool model with name, description, is_default
+    - Add Tag model with name, description
+    - Define resource_tags association table
+    - Define pool_permissions association table for role-based access
+    - _Requirements: 1.1, 2.1, 7.1_
+  - [x] 1.2 Create ORM model for Resource
+    - Add Resource model with name, resource_type, pool_id, metadata_json, capacity, health_status
+    - Add sensitive_fields JSONB column for metadata masking
+    - Add relationships to pool, tags, allocations
+    - _Requirements: 1.1, 8.1_
+  - [x] 1.3 Create ORM models for IPPool and IPAllocation
+    - Add IPPool model with cidr, ip_version, network_address, subnet_mask, gateway, dns_servers, reserved_ips
+    - Add IPAllocation model with pool_id, ip_address, user_id, job_id, status
+    - _Requirements: 2A.1, 3A.1_
+  - [x] 1.4 Create ORM models for Allocation and Reservation
+    - Add Allocation model with resource_id, user_id, job_id, mode, status, timestamps
+    - Add Reservation model with resource_id, time window, status
+    - _Requirements: 3.1, 5.1_
+  - [x] 1.5 Create ORM models for health tracking
+    - Add HealthCheckConfigModel with probe settings
+    - Add HealthTransitionLog for status change history
+    - Add ResourceMetadataHistory for metadata audit trail
+    - _Requirements: 6.1, 6.5, 8.4_
+  - [x] 1.6 Create database migration script
+    - Create Alembic migration for all new tables
+    - Include default resource pool
+    - _Requirements: 2.4_
+
+- [x] 2. Implement Resource Manager
+  - [x] 2.1 Create ResourceManager class with validation methods
+    - Create `source/packages/automojo/pychestrate/core/managers/resource_manager.py`
+    - Implement validate_resource_name (alphanumeric, underscore, hyphen, period)
+    - Implement validate_tag_name (alphanumeric, underscore, hyphen)
+    - Create dataclasses for requests/responses
+    - _Requirements: 1.7, 7.5_
+  - [x] 2.2 Write property test for resource name validation
+    - **Property 2: Resource Name Validation**
+    - **Validates: Requirements 1.7**
+  - [x] 2.3 Implement resource CRUD operations
+    - Implement create_resource with duplicate check within pool
+    - Implement get_resource, get_resource_by_name
+    - Implement update_resource
+    - Implement delete_resource with allocation check
+    - Implement list_resources with filtering and pagination
+    - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+  - [x] 2.4 Write property test for resource name uniqueness
+    - **Property 1: Resource Name Uniqueness**
+    - **Validates: Requirements 1.2**
+  - [x] 2.5 Write property test for resource deletion constraint
+    - **Property 3: Resource Deletion Constraint**
+    - **Validates: Requirements 1.4**
+  - [x] 2.6 Implement pool management
+    - Implement create_pool, get_pool, list_pools, delete_pool
+    - Implement assign_resource_to_pool, remove_resource_from_pool
+    - _Requirements: 2.1, 2.2, 2.3, 2.5_
+  - [x] 2.7 Write property test for pool deletion constraint
+    - **Property 4: Pool Deletion Constraint**
+    - **Validates: Requirements 2.5**
+  - [x] 2.8 Implement tag management
+    - Implement add_tags, remove_tags
+    - Implement tag-based filtering in list_resources
+    - _Requirements: 7.1, 7.2_
+  - [x] 2.9 Implement metadata management
+    - Implement update_metadata with history tracking
+    - Implement get_metadata with sensitive field masking
+    - _Requirements: 8.1, 8.4, 8.5_
+  - [x] 2.10 Write property test for metadata sensitive field masking
+    - **Property 14: Metadata Sensitive Field Masking**
+    - **Validates: Requirements 8.5**
+
+- [x] 3. Checkpoint - Resource Manager complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 4. Implement IP Pool Manager
+  - [x] 4.1 Create IPPoolManager class with CIDR utilities
+    - Create `source/packages/automojo/pychestrate/core/managers/ip_pool_manager.py`
+    - Implement validate_cidr using Python ipaddress module
+    - Implement calculate_pool_stats (total, reserved, allocated, available)
+    - Implement check_cidr_overlap
+    - _Requirements: 2A.2, 2A.3, 2A.6_
+  - [x] 4.2 Write property test for CIDR validation
+    - **Property 19: CIDR Validation**
+    - **Validates: Requirements 2A.2**
+  - [x] 4.3 Write property test for IP pool address calculation
+    - **Property 20: IP Pool Address Calculation**
+    - **Validates: Requirements 2A.3**
+  - [x] 4.4 Write property test for CIDR overlap detection
+    - **Property 24: CIDR Overlap Detection**
+    - **Validates: Requirements 2A.6**
+  - [x] 4.5 Implement IP pool CRUD operations
+    - Implement create_pool with CIDR parsing
+    - Implement get_pool, list_pools, update_pool, delete_pool
+    - Implement mark_ip_reserved, unmark_ip_reserved
+    - _Requirements: 2A.1, 2A.4, 2A.5_
+  - [x] 4.6 Implement IP checkout operations
+    - Implement checkout_ip (single IP allocation)
+    - Implement checkout_ips (bulk allocation with contiguous preference)
+    - Implement is_ip_available, get_available_ips
+    - Implement find_contiguous_block
+    - _Requirements: 3A.1, 3A.2, 3A.3, 3A.4_
+  - [x] 4.7 Write property test for IP checkout-checkin round-trip
+    - **Property 21: IP Checkout-Checkin Round-Trip**
+    - **Validates: Requirements 3A.1, 4A.1**
+  - [x] 4.8 Write property test for IP pool exhaustion
+    - **Property 22: IP Pool Exhaustion**
+    - **Validates: Requirements 3A.6**
+  - [x] 4.9 Write property test for specific IP allocation
+    - **Property 23: Specific IP Allocation**
+    - **Validates: Requirements 3A.3**
+  - [x] 4.10 Implement IP checkin operations
+    - Implement checkin_ip (single release)
+    - Implement checkin_ips (bulk release)
+    - Implement checkin_job_ips (release all IPs for a job)
+    - _Requirements: 4A.1, 4A.2, 4A.3_
+  - [x] 4.11 Write property test for job IP bulk checkin
+    - **Property 25: Job IP Bulk Checkin**
+    - **Validates: Requirements 4A.3**
+
+- [x] 5. Checkpoint - IP Pool Manager complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 6. Implement Allocation Manager
+  - [x] 6.1 Create AllocationManager class
+    - Create `source/packages/automojo/pychestrate/core/managers/allocation_manager.py`
+    - Implement check_availability for exclusive and shared modes
+    - Implement find_available_resource for tag-based selection
+    - _Requirements: 3.1, 7.3, 7.4_
+  - [x] 6.2 Implement checkout operations with concurrency control
+    - Implement checkout with database-level locking (SELECT FOR UPDATE)
+    - Support exclusive and shared modes
+    - Include metadata snapshot in allocation
+    - _Requirements: 3.1, 3.3, 3.4, 8.2, 12.1, 12.2_
+  - [x] 6.3 Write property test for checkout-checkin round-trip
+    - **Property 5: Checkout-Checkin Round-Trip**
+    - **Validates: Requirements 3.1, 4.1**
+  - [x] 6.4 Write property test for exclusive allocation enforcement
+    - **Property 6: Exclusive Allocation Enforcement**
+    - **Validates: Requirements 3.2**
+  - [x] 6.5 Write property test for shared capacity enforcement
+    - **Property 7: Shared Capacity Enforcement**
+    - **Validates: Requirements 3.5**
+  - [x] 6.6 Write property test for concurrent checkout serialization
+    - **Property 15: Concurrent Checkout Serialization**
+    - **Validates: Requirements 12.1**
+    - **PBT Status: PASSED (5/5 tests)**
+  - [x] 6.7 Implement checkin operations
+    - Implement checkin with ownership validation
+    - Implement force_checkin for administrators
+    - Calculate duration on checkin
+    - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
+    - **Implementation: checkin() and force_checkin() methods in AllocationManager**
+  - [x] 6.8 Write property test for checkin ownership validation
+    - **Property 9: Checkin Ownership Validation**
+    - **Validates: Requirements 4.2**
+    - **PBT Status: PASSED (5/5 tests)**
+  - [x] 6.9 Implement timeout handling
+    - Implement expire_timed_out_allocations
+    - _Requirements: 3.6_
+    - **Implementation: expire_timed_out_allocations() method in AllocationManager**
+  - [x] 6.10 Write property test for allocation timeout expiration
+    - **Property 8: Allocation Timeout Expiration**
+    - **Validates: Requirements 3.6**
+    - **PBT Status: PASSED (6/6 tests)**
+  - [x] 6.11 Implement tag-based checkout
+    - Implement checkout by tags with load balancing
+    - _Requirements: 7.3, 7.4_
+    - **Implementation: find_available_resource() and checkout() with tags support**
+  - [x] 6.12 Write property test for tag-based resource selection
+    - **Property 13: Tag-Based Resource Selection**
+    - **Validates: Requirements 7.3, 7.4**
+    - **PBT Status: PASSED (8/8 tests)**
+
+- [x] 7. Implement Reservation System
+  - [x] 7.1 Implement reservation CRUD
+    - Implement create_reservation with conflict checking
+    - Implement cancel_reservation, modify_reservation
+    - Implement list_reservations with filtering
+    - _Requirements: 5.1, 5.2, 5.4, 5.5_
+  - [x] 7.2 Write property test for reservation conflict detection
+    - **Property 10: Reservation Conflict Detection**
+    - **Validates: Requirements 5.1, 5.2**
+    - **PBT Status: PASSED (11/11 tests)**
+  - [x] 7.3 Implement reservation activation
+    - Implement activate_due_reservations
+    - Convert pending reservations to active allocations
+    - _Requirements: 5.3_
+  - [x] 7.4 Write property test for reservation activation
+    - **Property 11: Reservation Activation**
+    - **Validates: Requirements 5.3**
+    - **PBT Status: PASSED (8/8 tests)**
+  - [x] 7.5 Update availability checking to consider reservations
+    - Modify check_availability to consider future reservations
+    - Modify find_available_resource to consider future reservations
+    - _Requirements: 5.6_
+
+- [x] 8. Checkpoint - Allocation Manager complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 9. Implement Health Monitor
+  - [x] 9.1 Create HealthMonitor class
+    - Create `source/packages/automojo/pychestrate/core/managers/health_monitor.py`
+    - Implement update_health_status with transition logging
+    - Implement get_health_history
+    - _Requirements: 6.1, 6.2_
+  - [x] 9.2 Implement health check configuration
+    - Implement configure_health_check
+    - Implement get_health_check_config
+    - _Requirements: 6.5_
+  - [x] 9.3 Implement health check execution
+    - Implement run_health_check (URL probe or command)
+    - Implement run_all_health_checks
+    - Update status based on failure/success thresholds
+    - _Requirements: 6.5, 6.6_
+  - [x] 9.4 Implement allocation blocking for unhealthy resources
+    - Modify checkout to check health status
+    - Block allocations for offline/maintenance resources
+    - _Requirements: 6.3_
+  - [x] 9.5 Write property test for health status allocation blocking
+    - **Property 12: Health Status Allocation Blocking**
+    - **Validates: Requirements 6.3**
+  - [x] 9.6 Implement notification for status changes
+    - Implement notify_allocation_holders
+    - _Requirements: 6.4_
+
+- [x] 10. Implement Audit and History
+  - [x] 10.1 Implement allocation history
+    - Implement get_allocation_history with filtering
+    - _Requirements: 9.1, 9.2_
+  - [x] 10.2 Implement utilization metrics
+    - Implement get_utilization_metrics (total time, avg duration, peak usage)
+    - _Requirements: 9.3_
+  - [x] 10.3 Implement data export
+    - Implement export_allocation_data (JSON and CSV formats)
+    - _Requirements: 9.5_
+  - [x] 10.4 Implement history retention
+    - Implement cleanup for old allocation records
+    - _Requirements: 9.4_
+  - [x] 10.5 Integrate audit logging
+    - Add audit calls to ResourceManager operations
+    - Add audit calls to AllocationManager operations
+    - Add audit calls to IPPoolManager operations
+    - _Requirements: 8.4, 9.1_
+
+- [x] 11. Checkpoint - Core managers complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 12. Implement REST API endpoints
+  - [x] 12.1 Create REST API namespace and base configuration
+    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/resources/` directory
+    - Set up Flask-RestX namespace for /api/v1/resources
+    - Implement authentication decorator
+    - _Requirements: 10.1, 10.2_
+  - [x] 12.2 Write property test for API authentication enforcement
+    - **Property 16: API Authentication Enforcement**
+    - **Validates: Requirements 10.2**
+  - [x] 12.3 Implement error handling middleware
+    - Create consistent error response format
+    - Map exceptions to HTTP status codes
+    - _Requirements: 10.3, 10.6_
+  - [x] 12.4 Write property test for API error format consistency
+    - **Property 18: API Error Format Consistency**
+    - **Validates: Requirements 10.3**
+  - [x] 12.5 Implement resource management endpoints
+    - POST /resources - create resource
+    - GET /resources - list resources
+    - GET /resources/{id} - get resource
+    - PUT /resources/{id} - update resource
+    - DELETE /resources/{id} - delete resource
+    - _Requirements: 1.1, 1.3, 1.4, 1.5, 10.4, 10.5_
+  - [x] 12.6 Write property test for API pagination correctness
+    - **Property 17: API Pagination Correctness**
+    - **Validates: Requirements 10.4**
+    - **PBT Status: PASSED (13/13 tests)**
+  - [x] 12.7 Implement pool management endpoints
+    - POST /pools - create pool
+    - GET /pools - list pools
+    - DELETE /pools/{id} - delete pool
+    - _Requirements: 2.1, 2.5_
+  - [x] 12.8 Implement IP pool endpoints
+    - POST /ip-pools - create IP pool
+    - GET /ip-pools - list IP pools
+    - GET /ip-pools/{id} - get IP pool with stats
+    - PUT /ip-pools/{id} - update IP pool
+    - DELETE /ip-pools/{id} - delete IP pool
+    - POST /ip-pools/{id}/checkout - checkout IP(s)
+    - POST /ip-pools/{id}/checkin - checkin IP(s)
+    - POST /ip-pools/{id}/reserved - mark IP reserved
+    - DELETE /ip-pools/{id}/reserved/{ip} - unmark reserved
+    - _Requirements: 2A.1, 2A.4, 3A.1, 4A.1_
+  - [x] 12.9 Implement allocation endpoints
+    - POST /resources/{id}/checkout - checkout resource
+    - POST /allocations/{id}/checkin - checkin resource
+    - GET /allocations - list allocations
+    - GET /allocations/{id} - get allocation
+    - DELETE /allocations/{id} - force checkin (admin)
+    - _Requirements: 3.1, 4.1, 4.4_
+  - [x] 12.10 Implement reservation endpoints
+    - POST /reservations - create reservation
+    - GET /reservations - list reservations
+    - PUT /reservations/{id} - modify reservation
+    - DELETE /reservations/{id} - cancel reservation
+    - _Requirements: 5.1, 5.4, 5.5_
+  - [x] 12.11 Implement tag endpoints
+    - POST /resources/{id}/tags - add tags
+    - DELETE /resources/{id}/tags - remove tags
+    - GET /tags - list all tags
+    - _Requirements: 7.1_
+  - [x] 12.12 Implement health endpoints
+    - PUT /resources/{id}/health - update health status
+    - GET /resources/{id}/health/history - get health history
+    - PUT /resources/{id}/health/config - configure health check
+    - POST /resources/{id}/health/check - run health check
+    - _Requirements: 6.1, 6.2, 6.5_
+  - [x] 12.13 Implement history and metrics endpoints
+    - GET /allocations/history - get allocation history
+    - GET /metrics - get utilization metrics
+    - GET /allocations/export - export allocation data
+    - _Requirements: 9.1, 9.3, 9.5_
+
+- [x] 13. Checkpoint - REST API complete
+  - Ensure all tests pass, ask the user if questions arise.
+
+- [x] 14. Implement Web Interface
+  - [x] 14.1 Create web interface blueprints structure
+    - Create `source/site/automojo/pychestrate/webservice/webinterface/blueprints/resources/` directory
+    - Use SecurityBlueprint for route security
+    - _Requirements: 11.1_
+  - [x] 14.2 Implement resource management pages
+    - Create resource list page with filtering
+    - Create resource detail/edit page
+    - Create resource create page
+    - Implement postback handlers
+    - _Requirements: 11.1, 11.2, 11.4, 11.6_
+  - [x] 14.3 Implement pool management pages
+    - Create pool list page
+    - Create pool detail page with resources
+    - Implement postback handlers
+    - _Requirements: 11.1, 11.2, 11.4_
+  - [x] 14.4 Implement IP pool management pages
+    - Create IP pool list page with stats
+    - Create IP pool detail page showing allocations
+    - Create IP pool create page with CIDR input
+    - Implement checkout/checkin UI
+    - _Requirements: 11.1, 11.2, 11.4, 11.6_
+  - [x] 14.5 Implement allocation viewing pages
+    - Create active allocations list page
+    - Create allocation history page with filtering
+    - Implement force checkin UI for admins
+    - _Requirements: 11.1, 11.4_
+  - [x] 14.6 Implement reservation management pages
+    - Create reservation list page
+    - Create reservation create/edit page
+    - Implement calendar view for reservations
+    - _Requirements: 11.1, 11.2, 11.4_
+  - [x] 14.7 Implement health monitoring pages
+    - Create health status dashboard
+    - Create health check configuration page
+    - Display health transition history
+    - _Requirements: 11.1, 11.4_
+  - [x] 14.8 Implement error display
+    - Create error message templates
+    - Integrate error display into all pages
+    - _Requirements: 11.3_
+
+- [x] 15. Final checkpoint - All components complete
+  - Ensure all tests pass, ask the user if questions arise.
+  - Verify all requirements are covered
+  - Run full test suite including property tests
+  - **Test Results: 466 tests PASSED, 0 failures, 0 errors**
+
+## Notes
+
+- All tasks are required for comprehensive correctness guarantees
+- Each task references specific requirements for traceability
+- Checkpoints ensure incremental validation
+- Property tests validate universal correctness properties using Hypothesis
+- Unit tests validate specific examples and edge cases
+- All database operations go through the dbio pattern per project conventions
+- Web interface uses postback URLs for data modifications per project conventions
+- IP Pool Manager uses Python's ipaddress module for CIDR calculations
+

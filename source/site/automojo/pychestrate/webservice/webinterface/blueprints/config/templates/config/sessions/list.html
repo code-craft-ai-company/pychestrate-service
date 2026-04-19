@@ -1,0 +1,63 @@
+{% extends "config/base.html" %}
+
+{% block title %}Sessions - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Active Sessions</h2>
+    <p>Monitor and manage active user sessions</p>
+</div>
+
+<div style="margin-bottom: 20px;">
+    <form method="get" style="display: flex; gap: 10px;">
+        <input type="text" name="user_id" class="form-control" placeholder="Filter by User ID" 
+               value="{{ filter_user_id or '' }}" style="width: 200px;">
+        <button type="submit" class="btn btn-secondary">
+            <span class="material-icons">filter_list</span> Filter
+        </button>
+        {% if filter_user_id %}
+        <a href="{{ url_for('config.session_list') }}" class="btn btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Created</th>
+            <th>Last Activity</th>
+            <th>Expires</th>
+            <th>Client IP</th>
+            <th>User Agent</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for session in sessions %}
+        <tr>
+            <td>{{ session.username }}</td>
+            <td>{{ session.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ session.last_activity.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ session.expires_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ session.client_ip or '-' }}</td>
+            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                {{ session.user_agent or '-' }}
+            </td>
+            <td>
+                <form action="{{ url_for('config.session_terminate', session_id=session.session_id) }}" method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Terminate this session?')">Terminate</button>
+                </form>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align: center; color: #6c757d;">No active sessions found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="margin-top: 20px; color: #6c757d;">Total: {{ sessions | length }} active sessions</p>
+{% endblock %}

@@ -1,0 +1,205 @@
+{% extends "resources/base.html" %}
+
+{% block title %}Health - {{ resource.name }} - Pychestrate Resources{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>{{ resource.name }} - Health</h2>
+    <p>Health status and transition history</p>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+    <div>
+        <div class="card">
+            <div class="card-header">Current Status</div>
+            <div style="display: flex; align-items: center; gap: 20px; padding: 20px 0;">
+                {% set status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+                {% if status == 'online' %}
+                <span class="material-icons health-online" style="font-size: 64px;">check_circle</span>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">Online</div>
+                    <div style="color: #6c757d;">Resource is healthy and available for allocation</div>
+                </div>
+                {% elif status == 'offline' %}
+                <span class="material-icons health-offline" style="font-size: 64px;">cancel</span>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">Offline</div>
+                    <div style="color: #6c757d;">Resource is unavailable - allocations blocked</div>
+                </div>
+                {% elif status == 'degraded' %}
+                <span class="material-icons health-degraded" style="font-size: 64px;">warning</span>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #ffc107;">Degraded</div>
+                    <div style="color: #6c757d;">Resource is partially functional - allocations allowed</div>
+                </div>
+                {% else %}
+                <span class="material-icons health-maintenance" style="font-size: 64px;">build</span>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #6c757d;">Maintenance</div>
+                    <div style="color: #6c757d;">Resource is under maintenance - allocations blocked</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        {% if config %}
+        <div class="card">
+            <div class="card-header">Health Check Configuration</div>
+            <table class="data-table" style="margin-top: 0;">
+                <tr>
+                    <th style="width: 150px;">Enabled</th>
+                    <td>
+                        {% if config.enabled %}
+                        <span class="badge badge-success">Yes</span>
+                        {% else %}
+                        <span class="badge badge-secondary">No</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th>Probe URL</th>
+                    <td>{{ config.probe_url or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Probe Command</th>
+                    <td><code>{{ config.probe_command or '-' }}</code></td>
+                </tr>
+                <tr>
+                    <th>Interval</th>
+                    <td>{{ config.interval_seconds }} seconds</td>
+                </tr>
+                <tr>
+                    <th>Timeout</th>
+                    <td>{{ config.timeout_seconds }} seconds</td>
+                </tr>
+                <tr>
+                    <th>Failure Threshold</th>
+                    <td>{{ config.failure_threshold }} consecutive failures</td>
+                </tr>
+                <tr>
+                    <th>Success Threshold</th>
+                    <td>{{ config.success_threshold }} consecutive successes</td>
+                </tr>
+            </table>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-header">Health Transition History</div>
+            {% if history %}
+            <table class="data-table" style="margin-top: 0;">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Reason</th>
+                        <th>Triggered By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transition in history %}
+                    <tr>
+                        <td>{{ transition.timestamp.strftime('%Y-%m-%d %H:%M:%S') if transition.timestamp else '-' }}</td>
+                        <td>
+                            {% if transition.old_status == 'online' %}
+                            <span class="badge badge-success">Online</span>
+                            {% elif transition.old_status == 'offline' %}
+                            <span class="badge badge-danger">Offline</span>
+                            {% elif transition.old_status == 'degraded' %}
+                            <span class="badge badge-warning">Degraded</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ transition.old_status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if transition.new_status == 'online' %}
+                            <span class="badge badge-success">Online</span>
+                            {% elif transition.new_status == 'offline' %}
+                            <span class="badge badge-danger">Offline</span>
+                            {% elif transition.new_status == 'degraded' %}
+                            <span class="badge badge-warning">Degraded</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ transition.new_status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ transition.reason or '-' }}</td>
+                        <td>{{ transition.triggered_by }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if total_pages > 1 %}
+            <div class="pagination">
+                {% if page > 1 %}
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page-1) }}">&laquo; Previous</a>
+                {% endif %}
+                
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                    <span class="active">{{ p }}</span>
+                    {% else %}
+                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=p) }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if page < total_pages %}
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page+1) }}">Next &raquo;</a>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% else %}
+            <p style="color: #6c757d; margin: 0;">No health transitions recorded</p>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div>
+        <div class="card">
+            <div class="card-header">Update Status</div>
+            <form method="post" action="{{ url_for('resources.health_update', resource_id=resource.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                
+                <div class="form-group">
+                    <label for="status">New Status</label>
+                    <select id="status" name="status" class="form-control" required>
+                        {% set current_status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+                        <option value="online" {% if current_status == 'online' %}selected{% endif %}>Online</option>
+                        <option value="offline" {% if current_status == 'offline' %}selected{% endif %}>Offline</option>
+                        <option value="degraded" {% if current_status == 'degraded' %}selected{% endif %}>Degraded</option>
+                        <option value="maintenance" {% if current_status == 'maintenance' %}selected{% endif %}>Maintenance</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="reason">Reason</label>
+                    <input type="text" id="reason" name="reason" class="form-control" placeholder="Reason for status change">
+                </div>
+                
+                <button type="submit" class="btn btn-primary" style="width: 100%;">
+                    <span class="material-icons">update</span> Update Status
+                </button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Actions</div>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <a href="{{ url_for('resources.health_config', resource_id=resource.id) }}" class="btn btn-secondary">
+                    <span class="material-icons">settings</span> Configure Health Check
+                </a>
+                <form method="post" action="{{ url_for('resources.health_run_check', resource_id=resource.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-secondary" style="width: 100%;">
+                        <span class="material-icons">play_arrow</span> Run Health Check
+                    </button>
+                </form>
+                <a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}" class="btn btn-secondary">
+                    <span class="material-icons">devices</span> View Resource
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
