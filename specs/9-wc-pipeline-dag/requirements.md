@@ -1,0 +1,110 @@
+# 9-wc-pipeline-dag — Requirements
+
+## Introduction
+
+`9-wc-pipeline-dag` is the framework-agnostic Custom Element that renders a
+pipeline run as an interactive Directed Acyclic Graph. Each node is a step or
+stage produced by `6-pipeline-definition`; edges encode declared dependencies
+and fan-out / fan-in from `6-matrix-sharding`. The element streams node status
+updates from `6-live-run-view`, lays out the DAG deterministically, exposes
+zoom/pan/focus, and delegates per-node drill-downs (logs, results, artifacts)
+to other `9-wc-*` components via events. Ships in **Phase 6** when build
+orchestration lands. Sits between `6-pipeline-definition` / `6-live-run-view`
+and the dashboards / run detail pages that host the element. The
+authoritative DAG definition lives in `6-pipeline-definition`; this element
+renders the projection and never mutates it.
+
+## Requirements
+
+### Requirement 1: Deterministic DAG Layout
+
+**User Story:** As an engineer, I want the pipeline to lay out identically on
+every load, so that I can spatially remember where a step lives across runs.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN the element receives `pipeline-run-id` THEN the system SHALL fetch `/api/v1/pipeline_runs/{pipeline_run_id}/graph.json` AND compute a layout whose node coordinates are a deterministic function of the graph definition.
+2. IF the graph contains a cycle THEN the system SHALL emit `pyc-pipeline-dag-error` with `{reason: "cycle_detected", nodes: string[]}` AND render a diagnostic banner; layout SHALL NOT crash.
+3. WHEN the same graph is rendered twice across independent sessions THEN the node coordinates SHALL be byte-for-byte identical.
+4. WHERE a matrix step exists with N shards THEN the element SHALL collapse the shards into a single expandable super-node by default AND expose an `expand-matrix="all|none|failing"` attribute to control expansion.
+
+### Requirement 2: Live Status Updates Without Re-layout
+
+**User Story:** As an engineer watching a running pipeline, I want nodes to
+change color and glyph as steps progress, so that I can see the wave of
+execution without the graph jumping around.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN a status event arrives via `/api/v1/pipeline_runs/{id}/status.stream` THEN the element SHALL update the target node's badge AND SHALL NOT recompute layout coordinates.
+2. IF a node transitions into `failed` or `errored` THEN the element SHALL animate a 300 ms pulse on that node bounded by the `--pyc-pipeline-dag-pulse-failed` token.
+3. WHILE a node is in `running` state THEN the element SHALL display an inline spinner via a pure CSS keyframe driven by `--pyc-pipeline-dag-spinner-speed`.
+4. WHEN all nodes reach terminal status THEN the element SHALL emit `pyc-pipeline-dag-terminal` with `{passed, failed, errored, skipped, durationMs}`.
+
+### Requirement 3: Zoom, Pan, Focus, and Selection
+
+**User Story:** As a user inspecting a 500-node pipeline, I want to zoom into
+a failing branch and follow edges, so that I can understand why a step ran.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN the user scrolls with Ctrl/Cmd THEN the viewport SHALL zoom around the cursor within `[zoom-min, zoom-max]` (defaults 0.25, 4.0) AND SHALL maintain a 60 fps redraw budget.
+2. WHEN the user clicks a node THEN the element SHALL emit `pyc-pipeline-dag-select` with `{nodeId, stepKind, status, shardIndex}` AND SHALL highlight the transitive upstream and downstream subgraph of the selected node.
+3. WHEN the user presses `F` with a node selected THEN the element SHALL center-and-zoom to fit the subgraph of that node and its neighbors within the viewport.
+4. WHEN the user presses `R` THEN the viewport SHALL reset to the full-graph fit.
+
+### Requirement 4: Keyboard Navigation and Accessibility
+
+**User Story:** As a keyboard user, I want to traverse the DAG and have a
+screen reader announce status transitions, so that I can use the element
+without a mouse.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN the element mounts THEN the root SHALL expose `role="application"` with an accessible name AND the node canvas SHALL have a hidden ordered list (`role="list"`) mirroring the topologically-sorted nodes for assistive tech.
+2. WHEN the user presses `Tab` THEN focus SHALL advance through nodes in topological order.
+3. WHEN the user presses `ArrowRight` / `ArrowLeft` on a selected node THEN focus SHALL move to the next / previous downstream / upstream neighbor.
+4. IF a node transitions to failed THEN the element SHALL announce `"Step <name> failed"` through a live region.
+
+## Property-Based Test Requirements
+
+### Property 1: Layout Is Deterministic and Acyclic for Any DAG
+
+- **Invariant:** For any directed acyclic graph with N nodes and E edges, the layout function produces the same node coordinates given the same graph, and the layout respects topological order (every edge goes left-to-right or top-to-bottom within a configured tolerance).
+- **Generator:** Random DAGs generated by sampling a topological order of N nodes (1..500) and adding E edges (0..2N) that respect the order.
+- **Assertion:** `layout(g) == layout(g)` byte-identical; for every edge `(u, v)` `coord(u).rank < coord(v).rank`.
+- **Sample size:** 1000 generated cases
+
+### Property 2: Status Updates Are Render-Idempotent
+
+- **Invariant:** For any sequence of status events ending in a known terminal state per node, re-sending the event stream yields the same final DOM snapshot.
+- **Generator:** Random permutations of status event sequences for a fixed graph.
+- **Assertion:** Final shadow-DOM snapshot after replay equals the reference snapshot.
+- **Sample size:** 1000 generated cases
+
+### Property 3: Cycle Detection Never Blocks Render
+
+- **Invariant:** For any graph (including cyclic ones), the element returns from `connectedCallback` within a bounded time and either renders an acyclic layout or emits `pyc-pipeline-dag-error` and renders a banner.
+- **Generator:** Random graphs with 0..5 injected cycles.
+- **Assertion:** Render completes in < 1 s; when cycles exist, the `error` event is emitted with the implicated node ids.
+- **Sample size:** 1000 generated cases
+
+## Non-Functional Requirements
+
+- **NFR-1 (Performance):** Layout for 500 nodes / 1 000 edges p95 < 350 ms. Pan / zoom sustain 60 fps on a 2020-class laptop. Status update per event p95 < 8 ms including animation scheduling. TTI p95 < 400 ms with graph cached.
+- **NFR-2 (Security):** Same-origin REST; session cookies + CSRF. Node names and messages rendered via `textContent`; no HTML injection. Element never accepts a node URL from the server as an HTML-rendered link; downstream navigation fires as events, host page handles routing.
+- **NFR-3 (Observability):** Client metrics beaconed: `pychestrate_ui_pipeline_dag_tti_seconds` (histogram), `pychestrate_ui_pipeline_dag_layout_duration_seconds{node_bucket}` (histogram), `pychestrate_ui_pipeline_dag_status_update_total{status}` (counter), `pychestrate_ui_pipeline_dag_cycle_detected_total` (counter), `pychestrate_ui_pipeline_dag_fps` (summary from requestAnimationFrame samples). Log events `pychestrate.ui.pipeline_dag.opened`, `pychestrate.ui.pipeline_dag.terminal`, `pychestrate.ui.pipeline_dag.cycle_detected`.
+- **NFR-4 (Reliability):** When the status stream disconnects, the element SHALL freeze current state and show a `data-pyc-pipeline-dag-stream="disconnected"` attribute; reconnect with backoff. When the graph endpoint is unavailable the element SHALL render a `slot="graph-unavailable"` banner and SHALL NOT retry more than 3 times.
+
+## Out of Scope
+
+- Authoring or editing pipelines (see `6-pipeline-definition`).
+- Viewing per-step logs or results (delegates to `9-wc-log-stream` / `9-wc-result-viewer`).
+- Cross-pipeline DAG diff (future `6-compare-runs` extension).
+- Per-step metric tiles (see `9-wc-metric-tile`).
+
+## Dependencies
+
+- **Depends on:** `9-ui-design-tokens`, `6-pipeline-definition`, `6-matrix-sharding`, `6-live-run-view`, `8-rest-api-v1`, `1-authentication`, `1-rbac`.
+- **Depended on by:** `9-run-detail-ui`, `9-project-dashboard-ui`.
+- **Extension points exposed:** None directly; per-step visual customization is deferred to `DashboardTileKindExtension` in `9-project-dashboard-ui`.
