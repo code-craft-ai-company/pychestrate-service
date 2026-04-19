@@ -34,6 +34,11 @@ AI based testing should run only the 'singlehost' tests tests with:
 
 When running tests you should create an output folder in order to be able to capture all the test run artifacts in an isolated folder.
 
+## XTest Pages
+For testing controls, create a 'xtest' leaf that is accessible in debug and development environments. The base '/xtest' path has links
+to all the control test pages.  The control test pages contain fixed, no backend required JSON data that is used to test individual
+controls. For example 'xtest/build-info-card'
+
 
 ## Implementation
 The website along with its REST API interface is written in python and is based on the Flask web framework and Flask-RestX.
