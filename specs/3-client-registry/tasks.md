@@ -13,21 +13,29 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Extend `client` table with `last_seen`, `liveness_state`,
+- [x] T1.1 — Extend `client` table with `last_seen`, `liveness_state`,
   `last_agent_version`, `transport_name`, `degraded_at`, `revision_token`
-  via a migration pack.
-- [ ] T1.2 — Add `client_attribute` table with `(client_id, kind)` unique
-  constraint.
-- [ ] T1.3 — Declare `ClientAttributeExtension(ResourceExtension)` with
+  via a migration pack. *(``clients_clients`` in
+  ``clients/models.py``; migration 005_phase2_client_tables ships all
+  columns plus ``bearer_token_hash``.)*
+- [x] T1.2 — Add `client_attribute` table with `(client_id, kind)` unique
+  constraint. *(``clients_client_attributes`` in the same model module
+  and migration.)*
+- [x] T1.3 — Declare `ClientAttributeExtension(ResourceExtension)` with
   required class vars `attribute_kind_name`, `value_schema`, `display_label`,
-  `searchable`.
-- [ ] T1.4 — Implement `OsKindAttribute`, `CpuArchAttribute`,
+  `searchable`. *(``clients/registry/extensions/client_attribute_extension.py``.)*
+- [x] T1.4 — Implement `OsKindAttribute`, `CpuArchAttribute`,
   `ConcurrencyAttribute` as reference in-tree extensions.
-- [ ] T1.5 — Implement `ClientRegistryRepository` with `get_by_id`,
+- [~] T1.5 — Implement `ClientRegistryRepository` with `get_by_id`,
   `get_by_scope`, `get_by_cert_serial`, `list_clients`.
-- [ ] T1.6 — Implement `ClientRegistry.get_*` API with `ClientNotFound`
+  *(``clients/registry/service.py`` ships free-function read helpers
+  ``get_client``, ``get_client_by_scope``, ``list_clients``. The
+  ``get_by_cert_serial`` path lands in M2 alongside the cert table.)*
+- [x] T1.6 — Implement `ClientRegistry.get_*` API with `ClientNotFound`
   propagation.
-- [ ] T1.7 — Admin REST `GET /api/v1/clients` and `GET /api/v1/clients/{id}`.
+- [~] T1.7 — Admin REST `GET /api/v1/clients` and `GET /api/v1/clients/{id}`.
+  *(GET endpoints live in ``clients/restapi/v1/clients_controller.py``;
+  the M2 attribute-PUT endpoint ships in the same controller.)*
 
 ### M2 — Core Behavior
 

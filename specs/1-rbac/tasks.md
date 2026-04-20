@@ -17,43 +17,74 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Land the `roles`, `permissions`, `role_permissions`, and
+- [x] T1.1 — Land the `roles`, `permissions`, `role_permissions`, and
       `role_bindings` tables as an `EntityMigrationExtension` pack.
-- [ ] T1.2 — Declare `PermissionExtension` and `RoleExtension`
+      *(Models in `security/rbac/models.py`; Alembic migration
+      004_phase1_identity_tables creates ``rbac_roles``,
+      ``rbac_permissions``, ``rbac_role_permissions``, and
+      ``rbac_role_bindings`` with indexes and unique constraints.)*
+- [x] T1.2 — Declare `PermissionExtension` and `RoleExtension`
       `ResourceExtension` bases.
-- [ ] T1.3 — Implement `catalog.load_catalog_from_registry` with
+- [x] T1.3 — Implement `catalog.load_catalog_from_registry` with
       duplicate-key detection and namespace validation.
-- [ ] T1.4 — Ship `CorePermissionExtension` declaring the
+- [x] T1.4 — Ship `CorePermissionExtension` declaring the
       `system:*` keys (`users.read`, `users.write`, `rbac.admin`,
       `rbac.read`, `secrets.admin`, `audit.read`, `flags.admin`).
-- [ ] T1.5 — Ship `SystemAdminRole` and `AuditorRole` in-tree.
-- [ ] T1.6 — Implement `rbac_evaluator.check_permission` covering the
+- [x] T1.5 — Ship `SystemAdminRole` and `AuditorRole` in-tree.
+- [x] T1.6 — Implement `rbac_evaluator.check_permission` covering the
       `system:<action>` path with deny-beats-allow.
-- [ ] T1.7 — Implement `rbac_evaluator.require_permission` shortcut.
-- [ ] T1.8 — Wire the middleware hook that controllers call to guard a
-      route.
+- [x] T1.7 — Implement `rbac_evaluator.require_permission` shortcut.
+- [x] T1.8 — Wire the middleware hook that controllers call to guard a
+      route. *(Controllers call `require_permission(db_session=g.db_session,
+      principal=g.auth_principal, permission_key=..., now=...)` — the
+      Phase-1 middleware at ``webservice/middleware.py`` sets both
+      values on every Phase-1 request.)*
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Implement `binding_service.assign_role` with scope
+- [x] T2.1 — Implement `binding_service.assign_role` with scope
       validation and outbox publication of `entity.role.assigned`.
-- [ ] T2.2 — Implement `binding_service.revoke_role` with
+      *(security/rbac/binding_service.py. Scope-validation rules:
+      SYSTEM has no scope_id and no inheritance; ORGANIZATION has no
+      scope_id; PROJECT requires scope_id and rejects inheritance.
+      Idempotent on the unique (role, principal, scope) tuple.)*
+- [x] T2.2 — Implement `binding_service.revoke_role` with
       `entity.role.revoked`.
-- [ ] T2.3 — Extend `check_permission` to the `project:<id>:<action>`
+- [x] T2.3 — Extend `check_permission` to the `project:<id>:<action>`
       namespace with group-based binding resolution.
-- [ ] T2.4 — Implement `inheritance.seed_project_permissions` on
+      *(rbac_evaluator.py collects direct USER bindings, GROUP
+      bindings via identity_group_memberships, and ORGANIZATION
+      bindings with inherits_into_project=True. Deny beats allow
+      across all sources.)*
+- [x] T2.4 — Implement `inheritance.seed_project_permissions` on
       `entity.project.created` consumption.
-- [ ] T2.5 — Ship `ProjectPermissionExtension` and the project role
+      *(security/rbac/inheritance.py. wire_project_inheritance()
+      subscribes the seeder to entity.project.created; the seeder is
+      idempotent on the unique binding tuple.)*
+- [x] T2.5 — Ship `ProjectPermissionExtension` and the project role
       presets (`ProjectOwnerRole`, `ProjectEditorRole`,
       `ProjectViewerRole`).
-- [ ] T2.6 — Implement `cache.get_effective_permissions` LRU with
+      *(security/rbac/extensions/project_permissions.py +
+      project_roles.py. Permission keys declared in preset form
+      (project:<action>) — evaluator expands to project:<id>:<action>
+      at evaluation time so presets stay reusable across projects.)*
+- [x] T2.6 — Implement `cache.get_effective_permissions` LRU with
       bus-driven invalidation on `entity.role.assigned|revoked`,
       `entity.user.deactivated`, `entity.group.membership.changed`.
-- [ ] T2.7 — Wire REST controllers under `/api/v1/rbac/...`
+      *(security/rbac/cache.py. Thread-safe OrderedDict-backed LRU
+      keyed on (principal_id, permission_key, scope_id). wire_cache_invalidation()
+      subscribes invalidation handlers to the listed topics.)*
+- [x] T2.7 — Wire REST controllers under `/api/v1/rbac/...`
       (list roles, list permissions, CRUD bindings, `/check`).
-- [ ] T2.8 — Implement `RoleNotFoundError`, `BindingNotFoundError`,
+      *(security/rbac/restapi/v1/rbac_controller.py. Full binding
+      CRUD with filter query params and the /check endpoint that
+      out-of-process integrations call to evaluate a single key.)*
+- [x] T2.8 — Implement `RoleNotFoundError`, `BindingNotFoundError`,
       `PermissionKeyCollisionError`, and `AuthorizationError` with
       `os.linesep.join(...)` multiline messages.
+      *(security/rbac/exceptions.py + multi-line messages in
+      binding_service, catalog, and rbac_evaluator. Added
+      InvalidBindingScopeError for the M2 scope-validation surface.)*
 
 ### M3 — Hardening
 

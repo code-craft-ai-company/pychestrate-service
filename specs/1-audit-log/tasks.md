@@ -19,20 +19,24 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Land the `audit_records`, `audit_event_catalog`,
+- [x] T1.1 — Land the `audit_records`, `audit_event_catalog`,
       `audit_sink_registrations`, `audit_sink_outbox` tables with
       `REVOKE UPDATE, DELETE ON audit_records` asserted in the
-      migration.
-- [ ] T1.2 — Declare `AuditEventTypeExtension` resource base and ship
+      migration. *(All four models in `audit/models.py`; Alembic migration
+      004_phase1_identity_tables creates them and runs a ``DO $$ ...
+      REVOKE UPDATE, DELETE ON TABLE audit_records FROM <app_role>``
+      guarded by ``pg_roles`` membership so environments without the
+      configured role treat the REVOKE as a no-op.)*
+- [x] T1.2 — Declare `AuditEventTypeExtension` resource base and ship
       `UserLifecycleAuditEvents`, `RoleBindingAuditEvents`,
       `SecretAuditEvents` in-tree.
-- [ ] T1.3 — Declare `AuditSinkProtocol` `FactoryProtocolBase` with
+- [x] T1.3 — Declare `AuditSinkProtocol` `FactoryProtocolBase` with
       `protocol_schema_version = 1`.
-- [ ] T1.4 — Ship `LocalDatabaseAuditSink` at `PRECEDENCE = 1000`
+- [x] T1.4 — Ship `LocalDatabaseAuditSink` at `PRECEDENCE = 1000`
       with `is_canonical = True`.
-- [ ] T1.5 — Implement `audit_writer.capture_event` with canonical
+- [x] T1.5 — Implement `audit_writer.capture_event` with canonical
       JSON serialization and SHA-256 hash chain.
-- [ ] T1.6 — Wire `bus_subscriber` onto the minimal Phase-1 event set
+- [x] T1.6 — Wire `bus_subscriber` onto the minimal Phase-1 event set
       and publish `entity.audit.emitted` after each insert.
 
 ### M2 — Core Behavior

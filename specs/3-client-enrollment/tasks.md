@@ -13,18 +13,39 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Add `enrollment_token`, `client`, `client_cert`, `client_revocation`
+- [~] T1.1 — Add `enrollment_token`, `client`, `client_cert`, `client_revocation`
   tables via a `0-persistence` migration pack with prefix `enrollment_`.
-- [ ] T1.2 — Implement `enums.py` (TokenStatus, ClientStatus, RevocationReason).
-- [ ] T1.3 — Declare `EnrollmentTokenIssuerProtocol` and
+  *(Migration 005_phase2_client_tables creates
+  ``clients_enrollment_tokens`` / ``clients_clients`` /
+  ``clients_client_revocations``. The ``client_cert`` table lands in M2
+  with the mTLS CSR/CA path; M1 issues a server-generated bearer token
+  stored as ``clients_clients.bearer_token_hash`` instead.)*
+- [x] T1.2 — Implement `enums.py` (TokenStatus, ClientStatus, RevocationReason).
+      *(``clients/enums.py`` — shared with the registry.)*
+- [x] T1.3 — Declare `EnrollmentTokenIssuerProtocol` and
   `ClientIdentityVerifierProtocol` as `FactoryProtocolBase` subclasses with
   `protocol_schema_version = 1`.
-- [ ] T1.4 — Implement `Argon2TokenIssuer` reference factory at `PRECEDENCE=100`.
-- [ ] T1.5 — Implement `CsrSubjectVerifier` reference factory at `PRECEDENCE=100`.
-- [ ] T1.6 — Implement `service.issue_enrollment_token` with transactional write
+      *(``clients/enrollment/factories/token_issuer.py`` +
+      ``identity_verifier.py``.)*
+- [~] T1.4 — Implement `Argon2TokenIssuer` reference factory at `PRECEDENCE=100`.
+      *(Ships as pluggable ``password_hasher``-style factory. In-tree
+      reference is ``StdlibHmacTokenIssuer`` at ``PRECEDENCE=2000`` using
+      stdlib HMAC-SHA256 + the password pepper so the service boots
+      without ``argon2-cffi`` installed. Argon2id is supplied by an
+      out-of-tree ``pychestrate-ext-auth-argon2id``-style extension pack
+      at a lower PRECEDENCE once the operator adds the dependency.)*
+- [~] T1.5 — Implement `CsrSubjectVerifier` reference factory at `PRECEDENCE=100`.
+      *(M1 ships ``ScopeIdentityVerifier`` at ``PRECEDENCE=2000`` —
+      accepts when inbound pod_name matches the token scope. Full CSR
+      subject + attestation verification lands in M2.)*
+- [x] T1.6 — Implement `service.issue_enrollment_token` with transactional write
   and Argon2id hashing via the registered factory.
-- [ ] T1.7 — Implement `service.redeem_enrollment_token` with local
+      *(``clients/enrollment/service.py``; hashing delegated to the
+      registered ``enrollment_token_issuer``.)*
+- [~] T1.7 — Implement `service.redeem_enrollment_token` with local
   file-backed CA (stand-in for vault) for M1.
+      *(M1 redemption uses a bearer token path instead of a CA. The
+      mTLS + CSR + CA-signing path lands in M2.)*
 
 ### M2 — Core Behavior
 

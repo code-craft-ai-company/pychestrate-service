@@ -16,19 +16,25 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Land the `feature_flags` and `feature_flag_versions`
+- [x] T1.1 — Land the `feature_flags` and `feature_flag_versions`
       tables via `EntityMigrationExtension`.
-- [ ] T1.2 — Declare `FeatureFlagBackendProtocol`
+      *(Models in `identity/flags/models.py`; Alembic migration
+      004_phase1_identity_tables creates ``feature_flags`` and
+      ``feature_flag_versions`` with the ``(flag_key, version)`` unique
+      constraint.)*
+- [x] T1.2 — Declare `FeatureFlagBackendProtocol`
       `FactoryProtocolBase` with `protocol_schema_version = 1`.
-- [ ] T1.3 — Ship `LocalDatabaseFeatureFlagBackend` at
+- [x] T1.3 — Ship `LocalDatabaseFeatureFlagBackend` at
       `PRECEDENCE = 1000` claiming `flag_key_pattern = "*"`.
-- [ ] T1.4 — Implement `rules.compute_bucket` using
+- [x] T1.4 — Implement `rules.compute_bucket` using
       `sha256(flag_key || bucketing_key)` and
       `rules.evaluate_rollout` for PERCENTAGE flags.
-- [ ] T1.5 — Implement `flag_evaluator.evaluate_flag` +
+- [x] T1.5 — Implement `flag_evaluator.evaluate_flag` +
       `evaluate_boolean` with cache-miss → backend path and
       `SemanticError` on missing `bucketing_key`.
-- [ ] T1.6 — Implement `flag_service.create_flag` with outbox
+      *(Direct-to-backend path in place; staleness-window cache arrives
+      in M2.)*
+- [x] T1.6 — Implement `flag_service.create_flag` with outbox
       publication of `entity.flag.created`.
 
 ### M2 — Core Behavior
