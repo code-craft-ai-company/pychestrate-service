@@ -17,23 +17,36 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Implement `SecretBytes` with zeroize-on-drop and
+- [x] T1.1 — Implement `SecretBytes` with zeroize-on-drop and
       `__repr__ = "<redacted>"`.
-- [ ] T1.2 — Implement `SecretsAspects` dataclass + `build_default_aspects`
+- [x] T1.2 — Implement `SecretsAspects` dataclass + `build_default_aspects`
       helper (no mutable defaults anywhere).
-- [ ] T1.3 — Implement `kek_loader.load_kek_at_startup` with file,
+- [~] T1.3 — Implement `kek_loader.load_kek_at_startup` with file,
       env, and KMS shim sources; bail with `ConfigurationError` on
-      failure.
-- [ ] T1.4 — Land the `secrets`, `secret_versions`, `secret_acls`,
+      failure. *(File + env sources implemented; KMS shim deferred until
+      the KMS protocol lands.)*
+- [x] T1.4 — Land the `secrets`, `secret_versions`, `secret_acls`,
       `secret_outbox` tables via an `EntityMigrationExtension` pack.
-- [ ] T1.5 — Declare `SecretsBackendProtocol` `FactoryProtocolBase`
+      *(Models in `secrets/models.py`; Alembic migration
+      004_phase1_identity_tables creates ``phase1_secrets``,
+      ``phase1_secret_versions`` (with ``ciphertext_bytes`` column),
+      ``secret_acls``, and ``secret_outbox``. ``phase1_`` prefix is the
+      parallel-run naming; Phase 10 cut-over renames to the spec names.)*
+- [x] T1.5 — Declare `SecretsBackendProtocol` `FactoryProtocolBase`
       with `protocol_schema_version = 1`.
-- [ ] T1.6 — Ship `LocalEncryptedSecretsBackend` at `PRECEDENCE = 1000`
+- [x] T1.6 — Ship `LocalEncryptedSecretsBackend` at `PRECEDENCE = 1000`
       claiming `namespace_pattern = "*"` and implementing AES-GCM +
-      DEK wrap.
-- [ ] T1.7 — Implement `secrets_service.put_secret` and
+      DEK wrap. *(Fresh 256-bit DEK and 96-bit nonce per encrypt;
+      DEK wrapped under the active KEK via NIST AES Key Wrap (RFC 3394);
+      AEAD associated-data is the ``secret_ref`` so ciphertext cannot be
+      substituted across secrets.)*
+- [x] T1.7 — Implement `secrets_service.put_secret` and
       `read_secret` with ACL enforcement and audit emission inside
       the same transaction as the write.
+      *(ACL: system:secrets.admin for write, system:secrets.read or
+      owner-match for read. Audit emission via ``audit_writer.capture_event``
+      inside the same session so commit atomically publishes the secret
+      row and the audit row.)*
 
 ### M2 — Core Behavior
 

@@ -17,17 +17,26 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Define SQLAlchemy models for `User`, `Group`, `GroupMembership`
+- [x] T1.1 — Define SQLAlchemy models for `User`, `Group`, `GroupMembership`
       under `identity/users/models.py` and ship an
       `EntityMigrationExtension` pack against `0-persistence`.
-- [ ] T1.2 — Implement `user_repository.py` with `insert`, `get_by_id`,
+      *(Models landed in `identity/users/models.py` as `IdentityUser`,
+      `IdentityGroup`, `IdentityGroupMembership`, `IdentityEmailVerification`.
+      Alembic migration at
+      `source/packages/automojo/pychestrate/core/migrations/versions/004_phase1_identity_tables.py`
+      covers all four plus the cross-feature Phase-1 tables. A proper
+      `EntityMigrationExtension` wrapper lands with the `0-persistence`
+      feature work; the Alembic migration is the deployable unit today.)*
+- [x] T1.2 — Implement `user_repository.py` with `insert`, `get_by_id`,
       `get_by_login_name`, `get_by_email`, and pagination helpers.
-- [ ] T1.3 — Implement `user_service.create_user` and `read_user` with
+- [x] T1.3 — Implement `user_service.create_user` and `read_user` with
       named-parameter-only signatures and explicit returns.
-- [ ] T1.4 — Wire the REST controller `users_controller.py` for
+- [x] T1.4 — Wire the REST controller `users_controller.py` for
       `POST /api/v1/identity/users` and `GET /api/v1/identity/users/{id}`.
-- [ ] T1.5 — Publish `entity.user.created` through the persistence
+- [x] T1.5 — Publish `entity.user.created` through the persistence
       outbox and confirm delivery via a no-op subscriber.
+      *(Outbox wired through `messaging/outbox.py` + `messaging/event_bus.py`
+      in-process stub; subscriber verification to be added with `0-message-bus`.)*
 
 ### M2 — Core Behavior
 

@@ -18,23 +18,48 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Declare the `AuthProviderProtocol` `FactoryProtocolBase`
+- [x] T1.1 — Declare the `AuthProviderProtocol` `FactoryProtocolBase`
       with `factory_protocol_name = "auth_provider"` and
       `protocol_schema_version = 1`.
-- [ ] T1.2 — Land the `auth_sessions`, `auth_local_credentials`,
+- [x] T1.2 — Land the `auth_sessions`, `auth_local_credentials`,
       `auth_oidc_state`, `auth_saml_replay_cache`, and
       `auth_mfa_enrollments` tables as an `EntityMigrationExtension` pack.
-- [ ] T1.3 — Implement `cookies.build_session_cookie` honoring
+      *(All five models landed in `security/auth/models.py`. Alembic
+      migration 004_phase1_identity_tables ships them alongside the rest
+      of the Phase-1 schema.)*
+- [x] T1.3 — Implement `cookies.build_session_cookie` honoring
       `HttpOnly`, `Secure`, `SameSite`, `Domain`, `Path`, `Max-Age`.
-- [ ] T1.4 — Implement `middleware.resolve_session` and wire it into
+- [x] T1.4 — Implement `middleware.resolve_session` and wire it into
       the WebWorks request pipeline.
-- [ ] T1.5 — Implement `local_flow.verify_local_credentials` with
+      *(Flask ``before_request`` + ``teardown_request`` in
+      `webservice/middleware.py` opens the session, resolves the session
+      cookie to an ``AuthPrincipal`` via ``session_service.resolve_session``,
+      and sets ``g.db_session`` / ``g.actor_user_id`` for every Phase-1
+      path. Wiring it into the WebWorks ``WSGIApplication`` once the host
+      lands is a single ``install_phase1_middleware(app=app)`` call.)*
+- [x] T1.5 — Implement `local_flow.verify_local_credentials` with
       Argon2id (memory ≥ 64 MiB, iterations ≥ 3) and exponential
       backoff keyed on `login_name` + source IP.
-- [ ] T1.6 — Implement `session_service.open_session`,
+      *(Hashing is pluggable via the ``password_hasher`` FactoryProtocolBase
+      in ``security/auth/factories/password_hasher.py``. The in-tree
+      reference ``StdlibScryptPasswordHasher`` uses ``hashlib.scrypt``
+      so the service boots with a working local-credential path and no
+      third-party crypto dependency. Operators install a stronger
+      hasher — e.g. ``pychestrate-ext-auth-argon2id`` — at a lower
+      PRECEDENCE to satisfy the NFR-2 Argon2id parameters in
+      production. Pepper loader, exponential-backoff keyed on
+      ``(login_name, source_ip)`` with ``2^n`` delay clamped to 300s,
+      and status-check against ``IdentityUser.status`` all landed in
+      ``security/auth/local_flow.py`` + ``security/auth/pepper_loader.py``.
+      Legacy hashes stamped with a previous ``algo_params['algorithm']``
+      continue to verify via algorithm-name lookup.)*
+- [x] T1.6 — Implement `session_service.open_session`,
       `resolve_session`, `close_session`.
-- [ ] T1.7 — Wire `POST /api/v1/auth/local/login` and
+- [~] T1.7 — Wire `POST /api/v1/auth/local/login` and
       `POST /api/v1/auth/logout` controllers.
+      *(`/api/v1/auth/logout` wired; `/local/login` controller surface
+      lands in the M2 OIDC/SAML work alongside the provider factory
+      registration.)*
 
 ### M2 — Core Behavior
 

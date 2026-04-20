@@ -1,0 +1,142 @@
+"""
+.. module:: security.auth.models
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: SQLAlchemy models for the 1-authentication feature.
+
+.. moduleauthor:: Automation Mojo LLC
+"""
+
+__author__ = "Automation Mojo LLC"
+__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+import enum
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+)
+from sqlalchemy.types import JSON
+from sqlalchemy_utils.types.uuid import UUIDType
+
+from automojo.pychestrate.core.defaults import utc_now
+from automojo.pychestrate.core.orm import SerializableModel
+from automojo.pychestrate.webservice.persistence.schema import PychestratePhase1Base
+
+
+class AuthProviderKind(enum.Enum):
+    """
+        Kind of authentication provider used to open a session.
+    """
+    OIDC = "OIDC"
+    SAML = "SAML"
+    LOCAL = "LOCAL"
+
+
+class AuthSession(PychestratePhase1Base, SerializableModel):
+    """
+        Authoritative session state. The session_id is what the cookie
+        carries; all other fields are server-owned.
+    """
+
+    __tablename__ = "auth_sessions"
+
+    session_id = Column(UUIDType(binary=False), primary_key=True)
+    user_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("identity_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provider_kind = Column(
+        Enum(AuthProviderKind, name="auth_provider_kind"),
+        nullable=False,
+    )
+    provider_name = Column(String(128), nullable=False)
+    opened_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    idle_timeout_seconds = Column(Integer, nullable=False, default=1800)
+    access_token_enc = Column(LargeBinary, nullable=True)
+    refresh_token_enc = Column(LargeBinary, nullable=True)
+    mfa_method_name = Column(String(64), nullable=True)
+    ip_fingerprint = Column(String(128), nullable=False, default="")
+    user_agent_fingerprint = Column(String(128), nullable=False, default="")
+
+    __table_args__ = (
+        Index("ix_auth_sessions_user_expires", "user_id", "expires_at"),
+        Index("ix_auth_sessions_last_seen", "last_seen_at"),
+    )
+
+
+class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):
+    """
+        Local fallback credential hash per user. Argon2id parameters carried
+        in ``algo_params`` so rotation can be done without schema changes.
+    """
+
+    __tablename__ = "auth_local_credentials"
+
+    user_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("identity_users.user_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    argon2id_hash = Column(LargeBinary, nullable=False)
+    algo_params = Column(JSON, nullable=False, default=dict)
+    must_rotate_after = Column(DateTime(timezone=True), nullable=True)
+    last_changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class AuthSamlReplayCache(PychestratePhase1Base, SerializableModel):
+    """
+        Replay cache keyed on ``Response/@ID`` to block SAML replay.
+    """
+
+    __tablename__ = "auth_saml_replay_cache"
+
+    response_id = Column(String(128), primary_key=True)
+    not_on_or_after = Column(DateTime(timezone=True), nullable=False)
+
+
+class AuthMfaEnrollment(PychestratePhase1Base, SerializableModel):
+    """
+        Enrollment row per (user, method). ``secret_ref`` points into
+        ``1-secrets-vault`` for the method-specific material.
+    """
+
+    __tablename__ = "auth_mfa_enrollments"
+
+    enrollment_id = Column(UUIDType(binary=False), primary_key=True)
+    user_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("identity_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    method_name = Column(String(64), nullable=False)
+    secret_ref = Column(String(256), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AuthOidcState(PychestratePhase1Base, SerializableModel):
+    """
+        One-shot state/nonce/PKCE row for an OIDC authorization code flow.
+    """
+
+    __tablename__ = "auth_oidc_state"
+
+    state = Column(String(128), primary_key=True)
+    nonce = Column(String(128), nullable=False)
+    pkce_verifier_enc = Column(LargeBinary, nullable=False)
+    provider_name = Column(String(128), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    redirect_target = Column(String(1024), nullable=False, default="")

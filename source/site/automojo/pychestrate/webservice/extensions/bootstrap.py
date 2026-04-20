@@ -1,0 +1,141 @@
+"""
+.. module:: extensions.bootstrap
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: Register the in-tree Phase-1 extensions at service startup.
+
+.. moduleauthor:: Automation Mojo LLC
+
+This module provides :func:`register_phase1_builtin_extensions` — the
+canonical entry point the service bootstrap calls once at startup to
+populate the extension host with the in-tree reference implementations
+shipped by each Layer 1 feature. When the full ``E-extension-host``
+scanner lands, this function becomes the seed-only path that runs before
+on-disk discovery; the function signature stays stable.
+
+For services that need the full Phase-1 runtime wired in one call,
+:func:`bootstrap_phase1_runtime` chains extension registration with the
+KEK loader, the audit bus subscriber, and the password-pepper installer.
+"""
+
+__author__ = "Automation Mojo LLC"
+__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+from dataclasses import dataclass
+from typing import Callable, Optional
+
+from sqlalchemy.orm import Session as DbSession
+
+from automojo.pychestrate.webservice.audit import register_builtin_extensions as audit_register
+from automojo.pychestrate.webservice.audit.bus_subscriber import wire_bus_subscribers
+from automojo.pychestrate.webservice.clients import (
+    register_builtin_extensions as clients_register,
+)
+from automojo.pychestrate.webservice.identity.flags import register_builtin_extensions as flags_register
+from automojo.pychestrate.webservice.identity.users import register_builtin_extensions as users_register
+from automojo.pychestrate.webservice.secrets import register_builtin_extensions as secrets_register
+from automojo.pychestrate.webservice.secrets.kek_loader import (
+    KekHandle,
+    load_kek_at_startup,
+    set_active_kek,
+)
+from automojo.pychestrate.webservice.security.auth import register_builtin_extensions as auth_register
+from automojo.pychestrate.webservice.security.auth.pepper_loader import set_active_pepper
+from automojo.pychestrate.webservice.security.rbac import register_builtin_extensions as rbac_register
+from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+
+# Side-effect imports: loading every model module ensures the tables are
+# registered on ``PychestratePhase1Base.metadata`` before ``create_all``
+# runs (tests) or Alembic inspects the metadata (production migrations).
+# Without these, a test that imports only a subset of features can fail
+# with ``NoReferencedTableError`` when an FK points at a table whose
+# model module was never loaded.
+from automojo.pychestrate.webservice.audit import models as _audit_models  # noqa: F401
+from automojo.pychestrate.webservice.clients import models as _clients_models  # noqa: F401
+from automojo.pychestrate.webservice.identity.flags import models as _flags_models  # noqa: F401
+from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
+from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401
+from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401
+from automojo.pychestrate.webservice.security.rbac import models as _rbac_models  # noqa: F401
+
+
+SessionFactory = Callable[[], DbSession]
+
+
+@dataclass(frozen=True)
+class Phase1BootstrapConfig:
+    """
+        Operator-supplied bootstrap configuration.
+
+        :param kek_source: ``"file"`` or ``"env"`` — matches
+                           :func:`load_kek_at_startup` semantics.
+        :param kek_file_path: Path to the KEK file when ``kek_source="file"``.
+        :param kek_env_var: Environment variable name when ``kek_source="env"``.
+        :param kek_id: Operator-assigned identifier for the active KEK.
+        :param password_pepper: Pre-loaded pepper bytes wrapped in
+                                :class:`SecretBytes`. Pass ``None`` to skip
+                                pepper installation — callers that use only
+                                OIDC / SAML do not need a local pepper.
+        :param session_factory: Callable that opens a new session; used by
+                                the audit bus subscriber to persist audit
+                                rows outside the originating request's
+                                transaction.
+    """
+    kek_source: str
+    kek_file_path: Optional[str]
+    kek_env_var: Optional[str]
+    kek_id: str
+    password_pepper: Optional[SecretBytes]
+    session_factory: Optional[SessionFactory]
+
+
+def register_phase1_builtin_extensions() -> None:
+    """
+        Register every in-tree Phase-1 factory protocol implementation and
+        resource extension pack in the canonical order: identity users
+        first (so directory sources are ready), then authentication (so
+        sessions can reference them), then RBAC, secrets, audit, and
+        feature flags.
+
+        :returns: None.
+    """
+    users_register()
+    auth_register()
+    rbac_register()
+    secrets_register()
+    audit_register()
+    flags_register()
+    clients_register()
+    return
+
+
+def bootstrap_phase1_runtime(*, config: Phase1BootstrapConfig) -> KekHandle:
+    """
+        Register extensions, load the KEK, wire the audit bus subscriber,
+        and install the password pepper. Intended to be called once at
+        service startup.
+
+        :param config: Caller-supplied :class:`Phase1BootstrapConfig`.
+
+        :returns: The loaded :class:`KekHandle` — useful for operators who
+                  want to log the active KEK id at startup.
+    """
+    register_phase1_builtin_extensions()
+
+    kek = load_kek_at_startup(
+        source=config.kek_source,
+        file_path=config.kek_file_path,
+        env_var=config.kek_env_var,
+        kek_id=config.kek_id,
+    )
+    set_active_kek(kek=kek)
+
+    if config.password_pepper is not None:
+        set_active_pepper(pepper=config.password_pepper)
+
+    if config.session_factory is not None:
+        wire_bus_subscribers(session_factory=config.session_factory)
+
+    return kek
