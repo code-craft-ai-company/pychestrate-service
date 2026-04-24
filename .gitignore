@@ -132,3 +132,10 @@ dmypy.json
 
 # Project Specific Exclusion
 *.code-workspace
+
+# Claude Code scratch areas — worktrees, scheduled task locks, and
+# per-run test output folders are all local-only runtime artifacts.
+.claude/worktrees/
+.claude/scheduled_tasks.lock
+.output
+.output_*/
