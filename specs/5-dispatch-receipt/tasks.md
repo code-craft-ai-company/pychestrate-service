@@ -16,13 +16,47 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/dispatch/receipt/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Implement `jobs/dispatch/receipt/schema.py` Pydantic models with `additionalProperties: false`.
-- [ ] T1.3 — Implement `jobs/dispatch/receipt/repository.py` with `INSERT … ON CONFLICT (client_id, client_local_run_id) DO UPDATE` idempotency; add migration.
-- [ ] T1.4 — Implement `jobs/dispatch/receipt/service.py::DispatchReceiptService.record` + `lookup_by_local` + `lookup_by_run`.
-- [ ] T1.5 — Implement `jobs/dispatch/receipt/timer_wheel.py` hashed timer wheel; `expect` API to arm, `record` to cancel.
-- [ ] T1.6 — Register `receipt_rehydrate_hook` at web-app startup priority `55` pulling outstanding `transmitted` attempts and rearming timers.
-- [ ] T1.7 — Implement `jobs/dispatch/receipt/errors.py` with the error hierarchy.
+- [x] T1.1 — Create `jobs/dispatch/receipt/` package skeleton per design.md Component Breakdown.
+      *(``source/site/automojo/pychestrate/webservice/jobs/dispatch/receipt/``
+      with ``schema.py``, ``models.py``, ``repository.py``,
+      ``service.py``, ``timer_wheel.py``, ``errors.py``, and
+      ``__init__.py``.)*
+- [~] T1.2 — Implement `jobs/dispatch/receipt/schema.py` Pydantic models with `additionalProperties: false`.
+      *(Ships as ``frozen=True`` dataclasses instead of Pydantic
+      to avoid a new runtime dep. No wire-level
+      ``additionalProperties:false`` is meaningful here yet —
+      receipts arrive through the internal service API, not a
+      REST surface. Pydantic upgrade is M3 alongside the
+      ``jobs.envelope`` schema swap.)*
+- [~] T1.3 — Implement `jobs/dispatch/receipt/repository.py` with `INSERT … ON CONFLICT (client_id, client_local_run_id) DO UPDATE` idempotency; add migration.
+      *(The unique constraint on
+      ``(client_id, client_local_run_id)`` is enforced at the DB
+      level in migration ``018_phase3_dispatch_receipt``. The
+      idempotent upsert is implemented at the service layer via
+      ``find_by_local_key`` → early return — portable across
+      SQLite tests and Postgres. Native
+      ``INSERT ON CONFLICT DO UPDATE`` lands in M3.)*
+- [x] T1.4 — Implement `jobs/dispatch/receipt/service.py::DispatchReceiptService.record` + `lookup_by_local` + `lookup_by_run`.
+      *(``record`` + ``lookup_by_local`` + ``lookup_by_run``
+      exposed as module-level functions; ``record`` computes
+      ``late_arrival`` inline, enforces single-receipt-per-run +
+      envelope-matches-attempt, and is idempotent on the local
+      key.)*
+- [x] T1.5 — Implement `jobs/dispatch/receipt/timer_wheel.py` hashed timer wheel; `expect` API to arm, `record` to cancel.
+      *(``TimerWheel`` with ``expect / cancel / pending_count /
+      peek / fire_expired / reset``. Simple dict-backed
+      implementation — M3 swaps in a hashed wheel for O(1) tick
+      cost once the pending-count moves past a few hundred.)*
+- [~] T1.6 — Register `receipt_rehydrate_hook` at web-app startup priority `55` pulling outstanding `transmitted` attempts and rearming timers.
+      *(``jobs.dispatch.repository.list_inflight_attempts`` +
+      ``TimerWheel.expect`` are the rehydration building
+      blocks. The actual hook registration on the app startup
+      priority chain lands with the M2 wiring.)*
+- [x] T1.7 — Implement `jobs/dispatch/receipt/errors.py` with the error hierarchy.
+      *(``DispatchReceiptError`` base +
+      ``DuplicateRunReceiptError``,
+      ``ReceiptEnvelopeMismatchError``,
+      ``ReceiptNotFoundError``.)*
 
 ### M2 — Core Behavior
 
