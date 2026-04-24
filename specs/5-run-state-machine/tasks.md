@@ -16,14 +16,44 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/run/state/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Implement `jobs/run/state/enums.py` with `RunState`, `RunEvent`, `TerminalOutcome`.
-- [ ] T1.3 — Implement `jobs/run/state/transition_table.py` encoding every permitted `(state, event) → next_state` edge.
-- [ ] T1.4 — Add Postgres migrations for `run`, `run_state_audit`, `run_event_outbox`.
-- [ ] T1.5 — Implement `jobs/run/state/repository.py` with a single transaction covering state update + audit insert + outbox insert.
-- [ ] T1.6 — Implement `jobs/run/state/machine.py::RunStateMachine.transition` enforcing table + terminal-guard.
-- [ ] T1.7 — Implement `jobs/run/state/outbox_publisher.py` background task draining the outbox onto `0-message-bus`.
-- [ ] T1.8 — Implement `jobs/run/state/errors.py` with `IllegalTransitionError`, `TerminalStateError`, `RunNotFoundError`.
+- [x] T1.1 — Create `jobs/run/state/` package skeleton per design.md Component Breakdown.
+      *(``source/site/automojo/pychestrate/webservice/jobs/run/state/``
+      with ``enums.py``, ``transition_table.py``, ``models.py``,
+      ``repository.py``, ``machine.py``, ``events.py``,
+      ``errors.py``, ``outbox_publisher.py``, and a public
+      re-export ``__init__.py``.)*
+- [x] T1.2 — Implement `jobs/run/state/enums.py` with `RunState`, `RunEvent`, `TerminalOutcome`.
+      *(All 15 states + 17 events + 5 terminal outcomes. ``str``
+      mixin keeps the enums JSON-serializable without a custom
+      encoder.)*
+- [x] T1.3 — Implement `jobs/run/state/transition_table.py` encoding every permitted `(state, event) → next_state` edge.
+      *(``validate_table_on_startup`` runs on import and asserts
+      no terminal state has outgoing edges.)*
+- [x] T1.4 — Add Postgres migrations for `run`, `run_state_audit`, `run_event_outbox`.
+      *(Migration ``017_phase3_run_state`` creates
+      ``runs_run``, ``runs_run_state_audit``, ``runs_run_event_outbox``
+      plus the three named enum types.)*
+- [x] T1.5 — Implement `jobs/run/state/repository.py` with a single transaction covering state update + audit insert + outbox insert.
+      *(Transaction boundary owned by :func:`machine.transition`:
+      Run UPDATE + RunStateAudit INSERT + RunEventOutbox INSERT
+      in one commit, plus an in-process bus ``enqueue_event`` so
+      subscribers wake synchronously on commit.)*
+- [x] T1.6 — Implement `jobs/run/state/machine.py::RunStateMachine.transition` enforcing table + terminal-guard.
+      *(Also exposes ``create_run``, ``request_cancel``,
+      ``reconcile``, ``get_snapshot`` per design.md Internal API.
+      ``reconcile`` emits both the state-changed + reconciled
+      events so subscribers see the divergence.)*
+- [~] T1.7 — Implement `jobs/run/state/outbox_publisher.py` background task draining the outbox onto `0-message-bus`.
+      *(``drain_once(db_session, batch_size)`` ships as a blocking
+      helper — intended for service startup recovery. A long-running
+      daemon loop is M2 scope. The primary delivery path is the
+      session-scoped in-process publish; the durable outbox row
+      exists for crash recovery.)*
+- [x] T1.8 — Implement `jobs/run/state/errors.py` with `IllegalTransitionError`, `TerminalStateError`, `RunNotFoundError`.
+      *(``RunStateError`` base + the three subclasses. Illegal
+      transitions produce a multiline ``os.linesep.join([...])``
+      message naming current state, event, and the permitted
+      events.)*
 
 ### M2 — Core Behavior
 
