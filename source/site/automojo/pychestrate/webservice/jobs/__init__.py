@@ -9,10 +9,10 @@ The ``jobs`` package owns the signed-envelope / dispatch / receipt /
 run-state-machine pipeline that Pychestrate hands to pod client agents.
 Layer 5 sub-packages land in Phase 3:
 
-- ``jobs.envelope`` — canonical, signed dispatch payload (this PR: M1).
+- ``jobs.envelope`` — canonical, signed dispatch payload.
+- ``jobs.run.state`` — authoritative run state machine + outbox.
 - ``jobs.dispatch`` — scheduler + transport + attempt persistence (later).
 - ``jobs.dispatch.receipt`` — client-issued local-run-id correlation (later).
-- ``jobs.run.state`` — authoritative run state machine + outbox (later).
 """
 
 __author__ = "Automation Mojo LLC"
