@@ -18,12 +18,24 @@ from automojo.pychestrate.webservice.extensions.registry import (
 )
 
 from automojo.pychestrate.webservice.audit.extensions.event_type import AuditEventTypeExtension
+from automojo.pychestrate.webservice.audit.extensions.project_events import (
+    ProjectArchivedAuditEvents,
+    ProjectCreatedAuditEvents,
+    ProjectDeletedAuditEvents,
+    ProjectMemberAddedAuditEvents,
+    ProjectMemberRemovedAuditEvents,
+    ProjectUnarchivedAuditEvents,
+)
 from automojo.pychestrate.webservice.audit.extensions.role_events import RoleBindingAuditEvents
 from automojo.pychestrate.webservice.audit.extensions.secret_events import (
     SecretAccessedAuditEvents,
     SecretCreatedAuditEvents,
 )
 from automojo.pychestrate.webservice.audit.extensions.user_events import UserLifecycleAuditEvents
+from automojo.pychestrate.webservice.audit.extensions.variable_events import (
+    VariableSetAuditEvents,
+    VariableUnsetAuditEvents,
+)
 from automojo.pychestrate.webservice.audit.factories.local_db_sink import LocalDatabaseAuditSink
 
 
@@ -46,5 +58,29 @@ def register_builtin_extensions() -> None:
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=SecretCreatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectCreatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectArchivedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectUnarchivedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectDeletedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectMemberAddedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=ProjectMemberRemovedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=VariableSetAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=VariableUnsetAuditEvents
     )
     return

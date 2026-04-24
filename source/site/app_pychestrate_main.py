@@ -1,6 +1,15 @@
 import logging
 import os
 
+from automojo.pychestrate.webservice.extensions.bootstrap import (
+    register_phase1_builtin_extensions,
+)
+from automojo.pychestrate.webservice.extensions.phase2_bootstrap import (
+    register_phase2_builtin_extensions,
+)
+from automojo.pychestrate.webservice.extensions.phase3_bootstrap import (
+    register_phase3_builtin_extensions,
+)
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
@@ -52,10 +61,34 @@ def hello_world(request: Request) -> HTMLResponse:
     """
     return HTMLResponse(content=html_content)
 
+def register_service_extensions() -> None:
+    """
+        Register every in-tree factory-protocol implementation and
+        resource-extension pack that the service publishes REST
+        namespaces for. Must run before ``app.startup`` so request
+        handlers that look up factories see populated registries.
+
+        Full-fidelity :func:`bootstrap_phase1_runtime` /
+        :func:`bootstrap_phase2_runtime` / :func:`bootstrap_phase3_runtime`
+        additionally load the KEK, password pepper, and bus subscribers;
+        those are driven from operator-supplied config and are wired in
+        at deployment time. The register-only path here is idempotent
+        and does not touch any secret material.
+
+        :returns: None.
+    """
+    register_phase1_builtin_extensions()
+    register_phase2_builtin_extensions()
+    register_phase3_builtin_extensions()
+    return
+
+
 def pychestrate_website_main():
+    register_service_extensions()
+
     app.startup()
     wsgi_app = create_wsgi_application(config={"handler": app.dispatcher})
-    
+
     print("Starting native WebWorks WSGI Server on 127.0.0.1:8888")
     run_server(app=wsgi_app, host="127.0.0.1", port=8888, workers=1, threads=1)
 

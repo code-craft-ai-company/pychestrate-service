@@ -65,6 +65,7 @@ PHASE1_URL_PREFIXES: Tuple[str, ...] = (
     "/1/flags",
     "/1/clients",
     "/1/enrollment-tokens",
+    "/1/projects",
 )
 
 

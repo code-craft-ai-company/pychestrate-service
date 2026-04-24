@@ -19,6 +19,8 @@ from .config import publish_namespaces as config_publish_namespaces
 from .resources import publish_namespaces as resources_publish_namespaces
 from .projects import publish_namespaces as projects_publish_namespaces
 from .phase1 import publish_namespaces as phase1_publish_namespaces
+from .phase2 import publish_namespaces as phase2_publish_namespaces
+from .phase3 import publish_namespaces as phase3_publish_namespaces
 
 
 def publish_namespaces(version_prefix):
@@ -44,5 +46,13 @@ def publish_namespaces(version_prefix):
 
     # Phase-1 spec-shaped namespaces (identity, auth, rbac, secrets, audit, flags)
     ns_list.extend(phase1_publish_namespaces(version_prefix))
+
+    # Phase-2 spec-shaped namespaces (projects, tagging, variables,
+    # notifications, project-templates, retention)
+    ns_list.extend(phase2_publish_namespaces(version_prefix))
+
+    # Phase-3 spec-shaped namespaces (pod definitions/lifecycle/static/
+    # topology/scoped-config/dynamic; agent protocol/capability/inventory/upgrade)
+    ns_list.extend(phase3_publish_namespaces(version_prefix))
 
     return ns_list
