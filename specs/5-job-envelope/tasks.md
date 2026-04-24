@@ -19,14 +19,43 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/envelope/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Implement `jobs/envelope/schema.py::JobEnvelope` Pydantic model with `additionalProperties: false`; cover all required fields in Requirement 1 AC #1.
-- [ ] T1.3 — Implement `jobs/envelope/canonical.py` RFC8785 JCS serializer + matching parser.
-- [ ] T1.4 — Implement `jobs/envelope/signer.py` Ed25519 sign/verify helpers (PyNaCl or cryptography library).
-- [ ] T1.5 — Implement `jobs/envelope/codec.py::EnvelopeCodec` `build`, `sign`, `serialize_canonical`, `parse`.
-- [ ] T1.6 — Implement `jobs/envelope/repository.py::JobEnvelopeRepository` writing the `job_envelope` Postgres table.
-- [ ] T1.7 — Register `envelope_startup_hook` at web-app startup priority `40` — loads the signing key from `1-secrets-vault` (env fallback under `PYCHESTRATE_DEV_MODE`).
-- [ ] T1.8 — Implement `jobs/envelope/errors.py` with the full error hierarchy.
+- [x] T1.1 — Create `jobs/envelope/` package skeleton per design.md Component Breakdown.
+      *(``source/site/automojo/pychestrate/webservice/jobs/envelope/`` with
+      ``schema.py``, ``canonical.py``, ``signer.py``, ``codec.py``,
+      ``repository.py``, ``models.py``, ``startup.py``, ``errors.py``,
+      and a public-re-export ``__init__.py``.)*
+- [~] T1.2 — Implement `jobs/envelope/schema.py::JobEnvelope` Pydantic model with `additionalProperties: false`; cover all required fields in Requirement 1 AC #1.
+      *(Ships as a frozen ``dataclass`` instead of Pydantic to avoid a
+      new runtime dep; ``assert_required_fields_present`` + the
+      ``_envelope_to_dict_keys`` allow-list enforce the same
+      ``additionalProperties: false`` contract. Upgrading to Pydantic
+      is an M3 concern.)*
+- [~] T1.3 — Implement `jobs/envelope/canonical.py` RFC8785 JCS serializer + matching parser.
+      *(M1 ships a sort-keys + ``separators=(",",":")`` JSON serializer
+      that matches the JCS subset we produce — ASCII keys,
+      ISO-8601 strings, ints. Full JCS library wiring is M3.)*
+- [x] T1.4 — Implement `jobs/envelope/signer.py` Ed25519 sign/verify helpers (PyNaCl or cryptography library).
+      *(``cryptography.hazmat.primitives.asymmetric.ed25519`` +
+      module-level active-key / JWKS-style verify set.)*
+- [x] T1.5 — Implement `jobs/envelope/codec.py::EnvelopeCodec` `build`, `sign`, `serialize_canonical`, `parse`.
+      *(Exposes ``build / sign / parse / verify`` functions directly
+      rather than a class facade; the ``SignedJobEnvelope`` +
+      ``DispatchRequest`` dataclasses are the stable IO types.)*
+- [x] T1.6 — Implement `jobs/envelope/repository.py::JobEnvelopeRepository` writing the `job_envelope` Postgres table.
+      *(``persist_signed_envelope / get_envelope /
+      list_envelopes_for_run`` against ``jobs_envelope_archive``.
+      Migration ``016_phase3_job_envelope`` creates the table.)*
+- [~] T1.7 — Register `envelope_startup_hook` at web-app startup priority `40` — loads the signing key from `1-secrets-vault` (env fallback under `PYCHESTRATE_DEV_MODE`).
+      *(``install_envelope_signer`` + ``EnvelopeSignerBootstrapConfig``
+      support ``file`` / ``env`` / ``dev`` sources;
+      ``PYCHESTRATE_DEV_MODE=1`` gates the ephemeral ``dev`` path.
+      Hooking the full ``1-secrets-vault`` path awaits the vault-fetch
+      plumbing that lands with the rest of the phase-1 bootstrap
+      completion.)*
+- [x] T1.8 — Implement `jobs/envelope/errors.py` with the full error hierarchy.
+      *(``JobEnvelopeError`` base + ``EnvelopeSchemaVersionError``,
+      ``EnvelopeSerializationError``, ``EnvelopeSigningKeyMissingError``,
+      ``EnvelopeClaimMissingError`` — the last is reserved for M2.)*
 
 ### M2 — Core Behavior
 
