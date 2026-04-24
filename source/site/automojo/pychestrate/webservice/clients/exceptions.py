@@ -55,3 +55,36 @@ class EnrollmentRejectedError(Exception):
         Raised when the identity verifier rejects the inbound enrollment
         payload.
     """
+
+
+class CertificateAuthorityUnavailableError(Exception):
+    """
+        Raised when :func:`ca_adapter.sign_csr` is invoked before the
+        service bootstrap has installed an active CA handle. REST / wire
+        layers translate to HTTP 503.
+    """
+
+
+class CsrValidationError(Exception):
+    """
+        Raised when a submitted CSR cannot be parsed, fails signature
+        verification, or uses an unacceptable key algorithm. REST / wire
+        layers translate to HTTP 400.
+    """
+
+
+class CsrScopeMismatchError(Exception):
+    """
+        Raised when the Subject CN of a submitted CSR does not match the
+        pod name scoped by the enrollment token. REST / wire layers
+        translate to HTTP 403 with ``reason=scope_mismatch``.
+    """
+
+
+class CertRevokedError(Exception):
+    """
+        Raised when a caller presents a certificate serial that has
+        already been recorded in ``clients_client_revocations``. REST /
+        wire layers translate to HTTP 403 with
+        ``reason=revoked_cert_presented``.
+    """

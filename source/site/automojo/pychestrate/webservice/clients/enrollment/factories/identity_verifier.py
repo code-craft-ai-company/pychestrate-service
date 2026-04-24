@@ -36,18 +36,26 @@ class TokenScope:
 class EnrollmentPayload:
     """
         Normalized inbound payload submitted by an agent during token
-        redemption. M1 passes the pod name + reported agent version; M2
-        extends with CSR DER + attestation blobs.
+        redemption. M1 carried only the pod name + reported agent
+        version + transport name + opaque extras. M2 extends with an
+        optional ``csr_pem`` — when present the service signs the CSR
+        against its internal CA and returns an mTLS identity; when
+        absent the service falls back to issuing a bearer token only
+        (the M1 path, kept for backward compatibility).
 
         :param pod_name: Pod name the agent claims.
         :param agent_version: Reported agent version string.
         :param transport_name: Transport name the agent plans to use.
         :param extras: Opaque additional fields the verifier may inspect.
+        :param csr_pem: Optional PEM-encoded CSR. When supplied the
+                        service signs it and returns a cert alongside
+                        the bearer token.
     """
     pod_name: str
     agent_version: Optional[str]
     transport_name: Optional[str]
     extras: Mapping[str, Any]
+    csr_pem: Optional[bytes] = None
 
 
 @dataclass(frozen=True)

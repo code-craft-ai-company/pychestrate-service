@@ -45,6 +45,7 @@ from automojo.errors.exceptions import ConfigurationError
 
 from automojo.pychestrate.core.defaults import new_uuid, utc_now
 
+from automojo.pychestrate.webservice.clients.enrollment import ca_adapter
 from automojo.pychestrate.webservice.clients.enrollment.factories.identity_verifier import (
     ClientIdentityVerifierProtocol,
     EnrollmentPayload,
@@ -62,13 +63,17 @@ from automojo.pychestrate.webservice.clients.enums import (
 )
 from automojo.pychestrate.webservice.clients.events import ClientEventTopics
 from automojo.pychestrate.webservice.clients.exceptions import (
+    CertificateAuthorityUnavailableError,
     ClientNotFoundError,
+    CsrScopeMismatchError,
+    CsrValidationError,
     EnrollmentRejectedError,
     EnrollmentTokenInvalidError,
     EnrollmentTokenNotFoundError,
 )
 from automojo.pychestrate.webservice.clients.models import (
     Client,
+    ClientCert,
     ClientRevocation,
     EnrollmentToken,
 )
@@ -144,17 +149,31 @@ class RedemptionResult:
         Returned to the agent after a successful
         :func:`redeem_enrollment_token`.
 
+        In M1 only the bearer fields were populated. M2 adds
+        ``cert_serial``, ``cert_pem``, and ``cert_chain_pem`` when the
+        redemption request included a CSR. Clients that did not
+        supply a CSR receive only bearer credentials as before.
+
         :param client_id: Server-assigned UUID of the new client row.
         :param project_id: Scope the token committed to.
         :param pod_name: Pod the token committed to.
-        :param bearer_token: Secret the agent carries on subsequent requests.
-        :param bearer_algorithm: Algorithm that produced the bearer digest.
+        :param bearer_token: Secret the agent carries on subsequent
+                             requests.
+        :param bearer_algorithm: Algorithm that produced the bearer
+                                 digest.
+        :param cert_serial: Hex serial of the issued cert, or ``None``
+                            when the redemption was bearer-only.
+        :param cert_pem: PEM-encoded issued certificate, or ``None``.
+        :param cert_chain_pem: PEM-encoded issuer chain, or ``None``.
     """
     client_id: str
     project_id: str
     pod_name: str
     bearer_token: str
     bearer_algorithm: str
+    cert_serial: Optional[str] = None
+    cert_pem: Optional[bytes] = None
+    cert_chain_pem: Optional[bytes] = None
 
 
 def _resolve_token_issuer_for_hashing() -> type:
@@ -496,29 +515,58 @@ def redeem_enrollment_token(
         transport_name=payload.transport_name,
     )
 
+    signed_cert: Optional[ca_adapter.SignedCertificate] = None
+    if payload.csr_pem is not None and len(payload.csr_pem) > 0:
+        signed_cert = ca_adapter.sign_csr(
+            csr_pem=payload.csr_pem,
+            expected_subject_cn=matched_row.pod_name,
+        )
+        cert_row = ClientCert(
+            cert_serial=signed_cert.cert_serial,
+            client_id=client.client_id,
+            not_before=signed_cert.not_before,
+            not_after=signed_cert.not_after,
+            issuer_subject=signed_cert.issuer_subject,
+            subject_cn=signed_cert.subject_cn,
+            pem_public=signed_cert.pem_public.decode("utf-8"),
+            issued_at=now,
+        )
+        db_session.add(cert_row)
+
     if matched_row.one_shot is True:
         matched_row.status = TokenStatus.REDEEMED
     matched_row.redeemed_at = now
     matched_row.redeemed_by_client_id = client.client_id
     db_session.flush()
 
+    enrolled_payload = {
+        "client_id": str(client.client_id),
+        "token_id": str(matched_row.token_id),
+        "project_id": str(matched_row.project_id),
+        "pod_name": matched_row.pod_name,
+        "agent_version": payload.agent_version,
+        "transport_name": payload.transport_name,
+        "enrolled_at": now.isoformat(),
+    }
+    if signed_cert is not None:
+        enrolled_payload["cert_serial"] = signed_cert.cert_serial
     enqueue_event(
         db_session=db_session,
         event=EntityEvent(
             topic=ClientEventTopics.ENROLLED,
-            payload={
-                "client_id": str(client.client_id),
-                "token_id": str(matched_row.token_id),
-                "project_id": str(matched_row.project_id),
-                "pod_name": matched_row.pod_name,
-                "agent_version": payload.agent_version,
-                "transport_name": payload.transport_name,
-                "enrolled_at": now.isoformat(),
-            },
+            payload=enrolled_payload,
             source_event_id=new_uuid(),
         ),
     )
     db_session.commit()
+
+    cert_serial_out: Optional[str] = None
+    cert_pem_out: Optional[bytes] = None
+    cert_chain_out: Optional[bytes] = None
+    if signed_cert is not None:
+        cert_serial_out = signed_cert.cert_serial
+        cert_pem_out = signed_cert.pem_public
+        cert_chain_out = signed_cert.chain_pem
 
     rtnval = RedemptionResult(
         client_id=str(client.client_id),
@@ -526,6 +574,9 @@ def redeem_enrollment_token(
         pod_name=matched_row.pod_name,
         bearer_token=bearer_bundle.secret,
         bearer_algorithm=bearer_bundle.algorithm_name,
+        cert_serial=cert_serial_out,
+        cert_pem=cert_pem_out,
+        cert_chain_pem=cert_chain_out,
     )
     return rtnval
 
@@ -536,17 +587,28 @@ def revoke_client(
         client_id: str,
         reason: RevocationReason,
         revoked_by: Optional[str],
-        note: str = ""
+        note: str = "",
+        cert_serial: Optional[str] = None
     ) -> None:
     """
         Flip a client to ``REVOKED`` and record a
-        ``clients_client_revocations`` row.
+        ``clients_client_revocations`` row. When ``cert_serial`` is
+        supplied it is persisted on the revocation row so
+        :func:`is_cert_revoked` can do a constant-time lookup.
+        When ``cert_serial`` is ``None`` and the client has an active
+        :class:`ClientCert` row, the most recently issued serial is
+        used so M1 flows keep working without the caller having to
+        pass a serial explicitly.
 
         :param db_session: Active SQLAlchemy session.
         :param client_id: Target client UUID.
         :param reason: :class:`RevocationReason` enum value.
         :param revoked_by: Acting admin UUID (nullable).
         :param note: Free-form note persisted on the revocation row.
+        :param cert_serial: Optional specific cert serial being
+                            revoked. Defaults to the client's most
+                            recently-issued cert serial when
+                            available.
 
         :returns: None.
         :raises: ClientNotFoundError
@@ -558,10 +620,22 @@ def revoke_client(
         err_msg = os.linesep.join(err_msg_lines)
         raise ClientNotFoundError(err_msg) from None
 
+    resolved_serial = cert_serial
+    if resolved_serial is None:
+        latest_cert = (
+            db_session.query(ClientCert)
+            .filter(ClientCert.client_id == client.client_id)
+            .order_by(ClientCert.issued_at.desc())
+            .first()
+        )
+        if latest_cert is not None:
+            resolved_serial = latest_cert.cert_serial
+
     now = utc_now()
     revocation = ClientRevocation(
         revocation_id=new_uuid(),
         client_id=client.client_id,
+        cert_serial=resolved_serial,
         reason=reason,
         revoked_by=revoked_by,
         revoked_at=now,
@@ -573,22 +647,52 @@ def revoke_client(
     client.revision_token = new_uuid()
     db_session.flush()
 
+    revoked_payload = {
+        "client_id": str(client.client_id),
+        "project_id": str(client.project_id),
+        "pod_name": client.pod_name,
+        "reason": reason.value,
+        "revoked_by": revoked_by,
+        "revoked_at": now.isoformat(),
+        "note": note,
+    }
+    if resolved_serial is not None:
+        revoked_payload["cert_serial"] = resolved_serial
     enqueue_event(
         db_session=db_session,
         event=EntityEvent(
             topic=ClientEventTopics.REVOKED,
-            payload={
-                "client_id": str(client.client_id),
-                "project_id": str(client.project_id),
-                "pod_name": client.pod_name,
-                "reason": reason.value,
-                "revoked_by": revoked_by,
-                "revoked_at": now.isoformat(),
-                "note": note,
-            },
+            payload=revoked_payload,
             source_event_id=new_uuid(),
         ),
     )
     db_session.commit()
 
     return
+
+
+def is_cert_revoked(
+        *,
+        db_session: DbSession,
+        cert_serial: str
+    ) -> bool:
+    """
+        Return whether the supplied cert serial appears in
+        ``clients_client_revocations``. Exposed as a simple boolean
+        query so ``3-client-agent-protocol`` can gate inbound
+        authenticated requests on a single lookup.
+
+        :param db_session: Active SQLAlchemy session.
+        :param cert_serial: Hex serial returned at enrollment time.
+
+        :returns: True when a revocation row exists for ``cert_serial``.
+    """
+    if cert_serial is None or len(cert_serial) == 0:
+        return False
+    match = (
+        db_session.query(ClientRevocation)
+        .filter(ClientRevocation.cert_serial == cert_serial)
+        .first()
+    )
+    rtnval = match is not None
+    return rtnval

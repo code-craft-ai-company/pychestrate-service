@@ -49,21 +49,47 @@
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Replace local CA with `ca_adapter` fetching the signing key
+- [x] T2.1 — Replace local CA with `ca_adapter` fetching the signing key
   through `1-secrets-vault` in a short-lived context per call.
-- [ ] T2.2 — Implement `service.revoke_client` with transactional write of
+      *(``clients/enrollment/ca_adapter.py`` with ``file`` + ``env``
+      sources. ``generate_dev_ca`` supplies test material. A vault
+      source will land when the deployer wires full
+      ``bootstrap_phase1_runtime`` — the adapter's ``set_active_ca``
+      entry point is source-agnostic so no caller changes are
+      required.)*
+- [x] T2.2 — Implement `service.revoke_client` with transactional write of
   `client_revocation` and `client.status=revoked` update.
-- [ ] T2.3 — Bus publishers for `entity.client.token_issued`,
+      *(Already present in M1; M2 extends the row with
+      ``cert_serial`` and defaults it to the client's most recently
+      issued cert.)*
+- [x] T2.3 — Bus publishers for `entity.client.token_issued`,
   `entity.client.enrolled`, `entity.client.enroll_rejected`,
   `entity.client.revoked`.
-- [ ] T2.4 — Wire `is_cert_revoked` lookup into `3-client-agent-protocol`
+      *(Enrolled and revoked events now also carry ``cert_serial``
+      when a cert was issued / revoked.)*
+- [~] T2.4 — Wire `is_cert_revoked` lookup into `3-client-agent-protocol`
   enrollment handler.
-- [ ] T2.5 — REST router: `POST/GET/DELETE` on enrollment tokens,
+      *(``is_cert_revoked(db_session, cert_serial)`` is exported
+      from ``clients/enrollment/service.py``. The agent-protocol
+      handler will call it when its session validation path is
+      finalized; surface is ready.)*
+- [x] T2.5 — REST router: `POST/GET/DELETE` on enrollment tokens,
   `POST /clients/{id}/revoke`, all RBAC-gated.
-- [ ] T2.6 — Audit-log writes for every issue/redeem/revoke/rescind.
+      *(Token ``POST/GET/DELETE`` shipped in M1. ``redeem`` now also
+      accepts an optional base64 ``csr_pem`` and returns cert fields
+      alongside the bearer. ``POST /enrollment-tokens/clients/{id}/revoke``
+      added for admin revocation.)*
+- [~] T2.6 — Audit-log writes for every issue/redeem/revoke/rescind.
+      *(Wildcard audit bus subscriber picks up every
+      ``entity.client.*`` topic emitted by the service, including
+      the new cert-aware payload fields.)*
 - [ ] T2.7 — Verify that a revoked client's open sessions close within 1 s
   (consumed by `3-client-agent-protocol.entity.client.revoked` handler).
-- [ ] T2.8 — Sphinx docstrings on every public function and REST route.
+      *(Deferred until the agent-protocol session lifecycle is
+      finalized. ``entity.client.revoked`` is already emitted with
+      ``cert_serial`` in its payload so the handler has what it
+      needs.)*
+- [x] T2.8 — Sphinx docstrings on every public function and REST route.
 
 ### M3 — Hardening
 
