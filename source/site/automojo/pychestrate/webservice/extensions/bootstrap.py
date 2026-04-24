@@ -35,6 +35,8 @@ from automojo.pychestrate.webservice.clients import (
 )
 from automojo.pychestrate.webservice.identity.flags import register_builtin_extensions as flags_register
 from automojo.pychestrate.webservice.identity.users import register_builtin_extensions as users_register
+from automojo.pychestrate.webservice.projects import register_builtin_extensions as projects_register
+from automojo.pychestrate.webservice.projects.metadata_registry import freeze_registry as projects_freeze_registry
 from automojo.pychestrate.webservice.secrets import register_builtin_extensions as secrets_register
 from automojo.pychestrate.webservice.secrets.kek_loader import (
     KekHandle,
@@ -56,6 +58,7 @@ from automojo.pychestrate.webservice.audit import models as _audit_models  # noq
 from automojo.pychestrate.webservice.clients import models as _clients_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.flags import models as _flags_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
+from automojo.pychestrate.webservice.projects import models as _projects_models  # noqa: F401
 from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401
 from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401
 from automojo.pychestrate.webservice.security.rbac import models as _rbac_models  # noqa: F401
@@ -108,6 +111,8 @@ def register_phase1_builtin_extensions() -> None:
     audit_register()
     flags_register()
     clients_register()
+    projects_register()
+    projects_freeze_registry()
     return
 
 

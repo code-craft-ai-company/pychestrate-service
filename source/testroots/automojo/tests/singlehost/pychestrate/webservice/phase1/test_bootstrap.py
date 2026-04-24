@@ -28,6 +28,9 @@ from automojo.pychestrate.webservice.extensions.registry import (
     reset_registry_for_testing,
 )
 from automojo.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
+from automojo.pychestrate.webservice.projects.metadata_registry import (
+    reset_for_testing as reset_projects_metadata_registry,
+)
 from automojo.pychestrate.webservice.secrets.kek_loader import (
     get_active_kek,
     reset_active_kek_for_testing,
@@ -49,6 +52,7 @@ def test_register_phase1_builtin_extensions_covers_every_feature():
     """
     reset_registry_for_testing()
     reset_event_bus()
+    reset_projects_metadata_registry()
     register_phase1_builtin_extensions()
 
     factory_names = [
@@ -76,6 +80,7 @@ def test_bootstrap_phase1_runtime_end_to_end():
     """
     reset_registry_for_testing()
     reset_event_bus()
+    reset_projects_metadata_registry()
     reset_active_kek_for_testing()
     reset_active_pepper_for_testing()
 

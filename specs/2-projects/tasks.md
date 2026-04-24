@@ -16,43 +16,79 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Add migration under `0-persistence` creating tables
+- [x] T1.1 — Add migration under `0-persistence` creating tables
       `projects` and `project_member_bindings` with indexes from
       design.md Data Model.
-- [ ] T1.2 — Implement `canonicalize_project_slug` in
+      (migration `006_phase2_projects.py` creates
+      `projects_projects` + `projects_project_member_bindings`.)
+- [x] T1.2 — Implement `canonicalize_project_slug` in
       `webservice/model/projects/slug.py` with `SlugValidationError`.
-- [ ] T1.3 — Implement `entities.py` dataclasses / ORM mappers for
+      (implemented in `webservice/projects/slug.py`.)
+- [x] T1.3 — Implement `entities.py` dataclasses / ORM mappers for
       `Project`, `ProjectMemberBinding`, `ProjectState`.
-- [ ] T1.4 — Implement `repository.py` with `insert_project`,
+      (delivered as `webservice/projects/models.py` on
+      `PychestratePhase1Base`.)
+- [x] T1.4 — Implement `repository.py` with `insert_project`,
       `get_project_by_slug`, `list_projects`.
-- [ ] T1.5 — Implement `service.create_project` including advisory-lock
+      (delivered in `webservice/projects/repository.py`.)
+- [x] T1.5 — Implement `service.create_project` including advisory-lock
       acquisition and outbox write for `entity.project.created`.
-- [ ] T1.6 — Wire Flask-RestX resources for `POST /api/v1/projects`
+      (delivered in `webservice/projects/service.py::create_project`;
+      the advisory-lock hardening is the M3 concurrent-collision guard.)
+- [x] T1.6 — Wire Flask-RestX resources for `POST /api/v1/projects`
       and `GET /api/v1/projects/{slug}` under
       `webservice/restapi/versions/v1/projects.py`.
-- [ ] T1.7 — Subscribe `1-audit-log` ingester to
+      (delivered under
+      `webservice/projects/restapi/v1/projects_controller.py` and
+      aggregated through
+      `restapi/versions/v1/phase2/__init__.py`.)
+- [x] T1.7 — Subscribe `1-audit-log` ingester to
       `entity.project.created` and write a `project.created` record.
+      (audit `ProjectCreatedAuditEvents` pack wires
+      `entity.project.created → audit.project.created` through the
+      existing bus subscriber.)
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Implement `service.archive_project` + endpoint +
+- [x] T2.1 — Implement `service.archive_project` + endpoint +
       `entity.project.archived` outbox.
-- [ ] T2.2 — Implement `service.unarchive_project` + endpoint.
-- [ ] T2.3 — Implement `service.delete_project` with archive
+      (delivered in `webservice/projects/service.py::archive_project`
+      and `ProjectArchiveResource` in the controller.)
+- [x] T2.2 — Implement `service.unarchive_project` + endpoint.
+      (delivered alongside archive in the same service module +
+      `ProjectUnarchiveResource` in the controller.)
+- [x] T2.3 — Implement `service.delete_project` with archive
       precondition, cascade SQL, `entity.project.deleted` outbox.
-- [ ] T2.4 — Implement `service.add_member` and `service.remove_member`
+      (SQLAlchemy cascade plus an explicit Python-side cascade over
+      `ProjectMemberBinding` rows so SQLite test engines see the
+      same no-orphan invariant PostgreSQL would enforce via FK.)
+- [x] T2.4 — Implement `service.add_member` and `service.remove_member`
       with `1-rbac` role validation and the last-admin safeguard;
       emit `entity.project.member_added|removed`.
-- [ ] T2.5 — Implement `ProjectMetadataFieldExtension` base class in
+      (last-admin check counts `project-owner` holders; `force=True`
+      bypass for platform admins is plumbed via the controller.)
+- [x] T2.5 — Implement `ProjectMetadataFieldExtension` base class in
       `extensions.py`; implement the metadata registry that loads via
       `E-resource-extensions` on `on_service_ready`.
-- [ ] T2.6 — Ship in-tree reference
+      (registry is frozen at the end of
+      `register_phase1_builtin_extensions`; post-freeze mutation
+      raises `ConfigurationError`.)
+- [x] T2.6 — Ship in-tree reference
       `CostCenterFieldExtension` under `automojo/extensions/pychestrate/projects/`.
-- [ ] T2.7 — Implement `PATCH /projects/{slug}` honoring the metadata
+      (lives alongside the feature module at
+      `webservice/projects/extensions/cost_center.py`.)
+- [x] T2.7 — Implement `PATCH /projects/{slug}` honoring the metadata
       registry for `extension_fields`.
-- [ ] T2.8 — Implement `GET /projects/{slug}/members` and the
+      (delivered in `ProjectDetail.patch`; invalid field names and
+      field-type failures return `422`.)
+- [x] T2.8 — Implement `GET /projects/{slug}/members` and the
       member-list DELETE endpoint.
-- [ ] T2.9 — Subscribe to `entity.user.deleted` and cascade bindings.
+      (`ProjectMembersResource` GET + `ProjectMemberByUserIdDetail`
+      DELETE with `?force=true` + role-specific
+      `ProjectMemberRoleDetail` DELETE.)
+- [x] T2.9 — Subscribe to `entity.user.deleted` and cascade bindings.
+      (wired via `webservice/projects/bus_subscriber.py` and
+      `service.cascade_user_deleted`.)
 
 ### M3 — Hardening
 
@@ -72,18 +108,27 @@
 
 ## Test Tasks
 
-- [ ] TT-1 — Unit tests covering each EARS requirement in
+- [x] TT-1 — Unit tests covering each EARS requirement in
       requirements.md (Requirements 1–4).
-- [ ] TT-2 — Property-based tests implementing Property 1 (slug
+      (delivered in
+      `tests/singlehost/pychestrate/webservice/phase1/test_project_service.py`.)
+- [x] TT-2 — Property-based tests implementing Property 1 (slug
       canonicalization idempotence) and Property 2 (create-then-delete
       leaves no orphans) using `hypothesis`.
-- [ ] TT-3 — Integration test: admin creates a project, adds two
+      (the repo does not ship `hypothesis`; both properties are
+      implemented as seeded deterministic property tests in
+      `test_project_slug_property.py` (1024 cases) and
+      `test_project_lifecycle_property.py` (64 scenarios x ≤32 ops).)
+- [x] TT-3 — Integration test: admin creates a project, adds two
       members, sets extension fields, archives, deletes; audit-log
       reflects every step and DB shows zero orphans.
-- [ ] TT-4 — Extension-point test: an out-of-tree sample
+      (delivered in `test_project_integration.py`.)
+- [x] TT-4 — Extension-point test: an out-of-tree sample
       `pychestrate-ext-example` registers a
       `ComplianceTierFieldExtension`, the service accepts projects with
       the field, and rejects invalid values.
+      (delivered in `test_project_extensions.py`, plus the duplicate
+      `field_name` collision case exercising `ConfigurationError`.)
 
 ## Definition of Done
 

@@ -26,6 +26,9 @@ from automojo.pychestrate.webservice.extensions.bootstrap import register_phase1
 from automojo.pychestrate.webservice.extensions.registry import reset_registry_for_testing
 from automojo.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
 from automojo.pychestrate.webservice.persistence.schema import PychestratePhase1Base
+from automojo.pychestrate.webservice.projects.metadata_registry import (
+    reset_for_testing as reset_projects_metadata_registry,
+)
 from automojo.pychestrate.webservice.security.rbac import cache as rbac_cache
 from automojo.pychestrate.webservice.security.rbac import inheritance as rbac_inheritance
 
@@ -72,5 +75,6 @@ def reset_phase1_runtime() -> None:
     reset_event_bus()
     rbac_cache.reset_for_testing()
     rbac_inheritance.reset_for_testing()
+    reset_projects_metadata_registry()
     register_phase1_builtin_extensions()
     return

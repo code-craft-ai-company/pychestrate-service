@@ -11,7 +11,7 @@ AI Agents working in this repository should refer to themselves as an agent name
 # Project Overview
 This folder contains the source code for the 'Automation Mojo - Pychestrate' web service. The 'Automation Mojo - Pychestrate' website acts as the user interface for the 'Pychestrate' continuous integration and orchestration system.  The 'Pychestrate' web service acts as the user interface for a microservice based orchestration systems.  The 'Pychestrate' web interfaces will provide.
 
-* System Configuration - Global Variables, Security, User Management
+* System Configuration - Global Variables, Security, User Management, Secrets and Credentials
 * Resource Management - Track and deconflict usage of ( devices, IPs ) with checkout and checkin
 * Build Orchestrations
 * Infrastructre Orchestration
