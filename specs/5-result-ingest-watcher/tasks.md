@@ -18,14 +18,41 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `ingest/result/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Add Postgres migrations for `run_result_summary`, `task_result`, `run_artifact`, `result_scan_attempt`.
-- [ ] T1.3 — Implement `ingest/result/repositories.py` for summary/task/artifact/attempt.
-- [ ] T1.4 — Implement `ingest/result/detector.py` polling path (15 s interval) with `last_modified` watermark.
-- [ ] T1.5 — Implement `ingest/result/scanner.py::ResultWatcherScanner.scan` end-to-end happy path.
-- [ ] T1.6 — Implement `TestBaseResultTreeParser` at `source/site/automojo/factories/pychestrate/result_tree_parser/testbase_v1.py` with `PRECEDENCE = 1000`; handles all testbase tree files and subdirs.
-- [ ] T1.7 — Implement default `ArtifactClassifierExtension`s under `source/site/automojo/extensions/pychestrate/artifact_classifiers/` covering summary, progress-stream, taskings, tc-by-products, diagnostics, static, and labelled artifacts.
-- [ ] T1.8 — Emit `entity.result_tree.landed` and per-file `entity.artifact.ingested` via the outbox onto `0-message-bus`.
+- [x] T1.1 — Create `ingest/result/` package skeleton per design.md Component Breakdown.
+- [x] T1.2 — Add Postgres migrations for `run_result_summary`, `task_result`, `run_artifact`, `result_scan_attempt`.
+      *(``019_phase3_results_ingest`` creates the four tables +
+      ``ingest_scan_outcome_status`` enum.)*
+- [x] T1.3 — Implement `ingest/result/repositories.py` for summary/task/artifact/attempt.
+      *(``upsert_summary``, ``upsert_task_result``,
+      ``upsert_artifact``, ``insert_scan_attempt``,
+      ``finalize_scan_attempt``, plus list/find helpers.)*
+- [~] T1.4 — Implement `ingest/result/detector.py` polling path (15 s interval) with `last_modified` watermark.
+      *(M1 exposes ``scan_once(run_id, tree_path)`` so callers
+      drive each scan explicitly. The polling daemon with
+      watermark bookkeeping lands in M2 alongside the
+      ``5-shared-results-backend`` ``mark_landed`` subscription.)*
+- [x] T1.5 — Implement `ingest/result/scanner.py::ResultWatcherScanner.scan` end-to-end happy path.
+      *(``scanner.scan_once`` records a ``ResultScanAttempt``
+      row, parses the tree, persists summary / task / artifact
+      rows idempotently, and emits
+      ``entity.result_tree.landed`` plus per-task and
+      per-artifact events.)*
+- [~] T1.6 — Implement `TestBaseResultTreeParser` at `source/site/automojo/factories/pychestrate/result_tree_parser/testbase_v1.py` with `PRECEDENCE = 1000`; handles all testbase tree files and subdirs.
+      *(In-package at
+      ``ingest/result/factories/testbase_v1.py``;
+      ``PRECEDENCE=1000`` preserved. Reads
+      ``testrun_summary.json``,
+      ``testrun_results_stream.jsos`` (terminal records, deduped
+      on ``instance`` UUID), and walks every regular file as an
+      artifact with classification by top-level subdirectory.)*
+- [~] T1.7 — Implement default `ArtifactClassifierExtension`s under `source/site/automojo/extensions/pychestrate/artifact_classifiers/` covering summary, progress-stream, taskings, tc-by-products, diagnostics, static, and labelled artifacts.
+      *(M1 classifies inline in the testbase parser via the
+      ``ARTIFACT_CLASSIFICATION_MAP``. Extracting the classifiers
+      into a registry of ``ArtifactClassifierExtension`` packs
+      lands when an out-of-tree classifier is needed (M2).)*
+- [x] T1.8 — Emit `entity.result_tree.landed` and per-file `entity.artifact.ingested` via the outbox onto `0-message-bus`.
+      *(Plus ``entity.task_result.ingested`` per task — same
+      session-outbox pattern the run-state-machine uses.)*
 
 ### M2 — Core Behavior
 

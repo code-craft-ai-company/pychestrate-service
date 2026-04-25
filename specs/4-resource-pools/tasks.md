@@ -15,13 +15,31 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/pools/` per design.md.
-- [ ] T1.2 — Alembic migration `0020_resource_pools` creating `core.resource_pools` and `core.resource_pool_members` with the indices listed in design.md.
-- [ ] T1.3 — Implement `models.py::ResourcePool` + `PoolCandidate`, plus `allocation_aspects.py::AllocationAspects` dataclass (sticky_tag, job_hint, preferred_member).
-- [ ] T1.4 — Implement `repository.py` pool CRUD and membership materialization.
-- [ ] T1.5 — Hard-wire `FifoAllocationStrategy` in the service; plumb the aspects argument end to end.
-- [ ] T1.6 — Add `api.py` with `POST`, `GET`, `DELETE` for `/api/v1/resource-pools`; wire `1-rbac` perms.
-- [ ] T1.7 — Emit `pychestrate.resource.pool.created` and `.deleted`.
+- [x] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/pools/` per design.md.
+- [x] T1.2 — Alembic migration `0020_resource_pools` creating `core.resource_pools` and `core.resource_pool_members` with the indices listed in design.md.
+      *(Migration 022 creates both tables.)*
+- [x] T1.3 — Implement `models.py::ResourcePool` + `PoolCandidate`, plus `allocation_aspects.py::AllocationAspects` dataclass (sticky_tag, job_hint, preferred_member).
+      *(``AllocationAspects`` lives on
+      ``resources/pools/service.py`` with the public surface re-
+      exported from ``__init__.py``. M1 honors
+      ``preferred_member``; ``sticky_tag`` and ``job_hint`` land
+      with the M2 strategy-registry path.)*
+- [x] T1.4 — Implement `repository.py` pool CRUD and membership materialization.
+      *(insert_pool / find_pool_by_id / find_pool_by_name /
+      list_pools / delete_pool / find_member / list_members /
+      insert_member / delete_member.)*
+- [x] T1.5 — Hard-wire `FifoAllocationStrategy` in the service; plumb the aspects argument end to end.
+      *(``pick_candidate`` sorts by ``added_at`` after filtering
+      to ``ResourceState.AVAILABLE`` members; aspects flow
+      through the public surface.)*
+- [~] T1.6 — Add `api.py` with `POST`, `GET`, `DELETE` for `/api/v1/resource-pools`; wire `1-rbac` perms.
+      *(Service-layer ``create_pool`` / ``get_pool`` /
+      ``list_pools`` / ``add_member`` / ``remove_member`` ship;
+      Flask-RestX routes land with the broader Phase-4 REST
+      surface.)*
+- [x] T1.7 — Emit `pychestrate.resource.pool.created` and `.deleted`.
+      *(Plus ``.member_added`` and ``.member_removed`` for
+      symmetry on member churn.)*
 
 ### M2 — Core Behavior
 

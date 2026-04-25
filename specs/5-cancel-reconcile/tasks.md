@@ -18,14 +18,25 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/cancel/` and `jobs/reconcile/` package skeletons per design.md Component Breakdown.
-- [ ] T1.2 — Add Postgres migrations for `cancel_request` and `reconcile_decision`.
-- [ ] T1.3 — Implement `jobs/cancel/repository.py::CancelRequestRepository` with the partial unique index on `run_id`.
-- [ ] T1.4 — Implement `jobs/cancel/dispatcher.py::CancelDispatcher.send_cancel_rpc` happy path (single transmit, record attempt).
-- [ ] T1.5 — Implement `jobs/cancel/dispatcher.py::CancelDispatcher.handle_ack`; emit `entity.run.cancel_ack`.
-- [ ] T1.6 — Implement `jobs/reconcile/reconciler.py::RunReconciler.reconcile_on_reconnect` basic concur + divergent paths.
-- [ ] T1.7 — Subscribe to `entity.client.reconnected`; invoke reconciler.
-- [ ] T1.8 — Implement `jobs/cancel/errors.py::CancelTransportError`.
+- [x] T1.1 — Create `jobs/cancel/` and `jobs/reconcile/` package skeletons per design.md Component Breakdown.
+- [x] T1.2 — Add Postgres migrations for `cancel_request` and `reconcile_decision`.
+      *(Migration 021.)*
+- [~] T1.3 — Implement `jobs/cancel/repository.py::CancelRequestRepository` with the partial unique index on `run_id`.
+      *(repo helpers ship; partial unique index is enforced at
+      the service layer via ``find_open_for_run`` for SQLite test
+      portability; native partial unique index lands with M2 on
+      Postgres.)*
+- [x] T1.4 — Implement `jobs/cancel/dispatcher.py::CancelDispatcher.send_cancel_rpc` happy path (single transmit, record attempt).
+- [x] T1.5 — Implement `jobs/cancel/dispatcher.py::CancelDispatcher.handle_ack`; emit `entity.run.cancel_ack`.
+- [x] T1.6 — Implement `jobs/reconcile/reconciler.py::RunReconciler.reconcile_on_reconnect` basic concur + divergent paths.
+      *(Drives ``run_state_machine.reconcile`` for terminal
+      client truth; persists a ``ReconcileDecision`` per pass.)*
+- [~] T1.7 — Subscribe to `entity.client.reconnected`; invoke reconciler.
+      *(Reconciler entry point is in place; the bus subscriber
+      that calls it lands when the client-protocol M2 emits
+      ``entity.client.reconnected``.)*
+- [x] T1.8 — Implement `jobs/cancel/errors.py::CancelTransportError`.
+      *(Plus ``CancelError`` base + ``CancelDuplicateRequestError``.)*
 
 ### M2 — Core Behavior
 

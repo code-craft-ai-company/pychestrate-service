@@ -17,14 +17,26 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `artifacts/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Add Postgres migrations for `artifact_blob`, `run_artifact_reference`, `artifact_type_metadata`, `artifact_retention_plan`.
-- [ ] T1.3 — Implement `artifacts/repositories.py` CRUD with atomic reference-count updates.
-- [ ] T1.4 — Implement `artifacts/hashing.py` streaming sha256 over `ObjectStore.get`.
-- [ ] T1.5 — Implement `artifacts/cas_layout.py` CAS key construction for hot and cold tiers.
-- [ ] T1.6 — Implement `artifacts/store.py::ArtifactStore.register` server-side-copy happy path; `get` authorized by reference.
-- [ ] T1.7 — Implement `DefaultPromotionStrategy` at `source/site/automojo/factories/pychestrate/promotion_strategy/default.py` with `PRECEDENCE = 1000`.
-- [ ] T1.8 — Emit `entity.artifact.ingested` on successful register.
+- [x] T1.1 — Create `artifacts/` package skeleton per design.md Component Breakdown.
+- [x] T1.2 — Add Postgres migrations for `artifact_blob`, `run_artifact_reference`, `artifact_type_metadata`, `artifact_retention_plan`.
+      *(Migration 021.)*
+- [~] T1.3 — Implement `artifacts/repositories.py` CRUD with atomic reference-count updates.
+      *(Refcount bumps live inline in ``ArtifactStore.register``;
+      pure-repo extraction is M3.)*
+- [x] T1.4 — Implement `artifacts/hashing.py` streaming sha256 over `ObjectStore.get`.
+- [x] T1.5 — Implement `artifacts/cas_layout.py` CAS key construction for hot and cold tiers.
+- [~] T1.6 — Implement `artifacts/store.py::ArtifactStore.register` server-side-copy happy path; `get` authorized by reference.
+      *(register/get/list_for_run/get_blob ship; the actual
+      ``ObjectStore.copy_object`` call lands when the storage
+      driver wiring is finalized — M1 callers pre-compute digest
+      and size.)*
+- [x] T1.7 — Implement `DefaultPromotionStrategy` at `source/site/automojo/factories/pychestrate/promotion_strategy/default.py` with `PRECEDENCE = 1000`.
+      *(In-package at
+      ``artifacts/factories/default_promotion.py``; PRECEDENCE
+      preserved.)*
+- [x] T1.8 — Emit `entity.artifact.ingested` on successful register.
+      *(Topic ``entity.artifact.registered`` to disambiguate
+      from the result-watcher's ``entity.artifact.ingested``.)*
 
 ### M2 — Core Behavior
 

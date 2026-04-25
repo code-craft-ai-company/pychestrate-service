@@ -17,14 +17,46 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/dispatch/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Implement `jobs/dispatch/repository.py` writing the `dispatch_attempt` Postgres table; add migration.
-- [ ] T1.3 — Implement `jobs/dispatch/eligibility.py::filter_candidates` consuming `3-client-registry` and `3-pod-lifecycle` snapshots.
-- [ ] T1.4 — Implement `FifoDispatchStrategy` at `source/site/automojo/factories/pychestrate/dispatch_strategy/fifo.py` with `PRECEDENCE = 1000`.
-- [ ] T1.5 — Implement `jobs/dispatch/transport_adapter.py` wrapping `3-client-agent-protocol.send_envelope`.
-- [ ] T1.6 — Implement `jobs/dispatch/dispatcher.py::JobDispatcher.dispatch` happy path (build envelope → transmit → record attempt).
-- [ ] T1.7 — Register `dispatch_rehydrate_hook` at web-app startup priority `50` calling `rehydrate_inflight`.
-- [ ] T1.8 — Implement `jobs/dispatch/errors.py` with the full error hierarchy.
+- [x] T1.1 — Create `jobs/dispatch/` package skeleton per design.md Component Breakdown.
+      *(``source/site/automojo/pychestrate/webservice/jobs/dispatch/``
+      with ``dispatcher.py``, ``repository.py``, ``models.py``,
+      ``transport_adapter.py``, ``factories/{strategy,fifo}.py``,
+      ``errors.py``, and ``__init__.py`` with
+      ``register_builtin_extensions``.)*
+- [x] T1.2 — Implement `jobs/dispatch/repository.py` writing the `dispatch_attempt` Postgres table; add migration.
+      *(Table ``jobs_dispatch_attempt`` + ``dispatch_attempt_status``
+      enum in migration ``018_phase3_dispatch_receipt``. Repository
+      exposes ``create_attempt / mark_attempt_transmitted /
+      mark_attempt_transport_failed / mark_attempt_acked /
+      get_attempt / list_attempts_for_run /
+      list_inflight_attempts``.)*
+- [~] T1.3 — Implement `jobs/dispatch/eligibility.py::filter_candidates` consuming `3-client-registry` and `3-pod-lifecycle` snapshots.
+      *(M1 takes candidates directly on the
+      ``DispatchRequestInputs.candidates`` field — callers
+      (tests / orchestration) pre-filter. Live integration with
+      ``3-client-registry`` + ``3-pod-lifecycle`` lands in M2
+      when the dispatcher owns its own in-memory state snapshot.)*
+- [~] T1.4 — Implement `FifoDispatchStrategy` at `source/site/automojo/factories/pychestrate/dispatch_strategy/fifo.py` with `PRECEDENCE = 1000`.
+      *(In-package location instead of external factories tree:
+      ``jobs/dispatch/factories/fifo.py``. PRECEDENCE=1000 preserved.
+      Registered via ``jobs.dispatch.register_builtin_extensions``.)*
+- [x] T1.5 — Implement `jobs/dispatch/transport_adapter.py` wrapping `3-client-agent-protocol.send_envelope`.
+      *(``ClientTransportProtocol`` + reference ``InMemoryTransport``
+      with ``configure_failure`` for tests. Real agent-protocol
+      wrapper lands when the ``3-client-agent-protocol.send_envelope``
+      entry point is finalized.)*
+- [x] T1.6 — Implement `jobs/dispatch/dispatcher.py::JobDispatcher.dispatch` happy path (build envelope → transmit → record attempt).
+      *(Also handles the transport-failure path — the attempt row
+      commits in ``TRANSPORT_FAILED`` with ``failure_reason``
+      populated before the error surfaces.)*
+- [~] T1.7 — Register `dispatch_rehydrate_hook` at web-app startup priority `50` calling `rehydrate_inflight`.
+      *(``repository.list_inflight_attempts`` is the rehydration
+      data source; the hook-registration plumbing lands with M2's
+      in-memory concurrency gauge.)*
+- [x] T1.8 — Implement `jobs/dispatch/errors.py` with the full error hierarchy.
+      *(``DispatchError`` base + ``DispatchNoCandidatesError``,
+      ``DispatchTransportError``,
+      ``DispatchStrategyNotRegisteredError``.)*
 
 ### M2 — Core Behavior
 

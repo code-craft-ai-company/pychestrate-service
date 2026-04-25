@@ -18,14 +18,40 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `ingest/progress/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Register routes `POST /ingest/v1/progress/<run_id>/summary` and `.../records` in `ingest/progress/routes.py`.
-- [ ] T1.3 — Implement `ingest/progress/auth.py` — verify authenticated `client_id` matches the run's `DispatchReceipt.client_id`.
-- [ ] T1.4 — Add Postgres migrations for `run_progress_summary`, `run_progress_record`, `run_progress_counters`.
-- [ ] T1.5 — Implement `ingest/progress/repositories.py` — summary, record, counter CRUD.
-- [ ] T1.6 — Implement `ingest/progress/schema.py` Pydantic value types with `additionalProperties: false`.
-- [ ] T1.7 — Implement `TestBaseProgressParser` at `source/site/automojo/factories/pychestrate/progress_parser/testbase_v1.py` with `PRECEDENCE = 1000`.
-- [ ] T1.8 — Implement `ingest/progress/service.py::ProgressIngestService.ingest_summary` happy path; emit `entity.progress.received` via outbox.
+- [x] T1.1 — Create `ingest/progress/` package skeleton per design.md Component Breakdown.
+- [~] T1.2 — Register routes `POST /ingest/v1/progress/<run_id>/summary` and `.../records` in `ingest/progress/routes.py`.
+      *(M1 ships the service-layer entry points
+      (``ingest_summary``, ``ingest_record``); the Flask routes
+      land when the v1 ingest namespace is published — same
+      deferral as the existing ``8-rest-api-v1`` controllers
+      shipped under ``restapi/versions/v1/`` for other features.)*
+- [~] T1.3 — Implement `ingest/progress/auth.py` — verify authenticated `client_id` matches the run's `DispatchReceipt.client_id`.
+      *(Check is inlined in
+      ``service._assert_run_belongs_to_client`` consuming the
+      ``DispatchReceipt`` shipped by ``5-dispatch-receipt`` M1.
+      Will move to a dedicated ``auth.py`` when the route layer
+      lands.)*
+- [x] T1.4 — Add Postgres migrations for `run_progress_summary`, `run_progress_record`, `run_progress_counters`.
+      *(Migration ``019_phase3_results_ingest`` creates the three
+      tables with the unique constraint on
+      ``(run_id, record_index)``.)*
+- [x] T1.5 — Implement `ingest/progress/repositories.py` — summary, record, counter CRUD.
+- [~] T1.6 — Implement `ingest/progress/schema.py` Pydantic value types with `additionalProperties: false`.
+      *(Frozen ``dataclass`` shapes instead of Pydantic — same
+      decision as ``5-job-envelope`` M1 to avoid the new runtime
+      dep. Wire-level strict validation attaches when the route
+      layer lands.)*
+- [~] T1.7 — Implement `TestBaseProgressParser` at `source/site/automojo/factories/pychestrate/progress_parser/testbase_v1.py` with `PRECEDENCE = 1000`.
+      *(Located in-package at
+      ``ingest/progress/factories/testbase_v1.py``;
+      ``PRECEDENCE=1000`` preserved. Registered via
+      ``ingest.progress.register_builtin_extensions`` and called
+      from ``phase5_bootstrap``.)*
+- [x] T1.8 — Implement `ingest/progress/service.py::ProgressIngestService.ingest_summary` happy path; emit `entity.progress.received` via outbox.
+      *(Service exposes ``ingest_summary``, ``ingest_record``,
+      ``get_summary``, ``list_records``. Emits
+      ``entity.progress.received`` and
+      ``entity.progress.summary_landed`` per commit.)*
 
 ### M2 — Core Behavior
 

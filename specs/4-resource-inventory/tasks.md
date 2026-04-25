@@ -16,14 +16,26 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/inventory/` per design.md Component Breakdown.
-- [ ] T1.2 — Add Alembic migration `0010_resources_core` creating `core.resources` with PK, unique partial index `(kind, identity_hash) WHERE state != 'retired'`, index `(kind, state)`, GIN on `tags`.
-- [ ] T1.3 — Implement `models.py::Resource` dataclass and `ResourceState` enum.
-- [ ] T1.4 — Implement `repository.py::ResourceRepository` with `load`, `load_many`, `save`, `transition`, `query` (no per-kind indices yet).
-- [ ] T1.5 — Hard-code a single `DeviceResourceKind` in `kind_registry.py` (extension discovery deferred to T2.1).
-- [ ] T1.6 — Implement `service.py::register_resource` with validator + normalizer calls and `ResourceIdentityConflictError` on unique-constraint violation.
-- [ ] T1.7 — Add Flask-RestX namespace `api.py` exposing `POST /api/v1/resources` and `GET /api/v1/resources/{id}`; wire permission `resource.inventory.write` / `read`.
-- [ ] T1.8 — Emit `entity.resource.registered` through `0-message-bus`.
+- [x] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/inventory/` per design.md Component Breakdown.
+- [~] T1.2 — Add Alembic migration `0010_resources_core` creating `core.resources` with PK, unique partial index `(kind, identity_hash) WHERE state != 'retired'`, index `(kind, state)`, GIN on `tags`.
+      *(Migration 022 creates ``resources_resource``. Partial
+      unique index + GIN are Postgres-specific M2/M3 work; M1
+      enforces uniqueness at the service layer via
+      ``find_by_identity`` for SQLite test portability.)*
+- [x] T1.3 — Implement `models.py::Resource` dataclass and `ResourceState` enum.
+- [~] T1.4 — Implement `repository.py::ResourceRepository` with `load`, `load_many`, `save`, `transition`, `query`.
+      *(``find_by_identity`` / ``find_by_id`` /
+      ``list_by_project`` / ``insert_resource`` /
+      ``update_state`` cover the same surface.)*
+- [~] T1.5 — Hard-code a single `DeviceResourceKind` in `kind_registry.py` (extension discovery deferred to T2.1).
+      *(``DeviceResourceKind`` is registered through
+      ``ResourceKindProtocol`` factory at PRECEDENCE=1000 — uses
+      the extension-host pattern from day one; M2 just adds packs.)*
+- [x] T1.6 — Implement `service.py::register_resource` with validator + normalizer calls and `ResourceIdentityConflictError` on unique-constraint violation.
+- [~] T1.7 — Add Flask-RestX namespace `api.py` exposing `POST /api/v1/resources` and `GET /api/v1/resources/{id}`; wire permission `resource.inventory.write` / `read`.
+      *(Service-layer entry points ship; Flask-RestX namespaces
+      land with the broader Phase-4 REST surface.)*
+- [x] T1.8 — Emit `entity.resource.registered` through `0-message-bus`.
 
 ### M2 — Core Behavior
 

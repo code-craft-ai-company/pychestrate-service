@@ -10,14 +10,36 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/` package per design.md Component Breakdown.
-- [ ] T1.2 — Implement `repository.py::TestRunRepository` with the `test_run` schema (`0-persistence` migration included).
-- [ ] T1.3 — Implement `state_machine.py::TestRunStateMachine` transition table covering all nine states.
-- [ ] T1.4 — Implement `errors.py` exporting `CapabilityMismatchError`, `DispatchFailedError`, and re-exporting `AuthorizationError`.
-- [ ] T1.5 — Implement `runner_protocol.py::TestRunnerKindProtocol` declaring `factory_protocol_name = "test_runner_kind"` and every required classmethod.
-- [ ] T1.6 — Implement `TestbaseRunnerKind` at `source/site/automojo/factories/pychestrate/test_runner/testbase.py` with `PRECEDENCE = 1000`.
-- [ ] T1.7 — Implement `orchestrator.py::TestOrchestrator.trigger_run` happy path: RBAC → catalog lookup → input validate → shared-results allocate → envelope build → `5-job-dispatch.dispatch`.
-- [ ] T1.8 — Register `POST /api/v1/projects/{project_id}/test-runs` and `GET /api/v1/projects/{project_id}/test-runs/{run_id}` under Flask-RestX.
+- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/` package per design.md Component Breakdown.
+- [x] T1.2 — Implement `repository.py::TestRunRepository` with the `test_run` schema (`0-persistence` migration included).
+      *(``insert_run`` / ``get_run`` / ``update_state`` /
+      ``list_runs_for_project`` against
+      ``orchestration_test_run`` in migration 020.)*
+- [~] T1.3 — Implement `state_machine.py::TestRunStateMachine` transition table covering all nine states.
+      *(All nine ``TestRunState`` values exist as the row enum;
+      orchestration drives the M1 subset
+      (TRIGGERED → DISPATCHING → DISPATCHED / DISPATCH_FAILED)
+      inline. Full transition table + bus subscriber mirroring
+      ``5-run-state-machine`` events is M2.)*
+- [x] T1.4 — Implement `errors.py` exporting `CapabilityMismatchError`, `DispatchFailedError`, and re-exporting `AuthorizationError`.
+      *(``TestOrchestrationError`` + ``TestRunNotFoundError`` +
+      ``CapabilityMismatchError`` + ``DispatchFailedError``.
+      RBAC ``AuthorizationError`` re-export lands with M2 RBAC
+      integration.)*
+- [x] T1.5 — Implement `runner_protocol.py::TestRunnerKindProtocol` declaring `factory_protocol_name = "test_runner_kind"` and every required classmethod.
+- [x] T1.6 — Implement `TestbaseRunnerKind` at `source/site/automojo/factories/pychestrate/test_runner/testbase.py` with `PRECEDENCE = 1000`.
+      *(In-package at
+      ``orchestration/test/factories/testbase_runner.py``;
+      ``PRECEDENCE=1000`` preserved.)*
+- [x] T1.7 — Implement `orchestrator.py::TestOrchestrator.trigger_run` happy path: RBAC → catalog lookup → input validate → shared-results allocate → envelope build → `5-job-dispatch.dispatch`.
+      *(Catalog snapshot → runner resolve → input validate →
+      capability filter → results allocate → run-state-machine
+      create + DISPATCH_STARTED → dispatcher.dispatch →
+      orchestration row commits in DISPATCHED. RBAC ``run.create``
+      gate lands with the M2 REST surface.)*
+- [~] T1.8 — Register `POST /api/v1/projects/{project_id}/test-runs` and `GET /api/v1/projects/{project_id}/test-runs/{run_id}` under Flask-RestX.
+      *(Service-layer trigger ships; routes follow with the
+      Phase-3 REST surface.)*
 
 ### M2 — Core Behavior
 

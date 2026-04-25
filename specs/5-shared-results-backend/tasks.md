@@ -17,13 +17,27 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/results/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Add Postgres migration for `shared_results_allocation`.
-- [ ] T1.3 — Implement `jobs/results/repository.py::AllocationRepository` with upsert-on-conflict-do-nothing idempotency on `run_id`.
-- [ ] T1.4 — Implement `jobs/results/path_builder.py` with regex-sanitized components and the prescribed template `<project_slug>/results/<yyyy>/<mm>/<dd>/<job_type>/<run_id>`.
-- [ ] T1.5 — Implement `jobs/results/backend.py::SharedResultsBackend.allocate` + `resolve` happy paths.
-- [ ] T1.6 — Wire `5-job-envelope.codec.build` to call `shared_backend.allocate(...)` and populate `envelope.results.backend_key_prefix` + `backend_driver`.
-- [ ] T1.7 — Implement `jobs/results/errors.py` with `AllocationNotFoundError`.
+- [x] T1.1 — Create `jobs/results/` package skeleton per design.md Component Breakdown.
+- [x] T1.2 — Add Postgres migration for `shared_results_allocation`.
+      *(``019_phase3_results_ingest`` creates
+      ``jobs_shared_results_allocation``.)*
+- [~] T1.3 — Implement `jobs/results/repository.py::AllocationRepository` with upsert-on-conflict-do-nothing idempotency on `run_id`.
+      *(Idempotency at the service layer
+      (``SharedResultsBackend.allocate`` lookup-then-insert) for
+      cross-dialect portability; the unique constraint on
+      ``run_id`` enforces the invariant at the DB level. Native
+      ``ON CONFLICT DO NOTHING`` is M3.)*
+- [x] T1.4 — Implement `jobs/results/path_builder.py` with regex-sanitized components and the prescribed template `<project_slug>/results/<yyyy>/<mm>/<dd>/<job_type>/<run_id>`.
+- [x] T1.5 — Implement `jobs/results/backend.py::SharedResultsBackend.allocate` + `resolve` happy paths.
+- [~] T1.6 — Wire `5-job-envelope.codec.build` to call `shared_backend.allocate(...)` and populate `envelope.results.backend_key_prefix` + `backend_driver`.
+      *(Allocation surface in place; the dispatcher M1 still
+      receives a pre-built ``JobResultsLocator`` from its caller.
+      Inline allocation in the envelope build path lands when the
+      orchestration layer (B3) wires dispatch and allocation
+      together.)*
+- [x] T1.7 — Implement `jobs/results/errors.py` with `AllocationNotFoundError`.
+      *(``SharedResultsError`` base + ``AllocationNotFoundError``
+      + ``PathComponentInvalidError``.)*
 
 ### M2 — Core Behavior
 
