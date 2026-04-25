@@ -54,15 +54,19 @@ from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 # Without these, a test that imports only a subset of features can fail
 # with ``NoReferencedTableError`` when an FK points at a table whose
 # model module was never loaded.
+from automojo.pychestrate.webservice.artifacts import models as _artifacts_models  # noqa: F401
 from automojo.pychestrate.webservice.audit import models as _audit_models  # noqa: F401
 from automojo.pychestrate.webservice.clients import models as _clients_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.flags import models as _flags_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.progress import models as _ingest_progress_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.result import models as _ingest_result_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.cancel import models as _jobs_cancel_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _jobs_dispatch_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch.receipt import models as _jobs_dispatch_receipt_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.envelope import models as _jobs_envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.offline import models as _jobs_offline_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.reconcile import models as _jobs_reconcile_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.results import models as _jobs_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _orch_test_run_models  # noqa: F401

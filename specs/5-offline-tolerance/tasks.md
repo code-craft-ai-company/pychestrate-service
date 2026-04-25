@@ -16,14 +16,35 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `jobs/offline/` package skeleton per design.md Component Breakdown.
-- [ ] T1.2 — Add Postgres migrations for `pod_offline_state`, `client_replay_cursor`, `deferred_cancel`.
-- [ ] T1.3 — Implement `jobs/offline/pod_state.py::PodOfflineStateService` subscribing to `entity.client.session_dropped` and `entity.client.reconnected`; arm degrade + offline timers.
-- [ ] T1.4 — Extend `5-job-dispatch` eligibility filter to exclude `degraded` and `offline` pods.
-- [ ] T1.5 — Implement `jobs/offline/cancel_queue.py::DeferredCancelQueue.queue_if_offline`; integrate with `5-cancel-reconcile.send_cancel_rpc` as the offline-branch.
-- [ ] T1.6 — Implement `ingest/progress/replay.py::ReplayCoordinator.accept_replay` including cursor check + `ReplaySeqGapError` path.
-- [ ] T1.7 — Extend `ingest/progress/routes.py` to detect `X-Pychestrate-Replay` and dispatch to replay coordinator instead of live ingest.
-- [ ] T1.8 — Implement `jobs/offline/errors.py` with `ReplaySeqGapError` and `ReplayAuthError`.
+- [x] T1.1 — Create `jobs/offline/` package skeleton per design.md Component Breakdown.
+- [x] T1.2 — Add Postgres migrations for `pod_offline_state`, `client_replay_cursor`, `deferred_cancel`.
+      *(Migration 021.)*
+- [~] T1.3 — Implement `jobs/offline/pod_state.py::PodOfflineStateService` subscribing to `entity.client.session_dropped` and `entity.client.reconnected`; arm degrade + offline timers.
+      *(Service ships ``observe_session_dropped`` /
+      ``observe_reconnected`` / ``evaluate_tier`` /
+      ``is_eligible_for_dispatch``; bus subscribers that call
+      them land when the client-protocol M2 emits the events.)*
+- [~] T1.4 — Extend `5-job-dispatch` eligibility filter to exclude `degraded` and `offline` pods.
+      *(``PodOfflineStateService.is_eligible_for_dispatch`` is
+      the surface; the dispatcher's filter consumes it when the
+      Phase-3 client capability advertisement layer is wired in
+      the orchestration trigger path.)*
+- [~] T1.5 — Implement `jobs/offline/cancel_queue.py::DeferredCancelQueue.queue_if_offline`; integrate with `5-cancel-reconcile.send_cancel_rpc` as the offline-branch.
+      *(Queue ships with queue_if_offline / list_queued_for_pod /
+      mark_delivered / mark_expired_overdue; the cancel
+      dispatcher's hook into queue_if_offline lands with the M2
+      bus-subscriber for client_reconnected.)*
+- [x] T1.6 — Implement `ingest/progress/replay.py::ReplayCoordinator.accept_replay` including cursor check + `ReplaySeqGapError` path.
+      *(In-package at ``jobs/offline/replay.py`` to keep all
+      offline-tolerance code in one place; ``accept_replay``
+      enforces monotonic cursor + auth + idempotent already-
+      applied path.)*
+- [~] T1.7 — Extend `ingest/progress/routes.py` to detect `X-Pychestrate-Replay` and dispatch to replay coordinator instead of live ingest.
+      *(Coordinator ships at the service layer; HTTP route
+      header dispatch lands with the broader Phase-3 REST
+      surface.)*
+- [x] T1.8 — Implement `jobs/offline/errors.py` with `ReplaySeqGapError` and `ReplayAuthError`.
+      *(Plus ``OfflineError`` base.)*
 
 ### M2 — Core Behavior
 

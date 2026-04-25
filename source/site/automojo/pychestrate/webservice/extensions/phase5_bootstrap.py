@@ -34,6 +34,9 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.artifacts import (
+    register_builtin_extensions as artifacts_register,
+)
 from automojo.pychestrate.webservice.ingest.progress import (
     register_builtin_extensions as progress_register,
 )
@@ -45,11 +48,15 @@ from automojo.pychestrate.webservice.jobs.dispatch import (
 )
 
 # Side-effect imports so Layer-5 model tables attach to the metadata.
+from automojo.pychestrate.webservice.artifacts import models as _artifacts_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.progress import models as _progress_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.result import models as _result_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.cancel import models as _cancel_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch.receipt import models as _dispatch_receipt_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.offline import models as _offline_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.reconcile import models as _reconcile_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.results import models as _shared_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _run_state_models  # noqa: F401
 
@@ -81,6 +88,7 @@ def register_phase5_builtin_extensions() -> None:
     dispatch_register()
     progress_register()
     result_register()
+    artifacts_register()
     return
 
 
