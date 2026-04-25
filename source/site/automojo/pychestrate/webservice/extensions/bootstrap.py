@@ -64,6 +64,7 @@ from automojo.pychestrate.webservice.ingest.progress import models as _ingest_pr
 from automojo.pychestrate.webservice.ingest.result import models as _ingest_result_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.alerts import models as _metrics_alerts_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.dashboards import models as _metrics_dashboards_models  # noqa: F401
+from automojo.pychestrate.webservice.metrics.slos import models as _metrics_slos_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.timeseries import models as _metrics_timeseries_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.cancel import models as _jobs_cancel_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _jobs_dispatch_models  # noqa: F401
