@@ -72,6 +72,9 @@ from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_s
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _orch_sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _orch_test_run_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.catalog import models as _orch_test_catalog_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.compare import models as _orch_test_compare_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.flake import models as _orch_test_flake_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.triage import models as _orch_test_triage_models  # noqa: F401
 from automojo.pychestrate.webservice.projects import models as _projects_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.checkout import models as _resources_checkout_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.health import models as _resources_health_models  # noqa: F401
