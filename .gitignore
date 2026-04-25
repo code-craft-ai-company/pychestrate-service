@@ -9,6 +9,13 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+# Source-tree exception: the Layer-6 build orchestration package
+# is a Python sub-module under orchestration/, not a build-output
+# directory.
+!source/site/automojo/pychestrate/webservice/orchestration/build/
+!source/site/automojo/pychestrate/webservice/orchestration/build/**
+# Keep cache + bytecode out of the unignored sub-tree.
+source/site/automojo/pychestrate/webservice/orchestration/build/**/__pycache__/
 develop-eggs/
 dist/
 downloads/
