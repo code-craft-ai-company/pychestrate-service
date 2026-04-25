@@ -71,7 +71,9 @@ from automojo.pychestrate.webservice.jobs.results import models as _jobs_results
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.build import models as _orch_build_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.build.artifacts import models as _orch_build_artifacts_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.infra.drift import models as _orch_infra_drift_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.infra.environment import models as _orch_infra_environment_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.infra.guards import models as _orch_infra_guards_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.infra.runs import models as _orch_infra_runs_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import models as _orch_pipeline_definition_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _orch_sharding_models  # noqa: F401
