@@ -35,3 +35,43 @@ class MfaRequiredError(Exception):
     """
         Raised when local verification succeeds but MFA is still required.
     """
+
+
+class MfaMethodUnknownError(Exception):
+    """
+        Raised when a caller references a method_name with no
+        registered ``MFAMethodExtension``.
+    """
+
+
+class MfaEnrollmentNotFoundError(Exception):
+    """
+        Raised when a per-(user, method) enrollment lookup misses.
+    """
+
+
+class MfaChallengeRejectedError(Exception):
+    """
+        Raised when a verify_response call fails its constant-time
+        compare.
+    """
+
+
+class MfaChallengeExpiredError(Exception):
+    """
+        Raised when a challenge is consumed past its TTL.
+    """
+
+
+class MfaChallengeUnknownError(Exception):
+    """
+        Raised when a challenge id lookup misses.
+    """
+
+
+class MfaEnrollmentNotVerifiedError(Exception):
+    """
+        Raised when a verify_response is requested for an
+        enrollment that has not yet completed its initial
+        verify-on-enroll handshake.
+    """
