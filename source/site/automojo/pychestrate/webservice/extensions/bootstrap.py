@@ -69,6 +69,7 @@ from automojo.pychestrate.webservice.jobs.offline import models as _jobs_offline
 from automojo.pychestrate.webservice.jobs.reconcile import models as _jobs_reconcile_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.results import models as _jobs_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _orch_sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _orch_test_run_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.catalog import models as _orch_test_catalog_models  # noqa: F401
 from automojo.pychestrate.webservice.projects import models as _projects_models  # noqa: F401

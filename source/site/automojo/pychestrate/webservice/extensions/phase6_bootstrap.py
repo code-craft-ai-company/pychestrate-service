@@ -26,11 +26,15 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.orchestration.pipelines.sharding import (
+    register_builtin_extensions as sharding_register,
+)
 from automojo.pychestrate.webservice.orchestration.test import (
     register_builtin_extensions as test_orch_register,
 )
 
 # Side-effect imports so Layer-6 model tables attach to the metadata.
+from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _test_run_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.catalog import models as _test_catalog_models  # noqa: F401
 
@@ -51,6 +55,7 @@ def register_phase6_builtin_extensions() -> None:
         Register Layer-6 in-tree factory implementations.
     """
     test_orch_register()
+    sharding_register()
     return
 
 
