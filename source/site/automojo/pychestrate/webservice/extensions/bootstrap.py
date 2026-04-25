@@ -57,6 +57,7 @@ from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 from automojo.pychestrate.webservice.artifacts import models as _artifacts_models  # noqa: F401
 from automojo.pychestrate.webservice.audit import models as _audit_models  # noqa: F401
 from automojo.pychestrate.webservice.clients import models as _clients_models  # noqa: F401
+from automojo.pychestrate.webservice.extensions.sandbox import models as _extensions_sandbox_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.flags import models as _flags_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.progress import models as _ingest_progress_models  # noqa: F401
