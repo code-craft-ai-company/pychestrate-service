@@ -10,6 +10,9 @@ from automojo.pychestrate.webservice.extensions.phase2_bootstrap import (
 from automojo.pychestrate.webservice.extensions.phase3_bootstrap import (
     register_phase3_builtin_extensions,
 )
+from automojo.pychestrate.webservice.extensions.phase4_bootstrap import (
+    register_phase4_builtin_extensions,
+)
 from automojo.pychestrate.webservice.extensions.phase5_bootstrap import (
     register_phase5_builtin_extensions,
 )
@@ -86,6 +89,7 @@ def register_service_extensions() -> None:
     register_phase1_builtin_extensions()
     register_phase2_builtin_extensions()
     register_phase3_builtin_extensions()
+    register_phase4_builtin_extensions()
     register_phase5_builtin_extensions()
     register_phase6_builtin_extensions()
     return
