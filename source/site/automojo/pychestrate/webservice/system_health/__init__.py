@@ -43,6 +43,14 @@ from automojo.pychestrate.webservice.system_health.exceptions import (
     HealthRegistryError,
     ProbeNotFoundError,
 )
+from automojo.pychestrate.webservice.system_health.extensions.disk_space_probe import (
+    DiskSpaceHealthProbe,
+    configure as configure_disk_space_probe,
+    reset_for_testing as reset_disk_space_probe_for_testing,
+)
+from automojo.pychestrate.webservice.system_health.extensions.message_bus_probe import (
+    MessageBusHealthProbe,
+)
 from automojo.pychestrate.webservice.system_health.extensions.postgres_probe import (
     PostgresHealthProbe,
     reset_for_testing as reset_postgres_probe_for_testing,
@@ -69,13 +77,23 @@ from automojo.pychestrate.webservice.system_health.scheduler import (
 
 def register_builtin_extensions() -> None:
     """
-        Seed the in-tree :class:`PostgresHealthProbe` reference
-        under the :class:`SystemHealthProbeExtension` resource
-        category. M2 widens this to the bus / object-store /
-        timeseries / disk-space probes.
+        Seed the in-tree :class:`SystemHealthProbeExtension`
+        references — M1 ships the Postgres liveness probe; M2
+        adds :class:`MessageBusHealthProbe` and
+        :class:`DiskSpaceHealthProbe`. Object-store and
+        timeseries probes land alongside their owning features
+        as those packages stabilize.
     """
     register_resource_extension(
         base_class=SystemHealthProbeExtension,
         extension=PostgresHealthProbe,
+    )
+    register_resource_extension(
+        base_class=SystemHealthProbeExtension,
+        extension=MessageBusHealthProbe,
+    )
+    register_resource_extension(
+        base_class=SystemHealthProbeExtension,
+        extension=DiskSpaceHealthProbe,
     )
     return
