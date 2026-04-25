@@ -42,8 +42,10 @@ from automojo.pychestrate.core.defaults import new_uuid, utc_now
 from automojo.pychestrate.webservice.audit.audit_writer import capture_event as audit_capture
 from automojo.pychestrate.webservice.messaging.event_bus import EntityEvent
 from automojo.pychestrate.webservice.messaging.outbox import enqueue_event
+from automojo.pychestrate.webservice.secrets import audit_health_gate
 from automojo.pychestrate.webservice.secrets.events import SecretEventTopics
 from automojo.pychestrate.webservice.secrets.exceptions import (
+    AuditUnavailableError,
     SecretAccessDeniedError,
     SecretAlreadyExistsError,
     SecretNotFoundError,
@@ -152,6 +154,29 @@ def _has_read_permission(
     return rtnval
 
 
+def _require_audit_sink_healthy(*, secret_ref: str, action: str) -> None:
+    """
+        Refuse to mutate ``secret_ref`` when the audit canonical
+        sink is currently unhealthy. The NFR-4 fail-closed
+        invariant: secrets writes never escape the audit
+        chain, even briefly.
+
+        :raises: AuditUnavailableError when the gate is
+                 currently blocking writes.
+    """
+    if audit_health_gate.is_write_blocked() is False:
+        return
+    blocking = audit_health_gate.blocking_sinks()
+    err_lines = [
+        "Secret write blocked — audit canonical sink is unhealthy.",
+    ]
+    err_lines.append("SECRET_REF: {}".format(secret_ref))
+    err_lines.append("ACTION: {}".format(action))
+    err_lines.append("BLOCKING_SINKS: {}".format(sorted(blocking)))
+    err_msg = os.linesep.join(err_lines)
+    raise AuditUnavailableError(err_msg) from None
+
+
 def _raise_access_denied(*, secret_ref: str, action: str) -> None:
     """
         Construct and raise a :class:`SecretAccessDeniedError` using the
@@ -194,8 +219,11 @@ def put_secret(
                               principal's ``user_id`` when None.
 
         :returns: The persisted :class:`SecretVersion`.
-        :raises: SecretAlreadyExistsError, SecretAccessDeniedError
+        :raises: SecretAlreadyExistsError, SecretAccessDeniedError,
+                 AuditUnavailableError
     """
+    _require_audit_sink_healthy(secret_ref=secret_ref, action="write")
+
     existing = (
         db_session.query(SecretRecord).filter(SecretRecord.secret_ref == secret_ref).first()
     )
@@ -409,8 +437,11 @@ def rotate_secret(
         captures an ``audit.secret.rotated`` row in the same
         transaction.
 
-        :raises: SecretNotFoundError, SecretAccessDeniedError.
+        :raises: SecretNotFoundError, SecretAccessDeniedError,
+                 AuditUnavailableError.
     """
+    _require_audit_sink_healthy(secret_ref=secret_ref, action="rotate")
+
     record = (
         db_session.query(SecretRecord)
         .filter(SecretRecord.secret_ref == secret_ref)
@@ -522,8 +553,13 @@ def force_expire_secret(
         force-expire lands as a follow-up).
 
         :returns: Number of versions transitioned.
-        :raises: SecretNotFoundError, SecretAccessDeniedError.
+        :raises: SecretNotFoundError, SecretAccessDeniedError,
+                 AuditUnavailableError.
     """
+    _require_audit_sink_healthy(
+        secret_ref=secret_ref, action="force_expire",
+    )
+
     record = (
         db_session.query(SecretRecord)
         .filter(SecretRecord.secret_ref == secret_ref)
