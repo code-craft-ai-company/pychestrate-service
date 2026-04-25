@@ -97,6 +97,7 @@ from automojo.pychestrate.webservice.resources.lease import models as _resources
 from automojo.pychestrate.webservice.resources.pools import models as _resources_pools_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.scheduler import models as _resources_scheduler_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.usage_history import models as _resources_usage_history_models  # noqa: F401
+from automojo.pychestrate.webservice.webhooks_in import models as _webhooks_in_models  # noqa: F401
 from automojo.pychestrate.webservice.webhooks_out import models as _webhooks_out_models  # noqa: F401
 from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401
 from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401

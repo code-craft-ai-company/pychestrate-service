@@ -23,11 +23,15 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.webhooks_in import (
+    register_builtin_extensions as webhooks_in_register,
+)
 from automojo.pychestrate.webservice.webhooks_out import (
     register_builtin_extensions as webhooks_out_register,
 )
 
 # Side-effect imports so Layer-8 model tables attach to the metadata.
+from automojo.pychestrate.webservice.webhooks_in import models as _webhooks_in_models  # noqa: F401
 from automojo.pychestrate.webservice.webhooks_out import models as _webhooks_out_models  # noqa: F401
 
 
@@ -47,6 +51,7 @@ def register_phase8_builtin_extensions() -> None:
         Register Layer-8 in-tree factory implementations.
     """
     webhooks_out_register()
+    webhooks_in_register()
     return
 
 
