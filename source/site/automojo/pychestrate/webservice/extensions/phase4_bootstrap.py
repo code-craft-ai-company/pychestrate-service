@@ -21,13 +21,18 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.resources.conflict import (
+    register_builtin_extensions as conflict_register,
+)
 from automojo.pychestrate.webservice.resources.inventory import (
     register_builtin_extensions as inventory_register,
 )
 
 # Side-effect imports so Layer-4 model tables attach to the metadata.
+from automojo.pychestrate.webservice.resources.checkout import models as _checkout_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.inventory import models as _inventory_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.pools import models as _pools_models  # noqa: F401
+from automojo.pychestrate.webservice.resources.scheduler import models as _scheduler_models  # noqa: F401
 
 
 SessionFactory = Callable[[], DbSession]
@@ -46,6 +51,7 @@ def register_phase4_builtin_extensions() -> None:
         Register Layer-4 in-tree factory implementations.
     """
     inventory_register()
+    conflict_register()
     return
 
 
