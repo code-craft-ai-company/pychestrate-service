@@ -65,6 +65,8 @@ from automojo.pychestrate.webservice.jobs.dispatch.receipt import models as _job
 from automojo.pychestrate.webservice.jobs.envelope import models as _jobs_envelope_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.results import models as _jobs_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test import models as _orch_test_run_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.catalog import models as _orch_test_catalog_models  # noqa: F401
 from automojo.pychestrate.webservice.projects import models as _projects_models  # noqa: F401
 from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401
 from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401

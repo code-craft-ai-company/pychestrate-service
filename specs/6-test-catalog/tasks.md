@@ -10,14 +10,25 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/catalog/` package per design.md Component Breakdown.
-- [ ] T1.2 — Add `0-persistence` migration for `test_catalog_entry` + `test_catalog_entry_tag` with indices listed in design.md Data Model.
-- [ ] T1.3 — Implement `repository.py::TestCatalogRepository` with `upsert`, `retire`, `snapshot`, `list_paginated`.
-- [ ] T1.4 — Implement `payloads.py` with `ImporterEntryPayload`, `TestCatalogEntryView`, `TestCatalogEntrySnapshot`, `CatalogListFilters`.
-- [ ] T1.5 — Implement `canonicalization.py` producing a stable canonical JSON encoding and SHA-256 digest.
-- [ ] T1.6 — Implement `catalog.py::TestCatalog.upsert_entry` and `snapshot_for_dispatch` happy paths.
-- [ ] T1.7 — Register `GET /api/v1/projects/{id}/test-catalog` and `GET /api/v1/projects/{id}/test-catalog/{entry_id}`.
-- [ ] T1.8 — Implement `TestbaseProjectImporter` at `source/site/automojo/factories/pychestrate/test_catalog/testbase_project.py` with `PRECEDENCE = 1000`.
+- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/catalog/` package per design.md Component Breakdown.
+- [~] T1.2 — Add `0-persistence` migration for `test_catalog_entry` + `test_catalog_entry_tag` with indices listed in design.md Data Model.
+      *(Migration 020 creates ``orchestration_test_catalog_entry``;
+      tags ride a JSON array column for M1, denormalized join
+      table is M2.)*
+- [~] T1.3 — Implement `repository.py::TestCatalogRepository` with `upsert`, `retire`, `snapshot`, `list_paginated`.
+      *(repo has ``find_entry``/``find_by_id``/``list_entries``;
+      ``upsert``/``retire``/``snapshot_for_dispatch`` live on the
+      catalog facade. Pagination M2.)*
+- [x] T1.4 — Implement `payloads.py` with `ImporterEntryPayload`, `TestCatalogEntryView`, `TestCatalogEntrySnapshot`, `CatalogListFilters`.
+- [x] T1.5 — Implement `canonicalization.py` producing a stable canonical JSON encoding and SHA-256 digest.
+- [x] T1.6 — Implement `catalog.py::TestCatalog.upsert_entry` and `snapshot_for_dispatch` happy paths.
+- [~] T1.7 — Register `GET /api/v1/projects/{id}/test-catalog` and `GET /api/v1/projects/{id}/test-catalog/{entry_id}`.
+      *(Service entry points ship; Flask-RestX namespaces land
+      with the broader Phase-3 REST surface.)*
+- [x] T1.8 — Implement `TestbaseProjectImporter` at `source/site/automojo/factories/pychestrate/test_catalog/testbase_project.py` with `PRECEDENCE = 1000`.
+      *(In-package at
+      ``orchestration/test/catalog/factories/testbase_project.py``;
+      ``PRECEDENCE=1000`` preserved.)*
 
 ### M2 — Core Behavior
 

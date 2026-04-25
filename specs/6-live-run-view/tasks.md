@@ -10,13 +10,28 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/live/` package per design.md Component Breakdown.
-- [ ] T1.2 — Implement `snapshot.py` with `ProgressSnapshot`, `ProgressEvent`, delta-merge helper.
-- [ ] T1.3 — Implement `relay.py::RunRelay` with ring buffer, subscriber set, `publish(event)` and `emit_terminal`.
-- [ ] T1.4 — Implement `sse_channel.py` framing (`data:`, `event:`, `id:`, heartbeat every 15 s).
-- [ ] T1.5 — Implement `hub.py::LiveRunHub.subscribe_sse` happy path wired to route `GET /api/v1/runs/{id}/progress.stream`.
-- [ ] T1.6 — Wire the bus subscription to `progress.updated`; append to matching relay and broadcast.
-- [ ] T1.7 — Implement `GET /api/v1/runs/{id}/progress.snapshot` returning the last known snapshot.
+- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/live/` package per design.md Component Breakdown.
+- [x] T1.2 — Implement `snapshot.py` with `ProgressSnapshot`, `ProgressEvent`, delta-merge helper.
+      *(``empty_snapshot`` + pure ``merge_event``.)*
+- [x] T1.3 — Implement `relay.py::RunRelay` with ring buffer, subscriber set, `publish(event)` and `emit_terminal`.
+      *(``deque(maxlen=ring_size)`` ring, thread-safe subscriber
+      set, sequence assignment per publish, ``emit_terminal``
+      idempotent.)*
+- [x] T1.4 — Implement `sse_channel.py` framing (`data:`, `event:`, `id:`, heartbeat every 15 s).
+      *(``format_sse_frame`` emits id/event/data + blank-line;
+      ``sse_heartbeat_frame`` returns the comment frame.
+      ``SSE_HEARTBEAT_INTERVAL_SECONDS`` constant exposed.)*
+- [~] T1.5 — Implement `hub.py::LiveRunHub.subscribe_sse` happy path wired to route `GET /api/v1/runs/{id}/progress.stream`.
+      *(``LiveRunHub.subscribe_callable`` ships for in-process
+      subscribers; the SSE-streaming Flask route lands with the
+      Phase-3 REST surface.)*
+- [~] T1.6 — Wire the bus subscription to `progress.updated`; append to matching relay and broadcast.
+      *(Relay infrastructure ready; bus subscriber that reads
+      ``entity.progress.received`` and forwards to the hub
+      lands with the M2 wiring.)*
+- [~] T1.7 — Implement `GET /api/v1/runs/{id}/progress.snapshot` returning the last known snapshot.
+      *(``LiveRunHub.snapshot_for(run_id)`` ships; the REST
+      surface follows.)*
 
 ### M2 — Core Behavior
 
