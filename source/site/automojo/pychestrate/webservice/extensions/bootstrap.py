@@ -58,9 +58,12 @@ from automojo.pychestrate.webservice.audit import models as _audit_models  # noq
 from automojo.pychestrate.webservice.clients import models as _clients_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.flags import models as _flags_models  # noqa: F401
 from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
+from automojo.pychestrate.webservice.ingest.progress import models as _ingest_progress_models  # noqa: F401
+from automojo.pychestrate.webservice.ingest.result import models as _ingest_result_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _jobs_dispatch_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch.receipt import models as _jobs_dispatch_receipt_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.envelope import models as _jobs_envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.results import models as _jobs_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
 from automojo.pychestrate.webservice.projects import models as _projects_models  # noqa: F401
 from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401

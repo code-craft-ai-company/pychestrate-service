@@ -12,10 +12,13 @@ by :mod:`phase1_bootstrap` / :mod:`phase2_bootstrap` /
 :func:`bootstrap_phase1_runtime` + ``phase2`` + ``phase3`` +
 :func:`bootstrap_phase5_runtime` in sequence at service start.
 
-M1 ships one registration: :class:`FifoDispatchStrategy` under the
-``dispatch_strategy`` factory protocol. ``5-run-state-machine`` and
-``5-job-envelope`` do not need registration here because they do not
-own factory protocols; their startup requirements are covered by
+Registers in-tree implementations for every Layer-5 factory
+protocol: :class:`FifoDispatchStrategy` (``dispatch_strategy``),
+:class:`TestBaseProgressParser` (``progress_parser``), and
+:class:`TestBaseResultTreeParser` (``result_tree_parser``).
+``5-run-state-machine``, ``5-job-envelope``, and
+``5-shared-results-backend`` do not own factory protocols; their
+startup requirements are covered by
 :func:`install_envelope_signer` and in-code side-effect model
 imports.
 """
@@ -31,14 +34,23 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.ingest.progress import (
+    register_builtin_extensions as progress_register,
+)
+from automojo.pychestrate.webservice.ingest.result import (
+    register_builtin_extensions as result_register,
+)
 from automojo.pychestrate.webservice.jobs.dispatch import (
     register_builtin_extensions as dispatch_register,
 )
 
 # Side-effect imports so Layer-5 model tables attach to the metadata.
+from automojo.pychestrate.webservice.ingest.progress import models as _progress_models  # noqa: F401
+from automojo.pychestrate.webservice.ingest.result import models as _result_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch.receipt import models as _dispatch_receipt_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.results import models as _shared_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _run_state_models  # noqa: F401
 
 
@@ -67,6 +79,8 @@ def register_phase5_builtin_extensions() -> None:
         :returns: None.
     """
     dispatch_register()
+    progress_register()
+    result_register()
     return
 
 
