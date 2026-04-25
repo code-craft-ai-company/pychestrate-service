@@ -35,6 +35,9 @@ from automojo.pychestrate.webservice.orchestration.build.artifacts import (
 from automojo.pychestrate.webservice.orchestration.infra.environment import (
     register_builtin_extensions as environment_registry_register,
 )
+from automojo.pychestrate.webservice.orchestration.infra.runs import (
+    register_builtin_extensions as infra_runs_register,
+)
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import (
     register_builtin_extensions as pipeline_definition_register,
 )
@@ -64,6 +67,7 @@ from automojo.pychestrate.webservice.orchestration.test.triage import (
 from automojo.pychestrate.webservice.orchestration.build import models as _build_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.build.artifacts import models as _build_artifacts_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.infra.environment import models as _environment_registry_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.infra.runs import models as _infra_runs_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import models as _pipeline_definition_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.source import models as _source_models  # noqa: F401
@@ -100,6 +104,7 @@ def register_phase6_builtin_extensions() -> None:
     build_orch_register()
     build_artifacts_register()
     environment_registry_register()
+    infra_runs_register()
     return
 
 
