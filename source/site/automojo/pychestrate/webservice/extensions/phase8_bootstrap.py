@@ -23,6 +23,12 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.clients.upgrades import (
+    register_builtin_extensions as agent_upgrades_register,
+)
+from automojo.pychestrate.webservice.ops.release import (
+    register_builtin_extensions as releases_register,
+)
 from automojo.pychestrate.webservice.webhooks_in import (
     register_builtin_extensions as webhooks_in_register,
 )
@@ -31,6 +37,8 @@ from automojo.pychestrate.webservice.webhooks_out import (
 )
 
 # Side-effect imports so Layer-8 model tables attach to the metadata.
+from automojo.pychestrate.webservice.clients.upgrades import models as _upgrades_models  # noqa: F401
+from automojo.pychestrate.webservice.ops.release import models as _ops_release_models  # noqa: F401
 from automojo.pychestrate.webservice.webhooks_in import models as _webhooks_in_models  # noqa: F401
 from automojo.pychestrate.webservice.webhooks_out import models as _webhooks_out_models  # noqa: F401
 
@@ -52,6 +60,8 @@ def register_phase8_builtin_extensions() -> None:
     """
     webhooks_out_register()
     webhooks_in_register()
+    releases_register()
+    agent_upgrades_register()
     return
 
 
