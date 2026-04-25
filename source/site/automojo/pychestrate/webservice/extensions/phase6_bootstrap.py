@@ -32,6 +32,9 @@ from automojo.pychestrate.webservice.orchestration.pipelines.definition import (
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import (
     register_builtin_extensions as sharding_register,
 )
+from automojo.pychestrate.webservice.orchestration.source import (
+    register_builtin_extensions as source_integrations_register,
+)
 from automojo.pychestrate.webservice.orchestration.test import (
     register_builtin_extensions as test_orch_register,
 )
@@ -51,6 +54,7 @@ from automojo.pychestrate.webservice.orchestration.test.triage import (
 # Side-effect imports so Layer-6 model tables attach to the metadata.
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import models as _pipeline_definition_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _sharding_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.source import models as _source_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _test_run_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.catalog import models as _test_catalog_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.compare import models as _test_compare_models  # noqa: F401
@@ -80,6 +84,7 @@ def register_phase6_builtin_extensions() -> None:
     triage_register()
     compare_register()
     pipeline_definition_register()
+    source_integrations_register()
     return
 
 
