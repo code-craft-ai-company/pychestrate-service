@@ -69,6 +69,8 @@ from automojo.pychestrate.webservice.jobs.offline import models as _jobs_offline
 from automojo.pychestrate.webservice.jobs.reconcile import models as _jobs_reconcile_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.results import models as _jobs_results_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.run.state import models as _jobs_run_state_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.build import models as _orch_build_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.build.artifacts import models as _orch_build_artifacts_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import models as _orch_pipeline_definition_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _orch_sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.source import models as _orch_source_models  # noqa: F401
