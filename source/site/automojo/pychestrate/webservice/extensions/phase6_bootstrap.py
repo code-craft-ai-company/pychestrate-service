@@ -35,15 +35,23 @@ from automojo.pychestrate.webservice.orchestration.test import (
 from automojo.pychestrate.webservice.orchestration.test.artifact_browser import (
     register_builtin_extensions as artifact_browser_register,
 )
+from automojo.pychestrate.webservice.orchestration.test.compare import (
+    register_builtin_extensions as compare_register,
+)
 from automojo.pychestrate.webservice.orchestration.test.flake import (
     register_builtin_extensions as flake_register,
+)
+from automojo.pychestrate.webservice.orchestration.test.triage import (
+    register_builtin_extensions as triage_register,
 )
 
 # Side-effect imports so Layer-6 model tables attach to the metadata.
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import models as _sharding_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test import models as _test_run_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.catalog import models as _test_catalog_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.compare import models as _test_compare_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.test.flake import models as _test_flake_models  # noqa: F401
+from automojo.pychestrate.webservice.orchestration.test.triage import models as _test_triage_models  # noqa: F401
 
 
 SessionFactory = Callable[[], DbSession]
@@ -65,6 +73,8 @@ def register_phase6_builtin_extensions() -> None:
     sharding_register()
     flake_register()
     artifact_browser_register()
+    triage_register()
+    compare_register()
     return
 
 
