@@ -5,9 +5,11 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-Implements the controller-facing POST endpoints for the
+Implements the controller-facing endpoints for the
 1-authentication feature:
 
+* ``GET /api/v1/auth/providers`` — enumerate enabled
+  credential modes for the login picker (P21b).
 * ``POST /api/v1/auth/logout`` — close a session (M1 skeleton).
 * ``POST /api/v1/auth/mfa/challenge`` — issue a fresh MFA
   challenge for the active actor (M2, T2.12).
@@ -26,6 +28,7 @@ from flask_restx import Namespace, Resource, fields
 
 from automojo.pychestrate.webservice.security.auth import (
     mfa_service,
+    provider_directory,
     session_service,
 )
 from automojo.pychestrate.webservice.security.auth.exceptions import (
@@ -83,6 +86,35 @@ mfa_verify_model = auth_ns.model(
         ),
     },
 )
+
+
+@auth_ns.route("/providers")
+class AuthProviders(Resource):
+    """
+        Resource that exposes GET ``/api/v1/auth/providers``.
+
+        Returns the list of enabled credential modes the
+        login picker renders. Each entry carries the
+        ``provider_name``, ``kind``, ``display_label``, and
+        the ``login_path`` the controller submits to.
+    """
+
+    def get(self):
+        modes = provider_directory.list_enabled_credential_modes()
+        body = {
+            "providers": [
+                {
+                    "kind": m.kind.value,
+                    "provider_name": m.provider_name,
+                    "display_label": m.display_label,
+                    "login_path": m.login_path,
+                    "enabled": m.enabled,
+                }
+                for m in modes
+            ],
+        }
+        rtnval = (body, 200)
+        return rtnval
 
 
 @auth_ns.route("/logout")
