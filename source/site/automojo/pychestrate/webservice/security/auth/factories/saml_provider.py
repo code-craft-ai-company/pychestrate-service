@@ -23,6 +23,7 @@ __version__ = "1.0.0"
 
 
 import base64
+import logging
 import os
 import secrets
 
@@ -54,6 +55,10 @@ from automojo.pychestrate.webservice.security.auth.saml.provider_registry import
 from automojo.pychestrate.webservice.security.auth.saml.replay_cache import (
     SamlReplayDetectedError,
     record_response_id,
+)
+from automojo.pychestrate.webservice.security.auth import (
+    log_events,
+    metrics_emitter,
 )
 
 
@@ -128,37 +133,76 @@ class SamlAuthProvider(AuthProviderProtocol):
         saml_response_xml, in_response_to, supplied_session = (
             _read_inbound(inbound=inbound)
         )
-        metadata = _ensure_metadata(config=config)
-        params = SamlValidationParams(
-            expected_issuer=metadata.entity_id,
-            expected_audience=config.sp_entity_id,
-            expected_recipient=config.acs_url,
-            trusted_certificates=metadata.signing_certificates,
-            expected_in_response_to=in_response_to,
-            signature_verifier=config.signature_verifier,
-        )
-        validated = validate_saml_assertion(
-            saml_response_xml=saml_response_xml, params=params,
-        )
-        # Replay-cache record happens AFTER assertion validation
-        # so a forged Response/@ID for an invalid assertion
-        # can't poison the cache.
+        # Open a session early so login-outcome metrics can
+        # land regardless of the failure point. The session
+        # owns its commit / close semantics — the validate /
+        # replay-record both use it.
         db_session = (
             supplied_session if supplied_session is not None
             else config.session_factory()
         )
         owns_session = supplied_session is None
         try:
-            response_id = _extract_response_id(
-                saml_response_xml=saml_response_xml,
-            )
-            not_on_or_after = _extract_conditions_not_on_or_after(
-                validated=validated,
-            )
-            record_response_id(
+            try:
+                metadata = _ensure_metadata(config=config)
+                params = SamlValidationParams(
+                    expected_issuer=metadata.entity_id,
+                    expected_audience=config.sp_entity_id,
+                    expected_recipient=config.acs_url,
+                    trusted_certificates=metadata.signing_certificates,
+                    expected_in_response_to=in_response_to,
+                    signature_verifier=config.signature_verifier,
+                )
+                validated = validate_saml_assertion(
+                    saml_response_xml=saml_response_xml, params=params,
+                )
+                # Replay-cache record happens AFTER assertion validation
+                # so a forged Response/@ID for an invalid assertion
+                # can't poison the cache.
+                response_id = _extract_response_id(
+                    saml_response_xml=saml_response_xml,
+                )
+                not_on_or_after = _extract_conditions_not_on_or_after(
+                    validated=validated,
+                )
+                record_response_id(
+                    db_session=db_session,
+                    response_id=response_id,
+                    not_on_or_after=not_on_or_after,
+                )
+            except Exception as login_err:
+                metrics_emitter.record_login(
+                    db_session=db_session,
+                    provider_kind=AuthProviderKind.SAML,
+                    provider_name=provider_name,
+                    outcome=metrics_emitter.LOGIN_OUTCOME_REJECTED,
+                )
+                log_events.emit_log_event(
+                    event_name=log_events.AUTH_LOGIN_REJECTED,
+                    payload={
+                        "provider_kind": AuthProviderKind.SAML.value,
+                        "provider_name": provider_name,
+                        "reason": _resolve_saml_login_failure_reason(
+                            err=login_err,
+                        ),
+                    },
+                    level=logging.WARNING,
+                )
+                raise
+            metrics_emitter.record_login(
                 db_session=db_session,
-                response_id=response_id,
-                not_on_or_after=not_on_or_after,
+                provider_kind=AuthProviderKind.SAML,
+                provider_name=provider_name,
+                outcome=metrics_emitter.LOGIN_OUTCOME_SUCCEEDED,
+            )
+            log_events.emit_log_event(
+                event_name=log_events.AUTH_LOGIN_SUCCEEDED,
+                payload={
+                    "provider_kind": AuthProviderKind.SAML.value,
+                    "provider_name": provider_name,
+                    "user_id": validated.name_id,
+                    "issuer": validated.issuer,
+                },
             )
         finally:
             if owns_session is True:
@@ -172,6 +216,15 @@ class SamlAuthProvider(AuthProviderProtocol):
             mfa_method_name=None,
         )
         return rtnval
+
+
+def _resolve_saml_login_failure_reason(*, err: BaseException) -> str:
+    reason = getattr(err, "reason", None)
+    if reason is None or not isinstance(reason, str) or len(reason) == 0:
+        rtnval = type(err).__name__
+        return rtnval
+    rtnval = reason
+    return rtnval
 
 
 def _ensure_metadata(

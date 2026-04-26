@@ -203,12 +203,16 @@ def _safe_write_counter(
     ) -> None:
     """
         Internal helper: write a counter delta of 1.0 only
-        when the metric definition is in the registry. The
-        auth flows call the recorder helpers
-        unconditionally; deployments / tests that haven't
-        bootstrapped the timeseries driver simply skip
+        when the metric definition is in the registry AND a
+        db_session is available. The auth flows call the
+        recorder helpers unconditionally; deployments /
+        tests that haven't bootstrapped the timeseries
+        driver, and call sites without a db_session
+        (background refreshes, observers), simply skip
         emission instead of crashing the user-facing flow.
     """
+    if db_session is None:
+        return
     registry = get_metric_registry()
     if registry.find(name=name) is None:
         return
@@ -233,6 +237,8 @@ def _safe_write_gauge(
         value: float,
         labels: Mapping[str, Any]
     ) -> None:
+    if db_session is None:
+        return
     registry = get_metric_registry()
     if registry.find(name=name) is None:
         return
