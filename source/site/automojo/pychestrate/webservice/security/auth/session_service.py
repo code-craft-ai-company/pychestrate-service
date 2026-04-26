@@ -36,6 +36,11 @@ from automojo.pychestrate.webservice.security.auth.exceptions import (
     SessionNotFoundError,
 )
 from automojo.pychestrate.webservice.security.auth.models import AuthProviderKind, AuthSession
+from automojo.pychestrate.webservice.security.auth import log_events
+from automojo.pychestrate.webservice.security.auth.tracing import (
+    SPAN_SESSION_RESOLVE,
+    start_span,
+)
 
 
 @dataclass(frozen=True)
@@ -130,6 +135,18 @@ def open_session(
     enqueue_event(db_session=db_session, event=event)
     db_session.commit()
 
+    log_events.emit_log_event(
+        event_name=log_events.AUTH_SESSION_OPENED,
+        payload={
+            "session_id": str(session.session_id),
+            "user_id": str(session.user_id),
+            "provider_kind": provider_kind.value,
+            "provider_name": provider_name,
+            "mfa_method_name": mfa_method_name,
+            "opened_at": session.opened_at.isoformat(),
+        },
+    )
+
     rtnval = session
     return rtnval
 
@@ -150,30 +167,40 @@ def resolve_session(
         :returns: A populated :class:`AuthPrincipal`.
         :raises: SessionExpiredError, SessionNotFoundError
     """
-    session = db_session.query(AuthSession).filter(AuthSession.session_id == session_id).first()
-    if session is None:
-        err_msg_lines = ["Session resolution failed — session id not found."]
-        err_msg_lines.append("SESSION_ID: {}".format(session_id))
-        err_msg = os.linesep.join(err_msg_lines)
-        raise SessionNotFoundError(err_msg) from None
-
-    if session.expires_at is not None:
-        expires_at = session.expires_at
-        if expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= now:
-            err_msg_lines = ["Session resolution failed — session expired."]
+    with start_span(
+        name=SPAN_SESSION_RESOLVE,
+        attributes={"session_id": str(session_id)},
+    ) as span:
+        session = db_session.query(AuthSession).filter(AuthSession.session_id == session_id).first()
+        if session is None:
+            err_msg_lines = ["Session resolution failed — session id not found."]
             err_msg_lines.append("SESSION_ID: {}".format(session_id))
-            err_msg_lines.append("EXPIRES_AT: {}".format(session.expires_at.isoformat()))
             err_msg = os.linesep.join(err_msg_lines)
-            raise SessionExpiredError(err_msg) from None
+            raise SessionNotFoundError(err_msg) from None
 
-    rtnval = AuthPrincipal(
-        user_id=str(session.user_id),
-        session_id=str(session.session_id),
-        provider_kind=session.provider_kind,
-        provider_name=session.provider_name,
-    )
+        if session.expires_at is not None:
+            expires_at = session.expires_at
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= now:
+                err_msg_lines = ["Session resolution failed — session expired."]
+                err_msg_lines.append("SESSION_ID: {}".format(session_id))
+                err_msg_lines.append("EXPIRES_AT: {}".format(session.expires_at.isoformat()))
+                err_msg = os.linesep.join(err_msg_lines)
+                raise SessionExpiredError(err_msg) from None
+
+        span.set_attribute(
+            key="provider_kind", value=session.provider_kind.value,
+        )
+        span.set_attribute(
+            key="provider_name", value=session.provider_name,
+        )
+        rtnval = AuthPrincipal(
+            user_id=str(session.user_id),
+            session_id=str(session.session_id),
+            provider_kind=session.provider_kind,
+            provider_name=session.provider_name,
+        )
     return rtnval
 
 
@@ -210,6 +237,16 @@ def close_session(*, db_session: DbSession, session_id: str) -> None:
     db_session.delete(session)
     enqueue_event(db_session=db_session, event=event)
     db_session.commit()
+
+    log_events.emit_log_event(
+        event_name=log_events.AUTH_SESSION_CLOSED,
+        payload={
+            "session_id": closed_session_id,
+            "user_id": closed_user_id,
+            "reason": "user_logout",
+            "closed_at": payload["closed_at"],
+        },
+    )
 
     return
 
