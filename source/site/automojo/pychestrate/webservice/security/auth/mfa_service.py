@@ -364,85 +364,142 @@ def verify_challenge(
         :raises: MfaChallengeUnknownError, MfaChallengeExpiredError,
                  MfaChallengeRejectedError.
     """
-    with _LOCK:
-        challenge = _ACTIVE_CHALLENGES.pop(challenge_id, None)
-    if challenge is None:
-        err_lines = ["MFA challenge id not recognized."]
-        err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
-        err_msg = os.linesep.join(err_lines)
-        raise MfaChallengeUnknownError(err_msg) from None
-    now = utc_now()
-    expires = _aware(value=challenge.expires_at)
-    if now > expires:
-        enqueue_event(
-            db_session=db_session,
-            event=EntityEvent(
-                topic=AuthEventTopics.MFA_CHALLENGE_REJECTED,
+    # Local imports keep the mfa_service loadable before
+    # the auth-instrumentation modules wire in.
+    from automojo.pychestrate.webservice.security.auth import (
+        log_events as _log_events,
+        metrics_emitter as _metrics_emitter,
+    )
+    from automojo.pychestrate.webservice.security.auth.tracing import (
+        SPAN_MFA_VERIFY as _SPAN_MFA_VERIFY,
+        start_span as _start_span,
+    )
+
+    with _start_span(
+        name=_SPAN_MFA_VERIFY,
+        attributes={"challenge_id": str(challenge_id)},
+    ) as span:
+        with _LOCK:
+            challenge = _ACTIVE_CHALLENGES.pop(challenge_id, None)
+        if challenge is None:
+            err_lines = ["MFA challenge id not recognized."]
+            err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
+            err_msg = os.linesep.join(err_lines)
+            raise MfaChallengeUnknownError(err_msg) from None
+        span.set_attribute(
+            key="method_name", value=challenge.method_name,
+        )
+        span.set_attribute(
+            key="user_id", value=challenge.user_id,
+        )
+        now = utc_now()
+        expires = _aware(value=challenge.expires_at)
+        if now > expires:
+            enqueue_event(
+                db_session=db_session,
+                event=EntityEvent(
+                    topic=AuthEventTopics.MFA_CHALLENGE_REJECTED,
+                    payload={
+                        "user_id": challenge.user_id,
+                        "method_name": challenge.method_name,
+                        "phase": "verify",
+                        "reason": "expired",
+                    },
+                    source_event_id=new_uuid(),
+                ),
+            )
+            db_session.commit()
+            _metrics_emitter.record_mfa_failure(
+                db_session=db_session,
+                method_name=challenge.method_name,
+            )
+            _log_events.emit_log_event(
+                event_name=_log_events.AUTH_MFA_CHALLENGE_REJECTED,
                 payload={
                     "user_id": challenge.user_id,
                     "method_name": challenge.method_name,
-                    "phase": "verify",
+                    "challenge_id": challenge_id,
                     "reason": "expired",
                 },
-                source_event_id=new_uuid(),
-            ),
-        )
-        db_session.commit()
-        err_lines = ["MFA challenge has expired."]
-        err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
-        err_msg = os.linesep.join(err_lines)
-        raise MfaChallengeExpiredError(err_msg) from None
+            )
+            err_lines = ["MFA challenge has expired."]
+            err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
+            err_msg = os.linesep.join(err_lines)
+            raise MfaChallengeExpiredError(err_msg) from None
 
-    row = _require_enrollment(
-        db_session=db_session,
-        user_id=challenge.user_id,
-        method_name=challenge.method_name,
-    )
-    method_cls = _resolve_method(method_name=challenge.method_name)
-    enrollment_record = _row_to_enrollment_record(row=row)
-    outcome = method_cls.verify_response(
-        enrollment=enrollment_record,
-        challenge=challenge,
-        response=MfaResponse(fields=response_fields),
-        now=now,
-    )
-    if outcome.accepted is False:
-        enqueue_event(
+        row = _require_enrollment(
             db_session=db_session,
-            event=EntityEvent(
-                topic=AuthEventTopics.MFA_CHALLENGE_REJECTED,
+            user_id=challenge.user_id,
+            method_name=challenge.method_name,
+        )
+        method_cls = _resolve_method(method_name=challenge.method_name)
+        enrollment_record = _row_to_enrollment_record(row=row)
+        outcome = method_cls.verify_response(
+            enrollment=enrollment_record,
+            challenge=challenge,
+            response=MfaResponse(fields=response_fields),
+            now=now,
+        )
+        if outcome.accepted is False:
+            enqueue_event(
+                db_session=db_session,
+                event=EntityEvent(
+                    topic=AuthEventTopics.MFA_CHALLENGE_REJECTED,
+                    payload={
+                        "user_id": challenge.user_id,
+                        "method_name": challenge.method_name,
+                        "phase": "verify",
+                        "reason": outcome.reason or "code_invalid",
+                    },
+                    source_event_id=new_uuid(),
+                ),
+            )
+            db_session.commit()
+            _metrics_emitter.record_mfa_failure(
+                db_session=db_session,
+                method_name=challenge.method_name,
+            )
+            _log_events.emit_log_event(
+                event_name=_log_events.AUTH_MFA_CHALLENGE_REJECTED,
                 payload={
                     "user_id": challenge.user_id,
                     "method_name": challenge.method_name,
-                    "phase": "verify",
+                    "challenge_id": challenge_id,
                     "reason": outcome.reason or "code_invalid",
+                },
+            )
+            err_lines = ["MFA challenge response rejected."]
+            err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
+            err_lines.append("REASON: {}".format(outcome.reason))
+            err_msg = os.linesep.join(err_lines)
+            raise MfaChallengeRejectedError(err_msg) from None
+
+        row.last_used_at = now
+        db_session.flush()
+        enqueue_event(
+            db_session=db_session,
+            event=EntityEvent(
+                topic=AuthEventTopics.MFA_CHALLENGE_VERIFIED,
+                payload={
+                    "user_id": challenge.user_id,
+                    "method_name": challenge.method_name,
+                    "challenge_id": challenge_id,
+                    "verified_at": now.isoformat(),
                 },
                 source_event_id=new_uuid(),
             ),
         )
         db_session.commit()
-        err_lines = ["MFA challenge response rejected."]
-        err_lines.append("CHALLENGE_ID: {}".format(challenge_id))
-        err_lines.append("REASON: {}".format(outcome.reason))
-        err_msg = os.linesep.join(err_lines)
-        raise MfaChallengeRejectedError(err_msg) from None
-
-    row.last_used_at = now
-    db_session.flush()
-    enqueue_event(
-        db_session=db_session,
-        event=EntityEvent(
-            topic=AuthEventTopics.MFA_CHALLENGE_VERIFIED,
+        _log_events.emit_log_event(
+            event_name=_log_events.AUTH_MFA_CHALLENGE_VERIFIED,
             payload={
                 "user_id": challenge.user_id,
                 "method_name": challenge.method_name,
                 "challenge_id": challenge_id,
                 "verified_at": now.isoformat(),
             },
-            source_event_id=new_uuid(),
-        ),
-    )
-    db_session.commit()
+        )
+        span.set_attribute(key="accepted", value=True)
     return outcome
 
 
