@@ -37,6 +37,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
 import os
 
 from dataclasses import dataclass, field
@@ -70,6 +71,10 @@ from automojo.pychestrate.webservice.security.auth.oidc.token_exchange import (
 from automojo.pychestrate.webservice.security.auth.session_service import (
     RequestFingerprint,
     open_session,
+)
+from automojo.pychestrate.webservice.security.auth import (
+    log_events,
+    metrics_emitter,
 )
 
 
@@ -166,46 +171,81 @@ def open_oidc_session(
         err_msg = os.linesep.join(err_lines)
         raise ValueError(err_msg) from None
 
-    callback = complete_oidc_callback(
-        db_session=db_session,
-        state=state,
-        code=code,
-        provider_name=provider_name,
-        token_endpoint=token_endpoint,
-        client_id=client_id,
-        redirect_uri=redirect_uri,
-        token_fetcher=token_fetcher,
-        key_resolver=key_resolver,
-        expected_issuer=expected_issuer,
-        client_secret=client_secret,
-        clock_skew=clock_skew,
-        now=now,
-    )
+    try:
+        callback = complete_oidc_callback(
+            db_session=db_session,
+            state=state,
+            code=code,
+            provider_name=provider_name,
+            token_endpoint=token_endpoint,
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            token_fetcher=token_fetcher,
+            key_resolver=key_resolver,
+            expected_issuer=expected_issuer,
+            client_secret=client_secret,
+            clock_skew=clock_skew,
+            now=now,
+        )
 
-    provisioning = resolve_user_from_claims(
-        db_session=db_session,
-        provider_name=provider_name,
-        claims=callback.id_token.payload,
-        mapping=claim_mapping,
-    )
+        provisioning = resolve_user_from_claims(
+            db_session=db_session,
+            provider_name=provider_name,
+            claims=callback.id_token.payload,
+            mapping=claim_mapping,
+        )
 
-    access_payload = _maybe_payload_bytes(
-        token=callback.token_response.access_token,
-    )
-    refresh_payload = _maybe_payload_bytes(
-        token=callback.token_response.refresh_token,
-    )
-    session = open_session(
+        access_payload = _maybe_payload_bytes(
+            token=callback.token_response.access_token,
+        )
+        refresh_payload = _maybe_payload_bytes(
+            token=callback.token_response.refresh_token,
+        )
+        session = open_session(
+            db_session=db_session,
+            user_id=str(provisioning.user.user_id),
+            provider_kind=AuthProviderKind.OIDC,
+            provider_name=provider_name,
+            mfa_method_name=None,
+            access_token_payload=access_payload,
+            refresh_token_payload=refresh_payload,
+            request_fingerprint=request_fingerprint,
+            idle_timeout_seconds=idle_timeout_seconds,
+            max_lifetime_seconds=max_lifetime_seconds,
+        )
+    except Exception as login_err:
+        metrics_emitter.record_login(
+            db_session=db_session,
+            provider_kind=AuthProviderKind.OIDC,
+            provider_name=provider_name,
+            outcome=metrics_emitter.LOGIN_OUTCOME_REJECTED,
+        )
+        log_events.emit_log_event(
+            event_name=log_events.AUTH_LOGIN_REJECTED,
+            payload={
+                "provider_kind": AuthProviderKind.OIDC.value,
+                "provider_name": provider_name,
+                "reason": _resolve_login_failure_reason(err=login_err),
+            },
+            level=logging.WARNING,
+        )
+        raise
+
+    metrics_emitter.record_login(
         db_session=db_session,
-        user_id=str(provisioning.user.user_id),
         provider_kind=AuthProviderKind.OIDC,
         provider_name=provider_name,
-        mfa_method_name=None,
-        access_token_payload=access_payload,
-        refresh_token_payload=refresh_payload,
-        request_fingerprint=request_fingerprint,
-        idle_timeout_seconds=idle_timeout_seconds,
-        max_lifetime_seconds=max_lifetime_seconds,
+        outcome=metrics_emitter.LOGIN_OUTCOME_SUCCEEDED,
+    )
+    log_events.emit_log_event(
+        event_name=log_events.AUTH_LOGIN_SUCCEEDED,
+        payload={
+            "provider_kind": AuthProviderKind.OIDC.value,
+            "provider_name": provider_name,
+            "user_id": str(provisioning.user.user_id),
+            "session_id": str(session.session_id),
+            "provisioning_outcome": provisioning.outcome,
+        },
     )
 
     rtnval = OidcLoginResult(
@@ -214,6 +254,21 @@ def open_oidc_session(
         provisioning_outcome=provisioning.outcome,
         redirect_target=callback.redirect_target,
     )
+    return rtnval
+
+
+def _resolve_login_failure_reason(*, err: BaseException) -> str:
+    """
+        Surface the stable reason token from the M2 auth-error
+        types when present; fall back to the exception class
+        name otherwise. Mirrors the tracing seam's behavior so
+        log + span carry the same reason for a given failure.
+    """
+    reason = getattr(err, "reason", None)
+    if reason is None or not isinstance(reason, str) or len(reason) == 0:
+        rtnval = type(err).__name__
+        return rtnval
+    rtnval = reason
     return rtnval
 
 

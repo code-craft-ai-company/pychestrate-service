@@ -21,6 +21,11 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional
 
+from automojo.pychestrate.webservice.security.auth.tracing import (
+    SPAN_OIDC_TOKEN_EXCHANGE,
+    start_span,
+)
+
 
 @dataclass(frozen=True)
 class TokenExchangeRequest:
@@ -140,63 +145,71 @@ def exchange_code_for_tokens(
         err_lines = ["exchange_code_for_tokens requires a fetcher."]
         err_msg = os.linesep.join(err_lines)
         raise ValueError(err_msg) from None
-    raw = fetcher(request)
-    if raw is None:
-        raise TokenExchangeError(
-            "payload_invalid", "fetcher returned None",
-        ) from None
-    if raw.status_code < 200 or raw.status_code >= 300:
-        provider_error = ""
-        if isinstance(raw.payload, dict):
-            provider_error = str(raw.payload.get("error", ""))
-        raise TokenExchangeError(
-            "http_error",
-            "status={} provider_error={!r}".format(
-                raw.status_code, provider_error,
-            ),
-        ) from None
-    if not isinstance(raw.payload, dict):
-        raise TokenExchangeError(
-            "payload_invalid", "payload is not an object",
-        ) from None
-    if "error" in raw.payload:
-        raise TokenExchangeError(
-            "provider_rejected",
-            "{}: {}".format(
-                raw.payload.get("error"),
-                raw.payload.get("error_description", ""),
-            ),
-        ) from None
-    id_token = raw.payload.get("id_token")
-    if id_token is None or not isinstance(id_token, str) or len(id_token) == 0:
-        raise TokenExchangeError(
-            "payload_invalid", "id_token missing or non-string",
-        ) from None
-    access_token = raw.payload.get("access_token")
-    if access_token is not None and not isinstance(access_token, str):
-        raise TokenExchangeError(
-            "payload_invalid", "access_token must be a string",
-        ) from None
-    refresh_token = raw.payload.get("refresh_token")
-    if refresh_token is not None and not isinstance(refresh_token, str):
-        raise TokenExchangeError(
-            "payload_invalid", "refresh_token must be a string",
-        ) from None
-    expires_in = raw.payload.get("expires_in")
-    expires_in_seconds: Optional[int] = None
-    if expires_in is not None:
-        try:
-            expires_in_seconds = int(expires_in)
-        except (TypeError, ValueError):
+    with start_span(
+        name=SPAN_OIDC_TOKEN_EXCHANGE,
+        attributes={"client_id": request.client_id},
+    ) as span:
+        raw = fetcher(request)
+        if raw is None:
             raise TokenExchangeError(
-                "payload_invalid", "expires_in not an integer",
+                "payload_invalid", "fetcher returned None",
             ) from None
-    rtnval = TokenExchangeResponse(
-        id_token=id_token,
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type=str(raw.payload.get("token_type", "Bearer")),
-        expires_in_seconds=expires_in_seconds,
-        raw=dict(raw.payload),
-    )
+        span.set_attribute(key="status_code", value=raw.status_code)
+        if raw.status_code < 200 or raw.status_code >= 300:
+            provider_error = ""
+            if isinstance(raw.payload, dict):
+                provider_error = str(raw.payload.get("error", ""))
+            raise TokenExchangeError(
+                "http_error",
+                "status={} provider_error={!r}".format(
+                    raw.status_code, provider_error,
+                ),
+            ) from None
+        if not isinstance(raw.payload, dict):
+            raise TokenExchangeError(
+                "payload_invalid", "payload is not an object",
+            ) from None
+        if "error" in raw.payload:
+            raise TokenExchangeError(
+                "provider_rejected",
+                "{}: {}".format(
+                    raw.payload.get("error"),
+                    raw.payload.get("error_description", ""),
+                ),
+            ) from None
+        id_token = raw.payload.get("id_token")
+        if id_token is None or not isinstance(id_token, str) or len(id_token) == 0:
+            raise TokenExchangeError(
+                "payload_invalid", "id_token missing or non-string",
+            ) from None
+        access_token = raw.payload.get("access_token")
+        if access_token is not None and not isinstance(access_token, str):
+            raise TokenExchangeError(
+                "payload_invalid", "access_token must be a string",
+            ) from None
+        refresh_token = raw.payload.get("refresh_token")
+        if refresh_token is not None and not isinstance(refresh_token, str):
+            raise TokenExchangeError(
+                "payload_invalid", "refresh_token must be a string",
+            ) from None
+        expires_in = raw.payload.get("expires_in")
+        expires_in_seconds: Optional[int] = None
+        if expires_in is not None:
+            try:
+                expires_in_seconds = int(expires_in)
+            except (TypeError, ValueError):
+                raise TokenExchangeError(
+                    "payload_invalid", "expires_in not an integer",
+                ) from None
+        span.set_attribute(
+            key="refresh_token_present", value=refresh_token is not None,
+        )
+        rtnval = TokenExchangeResponse(
+            id_token=id_token,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type=str(raw.payload.get("token_type", "Bearer")),
+            expires_in_seconds=expires_in_seconds,
+            raw=dict(raw.payload),
+        )
     return rtnval
