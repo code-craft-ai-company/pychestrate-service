@@ -318,6 +318,18 @@ def refresh_metadata_document(
         err_msg = os.linesep.join(err_lines)
         raise ValueError(err_msg) from None
 
+    # Local imports keep the metadata module loadable
+    # before the auth package's instrumentation modules
+    # are wired in by phase11+ tests.
+    from automojo.pychestrate.webservice.security.auth import (
+        log_events as _log_events,
+        metrics_emitter as _metrics_emitter,
+    )
+    from automojo.pychestrate.webservice.security.auth.tracing import (
+        SPAN_SAML_METADATA_REFRESH as _SPAN_SAML_METADATA_REFRESH,
+        start_span as _start_span,
+    )
+
     materialized_now = now if now is not None else _now_utc()
     if force_refresh is False:
         cached = _read_cache(
@@ -326,18 +338,50 @@ def refresh_metadata_document(
         if cached is not None:
             return cached
 
-    fetch_result = fetcher(metadata_url)
-    if fetch_result is None:
-        err_lines = [
-            "SAML metadata fetcher returned None.",
-            "PROVIDER_NAME: {}".format(provider_name),
-            "METADATA_URL: {}".format(metadata_url),
-        ]
-        err_msg = os.linesep.join(err_lines)
-        raise RuntimeError(err_msg) from None
-    metadata = parse_metadata_document(
-        xml_bytes=fetch_result.document_xml,
-    )
+    with _start_span(
+        name=_SPAN_SAML_METADATA_REFRESH,
+        attributes={"provider_name": provider_name},
+    ) as span:
+        try:
+            fetch_result = fetcher(metadata_url)
+            if fetch_result is None:
+                err_lines = [
+                    "SAML metadata fetcher returned None.",
+                    "PROVIDER_NAME: {}".format(provider_name),
+                    "METADATA_URL: {}".format(metadata_url),
+                ]
+                err_msg = os.linesep.join(err_lines)
+                raise RuntimeError(err_msg) from None
+            metadata = parse_metadata_document(
+                xml_bytes=fetch_result.document_xml,
+            )
+        except Exception:
+            # Failed refresh: record the metric + log event
+            # so operators see the failure rate. The
+            # exception bubbles unchanged; the cached row
+            # (if any) stays put per NFR-4.
+            _metrics_emitter.record_saml_metadata_refresh_failure(
+                # We don't have a db_session here — call the
+                # safe helper via a sentinel so the recorder
+                # short-circuits when no driver is wired.
+                db_session=None,
+                provider_name=provider_name,
+            )
+            _log_events.emit_log_event(
+                event_name=_log_events.AUTH_SAML_METADATA_REFRESH_FAILED,
+                payload={
+                    "provider_name": provider_name,
+                    "metadata_url": metadata_url,
+                },
+            )
+            raise
+        span.set_attribute(
+            key="entity_id", value=metadata.entity_id,
+        )
+        span.set_attribute(
+            key="signing_cert_count",
+            value=len(metadata.signing_certificates),
+        )
     ttl_hint = (
         fetch_result.max_age_seconds
         if fetch_result.max_age_seconds is not None
@@ -361,6 +405,16 @@ def refresh_metadata_document(
     # concurrent readers see one or the other, never both.
     with _LOCK:
         _CACHE[provider_name] = entry
+
+    _log_events.emit_log_event(
+        event_name=_log_events.AUTH_SAML_METADATA_REFRESHED,
+        payload={
+            "provider_name": provider_name,
+            "entity_id": metadata.entity_id,
+            "expires_at": expires_at.isoformat(),
+            "signing_cert_count": len(metadata.signing_certificates),
+        },
+    )
     return metadata
 
 

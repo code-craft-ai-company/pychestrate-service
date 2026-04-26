@@ -229,6 +229,30 @@ def validate_saml_assertion(
         err_msg = os.linesep.join(err_lines)
         raise ValueError(err_msg) from None
 
+    # Local import keeps the assertion module loadable
+    # before the auth package's tracing module is wired in
+    # by phase11 fixtures.
+    from automojo.pychestrate.webservice.security.auth.tracing import (
+        SPAN_SAML_VALIDATE as _SPAN_SAML_VALIDATE,
+        start_span as _start_span,
+    )
+
+    with _start_span(
+        name=_SPAN_SAML_VALIDATE,
+        attributes={"expected_issuer": params.expected_issuer},
+    ) as span:
+        rtnval = _validate_inside_span(
+            saml_response_xml=saml_response_xml, params=params, span=span,
+        )
+    return rtnval
+
+
+def _validate_inside_span(
+        *,
+        saml_response_xml: bytes,
+        params: SamlValidationParams,
+        span
+    ) -> ValidatedSamlAssertion:
     try:
         root = ET.fromstring(saml_response_xml)
     except ET.ParseError as parse_err:
@@ -297,6 +321,8 @@ def validate_saml_assertion(
     authn_instant = _extract_authn_instant(assertion=assertion_elem)
     attributes = _extract_attributes(assertion=assertion_elem)
 
+    span.set_attribute(key="issuer", value=issuer_text)
+    span.set_attribute(key="audience_count", value=len(audiences))
     rtnval = ValidatedSamlAssertion(
         name_id=name_id,
         name_id_format=name_id_format,
