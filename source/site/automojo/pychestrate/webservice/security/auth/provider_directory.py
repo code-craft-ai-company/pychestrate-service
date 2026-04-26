@@ -41,6 +41,8 @@ import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy.orm import Session as DbSession
+
 from automojo.pychestrate.webservice.security.auth.models import (
     AuthProviderKind,
 )
@@ -50,6 +52,17 @@ from automojo.pychestrate.webservice.security.auth.oidc import (
 from automojo.pychestrate.webservice.security.auth.saml import (
     provider_registry as saml_provider_registry,
 )
+
+
+# Per-kind feature-flag keys consulted by *_with_flags
+# helpers. Each defaults to True when the flag is not yet
+# created, so an operator who hasn't seeded any rows still
+# gets the directory's in-memory enabled flag honored.
+KIND_FEATURE_FLAG_KEYS: Dict[AuthProviderKind, str] = {
+    AuthProviderKind.OIDC: "auth.oidc_enabled",
+    AuthProviderKind.SAML: "auth.saml_enabled",
+    AuthProviderKind.LOCAL: "auth.local_fallback_enabled",
+}
 
 
 @dataclass(frozen=True)
@@ -264,6 +277,104 @@ def reset_for_testing() -> None:
     with _GUARD:
         _DIRECTORY.clear()
     return
+
+
+def is_enabled_with_flags(
+        *,
+        kind: AuthProviderKind,
+        provider_name: str,
+        db_session: DbSession,
+        bucketing_key: str = "anonymous"
+    ) -> bool:
+    """
+        Combined check: directory ``enabled`` flag AND the
+        kind-level feature flag (``auth.oidc_enabled`` /
+        ``auth.saml_enabled`` / ``auth.local_fallback_enabled``).
+
+        :param db_session: Active SQLAlchemy session used to
+                           consult the feature-flag store.
+        :param bucketing_key: Optional rollout bucket — for
+                              the picker the
+                              ``"anonymous"`` default is
+                              correct because the user
+                              hasn't authenticated yet.
+
+        :returns: ``True`` only when both the directory and
+                  the feature flag agree.
+    """
+    if is_enabled(kind=kind, provider_name=provider_name) is False:
+        return False
+    flag_key = KIND_FEATURE_FLAG_KEYS.get(kind)
+    if flag_key is None:
+        return True
+    rtnval = _evaluate_flag(
+        db_session=db_session,
+        flag_key=flag_key,
+        bucketing_key=bucketing_key,
+    )
+    return rtnval
+
+
+def list_enabled_credential_modes_with_flags(
+        *,
+        db_session: DbSession,
+        bucketing_key: str = "anonymous"
+    ) -> List[CredentialModeView]:
+    """
+        Snapshot of every enabled mode that has a backing
+        config AND whose kind-level feature flag is on. This
+        is what the picker endpoint returns when a request-
+        scoped DB session is available.
+    """
+    matched: List[CredentialModeView] = []
+    for view in list_enabled_credential_modes():
+        flag_key = KIND_FEATURE_FLAG_KEYS.get(view.kind)
+        if flag_key is None:
+            matched.append(view)
+            continue
+        if _evaluate_flag(
+            db_session=db_session,
+            flag_key=flag_key,
+            bucketing_key=bucketing_key,
+        ) is True:
+            matched.append(view)
+    rtnval = matched
+    return rtnval
+
+
+def _evaluate_flag(
+        *,
+        db_session: DbSession,
+        flag_key: str,
+        bucketing_key: str
+    ) -> bool:
+    """
+        Read a feature flag value with a ``True`` default so
+        the picker honors the directory in deployments that
+        haven't seeded any auth feature flags.
+    """
+    # Imported lazily so the directory module doesn't drag
+    # the feature-flag stack onto callers that never use the
+    # *_with_flags helpers.
+    from automojo.pychestrate.webservice.identity.flags.flag_evaluator import (
+        evaluate_boolean,
+    )
+    from automojo.pychestrate.webservice.identity.flags.models import (
+        FlagContext,
+    )
+
+    context = FlagContext(
+        bucketing_key=bucketing_key,
+        user_id=None,
+        project_id=None,
+    )
+    rtnval = evaluate_boolean(
+        db_session=db_session,
+        flag_key=flag_key,
+        context=context,
+        default=True,
+    )
+    return rtnval
 
 
 def _default_login_path(

@@ -31,6 +31,9 @@ from automojo.pychestrate.webservice.security.auth import (
     provider_directory,
     session_service,
 )
+from automojo.pychestrate.webservice.security.auth.models import (
+    AuthProviderKind,
+)
 from automojo.pychestrate.webservice.security.auth.exceptions import (
     MfaChallengeExpiredError,
     MfaChallengeRejectedError,
@@ -97,10 +100,23 @@ class AuthProviders(Resource):
         login picker renders. Each entry carries the
         ``provider_name``, ``kind``, ``display_label``, and
         the ``login_path`` the controller submits to.
+
+        When a request-scoped ``g.db_session`` is attached,
+        the kind-level feature flags
+        (``auth.oidc_enabled`` / ``auth.saml_enabled`` /
+        ``auth.local_fallback_enabled``) are also consulted
+        so an operator can hot-disable an entire credential
+        kind without unregistering the providers.
     """
 
     def get(self):
-        modes = provider_directory.list_enabled_credential_modes()
+        db_session = getattr(g, "db_session", None)
+        if db_session is not None:
+            modes = provider_directory.list_enabled_credential_modes_with_flags(
+                db_session=db_session,
+            )
+        else:
+            modes = provider_directory.list_enabled_credential_modes()
         body = {
             "providers": [
                 {
@@ -112,6 +128,85 @@ class AuthProviders(Resource):
                 }
                 for m in modes
             ],
+        }
+        rtnval = (body, 200)
+        return rtnval
+
+
+_VALID_PROVIDER_KINDS = {kind.value for kind in AuthProviderKind}
+
+
+def _resolve_provider_kind_or_abort(*, kind_segment: str) -> AuthProviderKind:
+    upper = kind_segment.upper() if kind_segment is not None else ""
+    if upper not in _VALID_PROVIDER_KINDS:
+        auth_ns.abort(
+            404,
+            "kind_unknown",
+        )
+    rtnval = AuthProviderKind(upper)
+    return rtnval
+
+
+@auth_ns.route("/providers/<string:kind_segment>/<string:provider_name>/enable")
+class AuthProviderEnable(Resource):
+    """
+        Resource that exposes POST
+        ``/api/v1/auth/providers/{kind}/{provider_name}/enable``.
+
+        Hot-flips the directory's ``enabled`` flag to
+        ``True`` so the picker resumes advertising the
+        provider. Authorization is enforced upstream by the
+        webworks ``RouteSecurityManager`` (the spec maps
+        this endpoint to ``system:auth.admin``).
+    """
+
+    def post(self, kind_segment: str, provider_name: str):
+        kind = _resolve_provider_kind_or_abort(
+            kind_segment=kind_segment,
+        )
+        try:
+            view = provider_directory.set_enabled(
+                kind=kind, provider_name=provider_name, enabled=True,
+            )
+        except KeyError:
+            auth_ns.abort(404, "credential_mode_not_registered")
+        body = {
+            "kind": view.kind.value,
+            "provider_name": view.provider_name,
+            "enabled": view.enabled,
+        }
+        rtnval = (body, 200)
+        return rtnval
+
+
+@auth_ns.route("/providers/<string:kind_segment>/<string:provider_name>/disable")
+class AuthProviderDisable(Resource):
+    """
+        Resource that exposes POST
+        ``/api/v1/auth/providers/{kind}/{provider_name}/disable``.
+
+        Hot-flips the directory's ``enabled`` flag to
+        ``False`` so the picker stops advertising the
+        provider. The provider's controller routes remain
+        wired so a deep-link login attempt still surfaces
+        the provider's normal error path; only the picker
+        view shifts.
+    """
+
+    def post(self, kind_segment: str, provider_name: str):
+        kind = _resolve_provider_kind_or_abort(
+            kind_segment=kind_segment,
+        )
+        try:
+            view = provider_directory.set_enabled(
+                kind=kind, provider_name=provider_name, enabled=False,
+            )
+        except KeyError:
+            auth_ns.abort(404, "credential_mode_not_registered")
+        body = {
+            "kind": view.kind.value,
+            "provider_name": view.provider_name,
+            "enabled": view.enabled,
         }
         rtnval = (body, 200)
         return rtnval
