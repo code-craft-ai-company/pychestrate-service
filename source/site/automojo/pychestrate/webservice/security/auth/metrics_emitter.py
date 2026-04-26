@@ -34,7 +34,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Tuple
+from typing import Any, Mapping, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -42,6 +42,7 @@ from automojo.pychestrate.webservice.metrics.timeseries import service as metric
 from automojo.pychestrate.webservice.metrics.timeseries.facade import (
     MetricDefinition,
     MetricKind,
+    get_metric_registry,
 )
 from automojo.pychestrate.webservice.security.auth.models import (
     AuthProviderKind,
@@ -194,6 +195,59 @@ def register_auth_metrics(*, db_session: DbSession) -> None:
     return
 
 
+def _safe_write_counter(
+        *,
+        db_session: DbSession,
+        name: str,
+        labels: Mapping[str, Any]
+    ) -> None:
+    """
+        Internal helper: write a counter delta of 1.0 only
+        when the metric definition is in the registry. The
+        auth flows call the recorder helpers
+        unconditionally; deployments / tests that haven't
+        bootstrapped the timeseries driver simply skip
+        emission instead of crashing the user-facing flow.
+    """
+    registry = get_metric_registry()
+    if registry.find(name=name) is None:
+        return
+    try:
+        metrics_service.write_counter(
+            db_session=db_session,
+            name=name,
+            delta=1.0,
+            labels=dict(labels),
+        )
+    except Exception:
+        # Metrics emission is best-effort — never break a
+        # login / refresh on a metric-side failure.
+        return
+    return
+
+
+def _safe_write_gauge(
+        *,
+        db_session: DbSession,
+        name: str,
+        value: float,
+        labels: Mapping[str, Any]
+    ) -> None:
+    registry = get_metric_registry()
+    if registry.find(name=name) is None:
+        return
+    try:
+        metrics_service.write_gauge(
+            db_session=db_session,
+            name=name,
+            value=float(value),
+            labels=dict(labels),
+        )
+    except Exception:
+        return
+    return
+
+
 def record_login(
         *,
         db_session: DbSession,
@@ -205,10 +259,9 @@ def record_login(
         Increment :data:`METRIC_LOGIN_TOTAL` by 1 for
         ``(provider_kind, provider_name, outcome)``.
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_LOGIN_TOTAL,
-        delta=1.0,
         labels={
             "provider_kind": provider_kind.value,
             "provider_name": provider_name,
@@ -229,10 +282,9 @@ def record_local_login_failure(
         ``user_not_found`` / ``mfa_required`` /
         ``backoff_active`` / etc.).
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_LOCAL_LOGIN_FAILURES_TOTAL,
-        delta=1.0,
         labels={"reason": reason},
     )
     return
@@ -249,10 +301,9 @@ def record_mfa_failure(
         :meth:`MFAMethodExtension.verify_response` rejects
         the user-supplied response.
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_MFA_FAILURES_TOTAL,
-        delta=1.0,
         labels={"method": method_name},
     )
     return
@@ -267,10 +318,9 @@ def record_oidc_discovery_refresh_failure(
         Increment :data:`METRIC_OIDC_DISCOVERY_REFRESH_FAILURES_TOTAL`
         for the named issuer.
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_OIDC_DISCOVERY_REFRESH_FAILURES_TOTAL,
-        delta=1.0,
         labels={"issuer": issuer},
     )
     return
@@ -285,10 +335,9 @@ def record_saml_metadata_refresh_failure(
         Increment :data:`METRIC_SAML_METADATA_REFRESH_FAILURES_TOTAL`
         for the named SAML IdP.
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_SAML_METADATA_REFRESH_FAILURES_TOTAL,
-        delta=1.0,
         labels={"provider_name": provider_name},
     )
     return
@@ -304,10 +353,9 @@ def record_token_refresh(
         the supplied outcome (``refreshed`` /
         ``skipped_fresh`` / ``failed``).
     """
-    metrics_service.write_counter(
+    _safe_write_counter(
         db_session=db_session,
         name=METRIC_TOKEN_REFRESH_TOTAL,
-        delta=1.0,
         labels={"outcome": outcome},
     )
     return
@@ -324,7 +372,7 @@ def set_session_active_count(
         deployments call this from a periodic job; tests can
         call it inline.
     """
-    metrics_service.write_gauge(
+    _safe_write_gauge(
         db_session=db_session,
         name=METRIC_SESSION_ACTIVE,
         value=float(count),

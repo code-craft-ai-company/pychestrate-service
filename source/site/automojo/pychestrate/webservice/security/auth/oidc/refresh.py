@@ -55,6 +55,14 @@ from automojo.pychestrate.webservice.security.auth.models import (
 from automojo.pychestrate.webservice.security.auth.oidc.token_exchange import (
     TokenExchangeRawResponse,
 )
+from automojo.pychestrate.webservice.security.auth import (
+    log_events,
+    metrics_emitter,
+)
+from automojo.pychestrate.webservice.security.auth.tracing import (
+    SPAN_OIDC_REFRESH,
+    start_span,
+)
 
 
 DEFAULT_REFRESH_LEEWAY_SECONDS: int = 60
@@ -286,19 +294,53 @@ def refresh_oidc_session(
     materialized_now = now if now is not None else utc_now()
     lock = materialized_locker.acquire(session_id=str(session_id))
     with lock:
-        rtnval = _refresh_inside_lock(
-            db_session=db_session,
-            session_id=str(session_id),
-            token_endpoint=token_endpoint,
-            client_id=client_id,
-            token_fetcher=token_fetcher,
-            client_secret=client_secret,
-            scope=scope,
-            refresh_leeway_seconds=refresh_leeway_seconds,
-            extension_seconds=extension_seconds,
-            max_lifetime_seconds=max_lifetime_seconds,
-            now=materialized_now,
-        )
+        with start_span(
+            name=SPAN_OIDC_REFRESH,
+            attributes={"session_id": str(session_id)},
+        ) as span:
+            try:
+                rtnval = _refresh_inside_lock(
+                    db_session=db_session,
+                    session_id=str(session_id),
+                    token_endpoint=token_endpoint,
+                    client_id=client_id,
+                    token_fetcher=token_fetcher,
+                    client_secret=client_secret,
+                    scope=scope,
+                    refresh_leeway_seconds=refresh_leeway_seconds,
+                    extension_seconds=extension_seconds,
+                    max_lifetime_seconds=max_lifetime_seconds,
+                    now=materialized_now,
+                )
+            except Exception:
+                metrics_emitter.record_token_refresh(
+                    db_session=db_session,
+                    outcome=metrics_emitter.TOKEN_REFRESH_OUTCOME_FAILED,
+                )
+                raise
+            span.set_attribute(
+                key="outcome", value=rtnval.outcome,
+            )
+            span.set_attribute(
+                key="refresh_token_rotated",
+                value=rtnval.refresh_token_rotated,
+            )
+            metrics_emitter.record_token_refresh(
+                db_session=db_session,
+                outcome=rtnval.outcome,
+            )
+            if rtnval.outcome == "refreshed":
+                log_events.emit_log_event(
+                    event_name=log_events.AUTH_SESSION_REFRESHED,
+                    payload={
+                        "session_id": str(rtnval.session.session_id),
+                        "user_id": str(rtnval.session.user_id),
+                        "refresh_token_rotated": rtnval.refresh_token_rotated,
+                        "previous_expires_at": rtnval.previous_expires_at.isoformat(),
+                        "new_expires_at": rtnval.session.expires_at.isoformat()
+                            if rtnval.session.expires_at is not None else None,
+                    },
+                )
     return rtnval
 
 

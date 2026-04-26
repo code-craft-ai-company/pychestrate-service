@@ -220,6 +220,10 @@ from automojo.pychestrate.webservice.security.auth.oidc.token_exchange import (
     TokenExchangeResponse,
     exchange_code_for_tokens,
 )
+from automojo.pychestrate.webservice.security.auth.tracing import (
+    SPAN_OIDC_CALLBACK,
+    start_span,
+)
 
 
 class OidcCallbackError(Exception):
@@ -327,68 +331,75 @@ def complete_oidc_callback(
             "id_token_invalid", "missing code",
         ) from None
 
-    state_record = consume_state(db_session=db_session, state=state)
-    if state_record is None:
-        raise OidcCallbackError(
-            "state_unknown",
-            "no auth_oidc_state row matched state",
-        ) from None
-    if state_record.provider_name != provider_name:
-        raise OidcCallbackError(
-            "provider_mismatch",
-            "state.provider={!r} caller.provider={!r}".format(
-                state_record.provider_name, provider_name,
+    with start_span(
+        name=SPAN_OIDC_CALLBACK,
+        attributes={"provider_name": provider_name},
+    ) as span:
+        state_record = consume_state(db_session=db_session, state=state)
+        if state_record is None:
+            raise OidcCallbackError(
+                "state_unknown",
+                "no auth_oidc_state row matched state",
+            ) from None
+        if state_record.provider_name != provider_name:
+            raise OidcCallbackError(
+                "provider_mismatch",
+                "state.provider={!r} caller.provider={!r}".format(
+                    state_record.provider_name, provider_name,
+                ),
+            ) from None
+
+        request = TokenExchangeRequest(
+            token_endpoint=token_endpoint,
+            client_id=client_id,
+            client_secret=client_secret,
+            redirect_uri=redirect_uri,
+            code=code,
+            pkce_verifier=state_record.pkce_verifier.decode("ascii"),
+        )
+        try:
+            token_response = exchange_code_for_tokens(
+                request=request, fetcher=token_fetcher,
+            )
+        except TokenExchangeError as exchange_err:
+            raise OidcCallbackError(
+                "token_exchange_failed",
+                exchange_err.detail,
+                cause=exchange_err.reason,
+            ) from None
+
+        validation_params = ValidationParams(
+            expected_issuer=expected_issuer,
+            expected_audience=client_id,
+            expected_nonce=state_record.nonce,
+            clock_skew=(
+                clock_skew if clock_skew is not None
+                else _default_clock_skew()
             ),
-        ) from None
-
-    request = TokenExchangeRequest(
-        token_endpoint=token_endpoint,
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri=redirect_uri,
-        code=code,
-        pkce_verifier=state_record.pkce_verifier.decode("ascii"),
-    )
-    try:
-        token_response = exchange_code_for_tokens(
-            request=request, fetcher=token_fetcher,
+            now=now,
         )
-    except TokenExchangeError as exchange_err:
-        raise OidcCallbackError(
-            "token_exchange_failed",
-            exchange_err.detail,
-            cause=exchange_err.reason,
-        ) from None
+        try:
+            decoded = validate_id_token(
+                token=token_response.id_token,
+                params=validation_params,
+                key_resolver=key_resolver,
+            )
+        except IdTokenValidationError as token_err:
+            raise OidcCallbackError(
+                "id_token_invalid",
+                token_err.detail,
+                cause=token_err.reason,
+            ) from None
 
-    validation_params = ValidationParams(
-        expected_issuer=expected_issuer,
-        expected_audience=client_id,
-        expected_nonce=state_record.nonce,
-        clock_skew=(
-            clock_skew if clock_skew is not None
-            else _default_clock_skew()
-        ),
-        now=now,
-    )
-    try:
-        decoded = validate_id_token(
-            token=token_response.id_token,
-            params=validation_params,
-            key_resolver=key_resolver,
+        span.set_attribute(
+            key="audience", value=client_id,
         )
-    except IdTokenValidationError as token_err:
-        raise OidcCallbackError(
-            "id_token_invalid",
-            token_err.detail,
-            cause=token_err.reason,
-        ) from None
-
-    rtnval = CompleteCallbackResult(
-        state_record=state_record,
-        token_response=token_response,
-        id_token=decoded,
-        redirect_target=state_record.redirect_target or "",
-    )
+        rtnval = CompleteCallbackResult(
+            state_record=state_record,
+            token_response=token_response,
+            id_token=decoded,
+            redirect_target=state_record.redirect_target or "",
+        )
     return rtnval
 
 
