@@ -5,12 +5,10 @@ Use this alongside [`quickstart.md`](quickstart.md) (bring-up),
 [`configuration.md`](configuration.md) (tunables), and
 [`hardwareonboarding.md`](hardwareonboarding.md) (registering hosts).
 
-The **Auth** column lists the role required by
-`AccessPolicyMiddleware`. `—` means the endpoint is public.
-`system-admin` means the request must carry an `AuthenticationContext`
-whose principal has the `system-admin` role (currently the only
-gate, see *Configuration › RBAC and AccessPolicy* for the rollout
-plan).
+The **Auth** column lists the role-set required by
+`AccessPolicyMiddleware`. `—` means the endpoint is public; the
+remaining values are explained in the *Role values used in the
+Auth column* table at the bottom of this doc.
 
 Path parameters use webworks `{name}` syntax. `{name:int}` indicates
 an integer-coerced segment.
@@ -126,14 +124,14 @@ pychestrate_session=<id>` header. See
 |--------|---------------------------------------------------------------|--------------|--------------------------------------------------------------------------|
 | POST   | `/api/v1/projects`                                            | system-admin | Create a project.                                                        |
 | GET    | `/api/v1/projects/{slug}`                                     | —            | Read a project by slug.                                                  |
-| PATCH  | `/api/v1/projects/{slug}`                                     | system-admin | Update mutable fields (`display_name`, `description`, `extension_fields`).|
-| DELETE | `/api/v1/projects/{slug}`                                     | system-admin | Hard-delete an archived project.                                         |
-| POST   | `/api/v1/projects/{slug}/archive`                             | system-admin | Archive a project.                                                       |
-| POST   | `/api/v1/projects/{slug}/unarchive`                           | system-admin | Unarchive a project.                                                     |
+| PATCH  | `/api/v1/projects/{slug}`                                     | project-write | Update mutable fields (`display_name`, `description`, `extension_fields`).|
+| DELETE | `/api/v1/projects/{slug}`                                     | project-owner | Hard-delete an archived project.                                         |
+| POST   | `/api/v1/projects/{slug}/archive`                             | project-owner | Archive a project.                                                       |
+| POST   | `/api/v1/projects/{slug}/unarchive`                           | project-owner | Unarchive a project.                                                     |
 | GET    | `/api/v1/projects/{slug}/members`                             | —            | List project members.                                                    |
-| POST   | `/api/v1/projects/{slug}/members`                             | system-admin | Attach a user with a role.                                               |
-| DELETE | `/api/v1/projects/{slug}/members/{user_id}`                   | system-admin | Detach the `PROJECT_OWNER_ROLE` binding (last-admin safeguard).          |
-| DELETE | `/api/v1/projects/{slug}/members/{user_id}/{role_name}`       | system-admin | Detach a specific binding.                                               |
+| POST   | `/api/v1/projects/{slug}/members`                             | project-owner | Attach a user with a role.                                               |
+| DELETE | `/api/v1/projects/{slug}/members/{user_id}`                   | project-owner | Detach the `PROJECT_OWNER_ROLE` binding (last-admin safeguard).          |
+| DELETE | `/api/v1/projects/{slug}/members/{user_id}/{role_name}`       | project-owner | Detach a specific binding.                                               |
 
 ---
 
@@ -142,7 +140,7 @@ pychestrate_session=<id>` header. See
 | Method | Path                                                                               | Auth         | Description                                            |
 |--------|------------------------------------------------------------------------------------|--------------|--------------------------------------------------------|
 | GET    | `/api/v1/projects/{project_id}/pod-definitions`                                    | —            | List pod definitions in a project.                     |
-| POST   | `/api/v1/projects/{project_id}/pod-definitions`                                    | system-admin | Create a pod definition. Body: `{pod_name, spec}`.     |
+| POST   | `/api/v1/projects/{project_id}/pod-definitions`                                    | project-write | Create a pod definition. Body: `{pod_name, spec}`.     |
 | GET    | `/api/v1/projects/{project_id}/pod-definitions/{pod_id}`                           | —            | Read one pod definition.                               |
 | GET    | `/api/v1/projects/{project_id}/pods/{pod_id}/state`                                | —            | Read current lifecycle state.                          |
 | GET    | `/api/v1/projects/{project_id}/pods/{pod_id}/state/history`                        | —            | List state-transition log. Query: `offset`, `limit`.   |
@@ -150,10 +148,10 @@ pychestrate_session=<id>` header. See
 | GET    | `/api/v1/projects/{project_id}/pods/{pod_id}/registrations`                        | —            | List registration history.                             |
 | GET    | `/api/v1/projects/{project_id}/pods/{pod_id}/topology`                             | —            | Composed topology graph.                               |
 | GET    | `/api/v1/projects/{project_id}/pod-templates`                                      | —            | List pod templates.                                    |
-| POST   | `/api/v1/projects/{project_id}/pod-templates`                                      | system-admin | Create a pod template.                                 |
-| POST   | `/api/v1/projects/{project_id}/pod-templates/{template_id}/materialize`            | system-admin | Materialize a template into a pod definition.          |
-| PUT    | `/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}`                     | system-admin | Set a scoped run variable. Query: `pod_id` required.   |
-| DELETE | `/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}`                     | system-admin | Delete a scoped run variable. Query: `pod_id` required.|
+| POST   | `/api/v1/projects/{project_id}/pod-templates`                                      | project-write | Create a pod template.                                 |
+| POST   | `/api/v1/projects/{project_id}/pod-templates/{template_id}/materialize`            | project-write | Materialize a template into a pod definition.          |
+| PUT    | `/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}`                     | project-write | Set a scoped run variable. Query: `pod_id` required.   |
+| DELETE | `/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}`                     | project-write | Delete a scoped run variable. Query: `pod_id` required.|
 
 ---
 
@@ -174,8 +172,8 @@ pychestrate_session=<id>` header. See
 | GET    | `/api/v1/tags/taxonomies`                           | —            | List registered taxonomies.                            |
 | GET    | `/api/v1/tags/search`                               | —            | Search by tag expression. Query: `kind`, `expr`.       |
 | GET    | `/api/v1/tags/{entity_kind}/{entity_id}`            | —            | List tags on an entity.                                |
-| POST   | `/api/v1/tags/{entity_kind}/{entity_id}`            | system-admin | Assign a tag to an entity. Body: `{tag}`.              |
-| DELETE | `/api/v1/tags/{entity_kind}/{entity_id}/{tag}`      | system-admin | Remove a tag.                                          |
+| POST   | `/api/v1/tags/{entity_kind}/{entity_id}`            | project-write | Assign a tag to an entity. Body: `{tag}`.              |
+| DELETE | `/api/v1/tags/{entity_kind}/{entity_id}/{tag}`      | project-write | Remove a tag.                                          |
 
 ---
 
@@ -186,8 +184,8 @@ pychestrate_session=<id>` header. See
 | GET    | `/api/v1/variables/effective`                     | —            | Resolve a variable through the scope chain. Query: `name` (req), `project`/`pipeline`/`job`, `include_trace`, `dereference_secrets`. |
 | GET    | `/api/v1/variables/{scope}/{scope_id}`            | —            | List bindings at a scope.                                                         |
 | GET    | `/api/v1/variables/{scope}/{scope_id}/{name}`     | —            | Read one binding.                                                                 |
-| PUT    | `/api/v1/variables/{scope}/{scope_id}/{name}`     | system-admin | Set or replace a binding. Body: `{value, value_type}`.                            |
-| DELETE | `/api/v1/variables/{scope}/{scope_id}/{name}`     | system-admin | Remove a binding.                                                                 |
+| PUT    | `/api/v1/variables/{scope}/{scope_id}/{name}`     | project-write | Set or replace a binding. Body: `{value, value_type}`.                            |
+| DELETE | `/api/v1/variables/{scope}/{scope_id}/{name}`     | project-write | Remove a binding.                                                                 |
 
 ---
 
@@ -227,3 +225,12 @@ pychestrate_session=<id>` header. See
   flow runtime, WSGI deployment.
 * [`hardwareonboarding.md`](hardwareonboarding.md) — registering
   hosts, agent enrollment, flow submission.
+
+
+## Role values used in the Auth column
+
+| Token            | Means (any of)                                          |
+|------------------|---------------------------------------------------------|
+| `system-admin`   | `system-admin` only.                                    |
+| `project-owner`  | `system-admin` or `project-owner`.                      |
+| `project-write`  | `system-admin` or `project-owner` or `project-editor`.  |

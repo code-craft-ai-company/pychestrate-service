@@ -28,7 +28,19 @@ from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.webworks.security.accesspolicy import AccessPolicy
 
 
+# Operator-side gates. Webworks AccessPolicy uses OR-of-roles logic
+# ("subject has at least one of these roles"). Today the role
+# resolver emits role names without scope context, so a user with
+# ``project-owner`` granted at one project's PROJECT scope clears
+# the policy for any other project's URL too. Per-project scope
+# enforcement is a follow-up; see usersguide/configuration.md.
 _ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
+_PROJECT_OWNER_OR_ADMIN = AccessPolicy(
+    roles=("system-admin", "project-owner"),
+)
+_PROJECT_WRITE = AccessPolicy(
+    roles=("system-admin", "project-owner", "project-editor"),
+)
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -224,7 +236,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}",
         methods=["PATCH"],
         doc=Doc(summary="Patch project"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def patch_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -254,7 +266,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}",
         methods=["DELETE"],
         doc=Doc(summary="Delete archived project"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def delete_project(request: Request) -> Response:
         db_session = _require_db_session(request=request)
@@ -279,7 +291,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/archive",
         methods=["POST"],
         doc=Doc(summary="Archive project"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def archive_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -303,7 +315,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/unarchive",
         methods=["POST"],
         doc=Doc(summary="Unarchive project"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def unarchive_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -347,7 +359,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/members",
         methods=["POST"],
         doc=Doc(summary="Add project member"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def add_member(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -383,7 +395,7 @@ class ProjectsBlueprint(RestBlueprint):
                 "owner unless ``?force=true`` is supplied by an admin."
             ),
         ),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def remove_owner_binding(request: Request) -> Response:
         db_session = _require_db_session(request=request)
@@ -415,7 +427,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/members/{user_id}/{role_name}",
         methods=["DELETE"],
         doc=Doc(summary="Remove specific role binding"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_OWNER_OR_ADMIN,
     )
     def remove_role_binding(request: Request) -> Response:
         db_session = _require_db_session(request=request)

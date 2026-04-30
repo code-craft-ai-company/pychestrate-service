@@ -32,6 +32,9 @@ from automojo.webworks.security.accesspolicy import AccessPolicy
 
 
 _ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
+_PROJECT_WRITE = AccessPolicy(
+    roles=("system-admin", "project-owner", "project-editor"),
+)
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -144,7 +147,7 @@ class PodsBlueprint(RestBlueprint):
         path="/api/v1/projects/{project_id}/pod-definitions",
         methods=["POST"],
         doc=Doc(summary="Create pod definition"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def create_pod_definition_endpoint(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -391,7 +394,7 @@ class PodsBlueprint(RestBlueprint):
         path="/api/v1/projects/{project_id}/pod-templates",
         methods=["POST"],
         doc=Doc(summary="Create pod template"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def create_pod_template_endpoint(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -455,7 +458,7 @@ class PodsBlueprint(RestBlueprint):
                 "on colon, so the path is normalized to a slash."
             ),
         ),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def materialize_pod_template(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -498,7 +501,7 @@ class PodsBlueprint(RestBlueprint):
         path="/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}",
         methods=["PUT"],
         doc=Doc(summary="Set scoped run variable"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def set_run_variable(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -541,7 +544,7 @@ class PodsBlueprint(RestBlueprint):
         path="/api/v1/projects/{project_id}/runs/{run_id}/variables/{name}",
         methods=["DELETE"],
         doc=Doc(summary="Delete scoped run variable"),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def delete_run_variable(request: Request) -> Response:
         db_session = _require_db_session(request=request)
