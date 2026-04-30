@@ -24,6 +24,7 @@ automojo-dataprofiles = { git = "https://github.com/automationmojo/automojo-data
 automojo-storage-database = { git = "https://github.com/automationmojo/automojo-storage-database.git", branch = "main" }
 automojo-testbase = { git = "https://github.com/automationmojo/automojo-testbase.git", branch = "main" }
 automojo-webworks = { git = "https://github.com/automationmojo/automojo-webworks.git", branch = "main" }
+automojo-taskplus = { git = "https://github.com/automationmojo/automojo-taskplus.git", branch = "main" }
 pychestrate-core = { git = "https://github.com/automationmojo/pychestrate-core.git", branch = "main" }
 psycopg2-binary = "^2.9.10"
 aiosmtpd = "^1.4.6"

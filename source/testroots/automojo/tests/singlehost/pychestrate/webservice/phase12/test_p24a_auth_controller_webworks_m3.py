@@ -1,6 +1,6 @@
 """
-.. module:: test_p24a_auth_controller_webworks_m3
-    :synopsis: Tests for P24a — auth_controller migrated to webworks.
+.. module:: test_p24a_authblueprint_webworks_m3
+    :synopsis: Tests for P24a — authblueprint migrated to webworks.
 
 This module is the **worked-example test** for the P24a Flask →
 automojo-webworks migration. It exercises the migrated
@@ -31,7 +31,7 @@ from automojo.webworks.routing.router import Router
 
 from automojo.pychestrate.core.defaults import new_uuid
 
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     DbSessionMiddleware,
 )
 from automojo.pychestrate.webservice.security.auth import session_service
@@ -42,7 +42,7 @@ from automojo.pychestrate.webservice.security.auth.models import (
     AuthProviderKind,
 )
 from automojo.pychestrate.webservice.security.auth.restapi.v1 import (
-    auth_controller,
+    authblueprint,
 )
 from automojo.pychestrate.webservice.security.auth.session_service import (
     RequestFingerprint,
@@ -85,7 +85,7 @@ def _build_app_callable(
     session_factory = sessionmaker(bind=engine)
 
     router = Router()
-    auth_controller.AuthBlueprint.register(router=router)
+    authblueprint.AuthBlueprint.register(router=router)
 
     pipeline = MiddlewarePipeline()
     if install_db_session_middleware is True:
