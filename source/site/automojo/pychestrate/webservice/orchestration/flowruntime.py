@@ -481,6 +481,15 @@ class FlowRuntime:
         log_buffer = io.StringIO()
         self._log_handler.attach_buffer(buffer=log_buffer)
 
+        # Bind the session_factory on a thread-local so RemoteCommand
+        # tasks running inside this worker can dispatch jobs through
+        # the worker queue without us having to thread the factory
+        # through every taskplus call.
+        from automojo.pychestrate.webservice.orchestration.remotecommand import (
+            set_session_factory,
+        )
+        set_session_factory(factory=self._session_factory)
+
         started_at_dt = datetime.now(timezone.utc)
         with self._lock:
             submission = self._submissions[flow_id]
