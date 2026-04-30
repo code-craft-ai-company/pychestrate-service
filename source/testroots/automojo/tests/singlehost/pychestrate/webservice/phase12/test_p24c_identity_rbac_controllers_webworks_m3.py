@@ -1,5 +1,5 @@
 """
-.. module:: test_p24c_identity_rbac_controllers_webworks_m3
+.. module:: test_p24c_identity_rbacblueprints_webworks_m3
     :synopsis: Tests for P24c — identity + RBAC controllers on webworks.
 
 Exercises the migrated identity (users + flags) and security/RBAC
@@ -30,11 +30,11 @@ from automojo.webworks.routing.router import Router
 from automojo.pychestrate.webservice.identity.flags import flag_service
 from automojo.pychestrate.webservice.identity.flags.models import FlagKind
 from automojo.pychestrate.webservice.identity.flags.restapi.v1 import (
-    flags_controller,
+    flagsblueprint,
 )
 from automojo.pychestrate.webservice.identity.users import user_service
 from automojo.pychestrate.webservice.identity.users.restapi.v1 import (
-    users_controller,
+    identityusersblueprint,
 )
 from automojo.pychestrate.webservice.middleware_webworks import (
     DbSessionMiddleware,
@@ -49,7 +49,7 @@ from automojo.pychestrate.webservice.security.rbac.models import (
     RoleSource,
 )
 from automojo.pychestrate.webservice.security.rbac.restapi.v1 import (
-    rbac_controller,
+    rbacblueprint,
 )
 
 from automojo.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
@@ -140,12 +140,12 @@ def _setup_rbac():
 
 
 # =====================================
-# users_controller
+# identityusersblueprint
 # =====================================
 
-def test_users_controller_create_then_read_round_trips_through_webworks():
+def test_identityusersblueprint_create_then_read_round_trips_through_webworks():
     """
-    **Feature: P24c users_controller migration (M3)**
+    **Feature: P24c identityusersblueprint migration (M3)**
     **Property: POST /api/v1/identity/users persists a new user
     record and the follow-up GET /api/v1/identity/users/{user_id}
     returns it. Both legs run through DbSessionMiddleware.**
@@ -154,7 +154,7 @@ def test_users_controller_create_then_read_round_trips_through_webworks():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=users_controller.IdentityUsersBlueprint,
+            blueprint_cls=identityusersblueprint.IdentityUsersBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -186,9 +186,9 @@ def test_users_controller_create_then_read_round_trips_through_webworks():
     return
 
 
-def test_users_controller_returns_409_on_duplicate_login_name():
+def test_identityusersblueprint_returns_409_on_duplicate_login_name():
     """
-    **Feature: P24c users_controller migration (M3)**
+    **Feature: P24c identityusersblueprint migration (M3)**
     **Property: A second create with the same login_name surfaces
     UserAlreadyExistsError as HTTP 409 with detail body.**
     """
@@ -196,7 +196,7 @@ def test_users_controller_returns_409_on_duplicate_login_name():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=users_controller.IdentityUsersBlueprint,
+            blueprint_cls=identityusersblueprint.IdentityUsersBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -226,9 +226,9 @@ def test_users_controller_returns_409_on_duplicate_login_name():
     return
 
 
-def test_users_controller_returns_404_for_missing_user_id():
+def test_identityusersblueprint_returns_404_for_missing_user_id():
     """
-    **Feature: P24c users_controller migration (M3)**
+    **Feature: P24c identityusersblueprint migration (M3)**
     **Property: GET /api/v1/identity/users/{unknown} surfaces
     UserNotFoundError as HTTP 404.**
     """
@@ -236,7 +236,7 @@ def test_users_controller_returns_404_for_missing_user_id():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=users_controller.IdentityUsersBlueprint,
+            blueprint_cls=identityusersblueprint.IdentityUsersBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -249,9 +249,9 @@ def test_users_controller_returns_404_for_missing_user_id():
     return
 
 
-def test_users_controller_returns_503_when_db_session_middleware_absent():
+def test_identityusersblueprint_returns_503_when_db_session_middleware_absent():
     """
-    **Feature: P24c users_controller migration (M3)**
+    **Feature: P24c identityusersblueprint migration (M3)**
     **Property: With DbSessionMiddleware not installed, a create
     returns 503 surfacing the misconfiguration.**
     """
@@ -259,7 +259,7 @@ def test_users_controller_returns_503_when_db_session_middleware_absent():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=users_controller.IdentityUsersBlueprint,
+            blueprint_cls=identityusersblueprint.IdentityUsersBlueprint,
             install_db_session_middleware=False,
         )
         client = TestClient(app=app_callable)
@@ -280,12 +280,12 @@ def test_users_controller_returns_503_when_db_session_middleware_absent():
 
 
 # =====================================
-# flags_controller
+# flagsblueprint
 # =====================================
 
-def test_flags_controller_create_returns_201_with_flag_view():
+def test_flagsblueprint_create_returns_201_with_flag_view():
     """
-    **Feature: P24c flags_controller migration (M3)**
+    **Feature: P24c flagsblueprint migration (M3)**
     **Property: POST /api/v1/flags creates a BOOLEAN flag and
     returns the rendered view at status 201.**
     """
@@ -293,7 +293,7 @@ def test_flags_controller_create_returns_201_with_flag_view():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=flags_controller.FlagsBlueprint,
+            blueprint_cls=flagsblueprint.FlagsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -315,9 +315,9 @@ def test_flags_controller_create_returns_201_with_flag_view():
     return
 
 
-def test_flags_controller_read_returns_404_for_unknown_key():
+def test_flagsblueprint_read_returns_404_for_unknown_key():
     """
-    **Feature: P24c flags_controller migration (M3)**
+    **Feature: P24c flagsblueprint migration (M3)**
     **Property: GET /api/v1/flags/{unknown} returns 404 with the
     flag-not-found detail.**
     """
@@ -325,7 +325,7 @@ def test_flags_controller_read_returns_404_for_unknown_key():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=flags_controller.FlagsBlueprint,
+            blueprint_cls=flagsblueprint.FlagsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -336,9 +336,9 @@ def test_flags_controller_read_returns_404_for_unknown_key():
     return
 
 
-def test_flags_controller_create_returns_400_for_unknown_flag_kind():
+def test_flagsblueprint_create_returns_400_for_unknown_flag_kind():
     """
-    **Feature: P24c flags_controller migration (M3)**
+    **Feature: P24c flagsblueprint migration (M3)**
     **Property: An unknown flag_kind value surfaces SemanticError
     as HTTP 400 (preserved through the migration).**
     """
@@ -346,7 +346,7 @@ def test_flags_controller_create_returns_400_for_unknown_flag_kind():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=flags_controller.FlagsBlueprint,
+            blueprint_cls=flagsblueprint.FlagsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -365,12 +365,12 @@ def test_flags_controller_create_returns_400_for_unknown_flag_kind():
 
 
 # =====================================
-# rbac_controller
+# rbacblueprint
 # =====================================
 
-def test_rbac_controller_lists_permissions_from_registry():
+def test_rbacblueprint_lists_permissions_from_registry():
     """
-    **Feature: P24c rbac_controller migration (M3)**
+    **Feature: P24c rbacblueprint migration (M3)**
     **Property: GET /api/v1/rbac/permissions returns the registry
     permission catalog as a JSON array. The endpoint does not
     require DbSessionMiddleware.**
@@ -379,7 +379,7 @@ def test_rbac_controller_lists_permissions_from_registry():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=rbac_controller.RbacBlueprint,
+            blueprint_cls=rbacblueprint.RbacBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -397,9 +397,9 @@ def test_rbac_controller_lists_permissions_from_registry():
     return
 
 
-def test_rbac_controller_lists_roles_with_permission_counts():
+def test_rbacblueprint_lists_roles_with_permission_counts():
     """
-    **Feature: P24c rbac_controller migration (M3)**
+    **Feature: P24c rbacblueprint migration (M3)**
     **Property: GET /api/v1/rbac/roles returns each registered
     role with its grant count.**
     """
@@ -407,7 +407,7 @@ def test_rbac_controller_lists_roles_with_permission_counts():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=rbac_controller.RbacBlueprint,
+            blueprint_cls=rbacblueprint.RbacBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -424,9 +424,9 @@ def test_rbac_controller_lists_roles_with_permission_counts():
     return
 
 
-def test_rbac_controller_check_returns_decision_with_reason():
+def test_rbacblueprint_check_returns_decision_with_reason():
     """
-    **Feature: P24c rbac_controller migration (M3)**
+    **Feature: P24c rbacblueprint migration (M3)**
     **Property: POST /api/v1/rbac/check evaluates the requested
     permission and returns allowed/reason/permission_key fields.
     For an unbound principal the decision is deny.**
@@ -435,7 +435,7 @@ def test_rbac_controller_check_returns_decision_with_reason():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=rbac_controller.RbacBlueprint,
+            blueprint_cls=rbacblueprint.RbacBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -458,9 +458,9 @@ def test_rbac_controller_check_returns_decision_with_reason():
     return
 
 
-def test_rbac_controller_list_bindings_filters_by_query_param():
+def test_rbacblueprint_list_bindings_filters_by_query_param():
     """
-    **Feature: P24c rbac_controller migration (M3)**
+    **Feature: P24c rbacblueprint migration (M3)**
     **Property: GET /api/v1/rbac/bindings?principal_id=... reads
     the query parameter via request.query_params and applies it to
     the binding_service filter.**
@@ -505,7 +505,7 @@ def test_rbac_controller_list_bindings_filters_by_query_param():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=rbac_controller.RbacBlueprint,
+            blueprint_cls=rbacblueprint.RbacBlueprint,
         )
         client = TestClient(app=app_callable)
 

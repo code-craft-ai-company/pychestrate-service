@@ -1,5 +1,5 @@
 """
-.. module:: test_p24d_clients_enrollment_controllers_webworks_m3
+.. module:: test_p24d_clients_enrollmentblueprints_webworks_m3
     :synopsis: Tests for P24d — clients + enrollment controllers on webworks.
 
 Exercises the migrated clients (admin) and enrollment (admin + agent)
@@ -40,8 +40,8 @@ from automojo.pychestrate.webservice.clients.registry.service import (
     register_client,
 )
 from automojo.pychestrate.webservice.clients.restapi.v1 import (
-    clients_controller,
-    enrollment_controller,
+    clientsblueprint,
+    enrollmentblueprint,
 )
 from automojo.pychestrate.webservice.middleware_webworks import (
     DbSessionMiddleware,
@@ -152,12 +152,12 @@ def _seed_two_clients(*, session) -> Tuple[str, str, str]:
 
 
 # =====================================
-# clients_controller
+# clientsblueprint
 # =====================================
 
 def test_clients_list_returns_all_when_no_filters_supplied():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: GET /api/v1/clients with no query string returns
     every registered client view.**
     """
@@ -169,7 +169,7 @@ def test_clients_list_returns_all_when_no_filters_supplied():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -186,7 +186,7 @@ def test_clients_list_returns_all_when_no_filters_supplied():
 
 def test_clients_list_filters_by_project_id_query_param():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: GET /api/v1/clients?project_id=... reads the query
     param via request.query_params and filters down to the matching
     client(s) only.**
@@ -199,7 +199,7 @@ def test_clients_list_filters_by_project_id_query_param():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -218,7 +218,7 @@ def test_clients_list_filters_by_project_id_query_param():
 
 def test_clients_detail_returns_404_for_unknown_client_id():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: GET /api/v1/clients/{unknown} surfaces
     ClientNotFoundError as HTTP 404.**
     """
@@ -226,7 +226,7 @@ def test_clients_detail_returns_404_for_unknown_client_id():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -241,7 +241,7 @@ def test_clients_detail_returns_404_for_unknown_client_id():
 
 def test_clients_revoke_flips_status_and_returns_revoked_envelope():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: POST /api/v1/clients/{id}/revoke with a valid reason
     returns 200 with status=revoked and persists the change so the
     detail endpoint reflects it.**
@@ -254,7 +254,7 @@ def test_clients_revoke_flips_status_and_returns_revoked_envelope():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -280,7 +280,7 @@ def test_clients_revoke_flips_status_and_returns_revoked_envelope():
 
 def test_clients_revoke_returns_400_for_unknown_reason():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: An unknown revocation reason surfaces SemanticError
     as HTTP 400.**
     """
@@ -292,7 +292,7 @@ def test_clients_revoke_returns_400_for_unknown_reason():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -308,7 +308,7 @@ def test_clients_revoke_returns_400_for_unknown_reason():
 
 def test_clients_returns_503_when_db_session_middleware_absent():
     """
-    **Feature: P24d clients_controller migration (M3)**
+    **Feature: P24d clientsblueprint migration (M3)**
     **Property: With DbSessionMiddleware not installed, a list call
     returns 503.**
     """
@@ -316,7 +316,7 @@ def test_clients_returns_503_when_db_session_middleware_absent():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=clients_controller.ClientsBlueprint,
+            blueprint_cls=clientsblueprint.ClientsBlueprint,
             install_db_session_middleware=False,
         )
         client = TestClient(app=app_callable)
@@ -329,12 +329,12 @@ def test_clients_returns_503_when_db_session_middleware_absent():
 
 
 # =====================================
-# enrollment_controller
+# enrollmentblueprint
 # =====================================
 
 def test_enrollment_issue_returns_201_with_secret():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: POST /api/v1/enrollment-tokens issues a token and
     returns the secret + token_id at status 201.**
     """
@@ -342,7 +342,7 @@ def test_enrollment_issue_returns_201_with_secret():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -368,14 +368,14 @@ def test_enrollment_issue_returns_201_with_secret():
 
 def test_enrollment_issue_returns_400_for_zero_ttl():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: ttl_seconds <= 0 surfaces as HTTP 400.**
     """
     engine, session = _setup()
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -395,7 +395,7 @@ def test_enrollment_issue_returns_400_for_zero_ttl():
 
 def test_enrollment_list_returns_empty_when_none_issued():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: GET /api/v1/enrollment-tokens returns an empty list
     when no tokens have been issued.**
     """
@@ -403,7 +403,7 @@ def test_enrollment_list_returns_empty_when_none_issued():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -418,7 +418,7 @@ def test_enrollment_list_returns_empty_when_none_issued():
 
 def test_enrollment_delete_unknown_token_returns_404():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: DELETE /api/v1/enrollment-tokens/{unknown} surfaces
     EnrollmentTokenNotFoundError as HTTP 404.**
     """
@@ -426,7 +426,7 @@ def test_enrollment_delete_unknown_token_returns_404():
     try:
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -441,7 +441,7 @@ def test_enrollment_delete_unknown_token_returns_404():
 
 def test_enrollment_redeem_round_trips_through_pipeline():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: After issuing a token, POST /api/v1/enrollment-tokens
     /redeem with the secret + payload returns 200 with a bearer
     token; ClientAlreadyExistsError surfaces as 409 on the second
@@ -464,7 +464,7 @@ def test_enrollment_redeem_round_trips_through_pipeline():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         client = TestClient(app=app_callable)
 
@@ -501,7 +501,7 @@ def test_enrollment_redeem_round_trips_through_pipeline():
 
 def test_enrollment_revoke_client_identity_round_trips():
     """
-    **Feature: P24d enrollment_controller migration (M3)**
+    **Feature: P24d enrollmentblueprint migration (M3)**
     **Property: POST /api/v1/enrollment-tokens/clients/{id}/revoke
     accepts a reason, calls the service, and returns the revocation
     summary. An unknown reason returns 400 (not 500).**
@@ -534,7 +534,7 @@ def test_enrollment_revoke_client_identity_round_trips():
 
         app_callable = _build_app_callable(
             engine=engine,
-            blueprint_cls=enrollment_controller.EnrollmentBlueprint,
+            blueprint_cls=enrollmentblueprint.EnrollmentBlueprint,
         )
         api_client = TestClient(app=app_callable)
 
