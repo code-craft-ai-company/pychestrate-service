@@ -362,8 +362,29 @@ The policy carries:
 ### Currently gated endpoints
 
 Every write endpoint on the migrated controllers is gated by
-`AccessPolicy(roles=("system-admin",))`. Reads (GET) and the
-authentication endpoints stay public.
+`AccessPolicy`. The exact role set varies:
+
+* **`system-admin` only** — platform-level operations such as
+  creating new projects, issuing enrollment tokens, identity-user
+  creation, RBAC binding writes, agent rollouts, retention
+  policies, notifications, audit / log resources.
+* **`system-admin` or `project-owner`** — project lifecycle
+  operations on an existing project: `archive`, `unarchive`,
+  `delete`, member adds/removes.
+* **`system-admin`, `project-owner`, or `project-editor`**
+  (`_PROJECT_WRITE`) — content-edits inside a project: `PATCH
+  /projects/{slug}`, every `pod-definitions` / `pod-templates` /
+  scoped-run-variable write, every `/tags/...` and `/variables/...`
+  write.
+
+Reads (GET) and the authentication endpoints stay public.
+
+> **Cross-project leakage caveat.** The role resolver currently
+> emits role NAMES without scope context. A user with `project-owner`
+> at one project's PROJECT scope therefore clears the policy for
+> every other project's URL too. Per-project scope enforcement —
+> resolving the URL's `project_id` path parameter against the
+> binding's `scope_id` — is the next refinement.
 
 Gated:
 
@@ -540,9 +561,10 @@ For structured logging, install your handler before
 The configuration surface intentionally stays small while the service
 matures. Open work includes:
 
-* Finer-grained `AccessPolicy` for project-scoped roles
-  (`project-owner` / `project-editor` / `project-viewer`). Currently
-  every gated write requires `system-admin`.
-* Auth admin endpoints (`auth/providers/{kind}/.../enable`,
-  `auth/mfa/challenge`, `auth/mfa/verify`) need their own gates once
-  the partial-session UX is finalized.
+* Per-project scope enforcement — the role resolver should emit
+  scoped names (e.g. `project-owner:<project_id>`) and the
+  middleware should match those against the URL's `project_id`
+  path parameter so a `project-owner` on project A cannot manage
+  project B.
+* `auth/mfa/challenge` and `auth/mfa/verify` need their own gates
+  once the partial-session UX is finalized.

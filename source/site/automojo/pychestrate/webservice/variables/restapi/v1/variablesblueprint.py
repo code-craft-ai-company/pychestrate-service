@@ -29,6 +29,9 @@ from automojo.webworks.security.accesspolicy import AccessPolicy
 
 
 _ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
+_PROJECT_WRITE = AccessPolicy(
+    roles=("system-admin", "project-owner", "project-editor"),
+)
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -237,7 +240,7 @@ class VariablesBlueprint(RestBlueprint):
             summary="Set variable",
             description="Set or replace a variable binding.",
         ),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def set_variable(request: Request) -> JSONResponse:
         """
@@ -326,7 +329,7 @@ class VariablesBlueprint(RestBlueprint):
             summary="Unset variable",
             description="Remove a variable binding.",
         ),
-        access_policy=_ADMIN_POLICY,
+        access_policy=_PROJECT_WRITE,
     )
     def unset_variable(request: Request) -> Response:
         """
