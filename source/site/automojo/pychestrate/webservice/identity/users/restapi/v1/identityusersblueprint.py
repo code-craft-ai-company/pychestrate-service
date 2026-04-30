@@ -30,6 +30,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.identity.users.exceptions import (
     UserAlreadyExistsError,
@@ -138,6 +142,7 @@ class IdentityUsersBlueprint(RestBlueprint):
             summary="Create identity user",
             description="Create a new canonical identity user record.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def create_user(request: Request) -> JSONResponse:
         """

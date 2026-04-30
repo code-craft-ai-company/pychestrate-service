@@ -36,6 +36,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.clients.enrollment.factories.identity_verifier import (
     EnrollmentPayload,
@@ -240,6 +244,7 @@ class EnrollmentBlueprint(RestBlueprint):
                 "pod_name) scope. The secret is returned exactly once."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def issue_token(request: Request) -> JSONResponse:
         """
@@ -323,6 +328,7 @@ class EnrollmentBlueprint(RestBlueprint):
             summary="Revoke an enrollment token",
             description="Admin revoke of an enrollment token by id.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def delete_token(request: Request) -> JSONResponse:
         """
@@ -360,7 +366,10 @@ class EnrollmentBlueprint(RestBlueprint):
             description=(
                 "Agent presents the enrollment secret plus payload and "
                 "receives a bearer token (and, optionally, a signed "
-                "client cert)."
+                "client cert). This endpoint is intentionally NOT "
+                "gated by AccessPolicy: the agent has no cookie yet "
+                "at redemption time and the secret itself is the "
+                "authentication factor."
             ),
         ),
     )
@@ -455,6 +464,7 @@ class EnrollmentBlueprint(RestBlueprint):
                 "on the enrollment data model."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def revoke_client_identity(request: Request) -> JSONResponse:
         """

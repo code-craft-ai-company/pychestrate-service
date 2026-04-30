@@ -32,6 +32,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.identity.flags import flag_service
 from automojo.pychestrate.webservice.identity.flags.exceptions import (
@@ -159,6 +163,7 @@ class FlagsBlueprint(RestBlueprint):
             summary="Create feature flag",
             description="Register a new feature flag.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def create_flag(request: Request) -> JSONResponse:
         """
