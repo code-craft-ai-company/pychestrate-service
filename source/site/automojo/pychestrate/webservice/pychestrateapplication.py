@@ -119,6 +119,9 @@ from automojo.pychestrate.webservice.tagging.restapi.v1 import (  # noqa: F401
 from automojo.pychestrate.webservice.variables.restapi.v1 import (  # noqa: F401
     variablesblueprint as _variablesblueprint,
 )
+from automojo.pychestrate.webservice.workers.restapi.v1 import (  # noqa: F401
+    workersblueprint as _workersblueprint,
+)
 
 
 class PychestrateApplication:
