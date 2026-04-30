@@ -119,6 +119,10 @@ from automojo.pychestrate.webservice.tagging.restapi.v1 import (  # noqa: F401
 from automojo.pychestrate.webservice.variables.restapi.v1 import (  # noqa: F401
     variablesblueprint as _variablesblueprint,
 )
+from automojo.pychestrate.webservice.workers.localworkerpool import (
+    LocalWorkerPool,
+    resolve_pool_config_from_env,
+)
 from automojo.pychestrate.webservice.workers.restapi.v1 import (  # noqa: F401
     workersblueprint as _workersblueprint,
 )
@@ -166,6 +170,8 @@ class PychestrateApplication:
             user_profile_lookup: Optional[UserProfileLookup] = None,
             register_extensions: bool = True,
             debug: bool = False,
+            local_worker_pool_size: Optional[int] = None,
+            local_worker_pool_autostart: bool = False,
         ):
         """
             Construct a :class:`PychestrateApplication`.
@@ -201,6 +207,32 @@ class PychestrateApplication:
         self._flow_runtime: FlowRuntime = FlowRuntime(
             session_factory=session_factory,
         )
+
+        # In-process local worker pool. Pool size resolves from the
+        # caller's explicit override first, otherwise from
+        # PYCHESTRATE_LOCAL_WORKER_POOL_SIZE in the environment, with
+        # a default of 1. The pool is constructed but only auto-
+        # started when the bootstrap path requests it (the WSGI
+        # entrypoint does; tests typically don't, since they want
+        # deterministic control over which worker handles which
+        # job).
+        env_config = resolve_pool_config_from_env()
+        if local_worker_pool_size is not None:
+            env_config["size"] = int(local_worker_pool_size)
+        self._local_worker_pool: LocalWorkerPool = LocalWorkerPool(
+            session_factory=session_factory,
+            size=env_config["size"],
+            base_name=env_config["base_name"],
+            poll_interval_seconds=env_config["poll_interval_seconds"],
+            heartbeat_interval_seconds=(
+                env_config["heartbeat_interval_seconds"]
+            ),
+            default_command_timeout_seconds=(
+                env_config["default_command_timeout_seconds"]
+            ),
+        )
+        if local_worker_pool_autostart is True:
+            self._local_worker_pool.start()
 
         self._router: Router = self._build_router()
         self._pipeline: MiddlewarePipeline = self._build_pipeline()
@@ -266,6 +298,21 @@ class PychestrateApplication:
         return rtnval
 
     @property
+    def local_worker_pool(self) -> LocalWorkerPool:
+        """
+            The in-process :class:`LocalWorkerPool`. The pool is
+            constructed during ``__init__`` but only auto-started
+            when ``local_worker_pool_autostart=True`` was passed
+            to the constructor. The WSGI entrypoint
+            (``wsgientry.py``) starts it; unit tests typically
+            don't.
+
+            :returns: The pool instance.
+        """
+        rtnval = self._local_worker_pool
+        return rtnval
+
+    @property
     def debug(self) -> bool:
         """
             Whether debug mode is enabled.
@@ -274,6 +321,18 @@ class PychestrateApplication:
         """
         rtnval = self._debug
         return rtnval
+
+    def shutdown(self, *, wait: bool = True) -> None:
+        """
+            Graceful shutdown: drain the local worker pool, then
+            the flow runtime. The pool is drained first so any
+            in-flight ``RemoteCommand`` step against a local
+            worker has a chance to complete and report a result
+            before the flow runtime stops accepting new work.
+        """
+        self._local_worker_pool.shutdown(wait=wait)
+        self._flow_runtime.shutdown(wait=wait)
+        return
 
     def __call__(
             self,
