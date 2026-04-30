@@ -402,6 +402,8 @@ Gated:
 | PUT    | `/api/v1/variables/{scope}/{scope_id}/{name}`      |
 | DELETE | `/api/v1/variables/{scope}/{scope_id}/{name}`      |
 | POST   | `/api/v1/flows`                                    |
+| POST   | `/api/v1/auth/providers/{kind}/{name}/enable`      |
+| POST   | `/api/v1/auth/providers/{kind}/{name}/disable`     |
 
 Intentionally ungated:
 
@@ -410,8 +412,7 @@ Intentionally ungated:
 | POST   | `/api/v1/auth/login`                  | The caller has no cookie yet; credentials are the auth factor.   |
 | POST   | `/api/v1/auth/logout`                 | Idempotent; tolerates anonymous callers.                         |
 | GET    | `/api/v1/auth/providers`              | Needed by the login picker before any session exists.            |
-| POST   | `/api/v1/auth/providers/{kind}/.../enable` | TODO: gate on a future operator role.                       |
-| POST   | `/api/v1/auth/mfa/challenge`          | TODO: scoped to the partial-session principal once MFA flow lands.|
+| POST   | `/api/v1/auth/mfa/challenge`          | Scoped to the partial-session principal; the partial-session UX is the gate.|
 | POST   | `/api/v1/auth/mfa/verify`             | Same.                                                            |
 | POST   | `/api/v1/enrollment-tokens/redeem`    | Agents have no cookie at redemption; the secret is the factor.   |
 
