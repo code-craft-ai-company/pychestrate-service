@@ -21,7 +21,7 @@ This module assembles the runnable webworks application:
 Callers supply a ``session_factory`` (a zero-arg callable returning a
 fresh ``sqlalchemy.orm.Session``). The ``role_resolver`` and
 ``user_profile_lookup`` arguments default to the production-grade
-helpers that ship with :mod:`webworks_bridge`; tests typically pass
+helpers that ship with :mod:`pychestratesessionmiddleware`; tests typically pass
 deterministic stubs.
 """
 
@@ -63,7 +63,7 @@ from automojo.pychestrate.webservice.identity.flags.restapi.v1 import (  # noqa:
 from automojo.pychestrate.webservice.identity.users.restapi.v1 import (  # noqa: F401
     identityusersblueprint as _identityusersblueprint,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     DbSessionMiddleware,
     SessionFactory,
 )
@@ -91,7 +91,7 @@ from automojo.pychestrate.webservice.secrets.restapi.v1 import (  # noqa: F401
 from automojo.pychestrate.webservice.security.auth.restapi.v1 import (  # noqa: F401
     authblueprint as _authblueprint,
 )
-from automojo.pychestrate.webservice.security.auth.webworks_bridge import (
+from automojo.pychestrate.webservice.security.auth.pychestratesessionmiddleware import (
     PychestrateSessionMiddleware,
     RoleResolver,
     UserProfileLookup,

@@ -53,7 +53,7 @@ from automojo.pychestrate.webservice.agents.upgrade_service import (
     draft_rollout,
     start_rollout,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
 )
 

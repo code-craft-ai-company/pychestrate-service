@@ -1,5 +1,5 @@
 """
-.. module:: pychestrate.webservice.middleware_webworks
+.. module:: pychestrate.webservice.dbsessionmiddleware
     :platform: Darwin, Linux, Unix, Windows
     :synopsis: pychestrate-specific webworks middleware components.
 

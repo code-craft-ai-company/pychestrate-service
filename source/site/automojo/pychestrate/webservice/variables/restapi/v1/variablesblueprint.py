@@ -26,7 +26,7 @@ from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse, Response
 
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
 )
 from automojo.pychestrate.webservice.variables import (

@@ -27,7 +27,7 @@ Migration pattern (apply to the remaining REST controllers):
   :meth:`RestBlueprint.register` to filter descriptors when pushing
   them to the Router.
 * ``flask.g.db_session``  →  ``request.db_session`` populated by
-  :class:`automojo.pychestrate.webservice.middleware_webworks.DbSessionMiddleware`.
+  :class:`automojo.pychestrate.webservice.dbsessionmiddleware.DbSessionMiddleware`.
 * ``flask.request.get_json()``  →  ``request.json()`` (sync; webworks
   pre-buffers the body).
 * Path params: ``flask.request.view_args["kind"]`` →

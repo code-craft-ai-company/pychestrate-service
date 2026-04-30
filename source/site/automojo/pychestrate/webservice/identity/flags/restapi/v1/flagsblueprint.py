@@ -41,7 +41,7 @@ from automojo.pychestrate.webservice.identity.flags.models import (
     FeatureFlag,
     FlagKind,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
 )
 

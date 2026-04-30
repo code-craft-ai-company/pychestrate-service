@@ -31,7 +31,7 @@ from automojo.webworks.routing.router import Router
 
 from automojo.pychestrate.core.defaults import new_uuid
 
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     DbSessionMiddleware,
 )
 from automojo.pychestrate.webservice.security.auth import session_service

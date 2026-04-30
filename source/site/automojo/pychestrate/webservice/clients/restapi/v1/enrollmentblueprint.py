@@ -62,7 +62,7 @@ from automojo.pychestrate.webservice.clients.exceptions import (
     EnrollmentTokenInvalidError,
     EnrollmentTokenNotFoundError,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
 )
 

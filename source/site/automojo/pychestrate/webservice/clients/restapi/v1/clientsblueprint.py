@@ -55,7 +55,7 @@ from automojo.pychestrate.webservice.clients.registry.service import (
     list_clients,
     update_attributes,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
 )
 

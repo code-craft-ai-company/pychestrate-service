@@ -43,7 +43,7 @@ from automojo.pychestrate.webservice.clients.restapi.v1 import (
     clientsblueprint,
     enrollmentblueprint,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     DbSessionMiddleware,
 )
 from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes

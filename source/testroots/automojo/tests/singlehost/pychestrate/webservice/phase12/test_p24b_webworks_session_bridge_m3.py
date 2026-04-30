@@ -39,7 +39,7 @@ from automojo.pychestrate.webservice.security.auth.models import (
 from automojo.pychestrate.webservice.security.auth.session_service import (
     RequestFingerprint,
 )
-from automojo.pychestrate.webservice.security.auth.webworks_bridge import (
+from automojo.pychestrate.webservice.security.auth.pychestratesessionmiddleware import (
     PYCHESTRATE_SESSION_SCHEME,
     PychestrateSessionMiddleware,
     UserProfile,

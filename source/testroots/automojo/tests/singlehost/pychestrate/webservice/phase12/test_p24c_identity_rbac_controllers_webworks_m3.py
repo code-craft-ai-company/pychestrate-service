@@ -36,7 +36,7 @@ from automojo.pychestrate.webservice.identity.users import user_service
 from automojo.pychestrate.webservice.identity.users.restapi.v1 import (
     identityusersblueprint,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from automojo.pychestrate.webservice.dbsessionmiddleware import (
     DbSessionMiddleware,
 )
 from automojo.pychestrate.core.defaults import new_uuid
