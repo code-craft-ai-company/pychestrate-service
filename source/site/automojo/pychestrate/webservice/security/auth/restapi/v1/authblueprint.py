@@ -54,6 +54,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.security.auth import (
     local_flow,
@@ -407,6 +411,7 @@ class AuthBlueprint(RestBlueprint):
                 "advertising it."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def enable_provider(request: Request) -> JSONResponse:
         """
@@ -449,6 +454,7 @@ class AuthBlueprint(RestBlueprint):
                 "wired."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def disable_provider(request: Request) -> JSONResponse:
         """

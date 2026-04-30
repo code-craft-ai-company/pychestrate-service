@@ -24,8 +24,8 @@ an integer-coerced segment.
 | POST   | `/api/v1/auth/login`                                          | —    | Open a session via local credentials. Two-stage MFA when enrolled.         |
 | POST   | `/api/v1/auth/logout`                                         | —    | Close a session. Idempotent; tolerates anonymous callers.                  |
 | GET    | `/api/v1/auth/providers`                                      | —    | List enabled credential modes (login picker).                              |
-| POST   | `/api/v1/auth/providers/{kind}/{provider_name}/enable`        | —    | Hot-flip a provider's `enabled` flag to True.                              |
-| POST   | `/api/v1/auth/providers/{kind}/{provider_name}/disable`       | —    | Hot-flip a provider's `enabled` flag to False.                             |
+| POST   | `/api/v1/auth/providers/{kind}/{provider_name}/enable`        | system-admin | Hot-flip a provider's `enabled` flag to True.                       |
+| POST   | `/api/v1/auth/providers/{kind}/{provider_name}/disable`       | system-admin | Hot-flip a provider's `enabled` flag to False.                      |
 | POST   | `/api/v1/auth/mfa/challenge`                                  | —    | Issue a fresh MFA challenge for `(user_id, method_name)`.                  |
 | POST   | `/api/v1/auth/mfa/verify`                                     | —    | Verify a prior MFA challenge.                                              |
 
