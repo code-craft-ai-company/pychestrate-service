@@ -24,7 +24,7 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Callable
+from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -33,6 +33,43 @@ from automojo.webworks.routing.response import Response
 
 
 SessionFactory = Callable[[], DbSession]
+
+
+def get_request_db_session(*, request: Request) -> Optional[DbSession]:
+    """
+        Return the request-scoped SQLAlchemy session attached by
+        :class:`DbSessionMiddleware`, or ``None`` when the middleware
+        was not installed in the pipeline.
+
+        :param request: The incoming :class:`Request`.
+
+        :returns: The request-scoped ``DbSession``, or ``None``.
+    """
+    rtnval = getattr(request, "db_session", None)
+    return rtnval
+
+
+def get_request_actor_user_id(*, request: Request) -> Optional[str]:
+    """
+        Return the acting principal's user id derived from the
+        :class:`AuthenticationContext` attached by
+        :class:`PychestrateSessionMiddleware`, or ``None`` when the
+        request is anonymous.
+
+        Replaces the legacy Flask ``g.actor_user_id`` lookup.
+
+        :param request: The incoming :class:`Request`.
+
+        :returns: The acting user id string, or ``None``.
+    """
+    auth_context = getattr(request, "auth", None)
+    if auth_context is None:
+        return None
+    principal = getattr(auth_context, "principal", None)
+    if principal is None:
+        return None
+    rtnval = principal.identifier
+    return rtnval
 
 
 class DbSessionMiddleware:

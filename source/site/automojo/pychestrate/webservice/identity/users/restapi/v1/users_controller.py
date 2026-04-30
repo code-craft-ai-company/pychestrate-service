@@ -5,77 +5,49 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-Implements the Phase-1 M1 endpoints:
+Migrated from Flask + flask-restx to automojo-webworks. Pattern follows
+the worked example documented in
+:mod:`automojo.pychestrate.webservice.security.auth.restapi.v1.auth_controller`.
+
+Endpoints (unchanged URLs):
 
 * ``POST /api/v1/identity/users`` — create user.
 * ``GET  /api/v1/identity/users/{user_id}`` — fetch user.
-
-Downstream milestones extend this controller with list / patch /
-deactivate / reactivate / group-member endpoints. The namespace is
-registered against the v1 API via :func:`publish_namespaces`.
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
 
-from flask import request
-from flask_restx import Namespace, Resource, fields
+import os
+
+from typing import Any, Dict
+
+from automojo.webworks.endpoints.doc import Doc
+from automojo.webworks.endpoints.restblueprint import RestBlueprint
+from automojo.webworks.routing.exceptions import HTTPException
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import JSONResponse
 
 from automojo.pychestrate.webservice.identity.users.exceptions import (
     UserAlreadyExistsError,
     UserNotFoundError,
 )
 from automojo.pychestrate.webservice.identity.users import user_service
-
-
-IDENTITY_USERS_NAMESPACE_PATH = "/identity/users"
-
-
-users_ns = Namespace(
-    "Identity Users v1",
-    description="Canonical identity user records (1-user-management).",
+from automojo.pychestrate.webservice.middleware_webworks import (
+    get_request_actor_user_id,
 )
 
 
-user_create_model = users_ns.model(
-    "IdentityUserCreate",
-    {
-        "login_name": fields.String(required=True, description="Unique login name"),
-        "primary_email": fields.String(required=True, description="Primary email address"),
-        "display_name": fields.String(required=True, description="Human-facing name"),
-        "timezone": fields.String(required=True, description="IANA timezone name"),
-        "provisioning_source": fields.String(
-            required=False, default="local", description="Provisioning source name"
-        ),
-        "external_id": fields.String(
-            required=False, description="External id when provisioned from a directory"
-        ),
-    },
-)
-
-user_response_model = users_ns.model(
-    "IdentityUserResponse",
-    {
-        "user_id": fields.String(description="Server-generated UUID"),
-        "login_name": fields.String(description="Unique login name"),
-        "primary_email": fields.String(description="Primary email address"),
-        "display_name": fields.String(description="Human-facing name"),
-        "status": fields.String(description="ACTIVE | DEACTIVATED | PENDING"),
-        "provisioning_source": fields.String(description="Provisioning source"),
-        "external_id": fields.String(description="External id"),
-        "timezone": fields.String(description="IANA timezone name"),
-        "created_at": fields.String(description="Create timestamp (ISO-8601)"),
-        "updated_at": fields.String(description="Update timestamp (ISO-8601)"),
-    },
-)
+IDENTITY_USERS_BASE_PATH = "/api/v1/identity/users"
 
 
-def _model_to_dict(user) -> dict:
+def _model_to_dict(user) -> Dict[str, Any]:
     """
-        Render an :class:`IdentityUser` instance as the REST response dict.
+        Render an :class:`IdentityUser` instance as the REST response
+        dict.
 
         :param user: The persistent model instance.
 
@@ -90,30 +62,94 @@ def _model_to_dict(user) -> dict:
         "provisioning_source": user.provisioning_source,
         "external_id": user.external_id,
         "timezone": user.timezone,
-        "created_at": user.created_at.isoformat() if user.created_at is not None else None,
-        "updated_at": user.updated_at.isoformat() if user.updated_at is not None else None,
+        "created_at": (
+            user.created_at.isoformat() if user.created_at is not None else None
+        ),
+        "updated_at": (
+            user.updated_at.isoformat() if user.updated_at is not None else None
+        ),
     }
     return rtnval
 
 
-@users_ns.route("")
-class IdentityUsersList(Resource):
+def _require_db_session(*, request: Request) -> Any:
     """
-        Resource that exposes POST ``/api/v1/identity/users`` for creation.
+        Pull the request-scoped ``db_session`` set by
+        :class:`DbSessionMiddleware`, or 503.
+
+        :param request: The incoming HTTP request.
+
+        :returns: The SQLAlchemy session attached by the middleware.
+
+        :raises HTTPException: 503 when the middleware did not run.
+    """
+    db_session = getattr(request, "db_session", None)
+    if db_session is None:
+        err_lines = [
+            "Request-scoped db_session not configured.",
+            "DbSessionMiddleware must be installed in the pipeline.",
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise HTTPException(status_code=503, detail=err_msg)
+    return db_session
+
+
+def _read_json_body(*, request: Request) -> Dict[str, Any]:
+    """
+        Parse the request body as a JSON object.
+
+        :param request: The incoming HTTP request.
+
+        :returns: The decoded JSON object as a dict.
+
+        :raises HTTPException: 400 when the body is missing or not an
+                               object.
+    """
+    raw_body = request.body
+    if raw_body is None:
+        raise HTTPException(status_code=400, detail="request body required")
+    if len(raw_body) == 0:
+        raise HTTPException(status_code=400, detail="request body required")
+    try:
+        decoded = request.json()
+    except Exception as exc:
+        err_msg = "request body must be valid JSON"
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(
+            status_code=400, detail="request body must be a JSON object",
+        )
+    rtnval = decoded
+    return rtnval
+
+
+class IdentityUsersBlueprint(RestBlueprint):
+    """
+        Blueprint grouping the v1 ``/api/v1/identity/users`` endpoints.
     """
 
-    @users_ns.expect(user_create_model, validate=True)
-    @users_ns.marshal_with(user_response_model, code=201)
-    def post(self):
-        """
-            Create a new identity user. The session is expected to be attached
-            to the Flask request via the ``db_session`` extension; controllers
-            outside of this skeleton are responsible for wiring it.
-        """
-        payload = request.get_json(force=True, silent=False)
+    base_path = IDENTITY_USERS_BASE_PATH
+    tags = ["identity", "users", "v1"]
 
-        db_session = _get_request_db_session()
-        actor_user_id = _get_request_actor_user_id()
+    @RestBlueprint.attach_at(
+        path="/api/v1/identity/users",
+        methods=["POST"],
+        doc=Doc(
+            summary="Create identity user",
+            description="Create a new canonical identity user record.",
+        ),
+    )
+    def create_user(request: Request) -> JSONResponse:
+        """
+            Create a new identity user.
+
+            :param request: The incoming HTTP request.
+
+            :returns: 201 with the new user payload.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
 
         try:
             user = user_service.create_user(
@@ -122,76 +158,49 @@ class IdentityUsersList(Resource):
                 primary_email=payload.get("primary_email", ""),
                 display_name=payload.get("display_name", ""),
                 timezone=payload.get("timezone", "UTC"),
-                provisioning_source=payload.get("provisioning_source", "local"),
+                provisioning_source=payload.get(
+                    "provisioning_source", "local",
+                ),
                 external_id=payload.get("external_id", None),
                 actor_user_id=actor_user_id,
             )
-        except UserAlreadyExistsError as xcpt:
-            users_ns.abort(409, str(xcpt))
+        except UserAlreadyExistsError as exc:
+            raise HTTPException(
+                status_code=409, detail=str(exc),
+            ) from exc
 
-        rtnval = _model_to_dict(user)
-        return rtnval, 201
-
-
-@users_ns.route("/<string:user_id>")
-@users_ns.param("user_id", "The identity user id")
-class IdentityUserDetail(Resource):
-    """
-        Resource that exposes GET ``/api/v1/identity/users/{user_id}``.
-    """
-
-    @users_ns.marshal_with(user_response_model)
-    def get(self, user_id: str):
-        """
-            Fetch an identity user by id.
-
-            :param user_id: The target user's id.
-
-            :returns: The user response payload.
-        """
-        db_session = _get_request_db_session()
-        try:
-            user = user_service.read_user(db_session=db_session, user_id=user_id)
-        except UserNotFoundError as xcpt:
-            users_ns.abort(404, str(xcpt))
-
-        rtnval = _model_to_dict(user)
+        body = _model_to_dict(user)
+        rtnval = JSONResponse(content=body, status_code=201)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/identity/users/{user_id}",
+        methods=["GET"],
+        doc=Doc(
+            summary="Read identity user",
+            description="Fetch a canonical identity user by id.",
+        ),
+    )
+    def read_user(request: Request) -> JSONResponse:
+        """
+            Fetch a single identity user.
 
-def _get_request_db_session():
-    """
-        Resolve the request-scoped SQLAlchemy session. The host app sets the
-        attribute on :data:`flask.g`; when absent the controller raises 503
-        so the misconfiguration surfaces loudly during bring-up.
+            :param request: The incoming HTTP request.
 
-        :returns: The SQLAlchemy Session.
-    """
-    from flask import g
-    db_session = getattr(g, "db_session", None)
-    if db_session is None:
-        users_ns.abort(503, "Request-scoped db_session not configured")
-    return db_session
+            :returns: 200 with the user payload.
+        """
+        db_session = _require_db_session(request=request)
+        user_id = request.path_params.get("user_id", "")
 
+        try:
+            user = user_service.read_user(
+                db_session=db_session, user_id=user_id,
+            )
+        except UserNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
 
-def _get_request_actor_user_id():
-    """
-        Resolve the acting principal's user id from the request context.
-
-        :returns: The acting user id string, or None when anonymous.
-    """
-    from flask import g
-    actor = getattr(g, "actor_user_id", None)
-    return actor
-
-
-def publish_namespaces(version_prefix: str):
-    """
-        Return namespace registrations for the v1 API wiring.
-
-        :param version_prefix: Version prefix string (``/1``).
-
-        :returns: List of (namespace, path) tuples.
-    """
-    rtnval = [(users_ns, version_prefix + IDENTITY_USERS_NAMESPACE_PATH)]
-    return rtnval
+        body = _model_to_dict(user)
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval

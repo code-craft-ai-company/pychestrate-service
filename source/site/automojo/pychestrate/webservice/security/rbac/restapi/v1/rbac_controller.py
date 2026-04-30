@@ -5,129 +5,80 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-M2 exposes the full RBAC surface:
+Migrated from Flask + flask-restx to automojo-webworks. Pattern follows
+the worked example documented in
+:mod:`automojo.pychestrate.webservice.security.auth.restapi.v1.auth_controller`.
 
-* ``GET  /api/v1/rbac/roles`` — list registered role presets.
-* ``GET  /api/v1/rbac/permissions`` — list the permission key catalog.
-* ``POST /api/v1/rbac/bindings`` — assign a role to a principal at a scope.
-* ``GET  /api/v1/rbac/bindings`` — list bindings with optional filters.
+Endpoints (unchanged URLs):
+
+* ``GET    /api/v1/rbac/permissions`` — list the permission key catalog.
+* ``GET    /api/v1/rbac/roles`` — list registered role presets.
+* ``POST   /api/v1/rbac/bindings`` — assign a role to a principal at a scope.
+* ``GET    /api/v1/rbac/bindings`` — list bindings with optional filters.
 * ``DELETE /api/v1/rbac/bindings/{binding_id}`` — revoke a binding.
-* ``POST /api/v1/rbac/check`` — evaluate a single permission for a principal
-  (used by out-of-process integrations such as ``8-cli``).
+* ``POST   /api/v1/rbac/check`` — evaluate a single permission for a principal.
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
 
-from datetime import datetime, timezone
+import os
 
-from flask import g, request
-from flask_restx import Namespace, Resource, fields
+from datetime import datetime, timezone
+from typing import Any, Dict
 
 from automojo.errors.exceptions import SemanticError
 
-from automojo.pychestrate.webservice.security.auth.models import AuthProviderKind
-from automojo.pychestrate.webservice.security.auth.session_service import AuthPrincipal
+from automojo.webworks.endpoints.doc import Doc
+from automojo.webworks.endpoints.restblueprint import RestBlueprint
+from automojo.webworks.routing.exceptions import HTTPException
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import JSONResponse
+
+from automojo.pychestrate.webservice.middleware_webworks import (
+    get_request_actor_user_id,
+)
+from automojo.pychestrate.webservice.security.auth.models import (
+    AuthProviderKind,
+)
+from automojo.pychestrate.webservice.security.auth.session_service import (
+    AuthPrincipal,
+)
 from automojo.pychestrate.webservice.security.rbac import (
     binding_service,
     rbac_evaluator,
 )
-from automojo.pychestrate.webservice.security.rbac.binding_service import BindingView
-from automojo.pychestrate.webservice.security.rbac.catalog import load_catalog_from_registry
+from automojo.pychestrate.webservice.security.rbac.binding_service import (
+    BindingView,
+)
+from automojo.pychestrate.webservice.security.rbac.catalog import (
+    load_catalog_from_registry,
+)
 from automojo.pychestrate.webservice.security.rbac.exceptions import (
     BindingNotFoundError,
     InvalidBindingScopeError,
     RoleNotFoundError,
 )
-from automojo.pychestrate.webservice.security.rbac.models import BindingScope, PrincipalKind
-
-
-RBAC_NAMESPACE_PATH = "/rbac"
-
-
-rbac_ns = Namespace(
-    "RBAC v1",
-    description="Role, permission, and binding APIs (1-rbac).",
+from automojo.pychestrate.webservice.security.rbac.models import (
+    BindingScope,
+    PrincipalKind,
 )
 
 
-permission_model = rbac_ns.model(
-    "RbacPermission",
-    {
-        "permission_key": fields.String(description="Canonical key"),
-        "description": fields.String(description="Free-form description"),
-        "namespace": fields.String(description="Namespace (system|project)"),
-    },
-)
+RBAC_BASE_PATH = "/api/v1/rbac"
 
 
-role_model = rbac_ns.model(
-    "RbacRole",
-    {
-        "role_name": fields.String(description="Unique role name"),
-        "permission_count": fields.Integer(description="Number of permission grants"),
-    },
-)
+def _binding_to_dict(view: BindingView) -> Dict[str, Any]:
+    """
+        Render a :class:`BindingView` as the REST response dict.
 
+        :param view: The view object.
 
-binding_create_model = rbac_ns.model(
-    "RbacBindingCreate",
-    {
-        "role_name": fields.String(required=True, description="Role preset name"),
-        "principal_kind": fields.String(required=True, description="USER | GROUP"),
-        "principal_id": fields.String(required=True, description="User or group UUID"),
-        "scope_kind": fields.String(required=True, description="SYSTEM | ORGANIZATION | PROJECT"),
-        "scope_id": fields.String(required=False, description="Project UUID for PROJECT scope"),
-        "inherits_into_project": fields.Boolean(
-            required=False, default=False,
-            description="Seed project-scope bindings on project creation",
-        ),
-    },
-)
-
-
-binding_view_model = rbac_ns.model(
-    "RbacBindingView",
-    {
-        "binding_id": fields.String(description="Binding UUID"),
-        "role_name": fields.String(description="Role preset name"),
-        "principal_kind": fields.String(description="USER | GROUP"),
-        "principal_id": fields.String(description="User or group UUID"),
-        "scope_kind": fields.String(description="SYSTEM | ORGANIZATION | PROJECT"),
-        "scope_id": fields.String(description="Project UUID for PROJECT scope, else null"),
-        "inherits_into_project": fields.Boolean(description="Inheritance flag"),
-        "created_at": fields.String(description="ISO-8601 create timestamp"),
-        "created_by": fields.String(description="Actor UUID (nullable)"),
-    },
-)
-
-
-check_request_model = rbac_ns.model(
-    "RbacCheck",
-    {
-        "principal_id": fields.String(required=True, description="User UUID to evaluate"),
-        "permission_key": fields.String(
-            required=True,
-            description="Canonical key (system:<action> or project:<id>:<action>)",
-        ),
-    },
-)
-
-
-check_response_model = rbac_ns.model(
-    "RbacCheckResult",
-    {
-        "allowed": fields.Boolean(description="Allow/deny outcome"),
-        "reason": fields.String(description="Short decision reason string"),
-        "permission_key": fields.String(description="Key that was evaluated"),
-    },
-)
-
-
-def _binding_to_dict(view: BindingView) -> dict:
+        :returns: A plain dict suitable for JSON serialization.
+    """
     rtnval = {
         "binding_id": view.binding_id,
         "role_name": view.role_name,
@@ -142,87 +93,194 @@ def _binding_to_dict(view: BindingView) -> dict:
     return rtnval
 
 
-def _parse_principal_kind(raw: str) -> PrincipalKind:
+def _parse_principal_kind(*, raw: str) -> PrincipalKind:
+    """
+        Coerce a string to a :class:`PrincipalKind` member.
+
+        :param raw: Raw string value.
+
+        :returns: The matching :class:`PrincipalKind`.
+
+        :raises SemanticError: When ``raw`` is unknown.
+    """
     try:
         rtnval = PrincipalKind(raw)
-    except ValueError:
-        raise SemanticError("Unknown principal_kind: {}".format(raw))
+    except ValueError as exc:
+        err_msg = "Unknown principal_kind: {}".format(raw)
+        raise SemanticError(err_msg) from exc
     return rtnval
 
 
-def _parse_scope_kind(raw: str) -> BindingScope:
+def _parse_scope_kind(*, raw: str) -> BindingScope:
+    """
+        Coerce a string to a :class:`BindingScope` member.
+
+        :param raw: Raw string value.
+
+        :returns: The matching :class:`BindingScope`.
+
+        :raises SemanticError: When ``raw`` is unknown.
+    """
     try:
         rtnval = BindingScope(raw)
-    except ValueError:
-        raise SemanticError("Unknown scope_kind: {}".format(raw))
+    except ValueError as exc:
+        err_msg = "Unknown scope_kind: {}".format(raw)
+        raise SemanticError(err_msg) from exc
     return rtnval
 
 
-def _get_db_session():
-    db_session = getattr(g, "db_session", None)
+def _require_db_session(*, request: Request) -> Any:
+    """
+        Pull the request-scoped ``db_session`` set by
+        :class:`DbSessionMiddleware`, or 503.
+
+        :param request: The incoming HTTP request.
+
+        :returns: The SQLAlchemy session attached by the middleware.
+
+        :raises HTTPException: 503 when the middleware did not run.
+    """
+    db_session = getattr(request, "db_session", None)
     if db_session is None:
-        rbac_ns.abort(503, "Request-scoped db_session not configured")
+        err_lines = [
+            "Request-scoped db_session not configured.",
+            "DbSessionMiddleware must be installed in the pipeline.",
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise HTTPException(status_code=503, detail=err_msg)
     return db_session
 
 
-@rbac_ns.route("/permissions")
-class RbacPermissionsList(Resource):
+def _read_json_body(*, request: Request) -> Dict[str, Any]:
     """
-        GET ``/api/v1/rbac/permissions`` — list the permission key catalog.
+        Parse the request body as a JSON object.
+
+        :param request: The incoming HTTP request.
+
+        :returns: The decoded JSON object as a dict.
+
+        :raises HTTPException: 400 when the body is missing or not an
+                               object.
+    """
+    raw_body = request.body
+    if raw_body is None:
+        raise HTTPException(status_code=400, detail="request body required")
+    if len(raw_body) == 0:
+        raise HTTPException(status_code=400, detail="request body required")
+    try:
+        decoded = request.json()
+    except Exception as exc:
+        err_msg = "request body must be valid JSON"
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(
+            status_code=400, detail="request body must be a JSON object",
+        )
+    rtnval = decoded
+    return rtnval
+
+
+class RbacBlueprint(RestBlueprint):
+    """
+        Blueprint grouping the v1 ``/api/v1/rbac`` endpoints.
     """
 
-    @rbac_ns.marshal_list_with(permission_model)
-    def get(self):
+    base_path = RBAC_BASE_PATH
+    tags = ["rbac", "v1"]
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/permissions",
+        methods=["GET"],
+        doc=Doc(
+            summary="List permission catalog",
+            description="Return the full catalog of registered permission keys.",
+        ),
+    )
+    def list_permissions(request: Request) -> JSONResponse:
+        """
+            List the permission key catalog.
+
+            :param request: The incoming HTTP request.
+
+            :returns: 200 with a list of permission entries.
+        """
         catalog = load_catalog_from_registry()
-        rtnval = []
+        permission_entries = []
         for key in sorted(catalog.permissions.keys()):
             descriptor = catalog.permissions[key]
-            rtnval.append({
+            entry = {
                 "permission_key": descriptor.permission_key,
                 "description": descriptor.description,
                 "namespace": descriptor.namespace,
-            })
+            }
+            permission_entries.append(entry)
+        rtnval = JSONResponse(
+            content=permission_entries, status_code=200,
+        )
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/roles",
+        methods=["GET"],
+        doc=Doc(
+            summary="List role presets",
+            description="Return all registered role presets and their grant counts.",
+        ),
+    )
+    def list_roles(request: Request) -> JSONResponse:
+        """
+            List registered role presets.
 
-@rbac_ns.route("/roles")
-class RbacRolesList(Resource):
-    """
-        GET ``/api/v1/rbac/roles`` — list all registered roles.
-    """
+            :param request: The incoming HTTP request.
 
-    @rbac_ns.marshal_list_with(role_model)
-    def get(self):
+            :returns: 200 with a list of role entries.
+        """
         catalog = load_catalog_from_registry()
-        rtnval = []
+        role_entries = []
         for role_name in sorted(catalog.roles.keys()):
             grants = catalog.roles[role_name]
-            rtnval.append({
+            entry = {
                 "role_name": role_name,
                 "permission_count": len(grants),
-            })
+            }
+            role_entries.append(entry)
+        rtnval = JSONResponse(content=role_entries, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/bindings",
+        methods=["POST"],
+        doc=Doc(
+            summary="Assign a role binding",
+            description=(
+                "Bind a role preset to a principal at a SYSTEM, "
+                "ORGANIZATION, or PROJECT scope."
+            ),
+        ),
+    )
+    def create_binding(request: Request) -> JSONResponse:
+        """
+            Assign a role binding.
 
-@rbac_ns.route("/bindings")
-class RbacBindingsCollection(Resource):
-    """
-        POST ``/api/v1/rbac/bindings`` — create a binding.
-        GET  ``/api/v1/rbac/bindings`` — list bindings with optional filters.
-    """
+            :param request: The incoming HTTP request.
 
-    @rbac_ns.expect(binding_create_model, validate=True)
-    @rbac_ns.marshal_with(binding_view_model, code=201)
-    def post(self):
-        payload = request.get_json(force=True, silent=False)
-        db_session = _get_db_session()
-        actor = getattr(g, "actor_user_id", None)
+            :returns: 201 with the created binding view.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
 
         try:
-            principal_kind = _parse_principal_kind(payload.get("principal_kind", ""))
-            scope_kind = _parse_scope_kind(payload.get("scope_kind", ""))
-        except SemanticError as xcpt:
-            rbac_ns.abort(400, str(xcpt))
+            principal_kind = _parse_principal_kind(
+                raw=payload.get("principal_kind", ""),
+            )
+            scope_kind = _parse_scope_kind(
+                raw=payload.get("scope_kind", ""),
+            )
+        except SemanticError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
 
         try:
             binding = binding_service.assign_role(
@@ -232,15 +290,21 @@ class RbacBindingsCollection(Resource):
                 principal_id=payload.get("principal_id", ""),
                 scope_kind=scope_kind,
                 scope_id=payload.get("scope_id", None),
-                inherits_into_project=bool(payload.get("inherits_into_project", False)),
-                actor_user_id=actor,
+                inherits_into_project=bool(
+                    payload.get("inherits_into_project", False),
+                ),
+                actor_user_id=actor_user_id,
             )
-        except RoleNotFoundError as xcpt:
-            rbac_ns.abort(404, str(xcpt))
-        except InvalidBindingScopeError as xcpt:
-            rbac_ns.abort(400, str(xcpt))
+        except RoleNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        except InvalidBindingScopeError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
 
-        # Re-read through the view helper so the created_at string is normalised.
+        # Re-read through the view helper so created_at is normalised.
         views = binding_service.list_bindings(
             db_session=db_session,
             principal_kind=None,
@@ -250,34 +314,59 @@ class RbacBindingsCollection(Resource):
         )
         for view in views:
             if view.binding_id == str(binding.binding_id):
-                rtnval = (_binding_to_dict(view), 201)
+                body = _binding_to_dict(view)
+                rtnval = JSONResponse(content=body, status_code=201)
                 return rtnval
 
-        rbac_ns.abort(500, "Binding created but view lookup returned no row")
-        return
+        err_msg = "Binding created but view lookup returned no row"
+        raise HTTPException(status_code=500, detail=err_msg)
 
-    @rbac_ns.marshal_list_with(binding_view_model)
-    def get(self):
-        db_session = _get_db_session()
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/bindings",
+        methods=["GET"],
+        doc=Doc(
+            summary="List role bindings",
+            description="List role bindings with optional filters.",
+        ),
+    )
+    def list_bindings(request: Request) -> JSONResponse:
+        """
+            List role bindings (optional filters via query params).
+
+            :param request: The incoming HTTP request.
+
+            :returns: 200 with a list of binding views.
+        """
+        db_session = _require_db_session(request=request)
 
         principal_kind = None
-        principal_id = request.args.get("principal_id", None)
+        principal_id = request.query_params.get("principal_id", None)
         scope_kind = None
-        scope_id = request.args.get("scope_id", None)
+        scope_id = request.query_params.get("scope_id", None)
 
-        principal_kind_raw = request.args.get("principal_kind", None)
-        if principal_kind_raw is not None and len(principal_kind_raw) > 0:
-            try:
-                principal_kind = _parse_principal_kind(principal_kind_raw)
-            except SemanticError as xcpt:
-                rbac_ns.abort(400, str(xcpt))
+        principal_kind_raw = request.query_params.get(
+            "principal_kind", None,
+        )
+        if principal_kind_raw is not None:
+            if len(principal_kind_raw) > 0:
+                try:
+                    principal_kind = _parse_principal_kind(
+                        raw=principal_kind_raw,
+                    )
+                except SemanticError as exc:
+                    raise HTTPException(
+                        status_code=400, detail=str(exc),
+                    ) from exc
 
-        scope_kind_raw = request.args.get("scope_kind", None)
-        if scope_kind_raw is not None and len(scope_kind_raw) > 0:
-            try:
-                scope_kind = _parse_scope_kind(scope_kind_raw)
-            except SemanticError as xcpt:
-                rbac_ns.abort(400, str(xcpt))
+        scope_kind_raw = request.query_params.get("scope_kind", None)
+        if scope_kind_raw is not None:
+            if len(scope_kind_raw) > 0:
+                try:
+                    scope_kind = _parse_scope_kind(raw=scope_kind_raw)
+                except SemanticError as exc:
+                    raise HTTPException(
+                        status_code=400, detail=str(exc),
+                    ) from exc
 
         views = binding_service.list_bindings(
             db_session=db_session,
@@ -286,50 +375,71 @@ class RbacBindingsCollection(Resource):
             scope_kind=scope_kind,
             scope_id=scope_id,
         )
-        rtnval = [_binding_to_dict(v) for v in views]
+        body = [_binding_to_dict(view=v) for v in views]
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/bindings/{binding_id}",
+        methods=["DELETE"],
+        doc=Doc(
+            summary="Revoke a role binding",
+            description="Revoke an existing role binding by id.",
+        ),
+    )
+    def delete_binding(request: Request) -> JSONResponse:
+        """
+            Revoke a binding by id.
 
-@rbac_ns.route("/bindings/<string:binding_id>")
-@rbac_ns.param("binding_id", "Binding UUID")
-class RbacBindingResource(Resource):
-    """
-        DELETE ``/api/v1/rbac/bindings/{binding_id}`` — revoke a binding.
-    """
+            :param request: The incoming HTTP request.
 
-    def delete(self, binding_id: str):
-        db_session = _get_db_session()
-        actor = getattr(g, "actor_user_id", None)
+            :returns: 200 with ``{"binding_id": ..., "status":
+                      "revoked"}``.
+        """
+        db_session = _require_db_session(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
+        binding_id = request.path_params.get("binding_id", "")
 
         try:
             binding_service.revoke_role(
                 db_session=db_session,
                 binding_id=binding_id,
-                actor_user_id=actor,
+                actor_user_id=actor_user_id,
             )
-        except BindingNotFoundError as xcpt:
-            rbac_ns.abort(404, str(xcpt))
+        except BindingNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
 
-        rtnval = ({"binding_id": binding_id, "status": "revoked"}, 200)
+        body = {"binding_id": binding_id, "status": "revoked"}
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/rbac/check",
+        methods=["POST"],
+        doc=Doc(
+            summary="Check a permission",
+            description=(
+                "Evaluate a single permission key against a principal "
+                "and return the allow/deny outcome with a reason."
+            ),
+        ),
+    )
+    def check_permission(request: Request) -> JSONResponse:
+        """
+            Evaluate a single permission.
 
-@rbac_ns.route("/check")
-class RbacCheck(Resource):
-    """
-        POST ``/api/v1/rbac/check`` — evaluate a single permission.
-    """
+            :param request: The incoming HTTP request.
 
-    @rbac_ns.expect(check_request_model, validate=True)
-    @rbac_ns.marshal_with(check_response_model)
-    def post(self):
-        payload = request.get_json(force=True, silent=False)
-        db_session = _get_db_session()
+            :returns: 200 with the decision payload.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
 
         principal_id = payload.get("principal_id", "")
         permission_key = payload.get("permission_key", "")
 
-        # Build a lightweight principal representation for the evaluator.
         principal = AuthPrincipal(
             user_id=principal_id,
             session_id="rbac-check",
@@ -344,24 +454,15 @@ class RbacCheck(Resource):
                 permission_key=permission_key,
                 now=datetime.now(timezone.utc),
             )
-        except SemanticError as xcpt:
-            rbac_ns.abort(400, str(xcpt))
+        except SemanticError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
 
-        rtnval = {
+        body = {
             "allowed": decision.allowed,
             "reason": decision.reason,
             "permission_key": decision.permission_key,
         }
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
-
-
-def publish_namespaces(version_prefix: str):
-    """
-        Return namespace registrations for the v1 API wiring.
-
-        :param version_prefix: Version prefix string (``/1``).
-
-        :returns: List of (namespace, path) tuples.
-    """
-    rtnval = [(rbac_ns, version_prefix + RBAC_NAMESPACE_PATH)]
-    return rtnval
