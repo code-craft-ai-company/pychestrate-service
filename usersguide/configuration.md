@@ -34,6 +34,11 @@ For every tunable below the same precedence applies, highest first:
 | `PYCHESTRATE_CREATE_SCHEMA`    | `wsgientry`                    | no       | `false`                      | When truthy, `metadata.create_all` runs at boot. Useful for SQLite bring-up.|
 | `PYCHESTRATE_ADMIN_PEPPER`     | `bootstrapadmin`               | yes (for the script) | (none)              | Password pepper used to seed the in-memory pepper before opening a session. |
 | `PYCHESTRATE_DEV_MODE`         | `jobs.envelope.startup`        | no       | `false`                      | Enables a deterministic seed for the job-envelope signer in development.    |
+| `PYCHESTRATE_COOKIE_SECURE`    | login endpoint                 | no       | `true`                       | Whether the `Secure` flag is emitted on the session cookie.                 |
+| `PYCHESTRATE_COOKIE_SAMESITE`  | login endpoint                 | no       | `Lax`                        | `Lax` / `Strict` / `None` for the session cookie `SameSite` attribute.       |
+| `PYCHESTRATE_COOKIE_DOMAIN`    | login endpoint                 | no       | (omitted)                    | `Domain` attribute. Empty / unset → no Domain attribute is emitted.         |
+| `PYCHESTRATE_COOKIE_PATH`      | login endpoint                 | no       | `/`                          | `Path` attribute on the session cookie.                                     |
+| `PYCHESTRATE_COOKIE_MAX_AGE_SECONDS` | login endpoint           | no       | `28800` (8h)                 | `Max-Age` attribute. Also used as the session row's idle/lifetime ceiling.  |
 | `PYCHESTRATE_BASE_URL`         | `smoketest` (client-side)      | no       | `http://localhost:8080`      | Base URL the smoketest hits.                                                |
 | `PYCHESTRATE_SESSION_COOKIE`   | `smoketest` (client-side)      | no       | `""`                         | Cookie value emitted by `bootstrapadmin`; smoketest sends it as `Cookie:`.   |
 
@@ -164,13 +169,40 @@ rotations carefully.
   `SESSION_COOKIE_NAME` in
   `webservice.security.auth.cookies`).
 * **Body** — opaque server-generated session id (UUID).
-* **Attributes** — `HttpOnly` is hard-coded to `True`. Every other
-  flag (`Secure`, `SameSite`, `Domain`, `Path`, `Max-Age`) is
-  caller-supplied at the seam where the cookie is built
-  (`build_session_cookie`). The login endpoint that emits the cookie
-  is part of a follow-up slice; until then `bootstrapadmin` prints
-  the raw session id and callers send it via
-  `Cookie: pychestrate_session=<value>`.
+* **Attributes** — `HttpOnly` is hard-coded to `True`. The remaining
+  attributes (`Secure`, `SameSite`, `Domain`, `Path`, `Max-Age`) are
+  sourced by the login endpoint from the `PYCHESTRATE_COOKIE_*`
+  environment variables via
+  `automojo.pychestrate.webservice.security.auth.cookiepolicy.load_cookie_policy_from_env`.
+  Defaults are production-friendly (`Secure=true`, `SameSite=Lax`,
+  no Domain, `Path=/`, `Max-Age=28800` = 8 hours). `Secure=true`
+  means a non-TLS deployment must explicitly set
+  `PYCHESTRATE_COOKIE_SECURE=false` for browsers to retain the
+  cookie.
+
+### Login endpoint
+
+`POST /api/v1/auth/login` accepts a JSON body
+`{"login_name": "...", "password": "...", "mfa_code": "..."}` and
+returns:
+
+* **200** with `{"session_id": "...", "user_id": "...",
+  "expires_in_seconds": ..., "cookie_name": "pychestrate_session"}`
+  plus a `Set-Cookie: pychestrate_session=<id>; HttpOnly; Secure;
+  SameSite=Lax; Path=/; Max-Age=28800` header (attributes vary with
+  the env-var policy). Browsers persist the cookie automatically;
+  CLI callers can extract the id from the body.
+* **401** when credentials are invalid or the user is inactive. The
+  response intentionally omits `Set-Cookie` so a failed attempt
+  cannot leave a partial session on the client.
+* **400** when the body is missing or not a JSON object.
+
+Backoff: the local-credential verifier applies an exponential
+backoff keyed on `(login_name, source_ip)`. The login endpoint
+sources `source_ip` from the first entry of the `X-Forwarded-For`
+header when present, falling back to `"unknown"`. Place the service
+behind a reverse proxy that sets `X-Forwarded-For` so the backoff
+keys per-client correctly.
 
 ### Session lifetimes
 
@@ -384,13 +416,11 @@ For structured logging, install your handler before
 The configuration surface intentionally stays small while the service
 matures. Open work includes:
 
-* Login endpoint that returns a `Set-Cookie` envelope so admins don't
-  need to copy-paste the session id from `bootstrapadmin`.
 * Per-endpoint `AccessPolicy` rollout to the rest of the gated
   surface (`POST /identity/users`, `POST/DELETE /enrollment-tokens`,
   `POST /clients/{id}/revoke`, etc.).
-* Cookie policy (`Secure`, `SameSite`, `Max-Age`, `Domain`) sourced
-  from environment variables at the future login seam.
 * Thread-local log capture in `FlowRuntime` so concurrent flows don't
   cross-contaminate `log_text`.
 * Alembic migrations replacing `metadata.create_all`.
+* MFA second-factor flow on the login endpoint (the verifier already
+  accepts `mfa_code`; the partial-session UX is a follow-up).

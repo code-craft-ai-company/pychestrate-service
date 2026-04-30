@@ -56,20 +56,34 @@ from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
 
 from automojo.pychestrate.webservice.security.auth import (
+    local_flow,
     mfa_service,
     provider_directory,
     session_service,
 )
+from automojo.pychestrate.webservice.security.auth.cookiepolicy import (
+    load_cookie_policy_from_env,
+    render_set_cookie_header,
+)
+from automojo.pychestrate.webservice.security.auth.cookies import (
+    SESSION_COOKIE_NAME,
+    build_session_cookie,
+)
 from automojo.pychestrate.webservice.security.auth.exceptions import (
+    AuthenticationError,
     MfaChallengeExpiredError,
     MfaChallengeRejectedError,
     MfaChallengeUnknownError,
     MfaEnrollmentNotFoundError,
     MfaEnrollmentNotVerifiedError,
     MfaMethodUnknownError,
+    MfaRequiredError,
 )
 from automojo.pychestrate.webservice.security.auth.models import (
     AuthProviderKind,
+)
+from automojo.pychestrate.webservice.security.auth.session_service import (
+    RequestFingerprint,
 )
 
 
@@ -156,6 +170,116 @@ class AuthBlueprint(RestBlueprint):
 
     base_path = AUTH_BASE_PATH
     tags = ["auth", "v1"]
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/auth/login",
+        methods=["POST"],
+        doc=Doc(
+            summary="Open a session via local credentials",
+            description=(
+                "Verify a (login_name, password) pair against the local "
+                "credential store, open an auth session, and return 200 "
+                "with a Set-Cookie header carrying the session id. "
+                "Cookie attributes are sourced from the "
+                "PYCHESTRATE_COOKIE_* environment variables — see "
+                "usersguide/configuration.md for the full reference."
+            ),
+        ),
+    )
+    def login(request: Request) -> JSONResponse:
+        """
+            Verify local credentials and open a session.
+
+            :param request: The incoming HTTP request. Body must be a
+                            JSON object with string ``login_name`` and
+                            ``password`` keys; ``mfa_code`` is
+                            optional.
+
+            :returns: 200 with ``{"session_id": ..., "user_id": ...,
+                      "expires_in_seconds": ...}`` plus a Set-Cookie
+                      header. 401 on invalid credentials. 503 when
+                      the request-scoped db_session is missing.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+
+        login_name = str(payload.get("login_name", ""))
+        password = str(payload.get("password", ""))
+        mfa_code_raw = payload.get("mfa_code", None)
+        if mfa_code_raw is None:
+            mfa_code = None
+        else:
+            mfa_code = str(mfa_code_raw)
+
+        # Best-effort source-IP for the backoff key. The webworks
+        # Request does not yet expose a parsed remote_addr, so we
+        # read the X-Forwarded-For header when present and fall back
+        # to a placeholder.
+        forwarded = request.get_header("X-Forwarded-For", default=None)
+        if forwarded is None:
+            source_ip = "unknown"
+        else:
+            source_ip = forwarded.split(",")[0].strip()
+
+        try:
+            outcome = local_flow.verify_local_credentials(
+                login_name=login_name,
+                password=password,
+                mfa_code=mfa_code,
+                source_ip=source_ip,
+                db_session=db_session,
+            )
+        except AuthenticationError as exc:
+            raise HTTPException(
+                status_code=401, detail=str(exc),
+            ) from exc
+        except MfaRequiredError as exc:
+            raise HTTPException(
+                status_code=401, detail=str(exc),
+            ) from exc
+
+        cookie_policy = load_cookie_policy_from_env()
+        seated = session_service.open_session(
+            db_session=db_session,
+            user_id=outcome.user_id,
+            provider_kind=AuthProviderKind.LOCAL,
+            provider_name="local",
+            mfa_method_name=None,
+            access_token_payload=None,
+            refresh_token_payload=None,
+            request_fingerprint=RequestFingerprint(
+                ip_fingerprint=source_ip,
+                user_agent_fingerprint=request.get_header(
+                    "User-Agent", default="unknown",
+                ),
+            ),
+            idle_timeout_seconds=cookie_policy.max_age_seconds,
+            max_lifetime_seconds=cookie_policy.max_age_seconds,
+        )
+        session_id = str(seated.session_id)
+
+        cookie_spec = build_session_cookie(
+            session_id=session_id,
+            max_age_seconds=cookie_policy.max_age_seconds,
+            domain=cookie_policy.domain,
+            same_site=cookie_policy.same_site,
+            secure=cookie_policy.secure,
+            path=cookie_policy.path,
+        )
+        set_cookie_value = render_set_cookie_header(spec=cookie_spec)
+
+        body = {
+            "session_id": session_id,
+            "user_id": outcome.user_id,
+            "expires_in_seconds": cookie_policy.max_age_seconds,
+            "cookie_name": SESSION_COOKIE_NAME,
+        }
+        rtnval = JSONResponse(
+            content=body,
+            status_code=200,
+            headers={"Set-Cookie": set_cookie_value},
+        )
+        return rtnval
 
     @RestBlueprint.attach_at(
         path="/api/v1/auth/providers",

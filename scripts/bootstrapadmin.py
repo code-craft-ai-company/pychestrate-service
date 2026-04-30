@@ -51,11 +51,19 @@ from automojo.pychestrate.core.defaults import new_uuid
 from automojo.pychestrate.webservice.extensions.bootstrap import (
     register_phase1_builtin_extensions,
 )
+from automojo.pychestrate.core.defaults import utc_now
+
 from automojo.pychestrate.webservice.identity.users import user_service
 from automojo.pychestrate.webservice.identity.users.exceptions import (
     UserAlreadyExistsError,
 )
 from automojo.pychestrate.webservice.identity.users.models import IdentityUser
+from automojo.pychestrate.webservice.security.auth.local_flow import (
+    hash_password,
+)
+from automojo.pychestrate.webservice.security.auth.models import (
+    AuthLocalCredentials,
+)
 from automojo.pychestrate.webservice.persistence.schema import (
     PychestratePhase1Base,
 )
@@ -232,6 +240,47 @@ def _ensure_admin_binding(*, db_session, user_id: str) -> None:
     return
 
 
+def _ensure_local_password(
+        *, db_session, user_id: str, password: str,
+    ) -> bool:
+    """
+        Ensure the user has an :class:`AuthLocalCredentials` row with
+        the supplied password. Creates the row if missing, updates the
+        hash + algo_params if present.
+
+        :returns: True when a new row was created, False when an
+                  existing row was rotated.
+    """
+    hash_bytes, params = hash_password(password=password)
+    existing = (
+        db_session.query(AuthLocalCredentials)
+        .filter(AuthLocalCredentials.user_id == user_id)
+        .first()
+    )
+    now = utc_now()
+    if existing is not None:
+        existing.argon2id_hash = hash_bytes
+        existing.algo_params = params
+        existing.last_changed_at = now
+        sys.stdout.write(
+            "Local credentials rotated for {0}{1}".format(
+                user_id, os.linesep,
+            ),
+        )
+        return False
+    db_session.add(AuthLocalCredentials(
+        user_id=user_id,
+        argon2id_hash=hash_bytes,
+        algo_params=params,
+        must_rotate_after=None,
+        last_changed_at=now,
+    ))
+    sys.stdout.write(
+        "Local credentials seeded for {0}{1}".format(user_id, os.linesep),
+    )
+    return True
+
+
 def _open_admin_session(*, db_session, user_id: str) -> str:
     """
         Open a fresh auth session for ``user_id`` and return the
@@ -266,6 +315,16 @@ def main(*, argv: Optional[list] = None) -> int:
     parser.add_argument("--database-url", dest="database_url", default=None)
     parser.add_argument("--pepper", dest="pepper", default=None)
     parser.add_argument("--login", dest="login", default="admin")
+    parser.add_argument(
+        "--password",
+        dest="password",
+        default="ChangeMe!",
+        help=(
+            "Password to seed for the admin user. The bootstrap "
+            "rotates the stored hash on re-run, so you can rotate "
+            "by re-invoking with a new value."
+        ),
+    )
     parser.add_argument(
         "--email", dest="email", default="admin@example.com",
     )
@@ -310,6 +369,11 @@ def main(*, argv: Optional[list] = None) -> int:
             timezone_name=args.timezone,
         )
         _ensure_admin_binding(db_session=db_session, user_id=user_id)
+        _ensure_local_password(
+            db_session=db_session,
+            user_id=user_id,
+            password=args.password,
+        )
         session_id = _open_admin_session(
             db_session=db_session, user_id=user_id,
         )
