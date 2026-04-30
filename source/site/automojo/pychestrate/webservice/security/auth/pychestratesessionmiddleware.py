@@ -195,6 +195,16 @@ class PychestrateSessionMiddleware:
             :returns: The :class:`Response` returned by the downstream
                       handler.
         """
+        # Respect an existing non-None request.auth so test scaffolds
+        # can pre-inject an AuthenticationContext directly without
+        # going through the cookie + DB resolution path. Production
+        # requests always start without ``request.auth``, so this
+        # short-circuit is inert outside tests.
+        existing = getattr(request, "auth", None)
+        if existing is not None:
+            response = call_next(request)
+            return response
+
         cookie_value = request.cookies.get(self._cookie_name, "")
         if cookie_value is None or len(cookie_value) == 0:
             request.auth = None

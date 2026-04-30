@@ -30,6 +30,10 @@ from sqlalchemy.orm import sessionmaker
 
 from automojo import testbase
 
+from automojo.webworks.authentication.core import (
+    AuthenticationContext,
+    Principal,
+)
 from automojo.webworks.routing.request import Request
 
 from automojo.pychestrate.webservice.orchestration.flowruntime import (
@@ -87,12 +91,25 @@ def _build_app() -> Tuple[PychestrateApplication, FlowRuntime]:
 
     flow_runtime = FlowRuntime(max_workers=2)
 
-    # Wrap the dispatcher so every request gets a per-test runtime
-    # before pipeline middleware touches it.
+    # Wrap the dispatcher so every request gets:
+    #   - a per-test FlowRuntime (so submissions don't leak into the
+    #     module-level singleton);
+    #   - a system-admin AuthenticationContext so gated endpoints
+    #     (POST /api/v1/flows) accept the request without requiring
+    #     a real cookie + session round-trip.
     original_dispatch = app.dispatcher.dispatch
+    admin_context = AuthenticationContext(
+        principal=Principal(
+            identifier="00000000-0000-4000-8000-00000000a000",
+            display_name="Test Admin",
+            roles={"system-admin"},
+        ),
+        scheme="test-injection",
+    )
 
     def _dispatch_with_runtime(*, request: Request):
         request.flow_runtime = flow_runtime
+        request.auth = admin_context
         rtnval = original_dispatch(request=request)
         return rtnval
 

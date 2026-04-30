@@ -25,6 +25,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse, Response
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -167,6 +171,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects",
         methods=["POST"],
         doc=Doc(summary="Create project"),
+        access_policy=_ADMIN_POLICY,
     )
     def create_project_endpoint(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)

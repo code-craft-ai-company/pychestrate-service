@@ -35,6 +35,10 @@ from sqlalchemy.orm import sessionmaker
 
 from automojo import testbase
 
+from automojo.webworks.authentication.core import (
+    AuthenticationContext,
+    Principal,
+)
 from automojo.webworks.routing.request import Request
 
 from automojo.pychestrate.webservice.orchestration.flowruntime import (
@@ -54,6 +58,35 @@ from automojo.pychestrate.webservice.pychestrateapplication import (
 from automojo.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
     reset_phase1_runtime,
 )
+
+
+_ADMIN_AUTH_CONTEXT = AuthenticationContext(
+    principal=Principal(
+        identifier="00000000-0000-4000-8000-00000000a000",
+        display_name="Test Admin",
+        roles={"system-admin"},
+    ),
+    scheme="test-injection",
+)
+
+
+def _wrap_app_with_admin_auth(app: PychestrateApplication) -> None:
+    """
+        Wrap ``app.dispatcher.dispatch`` so every test request lands
+        with a pre-populated system-admin AuthenticationContext on
+        ``request.auth``. Mirrors the helper in
+        :mod:`test_p24h_end_to_end_application_smoke_m3` so gated
+        endpoints (POST /api/v1/flows) accept the request.
+    """
+    original = app.dispatcher.dispatch
+
+    def _wrapped(*, request):
+        request.auth = _ADMIN_AUTH_CONTEXT
+        rtnval = original(request=request)
+        return rtnval
+
+    app.dispatcher.dispatch = _wrapped
+    return
 
 
 _SMOKE_WORKFLOW_YAML = """
@@ -198,6 +231,7 @@ def test_log_endpoint_returns_captured_text():
         register_extensions=False,
         debug=False,
     )
+    _wrap_app_with_admin_auth(app=app)
     try:
         submit_request = Request(
             method="POST",
@@ -246,6 +280,7 @@ def test_log_endpoint_returns_404_for_unknown_flow():
         register_extensions=False,
         debug=False,
     )
+    _wrap_app_with_admin_auth(app=app)
     try:
         request = Request(
             method="GET",

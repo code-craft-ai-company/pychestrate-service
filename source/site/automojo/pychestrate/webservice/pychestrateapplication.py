@@ -73,6 +73,9 @@ from automojo.pychestrate.webservice.notifications.restapi.v1 import (  # noqa: 
 from automojo.pychestrate.webservice.orchestration import (  # noqa: F401
     flowsblueprint as _flowsblueprint,
 )
+from automojo.pychestrate.webservice.accesspolicymiddleware import (
+    AccessPolicyMiddleware,
+)
 from automojo.pychestrate.webservice.orchestration.flowruntime import (
     FlowRuntime,
 )
@@ -324,6 +327,7 @@ class PychestrateApplication:
         )
         original_dispatch = dispatcher.dispatch
         flow_runtime_ref = self._flow_runtime
+        router_ref = self._router
 
         def _dispatch_with_runtime(*, request) -> Any:
             # Only attach the app's runtime when callers (typically
@@ -333,6 +337,18 @@ class PychestrateApplication:
             existing = getattr(request, "flow_runtime", None)
             if existing is None:
                 request.flow_runtime = flow_runtime_ref
+
+            # Resolve the matching descriptor up-front so the
+            # AccessPolicyMiddleware can read ``request.endpoint_descriptor``
+            # off the request without taking a router reference of
+            # its own. The dispatcher will re-match downstream — that
+            # second match is cheap (in-process radix walk).
+            match = router_ref.match(request)
+            if match is not None:
+                request.endpoint_descriptor = match.descriptor
+            else:
+                request.endpoint_descriptor = None
+
             rtnval = original_dispatch(request=request)
             return rtnval
 
@@ -342,10 +358,14 @@ class PychestrateApplication:
     def _build_pipeline(self) -> MiddlewarePipeline:
         """
             Construct the standard middleware pipeline:
-            :class:`DbSessionMiddleware` first (so authentication can
-            read DB state) followed by
-            :class:`PychestrateSessionMiddleware` (which translates the
-            ``pychestrate_session`` cookie into ``request.auth``).
+
+            * :class:`DbSessionMiddleware` first (so authentication
+              can read DB state).
+            * :class:`PychestrateSessionMiddleware` (translates the
+              ``pychestrate_session`` cookie into ``request.auth``).
+            * :class:`AccessPolicyMiddleware` (enforces per-endpoint
+              role / scope requirements declared via
+              ``access_policy=`` on ``RestBlueprint.attach_at``).
 
             :returns: The configured pipeline.
         """
@@ -357,6 +377,7 @@ class PychestrateApplication:
             role_resolver=self._role_resolver,
             user_profile_lookup=self._user_profile_lookup,
         )
+        access_policy = AccessPolicyMiddleware()
 
         pipeline = MiddlewarePipeline()
         pipeline.add(
@@ -366,6 +387,10 @@ class PychestrateApplication:
         pipeline.add(
             middleware=session_bridge,
             name=session_bridge.name,
+        )
+        pipeline.add(
+            middleware=access_policy,
+            name=access_policy.name,
         )
         rtnval = pipeline
         return rtnval
