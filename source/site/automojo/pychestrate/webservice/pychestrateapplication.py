@@ -70,6 +70,9 @@ from automojo.pychestrate.webservice.dbsessionmiddleware import (
 from automojo.pychestrate.webservice.notifications.restapi.v1 import (  # noqa: F401
     notificationchannelsblueprint as _notificationchannelsblueprint,
 )
+from automojo.pychestrate.webservice import (  # noqa: F401
+    openapiblueprint as _openapiblueprint,
+)
 from automojo.pychestrate.webservice.orchestration import (  # noqa: F401
     flowsblueprint as _flowsblueprint,
 )
