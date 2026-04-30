@@ -88,6 +88,17 @@ def main(*, argv: Optional[list] = None) -> int:
             "{} environment variable.".format(DATABASE_URL_ENV_VAR)
         ),
     )
+    parser.add_argument(
+        "--use-metadata-create-all",
+        dest="use_metadata",
+        action="store_true",
+        help=(
+            "Skip Alembic and call metadata.create_all instead. "
+            "Faster for tests / one-shot SQLite bring-up; not "
+            "recommended for production where you need a migration "
+            "trail. The default path runs `alembic upgrade head`."
+        ),
+    )
     args = parser.parse_args(argv)
 
     database_url = _resolve_database_url(cli_value=args.database_url)
@@ -95,11 +106,38 @@ def main(*, argv: Optional[list] = None) -> int:
         "Connecting to: {0}{1}".format(database_url, os.linesep),
     )
 
-    engine = sa.create_engine(database_url)
-    PychestratePhase1Base.metadata.create_all(engine)
-    sys.stdout.write(
-        "Phase-1 schema created.{0}".format(os.linesep),
-    )
+    if args.use_metadata is True:
+        engine = sa.create_engine(database_url)
+        PychestratePhase1Base.metadata.create_all(engine)
+        sys.stdout.write(
+            "Phase-1 schema created via metadata.create_all.{0}".format(
+                os.linesep,
+            ),
+        )
+    else:
+        # Apply via Alembic so the schema_versions row records the
+        # migration trail. PYCHESTRATE_DATABASE_URL is read by
+        # alembic/env.py at runtime.
+        os.environ[DATABASE_URL_ENV_VAR] = database_url
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+
+        repo_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), ".."),
+        )
+        alembic_cfg = AlembicConfig(
+            os.path.join(repo_root, "alembic.ini"),
+        )
+        alembic_cfg.set_main_option(
+            "script_location",
+            os.path.join(repo_root, "alembic"),
+        )
+        alembic_command.upgrade(alembic_cfg, "head")
+        sys.stdout.write(
+            "Phase-1 schema applied via `alembic upgrade head`.{0}".format(
+                os.linesep,
+            ),
+        )
 
     rtnval = 0
     return rtnval

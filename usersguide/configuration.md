@@ -60,33 +60,80 @@ postgresql+psycopg://user:secret@db.host/pychestrate       # production target
 
 ### Schema lifecycle
 
-The service does **not** create the schema implicitly except when
-`PYCHESTRATE_CREATE_SCHEMA=true` is set. The recommended bring-up
-sequence is:
+The service uses **Alembic** for schema management. The migration
+trail lives in `alembic/versions/` and the active revision pointer
+is recorded in the `alembic_version` row of the target database.
+
+Recommended bring-up:
 
 ```bash
-PYCHESTRATE_DATABASE_URL=... python scripts/initdb.py    # one-shot
+PYCHESTRATE_DATABASE_URL=... python scripts/initdb.py    # one-shot upgrade
 PYCHESTRATE_DATABASE_URL=... python scripts/serve.py     # boot the service
 ```
 
-`scripts/initdb.py` calls
-`PychestratePhase1Base.metadata.create_all`, which is idempotent. It
-covers:
+`scripts/initdb.py` runs `alembic upgrade head` against the
+configured DB. To bypass Alembic and use
+`PychestratePhase1Base.metadata.create_all` directly (faster for
+ephemeral SQLite tests), pass `--use-metadata-create-all`.
 
-* `identity_user`, `auth_session`, MFA tables
-* `rbac_role`, `rbac_role_binding`
-* `secret_record`, `secret_version`, audit tables
-* `retention_policy`, `retention_action_log`
-* `project`, `project_member_binding`
-* `pod_definition`, `pod_definition_version`, `pod_state`,
-  `pod_registration`
-* `client`, `client_capability`, `client_revocation`
-* `notification_channel`, `tag_assignment`, `variable_binding`
-* `flow_submission` (taskplus state)
+#### Authoring a new migration
 
-The full table set comes from `PychestratePhase1Base.metadata`; if a
-migration ships in the future it will replace `metadata.create_all`
-with an Alembic flow.
+```bash
+PYCHESTRATE_DATABASE_URL=sqlite:///./pychestrate.db \
+    .venv/bin/python -m alembic revision \
+        --autogenerate -m "<short description>"
+```
+
+Alembic compares the SQLAlchemy metadata (loaded by
+`alembic/env.py` via the
+`automojo.pychestrate.webservice.pychestrateapplication` import)
+against the live database and emits a new file under
+`alembic/versions/`. Review the generated `upgrade()` and
+`downgrade()` bodies — autogenerate is good but not infallible —
+and patch in any `import sqlalchemy_utils` /
+`from sqlalchemy.dialects import postgresql` /
+`from sqlalchemy import Text` lines required by the column types.
+
+#### Applying migrations
+
+```bash
+PYCHESTRATE_DATABASE_URL=... .venv/bin/python -m alembic upgrade head
+PYCHESTRATE_DATABASE_URL=... .venv/bin/python -m alembic downgrade -1
+PYCHESTRATE_DATABASE_URL=... .venv/bin/python -m alembic current
+PYCHESTRATE_DATABASE_URL=... .venv/bin/python -m alembic history
+```
+
+The bring-up bootstrap (`PYCHESTRATE_CREATE_SCHEMA=true` env var on
+`scripts/serve.py` / `wsgientry.application`) also runs
+`alembic upgrade head` so a fresh deployment can self-bootstrap. In
+production you typically run the upgrade as a separate step in your
+deployment pipeline so the schema migration completes before any
+worker starts serving traffic.
+
+#### Tables in the baseline
+
+The baseline migration (`fc197732dce1_phase1_baseline_schema`)
+creates 62 tables covering:
+
+* Identity & auth: `identity_users`, `auth_sessions`,
+  `auth_local_credentials`, MFA enrollments + challenges,
+  `auth_provider_directory`.
+* RBAC: `rbac_roles`, `rbac_role_bindings`,
+  `rbac_role_permissions`.
+* Audit: `audit_records`, `audit_event_catalog`, sinks.
+* Secrets: `phase1_secrets`, `phase1_secret_versions`,
+  `secret_acls`.
+* Retention: `retention_policies`, `retention_runs`,
+  `retention_action_results`.
+* Projects: `projects_*`, member bindings.
+* Pods (Layer-3): definitions / versions / state / registrations /
+  templates / lifecycle log / dynamic materializations.
+* Clients: registry / inventory / capabilities / revocations.
+* Notifications: channels, dispatch attempts, dead letters.
+* Tagging: assignments, taxonomies.
+* Variables: bindings, scope cascades.
+* Agents: rollouts, stages, offers, frame audit, sessions.
+* Orchestration: `flow_submission` (taskplus state).
 
 ### Session factory
 
@@ -497,5 +544,4 @@ matures. Open work includes:
   every gated write requires `system-admin`.
 * Auth admin endpoints (`auth/providers/{kind}/.../enable`,
   `auth/mfa/challenge`, `auth/mfa/verify`) need their own gates once
-  the MFA partial-session UX lands.
-* Alembic migrations replacing `metadata.create_all`.
+  the partial-session UX is finalized.

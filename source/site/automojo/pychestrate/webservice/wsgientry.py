@@ -141,7 +141,31 @@ def build_default_app(
 
     engine = sa.create_engine(url)
     if create_schema_value is True:
-        PychestratePhase1Base.metadata.create_all(engine)
+        # PYCHESTRATE_CREATE_SCHEMA is the developer-mode shortcut.
+        # We apply migrations via Alembic so the schema_versions row
+        # records the trail. metadata.create_all is still available
+        # behind ``scripts/initdb.py --use-metadata-create-all`` for
+        # tests that want a fast one-shot.
+        os.environ[DATABASE_URL_ENV_VAR] = url
+        from alembic import command as alembic_command
+        from alembic.config import Config as AlembicConfig
+
+        # alembic.ini lives at the repo root; this module is at
+        # source/site/automojo/pychestrate/webservice/wsgientry.py.
+        # Walk up to the repo root via the package layout.
+        module_dir = os.path.dirname(os.path.abspath(__file__))
+        # webservice/ → pychestrate → automojo → site → source → repo_root
+        repo_root = os.path.abspath(
+            os.path.join(module_dir, "..", "..", "..", "..", ".."),
+        )
+        alembic_cfg = AlembicConfig(
+            os.path.join(repo_root, "alembic.ini"),
+        )
+        alembic_cfg.set_main_option(
+            "script_location",
+            os.path.join(repo_root, "alembic"),
+        )
+        alembic_command.upgrade(alembic_cfg, "head")
 
     factory = sessionmaker(bind=engine)
 
