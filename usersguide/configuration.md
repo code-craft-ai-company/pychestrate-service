@@ -450,7 +450,16 @@ and runs in this order on every request:
    `AuthenticationContext`, attaches it as `request.auth`. Respects
    an existing non-`None` `request.auth` so test scaffolds can
    inject contexts without going through the cookie path.
-3. **`AccessPolicyMiddleware`** — enforces the per-endpoint
+3. **`BearerTokenMiddleware`** — when `request.auth` is still
+   `None` after the cookie middleware, reads `Authorization: Bearer
+   <token>`, hashes the value via the same HMAC-SHA256 + pepper
+   recipe the enrollment redeem flow uses, looks up the matching
+   `clients` row, and attaches an `AuthenticationContext` whose
+   principal carries `roles={"agent"}` plus the client's
+   `client_id` / `pod_name` / `project_id` attributes. Cookie
+   callers keep their human seat; bearer-only callers (agents) get
+   the agent seat.
+4. **`AccessPolicyMiddleware`** — enforces the per-endpoint
    `AccessPolicy`. Always last so it sees the populated
    `request.auth`.
 

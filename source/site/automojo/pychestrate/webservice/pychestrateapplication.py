@@ -79,6 +79,9 @@ from automojo.pychestrate.webservice.orchestration import (  # noqa: F401
 from automojo.pychestrate.webservice.accesspolicymiddleware import (
     AccessPolicyMiddleware,
 )
+from automojo.pychestrate.webservice.bearertokenmiddleware import (
+    BearerTokenMiddleware,
+)
 from automojo.pychestrate.webservice.orchestration.flowruntime import (
     FlowRuntime,
 )
@@ -115,6 +118,9 @@ from automojo.pychestrate.webservice.tagging.restapi.v1 import (  # noqa: F401
 )
 from automojo.pychestrate.webservice.variables.restapi.v1 import (  # noqa: F401
     variablesblueprint as _variablesblueprint,
+)
+from automojo.pychestrate.webservice.workers.restapi.v1 import (  # noqa: F401
+    workersblueprint as _workersblueprint,
 )
 
 
@@ -366,6 +372,11 @@ class PychestrateApplication:
               can read DB state).
             * :class:`PychestrateSessionMiddleware` (translates the
               ``pychestrate_session`` cookie into ``request.auth``).
+            * :class:`BearerTokenMiddleware` (translates an
+              ``Authorization: Bearer <token>`` header into
+              ``request.auth`` when no cookie identity already
+              landed — so cookie callers keep their human seat and
+              bearer-only callers get the agent identity).
             * :class:`AccessPolicyMiddleware` (enforces per-endpoint
               role / scope requirements declared via
               ``access_policy=`` on ``RestBlueprint.attach_at``).
@@ -380,6 +391,7 @@ class PychestrateApplication:
             role_resolver=self._role_resolver,
             user_profile_lookup=self._user_profile_lookup,
         )
+        bearer_token = BearerTokenMiddleware()
         access_policy = AccessPolicyMiddleware()
 
         pipeline = MiddlewarePipeline()
@@ -390,6 +402,10 @@ class PychestrateApplication:
         pipeline.add(
             middleware=session_bridge,
             name=session_bridge.name,
+        )
+        pipeline.add(
+            middleware=bearer_token,
+            name=bearer_token.name,
         )
         pipeline.add(
             middleware=access_policy,
