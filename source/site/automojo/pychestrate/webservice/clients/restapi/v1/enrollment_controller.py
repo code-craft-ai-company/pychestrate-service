@@ -5,26 +5,37 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-M1 routes:
+Migrated from Flask + flask-restx to automojo-webworks. Pattern follows
+the worked example documented in
+:mod:`automojo.pychestrate.webservice.security.auth.restapi.v1.auth_controller`.
 
-* ``POST /api/v1/enrollment-tokens`` — admin issues a new token for a
-  ``(project_id, pod_name)`` scope. Secret returned exactly once.
-* ``GET  /api/v1/enrollment-tokens`` — admin list (no secrets).
+Endpoints (unchanged URLs):
+
+* ``POST   /api/v1/enrollment-tokens`` — admin issue.
+* ``GET    /api/v1/enrollment-tokens`` — admin list.
 * ``DELETE /api/v1/enrollment-tokens/{token_id}`` — admin revoke.
-* ``POST /api/v1/enrollment-tokens/redeem`` — agent presents the secret
-  plus its enrollment payload and receives a bearer token.
+* ``POST   /api/v1/enrollment-tokens/redeem`` — agent redeem.
+* ``POST   /api/v1/enrollment-tokens/clients/{client_id}/revoke`` —
+  admin revoke of a client identity (mounted under enrollment so it
+  shares the RBAC gate with token rescission).
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
 
 import base64
+import os
 
-from flask import g, request
-from flask_restx import Namespace, Resource, fields
+from typing import Any, Dict, Optional
+
+from automojo.webworks.endpoints.doc import Doc
+from automojo.webworks.endpoints.restblueprint import RestBlueprint
+from automojo.webworks.routing.exceptions import HTTPException
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import JSONResponse
 
 from automojo.pychestrate.webservice.clients.enrollment.factories.identity_verifier import (
     EnrollmentPayload,
@@ -37,7 +48,10 @@ from automojo.pychestrate.webservice.clients.enrollment.service import (
     revoke_client,
     revoke_enrollment_token,
 )
-from automojo.pychestrate.webservice.clients.enums import RevocationReason, TokenStatus
+from automojo.pychestrate.webservice.clients.enums import (
+    RevocationReason,
+    TokenStatus,
+)
 from automojo.pychestrate.webservice.clients.exceptions import (
     CertificateAuthorityUnavailableError,
     ClientAlreadyExistsError,
@@ -48,206 +62,22 @@ from automojo.pychestrate.webservice.clients.exceptions import (
     EnrollmentTokenInvalidError,
     EnrollmentTokenNotFoundError,
 )
-
-
-ENROLLMENT_NAMESPACE_PATH = "/enrollment-tokens"
-
-
-enrollment_ns = Namespace(
-    "Client Enrollment v1",
-    description="Enrollment token issuance + redemption (3-client-enrollment).",
+from automojo.pychestrate.webservice.middleware_webworks import (
+    get_request_actor_user_id,
 )
 
 
-token_issue_request_model = enrollment_ns.model(
-    "EnrollmentTokenIssueRequest",
-    {
-        "project_id": fields.String(required=True, description="Scope project UUID"),
-        "pod_name": fields.String(required=True, description="Pod name the token commits to"),
-        "ttl_seconds": fields.Integer(required=True, description="Lifetime in seconds (<=86400)"),
-        "one_shot": fields.Boolean(required=False, default=True, description="Consume on first redemption"),
-    },
-)
+ENROLLMENT_BASE_PATH = "/api/v1/enrollment-tokens"
 
 
-token_issue_response_model = enrollment_ns.model(
-    "EnrollmentTokenIssueResponse",
-    {
-        "token_id": fields.String(description="Server-assigned token UUID"),
-        "secret": fields.String(description="Secret returned exactly once"),
-        "project_id": fields.String(description="Scope project UUID"),
-        "pod_name": fields.String(description="Pod the token commits to"),
-        "expires_at": fields.String(description="ISO-8601 expiry"),
-        "algorithm_name": fields.String(description="Issuer algorithm"),
-    },
-)
-
-
-token_view_model = enrollment_ns.model(
-    "EnrollmentTokenView",
-    {
-        "token_id": fields.String(description="Token UUID"),
-        "project_id": fields.String(description="Scope project UUID"),
-        "pod_name": fields.String(description="Pod scope"),
-        "status": fields.String(description="PENDING | REDEEMED | EXPIRED | REVOKED"),
-        "issued_at": fields.String(description="ISO-8601 issue timestamp"),
-        "expires_at": fields.String(description="ISO-8601 expiry timestamp"),
-        "one_shot": fields.Boolean(description="One-shot flag"),
-        "algorithm_name": fields.String(description="Issuer algorithm"),
-        "redeemed_at": fields.String(description="ISO-8601 redemption timestamp"),
-        "redeemed_by_client_id": fields.String(description="Redeeming client UUID"),
-    },
-)
-
-
-redeem_request_model = enrollment_ns.model(
-    "EnrollmentRedeemRequest",
-    {
-        "secret": fields.String(required=True, description="Secret returned at issue time"),
-        "pod_name": fields.String(required=True, description="Pod name the agent claims"),
-        "agent_version": fields.String(required=False, description="Reported agent version"),
-        "transport_name": fields.String(required=False, description="Transport the agent plans to use"),
-        "extras": fields.Raw(required=False, description="Opaque additional fields"),
-        "csr_pem": fields.String(
-            required=False,
-            description=(
-                "Optional base64-encoded PEM CSR. When supplied the "
-                "service signs it against the internal CA and returns "
-                "the issued cert fields alongside the bearer token."
-            ),
-        ),
-    },
-)
-
-
-redeem_response_model = enrollment_ns.model(
-    "EnrollmentRedeemResponse",
-    {
-        "client_id": fields.String(description="Server-assigned client UUID"),
-        "project_id": fields.String(description="Scope project UUID"),
-        "pod_name": fields.String(description="Pod name"),
-        "bearer_token": fields.String(description="Bearer token for future requests"),
-        "bearer_algorithm": fields.String(description="Algorithm that produced the digest"),
-        "cert_serial": fields.String(
-            description="Hex serial of the issued cert, or empty when CSR was not supplied.",
-        ),
-        "cert_pem": fields.String(
-            description="Base64-encoded PEM of the issued cert, or empty.",
-        ),
-        "cert_chain_pem": fields.String(
-            description="Base64-encoded PEM of the issuer chain, or empty.",
-        ),
-    },
-)
-
-
-revoke_client_request_model = enrollment_ns.model(
-    "ClientRevokeRequest",
-    {
-        "reason": fields.String(
-            required=True,
-            description="Revocation reason: rotated, decommissioned, compromised, admin_request",
-        ),
-        "note": fields.String(required=False, description="Optional free-form operator note"),
-        "cert_serial": fields.String(
-            required=False,
-            description=(
-                "Optional specific cert serial being revoked. Defaults "
-                "to the client's most recently-issued cert serial."
-            ),
-        ),
-    },
-)
-
-
-revoke_client_response_model = enrollment_ns.model(
-    "ClientRevokeResponse",
-    {
-        "client_id": fields.String(description="Client UUID"),
-        "status": fields.String(description="Post-revoke client status"),
-        "cert_serial": fields.String(description="Cert serial recorded on the revocation row, or empty"),
-        "reason": fields.String(description="Reason code applied"),
-    },
-)
-
-
-def _get_db_session():
-    db_session = getattr(g, "db_session", None)
-    if db_session is None:
-        enrollment_ns.abort(503, "Request-scoped db_session not configured")
-    return db_session
-
-
-def _parse_status(raw: str):
-    if raw is None or len(raw) == 0:
-        return None
-    try:
-        rtnval = TokenStatus(raw)
-    except ValueError:
-        enrollment_ns.abort(400, "Unknown status: {}".format(raw))
-    return rtnval
-
-
-def _decode_csr_field(raw: str) -> bytes:
+def _token_to_dict(view: TokenView) -> Dict[str, Any]:
     """
-        Accept either raw PEM text or base64-encoded PEM for the
-        CSR field and return the PEM bytes. Returns ``b""`` for
-        empty input.
+        Render a :class:`TokenView` as the REST response dict.
 
-        :param raw: Value submitted on the ``csr_pem`` request field.
+        :param view: The view object.
 
-        :returns: PEM bytes (possibly empty).
+        :returns: A plain dict suitable for JSON serialization.
     """
-    if raw is None or len(raw) == 0:
-        return b""
-    stripped = raw.strip()
-    if stripped.startswith("-----BEGIN"):
-        rtnval = stripped.encode("utf-8")
-        return rtnval
-    try:
-        rtnval = base64.b64decode(stripped, validate=False)
-    except (ValueError, TypeError):
-        enrollment_ns.abort(400, "csr_pem must be PEM text or base64-encoded PEM")
-    return rtnval
-
-
-def _encode_pem_field(raw: bytes) -> str:
-    """
-        Encode a PEM bytes field as base64 for transport over the
-        JSON response surface. Returns an empty string when the field
-        is ``None`` so the JSON response stays strictly stringly-typed.
-
-        :param raw: PEM bytes (possibly ``None``).
-
-        :returns: Base64 string or empty string.
-    """
-    if raw is None or len(raw) == 0:
-        return ""
-    rtnval = base64.b64encode(raw).decode("ascii")
-    return rtnval
-
-
-def _parse_revocation_reason(raw: str) -> RevocationReason:
-    """
-        Parse an inbound ``reason`` string into :class:`RevocationReason`
-        or abort with HTTP 400.
-
-        :param raw: Raw string from the request body.
-
-        :returns: Enum value.
-    """
-    try:
-        rtnval = RevocationReason(raw)
-    except ValueError:
-        accepted = [v.value for v in RevocationReason]
-        err_lines = ["Unknown revocation reason."]
-        err_lines.append("RECEIVED: {}".format(raw))
-        err_lines.append("ACCEPTED: {}".format(accepted))
-        enrollment_ns.abort(400, " | ".join(err_lines))
-    return rtnval
-
-
-def _token_to_dict(view: TokenView) -> dict:
     rtnval = {
         "token_id": view.token_id,
         "project_id": view.project_id,
@@ -263,23 +93,176 @@ def _token_to_dict(view: TokenView) -> dict:
     return rtnval
 
 
-@enrollment_ns.route("")
-class EnrollmentTokenCollection(Resource):
+def _parse_status(*, raw: Optional[str]) -> Optional[TokenStatus]:
     """
-        POST ``/api/v1/enrollment-tokens`` — admin issue.
-        GET  ``/api/v1/enrollment-tokens`` — admin list.
+        Coerce a query-param string to a :class:`TokenStatus`.
+
+        :param raw: Raw query-string value, possibly None.
+
+        :returns: The matching enum, or None when ``raw`` is empty.
+
+        :raises HTTPException: 400 when ``raw`` is non-empty and unknown.
+    """
+    if raw is None:
+        return None
+    if len(raw) == 0:
+        return None
+    try:
+        rtnval = TokenStatus(raw)
+    except ValueError as exc:
+        err_msg = "Unknown status: {}".format(raw)
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    return rtnval
+
+
+def _decode_csr_field(*, raw: Optional[str]) -> bytes:
+    """
+        Accept either raw PEM text or base64-encoded PEM and return
+        the PEM bytes.
+
+        :param raw: Value submitted on the ``csr_pem`` field.
+
+        :returns: PEM bytes (possibly empty).
+
+        :raises HTTPException: 400 when the value is not valid base64
+                               or PEM.
+    """
+    if raw is None:
+        return b""
+    if len(raw) == 0:
+        return b""
+    stripped = raw.strip()
+    if stripped.startswith("-----BEGIN"):
+        rtnval = stripped.encode("utf-8")
+        return rtnval
+    try:
+        rtnval = base64.b64decode(stripped, validate=False)
+    except (ValueError, TypeError) as exc:
+        err_msg = "csr_pem must be PEM text or base64-encoded PEM"
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    return rtnval
+
+
+def _encode_pem_field(*, raw: Optional[bytes]) -> str:
+    """
+        Encode a PEM bytes field as base64 for the JSON response.
+
+        :param raw: PEM bytes (possibly None).
+
+        :returns: Base64 string or empty string.
+    """
+    if raw is None:
+        return ""
+    if len(raw) == 0:
+        return ""
+    rtnval = base64.b64encode(raw).decode("ascii")
+    return rtnval
+
+
+def _parse_revocation_reason(*, raw: str) -> RevocationReason:
+    """
+        Parse an inbound ``reason`` string into :class:`RevocationReason`.
+
+        :param raw: Raw string from the request body.
+
+        :returns: Enum value.
+
+        :raises HTTPException: 400 with the accepted-value list when
+                               ``raw`` is unknown.
+    """
+    try:
+        rtnval = RevocationReason(raw)
+    except ValueError as exc:
+        accepted = [v.value for v in RevocationReason]
+        err_lines = [
+            "Unknown revocation reason.",
+            "RECEIVED: {}".format(raw),
+            "ACCEPTED: {}".format(accepted),
+        ]
+        err_msg = " | ".join(err_lines)
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    return rtnval
+
+
+def _require_db_session(*, request: Request) -> Any:
+    """
+        Pull the request-scoped ``db_session`` set by
+        :class:`DbSessionMiddleware`, or 503.
+    """
+    db_session = getattr(request, "db_session", None)
+    if db_session is None:
+        err_lines = [
+            "Request-scoped db_session not configured.",
+            "DbSessionMiddleware must be installed in the pipeline.",
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise HTTPException(status_code=503, detail=err_msg)
+    return db_session
+
+
+def _read_json_body(*, request: Request) -> Dict[str, Any]:
+    """
+        Parse the request body as a JSON object.
+    """
+    raw_body = request.body
+    if raw_body is None:
+        raise HTTPException(status_code=400, detail="request body required")
+    if len(raw_body) == 0:
+        raise HTTPException(status_code=400, detail="request body required")
+    try:
+        decoded = request.json()
+    except Exception as exc:
+        err_msg = "request body must be valid JSON"
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(
+            status_code=400, detail="request body must be a JSON object",
+        )
+    rtnval = decoded
+    return rtnval
+
+
+class EnrollmentBlueprint(RestBlueprint):
+    """
+        Blueprint grouping the v1 ``/api/v1/enrollment-tokens`` endpoints.
     """
 
-    @enrollment_ns.expect(token_issue_request_model, validate=True)
-    @enrollment_ns.marshal_with(token_issue_response_model, code=201)
-    def post(self):
-        db_session = _get_db_session()
-        payload = request.get_json(force=True, silent=False)
-        actor = getattr(g, "actor_user_id", None)
+    base_path = ENROLLMENT_BASE_PATH
+    tags = ["enrollment", "v1"]
 
-        ttl_seconds = int(payload.get("ttl_seconds", 0))
+    @RestBlueprint.attach_at(
+        path="/api/v1/enrollment-tokens",
+        methods=["POST"],
+        doc=Doc(
+            summary="Issue an enrollment token",
+            description=(
+                "Issue a new enrollment token for a (project_id, "
+                "pod_name) scope. The secret is returned exactly once."
+            ),
+        ),
+    )
+    def issue_token(request: Request) -> JSONResponse:
+        """
+            Issue a new enrollment token.
+
+            :param request: The incoming HTTP request.
+
+            :returns: 201 with the issued-token payload.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
+
+        ttl_seconds_raw = payload.get("ttl_seconds", 0)
+        try:
+            ttl_seconds = int(ttl_seconds_raw)
+        except (TypeError, ValueError) as exc:
+            err_msg = "ttl_seconds must be an integer"
+            raise HTTPException(status_code=400, detail=err_msg) from exc
         if ttl_seconds <= 0:
-            enrollment_ns.abort(400, "ttl_seconds must be > 0")
+            raise HTTPException(
+                status_code=400, detail="ttl_seconds must be > 0",
+            )
 
         issued = issue_enrollment_token(
             db_session=db_session,
@@ -287,77 +270,129 @@ class EnrollmentTokenCollection(Resource):
             pod_name=payload.get("pod_name", ""),
             ttl_seconds=ttl_seconds,
             one_shot=bool(payload.get("one_shot", True)),
-            issued_by=actor,
+            issued_by=actor_user_id,
         )
-        rtnval = ({
+        body = {
             "token_id": issued.token_id,
             "secret": issued.secret,
             "project_id": issued.project_id,
             "pod_name": issued.pod_name,
             "expires_at": issued.expires_at_iso,
             "algorithm_name": issued.algorithm_name,
-        }, 201)
+        }
+        rtnval = JSONResponse(content=body, status_code=201)
         return rtnval
 
-    @enrollment_ns.marshal_list_with(token_view_model)
-    def get(self):
-        db_session = _get_db_session()
-        project_id = request.args.get("project_id", None)
-        status = _parse_status(request.args.get("status", ""))
+    @RestBlueprint.attach_at(
+        path="/api/v1/enrollment-tokens",
+        methods=["GET"],
+        doc=Doc(
+            summary="List enrollment tokens",
+            description=(
+                "List enrollment tokens (no secrets). Supports "
+                "project_id and status query-string filters."
+            ),
+        ),
+    )
+    def list_tokens(request: Request) -> JSONResponse:
+        """
+            List enrollment tokens with optional filters.
+
+            :param request: The incoming HTTP request.
+
+            :returns: 200 with a JSON list of token views.
+        """
+        db_session = _require_db_session(request=request)
+        project_id = request.query_params.get("project_id", None)
+        status_raw = request.query_params.get("status", "")
+        status = _parse_status(raw=status_raw)
+
         views = list_enrollment_tokens(
             db_session=db_session,
             project_id=project_id,
             status=status,
         )
-        rtnval = [_token_to_dict(v) for v in views]
+        body = [_token_to_dict(view=v) for v in views]
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/enrollment-tokens/{token_id}",
+        methods=["DELETE"],
+        doc=Doc(
+            summary="Revoke an enrollment token",
+            description="Admin revoke of an enrollment token by id.",
+        ),
+    )
+    def delete_token(request: Request) -> JSONResponse:
+        """
+            Revoke an enrollment token.
 
-@enrollment_ns.route("/<string:token_id>")
-@enrollment_ns.param("token_id", "Token UUID")
-class EnrollmentTokenResource(Resource):
-    """
-        DELETE ``/api/v1/enrollment-tokens/{token_id}`` — admin revoke.
-    """
+            :param request: The incoming HTTP request.
 
-    def delete(self, token_id: str):
-        db_session = _get_db_session()
-        actor = getattr(g, "actor_user_id", None)
+            :returns: 200 with ``{"token_id": ..., "status":
+                      "revoked"}``.
+        """
+        db_session = _require_db_session(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
+        token_id = request.path_params.get("token_id", "")
 
         try:
             revoke_enrollment_token(
                 db_session=db_session,
                 token_id=token_id,
-                actor_user_id=actor,
+                actor_user_id=actor_user_id,
             )
-        except EnrollmentTokenNotFoundError as xcpt:
-            enrollment_ns.abort(404, str(xcpt))
+        except EnrollmentTokenNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
 
-        rtnval = ({"token_id": token_id, "status": "revoked"}, 200)
+        body = {"token_id": token_id, "status": "revoked"}
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/enrollment-tokens/redeem",
+        methods=["POST"],
+        doc=Doc(
+            summary="Redeem an enrollment token",
+            description=(
+                "Agent presents the enrollment secret plus payload and "
+                "receives a bearer token (and, optionally, a signed "
+                "client cert)."
+            ),
+        ),
+    )
+    def redeem_token(request: Request) -> JSONResponse:
+        """
+            Redeem an enrollment token.
 
-@enrollment_ns.route("/redeem")
-class EnrollmentTokenRedemption(Resource):
-    """
-        POST ``/api/v1/enrollment-tokens/redeem`` — agent redeems a secret.
-    """
+            :param request: The incoming HTTP request.
 
-    @enrollment_ns.expect(redeem_request_model, validate=True)
-    @enrollment_ns.marshal_with(redeem_response_model)
-    def post(self):
-        db_session = _get_db_session()
-        payload = request.get_json(force=True, silent=False)
+            :returns: 200 with the redemption result.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
 
-        csr_raw = payload.get("csr_pem", "") or ""
-        csr_pem = _decode_csr_field(csr_raw)
-        csr_for_payload = csr_pem if len(csr_pem) > 0 else None
+        csr_raw = payload.get("csr_pem", "")
+        if csr_raw is None:
+            csr_raw = ""
+        csr_pem = _decode_csr_field(raw=csr_raw)
+        if len(csr_pem) > 0:
+            csr_for_payload = csr_pem
+        else:
+            csr_for_payload = None
+
+        extras_raw = payload.get("extras", {})
+        if extras_raw is None:
+            extras_raw = {}
 
         enrollment_payload = EnrollmentPayload(
             pod_name=payload.get("pod_name", ""),
             agent_version=payload.get("agent_version", None),
             transport_name=payload.get("transport_name", None),
-            extras=payload.get("extras", {}) or {},
+            extras=extras_raw,
             csr_pem=csr_for_payload,
         )
 
@@ -367,90 +402,112 @@ class EnrollmentTokenRedemption(Resource):
                 secret=payload.get("secret", ""),
                 payload=enrollment_payload,
             )
-        except EnrollmentTokenNotFoundError as xcpt:
-            enrollment_ns.abort(404, str(xcpt))
-        except EnrollmentTokenInvalidError as xcpt:
-            enrollment_ns.abort(400, str(xcpt))
-        except EnrollmentRejectedError as xcpt:
-            enrollment_ns.abort(403, str(xcpt))
-        except ClientAlreadyExistsError as xcpt:
-            enrollment_ns.abort(409, str(xcpt))
-        except CsrScopeMismatchError as xcpt:
-            enrollment_ns.abort(403, str(xcpt))
-        except CsrValidationError as xcpt:
-            enrollment_ns.abort(400, str(xcpt))
-        except CertificateAuthorityUnavailableError as xcpt:
-            enrollment_ns.abort(503, str(xcpt))
+        except EnrollmentTokenNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        except EnrollmentTokenInvalidError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
+        except EnrollmentRejectedError as exc:
+            raise HTTPException(
+                status_code=403, detail=str(exc),
+            ) from exc
+        except ClientAlreadyExistsError as exc:
+            raise HTTPException(
+                status_code=409, detail=str(exc),
+            ) from exc
+        except CsrScopeMismatchError as exc:
+            raise HTTPException(
+                status_code=403, detail=str(exc),
+            ) from exc
+        except CsrValidationError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
+        except CertificateAuthorityUnavailableError as exc:
+            raise HTTPException(
+                status_code=503, detail=str(exc),
+            ) from exc
 
-        rtnval = {
+        body = {
             "client_id": result.client_id,
             "project_id": result.project_id,
             "pod_name": result.pod_name,
             "bearer_token": result.bearer_token,
             "bearer_algorithm": result.bearer_algorithm,
-            "cert_serial": result.cert_serial or "",
-            "cert_pem": _encode_pem_field(result.cert_pem),
-            "cert_chain_pem": _encode_pem_field(result.cert_chain_pem),
+            "cert_serial": result.cert_serial if result.cert_serial else "",
+            "cert_pem": _encode_pem_field(raw=result.cert_pem),
+            "cert_chain_pem": _encode_pem_field(raw=result.cert_chain_pem),
         }
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/enrollment-tokens/clients/{client_id}/revoke",
+        methods=["POST"],
+        doc=Doc(
+            summary="Revoke a client identity",
+            description=(
+                "Admin revokes a client identity. Mounted under the "
+                "enrollment namespace because the revocation row lives "
+                "on the enrollment data model."
+            ),
+        ),
+    )
+    def revoke_client_identity(request: Request) -> JSONResponse:
+        """
+            Revoke a client identity.
 
-@enrollment_ns.route("/clients/<string:client_id>/revoke")
-@enrollment_ns.param("client_id", "Client UUID")
-class ClientRevocationResource(Resource):
-    """
-        POST ``/api/v1/enrollment-tokens/clients/{client_id}/revoke`` —
-        admin revokes a client identity. Mounts under the enrollment
-        namespace because the revocation state lives on the enrollment
-        data model (``client_revocations``) and must share the RBAC
-        gate with token rescission.
-    """
+            :param request: The incoming HTTP request.
 
-    @enrollment_ns.expect(revoke_client_request_model, validate=True)
-    @enrollment_ns.marshal_with(revoke_client_response_model)
-    def post(self, client_id: str):
-        db_session = _get_db_session()
-        actor = getattr(g, "actor_user_id", None)
-        body = request.get_json(force=True, silent=False)
+            :returns: 200 with the revocation summary.
+        """
+        db_session = _require_db_session(request=request)
+        actor_user_id = get_request_actor_user_id(request=request)
+        body_payload = _read_json_body(request=request)
+        client_id = request.path_params.get("client_id", "")
 
-        reason_raw = body.get("reason", "")
-        if reason_raw is None or len(reason_raw) == 0:
-            enrollment_ns.abort(400, "reason is required")
-        reason = _parse_revocation_reason(reason_raw)
+        reason_raw = body_payload.get("reason", "")
+        if reason_raw is None:
+            raise HTTPException(
+                status_code=400, detail="reason is required",
+            )
+        if len(reason_raw) == 0:
+            raise HTTPException(
+                status_code=400, detail="reason is required",
+            )
+        reason = _parse_revocation_reason(raw=reason_raw)
 
-        note = body.get("note", "") or ""
-        cert_serial_in = body.get("cert_serial", None)
-        if cert_serial_in is not None and len(cert_serial_in) == 0:
-            cert_serial_in = None
+        note = body_payload.get("note", "")
+        if note is None:
+            note = ""
+
+        cert_serial_in = body_payload.get("cert_serial", None)
+        if cert_serial_in is not None:
+            if len(cert_serial_in) == 0:
+                cert_serial_in = None
 
         try:
             revoke_client(
                 db_session=db_session,
                 client_id=client_id,
                 reason=reason,
-                revoked_by=actor,
+                revoked_by=actor_user_id,
                 note=note,
                 cert_serial=cert_serial_in,
             )
-        except ClientNotFoundError as xcpt:
-            enrollment_ns.abort(404, str(xcpt))
+        except ClientNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
 
-        rtnval = {
+        body = {
             "client_id": client_id,
             "status": "revoked",
-            "cert_serial": cert_serial_in or "",
+            "cert_serial": cert_serial_in if cert_serial_in else "",
             "reason": reason.value,
         }
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
-
-
-def publish_namespaces(version_prefix: str):
-    """
-        Return namespace registrations for the v1 API wiring.
-
-        :param version_prefix: Version prefix string (``/1``).
-
-        :returns: List of (namespace, path) tuples.
-    """
-    rtnval = [(enrollment_ns, version_prefix + ENROLLMENT_NAMESPACE_PATH)]
-    return rtnval

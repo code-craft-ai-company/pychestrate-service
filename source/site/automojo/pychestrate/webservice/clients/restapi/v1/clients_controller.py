@@ -5,28 +5,35 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-M1 routes:
+Migrated from Flask + flask-restx to automojo-webworks. Pattern follows
+the worked example documented in
+:mod:`automojo.pychestrate.webservice.security.auth.restapi.v1.auth_controller`.
+
+Endpoints (unchanged URLs):
 
 * ``GET    /api/v1/clients`` — list with optional filters.
 * ``GET    /api/v1/clients/{client_id}`` — single client view.
 * ``POST   /api/v1/clients/{client_id}/revoke`` — admin revoke.
-* ``PUT    /api/v1/clients/{client_id}/attributes`` — admin attribute override.
-
-Agent-side routes (``/api/v1/clients/enrollment`` for redemption,
-``/api/v1/clients/{id}/heartbeat`` for liveness) land in the
-paired ``enrollment_controller.py``.
+* ``PUT    /api/v1/clients/{client_id}/attributes`` — admin attribute upsert.
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
 
-from flask import g, request
-from flask_restx import Namespace, Resource, fields
+import os
+
+from typing import Any, Dict, Optional
 
 from automojo.errors.exceptions import SemanticError
+
+from automojo.webworks.endpoints.doc import Doc
+from automojo.webworks.endpoints.restblueprint import RestBlueprint
+from automojo.webworks.routing.exceptions import HTTPException
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import JSONResponse
 
 from automojo.pychestrate.webservice.clients.enrollment.service import (
     revoke_client,
@@ -48,74 +55,22 @@ from automojo.pychestrate.webservice.clients.registry.service import (
     list_clients,
     update_attributes,
 )
-
-
-CLIENTS_NAMESPACE_PATH = "/clients"
-
-
-clients_ns = Namespace(
-    "Clients v1",
-    description="Client registry admin endpoints (3-client-registry).",
+from automojo.pychestrate.webservice.middleware_webworks import (
+    get_request_actor_user_id,
 )
 
 
-client_view_model = clients_ns.model(
-    "ClientsClientView",
-    {
-        "client_id": fields.String(description="Client UUID"),
-        "project_id": fields.String(description="Owning project UUID"),
-        "pod_name": fields.String(description="Pod this client registered under"),
-        "status": fields.String(description="ACTIVE | SUSPENDED | REVOKED"),
-        "liveness_state": fields.String(description="ALIVE | DEGRADED | LOST"),
-        "enrolled_at": fields.String(description="ISO-8601 enrollment timestamp"),
-        "last_seen": fields.String(description="Last heartbeat timestamp"),
-        "last_agent_version": fields.String(description="Reported agent version"),
-        "transport_name": fields.String(description="Last-observed transport"),
-        "degraded_at": fields.String(description="DEGRADED timestamp"),
-        "revision_token": fields.String(description="Monotonic update token"),
-        "attributes": fields.Raw(description="Kind -> value map"),
-    },
-)
+CLIENTS_BASE_PATH = "/api/v1/clients"
 
 
-revoke_request_model = clients_ns.model(
-    "ClientsRevokeRequest",
-    {
-        "reason": fields.String(
-            required=True,
-            description="ROTATED | DECOMMISSIONED | COMPROMISED | ADMIN_REQUEST",
-        ),
-        "note": fields.String(required=False, default="", description="Operator note"),
-    },
-)
+def _view_to_dict(view: ClientView) -> Dict[str, Any]:
+    """
+        Render a :class:`ClientView` as the REST response dict.
 
+        :param view: The view object.
 
-attribute_update_model = clients_ns.model(
-    "ClientsAttributeUpdate",
-    {
-        "kind": fields.String(required=True, description="Attribute kind name"),
-        "value": fields.Raw(required=True, description="JSON-serializable value"),
-    },
-)
-
-
-attribute_batch_model = clients_ns.model(
-    "ClientsAttributeBatch",
-    {
-        "expected_revision_token": fields.String(
-            required=False,
-            description="Current revision_token for optimistic concurrency",
-        ),
-        "updates": fields.List(
-            fields.Nested(attribute_update_model),
-            required=True,
-            description="One or more kind/value pairs",
-        ),
-    },
-)
-
-
-def _view_to_dict(view: ClientView) -> dict:
+        :returns: A plain dict suitable for JSON serialization.
+    """
     rtnval = {
         "client_id": view.client_id,
         "project_id": view.project_id,
@@ -133,138 +88,279 @@ def _view_to_dict(view: ClientView) -> dict:
     return rtnval
 
 
-def _get_db_session():
-    db_session = getattr(g, "db_session", None)
-    if db_session is None:
-        clients_ns.abort(503, "Request-scoped db_session not configured")
-    return db_session
+def _parse_client_status(*, raw: Optional[str]) -> Optional[ClientStatus]:
+    """
+        Coerce a query-param string to a :class:`ClientStatus`.
 
+        :param raw: Raw query-string value, possibly None.
 
-def _parse_client_status(raw: str):
-    if raw is None or len(raw) == 0:
+        :returns: The matching enum, or None when ``raw`` is empty.
+
+        :raises HTTPException: 400 when ``raw`` is non-empty and unknown.
+    """
+    if raw is None:
+        return None
+    if len(raw) == 0:
         return None
     try:
         rtnval = ClientStatus(raw)
-    except ValueError:
-        clients_ns.abort(400, "Unknown status: {}".format(raw))
+    except ValueError as exc:
+        err_msg = "Unknown status: {}".format(raw)
+        raise HTTPException(status_code=400, detail=err_msg) from exc
     return rtnval
 
 
-def _parse_liveness_state(raw: str):
-    if raw is None or len(raw) == 0:
+def _parse_liveness_state(*, raw: Optional[str]) -> Optional[LivenessState]:
+    """
+        Coerce a query-param string to a :class:`LivenessState`.
+
+        :param raw: Raw query-string value, possibly None.
+
+        :returns: The matching enum, or None when ``raw`` is empty.
+
+        :raises HTTPException: 400 when ``raw`` is non-empty and unknown.
+    """
+    if raw is None:
+        return None
+    if len(raw) == 0:
         return None
     try:
         rtnval = LivenessState(raw)
-    except ValueError:
-        clients_ns.abort(400, "Unknown liveness_state: {}".format(raw))
+    except ValueError as exc:
+        err_msg = "Unknown liveness_state: {}".format(raw)
+        raise HTTPException(status_code=400, detail=err_msg) from exc
     return rtnval
 
 
-def _parse_revocation_reason(raw: str) -> RevocationReason:
+def _parse_revocation_reason(*, raw: str) -> RevocationReason:
+    """
+        Coerce a string to a :class:`RevocationReason`.
+
+        :param raw: Raw string value.
+
+        :returns: The matching enum.
+
+        :raises SemanticError: When ``raw`` is unknown.
+    """
     try:
         rtnval = RevocationReason(raw)
-    except ValueError:
-        raise SemanticError("Unknown revocation reason: {}".format(raw))
+    except ValueError as exc:
+        err_msg = "Unknown revocation reason: {}".format(raw)
+        raise SemanticError(err_msg) from exc
     return rtnval
 
 
-@clients_ns.route("")
-class ClientsList(Resource):
+def _require_db_session(*, request: Request) -> Any:
     """
-        GET ``/api/v1/clients`` — list with optional filters.
+        Pull the request-scoped ``db_session`` set by
+        :class:`DbSessionMiddleware`, or 503.
+    """
+    db_session = getattr(request, "db_session", None)
+    if db_session is None:
+        err_lines = [
+            "Request-scoped db_session not configured.",
+            "DbSessionMiddleware must be installed in the pipeline.",
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise HTTPException(status_code=503, detail=err_msg)
+    return db_session
+
+
+def _read_json_body(*, request: Request) -> Dict[str, Any]:
+    """
+        Parse the request body as a JSON object.
+    """
+    raw_body = request.body
+    if raw_body is None:
+        raise HTTPException(status_code=400, detail="request body required")
+    if len(raw_body) == 0:
+        raise HTTPException(status_code=400, detail="request body required")
+    try:
+        decoded = request.json()
+    except Exception as exc:
+        err_msg = "request body must be valid JSON"
+        raise HTTPException(status_code=400, detail=err_msg) from exc
+    if not isinstance(decoded, dict):
+        raise HTTPException(
+            status_code=400, detail="request body must be a JSON object",
+        )
+    rtnval = decoded
+    return rtnval
+
+
+class ClientsBlueprint(RestBlueprint):
+    """
+        Blueprint grouping the v1 ``/api/v1/clients`` admin endpoints.
     """
 
-    @clients_ns.marshal_list_with(client_view_model)
-    def get(self):
-        db_session = _get_db_session()
-        project_id = request.args.get("project_id", None)
-        status = _parse_client_status(request.args.get("status", ""))
-        liveness_state = _parse_liveness_state(request.args.get("liveness_state", ""))
+    base_path = CLIENTS_BASE_PATH
+    tags = ["clients", "v1"]
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/clients",
+        methods=["GET"],
+        doc=Doc(
+            summary="List clients",
+            description=(
+                "List registered clients. Supports project_id, status, "
+                "and liveness_state query-string filters."
+            ),
+        ),
+    )
+    def list_clients_endpoint(request: Request) -> JSONResponse:
+        """
+            List clients with optional filters.
+
+            :param request: The incoming HTTP request.
+
+            :returns: 200 with a JSON list of client views.
+        """
+        db_session = _require_db_session(request=request)
+        project_id = request.query_params.get("project_id", None)
+        status_raw = request.query_params.get("status", "")
+        liveness_raw = request.query_params.get("liveness_state", "")
+        status = _parse_client_status(raw=status_raw)
+        liveness_state = _parse_liveness_state(raw=liveness_raw)
+
         views = list_clients(
             db_session=db_session,
             project_id=project_id,
             status=status,
             liveness_state=liveness_state,
         )
-        rtnval = [_view_to_dict(v) for v in views]
+        body = [_view_to_dict(view=v) for v in views]
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/clients/{client_id}",
+        methods=["GET"],
+        doc=Doc(
+            summary="Read client",
+            description="Return a single client view.",
+        ),
+    )
+    def get_client_endpoint(request: Request) -> JSONResponse:
+        """
+            Read a single client view.
 
-@clients_ns.route("/<string:client_id>")
-@clients_ns.param("client_id", "Client UUID")
-class ClientsDetail(Resource):
-    """
-        GET ``/api/v1/clients/{client_id}`` — single client view.
-    """
+            :param request: The incoming HTTP request.
 
-    @clients_ns.marshal_with(client_view_model)
-    def get(self, client_id: str):
-        db_session = _get_db_session()
+            :returns: 200 with the client view.
+        """
+        db_session = _require_db_session(request=request)
+        client_id = request.path_params.get("client_id", "")
+
         try:
             view = get_client(db_session=db_session, client_id=client_id)
-        except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
-        rtnval = _view_to_dict(view)
+        except ClientNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+
+        body = _view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/clients/{client_id}/revoke",
+        methods=["POST"],
+        doc=Doc(
+            summary="Revoke a client",
+            description="Admin revoke of a client identity.",
+        ),
+    )
+    def revoke_client_endpoint(request: Request) -> JSONResponse:
+        """
+            Revoke a client identity.
 
-@clients_ns.route("/<string:client_id>/revoke")
-@clients_ns.param("client_id", "Client UUID")
-class ClientsRevoke(Resource):
-    """
-        POST ``/api/v1/clients/{client_id}/revoke`` — admin revoke.
-    """
+            :param request: The incoming HTTP request.
 
-    @clients_ns.expect(revoke_request_model, validate=True)
-    def post(self, client_id: str):
-        db_session = _get_db_session()
-        payload = request.get_json(force=True, silent=False)
-        actor = getattr(g, "actor_user_id", None)
+            :returns: 200 with ``{"client_id": ..., "status":
+                      "revoked"}``.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+        client_id = request.path_params.get("client_id", "")
+        actor_user_id = get_request_actor_user_id(request=request)
 
         try:
-            reason = _parse_revocation_reason(payload.get("reason", ""))
-        except SemanticError as xcpt:
-            clients_ns.abort(400, str(xcpt))
+            reason = _parse_revocation_reason(
+                raw=payload.get("reason", ""),
+            )
+        except SemanticError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
 
         try:
             revoke_client(
                 db_session=db_session,
                 client_id=client_id,
                 reason=reason,
-                revoked_by=actor,
+                revoked_by=actor_user_id,
                 note=payload.get("note", ""),
             )
-        except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
+        except ClientNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
 
-        rtnval = ({"client_id": client_id, "status": "revoked"}, 200)
+        body = {"client_id": client_id, "status": "revoked"}
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
 
+    @RestBlueprint.attach_at(
+        path="/api/v1/clients/{client_id}/attributes",
+        methods=["PUT"],
+        doc=Doc(
+            summary="Upsert client attributes",
+            description=(
+                "Apply a batch of attribute kind/value updates to a "
+                "client. Supports optimistic concurrency via "
+                "expected_revision_token."
+            ),
+        ),
+    )
+    def update_attributes_endpoint(request: Request) -> JSONResponse:
+        """
+            Apply a batch of attribute updates.
 
-@clients_ns.route("/<string:client_id>/attributes")
-@clients_ns.param("client_id", "Client UUID")
-class ClientsAttributes(Resource):
-    """
-        PUT ``/api/v1/clients/{client_id}/attributes`` — admin upsert batch.
-    """
+            :param request: The incoming HTTP request.
 
-    @clients_ns.expect(attribute_batch_model, validate=True)
-    def put(self, client_id: str):
-        db_session = _get_db_session()
-        payload = request.get_json(force=True, silent=False)
+            :returns: 200 with ``{"client_id": ..., "kinds_written":
+                      [...]}``.
+        """
+        db_session = _require_db_session(request=request)
+        payload = _read_json_body(request=request)
+        client_id = request.path_params.get("client_id", "")
 
         raw_updates = payload.get("updates", [])
-        if isinstance(raw_updates, list) is False:
-            clients_ns.abort(400, "'updates' must be a list of {kind, value} objects")
+        if not isinstance(raw_updates, list):
+            err_msg = "'updates' must be a list of {kind, value} objects"
+            raise HTTPException(status_code=400, detail=err_msg)
 
         updates = []
         for item in raw_updates:
-            if isinstance(item, dict) is False:
-                clients_ns.abort(400, "Each update must be an object")
+            if not isinstance(item, dict):
+                raise HTTPException(
+                    status_code=400, detail="Each update must be an object",
+                )
             kind = item.get("kind", "")
-            if isinstance(kind, str) is False or len(kind) == 0:
-                clients_ns.abort(400, "Each update must include a non-empty 'kind'")
-            updates.append(AttributeUpdate(kind=kind, value=item.get("value", None)))
+            if not isinstance(kind, str):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each update must include a non-empty 'kind'",
+                )
+            if len(kind) == 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each update must include a non-empty 'kind'",
+                )
+            update = AttributeUpdate(
+                kind=kind, value=item.get("value", None),
+            )
+            updates.append(update)
 
         expected_token = payload.get("expected_revision_token", None)
 
@@ -275,24 +371,19 @@ class ClientsAttributes(Resource):
                 updates=updates,
                 expected_revision_token=expected_token,
             )
-        except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
-        except UnknownAttributeKindError as xcpt:
-            clients_ns.abort(400, str(xcpt))
-        except InvalidAttributeValueError as xcpt:
-            clients_ns.abort(400, str(xcpt))
+        except ClientNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        except UnknownAttributeKindError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
+        except InvalidAttributeValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
 
-        rtnval = ({"client_id": client_id, "kinds_written": list(written)}, 200)
+        body = {"client_id": client_id, "kinds_written": list(written)}
+        rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
-
-
-def publish_namespaces(version_prefix: str):
-    """
-        Return namespace registrations for the v1 API wiring.
-
-        :param version_prefix: Version prefix string (``/1``).
-
-        :returns: List of (namespace, path) tuples.
-    """
-    rtnval = [(clients_ns, version_prefix + CLIENTS_NAMESPACE_PATH)]
-    return rtnval
