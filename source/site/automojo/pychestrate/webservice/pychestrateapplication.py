@@ -70,6 +70,9 @@ from automojo.pychestrate.webservice.middleware_webworks import (
 from automojo.pychestrate.webservice.notifications.restapi.v1 import (  # noqa: F401
     notificationchannelsblueprint as _notificationchannelsblueprint,
 )
+from automojo.pychestrate.webservice.orchestration import (  # noqa: F401
+    flowsblueprint as _flowsblueprint,
+)
 from automojo.pychestrate.webservice.pods.restapi.v1 import (  # noqa: F401
     podsblueprint as _podsblueprint,
 )
