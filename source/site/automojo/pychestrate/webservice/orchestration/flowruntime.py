@@ -64,6 +64,68 @@ logger = logging.getLogger(__name__)
 SessionFactory = Callable[[], DbSession]
 
 
+class _ThreadLocalLogHandler(logging.Handler):
+    """
+        Logging handler that routes records into a per-thread
+        :class:`io.StringIO` buffer, so the :class:`FlowRuntime`
+        worker pool can capture logs without one worker's records
+        bleeding into another's persisted ``log_text``.
+
+        Workers call :meth:`attach_buffer` before invoking the
+        engine and :meth:`detach_buffer` in the ``finally`` clause
+        afterwards. The handler is registered once on the root
+        logger when the :class:`FlowRuntime` is constructed and
+        removed on :meth:`FlowRuntime.shutdown`.
+
+        Records emitted from threads that haven't attached a buffer
+        are dropped silently (the workers are the only producers we
+        care to capture).
+    """
+
+    def __init__(self):
+        """
+            Construct a :class:`_ThreadLocalLogHandler`.
+        """
+        super().__init__(level=logging.DEBUG)
+        self._local: threading.local = threading.local()
+        self.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(name)s: %(message)s",
+            ),
+        )
+        return
+
+    def attach_buffer(self, *, buffer: io.StringIO) -> None:
+        """
+            Bind ``buffer`` as this thread's capture target.
+        """
+        self._local.buffer = buffer
+        return
+
+    def detach_buffer(self) -> None:
+        """
+            Clear this thread's capture target.
+        """
+        self._local.buffer = None
+        return
+
+    def emit(self, record: logging.LogRecord) -> None:
+        """
+            Append the formatted record to the thread-local buffer
+            when one is attached, otherwise drop it.
+        """
+        buffer = getattr(self._local, "buffer", None)
+        if buffer is None:
+            return
+        try:
+            message = self.format(record)
+            buffer.write(message)
+            buffer.write("\n")
+        except Exception:  # noqa: BLE001 — handler must not raise
+            self.handleError(record)
+        return
+
+
 class FlowState(str, Enum):
     """
         Lifecycle state of a :class:`FlowSubmission`.
@@ -152,6 +214,14 @@ class FlowRuntime:
         )
         self._max_workers: int = max_workers
         self._session_factory: Optional[SessionFactory] = session_factory
+
+        # Single thread-local handler shared by every worker, attached
+        # to the root logger for the runtime's lifetime. Per-worker
+        # buffers are bound via :meth:`_ThreadLocalLogHandler.attach_buffer`
+        # so concurrent flows don't cross-contaminate each other's
+        # persisted log_text.
+        self._log_handler: _ThreadLocalLogHandler = _ThreadLocalLogHandler()
+        logging.getLogger().addHandler(self._log_handler)
 
         if session_factory is not None:
             self._load_existing_submissions()
@@ -295,9 +365,14 @@ class FlowRuntime:
 
     def shutdown(self, *, wait: bool = True) -> None:
         """
-            Drain the worker pool.
+            Drain the worker pool and detach the per-thread log
+            handler from the root logger.
         """
         self._executor.shutdown(wait=wait)
+        try:
+            logging.getLogger().removeHandler(self._log_handler)
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
         return
 
     def _copy_submission(
@@ -400,16 +475,11 @@ class FlowRuntime:
         """
         from automojo.taskplus.model.flowengine import FlowEngine
 
-        # Capture engine + task logs into a per-submission buffer so
-        # the persisted log_text shows what happened during the run.
+        # Bind a thread-local capture buffer to the runtime's shared
+        # log handler so this worker's records land in log_text
+        # without cross-contaminating concurrent workers.
         log_buffer = io.StringIO()
-        log_handler = logging.StreamHandler(log_buffer)
-        log_handler.setLevel(logging.DEBUG)
-        log_handler.setFormatter(
-            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"),
-        )
-        root_logger = logging.getLogger()
-        root_logger.addHandler(log_handler)
+        self._log_handler.attach_buffer(buffer=log_buffer)
 
         started_at_dt = datetime.now(timezone.utc)
         with self._lock:
@@ -434,8 +504,7 @@ class FlowRuntime:
             )
             result_code = 1
         finally:
-            root_logger.removeHandler(log_handler)
-            log_handler.flush()
+            self._log_handler.detach_buffer()
 
         completed_at_dt = datetime.now(timezone.utc)
         if error_text is not None:
