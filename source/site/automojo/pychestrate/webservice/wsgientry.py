@@ -176,6 +176,7 @@ def build_default_app(
     rtnval = PychestrateApplication(
         session_factory=_open_session,
         debug=debug_value,
+        local_worker_pool_autostart=True,
     )
     return rtnval
 
