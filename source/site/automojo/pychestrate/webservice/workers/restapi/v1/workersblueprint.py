@@ -34,7 +34,10 @@ from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.webworks.security.accesspolicy import AccessPolicy
 
-from automojo.pychestrate.webservice.workers import service as worker_service
+from automojo.pychestrate.webservice.workers import (
+    jobservice as worker_job_service,
+    service as worker_service,
+)
 from automojo.pychestrate.webservice.workers.exceptions import (
     WorkerAlreadyRegisteredError,
     WorkerNotFoundError,
@@ -345,3 +348,98 @@ class WorkersBlueprint(RestBlueprint):
             ) from exc
         rtnval = Response(status_code=204, body=b"")
         return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/workers/{worker_id}/jobs/poll",
+        methods=["POST"],
+        doc=Doc(
+            summary="Worker polls for next job",
+            description=(
+                "Atomically claim the oldest PENDING job whose "
+                "selectors match this worker. Returns 200 with a "
+                "JobView when one was claimed; 200 with "
+                "``{job: null}`` when the queue has nothing."
+            ),
+        ),
+        access_policy=_WORKER_OR_ADMIN,
+    )
+    def poll_next_job(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        worker_id = request.path_params.get("worker_id", "")
+        view = worker_job_service.claim_next_job(
+            db_session=db_session, worker_id=worker_id,
+        )
+        if view is None:
+            body = {"job": None}
+        else:
+            body = {"job": _job_view_to_dict(view=view)}
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/workers/{worker_id}/jobs/{job_id}/result",
+        methods=["POST"],
+        doc=Doc(
+            summary="Worker reports job result",
+            description=(
+                "Body: ``{result_code, stdout?, stderr?, "
+                "error_text?}``. Sets the job state to SUCCEEDED "
+                "(result_code == 0) or FAILED."
+            ),
+        ),
+        access_policy=_WORKER_OR_ADMIN,
+    )
+    def report_job_result(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        worker_id = request.path_params.get("worker_id", "")
+        job_id = request.path_params.get("job_id", "")
+        payload = _read_json_body(request=request)
+
+        result_code_raw = payload.get("result_code", None)
+        if result_code_raw is None:
+            raise HTTPException(
+                status_code=400, detail="result_code is required",
+            )
+        try:
+            result_code = int(result_code_raw)
+        except (TypeError, ValueError) as exc:
+            err_msg = "result_code must be an integer"
+            raise HTTPException(status_code=400, detail=err_msg) from exc
+
+        try:
+            view = worker_job_service.report_result(
+                db_session=db_session,
+                worker_id=worker_id,
+                job_id=job_id,
+                result_code=result_code,
+                stdout=str(payload.get("stdout", "")),
+                stderr=str(payload.get("stderr", "")),
+                error_text=payload.get("error_text", None),
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        body = _job_view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+
+def _job_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "job_id": view.job_id,
+        "kind": view.kind,
+        "payload": view.payload,
+        "target_pod_name": view.target_pod_name,
+        "target_kind": view.target_kind,
+        "worker_id": view.worker_id,
+        "state": view.state,
+        "enqueued_at": view.enqueued_at,
+        "claimed_at": view.claimed_at,
+        "completed_at": view.completed_at,
+        "result_code": view.result_code,
+        "stdout": view.stdout,
+        "stderr": view.stderr,
+        "error_text": view.error_text,
+    }
+    return rtnval
