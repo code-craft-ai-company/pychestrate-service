@@ -236,3 +236,37 @@ class FlowsBlueprint(RestBlueprint):
         body = _submission_to_dict(submission=submission)
         rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/flows/{flow_id}/log",
+        methods=["GET"],
+        doc=Doc(
+            summary="Read flow log",
+            description=(
+                "Return captured stdout / log output for one "
+                "submission. Available only when the runtime is "
+                "wired with a DB session_factory; in-memory-only "
+                "runtimes return 404 here."
+            ),
+        ),
+    )
+    def read_flow_log(request: Request) -> JSONResponse:
+        """
+            Return the log_text persisted alongside a submission.
+        """
+        runtime = _resolve_runtime(request=request)
+        flow_id = request.path_params.get("flow_id", "")
+
+        # Confirm the submission exists first so we can distinguish
+        # "unknown id" from "log capture not enabled".
+        submission = runtime.status(flow_id=flow_id)
+        if submission is None:
+            err_msg = "Flow submission not found: {}".format(flow_id)
+            raise HTTPException(status_code=404, detail=err_msg)
+
+        log_text = runtime.read_log(flow_id=flow_id)
+        if log_text is None:
+            log_text = ""
+        body = {"flow_id": flow_id, "log_text": log_text}
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval

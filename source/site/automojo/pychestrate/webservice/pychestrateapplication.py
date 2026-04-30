@@ -73,6 +73,9 @@ from automojo.pychestrate.webservice.notifications.restapi.v1 import (  # noqa: 
 from automojo.pychestrate.webservice.orchestration import (  # noqa: F401
     flowsblueprint as _flowsblueprint,
 )
+from automojo.pychestrate.webservice.orchestration.flowruntime import (
+    FlowRuntime,
+)
 from automojo.pychestrate.webservice.pods.restapi.v1 import (  # noqa: F401
     podsblueprint as _podsblueprint,
 )
@@ -180,13 +183,16 @@ class PychestrateApplication:
         if register_extensions is True:
             self._register_builtin_extensions()
 
+        # FlowRuntime is constructed with the same session_factory so
+        # taskplus submissions persist to FlowSubmissionRecord rows
+        # and survive a service restart.
+        self._flow_runtime: FlowRuntime = FlowRuntime(
+            session_factory=session_factory,
+        )
+
         self._router: Router = self._build_router()
         self._pipeline: MiddlewarePipeline = self._build_pipeline()
-        self._dispatcher: Dispatcher = Dispatcher(
-            router=self._router,
-            pipeline=self._pipeline,
-            debug=debug,
-        )
+        self._dispatcher: Dispatcher = self._build_dispatcher(debug=debug)
         self._wsgi_app: WSGIApplication = WSGIApplication(
             handler=self._dispatcher.dispatch,
             debug=debug,
@@ -232,6 +238,19 @@ class PychestrateApplication:
             :returns: The WSGI app instance.
         """
         rtnval = self._wsgi_app
+        return rtnval
+
+    @property
+    def flow_runtime(self) -> FlowRuntime:
+        """
+            The :class:`FlowRuntime` shared by every request through
+            the dispatcher attach-shim. Wired with the same
+            session_factory as the rest of the app so submissions
+            persist to FlowSubmissionRecord rows.
+
+            :returns: The runtime instance.
+        """
+        rtnval = self._flow_runtime
         return rtnval
 
     @property
@@ -290,6 +309,35 @@ class PychestrateApplication:
             router.add_endpoint(descriptor=descriptor)
         rtnval = router
         return rtnval
+
+    def _build_dispatcher(self, *, debug: bool) -> Dispatcher:
+        """
+            Construct a :class:`Dispatcher` and wrap its ``dispatch``
+            so every incoming :class:`Request` carries the per-app
+            :class:`FlowRuntime` on ``request.flow_runtime`` (the
+            attribute the FlowsBlueprint reads).
+        """
+        dispatcher = Dispatcher(
+            router=self._router,
+            pipeline=self._pipeline,
+            debug=debug,
+        )
+        original_dispatch = dispatcher.dispatch
+        flow_runtime_ref = self._flow_runtime
+
+        def _dispatch_with_runtime(*, request) -> Any:
+            # Only attach the app's runtime when callers (typically
+            # tests) haven't already injected an override. This keeps
+            # the per-request override pattern from
+            # test_p24h_end_to_end_application_smoke_m3 working.
+            existing = getattr(request, "flow_runtime", None)
+            if existing is None:
+                request.flow_runtime = flow_runtime_ref
+            rtnval = original_dispatch(request=request)
+            return rtnval
+
+        dispatcher.dispatch = _dispatch_with_runtime
+        return dispatcher
 
     def _build_pipeline(self) -> MiddlewarePipeline:
         """
