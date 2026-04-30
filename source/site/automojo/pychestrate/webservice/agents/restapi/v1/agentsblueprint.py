@@ -38,6 +38,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.agents.capability_service import (
     list_capabilities_for_client,
@@ -204,6 +208,7 @@ class AgentsBlueprint(RestBlueprint):
             summary="Draft an agent rollout",
             description="Stage a new agent rollout in DRAFT state.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def draft_agent_rollout(request: Request) -> JSONResponse:
         """
@@ -245,6 +250,7 @@ class AgentsBlueprint(RestBlueprint):
                 "upgrade offers to candidate clients."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def start_agent_rollout(request: Request) -> JSONResponse:
         """

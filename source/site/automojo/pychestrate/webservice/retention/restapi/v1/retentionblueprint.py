@@ -25,6 +25,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -198,6 +202,7 @@ class RetentionBlueprint(RestBlueprint):
             summary="Create retention policy",
             description="Register a new retention policy in DRAFT state.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def create_policy(request: Request) -> JSONResponse:
         """
@@ -337,6 +342,7 @@ class RetentionBlueprint(RestBlueprint):
             summary="Publish retention policy",
             description="Transition a retention policy into PUBLISHED.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def publish_policy(request: Request) -> JSONResponse:
         """

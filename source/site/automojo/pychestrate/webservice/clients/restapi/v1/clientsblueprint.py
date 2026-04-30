@@ -34,6 +34,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.clients.enrollment.service import (
     revoke_client,
@@ -269,6 +273,7 @@ class ClientsBlueprint(RestBlueprint):
             summary="Revoke a client",
             description="Admin revoke of a client identity.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def revoke_client_endpoint(request: Request) -> JSONResponse:
         """
@@ -321,6 +326,7 @@ class ClientsBlueprint(RestBlueprint):
                 "expected_revision_token."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def update_attributes_endpoint(request: Request) -> JSONResponse:
         """

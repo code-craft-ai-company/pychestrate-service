@@ -224,6 +224,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}",
         methods=["PATCH"],
         doc=Doc(summary="Patch project"),
+        access_policy=_ADMIN_POLICY,
     )
     def patch_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -253,6 +254,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}",
         methods=["DELETE"],
         doc=Doc(summary="Delete archived project"),
+        access_policy=_ADMIN_POLICY,
     )
     def delete_project(request: Request) -> Response:
         db_session = _require_db_session(request=request)
@@ -277,6 +279,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/archive",
         methods=["POST"],
         doc=Doc(summary="Archive project"),
+        access_policy=_ADMIN_POLICY,
     )
     def archive_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -300,6 +303,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/unarchive",
         methods=["POST"],
         doc=Doc(summary="Unarchive project"),
+        access_policy=_ADMIN_POLICY,
     )
     def unarchive_project(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -343,6 +347,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/members",
         methods=["POST"],
         doc=Doc(summary="Add project member"),
+        access_policy=_ADMIN_POLICY,
     )
     def add_member(request: Request) -> JSONResponse:
         db_session = _require_db_session(request=request)
@@ -378,6 +383,7 @@ class ProjectsBlueprint(RestBlueprint):
                 "owner unless ``?force=true`` is supplied by an admin."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def remove_owner_binding(request: Request) -> Response:
         db_session = _require_db_session(request=request)
@@ -409,6 +415,7 @@ class ProjectsBlueprint(RestBlueprint):
         path="/api/v1/projects/{slug}/members/{user_id}/{role_name}",
         methods=["DELETE"],
         doc=Doc(summary="Remove specific role binding"),
+        access_policy=_ADMIN_POLICY,
     )
     def remove_role_binding(request: Request) -> Response:
         db_session = _require_db_session(request=request)

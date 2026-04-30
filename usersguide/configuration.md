@@ -285,13 +285,59 @@ The policy carries:
 
 ### Currently gated endpoints
 
-| Method | Path                  | Required role |
-|--------|-----------------------|---------------|
-| POST   | `/api/v1/projects`    | `system-admin`|
-| POST   | `/api/v1/flows`       | `system-admin`|
+Every write endpoint on the migrated controllers is gated by
+`AccessPolicy(roles=("system-admin",))`. Reads (GET) and the
+authentication endpoints stay public.
 
-All other endpoints are public until you gate them. The mechanism is
-ready; per-endpoint review and rollout is a follow-up slice.
+Gated:
+
+| Method | Path                                               |
+|--------|----------------------------------------------------|
+| POST   | `/api/v1/identity/users`                           |
+| POST   | `/api/v1/flags`                                    |
+| POST   | `/api/v1/rbac/bindings`                            |
+| DELETE | `/api/v1/rbac/bindings/{binding_id}`               |
+| POST   | `/api/v1/rbac/check`                               |
+| POST   | `/api/v1/clients/{client_id}/revoke`               |
+| PUT    | `/api/v1/clients/{client_id}/attributes`           |
+| POST   | `/api/v1/enrollment-tokens`                        |
+| DELETE | `/api/v1/enrollment-tokens/{token_id}`             |
+| POST   | `/api/v1/enrollment-tokens/clients/{cid}/revoke`   |
+| POST   | `/api/v1/retention/policies`                       |
+| POST   | `/api/v1/retention/policies/{id}/publish`          |
+| POST   | `/api/v1/notifications/channels`                   |
+| POST   | `/api/v1/projects`                                 |
+| PATCH  | `/api/v1/projects/{slug}`                          |
+| DELETE | `/api/v1/projects/{slug}`                          |
+| POST   | `/api/v1/projects/{slug}/archive`                  |
+| POST   | `/api/v1/projects/{slug}/unarchive`                |
+| POST   | `/api/v1/projects/{slug}/members`                  |
+| DELETE | `/api/v1/projects/{slug}/members/{user_id}`        |
+| DELETE | `/api/v1/projects/{slug}/members/{user_id}/{role}` |
+| POST   | `/api/v1/projects/{pid}/pod-definitions`           |
+| POST   | `/api/v1/projects/{pid}/pod-templates`             |
+| POST   | `/api/v1/projects/{pid}/pod-templates/{tid}/materialize` |
+| PUT    | `/api/v1/projects/{pid}/runs/{rid}/variables/{name}` |
+| DELETE | `/api/v1/projects/{pid}/runs/{rid}/variables/{name}` |
+| POST   | `/api/v1/agent-rollouts`                           |
+| POST   | `/api/v1/agent-rollouts/{rollout_id}/start`        |
+| POST   | `/api/v1/tags/{kind}/{id}`                         |
+| DELETE | `/api/v1/tags/{kind}/{id}/{tag}`                   |
+| PUT    | `/api/v1/variables/{scope}/{scope_id}/{name}`      |
+| DELETE | `/api/v1/variables/{scope}/{scope_id}/{name}`      |
+| POST   | `/api/v1/flows`                                    |
+
+Intentionally ungated:
+
+| Method | Path                                  | Why                                                              |
+|--------|---------------------------------------|------------------------------------------------------------------|
+| POST   | `/api/v1/auth/login`                  | The caller has no cookie yet; credentials are the auth factor.   |
+| POST   | `/api/v1/auth/logout`                 | Idempotent; tolerates anonymous callers.                         |
+| GET    | `/api/v1/auth/providers`              | Needed by the login picker before any session exists.            |
+| POST   | `/api/v1/auth/providers/{kind}/.../enable` | TODO: gate on a future operator role.                       |
+| POST   | `/api/v1/auth/mfa/challenge`          | TODO: scoped to the partial-session principal once MFA flow lands.|
+| POST   | `/api/v1/auth/mfa/verify`             | Same.                                                            |
+| POST   | `/api/v1/enrollment-tokens/redeem`    | Agents have no cookie at redemption; the secret is the factor.   |
 
 ## Middleware pipeline
 
@@ -417,9 +463,12 @@ For structured logging, install your handler before
 The configuration surface intentionally stays small while the service
 matures. Open work includes:
 
-* Per-endpoint `AccessPolicy` rollout to the rest of the gated
-  surface (`POST /identity/users`, `POST/DELETE /enrollment-tokens`,
-  `POST /clients/{id}/revoke`, etc.).
+* Finer-grained `AccessPolicy` for project-scoped roles
+  (`project-owner` / `project-editor` / `project-viewer`). Currently
+  every gated write requires `system-admin`.
+* Auth admin endpoints (`auth/providers/{kind}/.../enable`,
+  `auth/mfa/challenge`, `auth/mfa/verify`) need their own gates once
+  the MFA partial-session UX lands.
 * Alembic migrations replacing `metadata.create_all`.
 * MFA second-factor flow on the login endpoint (the verifier already
   accepts `mfa_code`; the partial-session UX is a follow-up).

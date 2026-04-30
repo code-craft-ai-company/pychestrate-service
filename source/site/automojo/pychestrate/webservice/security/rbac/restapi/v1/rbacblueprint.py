@@ -37,6 +37,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -257,6 +261,7 @@ class RbacBlueprint(RestBlueprint):
                 "ORGANIZATION, or PROJECT scope."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def create_binding(request: Request) -> JSONResponse:
         """
@@ -386,6 +391,7 @@ class RbacBlueprint(RestBlueprint):
             summary="Revoke a role binding",
             description="Revoke an existing role binding by id.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def delete_binding(request: Request) -> JSONResponse:
         """
@@ -425,6 +431,7 @@ class RbacBlueprint(RestBlueprint):
                 "and return the allow/deny outcome with a reason."
             ),
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def check_permission(request: Request) -> JSONResponse:
         """

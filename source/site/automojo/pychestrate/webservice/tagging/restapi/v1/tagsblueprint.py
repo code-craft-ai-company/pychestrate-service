@@ -25,6 +25,10 @@ from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import JSONResponse, Response
+from automojo.webworks.security.accesspolicy import AccessPolicy
+
+
+_ADMIN_POLICY = AccessPolicy(roles=("system-admin",))
 
 from automojo.pychestrate.webservice.dbsessionmiddleware import (
     get_request_actor_user_id,
@@ -181,6 +185,7 @@ class TagsBlueprint(RestBlueprint):
             summary="Assign tag to entity",
             description="Assign a taxonomy:value tag to an entity.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def assign_tag(request: Request) -> JSONResponse:
         """
@@ -255,6 +260,7 @@ class TagsBlueprint(RestBlueprint):
             summary="Remove tag from entity",
             description="Remove a single tag from an entity.",
         ),
+        access_policy=_ADMIN_POLICY,
     )
     def remove_tag(request: Request) -> Response:
         """
