@@ -347,13 +347,14 @@ always pass a factory.
 * On boot, `FlowRuntime` reads every existing row into its in-memory
   cache so historical submissions appear in `GET /api/v1/flows`.
 
-### Log capture caveat
+### Log capture
 
-The current implementation attaches a `logging.StreamHandler` to the
-**root** logger for the duration of the worker. A second worker
-running concurrently against the same engine sees log entries from
-the other in its capture buffer. Acceptable for development;
-production deployments should switch to a thread-local handler.
+A single `_ThreadLocalLogHandler` is attached to the root logger when
+the runtime is constructed. Each worker thread binds its own
+`io.StringIO` buffer to the handler before invoking the engine and
+detaches it in the `finally` clause, so concurrent flows write only
+to their own `log_text`. The handler is removed from the root logger
+when the runtime is shut down.
 
 ## WSGI deployment
 
@@ -419,8 +420,6 @@ matures. Open work includes:
 * Per-endpoint `AccessPolicy` rollout to the rest of the gated
   surface (`POST /identity/users`, `POST/DELETE /enrollment-tokens`,
   `POST /clients/{id}/revoke`, etc.).
-* Thread-local log capture in `FlowRuntime` so concurrent flows don't
-  cross-contaminate `log_text`.
 * Alembic migrations replacing `metadata.create_all`.
 * MFA second-factor flow on the login endpoint (the verifier already
   accepts `mfa_code`; the partial-session UX is a follow-up).
