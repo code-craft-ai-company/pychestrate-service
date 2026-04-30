@@ -47,7 +47,7 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from automojo.webworks.endpoints.doc import Doc
 from automojo.webworks.endpoints.restblueprint import RestBlueprint
@@ -91,6 +91,25 @@ AUTH_BASE_PATH = "/api/v1/auth"
 
 
 _VALID_PROVIDER_KINDS = {kind.value for kind in AuthProviderKind}
+
+
+def _first_verified_enrollment(*, db_session, user_id: str):
+    """
+        Return the first verified MFA enrollment for ``user_id``, or
+        ``None`` when the user has none.
+
+        Used by the login endpoint to detect "MFA required" without
+        committing to a particular method ordering. Today the
+        AuthMfaEnrollment query is small (per-user, max a handful of
+        rows) so a linear scan in Python is fine.
+    """
+    enrollments = mfa_service.list_enrollments_for_user(
+        db_session=db_session, user_id=user_id,
+    )
+    for enrollment in enrollments:
+        if enrollment.verified is True:
+            return enrollment
+    return None
 
 
 def _require_db_session(*, request: Request) -> Any:
@@ -210,6 +229,11 @@ class AuthBlueprint(RestBlueprint):
             mfa_code = None
         else:
             mfa_code = str(mfa_code_raw)
+        challenge_id_raw = payload.get("challenge_id", None)
+        if challenge_id_raw is None:
+            challenge_id = None
+        else:
+            challenge_id = str(challenge_id_raw)
 
         # Best-effort source-IP for the backoff key. The webworks
         # Request does not yet expose a parsed remote_addr, so we
@@ -238,13 +262,62 @@ class AuthBlueprint(RestBlueprint):
                 status_code=401, detail=str(exc),
             ) from exc
 
+        # Two-stage MFA: if the user has any verified enrollment, the
+        # first /auth/login call returns mfa_required=true with a
+        # freshly-issued challenge_id (no Set-Cookie). The caller then
+        # POSTs /auth/login a second time including challenge_id +
+        # mfa_code; on success the session opens.
+        verified_enrollment = _first_verified_enrollment(
+            db_session=db_session, user_id=outcome.user_id,
+        )
+        used_method_name: Optional[str] = None
+        if verified_enrollment is not None:
+            if challenge_id is None or mfa_code is None:
+                challenge = mfa_service.initiate_challenge(
+                    db_session=db_session,
+                    user_id=outcome.user_id,
+                    method_name=verified_enrollment.method_name,
+                )
+                body = {
+                    "mfa_required": True,
+                    "user_id": outcome.user_id,
+                    "challenge_id": challenge.challenge_id,
+                    "method_name": challenge.method_name,
+                    "expires_at": challenge.expires_at.isoformat(),
+                }
+                rtnval = JSONResponse(content=body, status_code=200)
+                return rtnval
+            try:
+                verification = mfa_service.verify_challenge(
+                    db_session=db_session,
+                    challenge_id=challenge_id,
+                    response_fields={"code": mfa_code},
+                )
+            except MfaChallengeUnknownError as exc:
+                raise HTTPException(
+                    status_code=401, detail="challenge_unknown",
+                ) from exc
+            except MfaChallengeExpiredError as exc:
+                raise HTTPException(
+                    status_code=401, detail="challenge_expired",
+                ) from exc
+            except MfaChallengeRejectedError as exc:
+                raise HTTPException(
+                    status_code=401, detail="challenge_rejected",
+                ) from exc
+            if verification.accepted is False:
+                raise HTTPException(
+                    status_code=401, detail="challenge_rejected",
+                )
+            used_method_name = verified_enrollment.method_name
+
         cookie_policy = load_cookie_policy_from_env()
         seated = session_service.open_session(
             db_session=db_session,
             user_id=outcome.user_id,
             provider_kind=AuthProviderKind.LOCAL,
             provider_name="local",
-            mfa_method_name=None,
+            mfa_method_name=used_method_name,
             access_token_payload=None,
             refresh_token_payload=None,
             request_fingerprint=RequestFingerprint(

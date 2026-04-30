@@ -182,20 +182,49 @@ rotations carefully.
 
 ### Login endpoint
 
-`POST /api/v1/auth/login` accepts a JSON body
-`{"login_name": "...", "password": "...", "mfa_code": "..."}` and
-returns:
+`POST /api/v1/auth/login` accepts a JSON body. The flow is one or
+two stages depending on whether the user has any verified MFA
+enrollment.
 
-* **200** with `{"session_id": "...", "user_id": "...",
-  "expires_in_seconds": ..., "cookie_name": "pychestrate_session"}`
-  plus a `Set-Cookie: pychestrate_session=<id>; HttpOnly; Secure;
-  SameSite=Lax; Path=/; Max-Age=28800` header (attributes vary with
-  the env-var policy). Browsers persist the cookie automatically;
-  CLI callers can extract the id from the body.
-* **401** when credentials are invalid or the user is inactive. The
-  response intentionally omits `Set-Cookie` so a failed attempt
-  cannot leave a partial session on the client.
-* **400** when the body is missing or not a JSON object.
+**Stage one** — credentials only:
+
+```json
+{"login_name": "alice", "password": "secret"}
+```
+
+* **200** with the session payload + `Set-Cookie` when no MFA is
+  enrolled.
+* **200** with `{"mfa_required": true, "user_id": "...",
+  "challenge_id": "...", "method_name": "totp", "expires_at":
+  "..."}` when MFA is required. **No** `Set-Cookie` is emitted in
+  this stage.
+* **401** on invalid credentials.
+* **400** on missing / non-object body.
+
+**Stage two** — credentials + MFA proof:
+
+```json
+{
+  "login_name": "alice",
+  "password": "secret",
+  "challenge_id": "<from stage one>",
+  "mfa_code": "<TOTP digits / push-ack token / etc.>"
+}
+```
+
+* **200** with the session payload (`session_id`, `user_id`,
+  `expires_in_seconds`, `cookie_name`) + `Set-Cookie:
+  pychestrate_session=<id>; HttpOnly; Secure; SameSite=Lax; Path=/;
+  Max-Age=28800` (attributes vary with the env-var policy). The
+  opened session row records the MFA method via
+  `auth_session.mfa_method_name`.
+* **401** with `challenge_unknown` / `challenge_expired` /
+  `challenge_rejected` when MFA verification fails.
+
+Single-stage shortcut: the caller may submit creds + challenge_id +
+mfa_code in one POST when it already has a fresh challenge_id
+(e.g., from a prior `/auth/mfa/challenge` call); the endpoint
+treats that as the second stage directly.
 
 Backoff: the local-credential verifier applies an exponential
 backoff keyed on `(login_name, source_ip)`. The login endpoint
@@ -470,5 +499,3 @@ matures. Open work includes:
   `auth/mfa/challenge`, `auth/mfa/verify`) need their own gates once
   the MFA partial-session UX lands.
 * Alembic migrations replacing `metadata.create_all`.
-* MFA second-factor flow on the login endpoint (the verifier already
-  accepts `mfa_code`; the partial-session UX is a follow-up).
