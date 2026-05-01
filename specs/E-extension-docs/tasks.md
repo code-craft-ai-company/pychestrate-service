@@ -16,15 +16,34 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create Sphinx root `docs/` with `conf.py`,
+- [x] T1.1 — Create Sphinx root `docs/` with `conf.py`,
   `index.rst`, and the `extensions/` subfolder.
-- [ ] T1.2 — Create
+  *(``docs/conf.py`` registers the in-tree extension, prepends
+  the repo ``source/site`` and ``source/packages`` paths so
+  Sphinx imports resolve, and uses ``alabaster``. ``docs/index.rst``
+  carries a top-level toctree pointing at the generated category
+  indexes. ``docs/Makefile`` provides ``html`` + ``clean`` targets.)*
+- [x] T1.2 — Create
   `source/site/automojo/pychestrate/webservice/extension/docs_ext/`
   with a `setup(app)` entry point.
-- [ ] T1.3 — Implement a minimal `CatalogWalker.emit_protocol_pages`
+  *(Subsystem rooted at ``extension.docs_ext`` with ``models``,
+  ``catalog_walker`` modules and a ``templates/`` directory.
+  ``setup(app)`` returns the documented metadata mapping and
+  hooks ``builder-inited`` so pages render before Sphinx scans
+  the source tree.)*
+- [x] T1.3 — Implement a minimal `CatalogWalker.emit_protocol_pages`
   that emits one stub page per entry.
-- [ ] T1.4 — Wire the extension into `conf.py`; add a
+  *(``CatalogWalker`` accepts a :class:`Catalog` snapshot or
+  loads one via ``plugin_api.runtime.get_active_catalog``;
+  ``emit_protocol_pages`` writes ``<out>/protocols/<name>.rst``,
+  ``emit_resource_pages`` writes ``<out>/resources/<name>.rst``,
+  and ``emit_indexes`` writes per-category ``index.rst`` toctree
+  files. ``emit_all`` does the union pass.)*
+- [x] T1.4 — Wire the extension into `conf.py`; add a
   `make -C docs html` target invocation from the repo Makefile.
+  *(Repo Makefile gains ``docs-html`` / ``docs-clean`` targets
+  delegating to ``docs/Makefile``. ``conf.py``'s ``extensions``
+  list registers ``automojo.pychestrate.webservice.extension.docs_ext``.)*
 
 ### M2 — Core Behavior
 
