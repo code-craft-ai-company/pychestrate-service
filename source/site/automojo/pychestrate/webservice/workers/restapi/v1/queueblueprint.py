@@ -30,12 +30,17 @@ from automojo.webworks.endpoints.doc import Doc
 from automojo.webworks.endpoints.restblueprint import RestBlueprint
 from automojo.webworks.routing.exceptions import HTTPException
 from automojo.webworks.routing.request import Request
-from automojo.webworks.routing.response import JSONResponse
+from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.webworks.security.accesspolicy import AccessPolicy
 
 from automojo.pychestrate.webservice.workers import (
+    artifactservice,
     jobservice,
     service as worker_service,
+)
+from automojo.pychestrate.webservice.workers.artifactservice import (
+    ArtifactJobMismatchError,
+    ArtifactNotFoundError,
 )
 
 
@@ -207,3 +212,112 @@ class QueueBlueprint(RestBlueprint):
         body = _job_view_to_dict(view=view)
         rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/jobs/{job_id}/artifacts",
+        methods=["GET"],
+        doc=Doc(
+            summary="List artifacts attached to a job",
+            description=(
+                "Returns the artifact metadata records (no "
+                "content) attached to ``job_id`` oldest-first. "
+                "Use ``GET /api/v1/queue/artifacts/{id}/content`` "
+                "to download the bytes."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def list_job_artifacts(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        job_id = request.path_params.get("job_id", "")
+        views = artifactservice.list_artifacts_for_job(
+            db_session=db_session, job_id=job_id,
+        )
+        body = [_artifact_view_to_dict(view=v) for v in views]
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/artifacts/{artifact_id}",
+        methods=["GET"],
+        doc=Doc(
+            summary="Read artifact metadata",
+            description=(
+                "Returns the metadata record (no content). "
+                "Use ``.../content`` for the bytes."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def read_artifact_metadata_endpoint(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        artifact_id = request.path_params.get("artifact_id", "")
+        try:
+            view = artifactservice.read_artifact_metadata(
+                db_session=db_session, artifact_id=artifact_id,
+            )
+        except ArtifactNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        body = _artifact_view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/artifacts/{artifact_id}/content",
+        methods=["GET"],
+        doc=Doc(
+            summary="Download artifact content",
+            description=(
+                "Returns the raw bytes with the recorded "
+                "``content_type``. The body is the stored "
+                "blob; size is bounded by the inline-storage "
+                "cap configured at upload time."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def read_artifact_content_endpoint(request: Request) -> Response:
+        db_session = _require_db_session(request=request)
+        artifact_id = request.path_params.get("artifact_id", "")
+        try:
+            view = artifactservice.read_artifact_metadata(
+                db_session=db_session, artifact_id=artifact_id,
+            )
+            content = artifactservice.read_artifact_content(
+                db_session=db_session, artifact_id=artifact_id,
+            )
+        except ArtifactNotFoundError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        rtnval = Response(
+            status_code=200,
+            body=content,
+            headers={
+                "Content-Type": view.content_type,
+                "Content-Length": str(view.size_bytes),
+                "X-Artifact-Hash": view.content_hash,
+                "X-Artifact-Name": view.name,
+            },
+        )
+        return rtnval
+
+
+def _artifact_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "artifact_id": view.artifact_id,
+        "job_id": view.job_id,
+        "worker_id": view.worker_id,
+        "attempt": view.attempt,
+        "name": view.name,
+        "kind": view.kind,
+        "content_type": view.content_type,
+        "size_bytes": view.size_bytes,
+        "content_hash": view.content_hash,
+        "storage_kind": view.storage_kind,
+        "attributes": view.attributes,
+        "created_at": view.created_at,
+    }
+    return rtnval
