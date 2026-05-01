@@ -126,6 +126,31 @@ class RemoteCommand(Task):
             self._timeout_seconds: float = float(timeout_raw)
         except (TypeError, ValueError):
             self._timeout_seconds = _DEFAULT_TIMEOUT_SECONDS
+
+        # Retry policy. ``retries`` is the workflow-author-facing
+        # name (consistent with shell ``retry`` semantics: 0
+        # retries == 1 attempt). It is translated to the
+        # queue's ``max_attempts``.
+        retries_raw = task_info.get("retries", 0)
+        try:
+            retries_value = int(retries_raw)
+        except (TypeError, ValueError):
+            retries_value = 0
+        if retries_value < 0:
+            retries_value = 0
+        self._max_attempts: int = retries_value + 1
+        retry_delay_raw = task_info.get("retry_delay_seconds", 0.0)
+        try:
+            self._retry_delay_seconds: float = float(retry_delay_raw)
+        except (TypeError, ValueError):
+            self._retry_delay_seconds = 0.0
+        if self._retry_delay_seconds < 0.0:
+            self._retry_delay_seconds = 0.0
+        retry_strategy_raw = task_info.get("retry_strategy", None)
+        if retry_strategy_raw is None:
+            self._retry_strategy: str = "fixed"
+        else:
+            self._retry_strategy = str(retry_strategy_raw)
         return
 
     @property
@@ -146,6 +171,47 @@ class RemoteCommand(Task):
     @property
     def timeout_seconds(self) -> float:
         rtnval = self._timeout_seconds
+        return rtnval
+
+    @property
+    def max_attempts(self) -> int:
+        rtnval = self._max_attempts
+        return rtnval
+
+    @property
+    def retry_delay_seconds(self) -> float:
+        rtnval = self._retry_delay_seconds
+        return rtnval
+
+    @property
+    def retry_strategy(self) -> str:
+        rtnval = self._retry_strategy
+        return rtnval
+
+    def _compute_wait_budget(self) -> float:
+        """
+            Sum the per-attempt timeout across every attempt
+            plus the cumulative retry backoff so
+            ``wait_for_completion`` doesn't return before the
+            queue has had a chance to schedule each retry.
+
+            For ``max_attempts=1`` (the default, no retries)
+            this returns ``timeout_seconds`` exactly — same
+            behaviour as before retries existed.
+        """
+        attempts = max(1, int(self._max_attempts))
+        per_attempt = self._timeout_seconds * attempts
+        retries = attempts - 1
+        if retries <= 0:
+            rtnval = per_attempt
+            return rtnval
+        if self._retry_strategy == "exponential":
+            # Backoffs are base * 2**(k-1) for k = 1..retries.
+            multiplier_total = (2 ** retries) - 1
+            backoff_total = self._retry_delay_seconds * multiplier_total
+        else:
+            backoff_total = self._retry_delay_seconds * retries
+        rtnval = per_attempt + backoff_total
         return rtnval
 
     def perform_task(
@@ -171,15 +237,24 @@ class RemoteCommand(Task):
             self._logger.error(err_msg)
             return 1
 
-        # Enqueue
+        # Enqueue. ``timeout_seconds`` is per-attempt — workers
+        # use it to bound the subprocess. The overall budget for
+        # the ``wait_for_completion`` call below is computed
+        # separately so retries fit inside it.
         db_session = session_factory()
         try:
             job_view = jobservice.enqueue_job(
                 db_session=db_session,
                 kind="run-command",
-                payload={"command": self._command},
+                payload={
+                    "command": self._command,
+                    "timeout_seconds": self._timeout_seconds,
+                },
                 target_pod_name=self._target_pod_name,
                 target_kind=self._target_kind,
+                max_attempts=self._max_attempts,
+                retry_delay_seconds=self._retry_delay_seconds,
+                retry_strategy=self._retry_strategy,
             )
         finally:
             db_session.close()
@@ -192,11 +267,16 @@ class RemoteCommand(Task):
             self._command,
         )
 
-        # Wait
+        # Wait. The per-attempt budget is ``timeout_seconds``;
+        # with retries we add a per-attempt slice plus the sum
+        # of the configured backoffs so the wait_for_completion
+        # call doesn't time out before the queue exhausts the
+        # retry policy.
+        wait_budget = self._compute_wait_budget()
         terminal = jobservice.wait_for_completion(
             session_factory=session_factory,
             job_id=job_view.job_id,
-            timeout_seconds=self._timeout_seconds,
+            timeout_seconds=wait_budget,
         )
         if terminal is None:
             self._logger.error(
