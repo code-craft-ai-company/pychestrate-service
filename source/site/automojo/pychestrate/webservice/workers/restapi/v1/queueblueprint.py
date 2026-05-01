@@ -79,6 +79,8 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "retry_strategy": view.retry_strategy,
         "not_before": view.not_before,
         "required_capabilities": view.required_capabilities,
+        "lease_holder": view.lease_holder,
+        "lease_ttl_seconds": view.lease_ttl_seconds,
     }
     return rtnval
 

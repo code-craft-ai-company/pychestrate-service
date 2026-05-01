@@ -481,14 +481,18 @@ class FlowRuntime:
         log_buffer = io.StringIO()
         self._log_handler.attach_buffer(buffer=log_buffer)
 
-        # Bind the session_factory on a thread-local so RemoteCommand
-        # tasks running inside this worker can dispatch jobs through
-        # the worker queue without us having to thread the factory
-        # through every taskplus call.
+        # Bind the session_factory and flow_id on thread-locals so
+        # RemoteCommand tasks running inside this worker can
+        # dispatch jobs through the worker queue (and acquire
+        # exclusive leases keyed to this flow) without us having
+        # to thread the factory + flow_id through every taskplus
+        # call.
         from automojo.pychestrate.webservice.orchestration.remotecommand import (
+            set_flow_id,
             set_session_factory,
         )
         set_session_factory(factory=self._session_factory)
+        set_flow_id(flow_id=flow_id)
 
         started_at_dt = datetime.now(timezone.utc)
         with self._lock:
@@ -513,6 +517,11 @@ class FlowRuntime:
             )
             result_code = 1
         finally:
+            # Release every worker lease held by this flow so a
+            # crashed (or successful) flow doesn't leave hardware
+            # reserved.
+            self._release_flow_leases(flow_id=flow_id)
+            set_flow_id(flow_id=None)
             self._log_handler.detach_buffer()
 
         completed_at_dt = datetime.now(timezone.utc)
@@ -541,6 +550,35 @@ class FlowRuntime:
 
         rtnval = result_code
         return rtnval
+
+    def _release_flow_leases(self, *, flow_id: str) -> None:
+        """
+            Release every worker lease this flow currently holds.
+            Called from the worker-thread ``finally`` so a crash
+            mid-flow doesn't leave hardware reserved indefinitely.
+            No-op when the runtime has no session_factory (in-memory
+            test mode) — leases live in the DB.
+        """
+        if self._session_factory is None:
+            return
+        try:
+            from automojo.pychestrate.webservice.workers import (
+                service as worker_service,
+            )
+            holder = "flow:{0}".format(flow_id)
+            db_session = self._session_factory()
+            try:
+                worker_service.release_all_leases_for_holder(
+                    db_session=db_session, holder=holder,
+                )
+            finally:
+                db_session.close()
+        except Exception:
+            logger.exception(
+                "flow_runtime.lease_release_failed flow_id=%s",
+                flow_id,
+            )
+        return
 
     def _persist_state_transition(
             self,
