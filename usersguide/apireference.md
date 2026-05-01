@@ -198,6 +198,67 @@ pychestrate_session=<id>` header. See
 | GET    | `/api/v1/flows/{flow_id}`           | —            | Read one submission's state (PENDING / RUNNING / SUCCEEDED / FAILED).     |
 | GET    | `/api/v1/flows/{flow_id}/log`       | —            | Captured stdout + log lines for one submission.                          |
 
+`RemoteCommand` task — for steps that dispatch a shell command to a
+registered worker:
+
+```yaml
+flow:
+  - task: probe
+    tasktype: automojo.pychestrate.webservice.orchestration.remotecommand@RemoteCommand
+    command: uname -a
+    target_pod_name: raspi-01            # optional; pod-name selector
+    target_kind: remote-machine          # optional; local-process | remote-machine
+    timeout_seconds: 30                  # optional; per-attempt subprocess bound
+    retries: 2                           # optional; 0 (default) = single attempt
+    retry_delay_seconds: 5               # optional; base backoff
+    retry_strategy: exponential          # optional; fixed (default) | exponential
+    required_capabilities: [uefi, tpm-2.0]  # optional; worker must advertise all
+```
+
+The queue handles re-enqueue + backoff transparently to the workflow
+author; `wait_for_completion` blocks through the entire retry budget
+and returns only when the job reaches a terminal state.
+
+---
+
+## Workers — `/api/v1/workers`
+
+| Method | Path                                              | Auth                  | Description                                                              |
+|--------|---------------------------------------------------|-----------------------|--------------------------------------------------------------------------|
+| POST   | `/api/v1/workers/register`                        | system-admin or agent | Self-register (agent path) or pre-register (admin path). Body: `{name, kind, project_id?, attributes?}`. |
+| POST   | `/api/v1/workers/{worker_id}/heartbeat`           | system-admin or agent | Stamp `last_heartbeat_at`; optional `{status: idle\|running\|offline}`. |
+| GET    | `/api/v1/workers`                                 | system-admin          | List workers. Filters: `kind`, `status`, `project_id`.                   |
+| GET    | `/api/v1/workers/{worker_id}`                     | system-admin          | Read one worker.                                                         |
+| POST   | `/api/v1/workers/{worker_id}/drain`               | system-admin          | Mark DRAINING. Worker exits its loop after the current job.              |
+| DELETE | `/api/v1/workers/{worker_id}`                     | system-admin          | Deregister.                                                              |
+| POST   | `/api/v1/workers/{worker_id}/jobs/poll`           | system-admin or agent | Atomically claim the oldest matching PENDING job. Returns `{job: ...\|null}`. |
+| POST   | `/api/v1/workers/{worker_id}/jobs/{job_id}/result`| system-admin or agent | Report `{result_code, stdout?, stderr?, error_text?}`. Re-enqueues automatically when retries remain. |
+
+`attributes.capabilities` is a list of strings the worker advertises
+(`["uefi", "tpm-2.0", ...]`); jobs match on it via
+`required_capabilities`. A worker whose `last_heartbeat_at` exceeds
+`PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS` is flipped to `OFFLINE`
+by the stale-worker sweeper, and its in-flight jobs are either
+re-enqueued (retries left) or failed with an explanatory
+`error_text`.
+
+---
+
+## Queue inspection — `/api/v1/queue`
+
+Operator-dashboard surface. All gated `system-admin`.
+
+| Method | Path                                  | Auth         | Description                                                                                  |
+|--------|---------------------------------------|--------------|----------------------------------------------------------------------------------------------|
+| GET    | `/api/v1/queue/stats`                 | system-admin | Combined payload: `{jobs: {by_state, in_flight, retry_scheduled, oldest_pending_age_seconds}, workers: {by_status}}`. |
+| GET    | `/api/v1/queue/jobs`                  | system-admin | List jobs newest-first. Filters: `state`, `target_pod_name`, `target_kind`, `worker_id`, `limit` (≤500). |
+| GET    | `/api/v1/queue/jobs/{job_id}`         | system-admin | Read one `worker_jobs` row, including `attempt`, `max_attempts`, `not_before`, `required_capabilities`. |
+
+`jobs.retry_scheduled` is the count of PENDING rows whose
+`not_before` is still in the future (i.e. retries waiting on
+backoff) — useful for distinguishing "queue stuck" from "queue
+correctly waiting".
+
 ---
 
 ## Conventions
@@ -211,12 +272,17 @@ pychestrate_session=<id>` header. See
   by handlers (`HTTPException(400, "...")`) render the same way.
 * **`HttpOnly` cookie**: hard-coded; the rest of the cookie policy
   is env-driven (`PYCHESTRATE_COOKIE_*`).
-* **Bearer-token enforcement** on agent-side endpoints is *not yet*
-  wired through `AccessPolicy` — it remains a follow-up.
-* **OpenAPI**: endpoint descriptors carry `Doc(summary=...,
-  description=...)` metadata; the openapi emitter shipped by
-  webworks renders this when invoked. (No live `/openapi.json` route
-  is mounted yet.)
+* **Bearer-token enforcement** on agent-side endpoints (worker
+  registration, heartbeat, poll, report) is wired through
+  `AccessPolicy` with the `agent` role; the
+  `BearerTokenMiddleware` resolves an `Authorization: Bearer
+  <token>` header to a `Client` row and attaches an
+  `AuthenticationContext` with `principal.roles = {"agent"}`
+  plus `attributes.client_id` / `pod_name` / `project_id`.
+* **OpenAPI**: live at `GET /openapi.json` (cached, public). The
+  endpoint descriptors carry `Doc(summary=..., description=...)`
+  metadata; the webworks emitter renders the full 3.0.3
+  document at request time.
 
 ## See also
 
