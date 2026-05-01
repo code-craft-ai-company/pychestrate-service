@@ -67,6 +67,7 @@ class JobView:
     required_capabilities: List[str]
     lease_holder: Optional[str]
     lease_ttl_seconds: Optional[int]
+    priority: int
 
 
 def _to_view(*, row: WorkerJob) -> JobView:
@@ -127,6 +128,7 @@ def _to_view(*, row: WorkerJob) -> JobView:
             int(row.lease_ttl_seconds)
             if row.lease_ttl_seconds is not None else None
         ),
+        priority=int(row.priority) if row.priority is not None else 0,
     )
     return rtnval
 
@@ -280,6 +282,7 @@ def enqueue_job(
         required_capabilities: Optional[List[str]] = None,
         lease_holder: Optional[str] = None,
         lease_ttl_seconds: Optional[int] = None,
+        priority: int = 0,
     ) -> JobView:
     """
         Insert a :class:`WorkerJob` row in PENDING state.
@@ -363,6 +366,7 @@ def enqueue_job(
         required_capabilities=capabilities_value,
         lease_holder=lease_holder_value,
         lease_ttl_seconds=lease_ttl_value,
+        priority=int(priority),
     )
     db_session.add(row)
     db_session.commit()
@@ -404,10 +408,17 @@ def claim_next_job(
         return None
 
     now_value = datetime.now(timezone.utc)
+    # Priority-aware ordering: highest priority first, then
+    # FIFO by enqueued_at. The priority column is indexed; the
+    # composite ordering matches the index for typical
+    # all-pending-rows scans.
     candidates = (
         db_session.query(WorkerJob)
         .filter(WorkerJob.state == JobState.PENDING.value)
-        .order_by(WorkerJob.enqueued_at.asc())
+        .order_by(
+            WorkerJob.priority.desc(),
+            WorkerJob.enqueued_at.asc(),
+        )
         .all()
     )
     # Lease gate: a worker with an active lease held by someone

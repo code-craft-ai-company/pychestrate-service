@@ -216,6 +216,14 @@ class RemoteCommand(Task):
             )
         else:
             self._lease_holder_override = None
+
+        # Priority — higher = claimed sooner. Default 0
+        # (FIFO with everyone else at zero).
+        priority_raw = task_info.get("priority", 0)
+        try:
+            self._priority: int = int(priority_raw)
+        except (TypeError, ValueError):
+            self._priority = 0
         return
 
     @property
@@ -256,6 +264,11 @@ class RemoteCommand(Task):
     @property
     def required_capabilities(self) -> list:
         rtnval = list(self._required_capabilities)
+        return rtnval
+
+    @property
+    def priority(self) -> int:
+        rtnval = self._priority
         return rtnval
 
     @property
@@ -367,6 +380,7 @@ class RemoteCommand(Task):
                 required_capabilities=self._required_capabilities,
                 lease_holder=lease_holder,
                 lease_ttl_seconds=lease_ttl_seconds,
+                priority=self._priority,
             )
         finally:
             db_session.close()
