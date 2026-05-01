@@ -177,6 +177,7 @@ def build_default_app(
         session_factory=_open_session,
         debug=debug_value,
         local_worker_pool_autostart=True,
+        stale_worker_sweeper_autostart=True,
     )
     return rtnval
 

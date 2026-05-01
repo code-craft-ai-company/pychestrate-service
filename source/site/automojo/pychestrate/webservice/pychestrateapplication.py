@@ -123,6 +123,10 @@ from automojo.pychestrate.webservice.workers.localworkerpool import (
     LocalWorkerPool,
     resolve_pool_config_from_env,
 )
+from automojo.pychestrate.webservice.workers.staleworkersweeper import (
+    StaleWorkerSweeper,
+    resolve_sweeper_config_from_env,
+)
 from automojo.pychestrate.webservice.workers.restapi.v1 import (  # noqa: F401
     workersblueprint as _workersblueprint,
 )
@@ -172,6 +176,7 @@ class PychestrateApplication:
             debug: bool = False,
             local_worker_pool_size: Optional[int] = None,
             local_worker_pool_autostart: bool = False,
+            stale_worker_sweeper_autostart: bool = False,
         ):
         """
             Construct a :class:`PychestrateApplication`.
@@ -233,6 +238,27 @@ class PychestrateApplication:
         )
         if local_worker_pool_autostart is True:
             self._local_worker_pool.start()
+
+        # Stale-worker sweeper. Reads its threshold + interval
+        # from the environment so operators can dial in tighter
+        # liveness windows without redeploying. Construction is
+        # always cheap; only the autostart flag (or env override)
+        # spins the background thread.
+        sweeper_config = resolve_sweeper_config_from_env()
+        self._stale_worker_sweeper: StaleWorkerSweeper = (
+            StaleWorkerSweeper(
+                session_factory=session_factory,
+                stale_threshold_seconds=(
+                    sweeper_config["stale_threshold_seconds"]
+                ),
+                sweep_interval_seconds=(
+                    sweeper_config["sweep_interval_seconds"]
+                ),
+            )
+        )
+        if stale_worker_sweeper_autostart is True:
+            if sweeper_config["enabled"] is True:
+                self._stale_worker_sweeper.start()
 
         self._router: Router = self._build_router()
         self._pipeline: MiddlewarePipeline = self._build_pipeline()
@@ -313,6 +339,20 @@ class PychestrateApplication:
         return rtnval
 
     @property
+    def stale_worker_sweeper(self) -> StaleWorkerSweeper:
+        """
+            The :class:`StaleWorkerSweeper` background thread.
+            Constructed during ``__init__`` but only auto-started
+            when ``stale_worker_sweeper_autostart=True``. The
+            WSGI entrypoint starts it; unit tests typically run
+            ``run_one_pass`` directly for determinism.
+
+            :returns: The sweeper instance.
+        """
+        rtnval = self._stale_worker_sweeper
+        return rtnval
+
+    @property
     def debug(self) -> bool:
         """
             Whether debug mode is enabled.
@@ -325,12 +365,16 @@ class PychestrateApplication:
     def shutdown(self, *, wait: bool = True) -> None:
         """
             Graceful shutdown: drain the local worker pool, then
-            the flow runtime. The pool is drained first so any
-            in-flight ``RemoteCommand`` step against a local
-            worker has a chance to complete and report a result
-            before the flow runtime stops accepting new work.
+            stop the stale-worker sweeper, then the flow runtime.
+            The pool is drained first so any in-flight
+            ``RemoteCommand`` step against a local worker has a
+            chance to complete and report a result before the
+            flow runtime stops accepting new work; the sweeper
+            stops next so a final pass can fail any orphaned
+            jobs.
         """
         self._local_worker_pool.shutdown(wait=wait)
+        self._stale_worker_sweeper.shutdown(wait=wait)
         self._flow_runtime.shutdown(wait=wait)
         return
 
