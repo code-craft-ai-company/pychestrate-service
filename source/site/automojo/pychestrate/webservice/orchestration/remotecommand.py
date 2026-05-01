@@ -77,6 +77,27 @@ def get_session_factory() -> Optional[Callable]:
     return rtnval
 
 
+def set_flow_id(*, flow_id: Optional[str]) -> None:
+    """
+        Bind the owning ``flow_id`` on the calling thread so
+        :class:`RemoteCommand` instances with ``exclusive: true``
+        know what holder to acquire the worker lease under. Set
+        by the :class:`FlowRuntime` worker before invoking
+        ``FlowEngine.execute``; cleared in ``finally``.
+    """
+    _THREAD_LOCAL.flow_id = flow_id
+    return
+
+
+def get_flow_id() -> Optional[str]:
+    """
+        Return the thread-local ``flow_id``, or ``None`` when no
+        flow context has been bound.
+    """
+    rtnval = getattr(_THREAD_LOCAL, "flow_id", None)
+    return rtnval
+
+
 class RemoteCommand(Task):
     """
         Dispatch a shell command to a registered worker and wait
@@ -167,6 +188,34 @@ class RemoteCommand(Task):
             ]
             err_msg = os.linesep.join(err_lines)
             raise ValueError(err_msg) from None
+
+        # Exclusive lease. When ``exclusive: true``, this step
+        # reserves the chosen worker for the rest of the flow:
+        # other flows can't claim jobs on it until this flow
+        # exits. The lease holder defaults to the owning
+        # ``flow_id`` (read from the FlowRuntime thread-local at
+        # ``perform_task`` time) but can be overridden via the
+        # ``lease_holder`` field. ``lease_ttl_seconds`` controls
+        # the per-claim TTL refresh.
+        exclusive_raw = task_info.get("exclusive", False)
+        if isinstance(exclusive_raw, bool):
+            self._exclusive: bool = exclusive_raw
+        else:
+            self._exclusive = bool(exclusive_raw)
+        lease_ttl_raw = task_info.get("lease_ttl_seconds", 600)
+        try:
+            self._lease_ttl_seconds: int = int(lease_ttl_raw)
+        except (TypeError, ValueError):
+            self._lease_ttl_seconds = 600
+        if self._lease_ttl_seconds <= 0:
+            self._lease_ttl_seconds = 600
+        lease_holder_raw = task_info.get("lease_holder", None)
+        if lease_holder_raw is not None:
+            self._lease_holder_override: Optional[str] = str(
+                lease_holder_raw,
+            )
+        else:
+            self._lease_holder_override = None
         return
 
     @property
@@ -208,6 +257,36 @@ class RemoteCommand(Task):
     def required_capabilities(self) -> list:
         rtnval = list(self._required_capabilities)
         return rtnval
+
+    @property
+    def exclusive(self) -> bool:
+        rtnval = self._exclusive
+        return rtnval
+
+    @property
+    def lease_ttl_seconds(self) -> int:
+        rtnval = self._lease_ttl_seconds
+        return rtnval
+
+    def _resolve_lease_holder(self) -> Optional[str]:
+        """
+            Pick the lease holder for this step. Order:
+
+            1. Explicit ``lease_holder:`` from task_info.
+            2. The thread-local ``flow_id`` set by FlowRuntime.
+            3. ``None`` — no lease (the queue won't try to
+               acquire one).
+
+            Only invoked when ``exclusive`` is True.
+        """
+        if self._lease_holder_override is not None:
+            rtnval = self._lease_holder_override
+            return rtnval
+        flow_id = get_flow_id()
+        if flow_id is not None and len(flow_id) > 0:
+            rtnval = "flow:{0}".format(flow_id)
+            return rtnval
+        return None
 
     def _compute_wait_budget(self) -> float:
         """
@@ -258,6 +337,15 @@ class RemoteCommand(Task):
             self._logger.error(err_msg)
             return 1
 
+        # Resolve the lease holder once so the log line below
+        # can include it without a second lookup.
+        if self._exclusive is True:
+            lease_holder = self._resolve_lease_holder()
+            lease_ttl_seconds: Optional[int] = self._lease_ttl_seconds
+        else:
+            lease_holder = None
+            lease_ttl_seconds = None
+
         # Enqueue. ``timeout_seconds`` is per-attempt — workers
         # use it to bound the subprocess. The overall budget for
         # the ``wait_for_completion`` call below is computed
@@ -277,6 +365,8 @@ class RemoteCommand(Task):
                 retry_delay_seconds=self._retry_delay_seconds,
                 retry_strategy=self._retry_strategy,
                 required_capabilities=self._required_capabilities,
+                lease_holder=lease_holder,
+                lease_ttl_seconds=lease_ttl_seconds,
             )
         finally:
             db_session.close()

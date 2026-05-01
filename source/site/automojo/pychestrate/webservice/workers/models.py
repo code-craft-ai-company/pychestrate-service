@@ -80,6 +80,19 @@ class Worker(PychestratePhase1Base):
         :ivar registered_at: First-seen timestamp.
         :ivar last_heartbeat_at: Most recent heartbeat.
         :ivar attributes: Free-form JSON for capabilities / labels.
+        :ivar lease_holder: When set, the worker is exclusively
+                            reserved for this opaque holder
+                            (typically a ``flow_id``) until
+                            ``lease_expires_at`` or until an
+                            explicit release. Other holders
+                            cannot claim jobs on this worker
+                            even if their selectors match.
+        :ivar lease_acquired_at: When the current lease started.
+        :ivar lease_expires_at: TTL deadline for the lease. An
+                                expired lease is treated as
+                                released; the stale-worker
+                                sweeper clears the row fields on
+                                the next pass.
     """
 
     __tablename__ = "workers"
@@ -89,6 +102,7 @@ class Worker(PychestratePhase1Base):
         ),
         Index("ix_workers_status", "status"),
         Index("ix_workers_kind", "kind"),
+        Index("ix_workers_lease_holder", "lease_holder"),
     )
 
     worker_id = Column(UUIDType(binary=False), primary_key=True)
@@ -106,3 +120,6 @@ class Worker(PychestratePhase1Base):
     )
     last_heartbeat_at = Column(DateTime(timezone=True), nullable=True)
     attributes = Column(JSON, nullable=False, default=dict)
+    lease_holder = Column(String(255), nullable=True)
+    lease_acquired_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)

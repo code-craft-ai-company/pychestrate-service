@@ -167,6 +167,12 @@ def sweep_once(
         if lag <= stale_threshold_seconds:
             continue
         row.status = WorkerStatus.OFFLINE.value
+        # An OFFLINE worker can no longer honour a lease — clear
+        # it so the holder isn't left thinking they own hardware
+        # that's not coming back.
+        row.lease_holder = None
+        row.lease_acquired_at = None
+        row.lease_expires_at = None
         flipped_worker_ids.append(str(row.worker_id))
 
     failed_job_ids: List[str] = []

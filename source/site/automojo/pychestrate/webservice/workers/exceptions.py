@@ -34,3 +34,11 @@ class WorkerStateTransitionError(WorkerError):
     """
         Raised when a state change is rejected (e.g. drain -> idle).
     """
+
+
+class WorkerBusyError(WorkerError):
+    """
+        Raised when ``acquire_lease`` finds the target worker
+        already leased to a different holder. The caller should
+        either back off and retry or pick a different worker.
+    """

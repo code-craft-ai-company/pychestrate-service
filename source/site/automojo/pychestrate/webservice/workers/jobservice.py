@@ -65,6 +65,8 @@ class JobView:
     retry_strategy: str
     not_before: Optional[str]
     required_capabilities: List[str]
+    lease_holder: Optional[str]
+    lease_ttl_seconds: Optional[int]
 
 
 def _to_view(*, row: WorkerJob) -> JobView:
@@ -119,6 +121,11 @@ def _to_view(*, row: WorkerJob) -> JobView:
         required_capabilities=(
             list(row.required_capabilities)
             if row.required_capabilities is not None else []
+        ),
+        lease_holder=row.lease_holder,
+        lease_ttl_seconds=(
+            int(row.lease_ttl_seconds)
+            if row.lease_ttl_seconds is not None else None
         ),
     )
     return rtnval
@@ -271,6 +278,8 @@ def enqueue_job(
         retry_delay_seconds: float = 0.0,
         retry_strategy: Optional[Any] = None,
         required_capabilities: Optional[List[str]] = None,
+        lease_holder: Optional[str] = None,
+        lease_ttl_seconds: Optional[int] = None,
     ) -> JobView:
     """
         Insert a :class:`WorkerJob` row in PENDING state.
@@ -319,6 +328,24 @@ def enqueue_job(
     capabilities_value = _coerce_required_capabilities(
         value=required_capabilities,
     )
+    if lease_ttl_seconds is not None:
+        if int(lease_ttl_seconds) <= 0:
+            err_lines = [
+                "lease_ttl_seconds must be > 0 when supplied.",
+                "REQUESTED: {}".format(lease_ttl_seconds),
+            ]
+            err_msg = os.linesep.join(err_lines)
+            raise ValueError(err_msg) from None
+        lease_ttl_value: Optional[int] = int(lease_ttl_seconds)
+    else:
+        lease_ttl_value = None
+    if lease_holder is not None:
+        if len(str(lease_holder)) == 0:
+            lease_holder_value: Optional[str] = None
+        else:
+            lease_holder_value = str(lease_holder)
+    else:
+        lease_holder_value = None
     row = WorkerJob(
         job_id=new_uuid(),
         kind=kind,
@@ -334,6 +361,8 @@ def enqueue_job(
         retry_strategy=strategy_value,
         not_before=None,
         required_capabilities=capabilities_value,
+        lease_holder=lease_holder_value,
+        lease_ttl_seconds=lease_ttl_value,
     )
     db_session.add(row)
     db_session.commit()
@@ -381,6 +410,17 @@ def claim_next_job(
         .order_by(WorkerJob.enqueued_at.asc())
         .all()
     )
+    # Lease gate: a worker with an active lease held by someone
+    # else can't claim any job (including unscoped ones).
+    # Workers leased to the candidate's holder, or unleased, are
+    # eligible. We compute this once per claim call.
+    from automojo.pychestrate.webservice.workers.service import (
+        is_lease_active,
+    )
+    worker_has_active_lease = is_lease_active(
+        worker_row=worker, now=now_value,
+    )
+
     matched: Optional[WorkerJob] = None
     for candidate in candidates:
         # Retry backoff window — skip rows whose not_before is in
@@ -407,6 +447,13 @@ def claim_next_job(
                 required_capabilities=list(required_caps),
             ) is False:
                 continue
+        # Lease gate. If the worker is currently leased to
+        # someone, only this candidate's matching lease_holder
+        # may claim it. If the candidate names a lease_holder
+        # but the worker is leased elsewhere, skip.
+        if worker_has_active_lease is True:
+            if candidate.lease_holder != worker.lease_holder:
+                continue
         matched = candidate
         break
 
@@ -416,6 +463,20 @@ def claim_next_job(
     matched.worker_id = worker.worker_id
     matched.state = JobState.CLAIMED.value
     matched.claimed_at = now_value
+
+    # If the candidate names a lease_holder, acquire (or extend)
+    # the lease on the worker so subsequent jobs from the same
+    # holder land here and other holders are kept out.
+    if matched.lease_holder is not None:
+        ttl = matched.lease_ttl_seconds
+        if ttl is None or int(ttl) <= 0:
+            ttl = 600  # 10-minute default if unset.
+        worker.lease_holder = matched.lease_holder
+        worker.lease_acquired_at = now_value
+        worker.lease_expires_at = (
+            now_value + timedelta(seconds=int(ttl))
+        )
+
     db_session.commit()
     rtnval = _to_view(row=matched)
     return rtnval

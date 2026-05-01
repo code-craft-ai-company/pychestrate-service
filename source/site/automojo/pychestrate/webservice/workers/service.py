@@ -15,7 +15,7 @@ __version__ = "1.0.0"
 import os
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -25,6 +25,7 @@ from automojo.pychestrate.core.defaults import new_uuid
 
 from automojo.pychestrate.webservice.workers.exceptions import (
     WorkerAlreadyRegisteredError,
+    WorkerBusyError,
     WorkerNotFoundError,
     WorkerStateTransitionError,
 )
@@ -49,6 +50,9 @@ class WorkerView:
     registered_at: str
     last_heartbeat_at: Optional[str]
     attributes: Dict[str, Any]
+    lease_holder: Optional[str] = None
+    lease_acquired_at: Optional[str] = None
+    lease_expires_at: Optional[str] = None
 
 
 def _to_view(*, row: Worker) -> WorkerView:
@@ -68,6 +72,18 @@ def _to_view(*, row: Worker) -> WorkerView:
         attrs = dict(row.attributes)
     else:
         attrs = {}
+    if row.lease_acquired_at is not None:
+        lease_acquired_field: Optional[str] = (
+            row.lease_acquired_at.isoformat()
+        )
+    else:
+        lease_acquired_field = None
+    if row.lease_expires_at is not None:
+        lease_expires_field: Optional[str] = (
+            row.lease_expires_at.isoformat()
+        )
+    else:
+        lease_expires_field = None
     rtnval = WorkerView(
         worker_id=str(row.worker_id),
         name=row.name,
@@ -78,6 +94,9 @@ def _to_view(*, row: Worker) -> WorkerView:
         registered_at=row.registered_at.isoformat(),
         last_heartbeat_at=heartbeat_field,
         attributes=attrs,
+        lease_holder=row.lease_holder,
+        lease_acquired_at=lease_acquired_field,
+        lease_expires_at=lease_expires_field,
     )
     return rtnval
 
@@ -294,4 +313,206 @@ def count_workers_by_status(
     for status_value, count_value in rows:
         counts[status_value] = int(count_value)
     rtnval = counts
+    return rtnval
+
+
+def _coerce_utc(*, value: datetime) -> datetime:
+    """
+        Attach UTC tzinfo to a naive datetime — SQLite drops tz
+        on round-trip even when ``DateTime(timezone=True)`` is
+        declared.
+    """
+    if value.tzinfo is not None:
+        return value
+    rtnval = value.replace(tzinfo=timezone.utc)
+    return rtnval
+
+
+def is_lease_active(
+        *,
+        worker_row: Worker,
+        now: Optional[datetime] = None,
+    ) -> bool:
+    """
+        Return ``True`` when the worker currently holds a
+        non-expired lease.
+    """
+    if worker_row.lease_holder is None:
+        return False
+    if worker_row.lease_expires_at is None:
+        return True
+    if now is None:
+        now_value = datetime.now(timezone.utc)
+    else:
+        now_value = now
+    expires = _coerce_utc(value=worker_row.lease_expires_at)
+    rtnval = now_value < expires
+    return rtnval
+
+
+def acquire_lease(
+        *,
+        db_session: DbSession,
+        worker_id: str,
+        holder: str,
+        ttl_seconds: int,
+        now: Optional[datetime] = None,
+    ) -> WorkerView:
+    """
+        Acquire (or extend) the lease on ``worker_id`` for
+        ``holder``.
+
+        :raises WorkerNotFoundError: When ``worker_id`` is unknown.
+        :raises WorkerBusyError: When the worker currently holds an
+                                 unexpired lease for a *different*
+                                 holder.
+        :returns: The updated :class:`WorkerView`.
+    """
+    if holder is None or len(holder) == 0:
+        err_lines = [
+            "Lease holder is required.",
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise ValueError(err_msg) from None
+    if ttl_seconds <= 0:
+        err_lines = [
+            "ttl_seconds must be > 0.",
+            "REQUESTED: {}".format(ttl_seconds),
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise ValueError(err_msg) from None
+    row = (
+        db_session.query(Worker)
+        .filter(Worker.worker_id == worker_id)
+        .first()
+    )
+    if row is None:
+        err_lines = [
+            "Worker not registered.",
+            "WORKER_ID: {}".format(worker_id),
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise WorkerNotFoundError(err_msg) from None
+    if now is None:
+        now_value = datetime.now(timezone.utc)
+    else:
+        now_value = now
+    if is_lease_active(worker_row=row, now=now_value) is True:
+        if row.lease_holder != holder:
+            err_lines = [
+                "Worker already leased to a different holder.",
+                "WORKER_ID: {}".format(worker_id),
+                "HELD_BY: {}".format(row.lease_holder),
+                "REQUESTED_BY: {}".format(holder),
+            ]
+            err_msg = os.linesep.join(err_lines)
+            raise WorkerBusyError(err_msg) from None
+    row.lease_holder = holder
+    if row.lease_acquired_at is None or row.lease_holder != holder:
+        row.lease_acquired_at = now_value
+    elif not is_lease_active(worker_row=row, now=now_value):
+        row.lease_acquired_at = now_value
+    row.lease_expires_at = now_value + timedelta(seconds=int(ttl_seconds))
+    db_session.commit()
+    rtnval = _to_view(row=row)
+    return rtnval
+
+
+def release_lease(
+        *,
+        db_session: DbSession,
+        worker_id: str,
+        holder: str,
+    ) -> WorkerView:
+    """
+        Release a lease on ``worker_id``. A no-op when the lease
+        is already absent OR held by a different holder (release
+        is intentionally permissive — the caller has either
+        already given up or never held the lease).
+    """
+    row = (
+        db_session.query(Worker)
+        .filter(Worker.worker_id == worker_id)
+        .first()
+    )
+    if row is None:
+        err_lines = [
+            "Worker not registered.",
+            "WORKER_ID: {}".format(worker_id),
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise WorkerNotFoundError(err_msg) from None
+    if row.lease_holder is not None and row.lease_holder == holder:
+        row.lease_holder = None
+        row.lease_acquired_at = None
+        row.lease_expires_at = None
+        db_session.commit()
+    rtnval = _to_view(row=row)
+    return rtnval
+
+
+def release_all_leases_for_holder(
+        *,
+        db_session: DbSession,
+        holder: str,
+    ) -> List[str]:
+    """
+        Release every lease this ``holder`` currently has across
+        the registry. Used by :class:`FlowRuntime` to clean up on
+        flow exit so a crashed flow doesn't leave hardware
+        reserved indefinitely.
+
+        :returns: List of worker_ids that had a lease cleared.
+    """
+    if holder is None or len(holder) == 0:
+        return []
+    rows = (
+        db_session.query(Worker)
+        .filter(Worker.lease_holder == holder)
+        .all()
+    )
+    cleared: List[str] = []
+    for row in rows:
+        row.lease_holder = None
+        row.lease_acquired_at = None
+        row.lease_expires_at = None
+        cleared.append(str(row.worker_id))
+    if len(cleared) > 0:
+        db_session.commit()
+    rtnval = cleared
+    return rtnval
+
+
+def expire_stale_leases(
+        *,
+        db_session: DbSession,
+        now: Optional[datetime] = None,
+    ) -> List[str]:
+    """
+        Clear lease fields on workers whose ``lease_expires_at``
+        has passed. Returns the list of worker_ids that were
+        cleared. Idempotent — running it twice in a row clears
+        nothing the second time.
+    """
+    if now is None:
+        now_value = datetime.now(timezone.utc)
+    else:
+        now_value = now
+    rows = (
+        db_session.query(Worker)
+        .filter(Worker.lease_holder.isnot(None))
+        .filter(Worker.lease_expires_at.isnot(None))
+        .all()
+    )
+    cleared: List[str] = []
+    for row in rows:
+        expires = _coerce_utc(value=row.lease_expires_at)
+        if expires <= now_value:
+            row.lease_holder = None
+            row.lease_acquired_at = None
+            row.lease_expires_at = None
+            cleared.append(str(row.worker_id))
+    if len(cleared) > 0:
+        db_session.commit()
+    rtnval = cleared
     return rtnval

@@ -117,6 +117,20 @@ class WorkerJob(PychestratePhase1Base):
                                      to be allowed to claim this
                                      job. Empty list means
                                      "any worker".
+        :ivar lease_holder: When set, ``claim_next_job`` will
+                            only let workers that are either
+                            unleased OR leased to this same
+                            holder claim the job. On successful
+                            claim the worker's lease is acquired
+                            (or extended) for ``lease_holder``
+                            with TTL ``lease_ttl_seconds``.
+                            Typically set by ``RemoteCommand``
+                            with ``exclusive: true`` to the
+                            owning ``flow_id``.
+        :ivar lease_ttl_seconds: TTL applied at acquire / extend
+                                 time. ``None`` means
+                                 "don't acquire a lease on
+                                 claim".
     """
 
     __tablename__ = "worker_jobs"
@@ -154,3 +168,5 @@ class WorkerJob(PychestratePhase1Base):
     )
     not_before = Column(DateTime(timezone=True), nullable=True)
     required_capabilities = Column(JSON, nullable=False, default=list)
+    lease_holder = Column(String(255), nullable=True)
+    lease_ttl_seconds = Column(Integer, nullable=True)

@@ -100,6 +100,9 @@ def _view_to_dict(*, view) -> Dict[str, Any]:
         "registered_at": view.registered_at,
         "last_heartbeat_at": view.last_heartbeat_at,
         "attributes": view.attributes,
+        "lease_holder": view.lease_holder,
+        "lease_acquired_at": view.lease_acquired_at,
+        "lease_expires_at": view.lease_expires_at,
     }
     return rtnval
 
@@ -447,5 +450,7 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "retry_strategy": view.retry_strategy,
         "not_before": view.not_before,
         "required_capabilities": view.required_capabilities,
+        "lease_holder": view.lease_holder,
+        "lease_ttl_seconds": view.lease_ttl_seconds,
     }
     return rtnval
