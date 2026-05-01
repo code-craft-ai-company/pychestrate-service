@@ -26,6 +26,13 @@ class InfraToolDriverProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "infra_tool_driver"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/infra_tool_driver"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.orchestration.infra.runs.factories.terraform_driver"
+        ".TerraformInfraDriver"
+    )
+
     @classmethod
     def driver_name(cls) -> str:
         """

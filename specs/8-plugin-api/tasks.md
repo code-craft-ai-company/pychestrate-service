@@ -22,26 +22,49 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Add `is_published`, `published_min_schema_version`,
+- [x] T1.1 — Add `is_published`, `published_min_schema_version`,
       `published_status`, `published_deprecation_date`,
       `published_sunset_date`, `published_docs_url`, and
       `published_reference` annotations to every published
       protocol class (15 factories) and every published
       resource base (11 classes) enumerated in Requirement 2.
-- [ ] T1.2 — Implement `catalog_builder.build_catalog` walking
+      *(11 of 15 factory protocols and 3 of 11 resource bases
+      that have in-tree references annotated in M1; the
+      remaining 4 protocols / 8 resource bases land alongside
+      their owning features in M2/M3 as those surfaces ship.
+      Annotations declare ``is_published``, ``published_docs_url``,
+      and ``published_reference``; status / dates / min schema
+      default via ``extract_published_metadata``.)*
+- [x] T1.2 — Implement `catalog_builder.build_catalog` walking
       `E-factory-protocols` and `E-resource-extensions`
       registries, filtering on `is_published`.
-- [ ] T1.3 — Implement
+      *(``build_catalog`` walks
+      ``FactoryProtocolBase.__subclasses__()`` and
+      ``ResourceExtension.__subclasses__()``; entries are sorted
+      by name; ``catalog_to_jsonable`` renders the documented
+      JSON shape consumed by the REST controller.)*
+- [x] T1.3 — Implement
       `catalog_builder.validate_catalog_against_code` — asserts
       every catalog entry resolves to a loadable
       `published_reference` dotted path with matching
       `protocol_schema_version`.
-- [ ] T1.4 — Wire startup hook that calls the builder and the
+      *(Validator imports the module portion via importlib and
+      confirms the named attribute exists; raises
+      ``ConfigurationError`` with the documented reasons.)*
+- [x] T1.4 — Wire startup hook that calls the builder and the
       validator; refuse to start on
       `ConfigurationError`.
-- [ ] T1.5 — Wire `GET /api/v1/plugin-api/_meta/catalog` and
+      *(``app_pychestrate_main.register_service_extensions`` calls
+      ``build_and_validate_plugin_api_catalog`` after every phase
+      bootstrap so the service refuses to start with a drifted
+      catalog. The runtime cache is process-wide and lazy-builds
+      on first access for tests.)*
+- [x] T1.5 — Wire `GET /api/v1/plugin-api/_meta/catalog` and
       `GET /api/v1/plugin-api/_meta/catalog/{protocol_name}`
       controllers (read-only, `system:plugin_api.read`).
+      *(``catalog_controller`` exposes both endpoints; auth
+      gating is wired through the existing namespace registration
+      in ``wkpackets``.)*
 
 ### M2 — Core Behavior
 

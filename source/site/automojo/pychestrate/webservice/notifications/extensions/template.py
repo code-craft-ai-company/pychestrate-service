@@ -46,6 +46,15 @@ class NotificationTemplateExtension(ResourceExtension):
     default_severity: ClassVar[str] = "INFO"
     description: ClassVar[str] = ""
 
+    is_published: ClassVar[bool] = True
+    published_docs_url: ClassVar[str] = (
+        "https://docs.pychestrate.io/plugin-api/NotificationTemplateExtension"
+    )
+    published_reference: ClassVar[str] = (
+        "automojo.pychestrate.webservice.notifications.extensions.run_failed_template"
+        ".RunFailedTemplate"
+    )
+
     @classmethod
     def render(cls, *, payload: Mapping[str, Any]) -> RenderedMessage:
         """

@@ -68,6 +68,13 @@ class SecretsBackendProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "secrets_backend"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/secrets_backend"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.secrets.factories.local_backend"
+        ".LocalEncryptedSecretsBackend"
+    )
+
     @classmethod
     def namespace_pattern(cls) -> str:
         """

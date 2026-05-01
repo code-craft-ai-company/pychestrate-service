@@ -26,6 +26,13 @@ class BuildRunnerKindProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "build_runner_kind"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/build_runner_kind"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.orchestration.build.factories.makefile_runner_kind"
+        ".MakefileRunnerKind"
+    )
+
     @classmethod
     def runner_kind(cls) -> str:
         """

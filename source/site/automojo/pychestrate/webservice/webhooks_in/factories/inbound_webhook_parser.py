@@ -41,6 +41,13 @@ class InboundWebhookParserProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "inbound_webhook_parser"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/inbound_webhook_parser"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.webhooks_in.factories.generic_hmac_parser"
+        ".GenericHmacWebhookParser"
+    )
+
     @classmethod
     def provider_name(cls) -> str:
         """

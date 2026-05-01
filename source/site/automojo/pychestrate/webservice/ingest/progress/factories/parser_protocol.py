@@ -40,6 +40,13 @@ class ProgressParserProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "progress_parser"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/progress_parser"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.ingest.progress.factories.testbase_v1"
+        ".TestBaseProgressParser"
+    )
+
     @classmethod
     def format_tag(cls) -> str:
         """
