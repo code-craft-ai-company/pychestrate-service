@@ -206,6 +206,12 @@ class FanOutCommand(Task):
         if self._parallelism < 1:
             self._parallelism = 1
 
+        priority_raw = task_info.get("priority", 0)
+        try:
+            self._priority: int = int(priority_raw)
+        except (TypeError, ValueError):
+            self._priority = 0
+
         self._targets: List[_TargetSpec] = []
         for index, entry in enumerate(targets_raw):
             if not isinstance(entry, dict):
@@ -331,6 +337,7 @@ class FanOutCommand(Task):
                     # single-target ``exclusive: true`` paths.
                     lease_holder=None,
                     lease_ttl_seconds=None,
+                    priority=self._priority,
                 )
             finally:
                 db_session.close()

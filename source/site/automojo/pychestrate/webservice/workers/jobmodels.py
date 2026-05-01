@@ -131,6 +131,11 @@ class WorkerJob(PychestratePhase1Base):
                                  time. ``None`` means
                                  "don't acquire a lease on
                                  claim".
+        :ivar priority: Higher = claimed sooner. Default ``0``.
+                        Negative values run after default-priority
+                        rows; positive values jump ahead. Within
+                        the same priority bucket the queue is
+                        FIFO by ``enqueued_at``.
     """
 
     __tablename__ = "worker_jobs"
@@ -138,6 +143,7 @@ class WorkerJob(PychestratePhase1Base):
         Index("ix_worker_jobs_state", "state"),
         Index("ix_worker_jobs_target", "target_pod_name", "target_kind"),
         Index("ix_worker_jobs_not_before", "not_before"),
+        Index("ix_worker_jobs_priority", "priority"),
     )
 
     job_id = Column(UUIDType(binary=False), primary_key=True)
@@ -170,3 +176,4 @@ class WorkerJob(PychestratePhase1Base):
     required_capabilities = Column(JSON, nullable=False, default=list)
     lease_holder = Column(String(255), nullable=True)
     lease_ttl_seconds = Column(Integer, nullable=True)
+    priority = Column(Integer, nullable=False, default=0)
