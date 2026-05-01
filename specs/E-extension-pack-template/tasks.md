@@ -14,14 +14,29 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the package tree under
+- [x] T1.1 — Create the package tree under
   `source/site/automojo/pychestrate/webservice/extension/pack_template/`.
-- [ ] T1.2 — Implement `PackGenerationRequest`,
+  *(Subsystem rooted at ``extension.pack_template`` with ``models``,
+  ``corpus_loader``, ``generator``, ``cli`` modules; corpus is
+  vendored under ``corpus/v1/`` so service CI exercises it.)*
+- [x] T1.2 — Implement `PackGenerationRequest`,
   `PackTemplateManifest`, `PackTemplateFile` dataclasses.
-- [ ] T1.3 — Implement `PackGenerator.generate` rendering a minimal
+  *(Frozen dataclasses live in
+  ``extension.pack_template.models``; ``COPY_RENDER_MODE`` /
+  ``JINJA_RENDER_MODE`` constants document the supported modes.)*
+- [x] T1.3 — Implement `PackGenerator.generate` rendering a minimal
   v1 corpus using Jinja2.
-- [ ] T1.4 — Implement `pychestrate-admin pack-template new` CLI.
-- [ ] T1.5 — Implement `normalize_pack_name` with idempotence.
+  *(``StrictUndefined`` Jinja env, ``__NAME__`` placeholder
+  substitution in destination paths, refuses to overwrite a
+  non-empty pack root, rejects unknown ``template_version``.)*
+- [x] T1.4 — Implement `pychestrate-admin pack-template new` CLI.
+  *(``cli.main`` argparse-driven; ``pychestrate.admin.__main__``
+  routes ``pychestrate-admin <subsystem> …`` to the pack-template
+  CLI; ``new`` and ``list-versions`` subcommands ship.)*
+- [x] T1.5 — Implement `normalize_pack_name` with idempotence.
+  *(NFKD-decompose → ASCII strip → non-alnum → ``-`` collapse →
+  trim; prefixes ``ext-`` when the first character is not
+  ``[a-z]``; ``SemanticError`` on empty result.)*
 
 ### M2 — Core Behavior
 

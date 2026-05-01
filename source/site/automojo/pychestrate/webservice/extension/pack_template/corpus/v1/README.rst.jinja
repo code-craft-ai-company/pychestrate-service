@@ -1,0 +1,34 @@
+pychestrate-ext-{{ name }}
+{{ "=" * (16 + name|length) }}
+
+Pychestrate extension pack scaffolded by ``pychestrate-admin pack-template``.
+
+Generated from corpus version ``v{{ template_version }}``.
+
+{% if author -%}
+Author: {{ author }}
+{% endif -%}
+{% if license -%}
+License: {{ license }}
+{% endif -%}
+
+Layout
+------
+
+* ``pychestrate_ext.yaml`` — Layer E manifest. Declares which factory
+  protocols and resource extensions this pack contributes.
+* ``source/packages/automojo/factories/pychestrate/{{ name | replace("-", "_") }}/`` —
+  factory protocol implementations.
+* ``source/packages/automojo/extensions/pychestrate/{{ name | replace("-", "_") }}/`` —
+  resource extension subclasses.
+* ``tests/unit/`` — unit tests.
+
+Next steps
+----------
+
+1. Replace ``RaiseUntilImplementedFactory`` with a real implementation
+   of the protocol declared in ``pychestrate_ext.yaml``.
+2. Update ``capabilities`` in the manifest to match the operations
+   your pack performs at runtime; the host gates dispatch on these
+   capability grants.
+3. Run the unit tests with ``pytest tests/unit``.
