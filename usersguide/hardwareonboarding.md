@@ -204,10 +204,45 @@ Liveness state cycles `ALIVE → DEGRADED → LOST` based on agent
 heartbeats (the agent calls a heartbeat endpoint at the cadence its
 configuration declares).
 
-## 4. Submit a flow that targets the host
+## 4. Run the worker agent on the host
 
-With the host registered, you can now submit a taskplus workflow to
-`/api/v1/flows`:
+The host now needs a worker process so pychestrate has somewhere
+to dispatch work to. `scripts/worker.py` is the standalone agent.
+
+```bash
+# On the Pi:
+export PYCHESTRATE_BASE_URL=http://pychestrate.lab.local:8080
+export PYCHESTRATE_WORKER_REDEEM_SECRET="$ENROLLMENT_SECRET"
+
+python3 scripts/worker.py \
+    --pod-name raspi-01 \
+    --worker-name raspi-01 \
+    --heartbeat-interval 30 \
+    --command-timeout 300
+```
+
+The agent:
+
+1. redeems the enrollment secret for a bearer token via
+   `POST /api/v1/enrollment-tokens/redeem`;
+2. registers itself as a `remote-machine` worker via
+   `POST /api/v1/workers/register`;
+3. polls `POST /api/v1/workers/{id}/jobs/poll` and runs each
+   claimed job's command via `subprocess`;
+4. heartbeats periodically — when the registry flips it to
+   `DRAINING` (operator ran `POST /workers/{id}/drain`) the
+   agent finishes the current job and exits cleanly.
+
+**Capabilities** are advertised by passing `--attribute
+capabilities=uefi,tpm-2.0` (or via the redeemed payload's
+`extras.capabilities`). Workflows that declare
+`required_capabilities: [uefi]` only land on workers that
+advertise it.
+
+## 5. Submit a flow that targets the host
+
+With the agent running, submit a workflow whose
+`RemoteCommand` step dispatches to that pod:
 
 ```bash
 cat > /tmp/uname.yml <<'YAML'
@@ -216,8 +251,12 @@ environment: {}
 parameters: {}
 flow:
   - task: probe
-    tasktype: automojo.taskplus.tasks.runcommand@RunCommand
+    tasktype: automojo.pychestrate.webservice.orchestration.remotecommand@RemoteCommand
     command: uname -a
+    target_pod_name: raspi-01
+    timeout_seconds: 30
+    retries: 1                      # one retry on transient failure
+    retry_delay_seconds: 5
 YAML
 
 curl -sf -X POST "$PYCHESTRATE_BASE_URL/api/v1/flows" \
@@ -247,14 +286,44 @@ curl -sf -H "Cookie: pychestrate_session=$PYCHESTRATE_SESSION_COOKIE" \
     "$PYCHESTRATE_BASE_URL/api/v1/flows/$FLOW_ID/log"
 ```
 
-> The current `RunCommand` task runs the command on the **service
-> host**, not on the registered agent. Targeted execution (dispatch
-> to agents via the bearer-token-authenticated agent surface) is a
-> follow-up integration. The pod registration and inventory state
-> are wired today; the dispatch layer that hands work to specific
-> hosts is the next slice.
+The flow's `RemoteCommand` step:
 
-## 5. Troubleshoot
+* enqueues a `WorkerJob` with `target_pod_name=raspi-01`;
+* blocks until the agent reports a result (or a retry exhausts
+  the attempt budget);
+* propagates the worker's exit code into the flow's
+  `result_code`.
+
+Inspect what the queue is doing while a flow runs:
+
+```bash
+curl -sf -H "Cookie: pychestrate_session=$PYCHESTRATE_SESSION_COOKIE" \
+    "$PYCHESTRATE_BASE_URL/api/v1/queue/stats" | jq
+
+curl -sf -H "Cookie: pychestrate_session=$PYCHESTRATE_SESSION_COOKIE" \
+    "$PYCHESTRATE_BASE_URL/api/v1/queue/jobs?target_pod_name=raspi-01&limit=10" | jq
+```
+
+## 6. Operating the worker fleet
+
+Routine ops:
+
+* **Drain a host before a reboot**:
+  `POST /api/v1/workers/{worker_id}/drain` — the agent finishes
+  its current job and exits.
+* **Decommission**: `DELETE /api/v1/workers/{worker_id}`.
+* **Diagnose stuck queue**: `GET /api/v1/queue/stats`. Watch
+  `jobs.in_flight` (currently CLAIMED/RUNNING),
+  `jobs.retry_scheduled` (waiting on backoff), and
+  `jobs.oldest_pending_age_seconds` (how long the oldest
+  claimable job has been waiting). If `in_flight > 0` and
+  `oldest_pending_age_seconds` keeps climbing, a worker has
+  silently gone away — the stale-worker sweeper will flip it
+  to `OFFLINE` after `PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS`
+  (default 60s) and re-enqueue or fail its in-flight jobs.
+* **Spot a dead Pi**: `GET /api/v1/workers?status=offline`.
+
+## 7. Troubleshoot
 
 | Symptom                                                  | Likely cause                                                                              |
 |----------------------------------------------------------|-------------------------------------------------------------------------------------------|
@@ -267,6 +336,10 @@ curl -sf -H "Cookie: pychestrate_session=$PYCHESTRATE_SESSION_COOKIE" \
 | 404 from /enrollment-tokens/redeem on the agent          | Wrong secret, expired token, or already-redeemed one-shot token.                          |
 | 503 with `db_session not configured`                     | The DbSessionMiddleware didn't run. Indicates the app is mis-wired; file an issue.        |
 | Agent never appears in `/clients-inventory`              | Agent didn't redeem (network, secret, transport_name mismatch). Tail the agent's logs.    |
+| Agent never appears in `GET /api/v1/workers`             | `scripts/worker.py` failed to register. Check stderr; usually a 401 (bad bearer) or 409 (name collision; pass a different `--worker-name`). |
+| Flow stays PENDING; `queue/stats.in_flight=0`            | No worker matches the job's selectors. Inspect the job: `GET /api/v1/queue/jobs/{id}` — check `target_pod_name` / `target_kind` / `required_capabilities` against `GET /api/v1/workers`. |
+| Flow stays PENDING; `queue/stats.retry_scheduled>0`      | Job is in its retry-backoff window. Wait `not_before` out, or shorten `retry_delay_seconds`. |
+| Worker flips to OFFLINE during a long subprocess         | Heartbeat interval too long for the workload. Lower `--heartbeat-interval` on the agent or raise `PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS` on the service.  |
 
 ## Reference: registerpod.py flags
 

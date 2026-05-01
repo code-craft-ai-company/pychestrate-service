@@ -41,6 +41,15 @@ For every tunable below the same precedence applies, highest first:
 | `PYCHESTRATE_COOKIE_MAX_AGE_SECONDS` | login endpoint           | no       | `28800` (8h)                 | `Max-Age` attribute. Also used as the session row's idle/lifetime ceiling.  |
 | `PYCHESTRATE_BASE_URL`         | `smoketest` (client-side)      | no       | `http://localhost:8080`      | Base URL the smoketest hits.                                                |
 | `PYCHESTRATE_SESSION_COOKIE`   | `smoketest` (client-side)      | no       | `""`                         | Cookie value emitted by `bootstrapadmin`; smoketest sends it as `Cookie:`.   |
+| `PYCHESTRATE_LOCAL_WORKER_POOL_SIZE`        | `wsgientry`        | no       | `1`                          | Number of in-process worker threads. Set to `0` to disable in-process execution and rely solely on remote workers. |
+| `PYCHESTRATE_LOCAL_WORKER_POOL_NAME`        | `wsgientry`        | no       | `local-<hostname>`           | Base name for in-process workers. Multiple workers append `-0..N-1`.        |
+| `PYCHESTRATE_LOCAL_WORKER_POLL_INTERVAL`    | `wsgientry`        | no       | `0.5`                        | Seconds between empty polls.                                                |
+| `PYCHESTRATE_LOCAL_WORKER_HEARTBEAT_INTERVAL` | `wsgientry`      | no       | `30`                         | Seconds between local-pool worker heartbeats.                               |
+| `PYCHESTRATE_LOCAL_WORKER_COMMAND_TIMEOUT`  | `wsgientry`        | no       | `300`                        | Default subprocess timeout when a job omits one.                            |
+| `PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS` | `wsgientry`       | no       | `60`                         | Seconds since `last_heartbeat_at` before a worker is flipped to OFFLINE. Set to `0` to disable the sweeper. |
+| `PYCHESTRATE_WORKER_SWEEP_INTERVAL_SECONDS` | `wsgientry`        | no       | `30`                         | Seconds between sweeper passes.                                             |
+| `PYCHESTRATE_WORKER_BEARER_TOKEN`           | `scripts/worker.py`| no       | (none)                       | Bearer token for the remote worker agent. Mutually exclusive with `_REDEEM_SECRET`. |
+| `PYCHESTRATE_WORKER_REDEEM_SECRET`          | `scripts/worker.py`| no       | (none)                       | Enrollment-token secret to redeem for a bearer token at startup.            |
 
 The truthy parser accepts `1`, `true`, `yes`, `on` (case-insensitive)
 for boolean variables. Anything else is treated as false.
@@ -508,6 +517,98 @@ the runtime is constructed. Each worker thread binds its own
 detaches it in the `finally` clause, so concurrent flows write only
 to their own `log_text`. The handler is removed from the root logger
 when the runtime is shut down.
+
+## Worker management
+
+Pychestrate dispatches `RemoteCommand` flow steps to registered
+workers. Three executor options ship today:
+
+1. **In-process pool** — `LocalWorkerPool` runs threads inside the
+   service process itself, executing jobs via `subprocess.run` on
+   the service host. Auto-started by `wsgientry.py`. Size is
+   configured via `PYCHESTRATE_LOCAL_WORKER_POOL_SIZE` (default
+   `1`; set `0` to disable). Useful for service-host-side flows
+   and dev environments.
+2. **Pre-registered local-process workers** — admins use the cookie
+   path to register `local-process` workers via
+   `POST /api/v1/workers/register`. The in-process pool will adopt
+   them on the next start.
+3. **Remote-machine agent** — `scripts/worker.py` runs on a Pi /
+   UEFI host / VM, redeems an enrollment-token secret for a
+   bearer token, registers itself, and polls. See
+   [`hardwareonboarding.md`](hardwareonboarding.md) for the full
+   walkthrough.
+
+### Stale-worker sweeper
+
+A daemon thread (`StaleWorkerSweeper`) periodically scans the
+worker registry. Workers whose `last_heartbeat_at` exceeds
+`PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS` (default `60`) are
+flipped to `OFFLINE`. Their CLAIMED / RUNNING jobs are either:
+
+* **re-enqueued** when the job's `attempt < max_attempts`
+  (PENDING + bumped attempt + `not_before` per the configured
+  backoff strategy), or
+* **failed** terminally with an explanatory `error_text` when no
+  retries remain. The wait_for_completion waker fires either way
+  so blocked flows unblock immediately.
+
+Tunables:
+
+* `PYCHESTRATE_WORKER_STALE_THRESHOLD_SECONDS` — set to `0` to
+  disable the sweeper entirely (workers will never be aged out;
+  use this only when something else handles liveness).
+* `PYCHESTRATE_WORKER_SWEEP_INTERVAL_SECONDS` — sweep cadence,
+  default `30`. Tighter intervals respond faster but commit more
+  DB queries.
+
+### Job retry policy
+
+Every `WorkerJob` carries:
+
+* `attempt` (1-indexed),
+* `max_attempts` (1 = no retries),
+* `retry_delay_seconds` (base backoff),
+* `retry_strategy` (`fixed` or `exponential` — exponential
+  doubles the base each attempt),
+* `not_before` (earliest claim time for the next attempt).
+
+Workflow YAML uses the simpler `retries:` field
+(`retries=N` → `max_attempts=N+1`). The queue handles
+re-enqueue + backoff transparently to the workflow author —
+`wait_for_completion` blocks through the entire retry budget.
+
+### Capability matching
+
+Workers advertise capabilities in `attributes.capabilities` (a
+JSON list of strings, e.g. `["uefi", "tpm-2.0"]`). Jobs declare
+`required_capabilities`; `claim_next_job` only assigns the job to
+workers that advertise every required capability. Combined with
+`target_pod_name` / `target_kind`, this lets workflows express
+intent like "any UEFI host with TPM 2.0" without naming a
+specific machine.
+
+### Operator dashboard endpoints
+
+`/api/v1/queue/stats` returns:
+
+```json
+{
+  "jobs": {
+    "by_state": {"pending": 5, "claimed": 2, ...},
+    "in_flight": 2,
+    "retry_scheduled": 1,
+    "oldest_pending_age_seconds": 30.5
+  },
+  "workers": {
+    "by_status": {"idle": 3, "running": 2, "offline": 1, "draining": 0}
+  }
+}
+```
+
+See `usersguide/apireference.md` for the full surface
+(`/api/v1/queue/jobs`, `/api/v1/queue/jobs/{job_id}`,
+`/api/v1/workers?status=offline`).
 
 ## WSGI deployment
 
