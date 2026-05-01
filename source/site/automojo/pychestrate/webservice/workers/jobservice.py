@@ -68,6 +68,7 @@ class JobView:
     lease_holder: Optional[str]
     lease_ttl_seconds: Optional[int]
     priority: int
+    project_id: Optional[str]
 
 
 def _to_view(*, row: WorkerJob) -> JobView:
@@ -129,6 +130,9 @@ def _to_view(*, row: WorkerJob) -> JobView:
             if row.lease_ttl_seconds is not None else None
         ),
         priority=int(row.priority) if row.priority is not None else 0,
+        project_id=(
+            str(row.project_id) if row.project_id is not None else None
+        ),
     )
     return rtnval
 
@@ -283,6 +287,7 @@ def enqueue_job(
         lease_holder: Optional[str] = None,
         lease_ttl_seconds: Optional[int] = None,
         priority: int = 0,
+        project_id: Optional[str] = None,
     ) -> JobView:
     """
         Insert a :class:`WorkerJob` row in PENDING state.
@@ -367,6 +372,7 @@ def enqueue_job(
         lease_holder=lease_holder_value,
         lease_ttl_seconds=lease_ttl_value,
         priority=int(priority),
+        project_id=project_id if project_id is not None else None,
     )
     db_session.add(row)
     db_session.commit()
@@ -448,6 +454,18 @@ def claim_next_job(
                     continue
         if candidate.target_kind is not None:
             if candidate.target_kind != worker.kind:
+                continue
+        # Project gate. A job scoped to project X may only land
+        # on workers in project X (or globally-scoped workers
+        # with no project_id). Symmetrically, a project-scoped
+        # worker only claims jobs from its own project (or
+        # unscoped global jobs). The single check below covers
+        # both directions: skip iff both sides have a
+        # project_id and they differ.
+        candidate_project = candidate.project_id
+        worker_project = worker.project_id
+        if candidate_project is not None and worker_project is not None:
+            if str(candidate_project) != str(worker_project):
                 continue
         # Capability gate: worker must advertise every required
         # capability in attributes.capabilities (list of strs).
@@ -753,6 +771,7 @@ def list_jobs(
         target_pod_name: Optional[str] = None,
         target_kind: Optional[str] = None,
         worker_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         limit: int = 50,
     ) -> List[JobView]:
     """
@@ -776,6 +795,8 @@ def list_jobs(
         query = query.filter(WorkerJob.target_kind == target_kind)
     if worker_id is not None and len(worker_id) > 0:
         query = query.filter(WorkerJob.worker_id == worker_id)
+    if project_id is not None and len(project_id) > 0:
+        query = query.filter(WorkerJob.project_id == project_id)
     rows = (
         query.order_by(WorkerJob.enqueued_at.desc())
         .limit(limit_value)

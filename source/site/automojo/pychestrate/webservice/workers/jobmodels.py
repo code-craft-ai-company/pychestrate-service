@@ -136,6 +136,15 @@ class WorkerJob(PychestratePhase1Base):
                         rows; positive values jump ahead. Within
                         the same priority bucket the queue is
                         FIFO by ``enqueued_at``.
+        :ivar project_id: When set, only workers in the same
+                          project (or globally-scoped workers
+                          with no project_id) can claim this
+                          job. ``None`` means "global queue —
+                          any worker may claim". The matching
+                          rule is symmetric on the worker side
+                          too: a project-scoped worker only
+                          claims jobs from its own project or
+                          unscoped jobs.
     """
 
     __tablename__ = "worker_jobs"
@@ -144,6 +153,7 @@ class WorkerJob(PychestratePhase1Base):
         Index("ix_worker_jobs_target", "target_pod_name", "target_kind"),
         Index("ix_worker_jobs_not_before", "not_before"),
         Index("ix_worker_jobs_priority", "priority"),
+        Index("ix_worker_jobs_project_id", "project_id"),
     )
 
     job_id = Column(UUIDType(binary=False), primary_key=True)
@@ -177,3 +187,4 @@ class WorkerJob(PychestratePhase1Base):
     lease_holder = Column(String(255), nullable=True)
     lease_ttl_seconds = Column(Integer, nullable=True)
     priority = Column(Integer, nullable=False, default=0)
+    project_id = Column(UUIDType(binary=False), nullable=True)

@@ -709,5 +709,6 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "lease_holder": view.lease_holder,
         "lease_ttl_seconds": view.lease_ttl_seconds,
         "priority": view.priority,
+        "project_id": view.project_id,
     }
     return rtnval
