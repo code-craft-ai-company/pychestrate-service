@@ -220,8 +220,36 @@ class FlowRuntime:
         # buffers are bound via :meth:`_ThreadLocalLogHandler.attach_buffer`
         # so concurrent flows don't cross-contaminate each other's
         # persisted log_text.
+        #
+        # Defensive: remove any stale ``_ThreadLocalLogHandler``
+        # already attached to root from a prior runtime that
+        # didn't shut down cleanly (e.g. a test that crashed
+        # before its ``finally`` ran). Otherwise the stale
+        # handler carries pre-attach state — its threading.local
+        # may have buffers from worker threads we've reused, and
+        # records emitted on those threads land in *both*
+        # handlers, polluting the new runtime's log_text.
         self._log_handler: _ThreadLocalLogHandler = _ThreadLocalLogHandler()
-        logging.getLogger().addHandler(self._log_handler)
+        root_logger = logging.getLogger()
+        for stale in [
+            h for h in root_logger.handlers
+            if isinstance(h, _ThreadLocalLogHandler)
+        ]:
+            root_logger.removeHandler(stale)
+        root_logger.addHandler(self._log_handler)
+        # The root logger defaults to WARNING; ``RunCommand`` and
+        # ``RemoteCommand`` log progress at INFO. Without this
+        # adjustment the records are filtered before they reach
+        # the per-thread handler and ``log_text`` ends up empty.
+        # We remember the prior level so shutdown can restore it
+        # rather than leaving the process noisier than we found
+        # it.
+        self._prior_root_level: int = root_logger.level
+        if (
+            root_logger.level == logging.NOTSET
+            or root_logger.level > logging.INFO
+        ):
+            root_logger.setLevel(logging.INFO)
 
         if session_factory is not None:
             self._load_existing_submissions()
@@ -366,11 +394,19 @@ class FlowRuntime:
     def shutdown(self, *, wait: bool = True) -> None:
         """
             Drain the worker pool and detach the per-thread log
-            handler from the root logger.
+            handler from the root logger. Restore the root
+            logger level we found at construction time so we
+            don't leave the process noisier than when we
+            arrived.
         """
         self._executor.shutdown(wait=wait)
+        root_logger = logging.getLogger()
         try:
-            logging.getLogger().removeHandler(self._log_handler)
+            root_logger.removeHandler(self._log_handler)
+        except Exception:  # noqa: BLE001 — best-effort cleanup
+            pass
+        try:
+            root_logger.setLevel(self._prior_root_level)
         except Exception:  # noqa: BLE001 — best-effort cleanup
             pass
         return
