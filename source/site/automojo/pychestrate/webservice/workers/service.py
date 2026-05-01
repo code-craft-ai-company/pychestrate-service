@@ -270,3 +270,28 @@ def read_worker(
         raise WorkerNotFoundError(err_msg) from None
     rtnval = _to_view(row=row)
     return rtnval
+
+
+def count_workers_by_status(
+        *,
+        db_session: DbSession,
+    ) -> Dict[str, int]:
+    """
+        Count :class:`Worker` rows grouped by status. Every
+        :class:`WorkerStatus` member appears in the result with
+        at least ``0`` so the dashboard layer doesn't have to
+        special-case empty buckets.
+    """
+    from sqlalchemy import func as sa_func
+    rows = (
+        db_session.query(Worker.status, sa_func.count().label("count"))
+        .group_by(Worker.status)
+        .all()
+    )
+    counts: Dict[str, int] = {}
+    for member in WorkerStatus:
+        counts[member.value] = 0
+    for status_value, count_value in rows:
+        counts[status_value] = int(count_value)
+    rtnval = counts
+    return rtnval
