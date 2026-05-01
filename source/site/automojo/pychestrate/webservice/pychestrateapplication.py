@@ -128,6 +128,7 @@ from automojo.pychestrate.webservice.workers.staleworkersweeper import (
     resolve_sweeper_config_from_env,
 )
 from automojo.pychestrate.webservice.workers.restapi.v1 import (  # noqa: F401
+    metricsblueprint as _metricsblueprint,
     queueblueprint as _queueblueprint,
     workersblueprint as _workersblueprint,
 )
