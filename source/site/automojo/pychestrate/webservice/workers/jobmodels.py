@@ -111,6 +111,12 @@ class WorkerJob(PychestratePhase1Base):
                           this row until ``now >= not_before``.
                           Used to schedule the next retry's
                           earliest claim time.
+        :ivar required_capabilities: List of capability strings
+                                     the worker must advertise in
+                                     ``attributes.capabilities``
+                                     to be allowed to claim this
+                                     job. Empty list means
+                                     "any worker".
     """
 
     __tablename__ = "worker_jobs"
@@ -147,3 +153,4 @@ class WorkerJob(PychestratePhase1Base):
         String(32), nullable=False, default=RetryStrategy.FIXED.value,
     )
     not_before = Column(DateTime(timezone=True), nullable=True)
+    required_capabilities = Column(JSON, nullable=False, default=list)

@@ -446,5 +446,6 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "retry_delay_seconds": view.retry_delay_seconds,
         "retry_strategy": view.retry_strategy,
         "not_before": view.not_before,
+        "required_capabilities": view.required_capabilities,
     }
     return rtnval
