@@ -35,8 +35,12 @@ from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.webworks.security.accesspolicy import AccessPolicy
 
 from automojo.pychestrate.webservice.workers import (
+    artifactservice as worker_artifact_service,
     jobservice as worker_job_service,
     service as worker_service,
+)
+from automojo.pychestrate.webservice.workers.artifactservice import (
+    ArtifactTooLargeError,
 )
 from automojo.pychestrate.webservice.workers.exceptions import (
     WorkerAlreadyRegisteredError,
@@ -426,6 +430,101 @@ class WorkersBlueprint(RestBlueprint):
         body = _job_view_to_dict(view=view)
         rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/workers/{worker_id}/jobs/{job_id}/artifacts",
+        methods=["POST"],
+        doc=Doc(
+            summary="Worker uploads a job artifact",
+            description=(
+                "Attach a file (test log, screenshot, packet "
+                "capture, captured serial output, ...) to a "
+                "claimed job. Body: ``{name, kind?, "
+                "content_type?, content_b64, attributes?}``. "
+                "``content_b64`` is base64-encoded. "
+                "Returns 201 with the persisted metadata."
+            ),
+        ),
+        access_policy=_WORKER_OR_ADMIN,
+    )
+    def upload_job_artifact(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        worker_id = request.path_params.get("worker_id", "")
+        job_id = request.path_params.get("job_id", "")
+        payload = _read_json_body(request=request)
+
+        name = str(payload.get("name", "")).strip()
+        if len(name) == 0:
+            raise HTTPException(
+                status_code=400, detail="name is required",
+            ) from None
+        content_b64_raw = payload.get("content_b64", None)
+        if content_b64_raw is None:
+            raise HTTPException(
+                status_code=400,
+                detail="content_b64 is required",
+            ) from None
+        import base64 as _base64
+        try:
+            content_bytes = _base64.b64decode(
+                str(content_b64_raw), validate=True,
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="content_b64 must be valid base64",
+            ) from exc
+        kind = str(payload.get("kind", "binary"))
+        content_type = str(
+            payload.get("content_type", "application/octet-stream"),
+        )
+        attributes = payload.get("attributes", None)
+        if attributes is not None and not isinstance(attributes, dict):
+            raise HTTPException(
+                status_code=400,
+                detail="attributes must be a JSON object",
+            ) from None
+
+        try:
+            view = worker_artifact_service.upload_artifact(
+                db_session=db_session,
+                job_id=job_id,
+                worker_id=worker_id,
+                name=name,
+                content=content_bytes,
+                kind=kind,
+                content_type=content_type,
+                attributes=attributes,
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        except ArtifactTooLargeError as exc:
+            raise HTTPException(
+                status_code=413, detail=str(exc),
+            ) from exc
+        body = _artifact_view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=201)
+        return rtnval
+
+
+def _artifact_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "artifact_id": view.artifact_id,
+        "job_id": view.job_id,
+        "worker_id": view.worker_id,
+        "attempt": view.attempt,
+        "name": view.name,
+        "kind": view.kind,
+        "content_type": view.content_type,
+        "size_bytes": view.size_bytes,
+        "content_hash": view.content_hash,
+        "storage_kind": view.storage_kind,
+        "attributes": view.attributes,
+        "created_at": view.created_at,
+    }
+    return rtnval
 
 
 def _job_view_to_dict(*, view) -> Dict[str, Any]:

@@ -342,6 +342,49 @@ def report_result(
     return rtnval
 
 
+def upload_artifact(
+        *,
+        base_url: str,
+        bearer_token: str,
+        worker_id: str,
+        job_id: str,
+        name: str,
+        content: bytes,
+        kind: str = "binary",
+        content_type: str = "application/octet-stream",
+        attributes: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+    """
+        Upload an artifact for a claimed job. Returns the
+        server-side metadata view on success, ``None`` on a
+        non-201 response. Bytes are base64-encoded over the
+        wire (the service decodes inside the
+        ``upload_artifact`` REST handler).
+    """
+    import base64 as _base64
+    payload: Dict[str, Any] = {
+        "name": name,
+        "kind": kind,
+        "content_type": content_type,
+        "content_b64": _base64.b64encode(content).decode("ascii"),
+    }
+    if attributes is not None:
+        payload["attributes"] = attributes
+    status_code, body = _do_request(
+        base_url=base_url,
+        method="POST",
+        path="/api/v1/workers/{0}/jobs/{1}/artifacts".format(
+            worker_id, job_id,
+        ),
+        bearer_token=bearer_token,
+        json_body=payload,
+    )
+    if status_code != 201:
+        return None
+    rtnval = _decode_json_response(body=body)
+    return rtnval
+
+
 def deregister_worker(
         *,
         base_url: str,
