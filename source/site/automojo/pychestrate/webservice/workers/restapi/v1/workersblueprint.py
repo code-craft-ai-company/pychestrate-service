@@ -39,6 +39,7 @@ from automojo.pychestrate.webservice.workers import (
     joblogservice as worker_job_log_service,
     jobservice as worker_job_service,
     service as worker_service,
+    testresultservice as worker_test_result_service,
 )
 from automojo.pychestrate.webservice.workers.artifactservice import (
     ArtifactTooLargeError,
@@ -555,6 +556,114 @@ class WorkersBlueprint(RestBlueprint):
         }
         rtnval = JSONResponse(content=body, status_code=201)
         return rtnval
+
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/workers/{worker_id}/jobs/{job_id}/test-results",
+        methods=["POST"],
+        doc=Doc(
+            summary="Worker records test results",
+            description=(
+                "Record one or many test results for a "
+                "claimed job. Body: ``{results: [...]}`` for a "
+                "batch (preferred) or a single ``{case_name, "
+                "outcome, ...}`` object. Returns the persisted "
+                "view(s) with server-issued result_ids."
+            ),
+        ),
+        access_policy=_WORKER_OR_ADMIN,
+    )
+    def record_job_test_results(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        worker_id = request.path_params.get("worker_id", "")
+        job_id = request.path_params.get("job_id", "")
+        payload = _read_json_body(request=request)
+
+        if "results" in payload:
+            results_raw = payload.get("results", [])
+            if not isinstance(results_raw, list):
+                raise HTTPException(
+                    status_code=400,
+                    detail="results must be a JSON array",
+                ) from None
+            try:
+                views = (
+                    worker_test_result_service
+                    .record_test_results_batch(
+                        db_session=db_session,
+                        job_id=job_id,
+                        worker_id=worker_id,
+                        results=results_raw,
+                    )
+                )
+            except LookupError as exc:
+                raise HTTPException(
+                    status_code=404, detail=str(exc),
+                ) from exc
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail=str(exc),
+                ) from exc
+            body = {
+                "results": [
+                    _test_result_view_to_dict(view=v) for v in views
+                ],
+            }
+            rtnval = JSONResponse(content=body, status_code=201)
+            return rtnval
+
+        # Single-result form.
+        try:
+            view = (
+                worker_test_result_service.record_test_result(
+                    db_session=db_session,
+                    job_id=job_id,
+                    worker_id=worker_id,
+                    case_name=payload.get("case_name", ""),
+                    outcome=payload.get("outcome", None),
+                    suite_name=payload.get("suite_name", ""),
+                    duration_seconds=payload.get(
+                        "duration_seconds", 0.0,
+                    ),
+                    started_at=payload.get("started_at", None),
+                    completed_at=payload.get("completed_at", None),
+                    failure_message=payload.get(
+                        "failure_message", None,
+                    ),
+                    failure_trace=payload.get("failure_trace", None),
+                    attributes=payload.get("attributes", None),
+                )
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400, detail=str(exc),
+            ) from exc
+        body = _test_result_view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=201)
+        return rtnval
+
+
+def _test_result_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "result_id": view.result_id,
+        "job_id": view.job_id,
+        "worker_id": view.worker_id,
+        "attempt": view.attempt,
+        "suite_name": view.suite_name,
+        "case_name": view.case_name,
+        "outcome": view.outcome,
+        "duration_seconds": view.duration_seconds,
+        "started_at": view.started_at,
+        "completed_at": view.completed_at,
+        "failure_message": view.failure_message,
+        "failure_trace": view.failure_trace,
+        "attributes": view.attributes,
+    }
+    return rtnval
 
 
 def _artifact_view_to_dict(*, view) -> Dict[str, Any]:

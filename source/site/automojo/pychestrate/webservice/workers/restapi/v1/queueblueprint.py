@@ -24,7 +24,7 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from automojo.webworks.endpoints.doc import Doc
 from automojo.webworks.endpoints.restblueprint import RestBlueprint
@@ -38,6 +38,7 @@ from automojo.pychestrate.webservice.workers import (
     joblogservice,
     jobservice,
     service as worker_service,
+    testresultservice,
 )
 from automojo.pychestrate.webservice.workers.artifactservice import (
     ArtifactJobMismatchError,
@@ -376,6 +377,91 @@ class QueueBlueprint(RestBlueprint):
         }
         rtnval = JSONResponse(content=body, status_code=200)
         return rtnval
+
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/jobs/{job_id}/test-results",
+        methods=["GET"],
+        doc=Doc(
+            summary="List a job's test results",
+            description=(
+                "Returns every test result attached to the "
+                "job, oldest first. Filters: ``outcome`` "
+                "(passed/failed/skipped/errored or any custom "
+                "value), ``attempt`` (1-indexed)."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def list_job_test_results(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        job_id = request.path_params.get("job_id", "")
+        outcome = request.query_params.get("outcome", None)
+        attempt_raw = request.query_params.get("attempt", None)
+        attempt_value: Optional[int]
+        if attempt_raw is None or len(attempt_raw) == 0:
+            attempt_value = None
+        else:
+            try:
+                attempt_value = int(attempt_raw)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400,
+                    detail="attempt must be an integer",
+                ) from None
+        views = testresultservice.list_test_results_for_job(
+            db_session=db_session,
+            job_id=job_id,
+            outcome=outcome,
+            attempt=attempt_value,
+        )
+        body = [_test_result_view_to_dict(view=v) for v in views]
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/jobs/{job_id}/test-results/summary",
+        methods=["GET"],
+        doc=Doc(
+            summary="Summarise a job's test results",
+            description=(
+                "Returns ``{by_outcome, total, passed, failed, "
+                "skipped, errored}`` aggregated across every "
+                "attempt of the job. Conventional outcomes are "
+                "always present (zero buckets included)."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def summarise_job_test_results(
+            request: Request,
+        ) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        job_id = request.path_params.get("job_id", "")
+        body = testresultservice.summarize_test_results_for_job(
+            db_session=db_session, job_id=job_id,
+        )
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+
+def _test_result_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "result_id": view.result_id,
+        "job_id": view.job_id,
+        "worker_id": view.worker_id,
+        "attempt": view.attempt,
+        "suite_name": view.suite_name,
+        "case_name": view.case_name,
+        "outcome": view.outcome,
+        "duration_seconds": view.duration_seconds,
+        "started_at": view.started_at,
+        "completed_at": view.completed_at,
+        "failure_message": view.failure_message,
+        "failure_trace": view.failure_trace,
+        "attributes": view.attributes,
+    }
+    return rtnval
 
 
 def _log_chunk_view_to_dict(*, view) -> Dict[str, Any]:

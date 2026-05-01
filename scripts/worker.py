@@ -342,6 +342,37 @@ def report_result(
     return rtnval
 
 
+def report_test_results(
+        *,
+        base_url: str,
+        bearer_token: str,
+        worker_id: str,
+        job_id: str,
+        results: list,
+    ) -> Optional[list]:
+    """
+        Submit a batch of structured test results
+        (``[{case_name, outcome, ...}]``) for a claimed job.
+        Returns the list of persisted views on success,
+        ``None`` on a non-201 response.
+    """
+    payload: Dict[str, Any] = {"results": results}
+    status_code, body = _do_request(
+        base_url=base_url,
+        method="POST",
+        path="/api/v1/workers/{0}/jobs/{1}/test-results".format(
+            worker_id, job_id,
+        ),
+        bearer_token=bearer_token,
+        json_body=payload,
+    )
+    if status_code != 201:
+        return None
+    decoded = _decode_json_response(body=body)
+    rtnval = decoded.get("results", None)
+    return rtnval
+
+
 def append_log_chunk(
         *,
         base_url: str,
