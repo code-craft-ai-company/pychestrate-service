@@ -328,6 +328,53 @@ def _coerce_utc(*, value: datetime) -> datetime:
     return rtnval
 
 
+def _try_audit_lease_event(
+        *,
+        db_session: DbSession,
+        kind: str,
+        worker_id: str,
+        holder: str,
+        ttl_seconds: Optional[int],
+    ) -> None:
+    """
+        Best-effort capture of a lease-lifecycle event into the
+        canonical audit chain. Mirrors the queue-service helper
+        of the same shape — failures are swallowed so the lease
+        write stays committed even when audit is degraded.
+    """
+    try:
+        from automojo.pychestrate.webservice.audit import (
+            audit_writer,
+        )
+    except Exception:
+        return
+    payload: Dict[str, Any] = {
+        "worker_id": worker_id,
+        "holder": holder,
+    }
+    if ttl_seconds is not None:
+        payload["ttl_seconds"] = int(ttl_seconds)
+    try:
+        audit_writer.capture_event(
+            db_session=db_session,
+            source_event_id=new_uuid(),
+            source_topic=kind.replace("audit.", "entity.", 1),
+            kind=kind,
+            actor_user_id=None,
+            actor_service_identity=None,
+            target_ref="worker:{0}".format(worker_id),
+            payload=payload,
+        )
+        db_session.commit()
+    except Exception:
+        try:
+            db_session.rollback()
+        except Exception:
+            pass
+        return
+    return
+
+
 def is_lease_active(
         *,
         worker_row: Worker,
@@ -414,6 +461,13 @@ def acquire_lease(
         row.lease_acquired_at = now_value
     row.lease_expires_at = now_value + timedelta(seconds=int(ttl_seconds))
     db_session.commit()
+    _try_audit_lease_event(
+        db_session=db_session,
+        kind="audit.queue.lease.acquired",
+        worker_id=str(row.worker_id),
+        holder=holder,
+        ttl_seconds=int(ttl_seconds),
+    )
     rtnval = _to_view(row=row)
     return rtnval
 
@@ -447,6 +501,13 @@ def release_lease(
         row.lease_acquired_at = None
         row.lease_expires_at = None
         db_session.commit()
+        _try_audit_lease_event(
+            db_session=db_session,
+            kind="audit.queue.lease.released",
+            worker_id=str(row.worker_id),
+            holder=holder,
+            ttl_seconds=None,
+        )
     rtnval = _to_view(row=row)
     return rtnval
 

@@ -24,6 +24,13 @@ from automojo.pychestrate.webservice.audit.extensions.flag_events import (
     FlagRetiredAuditEvents,
     FlagUpdatedAuditEvents,
 )
+from automojo.pychestrate.webservice.audit.extensions.queue_events import (
+    QueueJobClaimedAuditEvents,
+    QueueJobEnqueuedAuditEvents,
+    QueueJobReportedAuditEvents,
+    QueueLeaseAcquiredAuditEvents,
+    QueueLeaseReleasedAuditEvents,
+)
 from automojo.pychestrate.webservice.audit.extensions.project_events import (
     ProjectArchivedAuditEvents,
     ProjectCreatedAuditEvents,
@@ -142,5 +149,20 @@ def register_builtin_extensions() -> None:
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=UnknownAuditKindAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=QueueJobEnqueuedAuditEvents,
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=QueueJobClaimedAuditEvents,
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=QueueJobReportedAuditEvents,
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=QueueLeaseAcquiredAuditEvents,
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=QueueLeaseReleasedAuditEvents,
     )
     return

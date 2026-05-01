@@ -40,6 +40,63 @@ _WAIT_LOCK = threading.Lock()
 _WAIT_EVENTS: Dict[str, threading.Event] = {}
 
 
+def _try_audit_event(
+        *,
+        db_session: DbSession,
+        kind: str,
+        target_ref: Optional[str],
+        payload: Dict[str, Any],
+        actor_user_id: Optional[str] = None,
+        actor_service_identity: Optional[str] = None,
+    ) -> None:
+    """
+        Best-effort capture into the canonical audit chain. The
+        queue's hot paths must not crash on an audit failure
+        (an extension that hasn't registered yet, an audit
+        sink-dispatcher hiccup, etc.) — the operational
+        promise is that the queue keeps moving even when the
+        bookkeeping is degraded.
+    """
+    # Lazy import — audit_writer imports back through the
+    # extension graph and we want the queue service to remain
+    # usable in unit tests that don't load the full app.
+    try:
+        from automojo.pychestrate.webservice.audit import (
+            audit_writer,
+        )
+    except Exception:
+        return
+    try:
+        audit_writer.capture_event(
+            db_session=db_session,
+            # source_event_id is a UUIDType column — a fresh
+            # UUID is fine; the dedup key it represents is
+            # never re-used across queue writes.
+            source_event_id=new_uuid(),
+            source_topic=kind.replace("audit.", "entity.", 1),
+            kind=kind,
+            actor_user_id=actor_user_id,
+            actor_service_identity=actor_service_identity,
+            target_ref=target_ref,
+            payload=payload,
+        )
+        # capture_event flushes but doesn't commit — caller owns
+        # the transaction boundary. The queue service has
+        # already committed its own write, so we open + close
+        # a fresh transaction for the audit row.
+        db_session.commit()
+    except Exception:
+        # An audit failure is a service degradation, not a
+        # queue failure. Logged in the audit_writer; we
+        # swallow here so the queue write stays committed.
+        try:
+            db_session.rollback()
+        except Exception:
+            pass
+        return
+    return
+
+
 @dataclass(frozen=True)
 class JobView:
     """
@@ -376,6 +433,30 @@ def enqueue_job(
     )
     db_session.add(row)
     db_session.commit()
+    audit_payload: Dict[str, Any] = {
+        "job_id": str(row.job_id),
+        "kind": row.kind,
+        "target_pod_name": row.target_pod_name,
+        "target_kind": row.target_kind,
+        "priority": int(row.priority or 0),
+        "project_id": (
+            str(row.project_id) if row.project_id is not None else None
+        ),
+        "attempt": int(row.attempt or 1),
+        "max_attempts": int(row.max_attempts or 1),
+        "lease_holder": row.lease_holder,
+        "required_capabilities": list(row.required_capabilities or []),
+    }
+    if isinstance(row.payload, dict):
+        command_value = row.payload.get("command", None)
+        if command_value is not None:
+            audit_payload["command"] = str(command_value)
+    _try_audit_event(
+        db_session=db_session,
+        kind="audit.queue.job.enqueued",
+        target_ref="worker_job:{0}".format(row.job_id),
+        payload=audit_payload,
+    )
     rtnval = _to_view(row=row)
     return rtnval
 
@@ -507,6 +588,17 @@ def claim_next_job(
         )
 
     db_session.commit()
+    _try_audit_event(
+        db_session=db_session,
+        kind="audit.queue.job.claimed",
+        target_ref="worker_job:{0}".format(matched.job_id),
+        payload={
+            "job_id": str(matched.job_id),
+            "worker_id": str(worker.worker_id),
+            "attempt": int(matched.attempt or 1),
+            "lease_holder": matched.lease_holder,
+        },
+    )
     rtnval = _to_view(row=matched)
     return rtnval
 
@@ -580,6 +672,19 @@ def report_result(
             now=now_value,
         )
         db_session.commit()
+        _try_audit_event(
+            db_session=db_session,
+            kind="audit.queue.job.reported",
+            target_ref="worker_job:{0}".format(row.job_id),
+            payload={
+                "job_id": str(row.job_id),
+                "worker_id": str(worker_id),
+                "attempt": int(row.attempt or 1) - 1,
+                "state": JobState.PENDING.value,
+                "result_code": int(result_code),
+                "is_retry": True,
+            },
+        )
         rtnval = _to_view(row=row)
         return rtnval
 
@@ -603,6 +708,19 @@ def report_result(
     if event is not None:
         event.set()
 
+    _try_audit_event(
+        db_session=db_session,
+        kind="audit.queue.job.reported",
+        target_ref="worker_job:{0}".format(row.job_id),
+        payload={
+            "job_id": str(row.job_id),
+            "worker_id": str(worker_id),
+            "attempt": int(row.attempt or 1),
+            "state": row.state,
+            "result_code": int(row.result_code or 0),
+            "is_retry": False,
+        },
+    )
     rtnval = _to_view(row=row)
     return rtnval
 
