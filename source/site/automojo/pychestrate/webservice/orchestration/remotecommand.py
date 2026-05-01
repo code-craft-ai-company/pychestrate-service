@@ -224,6 +224,17 @@ class RemoteCommand(Task):
             self._priority: int = int(priority_raw)
         except (TypeError, ValueError):
             self._priority = 0
+
+        # Project scope. When set, only workers in the same
+        # project (or globally-scoped workers) can claim. The
+        # YAML carries the explicit UUID for now; a future
+        # FlowRuntime change can default this to the owning
+        # flow's project.
+        project_id_raw = task_info.get("project_id", None)
+        if project_id_raw is None:
+            self._project_id: Optional[str] = None
+        else:
+            self._project_id = str(project_id_raw)
         return
 
     @property
@@ -269,6 +280,11 @@ class RemoteCommand(Task):
     @property
     def priority(self) -> int:
         rtnval = self._priority
+        return rtnval
+
+    @property
+    def project_id(self) -> Optional[str]:
+        rtnval = self._project_id
         return rtnval
 
     @property
@@ -381,6 +397,7 @@ class RemoteCommand(Task):
                 lease_holder=lease_holder,
                 lease_ttl_seconds=lease_ttl_seconds,
                 priority=self._priority,
+                project_id=self._project_id,
             )
         finally:
             db_session.close()

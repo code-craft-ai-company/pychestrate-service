@@ -89,6 +89,7 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "lease_holder": view.lease_holder,
         "lease_ttl_seconds": view.lease_ttl_seconds,
         "priority": view.priority,
+        "project_id": view.project_id,
     }
     return rtnval
 
@@ -169,6 +170,7 @@ class QueueBlueprint(RestBlueprint):
         )
         target_kind = request.query_params.get("target_kind", None)
         worker_id = request.query_params.get("worker_id", None)
+        project_id = request.query_params.get("project_id", None)
         limit_raw = request.query_params.get("limit", None)
         if limit_raw is None or len(limit_raw) == 0:
             limit_value = 50
@@ -186,6 +188,7 @@ class QueueBlueprint(RestBlueprint):
             target_pod_name=target_pod_name,
             target_kind=target_kind,
             worker_id=worker_id,
+            project_id=project_id,
             limit=limit_value,
         )
         body = [_job_view_to_dict(view=v) for v in views]

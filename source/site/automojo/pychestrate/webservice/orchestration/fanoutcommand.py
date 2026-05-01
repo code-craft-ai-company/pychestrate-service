@@ -212,6 +212,12 @@ class FanOutCommand(Task):
         except (TypeError, ValueError):
             self._priority = 0
 
+        project_id_raw = task_info.get("project_id", None)
+        if project_id_raw is None:
+            self._project_id: Optional[str] = None
+        else:
+            self._project_id = str(project_id_raw)
+
         self._targets: List[_TargetSpec] = []
         for index, entry in enumerate(targets_raw):
             if not isinstance(entry, dict):
@@ -338,6 +344,7 @@ class FanOutCommand(Task):
                     lease_holder=None,
                     lease_ttl_seconds=None,
                     priority=self._priority,
+                    project_id=self._project_id,
                 )
             finally:
                 db_session.close()
