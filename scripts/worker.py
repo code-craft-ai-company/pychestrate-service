@@ -342,6 +342,45 @@ def report_result(
     return rtnval
 
 
+def append_log_chunk(
+        *,
+        base_url: str,
+        bearer_token: str,
+        worker_id: str,
+        job_id: str,
+        text: str,
+        stream: str = "stdout",
+    ) -> Optional[int]:
+    """
+        Append a live log chunk to a claimed job. Returns the
+        server-assigned sequence number on success, ``None``
+        on a non-201 response. Useful for long-running tests
+        that need a tail-able output stream rather than waiting
+        for ``report_result`` to surface stdout.
+    """
+    payload: Dict[str, Any] = {
+        "text": text if text is not None else "",
+        "stream": stream,
+    }
+    status_code, body = _do_request(
+        base_url=base_url,
+        method="POST",
+        path="/api/v1/workers/{0}/jobs/{1}/log".format(
+            worker_id, job_id,
+        ),
+        bearer_token=bearer_token,
+        json_body=payload,
+    )
+    if status_code != 201:
+        return None
+    decoded = _decode_json_response(body=body)
+    seq = decoded.get("seq", None)
+    if seq is None:
+        return None
+    rtnval = int(seq)
+    return rtnval
+
+
 def upload_artifact(
         *,
         base_url: str,

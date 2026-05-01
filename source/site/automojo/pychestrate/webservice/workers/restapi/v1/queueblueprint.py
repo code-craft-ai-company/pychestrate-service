@@ -35,6 +35,7 @@ from automojo.webworks.security.accesspolicy import AccessPolicy
 
 from automojo.pychestrate.webservice.workers import (
     artifactservice,
+    joblogservice,
     jobservice,
     service as worker_service,
 )
@@ -303,6 +304,92 @@ class QueueBlueprint(RestBlueprint):
             },
         )
         return rtnval
+
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/queue/jobs/{job_id}/log/stream",
+        methods=["GET"],
+        doc=Doc(
+            summary="Tail a job's live log",
+            description=(
+                "Long-poll cursor-based tail. Returns "
+                "``{chunks: [...], next_since: N}``. The "
+                "consumer persists ``next_since`` and supplies "
+                "it as ``?since=N`` on the next call. "
+                "Filters: ``since`` (default 0), ``limit`` "
+                "(default 200, max 1000)."
+            ),
+        ),
+        access_policy=_ADMIN_POLICY,
+    )
+    def stream_job_log(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        job_id = request.path_params.get("job_id", "")
+        since_raw = request.query_params.get("since", None)
+        if since_raw is None or len(since_raw) == 0:
+            since_value = 0
+        else:
+            try:
+                since_value = int(since_raw)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400,
+                    detail="since must be an integer",
+                ) from None
+        limit_raw = request.query_params.get("limit", None)
+        if limit_raw is None or len(limit_raw) == 0:
+            limit_value = 200
+        else:
+            try:
+                limit_value = int(limit_raw)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=400,
+                    detail="limit must be an integer",
+                ) from None
+        # 404 a missing job so the dashboard can distinguish
+        # "no chunks yet" (200 + empty list) from
+        # "you've got the wrong job_id".
+        job_view = jobservice.read_job(
+            db_session=db_session, job_id=job_id,
+        )
+        if job_view is None:
+            raise HTTPException(
+                status_code=404,
+                detail="job not found: {0}".format(job_id),
+            ) from None
+        chunks = joblogservice.read_log_chunks(
+            db_session=db_session,
+            job_id=job_id,
+            since_seq=since_value,
+            limit=limit_value,
+        )
+        if len(chunks) > 0:
+            next_since = chunks[-1].seq
+        else:
+            next_since = since_value
+        body = {
+            "chunks": [
+                _log_chunk_view_to_dict(view=v) for v in chunks
+            ],
+            "next_since": next_since,
+        }
+        rtnval = JSONResponse(content=body, status_code=200)
+        return rtnval
+
+
+def _log_chunk_view_to_dict(*, view) -> Dict[str, Any]:
+    rtnval = {
+        "chunk_id": view.chunk_id,
+        "job_id": view.job_id,
+        "worker_id": view.worker_id,
+        "attempt": view.attempt,
+        "seq": view.seq,
+        "stream": view.stream,
+        "text": view.text,
+        "created_at": view.created_at,
+    }
+    return rtnval
 
 
 def _artifact_view_to_dict(*, view) -> Dict[str, Any]:

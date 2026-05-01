@@ -36,6 +36,7 @@ from automojo.webworks.security.accesspolicy import AccessPolicy
 
 from automojo.pychestrate.webservice.workers import (
     artifactservice as worker_artifact_service,
+    joblogservice as worker_job_log_service,
     jobservice as worker_job_service,
     service as worker_service,
 )
@@ -505,6 +506,53 @@ class WorkersBlueprint(RestBlueprint):
                 status_code=413, detail=str(exc),
             ) from exc
         body = _artifact_view_to_dict(view=view)
+        rtnval = JSONResponse(content=body, status_code=201)
+        return rtnval
+
+
+    @RestBlueprint.attach_at(
+        path="/api/v1/workers/{worker_id}/jobs/{job_id}/log",
+        methods=["POST"],
+        doc=Doc(
+            summary="Worker appends a live log chunk",
+            description=(
+                "Append-only stream surface. Body: ``{text, "
+                "stream?}`` where ``stream`` is one of "
+                "``stdout`` / ``stderr`` / ``log`` (or any "
+                "operator-defined name). Returns ``{seq}`` — "
+                "the new chunk's monotonic sequence — so the "
+                "agent can detect dropped writes."
+            ),
+        ),
+        access_policy=_WORKER_OR_ADMIN,
+    )
+    def append_job_log_chunk(request: Request) -> JSONResponse:
+        db_session = _require_db_session(request=request)
+        worker_id = request.path_params.get("worker_id", "")
+        job_id = request.path_params.get("job_id", "")
+        payload = _read_json_body(request=request)
+        text_value = payload.get("text", "")
+        if text_value is None:
+            text_value = ""
+        try:
+            view = worker_job_log_service.append_log_chunk(
+                db_session=db_session,
+                job_id=job_id,
+                worker_id=worker_id,
+                text=str(text_value),
+                stream=payload.get("stream", None),
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail=str(exc),
+            ) from exc
+        body = {
+            "chunk_id": view.chunk_id,
+            "seq": view.seq,
+            "stream": view.stream,
+            "attempt": view.attempt,
+            "created_at": view.created_at,
+        }
         rtnval = JSONResponse(content=body, status_code=201)
         return rtnval
 
