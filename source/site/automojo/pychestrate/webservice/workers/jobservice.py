@@ -586,3 +586,140 @@ def wait_for_completion(
     finally:
         db_session.close()
     return rtnval
+
+
+def count_jobs_by_state(
+        *,
+        db_session: DbSession,
+    ) -> Dict[str, int]:
+    """
+        Return a count of :class:`WorkerJob` rows grouped by
+        ``state``. Every :class:`JobState` member appears in the
+        result with at least ``0`` so the dashboard layer
+        doesn't have to special-case empty buckets.
+    """
+    rows = (
+        db_session.query(WorkerJob.state, sa_func_count_label())
+        .group_by(WorkerJob.state)
+        .all()
+    )
+    counts: Dict[str, int] = {}
+    for member in JobState:
+        counts[member.value] = 0
+    for state_value, count_value in rows:
+        counts[state_value] = int(count_value)
+    rtnval = counts
+    return rtnval
+
+
+def count_retry_scheduled_jobs(
+        *,
+        db_session: DbSession,
+        now: Optional[datetime] = None,
+    ) -> int:
+    """
+        Number of PENDING jobs whose ``not_before`` is still in
+        the future — i.e. retries waiting on backoff. Useful
+        signal for "is the queue stuck or just respecting the
+        backoff window?".
+    """
+    if now is None:
+        now_value = datetime.now(timezone.utc)
+    else:
+        now_value = now
+    rows = (
+        db_session.query(WorkerJob)
+        .filter(WorkerJob.state == JobState.PENDING.value)
+        .filter(WorkerJob.not_before.isnot(None))
+        .all()
+    )
+    count = 0
+    for row in rows:
+        scheduled = _coerce_utc(value=row.not_before)
+        if scheduled > now_value:
+            count += 1
+    rtnval = count
+    return rtnval
+
+
+def oldest_pending_age_seconds(
+        *,
+        db_session: DbSession,
+        now: Optional[datetime] = None,
+    ) -> Optional[float]:
+    """
+        Age (in seconds) of the oldest claimable PENDING job —
+        i.e. PENDING with ``not_before`` either NULL or in the
+        past. Returns ``None`` when no claimable PENDING row
+        exists.
+    """
+    if now is None:
+        now_value = datetime.now(timezone.utc)
+    else:
+        now_value = now
+    rows = (
+        db_session.query(WorkerJob)
+        .filter(WorkerJob.state == JobState.PENDING.value)
+        .order_by(WorkerJob.enqueued_at.asc())
+        .all()
+    )
+    for row in rows:
+        if row.not_before is not None:
+            scheduled = _coerce_utc(value=row.not_before)
+            if scheduled > now_value:
+                continue
+        enqueued = _coerce_utc(value=row.enqueued_at)
+        rtnval = (now_value - enqueued).total_seconds()
+        return rtnval
+    return None
+
+
+def list_jobs(
+        *,
+        db_session: DbSession,
+        state: Optional[str] = None,
+        target_pod_name: Optional[str] = None,
+        target_kind: Optional[str] = None,
+        worker_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[JobView]:
+    """
+        List :class:`WorkerJob` rows newest-first with optional
+        filters. ``limit`` is clamped to ``[1, 500]`` so a
+        runaway dashboard call can't exhaust the API host's
+        memory.
+    """
+    if limit < 1:
+        limit_value = 1
+    elif limit > 500:
+        limit_value = 500
+    else:
+        limit_value = int(limit)
+    query = db_session.query(WorkerJob)
+    if state is not None and len(state) > 0:
+        query = query.filter(WorkerJob.state == state)
+    if target_pod_name is not None and len(target_pod_name) > 0:
+        query = query.filter(WorkerJob.target_pod_name == target_pod_name)
+    if target_kind is not None and len(target_kind) > 0:
+        query = query.filter(WorkerJob.target_kind == target_kind)
+    if worker_id is not None and len(worker_id) > 0:
+        query = query.filter(WorkerJob.worker_id == worker_id)
+    rows = (
+        query.order_by(WorkerJob.enqueued_at.desc())
+        .limit(limit_value)
+        .all()
+    )
+    rtnval = [_to_view(row=r) for r in rows]
+    return rtnval
+
+
+def sa_func_count_label():
+    """
+        Return ``sqlalchemy.func.count('*')``. Wrapped in a
+        helper so the import of :mod:`sqlalchemy.func` stays
+        local — many readers of this module never touch the
+        stats path.
+    """
+    from sqlalchemy import func as sa_func
+    rtnval = sa_func.count().label("count")
+    return rtnval
