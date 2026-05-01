@@ -441,5 +441,10 @@ def _job_view_to_dict(*, view) -> Dict[str, Any]:
         "stdout": view.stdout,
         "stderr": view.stderr,
         "error_text": view.error_text,
+        "attempt": view.attempt,
+        "max_attempts": view.max_attempts,
+        "retry_delay_seconds": view.retry_delay_seconds,
+        "retry_strategy": view.retry_strategy,
+        "not_before": view.not_before,
     }
     return rtnval

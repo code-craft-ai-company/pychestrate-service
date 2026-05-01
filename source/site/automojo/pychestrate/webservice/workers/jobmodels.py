@@ -24,6 +24,7 @@ import enum
 from sqlalchemy import (
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -48,6 +49,23 @@ class JobState(str, enum.Enum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+
+
+class RetryStrategy(str, enum.Enum):
+    """
+        How the queue computes the delay before re-enqueuing a
+        failed attempt.
+
+        * ``FIXED`` — every retry waits exactly
+          ``retry_delay_seconds`` after the failed attempt.
+        * ``EXPONENTIAL`` — the delay doubles each attempt:
+          ``retry_delay_seconds * 2**(attempt - 1)``. Useful for
+          flaky network targets where a brief blip should be
+          retried fast but a sustained outage shouldn't hammer
+          the worker.
+    """
+    FIXED = "fixed"
+    EXPONENTIAL = "exponential"
 
 
 class WorkerJob(PychestratePhase1Base):
@@ -77,12 +95,29 @@ class WorkerJob(PychestratePhase1Base):
         :ivar error_text: Worker-reported error message, when the
                           worker crashed before it could report a
                           clean code.
+        :ivar attempt: Which attempt this is, 1-indexed. Bumped
+                       by ``report_result`` (and the stale-worker
+                       sweeper) when a failed attempt is
+                       re-enqueued under a retry policy.
+        :ivar max_attempts: Total attempts the queue is allowed
+                            to schedule for this job. ``1`` means
+                            "no retries"; ``3`` means "two
+                            retries on failure".
+        :ivar retry_delay_seconds: Base delay between attempts.
+                                   The strategy below decides how
+                                   the delay grows with attempts.
+        :ivar retry_strategy: One of :class:`RetryStrategy`.
+        :ivar not_before: When set, ``claim_next_job`` must skip
+                          this row until ``now >= not_before``.
+                          Used to schedule the next retry's
+                          earliest claim time.
     """
 
     __tablename__ = "worker_jobs"
     __table_args__ = (
         Index("ix_worker_jobs_state", "state"),
         Index("ix_worker_jobs_target", "target_pod_name", "target_kind"),
+        Index("ix_worker_jobs_not_before", "not_before"),
     )
 
     job_id = Column(UUIDType(binary=False), primary_key=True)
@@ -105,3 +140,10 @@ class WorkerJob(PychestratePhase1Base):
     stdout = Column(Text, nullable=False, default="")
     stderr = Column(Text, nullable=False, default="")
     error_text = Column(Text, nullable=True)
+    attempt = Column(Integer, nullable=False, default=1)
+    max_attempts = Column(Integer, nullable=False, default=1)
+    retry_delay_seconds = Column(Float, nullable=False, default=0.0)
+    retry_strategy = Column(
+        String(32), nullable=False, default=RetryStrategy.FIXED.value,
+    )
+    not_before = Column(DateTime(timezone=True), nullable=True)

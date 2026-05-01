@@ -82,10 +82,22 @@ class SweepResult:
         :ivar workers_marked_offline: Worker IDs flipped to
                                       OFFLINE this pass.
         :ivar jobs_failed: Job IDs failed this pass because
-                           their owning worker had timed out.
+                           their owning worker had timed out
+                           AND the job had no retries left.
+        :ivar jobs_retried: Job IDs that the sweeper
+                            re-enqueued after their owning
+                            worker timed out. The original
+                            target_pod_name / target_kind
+                            selector is kept; the next attempt
+                            can therefore land on any worker
+                            that satisfies the selector — i.e.
+                            another Pi with the same name (or
+                            any worker, when the job was
+                            unscoped).
     """
     workers_marked_offline: List[str]
     jobs_failed: List[str]
+    jobs_retried: List[str]
 
 
 def _coerce_utc(*, value: datetime) -> datetime:
@@ -158,9 +170,12 @@ def sweep_once(
         flipped_worker_ids.append(str(row.worker_id))
 
     failed_job_ids: List[str] = []
+    retried_job_ids: List[str] = []
     if len(flipped_worker_ids) > 0:
         # Any in-flight job whose owning worker is now offline
-        # must be failed so the wait_for_completion waker fires.
+        # is either re-enqueued for another attempt (when the
+        # job's retry policy still has attempts left) or failed
+        # outright so the wait_for_completion waker fires.
         in_flight_states = (
             JobState.CLAIMED.value, JobState.RUNNING.value,
         )
@@ -170,6 +185,9 @@ def sweep_once(
             .filter(WorkerJob.worker_id.in_(flipped_worker_ids))
             .all()
         )
+        # Lazy import — jobservice imports jobmodels and we
+        # want to avoid touching the import-time graph.
+        from automojo.pychestrate.webservice.workers import jobservice
         for job in stuck_jobs:
             job_lag_seconds: float
             if job.claimed_at is not None:
@@ -180,19 +198,52 @@ def sweep_once(
             error_text = _OFFLINE_REASON_TEMPLATE.format(
                 job_lag_seconds, stale_threshold_seconds,
             )
-            job.state = JobState.FAILED.value
-            job.error_text = error_text
-            job.completed_at = now_value
-            if job.result_code is None:
-                job.result_code = 1
-            failed_job_ids.append(str(job.job_id))
+            current_attempt = (
+                int(job.attempt) if job.attempt is not None else 1
+            )
+            max_attempts = (
+                int(job.max_attempts)
+                if job.max_attempts is not None else 1
+            )
+            if current_attempt < max_attempts:
+                # Re-enqueue. Mirror the report_result retry
+                # path: clear attempt-specific state, bump
+                # attempt, schedule the next claim.
+                job.attempt = current_attempt + 1
+                job.state = JobState.PENDING.value
+                job.worker_id = None
+                job.claimed_at = None
+                job.completed_at = None
+                job.result_code = None
+                job.stdout = ""
+                job.stderr = ""
+                job.error_text = None
+                job.not_before = jobservice.compute_next_retry_at(
+                    attempt_just_finished=current_attempt,
+                    retry_delay_seconds=float(
+                        job.retry_delay_seconds or 0.0,
+                    ),
+                    retry_strategy=(
+                        job.retry_strategy
+                        or "fixed"
+                    ),
+                    now=now_value,
+                )
+                retried_job_ids.append(str(job.job_id))
+            else:
+                job.state = JobState.FAILED.value
+                job.error_text = error_text
+                job.completed_at = now_value
+                if job.result_code is None:
+                    job.result_code = 1
+                failed_job_ids.append(str(job.job_id))
 
-    if len(flipped_worker_ids) > 0 or len(failed_job_ids) > 0:
+    if (
+        len(flipped_worker_ids) > 0
+        or len(failed_job_ids) > 0
+        or len(retried_job_ids) > 0
+    ):
         db_session.commit()
-        # Wake any waiter blocked on a failed job. We import
-        # lazily so this module doesn't import jobservice at
-        # module-load (jobservice imports jobmodels, and
-        # circular-init paranoia is cheap insurance).
         from automojo.pychestrate.webservice.workers import jobservice
         for job_id in failed_job_ids:
             with jobservice._WAIT_LOCK:
@@ -203,6 +254,7 @@ def sweep_once(
     rtnval = SweepResult(
         workers_marked_offline=flipped_worker_ids,
         jobs_failed=failed_job_ids,
+        jobs_retried=retried_job_ids,
     )
     return rtnval
 
