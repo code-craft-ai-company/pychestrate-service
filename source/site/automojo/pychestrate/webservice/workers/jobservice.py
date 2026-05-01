@@ -18,7 +18,7 @@ import time
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -64,6 +64,7 @@ class JobView:
     retry_delay_seconds: float
     retry_strategy: str
     not_before: Optional[str]
+    required_capabilities: List[str]
 
 
 def _to_view(*, row: WorkerJob) -> JobView:
@@ -115,6 +116,10 @@ def _to_view(*, row: WorkerJob) -> JobView:
             if row.retry_strategy is not None else RetryStrategy.FIXED.value
         ),
         not_before=not_before_field,
+        required_capabilities=(
+            list(row.required_capabilities)
+            if row.required_capabilities is not None else []
+        ),
     )
     return rtnval
 
@@ -186,6 +191,75 @@ def compute_next_retry_at(
     return rtnval
 
 
+def _coerce_required_capabilities(
+        *,
+        value: Optional[Any],
+    ) -> List[str]:
+    """
+        Normalise an incoming required-capabilities parameter to
+        a sorted, de-duplicated list of strings. Anything that
+        isn't a list (or that contains non-string entries)
+        raises ``ValueError`` so a buggy workflow YAML doesn't
+        silently match the wrong workers.
+    """
+    if value is None:
+        rtnval: List[str] = []
+        return rtnval
+    if not isinstance(value, (list, tuple)):
+        err_lines = [
+            "required_capabilities must be a list of strings.",
+            "FOUND_TYPE: {}".format(type(value).__name__),
+        ]
+        err_msg = os.linesep.join(err_lines)
+        raise ValueError(err_msg)
+    coerced: List[str] = []
+    for entry in value:
+        if not isinstance(entry, str):
+            err_lines = [
+                "required_capabilities entries must be strings.",
+                "FOUND_TYPE: {}".format(type(entry).__name__),
+                "FOUND_VALUE: {!r}".format(entry),
+            ]
+            err_msg = os.linesep.join(err_lines)
+            raise ValueError(err_msg)
+        stripped = entry.strip()
+        if len(stripped) == 0:
+            continue
+        coerced.append(stripped)
+    deduped = sorted(set(coerced))
+    rtnval = deduped
+    return rtnval
+
+
+def worker_satisfies_capabilities(
+        *,
+        worker_attributes: Optional[Dict[str, Any]],
+        required_capabilities: List[str],
+    ) -> bool:
+    """
+        Return ``True`` when every entry in
+        ``required_capabilities`` appears in
+        ``worker_attributes['capabilities']`` (a list of
+        strings). An empty requirement list always matches.
+        Missing / non-list ``capabilities`` is treated as the
+        empty set.
+    """
+    if len(required_capabilities) == 0:
+        return True
+    if worker_attributes is None:
+        return False
+    advertised_raw = worker_attributes.get("capabilities", None)
+    if not isinstance(advertised_raw, (list, tuple)):
+        return False
+    advertised = set(
+        str(item) for item in advertised_raw if isinstance(item, str)
+    )
+    for required in required_capabilities:
+        if required not in advertised:
+            return False
+    return True
+
+
 def enqueue_job(
         *,
         db_session: DbSession,
@@ -196,6 +270,7 @@ def enqueue_job(
         max_attempts: int = 1,
         retry_delay_seconds: float = 0.0,
         retry_strategy: Optional[Any] = None,
+        required_capabilities: Optional[List[str]] = None,
     ) -> JobView:
     """
         Insert a :class:`WorkerJob` row in PENDING state.
@@ -209,6 +284,14 @@ def enqueue_job(
                                     immediately.
         :param retry_strategy: ``"fixed"`` (default) or
                                ``"exponential"``.
+        :param required_capabilities: List of capability strings
+                                      the claiming worker must
+                                      advertise in
+                                      ``attributes.capabilities``.
+                                      Empty / None means "any
+                                      worker that satisfies the
+                                      target_pod_name /
+                                      target_kind selector".
     """
     if payload is None:
         payload_value: Dict[str, Any] = {}
@@ -233,6 +316,9 @@ def enqueue_job(
         err_msg = os.linesep.join(err_lines)
         raise ValueError(err_msg)
     strategy_value = _coerce_retry_strategy(value=retry_strategy)
+    capabilities_value = _coerce_required_capabilities(
+        value=required_capabilities,
+    )
     row = WorkerJob(
         job_id=new_uuid(),
         kind=kind,
@@ -247,6 +333,7 @@ def enqueue_job(
         retry_delay_seconds=float(retry_delay_seconds),
         retry_strategy=strategy_value,
         not_before=None,
+        required_capabilities=capabilities_value,
     )
     db_session.add(row)
     db_session.commit()
@@ -310,6 +397,15 @@ def claim_next_job(
                     continue
         if candidate.target_kind is not None:
             if candidate.target_kind != worker.kind:
+                continue
+        # Capability gate: worker must advertise every required
+        # capability in attributes.capabilities (list of strs).
+        required_caps = candidate.required_capabilities
+        if required_caps is not None and len(required_caps) > 0:
+            if worker_satisfies_capabilities(
+                worker_attributes=worker.attributes,
+                required_capabilities=list(required_caps),
+            ) is False:
                 continue
         matched = candidate
         break

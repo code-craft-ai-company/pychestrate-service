@@ -151,6 +151,22 @@ class RemoteCommand(Task):
             self._retry_strategy: str = "fixed"
         else:
             self._retry_strategy = str(retry_strategy_raw)
+        required_caps_raw = task_info.get("required_capabilities", None)
+        if required_caps_raw is None:
+            self._required_capabilities: list = []
+        elif isinstance(required_caps_raw, (list, tuple)):
+            self._required_capabilities = [
+                str(item) for item in required_caps_raw
+                if isinstance(item, str)
+            ]
+        else:
+            err_lines = [
+                "RemoteCommand 'required_capabilities' must be a list.",
+                "LABEL: {}".format(label),
+                "FOUND_TYPE: {}".format(type(required_caps_raw).__name__),
+            ]
+            err_msg = os.linesep.join(err_lines)
+            raise ValueError(err_msg) from None
         return
 
     @property
@@ -186,6 +202,11 @@ class RemoteCommand(Task):
     @property
     def retry_strategy(self) -> str:
         rtnval = self._retry_strategy
+        return rtnval
+
+    @property
+    def required_capabilities(self) -> list:
+        rtnval = list(self._required_capabilities)
         return rtnval
 
     def _compute_wait_budget(self) -> float:
@@ -255,6 +276,7 @@ class RemoteCommand(Task):
                 max_attempts=self._max_attempts,
                 retry_delay_seconds=self._retry_delay_seconds,
                 retry_strategy=self._retry_strategy,
+                required_capabilities=self._required_capabilities,
             )
         finally:
             db_session.close()
