@@ -28,8 +28,23 @@
       mandatory `required_permissions` validation at startup.
 - [ ] T1.3 — Wire the `1-authentication` cookie, bearer, and mTLS
       resolvers behind a single request-scoped principal middleware.
-- [ ] T1.4 — Implement `problem_json.build_problem_response` per
+- [x] T1.4 — Implement `problem_json.build_problem_response` per
       RFC 7807.
+      *(Framework-agnostic builder under
+      ``webservice.api.problem_json`` returning a
+      ``(body, content_type, status_code)`` triple. ProblemDocument
+      frozen dataclass carries the five RFC 7807 members plus an
+      extensions mapping; build_problem_document validates status
+      codes (1xx-5xx) and refuses extension keys that collide with
+      reserved RFC names. ``problem_for_http_status`` shortcut maps
+      stock 400/401/403/404/405/409/422/429/500/503 to documented
+      ``type`` URIs under https://docs.pychestrate.io/errors/ and
+      falls back to ``unknown-error`` for unrecognized codes. Body
+      ordering matches the spec: type, title, status, detail, then
+      instance (when supplied), then extensions in insertion order.
+      Lives outside the flask-importing ``restapi`` tree so the
+      module is consumable by tests, the CLI, and any future
+      ASGI / stdlib HTTP target without extra dependencies.)*
 - [ ] T1.5 — Implement the `projects`, `pods`, `clients`, `runs`,
       and `artifacts` *read* controllers (GET list + GET detail)
       calling their owning domain repositories.
