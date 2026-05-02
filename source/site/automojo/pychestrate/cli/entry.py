@@ -77,6 +77,7 @@ def _print_top_help(*, stream) -> None:
         "  project list           List projects from the configured server.",
         "  plugin-api catalog     List the published plugin-api surface.",
         "  plugin-api catalog <n> Read a single catalog entry by name.",
+        "  ext list               List concrete extension mounts the host discovered.",
         "",
         "see 'pyc <noun> --help' or 'pyc <noun> <verb> --help'.",
         "",
@@ -183,6 +184,13 @@ def _handle_noun_help(*, argv: Sequence[str], stdout, stderr) -> int:
             "  catalog <entry>      Read a single entry by name.\n"
         )
         return exit_codes.EXIT_OK
+    if noun == "ext":
+        stdout.write(
+            "usage: pyc ext <verb> [args]\n\n"
+            "verbs:\n"
+            "  list                 List the concrete extension mounts the host discovered.\n"
+        )
+        return exit_codes.EXIT_OK
     stdout.write("noun '{}' not yet wired in M1\n".format(noun))
     return exit_codes.EXIT_OK
 
@@ -206,6 +214,14 @@ def _handle_verb_help(*, argv: Sequence[str], stdout, stderr) -> int:
             "Read the published plugin-api surface.\n"
             "With no argument, lists every entry.\n"
             "With an argument, reads the named entry's metadata.\n"
+        )
+        return exit_codes.EXIT_OK
+    if (noun, verb) == ("ext", _EXT_LIST_VERB):
+        stdout.write(
+            "usage: pyc ext list\n\n"
+            "List every concrete extension route the host has discovered.\n"
+            "Each line names ext_name, method, full path, and the\n"
+            "handler class.\n"
         )
         return exit_codes.EXIT_OK
     stdout.write("'{} {}' not yet wired in M1\n".format(noun, verb))
@@ -355,6 +371,21 @@ def _plugin_api_catalog_entry_operation() -> RestOperation:
         path_template="/api/v1/plugin-api/_meta/catalog/{name}",
         path_param_names=("name",),
         required_path_param_names=("name",),
+    )
+    return rtnval
+
+
+def _plugin_api_mounts_operation() -> RestOperation:
+    """
+        Operation backing ``pyc ext list``. Reports every concrete
+        ``RestEndpointExtension`` mount the host has discovered.
+
+        :returns: :class:`RestOperation`.
+    """
+    rtnval = RestOperation(
+        operation_id="plugin_api_mounts",
+        method="GET",
+        path_template="/api/v1/plugin-api/_meta/mounts",
     )
     return rtnval
 
@@ -509,6 +540,59 @@ def _handle_plugin_api_catalog(
 
 
 _PLUGIN_API_CATALOG_VERB: str = "catalog"
+_EXT_LIST_VERB: str = "list"
+
+
+def _handle_ext_list(
+        *,
+        profile: CliProfile,
+        request_opener,
+        stdout,
+        stderr
+    ) -> int:
+    """
+        Drive ``pyc ext list``. Hits
+        ``/api/v1/plugin-api/_meta/mounts`` and emits the JSON body to
+        stdout.
+
+        :param profile: Active :class:`CliProfile`.
+        :param request_opener: Test seam replacing the urllib opener.
+        :param stdout: Output stream.
+        :param stderr: Diagnostics stream.
+
+        :returns: Process exit code.
+    """
+    operation = _plugin_api_mounts_operation()
+
+    try:
+        response = transport.execute_request(
+            profile=profile,
+            operation=operation,
+            path_params={},
+            query_params={},
+            body=None,
+            idempotency_key=None,
+            timeout_seconds=None,
+            opener=request_opener,
+        )
+    except (
+        AuthenticationError,
+        NotFoundError,
+        ConflictError,
+        RateLimitedError,
+        ServerError,
+    ) as xcpt:
+        return _map_exception_to_exit_code(xcpt=xcpt, stderr=stderr)
+
+    if response.body is None:
+        stdout.write("[]\n")
+    elif isinstance(response.body, (dict, list)):
+        stdout.write(json.dumps(response.body, indent=2))
+        stdout.write("\n")
+    else:
+        stdout.write("{}\n".format(response.body))
+
+    return exit_codes.EXIT_OK
 
 
 def _is_supported_command(*, noun: str, verb: str) -> bool:
@@ -524,6 +608,9 @@ def _is_supported_command(*, noun: str, verb: str) -> bool:
         rtnval = True
         return rtnval
     if (noun, verb) == ("plugin-api", _PLUGIN_API_CATALOG_VERB):
+        rtnval = True
+        return rtnval
+    if (noun, verb) == ("ext", _EXT_LIST_VERB):
         rtnval = True
         return rtnval
     rtnval = False
@@ -580,7 +667,9 @@ def main(
             "error: '{} {}' is not wired in M1.\n".format(noun, verb)
         )
         err_stream.write(
-            "supported: 'project list', 'plugin-api catalog [<entry-name>]'\n"
+            "supported: 'project list', "
+            "'plugin-api catalog [<entry-name>]', "
+            "'ext list'\n"
         )
         rtnval = exit_codes.EXIT_USAGE_ERROR
         return rtnval
@@ -605,6 +694,15 @@ def main(
         rtnval = _handle_plugin_api_catalog(
             profile=profile,
             entry_name=entry_name,
+            request_opener=request_opener,
+            stdout=out_stream,
+            stderr=err_stream,
+        )
+        return rtnval
+
+    if (noun, verb) == ("ext", _EXT_LIST_VERB):
+        rtnval = _handle_ext_list(
+            profile=profile,
             request_opener=request_opener,
             stdout=out_stream,
             stderr=err_stream,

@@ -1,14 +1,18 @@
 """
 .. module:: plugin_api.restapi.v1.catalog_controller
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: REST controllers for ``GET /api/v1/plugin-api/_meta/catalog``.
+    :synopsis: REST controllers for ``GET /api/v1/plugin-api/_meta/*``.
 
 .. moduleauthor:: Automation Mojo LLC
 
 The controllers are read-only views over the cached
-:class:`Catalog` exposed by ``plugin_api.runtime``. M2 layers in
-``GET /api/v1/plugin-api/_meta/extensions`` listing loaded
-extensions; M1 stops at the catalog itself.
+:class:`Catalog` exposed by ``plugin_api.runtime`` plus the
+:class:`MountManifest` produced by
+``extensions.ext_router.mount_extension_routes``. The catalog
+endpoint enumerates the published-surface contract; the mounts
+endpoint reports which concrete subclasses the host has discovered
+at startup so operators can answer "which extensions are live?"
+without SSH access.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -19,6 +23,10 @@ __version__ = "1.0.0"
 
 from flask_restx import Namespace, Resource, fields
 
+from automojo.pychestrate.webservice.extensions.ext_router import (
+    manifest_to_jsonable,
+    mount_extension_routes,
+)
 from automojo.pychestrate.webservice.plugin_api import runtime as plugin_api_runtime
 from automojo.pychestrate.webservice.plugin_api.catalog_builder import (
     catalog_to_jsonable,
@@ -56,6 +64,21 @@ catalog_response_model = plugin_api_ns.model(
     {
         "factory_protocols": fields.List(fields.Nested(catalog_entry_model)),
         "resource_extensions": fields.List(fields.Nested(catalog_entry_model)),
+    },
+)
+
+
+mount_entry_model = plugin_api_ns.model(
+    "PluginApiExtMount",
+    {
+        "ext_name": fields.String(description="Owning extension's ext_name."),
+        "method": fields.String(description="HTTP method."),
+        "path_suffix": fields.String(description="Per-extension suffix."),
+        "full_path": fields.String(description="/api/v1/ext/<ext-name><suffix>."),
+        "handler_class": fields.String(description="Fully qualified handler class."),
+        "required_permissions": fields.List(fields.String()),
+        "required_capabilities": fields.List(fields.String()),
+        "description": fields.String(description="Operator-facing summary."),
     },
 )
 
@@ -103,6 +126,23 @@ class PluginApiCatalogDetailResource(Resource):
 
         plugin_api_ns.abort(404, "Plugin API catalog entry not found: {}".format(protocol_name))
         return None
+
+
+@plugin_api_ns.route("/mounts")
+class PluginApiMountsResource(Resource):
+    """
+        ``GET /api/v1/plugin-api/_meta/mounts`` — concrete extension
+        routes the host has discovered. Mirrors the in-process
+        :class:`MountManifest` produced by
+        ``extensions.ext_router.mount_extension_routes`` so operators
+        can enumerate live extensions without SSH access.
+    """
+
+    @plugin_api_ns.marshal_list_with(mount_entry_model)
+    def get(self):
+        manifest = mount_extension_routes(extensions=None)
+        rtnval = manifest_to_jsonable(manifest=manifest)
+        return rtnval
 
 
 def publish_namespaces(version_prefix: str):
