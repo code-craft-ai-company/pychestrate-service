@@ -117,6 +117,11 @@ from automojo.pychestrate.webservice.extensions import rest_endpoint_example as 
 from automojo.pychestrate.cli.extensions import cli_subcommand as _cli_subcommand  # noqa: F401
 from automojo.pychestrate.cli.extensions import example_subcommand as _cli_example_subcommand  # noqa: F401
 
+# 1-authentication MFA extension surface — loaded ahead of the
+# catalog build so MFAMethodExtension is enumerated.
+from automojo.pychestrate.webservice.security.auth.extensions import mfa_method as _mfa_method  # noqa: F401
+from automojo.pychestrate.webservice.security.auth.extensions import totp_method as _totp_method  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 

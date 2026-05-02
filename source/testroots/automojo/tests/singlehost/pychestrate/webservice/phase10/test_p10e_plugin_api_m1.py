@@ -91,6 +91,9 @@ from automojo.pychestrate.webservice.extensions.rest_endpoint_protocol import ( 
 from automojo.pychestrate.cli.extensions.cli_subcommand import (  # noqa: F401
     CLISubcommandExtension,
 )
+from automojo.pychestrate.webservice.security.auth.extensions.mfa_method import (  # noqa: F401
+    MFAMethodExtension,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -114,6 +117,7 @@ PUBLISHED_RESOURCE_NAMES = (
     "NotificationTemplateExtension",
     "RestEndpointExtension",
     "CLISubcommandExtension",
+    "MFAMethodExtension",
 )
 
 
