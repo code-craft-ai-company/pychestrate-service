@@ -85,6 +85,9 @@ from automojo.pychestrate.webservice.metrics.ingest.extensions.metric_definition
 from automojo.pychestrate.webservice.notifications.extensions.template import (  # noqa: F401
     NotificationTemplateExtension,
 )
+from automojo.pychestrate.webservice.extensions.rest_endpoint_protocol import (  # noqa: F401
+    RestEndpointExtension,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -106,6 +109,7 @@ PUBLISHED_RESOURCE_NAMES = (
     "PodMemberKindExtension",
     "MetricDefinitionExtension",
     "NotificationTemplateExtension",
+    "RestEndpointExtension",
 )
 
 

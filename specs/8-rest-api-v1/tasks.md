@@ -52,12 +52,22 @@
 - [ ] T2.4 — Wire nested routes (`projects/{id}/members`,
       `projects/{id}/variables`,
       `runs/{run_id}:cancel`, `reservations/{id}:release`).
-- [ ] T2.5 — Declare `RestEndpointExtension` resource base and
+- [~] T2.5 — Declare `RestEndpointExtension` resource base and
       implement `ext_router.mount_extension_routes` with collision
       detection.
-- [ ] T2.6 — Ship `HealthExtensionEndpoints` and
+      *(Resource base + ``RestEndpointDescriptor`` dataclass landed at
+      ``webservice.extensions.rest_endpoint_protocol``; M1 keeps the
+      base framework-free so the M2 router can be Flask-, ASGI-, or
+      stdlib-backed. ``ext_router.mount_extension_routes`` plus
+      collision detection still pending in this slice.)*
+- [~] T2.6 — Ship `HealthExtensionEndpoints` and
       `ExampleEchoEndpoints` reference extensions under
       `pychestrate-ext-example`.
+      *(``ExampleEchoEndpoints`` reference impl landed in-tree at
+      ``webservice.extensions.rest_endpoint_example``; declares
+      ``GET /api/v1/ext/example/echo`` and a stub ``echo`` handler.
+      ``HealthExtensionEndpoints`` plus the out-of-tree
+      ``pychestrate-ext-example`` distribution remain pending.)*
 - [ ] T2.7 — Wire every controller's `required_permissions` to
       `1-rbac` permission keys.
 - [ ] T2.8 — Enforce `auth.mode_conflict` rejection when two
