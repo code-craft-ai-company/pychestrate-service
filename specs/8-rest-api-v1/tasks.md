@@ -52,14 +52,22 @@
 - [ ] T2.4 — Wire nested routes (`projects/{id}/members`,
       `projects/{id}/variables`,
       `runs/{run_id}:cancel`, `reservations/{id}:release`).
-- [~] T2.5 — Declare `RestEndpointExtension` resource base and
+- [x] T2.5 — Declare `RestEndpointExtension` resource base and
       implement `ext_router.mount_extension_routes` with collision
       detection.
-      *(Resource base + ``RestEndpointDescriptor`` dataclass landed at
-      ``webservice.extensions.rest_endpoint_protocol``; M1 keeps the
-      base framework-free so the M2 router can be Flask-, ASGI-, or
-      stdlib-backed. ``ext_router.mount_extension_routes`` plus
-      collision detection still pending in this slice.)*
+      *(Resource base + ``RestEndpointDescriptor`` dataclass at
+      ``webservice.extensions.rest_endpoint_protocol``; framework-free
+      so the actual HTTP mount layer can be Flask-, ASGI-, or stdlib-
+      backed. ``ext_router.mount_extension_routes`` walks
+      ``RestEndpointExtension.__subclasses__``, validates each
+      descriptor (canonical HTTP method, leading-slash suffix,
+      non-empty endpoint list), refuses duplicate ``ext_name`` across
+      classes and duplicate ``(method, path_suffix)`` within a single
+      class, and returns a frozen :class:`MountManifest`. Wired into
+      ``app_pychestrate_main.register_service_extensions`` after the
+      plugin-api catalog build so misconfigured extensions fail loud
+      at startup. The ``extensions=`` injection seam keeps the
+      collision tests off the live ``__subclasses__`` tree.)*
 - [~] T2.6 — Ship `HealthExtensionEndpoints` and
       `ExampleEchoEndpoints` reference extensions under
       `pychestrate-ext-example`.
