@@ -25,6 +25,9 @@ from automojo.pychestrate.webservice.extensions.ext_router import (
 from automojo.pychestrate.webservice.identity.flags.restapi.v1.flags_routes import (
     register_flags_routes,
 )
+from automojo.pychestrate.webservice.middleware_webworks import (
+    install_pychestrate_session_middleware,
+)
 from automojo.pychestrate.webservice.plugin_api.runtime import (
     build_and_validate_catalog as build_and_validate_plugin_api_catalog,
 )
@@ -111,6 +114,9 @@ def pychestrate_website_main():
     register_service_extensions()
 
     app.startup()
+
+    install_pychestrate_session_middleware(app=app)
+
     wsgi_app = create_wsgi_application(config={"handler": app.dispatcher})
 
     print("Starting native WebWorks WSGI Server on 127.0.0.1:8888")
