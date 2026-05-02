@@ -30,7 +30,7 @@ import json
 import os
 import sys
 
-from typing import Callable, Dict, List, Optional, Sequence
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from automojo.pychestrate.cli import (
     credentials,
@@ -50,6 +50,11 @@ from automojo.pychestrate.cli.exceptions import (
     ProfileNotFoundError,
     RateLimitedError,
     ServerError,
+)
+from automojo.pychestrate.cli.extensions.discovery import (
+    ResolvedExtCommand,
+    find_subcommand_class,
+    resolve_ext_command,
 )
 from automojo.pychestrate.cli.models import CliProfile, RestOperation
 
@@ -74,10 +79,11 @@ def _print_top_help(*, stream) -> None:
         "  --help                 Print this help.",
         "",
         "commands wired in M1:",
-        "  project list           List projects from the configured server.",
-        "  plugin-api catalog     List the published plugin-api surface.",
-        "  plugin-api catalog <n> Read a single catalog entry by name.",
-        "  ext list               List concrete extension mounts the host discovered.",
+        "  project list                 List projects from the configured server.",
+        "  plugin-api catalog           List the published plugin-api surface.",
+        "  plugin-api catalog <n>       Read a single catalog entry by name.",
+        "  ext list                     List concrete extension mounts.",
+        "  ext <name> <verb> [args]     Invoke a CLISubcommandExtension verb.",
         "",
         "see 'pyc <noun> --help' or 'pyc <noun> <verb> --help'.",
         "",
@@ -188,7 +194,8 @@ def _handle_noun_help(*, argv: Sequence[str], stdout, stderr) -> int:
         stdout.write(
             "usage: pyc ext <verb> [args]\n\n"
             "verbs:\n"
-            "  list                 List the concrete extension mounts the host discovered.\n"
+            "  list                       List the concrete extension mounts the host discovered.\n"
+            "  <ext-name> <verb> [args]   Invoke a CLISubcommandExtension subcommand.\n"
         )
         return exit_codes.EXIT_OK
     stdout.write("noun '{}' not yet wired in M1\n".format(noun))
@@ -595,6 +602,152 @@ def _handle_ext_list(
     return exit_codes.EXIT_OK
 
 
+def _handle_ext_invocation(
+        *,
+        profile: CliProfile,
+        ext_name: str,
+        verb: str,
+        positional_args: Sequence[str],
+        flag_args: Dict[str, str],
+        request_opener,
+        stdout,
+        stderr
+    ) -> int:
+    """
+        Drive ``pyc ext <ext_name> <verb> [positional...] [--flag=value...]``.
+
+        Discovery resolves the matching CLISubcommandDescriptor +
+        MountedRoute pair via :func:`resolve_ext_command`. The mounted
+        route names the HTTP method and the
+        ``/api/v1/ext/<ext_name><path_suffix>`` URL; the descriptor
+        names the positional / flag argument layout. Positional args
+        are url-encoded into the path-template substitution; flag args
+        become query parameters.
+
+        :param profile: Active :class:`CliProfile`.
+        :param ext_name: ``ext_name`` segment under ``pyc ext``.
+        :param verb: Subcommand verb supplied on the command line.
+        :param positional_args: Positional argv tokens (in declared
+                                order from the descriptor).
+        :param flag_args: Mapping of ``--flag=value`` tokens.
+        :param request_opener: Test seam replacing the urllib opener.
+        :param stdout: Output stream.
+        :param stderr: Diagnostics stream.
+
+        :returns: Process exit code.
+    """
+    resolved = resolve_ext_command(ext_name=ext_name, verb=verb)
+    if resolved is None:
+        if find_subcommand_class(ext_name=ext_name) is None:
+            stderr.write(
+                "error: no extension is registered under '{}'.\n".format(ext_name)
+            )
+        else:
+            stderr.write(
+                "error: extension '{}' does not declare verb '{}'.\n".format(
+                    ext_name, verb
+                )
+            )
+        rtnval = exit_codes.EXIT_USAGE_ERROR
+        return rtnval
+
+    descriptor = resolved.descriptor
+    route = resolved.mounted_route
+
+    if len(positional_args) != len(descriptor.positional_arg_names):
+        stderr.write(
+            "error: '{} {}' expects {} positional argument(s); got {}.\n".format(
+                ext_name, verb,
+                len(descriptor.positional_arg_names),
+                len(positional_args),
+            )
+        )
+        rtnval = exit_codes.EXIT_USAGE_ERROR
+        return rtnval
+
+    for flag_name in flag_args.keys():
+        if flag_name not in descriptor.flag_arg_names:
+            stderr.write(
+                "error: '{} {}' does not declare flag '--{}'.\n".format(
+                    ext_name, verb, flag_name
+                )
+            )
+            rtnval = exit_codes.EXIT_USAGE_ERROR
+            return rtnval
+
+    operation = RestOperation(
+        operation_id=descriptor.operation_id,
+        method=route.method,
+        path_template=route.full_path,
+    )
+
+    query_params: Dict[str, str] = {}
+    for flag_name in descriptor.flag_arg_names:
+        if flag_name in flag_args:
+            query_params[flag_name] = flag_args[flag_name]
+
+    try:
+        response = transport.execute_request(
+            profile=profile,
+            operation=operation,
+            path_params={},
+            query_params=query_params,
+            body=None,
+            idempotency_key=None,
+            timeout_seconds=None,
+            opener=request_opener,
+        )
+    except (
+        AuthenticationError,
+        NotFoundError,
+        ConflictError,
+        RateLimitedError,
+        ServerError,
+    ) as xcpt:
+        return _map_exception_to_exit_code(xcpt=xcpt, stderr=stderr)
+
+    if response.body is None:
+        stdout.write("{}\n")
+    elif isinstance(response.body, (dict, list)):
+        stdout.write(json.dumps(response.body, indent=2))
+        stdout.write("\n")
+    else:
+        stdout.write("{}\n".format(response.body))
+
+    return exit_codes.EXIT_OK
+
+
+def _parse_ext_invocation_args(
+        *,
+        argv_tokens: Sequence[str]
+    ) -> Tuple[List[str], Dict[str, str]]:
+    """
+        Split the trailing tokens of a ``pyc ext`` invocation into
+        positional + flag halves. ``--flag=value`` and
+        ``--flag value`` are both accepted.
+
+        :param argv_tokens: Tokens after ``pyc ext <ext_name> <verb>``.
+
+        :returns: ``(positional, flags)`` tuple.
+    """
+    positional: List[str] = []
+    flags: Dict[str, str] = {}
+    iterator = iter(argv_tokens)
+    for token in iterator:
+        if token.startswith("--") and "=" in token:
+            flag_name, _, flag_value = token[2:].partition("=")
+            flags[flag_name] = flag_value
+            continue
+        if token.startswith("--"):
+            flag_name = token[2:]
+            flag_value = next(iterator, "")
+            flags[flag_name] = flag_value
+            continue
+        positional.append(token)
+    rtnval = (positional, flags)
+    return rtnval
+
+
 def _is_supported_command(*, noun: str, verb: str) -> bool:
     """
         Return True if ``(noun, verb)`` is one of the M1-wired commands.
@@ -611,6 +764,12 @@ def _is_supported_command(*, noun: str, verb: str) -> bool:
         rtnval = True
         return rtnval
     if (noun, verb) == ("ext", _EXT_LIST_VERB):
+        rtnval = True
+        return rtnval
+    if noun == "ext":
+        # pyc ext <ext_name> <verb> ... — descriptor-driven dispatch.
+        # Concrete descriptor lookup happens in _handle_ext_invocation
+        # so the diagnostic can name the missing ext_name / verb.
         rtnval = True
         return rtnval
     rtnval = False
@@ -669,7 +828,8 @@ def main(
         err_stream.write(
             "supported: 'project list', "
             "'plugin-api catalog [<entry-name>]', "
-            "'ext list'\n"
+            "'ext list', "
+            "'ext <ext-name> <verb> [args]'\n"
         )
         rtnval = exit_codes.EXIT_USAGE_ERROR
         return rtnval
@@ -703,6 +863,29 @@ def main(
     if (noun, verb) == ("ext", _EXT_LIST_VERB):
         rtnval = _handle_ext_list(
             profile=profile,
+            request_opener=request_opener,
+            stdout=out_stream,
+            stderr=err_stream,
+        )
+        return rtnval
+
+    if noun == "ext":
+        # pyc ext <ext_name> <sub_verb> ... — descriptor-driven.
+        if len(remainder) < 3:
+            err_stream.write("usage: pyc ext <ext-name> <verb> [args]\n")
+            rtnval = exit_codes.EXIT_USAGE_ERROR
+            return rtnval
+        ext_name = remainder[1]
+        sub_verb = remainder[2]
+        positional_args, flag_args = _parse_ext_invocation_args(
+            argv_tokens=remainder[3:]
+        )
+        rtnval = _handle_ext_invocation(
+            profile=profile,
+            ext_name=ext_name,
+            verb=sub_verb,
+            positional_args=positional_args,
+            flag_args=flag_args,
             request_opener=request_opener,
             stdout=out_stream,
             stderr=err_stream,
