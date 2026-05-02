@@ -94,6 +94,9 @@ from automojo.pychestrate.cli.extensions.cli_subcommand import (  # noqa: F401
 from automojo.pychestrate.webservice.security.auth.extensions.mfa_method import (  # noqa: F401
     MFAMethodExtension,
 )
+from automojo.pychestrate.webservice.ingest.result.extensions.artifact_classifier import (  # noqa: F401
+    ArtifactClassifierExtension,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -118,6 +121,7 @@ PUBLISHED_RESOURCE_NAMES = (
     "RestEndpointExtension",
     "CLISubcommandExtension",
     "MFAMethodExtension",
+    "ArtifactClassifierExtension",
 )
 
 

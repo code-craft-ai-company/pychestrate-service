@@ -122,6 +122,11 @@ from automojo.pychestrate.cli.extensions import example_subcommand as _cli_examp
 from automojo.pychestrate.webservice.security.auth.extensions import mfa_method as _mfa_method  # noqa: F401
 from automojo.pychestrate.webservice.security.auth.extensions import totp_method as _totp_method  # noqa: F401
 
+# 5-result-ingest-watcher artifact classifier surface — loaded ahead
+# of the catalog build so ArtifactClassifierExtension is enumerated.
+from automojo.pychestrate.webservice.ingest.result.extensions import artifact_classifier as _artifact_classifier  # noqa: F401
+from automojo.pychestrate.webservice.ingest.result.extensions import testbase_classifier as _testbase_classifier  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 
