@@ -24,6 +24,8 @@ __version__ = "1.0.0"
 from flask import request
 from flask_restx import Namespace, Resource, fields
 
+from automojo.pychestrate.webservice.api.problem_json_flask import abort_with_problem
+
 from automojo.pychestrate.webservice.identity.users.exceptions import (
     UserAlreadyExistsError,
     UserNotFoundError,
@@ -127,7 +129,10 @@ class IdentityUsersList(Resource):
                 actor_user_id=actor_user_id,
             )
         except UserAlreadyExistsError as xcpt:
-            users_ns.abort(409, str(xcpt))
+            abort_with_problem(
+                status=409, detail=str(xcpt), instance=request.path,
+                extensions={"primary_email": payload.get("primary_email", "")},
+            )
 
         rtnval = _model_to_dict(user)
         return rtnval, 201
@@ -153,7 +158,10 @@ class IdentityUserDetail(Resource):
         try:
             user = user_service.read_user(db_session=db_session, user_id=user_id)
         except UserNotFoundError as xcpt:
-            users_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"user_id": user_id},
+            )
 
         rtnval = _model_to_dict(user)
         return rtnval
@@ -170,7 +178,9 @@ def _get_request_db_session():
     from flask import g
     db_session = getattr(g, "db_session", None)
     if db_session is None:
-        users_ns.abort(503, "Request-scoped db_session not configured")
+        abort_with_problem(
+            status=503, detail="Request-scoped db_session not configured"
+        )
     return db_session
 
 

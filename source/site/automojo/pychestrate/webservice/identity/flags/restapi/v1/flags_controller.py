@@ -24,6 +24,7 @@ from flask_restx import Namespace, Resource, fields
 
 from automojo.errors.exceptions import SemanticError
 
+from automojo.pychestrate.webservice.api.problem_json_flask import abort_with_problem
 from automojo.pychestrate.webservice.identity.flags import (
     backend_router,
     flag_evaluator,
@@ -192,7 +193,9 @@ def _parse_kind(flag_kind_raw: str) -> FlagKind:
 def _get_session_or_abort():
     db_session = getattr(g, "db_session", None)
     if db_session is None:
-        flags_ns.abort(503, "Request-scoped db_session not configured")
+        abort_with_problem(
+            status=503, detail="Request-scoped db_session not configured"
+        )
     rtnval = db_session
     return rtnval
 
@@ -200,7 +203,7 @@ def _get_session_or_abort():
 def _build_context_from_payload(payload: dict) -> FlagContext:
     bucketing_key = payload.get("bucketing_key", "")
     if bucketing_key is None or len(str(bucketing_key)) == 0:
-        flags_ns.abort(400, "bucketing_key is required")
+        abort_with_problem(status=400, detail="bucketing_key is required")
 
     user_id_raw = payload.get("user_id", None)
     project_id_raw = payload.get("project_id", None)
@@ -215,7 +218,9 @@ def _build_context_from_payload(payload: dict) -> FlagContext:
             collected.sort(key=lambda pair: pair[0])
             attribute_pairs = tuple(collected)
         else:
-            flags_ns.abort(400, "attributes must be a JSON object")
+            abort_with_problem(
+                status=400, detail="attributes must be a JSON object"
+            )
 
     rtnval = FlagContext(
         bucketing_key=str(bucketing_key),
@@ -264,9 +269,13 @@ class FlagsList(Resource):
                 actor_user_id=actor_user_id,
             )
         except FlagAlreadyExistsError as xcpt:
-            flags_ns.abort(409, str(xcpt))
+            abort_with_problem(
+                status=409, detail=str(xcpt),
+                instance=request.path,
+                extensions={"flag_key": payload.get("flag_key", "")},
+            )
         except SemanticError as xcpt:
-            flags_ns.abort(422, str(xcpt))
+            abort_with_problem(status=422, detail=str(xcpt), instance=request.path)
 
         rtnval = (_flag_to_dict(flag), 201)
         return rtnval
@@ -288,7 +297,12 @@ class FlagsDetail(Resource):
 
         flag = db_session.query(FeatureFlag).filter(FeatureFlag.flag_key == flag_key).first()
         if flag is None:
-            flags_ns.abort(404, "Feature flag not found: {}".format(flag_key))
+            abort_with_problem(
+                status=404,
+                detail="Feature flag not found: {}".format(flag_key),
+                instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
 
         rtnval = _flag_to_dict(flag)
         return rtnval
@@ -319,9 +333,16 @@ class FlagsDetail(Resource):
                 actor_user_id=actor_user_id,
             )
         except FlagNotFoundError as xcpt:
-            flags_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt),
+                instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
         except SemanticError as xcpt:
-            flags_ns.abort(422, str(xcpt))
+            abort_with_problem(
+                status=422, detail=str(xcpt), instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
 
         rtnval = _flag_to_dict(flag)
         return rtnval
@@ -345,7 +366,11 @@ class FlagRetire(Resource):
         try:
             grace_seconds = int(grace_seconds_raw)
         except (TypeError, ValueError):
-            flags_ns.abort(400, "grace_seconds must be an integer number of seconds")
+            abort_with_problem(
+                status=400,
+                detail="grace_seconds must be an integer number of seconds",
+                instance=request.path,
+            )
 
         try:
             flag = flag_service.retire_flag(
@@ -355,9 +380,16 @@ class FlagRetire(Resource):
                 actor_user_id=actor_user_id,
             )
         except FlagNotFoundError as xcpt:
-            flags_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt),
+                instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
         except SemanticError as xcpt:
-            flags_ns.abort(422, str(xcpt))
+            abort_with_problem(
+                status=422, detail=str(xcpt), instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
 
         rtnval = _flag_to_dict(flag)
         return rtnval
@@ -379,7 +411,11 @@ class FlagHistory(Resource):
                 db_session=db_session, flag_key=flag_key
             )
         except FlagNotFoundError as xcpt:
-            flags_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt),
+                instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
 
         rtnval = [_version_to_dict(version) for version in versions]
         return rtnval
@@ -410,7 +446,10 @@ class FlagEvaluate(Resource):
                 default=default,
             )
         except SemanticError as xcpt:
-            flags_ns.abort(422, str(xcpt))
+            abort_with_problem(
+                status=422, detail=str(xcpt), instance=request.path,
+                extensions={"flag_key": flag_key},
+            )
 
         flag = db_session.query(FeatureFlag).filter(FeatureFlag.flag_key == flag_key).first()
         version_value = int(flag.current_version) if flag is not None else 0
