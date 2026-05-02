@@ -88,6 +88,9 @@ from automojo.pychestrate.webservice.notifications.extensions.template import ( 
 from automojo.pychestrate.webservice.extensions.rest_endpoint_protocol import (  # noqa: F401
     RestEndpointExtension,
 )
+from automojo.pychestrate.cli.extensions.cli_subcommand import (  # noqa: F401
+    CLISubcommandExtension,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -110,6 +113,7 @@ PUBLISHED_RESOURCE_NAMES = (
     "MetricDefinitionExtension",
     "NotificationTemplateExtension",
     "RestEndpointExtension",
+    "CLISubcommandExtension",
 )
 
 

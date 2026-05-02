@@ -111,6 +111,12 @@ from automojo.pychestrate.webservice.security.rbac import models as _rbac_models
 from automojo.pychestrate.webservice.extensions import rest_endpoint_protocol as _rest_endpoint_protocol  # noqa: F401
 from automojo.pychestrate.webservice.extensions import rest_endpoint_example as _rest_endpoint_example  # noqa: F401
 
+# CLI extension surface lives under ``automojo.pychestrate.cli`` for
+# distribution reasons but the resource base must be loaded into the
+# subclass tree alongside the others so the catalog walker sees it.
+from automojo.pychestrate.cli.extensions import cli_subcommand as _cli_subcommand  # noqa: F401
+from automojo.pychestrate.cli.extensions import example_subcommand as _cli_example_subcommand  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 
