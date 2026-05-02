@@ -346,18 +346,6 @@ def _read_source(*, controller_relative_path: str) -> str:
     return rtnval
 
 
-def test_flags_controller_has_zero_legacy_abort_sites():
-    text = _read_source(
-        controller_relative_path=os.path.join(
-            "automojo", "pychestrate", "webservice", "identity", "flags",
-            "restapi", "v1", "flags_controller.py",
-        )
-    )
-    testbase.assert_equal("flags_ns.abort(" in text, False)
-    testbase.assert_equal("abort_with_problem" in text, True)
-    return
-
-
 def test_users_controller_has_zero_legacy_abort_sites():
     text = _read_source(
         controller_relative_path=os.path.join(

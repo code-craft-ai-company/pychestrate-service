@@ -148,12 +148,15 @@ def test_clients_controller_has_at_least_one_abort_with_problem_site():
 def test_prior_batch_controllers_still_carry_zero_legacy_aborts():
     """
     **Feature: 8-rest-api-v1 T1.4 (regression guard)**
-    **Property: The earlier p10s batch (flags / users / audit) does
-    not regress when this PR lands — none of those files should grow
-    a fresh ``<noun>_ns.abort(`` call.**
+    **Property: The earlier p10s batch (users / audit) does not
+    regress when this PR lands — none of those files should grow a
+    fresh ``<noun>_ns.abort(`` call. The flags entry from the
+    original batch dropped out when ``flags_controller.py`` was
+    deleted in the p10x cleanup; the webworks port at
+    ``flags_routes.py`` is exercised by
+    ``test_p10w_flags_webworks_routes_m1`` instead.**
     """
     paths = [
-        ("automojo/pychestrate/webservice/identity/flags/restapi/v1/flags_controller.py", "flags_ns.abort("),
         ("automojo/pychestrate/webservice/identity/users/restapi/v1/users_controller.py", "users_ns.abort("),
         ("automojo/pychestrate/webservice/audit/restapi/v1/audit_controller.py", "audit_ns.abort("),
     ]

@@ -34,9 +34,6 @@ from automojo.pychestrate.webservice.secrets.restapi.v1.secrets_controller impor
 from automojo.pychestrate.webservice.audit.restapi.v1.audit_controller import (
     publish_namespaces as audit_publish_namespaces,
 )
-from automojo.pychestrate.webservice.identity.flags.restapi.v1.flags_controller import (
-    publish_namespaces as flags_publish_namespaces,
-)
 from automojo.pychestrate.webservice.clients.restapi.v1.clients_controller import (
     publish_namespaces as clients_publish_namespaces,
 )
@@ -60,7 +57,6 @@ def publish_namespaces(version_prefix: str):
     rtnval.extend(rbac_publish_namespaces(version_prefix))
     rtnval.extend(secrets_publish_namespaces(version_prefix))
     rtnval.extend(audit_publish_namespaces(version_prefix))
-    rtnval.extend(flags_publish_namespaces(version_prefix))
     rtnval.extend(clients_publish_namespaces(version_prefix))
     rtnval.extend(enrollment_publish_namespaces(version_prefix))
     return rtnval
