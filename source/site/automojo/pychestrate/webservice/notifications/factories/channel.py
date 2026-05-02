@@ -41,6 +41,15 @@ class NotificationChannelProtocol(FactoryProtocolBase):
     protocol_schema_version: ClassVar[int] = 1
     channel_kind: ClassVar[str] = ""
 
+    is_published: ClassVar[bool] = True
+    published_docs_url: ClassVar[str] = (
+        "https://docs.pychestrate.io/plugin-api/notification_channel"
+    )
+    published_reference: ClassVar[str] = (
+        "automojo.pychestrate.webservice.notifications.factories.smtp_email"
+        ".SmtpEmailChannel"
+    )
+
     @classmethod
     def send(
             cls,

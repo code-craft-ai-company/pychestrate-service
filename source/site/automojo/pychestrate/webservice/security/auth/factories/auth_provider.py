@@ -71,6 +71,13 @@ class AuthProviderProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "auth_provider"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/auth_provider"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.security.auth.factories.local_provider"
+        ".LocalCredentialAuthProvider"
+    )
+
     @classmethod
     def provider_kind(cls) -> AuthProviderKind:
         """

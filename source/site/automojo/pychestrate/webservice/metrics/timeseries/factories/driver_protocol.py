@@ -31,6 +31,13 @@ class TimeseriesDriverProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "timeseries_driver"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/timeseries_driver"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.metrics.timeseries.factories.native_pg_driver"
+        ".NativePgTimeseriesDriver"
+    )
+
     @classmethod
     def driver_name(cls) -> str:
         """

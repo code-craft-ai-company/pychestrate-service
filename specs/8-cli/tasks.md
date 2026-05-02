@@ -20,23 +20,54 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Stand up the `pychestrate-cli` Python package with
+- [x] T1.1 — Stand up the `pychestrate-cli` Python package with
       `pyc` entry point in
       `source/site/automojo/pychestrate/cli/entry.py`.
-- [ ] T1.2 — Implement `openapi_cache.load_or_fetch` with
+      *(Package rooted at ``automojo.pychestrate.cli`` with
+      ``entry`` / ``parser`` / ``credentials`` / ``transport`` /
+      ``openapi_cache`` / ``models`` / ``exit_codes`` /
+      ``exceptions`` modules. Console-script registration in
+      pyproject.toml lands when packaging is updated.)*
+- [x] T1.2 — Implement `openapi_cache.load_or_fetch` with
       server-version-aware invalidation.
-- [ ] T1.3 — Implement `parser.build_command_tree` from an OpenAPI
+      *(Cache keyed by SHA-256(server_url) under
+      ``~/.pychestrate/cache/openapi/``; refreshes when the
+      server's ``info.version`` changes; falls back to last-good
+      on transient fetch failure; raises
+      ``OpenApiUnavailableError`` only when both cache and fetch
+      miss. ``PYC_OPENAPI_CACHE_DIR`` env override for tests.)*
+- [x] T1.3 — Implement `parser.build_command_tree` from an OpenAPI
       document; emit `pyc <noun> <verb>` argparse structure.
-- [ ] T1.4 — Implement `credentials.load_profile` with `0600`
+      *(Convention: ``operationId = "<noun>_<verb>"``; missing /
+      malformed ids skipped (M3 parity check fails the build on
+      gaps). ``build_argparse_for_tree`` lifts the tree into a
+      live argparse parser; ``lookup_command`` resolves
+      ``(noun, verb)`` pairs.)*
+- [x] T1.4 — Implement `credentials.load_profile` with `0600`
       enforcement and `--profile` / `PYC_PROFILE` precedence.
-- [ ] T1.5 — Implement `transport.execute_request` with mTLS and
+      *(``configparser``-based INI loader; refuses any group/other
+      bit set; ``PYC_CREDENTIALS_PATH`` env override for tests;
+      ``store_token`` writes through with mode 0600 preserved.)*
+- [x] T1.5 — Implement `transport.execute_request` with mTLS and
       bearer-token auth modes.
-- [ ] T1.6 — Wire `pyc --version`, `pyc --help`,
+      *(Stdlib ``urllib.request`` opener; bearer header attached
+      from profile; ``ssl.SSLContext`` honors ``verify_tls`` and
+      loads mTLS keypair; status >= 400 reclassified into the
+      documented exception types.)*
+- [x] T1.6 — Wire `pyc --version`, `pyc --help`,
       `pyc <noun> --help`, `pyc <noun> <verb> --help` — all
       offline, no network.
-- [ ] T1.7 — Implement `pyc project list` (end-to-end) as the
+      *(``_select_meta_handler`` dispatches all four meta paths
+      before any credentials / network code runs.)*
+- [x] T1.7 — Implement `pyc project list` (end-to-end) as the
       reference path; assert matches
       `GET /api/v1/projects`.
+      *(End-to-end flow: load profile → load_or_fetch OpenAPI →
+      build command tree → resolve project_list operation
+      (synthetic fallback to ``/api/v1/projects`` when missing)
+      → execute_request → emit JSON to stdout. Test seams for
+      profile loader, openapi fetcher, and request opener so the
+      flow is testable without a live server.)*
 
 ### M2 — Core Behavior
 
@@ -46,10 +77,19 @@
 - [ ] T2.2 — Implement `pyc logout` that invalidates the token
       server-side and wipes the profile's token block.
 - [ ] T2.3 — Implement `pyc config set` / `get`.
-- [ ] T2.4 — Implement every core command for nouns `user`,
+- [~] T2.4 — Implement every core command for nouns `user`,
       `project`, `pod`, `client`, `run`, `resource`,
       `reservation`, `artifact`, `metric` using the OpenAPI
       operation registry.
+      *(``pyc plugin-api catalog`` (p10k) and ``pyc ext list``
+      (p10l) wired as the second + third M2 command pairs
+      alongside the earlier ``pyc project list`` reference. All
+      three bypass OpenAPI fetch since the relevant endpoints
+      are stable ``_meta`` paths and flow through
+      transport.execute_request with full exit-code mapping. The
+      remaining M2 nouns (``user``, ``pod``, ``client``, ``run``,
+      ``resource``, ``reservation``, ``artifact``, ``metric``)
+      still pending.)*
 - [ ] T2.5 — Implement `renderer.render` for
       `table | json | yaml | tsv`, with TTY-aware default.
 - [ ] T2.6 — Implement `--fields` column selector with unknown-

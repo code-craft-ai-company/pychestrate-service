@@ -1,0 +1,6 @@
+# Pack-template corpus baseline marker.
+#
+# The presence of this file inside a generated pack tells
+# `pychestrate-admin pack-template upgrade` which corpus version a pack
+# was last regenerated against. Operators should not edit it by hand.
+template_version: 1

@@ -28,8 +28,23 @@
       mandatory `required_permissions` validation at startup.
 - [ ] T1.3 — Wire the `1-authentication` cookie, bearer, and mTLS
       resolvers behind a single request-scoped principal middleware.
-- [ ] T1.4 — Implement `problem_json.build_problem_response` per
+- [x] T1.4 — Implement `problem_json.build_problem_response` per
       RFC 7807.
+      *(Framework-agnostic builder under
+      ``webservice.api.problem_json`` returning a
+      ``(body, content_type, status_code)`` triple. ProblemDocument
+      frozen dataclass carries the five RFC 7807 members plus an
+      extensions mapping; build_problem_document validates status
+      codes (1xx-5xx) and refuses extension keys that collide with
+      reserved RFC names. ``problem_for_http_status`` shortcut maps
+      stock 400/401/403/404/405/409/422/429/500/503 to documented
+      ``type`` URIs under https://docs.pychestrate.io/errors/ and
+      falls back to ``unknown-error`` for unrecognized codes. Body
+      ordering matches the spec: type, title, status, detail, then
+      instance (when supplied), then extensions in insertion order.
+      Lives outside the flask-importing ``restapi`` tree so the
+      module is consumable by tests, the CLI, and any future
+      ASGI / stdlib HTTP target without extra dependencies.)*
 - [ ] T1.5 — Implement the `projects`, `pods`, `clients`, `runs`,
       and `artifacts` *read* controllers (GET list + GET detail)
       calling their owning domain repositories.
@@ -52,12 +67,30 @@
 - [ ] T2.4 — Wire nested routes (`projects/{id}/members`,
       `projects/{id}/variables`,
       `runs/{run_id}:cancel`, `reservations/{id}:release`).
-- [ ] T2.5 — Declare `RestEndpointExtension` resource base and
+- [x] T2.5 — Declare `RestEndpointExtension` resource base and
       implement `ext_router.mount_extension_routes` with collision
       detection.
-- [ ] T2.6 — Ship `HealthExtensionEndpoints` and
+      *(Resource base + ``RestEndpointDescriptor`` dataclass at
+      ``webservice.extensions.rest_endpoint_protocol``; framework-free
+      so the actual HTTP mount layer can be Flask-, ASGI-, or stdlib-
+      backed. ``ext_router.mount_extension_routes`` walks
+      ``RestEndpointExtension.__subclasses__``, validates each
+      descriptor (canonical HTTP method, leading-slash suffix,
+      non-empty endpoint list), refuses duplicate ``ext_name`` across
+      classes and duplicate ``(method, path_suffix)`` within a single
+      class, and returns a frozen :class:`MountManifest`. Wired into
+      ``app_pychestrate_main.register_service_extensions`` after the
+      plugin-api catalog build so misconfigured extensions fail loud
+      at startup. The ``extensions=`` injection seam keeps the
+      collision tests off the live ``__subclasses__`` tree.)*
+- [~] T2.6 — Ship `HealthExtensionEndpoints` and
       `ExampleEchoEndpoints` reference extensions under
       `pychestrate-ext-example`.
+      *(``ExampleEchoEndpoints`` reference impl landed in-tree at
+      ``webservice.extensions.rest_endpoint_example``; declares
+      ``GET /api/v1/ext/example/echo`` and a stub ``echo`` handler.
+      ``HealthExtensionEndpoints`` plus the out-of-tree
+      ``pychestrate-ext-example`` distribution remain pending.)*
 - [ ] T2.7 — Wire every controller's `required_permissions` to
       `1-rbac` permission keys.
 - [ ] T2.8 — Enforce `auth.mode_conflict` rejection when two

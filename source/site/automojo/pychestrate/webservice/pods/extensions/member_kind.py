@@ -27,6 +27,14 @@ class PodMemberKindExtension(ResourceExtension):
     display_label: ClassVar[str] = ""
     value_schema: ClassVar[Dict[str, Any]] = {}
 
+    is_published: ClassVar[bool] = True
+    published_docs_url: ClassVar[str] = (
+        "https://docs.pychestrate.io/plugin-api/PodMemberKindExtension"
+    )
+    published_reference: ClassVar[str] = (
+        "automojo.pychestrate.webservice.pods.extensions.member_kind.LinuxHost"
+    )
+
 
 class LinuxHost(PodMemberKindExtension):
     """

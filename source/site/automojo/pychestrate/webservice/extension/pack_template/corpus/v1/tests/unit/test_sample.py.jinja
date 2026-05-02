@@ -1,0 +1,26 @@
+"""
+.. module:: tests.unit.test_sample
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: Sanity test for pack '{{ name }}'.
+
+.. moduleauthor:: {% if author %}{{ author }}{% else %}<author>{% endif %}
+"""
+
+__author__ = "{% if author %}{{ author }}{% else %}<author>{% endif %}"
+__copyright__ = "Copyright 2025"
+__credits__ = []
+__version__ = "0.1.0"
+
+
+from automojo.factories.pychestrate.{{ name | replace("-", "_") }}.sample_factory import (
+    RaiseUntilImplementedFactory,
+)
+
+
+def test_sample_factory_protocol_name_is_stable() -> None:
+    """
+        Confirm the scaffolded factory still advertises its protocol name.
+    """
+    rtnval = RaiseUntilImplementedFactory.factory_protocol_name
+    assert rtnval == "{{ first_protocol_name }}"
+    return

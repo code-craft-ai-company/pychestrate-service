@@ -14,6 +14,10 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_controller import (
+    publish_namespaces as plugin_api_publish_namespaces,
+)
+
 from .feature.examples import publish_namespaces as examples_publish_namespaces
 from .config import publish_namespaces as config_publish_namespaces
 from .resources import publish_namespaces as resources_publish_namespaces
@@ -54,5 +58,8 @@ def publish_namespaces(version_prefix):
     # Phase-3 spec-shaped namespaces (pod definitions/lifecycle/static/
     # topology/scoped-config/dynamic; agent protocol/capability/inventory/upgrade)
     ns_list.extend(phase3_publish_namespaces(version_prefix))
+
+    # Plugin API published-surface catalog (8-plugin-api).
+    ns_list.extend(plugin_api_publish_namespaces(version_prefix))
 
     return ns_list

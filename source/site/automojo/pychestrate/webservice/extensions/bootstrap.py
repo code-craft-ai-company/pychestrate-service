@@ -105,6 +105,12 @@ from automojo.pychestrate.webservice.secrets import models as _secrets_models  #
 from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401
 from automojo.pychestrate.webservice.security.rbac import models as _rbac_models  # noqa: F401
 
+# Side-effect import so the published RestEndpointExtension resource
+# base is loaded into the ResourceExtension subclass tree before the
+# plugin-api catalog is built.
+from automojo.pychestrate.webservice.extensions import rest_endpoint_protocol as _rest_endpoint_protocol  # noqa: F401
+from automojo.pychestrate.webservice.extensions import rest_endpoint_example as _rest_endpoint_example  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 

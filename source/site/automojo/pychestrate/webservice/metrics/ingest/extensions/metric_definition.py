@@ -47,6 +47,15 @@ class MetricDefinitionExtension(ResourceExtension):
         into a sample.
     """
 
+    is_published: bool = True
+    published_docs_url: str = (
+        "https://docs.pychestrate.io/plugin-api/MetricDefinitionExtension"
+    )
+    published_reference: str = (
+        "automojo.pychestrate.webservice.metrics.ingest.extensions.reservation_granted_counter"
+        ".ResourceReservationGrantedCounter"
+    )
+
     @classmethod
     def metric_name(cls) -> str:
         """

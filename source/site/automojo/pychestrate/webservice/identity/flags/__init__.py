@@ -13,6 +13,7 @@ __version__ = "1.0.0"
 
 
 from automojo.pychestrate.webservice.extensions.registry import register_factory_implementation
+from automojo.pychestrate.webservice.identity.flags import cache as flag_cache
 from automojo.pychestrate.webservice.identity.flags.factories.local_backend import (
     LocalDatabaseFeatureFlagBackend,
 )
@@ -20,9 +21,12 @@ from automojo.pychestrate.webservice.identity.flags.factories.local_backend impo
 
 def register_builtin_extensions() -> None:
     """
-        Register the in-tree ``feature_flag_backend`` reference implementation.
+        Register the in-tree ``feature_flag_backend`` reference implementation
+        and wire the staleness-window cache invalidator to the bus so updates
+        and retirements propagate without explicit caller action.
 
         :returns: None.
     """
     register_factory_implementation(implementation=LocalDatabaseFeatureFlagBackend)
+    flag_cache.subscribe_invalidation_to_bus()
     return

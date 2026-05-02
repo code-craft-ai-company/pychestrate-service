@@ -24,6 +24,11 @@ from sqlalchemy.orm import Session as DbSession, sessionmaker
 
 from automojo.pychestrate.webservice.extensions.bootstrap import register_phase1_builtin_extensions
 from automojo.pychestrate.webservice.extensions.registry import reset_registry_for_testing
+from automojo.pychestrate.webservice.identity.flags import (
+    backend_router as flag_backend_router,
+    cache as flag_cache,
+    health_prober as flag_health_prober,
+)
 from automojo.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
 from automojo.pychestrate.webservice.persistence.schema import PychestratePhase1Base
 from automojo.pychestrate.webservice.projects.metadata_registry import (
@@ -76,5 +81,8 @@ def reset_phase1_runtime() -> None:
     rbac_cache.reset_for_testing()
     rbac_inheritance.reset_for_testing()
     reset_projects_metadata_registry()
+    flag_cache.reset_for_testing()
+    flag_backend_router.reset_override_log_for_testing()
+    flag_health_prober.reset_for_testing()
     register_phase1_builtin_extensions()
     return

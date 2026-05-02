@@ -19,6 +19,12 @@ from automojo.pychestrate.webservice.extensions.phase5_bootstrap import (
 from automojo.pychestrate.webservice.extensions.phase6_bootstrap import (
     register_phase6_builtin_extensions,
 )
+from automojo.pychestrate.webservice.extensions.ext_router import (
+    mount_extension_routes,
+)
+from automojo.pychestrate.webservice.plugin_api.runtime import (
+    build_and_validate_catalog as build_and_validate_plugin_api_catalog,
+)
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
@@ -92,6 +98,8 @@ def register_service_extensions() -> None:
     register_phase4_builtin_extensions()
     register_phase5_builtin_extensions()
     register_phase6_builtin_extensions()
+    build_and_validate_plugin_api_catalog()
+    mount_extension_routes()
     return
 
 

@@ -39,23 +39,53 @@
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Implement ENUM and STRING kinds with rule validation
+- [x] T2.1 — Implement ENUM and STRING kinds with rule validation
       (reject `flag_kind` changes as `SemanticError`).
-- [ ] T2.2 — Implement `flag_service.update_flag_rules` that bumps
+      *(Evaluator handles ENUM / STRING with optional
+      ``attribute_matches`` rules; ``_validate_rules_for_kind`` and
+      ``_validate_default_for_kind`` enforce kind-specific schemas;
+      ``update_flag_rules`` raises ``SemanticError`` on a different
+      ``flag_kind``.)*
+- [x] T2.2 — Implement `flag_service.update_flag_rules` that bumps
       `current_version` and inserts a new `feature_flag_versions`
       row.
-- [ ] T2.3 — Implement `flag_service.retire_flag` + grace scheduler
+      *(Persists new version row, increments
+      ``current_version``, publishes
+      ``entity.flag.updated`` via the outbox.)*
+- [x] T2.3 — Implement `flag_service.retire_flag` + grace scheduler
       that emits `entity.flag.removed` at grace end.
-- [ ] T2.4 — Implement `cache.staleness_window_cache` with
+      *(``retire_flag`` records ``retired_at`` and
+      ``grace_expires_at`` and publishes
+      ``entity.flag.retired``; ``remove_expired_retired_flags``
+      deletes rows past grace and publishes
+      ``entity.flag.removed``.)*
+- [x] T2.4 — Implement `cache.staleness_window_cache` with
       configurable TTL (default 60 s) and bus-driven invalidation
       on `entity.flag.updated` / `entity.flag.retired`.
-- [ ] T2.5 — Implement `backend_router.resolve_backend` with pattern
+      *(``identity.flags.cache`` keys on
+      ``(flag_key, flag_version, bucketing_key)`` with a configurable
+      clock; ``subscribe_invalidation_to_bus`` is wired during
+      ``register_builtin_extensions`` and listens on
+      ``entity.flag.updated|retired|removed``.)*
+- [x] T2.5 — Implement `backend_router.resolve_backend` with pattern
       matching + precedence tie-break and
       `flags.backend.override` log event.
-- [ ] T2.6 — Implement backend health prober and
+      *(``backend_router.resolve_backend`` filters by
+      ``fnmatch`` against ``flag_key_pattern``, sorts by ascending
+      ``PRECEDENCE``, and logs once per
+      ``(flag_key, winner, loser)`` triple.)*
+- [x] T2.6 — Implement backend health prober and
       `entity.flag.backend.unhealthy` / `healthy` emissions.
-- [ ] T2.7 — Wire REST controllers (`/api/v1/flags` CRUD +
+      *(``health_prober.probe_once`` walks every registered
+      backend, counts consecutive failures per backend, and emits
+      ``entity.flag.backend.unhealthy`` after the third failure /
+      ``entity.flag.backend.healthy`` on the next success;
+      raising backends are reclassified as unhealthy.)*
+- [x] T2.7 — Wire REST controllers (`/api/v1/flags` CRUD +
       `/evaluate`).
+      *(``flags_controller`` exposes GET / POST list, GET / PATCH
+      detail, POST retire, GET history, POST evaluate, and GET
+      ``/backends`` listing.)*
 
 ### M3 — Hardening
 

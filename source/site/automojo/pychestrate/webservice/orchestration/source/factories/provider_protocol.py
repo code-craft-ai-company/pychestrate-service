@@ -100,6 +100,13 @@ class ScmProviderProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "scm_provider"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/scm_provider"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.orchestration.source.factories.github_provider"
+        ".GithubScmProvider"
+    )
+
     @classmethod
     def provider_name(cls) -> str:
         """

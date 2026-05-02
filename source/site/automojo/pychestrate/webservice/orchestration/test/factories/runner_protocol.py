@@ -35,6 +35,13 @@ class TestRunnerKindProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "test_runner_kind"
     protocol_schema_version: int = 1
 
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/test_runner_kind"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.orchestration.test.factories.testbase_runner"
+        ".TestbaseRunnerKind"
+    )
+
     @classmethod
     def runner_kind(cls) -> str:
         """
