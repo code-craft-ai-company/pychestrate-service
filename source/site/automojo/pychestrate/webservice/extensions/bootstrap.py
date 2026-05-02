@@ -111,6 +111,27 @@ from automojo.pychestrate.webservice.security.rbac import models as _rbac_models
 from automojo.pychestrate.webservice.extensions import rest_endpoint_protocol as _rest_endpoint_protocol  # noqa: F401
 from automojo.pychestrate.webservice.extensions import rest_endpoint_example as _rest_endpoint_example  # noqa: F401
 
+# CLI extension surface lives under ``automojo.pychestrate.cli`` for
+# distribution reasons but the resource base must be loaded into the
+# subclass tree alongside the others so the catalog walker sees it.
+from automojo.pychestrate.cli.extensions import cli_subcommand as _cli_subcommand  # noqa: F401
+from automojo.pychestrate.cli.extensions import example_subcommand as _cli_example_subcommand  # noqa: F401
+
+# 1-authentication MFA extension surface — loaded ahead of the
+# catalog build so MFAMethodExtension is enumerated.
+from automojo.pychestrate.webservice.security.auth.extensions import mfa_method as _mfa_method  # noqa: F401
+from automojo.pychestrate.webservice.security.auth.extensions import totp_method as _totp_method  # noqa: F401
+
+# 5-result-ingest-watcher artifact classifier surface — loaded ahead
+# of the catalog build so ArtifactClassifierExtension is enumerated.
+from automojo.pychestrate.webservice.ingest.result.extensions import artifact_classifier as _artifact_classifier  # noqa: F401
+from automojo.pychestrate.webservice.ingest.result.extensions import testbase_classifier as _testbase_classifier  # noqa: F401
+
+# 4-resource-inventory ResourceKindProtocol factory — loaded ahead
+# of the catalog build so ``resource_kind`` appears in the published
+# factory list independently of the Phase 4 bootstrap import chain.
+from automojo.pychestrate.webservice.resources.inventory.kinds import kind_protocol as _resource_kind_protocol  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 

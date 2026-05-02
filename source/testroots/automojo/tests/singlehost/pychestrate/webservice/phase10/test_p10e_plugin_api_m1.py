@@ -88,6 +88,18 @@ from automojo.pychestrate.webservice.notifications.extensions.template import ( 
 from automojo.pychestrate.webservice.extensions.rest_endpoint_protocol import (  # noqa: F401
     RestEndpointExtension,
 )
+from automojo.pychestrate.cli.extensions.cli_subcommand import (  # noqa: F401
+    CLISubcommandExtension,
+)
+from automojo.pychestrate.webservice.security.auth.extensions.mfa_method import (  # noqa: F401
+    MFAMethodExtension,
+)
+from automojo.pychestrate.webservice.ingest.result.extensions.artifact_classifier import (  # noqa: F401
+    ArtifactClassifierExtension,
+)
+from automojo.pychestrate.webservice.resources.inventory.kinds.kind_protocol import (  # noqa: F401
+    ResourceKindProtocol,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -102,6 +114,7 @@ PUBLISHED_FACTORY_NAMES = (
     "infra_tool_driver",
     "progress_parser",
     "result_tree_parser",
+    "resource_kind",
 )
 
 
@@ -110,6 +123,9 @@ PUBLISHED_RESOURCE_NAMES = (
     "MetricDefinitionExtension",
     "NotificationTemplateExtension",
     "RestEndpointExtension",
+    "CLISubcommandExtension",
+    "MFAMethodExtension",
+    "ArtifactClassifierExtension",
 )
 
 
