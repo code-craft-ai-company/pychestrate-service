@@ -28,6 +28,8 @@ from flask_restx import Namespace, Resource, fields
 
 from automojo.errors.exceptions import SemanticError
 
+from automojo.pychestrate.webservice.api.problem_json_flask import abort_with_problem
+
 from automojo.pychestrate.webservice.pods.definitions_service import (
     create_pod_definition,
     list_pod_definitions,
@@ -114,7 +116,9 @@ def _get_request_db_session():
     from flask import g
     db_session = getattr(g, "db_session", None)
     if db_session is None:
-        pods_ns.abort(503, "Request-scoped db_session not configured")
+        abort_with_problem(
+            status=503, detail="Request-scoped db_session not configured"
+        )
     return db_session
 
 
@@ -158,13 +162,28 @@ class PodDefinitionsResource(Resource):
                 actor_user_id=actor,
             )
         except SemanticError as xcpt:
-            pods_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"project_id": project_id},
+            )
         except PodSpecValidationError as xcpt:
-            pods_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"project_id": project_id},
+            )
         except MemberKindNotRegisteredError as xcpt:
-            pods_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"project_id": project_id},
+            )
         except PodDefinitionAlreadyExistsError as xcpt:
-            pods_ns.abort(409, str(xcpt))
+            abort_with_problem(
+                status=409, detail=str(xcpt), instance=request.path,
+                extensions={
+                    "project_id": project_id,
+                    "pod_name": payload.get("pod_name", ""),
+                },
+            )
 
         version = read_pod_definition_version(
             db_session=db_session, pod_id=str(definition.pod_id),
@@ -197,7 +216,10 @@ class PodDefinitionDetail(Resource):
                 db_session=db_session, pod_id=pod_id, version=int(definition.current_version),
             )
         except PodDefinitionNotFoundError as xcpt:
-            pods_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"pod_id": pod_id, "project_id": project_id},
+            )
         return _definition_to_dict(definition, version)
 
 
@@ -210,7 +232,10 @@ class PodStateResource(Resource):
         try:
             row = read_state(db_session=db_session, pod_id=pod_id)
         except PodDefinitionNotFoundError as xcpt:
-            pods_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"pod_id": pod_id, "project_id": project_id},
+            )
         rtnval = {
             "pod_id": str(row.pod_id),
             "state": row.state.value,
@@ -255,7 +280,11 @@ class PodRegistrationResource(Resource):
         db_session = _get_request_db_session()
         row = read_active_registration(db_session=db_session, pod_id=pod_id)
         if row is None:
-            pods_ns.abort(404, "No active registration")
+            abort_with_problem(
+                status=404, detail="No active registration",
+                instance=request.path,
+                extensions={"pod_id": pod_id, "project_id": project_id},
+            )
         rtnval = {
             "registration_id": str(row.registration_id),
             "pod_id": str(row.pod_id),
@@ -298,7 +327,10 @@ class PodTopologyResource(Resource):
         try:
             graph = compose_topology(db_session=db_session, pod_id=pod_id)
         except PodDefinitionNotFoundError as xcpt:
-            pods_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"pod_id": pod_id, "project_id": project_id},
+            )
         return topology_as_dict(graph=graph)
 
 
@@ -320,7 +352,10 @@ class PodTemplatesResource(Resource):
                 actor_user_id=actor,
             )
         except SemanticError as xcpt:
-            pods_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"project_id": project_id},
+            )
         rtnval = {
             "template_id": str(template.template_id),
             "project_id": str(template.project_id),
@@ -361,9 +396,21 @@ class PodTemplateMaterializeResource(Resource):
                 actor_user_id=actor,
             )
         except PodTemplateNotFoundError as xcpt:
-            pods_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={
+                    "project_id": project_id,
+                    "template_id": template_id,
+                },
+            )
         except MaterializationError as xcpt:
-            pods_ns.abort(409, str(xcpt))
+            abort_with_problem(
+                status=409, detail=str(xcpt), instance=request.path,
+                extensions={
+                    "project_id": project_id,
+                    "template_id": template_id,
+                },
+            )
         rtnval = {
             "materialization_id": str(materialization.materialization_id),
             "template_id": str(materialization.template_id),
@@ -385,7 +432,11 @@ class PodScopedVariableResource(Resource):
         actor = _get_request_actor_user_id()
         pod_id = request.args.get("pod_id", "")
         if len(pod_id.strip()) == 0:
-            pods_ns.abort(400, "Query param 'pod_id' is required")
+            abort_with_problem(
+                status=400,
+                detail="Query param 'pod_id' is required",
+                instance=request.path,
+            )
         try:
             row = set_scoped_variable(
                 db_session=db_session, run_id=run_id, pod_id=pod_id,
@@ -395,7 +446,10 @@ class PodScopedVariableResource(Resource):
                 actor_user_id=actor,
             )
         except SemanticError as xcpt:
-            pods_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"run_id": run_id, "pod_id": pod_id, "name": name},
+            )
 
         rtnval = {
             "variable_id": str(row.variable_id),
@@ -411,7 +465,11 @@ class PodScopedVariableResource(Resource):
         actor = _get_request_actor_user_id()
         pod_id = request.args.get("pod_id", "")
         if len(pod_id.strip()) == 0:
-            pods_ns.abort(400, "Query param 'pod_id' is required")
+            abort_with_problem(
+                status=400,
+                detail="Query param 'pod_id' is required",
+                instance=request.path,
+            )
         delete_scoped_variable(
             db_session=db_session, run_id=run_id, pod_id=pod_id,
             name=name, actor_user_id=actor,
