@@ -28,6 +28,8 @@ from flask_restx import Namespace, Resource, fields
 
 from automojo.errors.exceptions import SemanticError
 
+from automojo.pychestrate.webservice.api.problem_json_flask import abort_with_problem
+
 from automojo.pychestrate.webservice.clients.enrollment.service import (
     revoke_client,
 )
@@ -136,7 +138,9 @@ def _view_to_dict(view: ClientView) -> dict:
 def _get_db_session():
     db_session = getattr(g, "db_session", None)
     if db_session is None:
-        clients_ns.abort(503, "Request-scoped db_session not configured")
+        abort_with_problem(
+            status=503, detail="Request-scoped db_session not configured"
+        )
     return db_session
 
 
@@ -146,7 +150,12 @@ def _parse_client_status(raw: str):
     try:
         rtnval = ClientStatus(raw)
     except ValueError:
-        clients_ns.abort(400, "Unknown status: {}".format(raw))
+        abort_with_problem(
+            status=400,
+            detail="Unknown status: {}".format(raw),
+            instance=request.path,
+            extensions={"requested_status": raw},
+        )
     return rtnval
 
 
@@ -156,7 +165,12 @@ def _parse_liveness_state(raw: str):
     try:
         rtnval = LivenessState(raw)
     except ValueError:
-        clients_ns.abort(400, "Unknown liveness_state: {}".format(raw))
+        abort_with_problem(
+            status=400,
+            detail="Unknown liveness_state: {}".format(raw),
+            instance=request.path,
+            extensions={"requested_liveness_state": raw},
+        )
     return rtnval
 
 
@@ -203,7 +217,10 @@ class ClientsDetail(Resource):
         try:
             view = get_client(db_session=db_session, client_id=client_id)
         except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
         rtnval = _view_to_dict(view)
         return rtnval
 
@@ -224,7 +241,10 @@ class ClientsRevoke(Resource):
         try:
             reason = _parse_revocation_reason(payload.get("reason", ""))
         except SemanticError as xcpt:
-            clients_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
 
         try:
             revoke_client(
@@ -235,7 +255,10 @@ class ClientsRevoke(Resource):
                 note=payload.get("note", ""),
             )
         except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
 
         rtnval = ({"client_id": client_id, "status": "revoked"}, 200)
         return rtnval
@@ -255,15 +278,29 @@ class ClientsAttributes(Resource):
 
         raw_updates = payload.get("updates", [])
         if isinstance(raw_updates, list) is False:
-            clients_ns.abort(400, "'updates' must be a list of {kind, value} objects")
+            abort_with_problem(
+                status=400,
+                detail="'updates' must be a list of {kind, value} objects",
+                instance=request.path,
+                extensions={"client_id": client_id},
+            )
 
         updates = []
         for item in raw_updates:
             if isinstance(item, dict) is False:
-                clients_ns.abort(400, "Each update must be an object")
+                abort_with_problem(
+                    status=400, detail="Each update must be an object",
+                    instance=request.path,
+                    extensions={"client_id": client_id},
+                )
             kind = item.get("kind", "")
             if isinstance(kind, str) is False or len(kind) == 0:
-                clients_ns.abort(400, "Each update must include a non-empty 'kind'")
+                abort_with_problem(
+                    status=400,
+                    detail="Each update must include a non-empty 'kind'",
+                    instance=request.path,
+                    extensions={"client_id": client_id},
+                )
             updates.append(AttributeUpdate(kind=kind, value=item.get("value", None)))
 
         expected_token = payload.get("expected_revision_token", None)
@@ -276,11 +313,20 @@ class ClientsAttributes(Resource):
                 expected_revision_token=expected_token,
             )
         except ClientNotFoundError as xcpt:
-            clients_ns.abort(404, str(xcpt))
+            abort_with_problem(
+                status=404, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
         except UnknownAttributeKindError as xcpt:
-            clients_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
         except InvalidAttributeValueError as xcpt:
-            clients_ns.abort(400, str(xcpt))
+            abort_with_problem(
+                status=400, detail=str(xcpt), instance=request.path,
+                extensions={"client_id": client_id},
+            )
 
         rtnval = ({"client_id": client_id, "kinds_written": list(written)}, 200)
         return rtnval
