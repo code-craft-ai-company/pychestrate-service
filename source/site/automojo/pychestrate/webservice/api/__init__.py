@@ -28,6 +28,10 @@ from automojo.pychestrate.webservice.api.problem_json import (
     build_problem_response,
     problem_for_http_status,
 )
+from automojo.pychestrate.webservice.api.problem_json_flask import (
+    abort_with_problem,
+    build_flask_problem_response,
+)
 
 
 __all__ = [
@@ -35,6 +39,8 @@ __all__ = [
     "PROBLEM_TYPE_BASE_URL",
     "ProblemDocument",
     "ProblemResponse",
+    "abort_with_problem",
+    "build_flask_problem_response",
     "build_problem_document",
     "build_problem_response",
     "problem_for_http_status",

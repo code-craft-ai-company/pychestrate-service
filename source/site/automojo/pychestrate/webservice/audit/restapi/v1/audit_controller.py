@@ -19,6 +19,7 @@ __version__ = "1.0.0"
 from flask import g, request
 from flask_restx import Namespace, Resource, fields
 
+from automojo.pychestrate.webservice.api.problem_json_flask import abort_with_problem
 from automojo.pychestrate.webservice.audit.models import AuditRecord
 
 
@@ -72,13 +73,18 @@ class AuditList(Resource):
     def get(self):
         db_session = getattr(g, "db_session", None)
         if db_session is None:
-            audit_ns.abort(503, "Request-scoped db_session not configured")
+            abort_with_problem(
+                status=503, detail="Request-scoped db_session not configured"
+            )
 
         limit_arg = request.args.get("limit", default="50")
         try:
             limit = int(limit_arg)
         except ValueError:
-            audit_ns.abort(400, "Invalid 'limit' argument")
+            abort_with_problem(
+                status=400, detail="Invalid 'limit' argument",
+                instance=request.path,
+            )
 
         if limit < 1:
             limit = 1
@@ -106,7 +112,9 @@ class AuditDetail(Resource):
     def get(self, sequence_number: int):
         db_session = getattr(g, "db_session", None)
         if db_session is None:
-            audit_ns.abort(503, "Request-scoped db_session not configured")
+            abort_with_problem(
+                status=503, detail="Request-scoped db_session not configured"
+            )
 
         row = (
             db_session.query(AuditRecord)
@@ -114,7 +122,12 @@ class AuditDetail(Resource):
             .first()
         )
         if row is None:
-            audit_ns.abort(404, "Audit record not found: {}".format(sequence_number))
+            abort_with_problem(
+                status=404,
+                detail="Audit record not found: {}".format(sequence_number),
+                instance=request.path,
+                extensions={"sequence_number": sequence_number},
+            )
 
         rtnval = _record_to_dict(row)
         return rtnval
