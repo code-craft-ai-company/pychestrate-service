@@ -97,6 +97,9 @@ from automojo.pychestrate.webservice.security.auth.extensions.mfa_method import 
 from automojo.pychestrate.webservice.ingest.result.extensions.artifact_classifier import (  # noqa: F401
     ArtifactClassifierExtension,
 )
+from automojo.pychestrate.webservice.resources.inventory.kinds.kind_protocol import (  # noqa: F401
+    ResourceKindProtocol,
+)
 
 
 PUBLISHED_FACTORY_NAMES = (
@@ -111,6 +114,7 @@ PUBLISHED_FACTORY_NAMES = (
     "infra_tool_driver",
     "progress_parser",
     "result_tree_parser",
+    "resource_kind",
 )
 
 

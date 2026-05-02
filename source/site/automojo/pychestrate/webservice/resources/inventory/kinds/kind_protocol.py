@@ -32,6 +32,20 @@ class ResourceKindProtocol(FactoryProtocolBase):
     factory_protocol_name: str = "resource_kind"
     protocol_schema_version: int = 1
 
+    # 8-plugin-api Requirement 2 advertises this surface as
+    # ``ResourceKindExtension`` (resource-extension shape). The
+    # in-tree implementation took the factory-protocol shape — same
+    # semantic surface (a discoverable set of typed kinds), different
+    # extension mechanism. The catalog publishes the actual
+    # implementation under ``factory: resource_kind``; the spec
+    # naming will be reconciled in a future doc pass.
+    is_published: bool = True
+    published_docs_url: str = "https://docs.pychestrate.io/plugin-api/resource_kind"
+    published_reference: str = (
+        "automojo.pychestrate.webservice.resources.inventory.kinds.device_kind"
+        ".DeviceResourceKind"
+    )
+
     @classmethod
     def kind_name(cls) -> str:
         """

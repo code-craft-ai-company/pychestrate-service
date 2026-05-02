@@ -127,6 +127,11 @@ from automojo.pychestrate.webservice.security.auth.extensions import totp_method
 from automojo.pychestrate.webservice.ingest.result.extensions import artifact_classifier as _artifact_classifier  # noqa: F401
 from automojo.pychestrate.webservice.ingest.result.extensions import testbase_classifier as _testbase_classifier  # noqa: F401
 
+# 4-resource-inventory ResourceKindProtocol factory — loaded ahead
+# of the catalog build so ``resource_kind`` appears in the published
+# factory list independently of the Phase 4 bootstrap import chain.
+from automojo.pychestrate.webservice.resources.inventory.kinds import kind_protocol as _resource_kind_protocol  # noqa: F401
+
 
 SessionFactory = Callable[[], DbSession]
 
