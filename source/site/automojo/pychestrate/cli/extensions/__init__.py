@@ -23,6 +23,13 @@ from automojo.pychestrate.cli.extensions.cli_subcommand import (
     CLISubcommandDescriptor,
     CLISubcommandExtension,
 )
+from automojo.pychestrate.cli.extensions.discovery import (
+    ResolvedExtCommand,
+    find_descriptor,
+    find_mounted_route_for_verb,
+    find_subcommand_class,
+    resolve_ext_command,
+)
 from automojo.pychestrate.cli.extensions.example_subcommand import (
     PycExtExampleSubcommand,
 )
@@ -32,4 +39,9 @@ __all__ = [
     "CLISubcommandDescriptor",
     "CLISubcommandExtension",
     "PycExtExampleSubcommand",
+    "ResolvedExtCommand",
+    "find_descriptor",
+    "find_mounted_route_for_verb",
+    "find_subcommand_class",
+    "resolve_ext_command",
 ]
