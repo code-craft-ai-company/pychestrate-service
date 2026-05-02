@@ -70,11 +70,13 @@ def _print_top_help(*, stream) -> None:
         "usage: pyc [--profile <name>] [--server-url <url>] <noun> <verb> [args]",
         "",
         "meta:",
-        "  --version             Print the CLI version.",
-        "  --help                Print this help.",
+        "  --version              Print the CLI version.",
+        "  --help                 Print this help.",
         "",
-        "commands (M1 ships 'project list' end-to-end):",
-        "  project list          List projects from the configured server.",
+        "commands wired in M1:",
+        "  project list           List projects from the configured server.",
+        "  plugin-api catalog     List the published plugin-api surface.",
+        "  plugin-api catalog <n> Read a single catalog entry by name.",
         "",
         "see 'pyc <noun> --help' or 'pyc <noun> <verb> --help'.",
         "",
@@ -162,8 +164,8 @@ def _handle_top_help(*, argv: Sequence[str], stdout, stderr) -> int:
 
 def _handle_noun_help(*, argv: Sequence[str], stdout, stderr) -> int:
     """
-        Print help for a noun. M1 supports ``project`` only; other
-        nouns get a generic placeholder line.
+        Print help for a noun. M1 wires ``project`` and ``plugin-api``;
+        other nouns get a generic placeholder line.
 
         :returns: ``EXIT_OK``.
     """
@@ -171,6 +173,14 @@ def _handle_noun_help(*, argv: Sequence[str], stdout, stderr) -> int:
     if noun == "project":
         stdout.write(
             "usage: pyc project <verb> [args]\n\nverbs:\n  list   List projects.\n"
+        )
+        return exit_codes.EXIT_OK
+    if noun == "plugin-api":
+        stdout.write(
+            "usage: pyc plugin-api <verb> [args]\n\n"
+            "verbs:\n"
+            "  catalog              List every published plugin-api entry.\n"
+            "  catalog <entry>      Read a single entry by name.\n"
         )
         return exit_codes.EXIT_OK
     stdout.write("noun '{}' not yet wired in M1\n".format(noun))
@@ -188,6 +198,14 @@ def _handle_verb_help(*, argv: Sequence[str], stdout, stderr) -> int:
         stdout.write(
             "usage: pyc project list\n\n"
             "List every project visible to the configured profile.\n"
+        )
+        return exit_codes.EXIT_OK
+    if (noun, verb) == ("plugin-api", _PLUGIN_API_CATALOG_VERB):
+        stdout.write(
+            "usage: pyc plugin-api catalog [<entry-name>]\n\n"
+            "Read the published plugin-api surface.\n"
+            "With no argument, lists every entry.\n"
+            "With an argument, reads the named entry's metadata.\n"
         )
         return exit_codes.EXIT_OK
     stdout.write("'{} {}' not yet wired in M1\n".format(noun, verb))
@@ -309,6 +327,38 @@ def _project_list_operation_fallback() -> RestOperation:
     return rtnval
 
 
+def _plugin_api_catalog_operation() -> RestOperation:
+    """
+        Operation backing ``pyc plugin-api catalog``. The endpoint is
+        a stable, versionless metadata path (``_meta``) so it does not
+        flow through the OpenAPI command-tree generator.
+
+        :returns: :class:`RestOperation`.
+    """
+    rtnval = RestOperation(
+        operation_id="plugin_api_catalog",
+        method="GET",
+        path_template="/api/v1/plugin-api/_meta/catalog",
+    )
+    return rtnval
+
+
+def _plugin_api_catalog_entry_operation() -> RestOperation:
+    """
+        Operation backing ``pyc plugin-api catalog <entry-name>``.
+
+        :returns: :class:`RestOperation`.
+    """
+    rtnval = RestOperation(
+        operation_id="plugin_api_catalog_entry",
+        method="GET",
+        path_template="/api/v1/plugin-api/_meta/catalog/{name}",
+        path_param_names=("name",),
+        required_path_param_names=("name",),
+    )
+    return rtnval
+
+
 def _resolve_project_list_operation(*, openapi_document: Dict) -> RestOperation:
     """
         Locate the ``project_list`` operation in the OpenAPI document,
@@ -393,6 +443,93 @@ def _handle_project_list(
     return exit_codes.EXIT_OK
 
 
+def _handle_plugin_api_catalog(
+        *,
+        profile: CliProfile,
+        entry_name: Optional[str],
+        request_opener,
+        stdout,
+        stderr
+    ) -> int:
+    """
+        Drive ``pyc plugin-api catalog`` and
+        ``pyc plugin-api catalog <entry-name>``.
+
+        Both endpoints are static metadata paths so the call bypasses
+        the OpenAPI command-tree resolution; ``transport.execute_request``
+        substitutes ``{name}`` from ``path_params`` for the detail form.
+
+        :param profile: Active :class:`CliProfile`.
+        :param entry_name: Optional catalog entry name. When ``None``,
+                           the list endpoint is queried; otherwise the
+                           per-entry detail endpoint is queried.
+        :param request_opener: Callable replacing the urllib opener
+                               (test seam). May be ``None``.
+        :param stdout: Stream for normal output.
+        :param stderr: Stream for diagnostics.
+
+        :returns: Process exit code.
+    """
+    if entry_name is None:
+        operation = _plugin_api_catalog_operation()
+        path_params: Dict[str, str] = {}
+    else:
+        operation = _plugin_api_catalog_entry_operation()
+        path_params = {"name": entry_name}
+
+    try:
+        response = transport.execute_request(
+            profile=profile,
+            operation=operation,
+            path_params=path_params,
+            query_params={},
+            body=None,
+            idempotency_key=None,
+            timeout_seconds=None,
+            opener=request_opener,
+        )
+    except (
+        AuthenticationError,
+        NotFoundError,
+        ConflictError,
+        RateLimitedError,
+        ServerError,
+    ) as xcpt:
+        return _map_exception_to_exit_code(xcpt=xcpt, stderr=stderr)
+
+    if response.body is None:
+        stdout.write("{}\n")
+    elif isinstance(response.body, (dict, list)):
+        stdout.write(json.dumps(response.body, indent=2))
+        stdout.write("\n")
+    else:
+        stdout.write("{}\n".format(response.body))
+
+    return exit_codes.EXIT_OK
+
+
+_PLUGIN_API_CATALOG_VERB: str = "catalog"
+
+
+def _is_supported_command(*, noun: str, verb: str) -> bool:
+    """
+        Return True if ``(noun, verb)`` is one of the M1-wired commands.
+
+        :param noun: First positional after ``pyc``.
+        :param verb: Second positional after ``pyc <noun>``.
+
+        :returns: Boolean.
+    """
+    if (noun, verb) == ("project", "list"):
+        rtnval = True
+        return rtnval
+    if (noun, verb) == ("plugin-api", _PLUGIN_API_CATALOG_VERB):
+        rtnval = True
+        return rtnval
+    rtnval = False
+    return rtnval
+
+
 def main(
         *,
         argv: Optional[Sequence[str]],
@@ -438,9 +575,12 @@ def main(
         return rtnval
 
     noun, verb = remainder[0], remainder[1]
-    if (noun, verb) != ("project", "list"):
+    if _is_supported_command(noun=noun, verb=verb) is False:
         err_stream.write(
-            "error: '{} {}' is not wired in M1; only 'project list' is supported.\n".format(noun, verb)
+            "error: '{} {}' is not wired in M1.\n".format(noun, verb)
+        )
+        err_stream.write(
+            "supported: 'project list', 'plugin-api catalog [<entry-name>]'\n"
         )
         rtnval = exit_codes.EXIT_USAGE_ERROR
         return rtnval
@@ -457,6 +597,19 @@ def main(
         return rtnval
 
     profile = _override_server_url(profile=profile, server_url=parsed_globals.get("server_url"))
+
+    if (noun, verb) == ("plugin-api", _PLUGIN_API_CATALOG_VERB):
+        entry_name: Optional[str] = None
+        if len(remainder) > 2:
+            entry_name = remainder[2]
+        rtnval = _handle_plugin_api_catalog(
+            profile=profile,
+            entry_name=entry_name,
+            request_opener=request_opener,
+            stdout=out_stream,
+            stderr=err_stream,
+        )
+        return rtnval
 
     if openapi_fetcher is None:
         openapi_fetcher_callable = _build_default_openapi_fetcher(profile=profile)

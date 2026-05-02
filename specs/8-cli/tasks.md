@@ -77,10 +77,18 @@
 - [ ] T2.2 — Implement `pyc logout` that invalidates the token
       server-side and wipes the profile's token block.
 - [ ] T2.3 — Implement `pyc config set` / `get`.
-- [ ] T2.4 — Implement every core command for nouns `user`,
+- [~] T2.4 — Implement every core command for nouns `user`,
       `project`, `pod`, `client`, `run`, `resource`,
       `reservation`, `artifact`, `metric` using the OpenAPI
       operation registry.
+      *(``pyc plugin-api catalog`` and ``pyc plugin-api catalog
+      <entry-name>`` wired in p10k as the second M2 command pair
+      alongside the earlier ``pyc project list`` reference. Both
+      bypass OpenAPI fetch since the catalog is a stable
+      ``_meta`` path and flow through transport.execute_request
+      with full exit-code mapping. The remaining M2 nouns
+      (``user``, ``pod``, ``client``, ``run``, ``resource``,
+      ``reservation``, ``artifact``, ``metric``) still pending.)*
 - [ ] T2.5 — Implement `renderer.render` for
       `table | json | yaml | tsv`, with TTY-aware default.
 - [ ] T2.6 — Implement `--fields` column selector with unknown-
