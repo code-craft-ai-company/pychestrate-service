@@ -28,6 +28,12 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.metrics.alerts import (
+    register_builtin_extensions as alerts_register,
+)
+from automojo.pychestrate.webservice.metrics.dashboards import (
+    register_builtin_extensions as dashboards_register,
+)
 from automojo.pychestrate.webservice.metrics.ingest import (
     register_builtin_extensions as metrics_ingest_register,
 )
@@ -36,6 +42,8 @@ from automojo.pychestrate.webservice.metrics.timeseries import (
 )
 
 # Side-effect imports so Layer-7 model tables attach to the metadata.
+from automojo.pychestrate.webservice.metrics.alerts import models as _alerts_models  # noqa: F401
+from automojo.pychestrate.webservice.metrics.dashboards import models as _dashboards_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.timeseries import models as _timeseries_models  # noqa: F401
 
 
@@ -61,6 +69,8 @@ def register_phase7_builtin_extensions() -> None:
     """
     timeseries_register()
     metrics_ingest_register()
+    dashboards_register()
+    alerts_register()
     return
 
 
