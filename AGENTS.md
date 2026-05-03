@@ -41,29 +41,31 @@ controls. For example 'xtest/build-info-card'
 
 
 ## Implementation
-The website along with its REST API interface is written in python and is based on the Flask web framework and Flask-RestX.
+The REST API surface runs on `automojo.webworks` (the Automation Mojo native web framework).  Routes are registered with `@app.attach_route(...)`; the runtime request type is `automojo.webworks.routing.request.Request` and the response types live under `automojo.webworks.routing.response`.  Flask and flask_restx are NOT installed in the production environment — any module that imports `flask` or `flask_restx` will fail at import time inside the running service.
+
+The customer-facing web interface is still flask-based scaffold pending its own webworks port (see "Web Interface" below).
+
+For details on the framework state, the dead pre-migration scaffold, and the RFC 7807 problem-document contract, see [userguide/09-00-code-organization-and-conventions.rst](userguide/09-00-code-organization-and-conventions.rst).
 
 ## Web Services Entrypoint
-The main entry point for the Automation Mojo website for both the REST API and the web interface is located in the file "<repository folder>/source/site/automojo/automojowebsite/app_automjo_website.py".
+The main entry point is `<repository folder>/source/site/app_pychestrate_main.py`.  It calls `automojo.webworks.webapplication.establish_webapp_persona` to build the app, registers feature routes via `register_service_extensions()`, runs `app.startup()`, installs `PychestrateSessionMiddleware` (per-request SQLAlchemy session + cookie-resolved actor), and then serves with `automojo.webworks.wsgi.server.run_server`.
 
 ## Web Interface
-The customer facing web interface code is organized under "<repository folder>/source/site/automojo/automojowebsite/webinterface"
+The customer-facing web interface code is organized under `<repository folder>/source/site/automojo/pychestrate/webservice/webinterface/`.  It is currently flask-based scaffold and is NOT loaded by the production bootstrap — porting it to webworks is deferred work.
 
 Rules:
 
-* All interactions with the data model should go through a postback URL and then through functions in the 'automojo.automojo_website.datum.dbio' module.  The consumer facing web interface should not direct use any REST APIs as they require special authentication.
+* All interactions with the data model should go through a postback URL and then through functions in the data-access module.  The consumer-facing web interface should not directly use any REST APIs as they require special authentication.
 
 
 ## REST API Interface
-REST APIs, the web service publishes rest API's that are meant to be consumed by the Automation Mojo website code.  There are currently no public REST services
-being offered through the company website.  The REST APIs are referenced on the site using a versioned path prefix.  For example, REST API's for version '1' of
-rest interface would be prefixed with.
+The REST API is published on the same webworks app as the web interface entrypoint and consumed by the (future) Automation Mojo website code as well as by tests and the `pyc` CLI.  Routes are versioned with a `/api/v1/` prefix; for example:
 
-https://automationmojo.com/api/v1/
+https://automationmojo.com/api/v1/flags
 
-The code for REST API's is organized under "<repository folder>/source/site/automojo/automojowebsite/restapi"
+REST routes for a given feature live next to the feature module under `<repository folder>/source/site/automojo/pychestrate/webservice/<feature>/restapi/v1/<feature>_routes.py`.  Each `*_routes.py` exposes a `register_<feature>_routes(*, app, version_prefix)` function that the bootstrap calls from `register_service_extensions()`.  See `webservice/identity/flags/restapi/v1/flags_routes.py` for the reference template.
 
-Specific code for a given versions of API's are organized under a folder associated with the version.  For example the code for version '1' of the API's would be under the folder "<repository folder>/source/site/automojo/automojowebsite/restapi/v1"
+Sibling `*_controller.py` files — written against `flask_restx` before the webworks migration — may still exist next to some `*_routes.py` files.  They are dead-on-import scaffold and **must not be refit**; port them to webworks then delete the controller (see the userguide note for the convention).
 
 
 # Code Naming Conventions
