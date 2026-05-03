@@ -188,6 +188,41 @@ class HealthScheduler:
             attempted = attempted + 1
         return attempted
 
+    def tick_due(self, *, now: Optional[datetime] = None) -> int:
+        """
+            Run only the probes whose ``interval_seconds`` has
+            elapsed since the last invocation. Probes that have
+            never run are always considered due. The M2
+            production cadence loop calls this on a small
+            timer (e.g. once per second) so each probe runs at
+            its declared cadence without a per-probe thread.
+
+            :param now: Optional timestamp override; defaults
+                        to ``datetime.now(tz=utc)``.
+
+            :returns: Number of probes invoked this tick.
+        """
+        executor = self._require_executor()
+        materialized_now = (
+            now if now is not None
+            else datetime.now(tz=timezone.utc)
+        )
+        records = self._registry.list_probes()
+        if records is None or len(records) == 0:
+            return 0
+        attempted = 0
+        for record in records:
+            if record.in_flight is True:
+                # Skip probes whose previous run is still in
+                # flight; the M3 backlog policy upgrades this
+                # to a backlog drop emit.
+                continue
+            if not _is_probe_due(record=record, now=materialized_now):
+                continue
+            self._run_one(executor=executor, record=record)
+            attempted = attempted + 1
+        return attempted
+
     def _run_one(self, *, executor: ThreadPoolExecutor, record) -> None:
         started_at = datetime.now(tz=timezone.utc)
         self._registry.mark_in_flight(
@@ -243,3 +278,19 @@ class HealthScheduler:
             err_msg = os.linesep.join(err_lines)
             raise SemanticError(err_msg) from None
         return executor
+
+
+def _is_probe_due(*, record, now: datetime) -> bool:
+    """
+        Return ``True`` when ``record`` is due to run again
+        per its ``interval_seconds``. Probes that have never
+        run are always due.
+    """
+    if record.last_started_at is None:
+        return True
+    last = record.last_started_at
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    elapsed = (now - last).total_seconds()
+    rtnval = elapsed >= record.interval_seconds
+    return rtnval
