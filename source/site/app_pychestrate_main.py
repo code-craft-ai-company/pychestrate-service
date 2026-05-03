@@ -71,6 +71,9 @@ from automojo.pychestrate.webservice.variables.restapi.v1.variables_routes impor
 from automojo.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
     register_auth_routes,
 )
+from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
+    register_rbac_routes,
+)
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
@@ -159,6 +162,7 @@ def register_service_extensions() -> None:
     register_retention_routes(app=app, version_prefix="/api/v1")
     register_variables_routes(app=app, version_prefix="/api/v1")
     register_clients_routes(app=app, version_prefix="/api/v1")
+    register_rbac_routes(app=app, version_prefix="/api/v1")
     return
 
 
