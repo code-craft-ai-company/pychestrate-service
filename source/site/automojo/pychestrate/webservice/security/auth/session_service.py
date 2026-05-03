@@ -212,3 +212,84 @@ def close_session(*, db_session: DbSession, session_id: str) -> None:
     db_session.commit()
 
     return
+
+
+def revoke_sessions_for_user(
+        *,
+        db_session: DbSession,
+        user_id: str,
+        reason: str = "session_revoked"
+    ) -> int:
+    """
+        Drop every active :class:`AuthSession` for ``user_id``
+        and emit one :data:`AuthEventTopics.SESSIONS_REVOKED`
+        event summarizing the revocation.
+
+        Used by ``1-user-management``'s
+        :func:`deactivate_user` path via the registered
+        :class:`SessionRevocationCallback` so deactivation
+        immediately ends every cookie that belongs to the
+        target user.
+
+        :returns: Number of sessions deleted.
+    """
+    rows = (
+        db_session.query(AuthSession)
+        .filter(AuthSession.user_id == user_id)
+        .all()
+    )
+    if rows is None or len(rows) == 0:
+        return 0
+    revoked_session_ids = [str(row.session_id) for row in rows]
+    for row in rows:
+        db_session.delete(row)
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=AuthEventTopics.SESSIONS_REVOKED,
+            payload={
+                "user_id": str(user_id),
+                "session_ids": revoked_session_ids,
+                "reason": reason,
+                "revoked_at": utc_now().isoformat(),
+                "count": len(revoked_session_ids),
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = len(revoked_session_ids)
+    return rtnval
+
+
+def install_user_management_revocation_callback(
+        *,
+        session_factory
+    ) -> None:
+    """
+        Wire the user-management deactivation callback so the
+        ``deactivate_user`` path drops every active session
+        when an account is taken offline.
+
+        :param session_factory: Callable that opens a fresh DB
+                                session — the callback runs
+                                outside the originating
+                                request transaction.
+    """
+    from automojo.pychestrate.webservice.identity.users import (
+        user_service as users_user_service,
+    )
+
+    def _revoke(user_id: str) -> None:
+        session = session_factory()
+        try:
+            revoke_sessions_for_user(
+                db_session=session, user_id=user_id,
+                reason="user_deactivated",
+            )
+        finally:
+            session.close()
+        return
+
+    users_user_service.set_session_revocation_callback(callback=_revoke)
+    return
