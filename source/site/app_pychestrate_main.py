@@ -22,6 +22,9 @@ from automojo.pychestrate.webservice.extensions.phase6_bootstrap import (
 from automojo.pychestrate.webservice.extensions.ext_router import (
     mount_extension_routes,
 )
+from automojo.pychestrate.webservice.agents.restapi.v1.agents_routes import (
+    register_agents_routes,
+)
 from automojo.pychestrate.webservice.audit.restapi.v1.audit_routes import (
     register_audit_routes,
 )
@@ -131,6 +134,7 @@ def register_service_extensions() -> None:
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_templates_routes(app=app, version_prefix="/api/v1")
     register_secrets_routes(app=app, version_prefix="/api/v1")
+    register_agents_routes(app=app, version_prefix="/api/v1")
     return
 
 
