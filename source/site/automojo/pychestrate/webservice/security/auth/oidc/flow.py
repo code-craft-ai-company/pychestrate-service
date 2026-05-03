@@ -23,7 +23,7 @@ import os
 
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 from urllib import parse as urlparse
 
 from sqlalchemy.orm import Session as DbSession
@@ -194,3 +194,206 @@ def _build_authorization_url(
     rebuilt = parsed._replace(query=new_query)
     rtnval = urlparse.urlunparse(rebuilt)
     return rtnval
+
+
+# ----------------------------------------------------------------
+# complete_oidc_callback
+# ----------------------------------------------------------------
+
+
+from automojo.pychestrate.webservice.security.auth.oidc.id_token import (
+    DecodedIdToken,
+    IdTokenValidationError,
+    JwksKey,
+    JwksKeyResolver,
+    ValidationParams,
+    validate_id_token,
+)
+from automojo.pychestrate.webservice.security.auth.oidc.state import (
+    StateRecord,
+    consume_state,
+)
+from automojo.pychestrate.webservice.security.auth.oidc.token_exchange import (
+    TokenExchangeError,
+    TokenExchangeFetcher,
+    TokenExchangeRequest,
+    TokenExchangeResponse,
+    exchange_code_for_tokens,
+)
+
+
+class OidcCallbackError(Exception):
+    """
+        Raised when complete_oidc_callback fails. ``reason``
+        token is stable so the controller can log + branch
+        without leaking detail to the client.
+
+        Reasons:
+
+        * ``state_unknown`` — IdP returned a state token the
+          server never issued (replay or forged callback).
+        * ``provider_mismatch`` — the consumed state row
+          declared a different provider than the caller's
+          arguments.
+        * ``token_exchange_failed`` — code-for-token swap
+          failed; ``cause`` carries the
+          :class:`TokenExchangeError` reason.
+        * ``id_token_invalid`` — id_token validation failed;
+          ``cause`` carries the
+          :class:`IdTokenValidationError` reason.
+    """
+
+    def __init__(
+            self,
+            reason: str,
+            detail: str = "",
+            cause: Optional[str] = None
+        ) -> None:
+        message = reason if len(detail) == 0 else "{}: {}".format(reason, detail)
+        super().__init__(message)
+        self.reason: str = reason
+        self.detail: str = detail
+        self.cause: Optional[str] = cause
+        return
+
+
+@dataclass(frozen=True)
+class CompleteCallbackResult:
+    """
+        Successful callback bundle.
+
+        :param state_record: Consumed
+                             :class:`StateRecord` (the
+                             state row was deleted on the
+                             way out).
+        :param token_response: IdP token-endpoint response.
+        :param id_token: Decoded id_token bundle the
+                         downstream session-opener consumes.
+        :param redirect_target: Optional in-app redirect
+                                target captured at begin
+                                time.
+    """
+    state_record: StateRecord
+    token_response: TokenExchangeResponse
+    id_token: DecodedIdToken
+    redirect_target: str = ""
+
+
+def complete_oidc_callback(
+        *,
+        db_session,
+        state: str,
+        code: str,
+        provider_name: str,
+        token_endpoint: str,
+        client_id: str,
+        redirect_uri: str,
+        token_fetcher: TokenExchangeFetcher,
+        key_resolver: JwksKeyResolver,
+        expected_issuer: str,
+        client_secret: Optional[str] = None,
+        clock_skew: Optional[Any] = None,
+        now: Optional[Any] = None
+    ) -> CompleteCallbackResult:
+    """
+        Run the post-redirect half of the OIDC flow. Steps:
+
+        1. Atomically consume the ``auth_oidc_state`` row by
+           ``state``. Returns ``None`` for unknown / expired
+           states; the orchestrator surfaces that as
+           ``OidcCallbackError(reason='state_unknown')``.
+        2. Confirm the consumed row's provider matches the
+           caller's ``provider_name`` so a callback can't
+           replay a state issued for a different provider.
+        3. Run the code-for-token swap through
+           ``exchange_code_for_tokens``.
+        4. Validate the returned ``id_token`` against the
+           configured issuer / client_id (audience) /
+           recovered nonce.
+        5. Return a :class:`CompleteCallbackResult` carrying
+           the decoded id_token, the token response, the
+           consumed state record, and the optional redirect
+           target the controller redirects to.
+
+        :raises: OidcCallbackError with stable reason
+                 tokens.
+    """
+    if state is None or len(state) == 0:
+        raise OidcCallbackError(
+            "state_unknown", "missing state",
+        ) from None
+    if code is None or len(code) == 0:
+        raise OidcCallbackError(
+            "id_token_invalid", "missing code",
+        ) from None
+
+    state_record = consume_state(db_session=db_session, state=state)
+    if state_record is None:
+        raise OidcCallbackError(
+            "state_unknown",
+            "no auth_oidc_state row matched state",
+        ) from None
+    if state_record.provider_name != provider_name:
+        raise OidcCallbackError(
+            "provider_mismatch",
+            "state.provider={!r} caller.provider={!r}".format(
+                state_record.provider_name, provider_name,
+            ),
+        ) from None
+
+    request = TokenExchangeRequest(
+        token_endpoint=token_endpoint,
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri=redirect_uri,
+        code=code,
+        pkce_verifier=state_record.pkce_verifier.decode("ascii"),
+    )
+    try:
+        token_response = exchange_code_for_tokens(
+            request=request, fetcher=token_fetcher,
+        )
+    except TokenExchangeError as exchange_err:
+        raise OidcCallbackError(
+            "token_exchange_failed",
+            exchange_err.detail,
+            cause=exchange_err.reason,
+        ) from None
+
+    validation_params = ValidationParams(
+        expected_issuer=expected_issuer,
+        expected_audience=client_id,
+        expected_nonce=state_record.nonce,
+        clock_skew=(
+            clock_skew if clock_skew is not None
+            else _default_clock_skew()
+        ),
+        now=now,
+    )
+    try:
+        decoded = validate_id_token(
+            token=token_response.id_token,
+            params=validation_params,
+            key_resolver=key_resolver,
+        )
+    except IdTokenValidationError as token_err:
+        raise OidcCallbackError(
+            "id_token_invalid",
+            token_err.detail,
+            cause=token_err.reason,
+        ) from None
+
+    rtnval = CompleteCallbackResult(
+        state_record=state_record,
+        token_response=token_response,
+        id_token=decoded,
+        redirect_target=state_record.redirect_target or "",
+    )
+    return rtnval
+
+
+def _default_clock_skew():
+    from automojo.pychestrate.webservice.security.auth.oidc.id_token import (
+        DEFAULT_CLOCK_SKEW,
+    )
+    return DEFAULT_CLOCK_SKEW
