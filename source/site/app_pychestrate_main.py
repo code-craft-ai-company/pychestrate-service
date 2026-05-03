@@ -31,6 +31,9 @@ from automojo.pychestrate.webservice.audit.restapi.v1.audit_routes import (
 from automojo.pychestrate.webservice.identity.flags.restapi.v1.flags_routes import (
     register_flags_routes,
 )
+from automojo.pychestrate.webservice.identity.users.restapi.v1.users_routes import (
+    register_users_routes,
+)
 from automojo.pychestrate.webservice.middleware_webworks import (
     install_pychestrate_session_middleware,
 )
@@ -139,6 +142,7 @@ def register_service_extensions() -> None:
     register_templates_routes(app=app, version_prefix="/api/v1")
     register_secrets_routes(app=app, version_prefix="/api/v1")
     register_agents_routes(app=app, version_prefix="/api/v1")
+    register_users_routes(app=app, version_prefix="/api/v1")
     return
 
 
