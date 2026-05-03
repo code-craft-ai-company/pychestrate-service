@@ -59,3 +59,27 @@ class SecretCreatedAuditEvents(AuditEventTypeExtension):
     description: str = "A secret was created."
 
 
+class SecretRotatedAuditEvents(AuditEventTypeExtension):
+    """
+        Canonical audit kind for ``entity.secret.rotated`` writes.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.secret.rotated"
+    source_topic: str = "entity.secret.rotated"
+    payload_schema: dict = {
+        "type": "object",
+        "required": ["secret_ref", "version_id", "version_number"],
+        "properties": {
+            "secret_ref": {"type": "string"},
+            "backend_name": {"type": "string"},
+            "version_id": {"type": "string"},
+            "version_number": {"type": "integer"},
+            "principal_id": {"type": ["string", "null"]},
+            "rotated_at": {"type": "string"},
+            "grace_seconds": {"type": "integer"},
+        },
+    }
+    description: str = "A secret was rotated to a new version."
+
+

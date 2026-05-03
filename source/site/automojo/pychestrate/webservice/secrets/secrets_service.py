@@ -32,8 +32,8 @@ __version__ = "1.0.0"
 import os
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -383,3 +383,232 @@ def read_secret(
         metadata=metadata,
     )
     return rtnval
+
+
+DEFAULT_ROTATION_GRACE = timedelta(hours=24)
+
+
+def rotate_secret(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        secret_ref: str,
+        new_plaintext: SecretBytes,
+        aspects: SecretsAspects,
+        grace_period: Optional[timedelta] = None
+    ) -> SecretVersion:
+    """
+        Rotate a secret to a new version. The old active row
+        flips to ``SUPERSEDED`` and gains a ``grace_expires_at``
+        deadline (default 24 h); the new row becomes ``ACTIVE``.
+        :func:`read_secret` continues to serve the new version
+        immediately; the M3 sweeper deletes / hardens superseded
+        ciphertext after the grace period elapses.
+
+        Emits :data:`SecretEventTopics.SECRET_ROTATED` and
+        captures an ``audit.secret.rotated`` row in the same
+        transaction.
+
+        :raises: SecretNotFoundError, SecretAccessDeniedError.
+    """
+    record = (
+        db_session.query(SecretRecord)
+        .filter(SecretRecord.secret_ref == secret_ref)
+        .first()
+    )
+    if record is None:
+        err_msg_lines = ["Cannot rotate secret — record not found."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretNotFoundError(err_msg) from None
+
+    if _has_write_permission(
+        db_session=db_session, principal=principal, record=record,
+    ) is False:
+        _raise_access_denied(secret_ref=secret_ref, action="rotate")
+
+    grace = grace_period if grace_period is not None else DEFAULT_ROTATION_GRACE
+    now = utc_now()
+
+    prior_active = (
+        db_session.query(SecretVersion)
+        .filter(SecretVersion.secret_ref == secret_ref)
+        .filter(SecretVersion.state == SecretVersionState.ACTIVE)
+        .order_by(SecretVersion.version_number.desc())
+        .first()
+    )
+
+    payload = encrypt_plaintext(
+        plaintext=new_plaintext, secret_ref=secret_ref,
+    )
+    new_version_number = (
+        int(prior_active.version_number) + 1 if prior_active is not None
+        else 1
+    )
+    new_version = SecretVersion(
+        version_id=new_uuid(),
+        secret_ref=secret_ref,
+        version_number=new_version_number,
+        state=SecretVersionState.ACTIVE,
+        ciphertext_ref=None,
+        ciphertext_bytes=payload.ciphertext_bytes,
+        wrapped_dek=payload.wrapped_dek,
+        kek_id=payload.kek_id,
+        grace_expires_at=None,
+        created_at=now,
+        created_by=principal.user_id,
+    )
+    db_session.add(new_version)
+    db_session.flush()
+
+    if prior_active is not None:
+        prior_active.state = SecretVersionState.SUPERSEDED
+        prior_active.grace_expires_at = now + grace
+        db_session.flush()
+
+    record.current_version_id = new_version.version_id
+    record.updated_at = now
+    db_session.flush()
+
+    audit_payload = {
+        "secret_ref": secret_ref,
+        "backend_name": record.backend_name,
+        "version_id": str(new_version.version_id),
+        "version_number": new_version_number,
+        "principal_id": principal.user_id,
+        "rotated_at": now.isoformat(),
+        "grace_seconds": int(grace.total_seconds()),
+    }
+    audit_capture(
+        db_session=db_session,
+        source_event_id=new_uuid(),
+        source_topic="entity.secret.rotated",
+        kind="audit.secret.rotated",
+        actor_user_id=principal.user_id,
+        actor_service_identity=None,
+        target_ref="secret:{}".format(secret_ref),
+        payload=audit_payload,
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=SecretEventTopics.SECRET_ROTATED,
+            payload=audit_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = new_version
+    return rtnval
+
+
+def force_expire_secret(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        secret_ref: str,
+        reason: str = "force_expire"
+    ) -> int:
+    """
+        Bypass the rotation grace window and flip every
+        non-EXPIRED version of ``secret_ref`` to
+        :data:`SecretVersionState.EXPIRED`. Used by the
+        on-call path when a secret leak is suspected and
+        downstream callers must be cut off immediately.
+
+        Emits :data:`SecretEventTopics.SECRET_FORCE_EXPIRED`
+        with the count + actor and captures an
+        ``audit.secret.rotated`` row (the M3 audit kind for
+        force-expire lands as a follow-up).
+
+        :returns: Number of versions transitioned.
+        :raises: SecretNotFoundError, SecretAccessDeniedError.
+    """
+    record = (
+        db_session.query(SecretRecord)
+        .filter(SecretRecord.secret_ref == secret_ref)
+        .first()
+    )
+    if record is None:
+        err_msg_lines = [
+            "Cannot force-expire secret — record not found.",
+        ]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretNotFoundError(err_msg) from None
+
+    if _has_write_permission(
+        db_session=db_session, principal=principal, record=record,
+    ) is False:
+        _raise_access_denied(secret_ref=secret_ref, action="force_expire")
+
+    now = utc_now()
+    versions: List[SecretVersion] = (
+        db_session.query(SecretVersion)
+        .filter(SecretVersion.secret_ref == secret_ref)
+        .filter(SecretVersion.state != SecretVersionState.EXPIRED)
+        .all()
+    )
+    transitioned = 0
+    for version in versions:
+        version.state = SecretVersionState.EXPIRED
+        version.grace_expires_at = now
+        transitioned = transitioned + 1
+    db_session.flush()
+    record.current_version_id = None
+    record.updated_at = now
+    db_session.flush()
+
+    audit_payload = {
+        "secret_ref": secret_ref,
+        "principal_id": principal.user_id,
+        "expired_count": transitioned,
+        "reason": reason,
+        "expired_at": now.isoformat(),
+    }
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=SecretEventTopics.SECRET_FORCE_EXPIRED,
+            payload=audit_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    return transitioned
+
+
+def sweep_expired_versions(
+        *,
+        db_session: DbSession,
+        now: Optional[datetime] = None
+    ) -> int:
+    """
+        Background-sweeper helper: flip every SUPERSEDED
+        version whose grace window has elapsed to EXPIRED.
+
+        :param now: Optional timestamp override; defaults to
+                    :func:`datetime.now(tz=utc)`.
+
+        :returns: Number of versions transitioned.
+    """
+    materialized_now = now if now is not None else utc_now()
+    superseded: List[SecretVersion] = (
+        db_session.query(SecretVersion)
+        .filter(SecretVersion.state == SecretVersionState.SUPERSEDED)
+        .all()
+    )
+    transitioned = 0
+    for version in superseded:
+        deadline = version.grace_expires_at
+        if deadline is None:
+            continue
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        if materialized_now < deadline:
+            continue
+        version.state = SecretVersionState.EXPIRED
+        transitioned = transitioned + 1
+    db_session.flush()
+    db_session.commit()
+    return transitioned
