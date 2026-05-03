@@ -40,15 +40,19 @@ Request-scoped values
 ---------------------
 The flask controller reads ``flask.g.db_session`` and
 ``flask.g.actor_user_id``. WebWorks has no built-in ``g``-style
-container, so until session-scoping middleware is wired up the
-handlers look at ``request.db_session`` and
-``request.actor_user_id`` (i.e., attributes set on the Request
-object by upstream middleware). When the session attribute is
-missing the handler returns the same 503 problem document the
-flask controller used (``"Request-scoped db_session not
-configured"``) rather than producing an opaque traceback.
-:func:`_resolve_db_session` and :func:`_resolve_actor_user_id`
-are module-level so tests can patch them.
+container; the equivalent is delivered by
+:mod:`webservice.middleware_webworks` —
+:class:`PychestrateSessionMiddleware` opens a session per request
+and attaches it as ``request.db_session``, plus resolves the
+session cookie to an :class:`AuthPrincipal` and writes
+``request.actor_user_id``. The handlers below read those
+attributes via :func:`_resolve_db_session` /
+:func:`_resolve_actor_user_id` (module-level so tests can patch
+them). When the session attribute is missing — i.e., the
+middleware was not installed — the handler returns the same 503
+problem document the flask controller used (``"Request-scoped
+db_session not configured"``) rather than producing an opaque
+traceback.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -139,13 +143,13 @@ def _abort_problem(
 
 def _resolve_db_session(request: Request) -> Optional[Any]:
     """
-        Return the request-scoped db session attached by upstream
-        middleware, or ``None`` when no middleware has populated it.
+        Return the request-scoped db session attached by
+        :class:`PychestrateSessionMiddleware`, or ``None`` when no
+        middleware has populated it (e.g., misconfigured deployment
+        or test bypass).
 
         Module-level so tests patch this rather than constructing a
-        full middleware stack. Production wiring (a session-scoping
-        middleware that opens a session on request entry and closes
-        it on exit) is not delivered by this slice.
+        full middleware stack.
 
         :param request: Incoming webworks request.
 
