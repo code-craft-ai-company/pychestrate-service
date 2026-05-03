@@ -43,6 +43,10 @@ from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import
 from automojo.pychestrate.webservice.plugin_api.runtime import (
     build_and_validate_catalog as build_and_validate_plugin_api_catalog,
 )
+from automojo.pychestrate.webservice.runtime_bootstrap import (
+    bootstrap_runtime,
+    load_config_from_environment,
+)
 from automojo.pychestrate.webservice.project_templates.restapi.v1.templates_routes import (
     register_templates_routes,
 )
@@ -139,6 +143,9 @@ def register_service_extensions() -> None:
 
 
 def pychestrate_website_main():
+    runtime_config = load_config_from_environment()
+    bootstrap_runtime(config=runtime_config)
+
     register_service_extensions()
 
     app.startup()
@@ -147,8 +154,49 @@ def pychestrate_website_main():
 
     wsgi_app = create_wsgi_application(config={"handler": app.dispatcher})
 
-    print("Starting native WebWorks WSGI Server on 127.0.0.1:8888")
-    run_server(app=wsgi_app, host="127.0.0.1", port=8888, workers=1, threads=1)
+    bind_host = os.environ.get("PYCHESTRATE_BIND_HOST", "127.0.0.1")
+    bind_port = int(os.environ.get("PYCHESTRATE_BIND_PORT", "8888"))
+    workers = int(os.environ.get("PYCHESTRATE_WORKERS", "1"))
+    threads = int(os.environ.get("PYCHESTRATE_THREADS", "1"))
+
+    print(
+        "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={})".format(
+            bind_host, bind_port, workers, threads
+        )
+    )
+    run_server(app=wsgi_app, host=bind_host, port=bind_port,
+               workers=workers, threads=threads)
+
+
+def build_wsgi_application_for_production():
+    """
+        Build a fully-bootstrapped WSGI app for embedding in an
+        external WSGI server (gunicorn, uwsgi, mod_wsgi). Reads the
+        operator environment, builds the engine + KEK + pepper, wires
+        every Phase-1/2/3 bus subscriber, registers all webworks
+        routes, advances the app to ``INFRASTRUCTURE_READY``, and
+        installs the session middleware. The returned WSGI callable
+        is what the external server should host.
+
+        Example gunicorn invocation::
+
+            gunicorn 'app_pychestrate_main:build_wsgi_application_for_production()' \\
+                --bind 0.0.0.0:8888 --workers 4
+
+        The trailing ``()`` tells gunicorn to call the factory rather
+        than treat it as a module-level WSGI app object.
+
+        :returns: WSGI callable.
+    """
+    runtime_config = load_config_from_environment()
+    bootstrap_runtime(config=runtime_config)
+
+    register_service_extensions()
+    app.startup()
+    install_pychestrate_session_middleware(app=app)
+
+    rtnval = create_wsgi_application(config={"handler": app.dispatcher})
+    return rtnval
 
 if __name__ == "__main__":
     pychestrate_website_main()
