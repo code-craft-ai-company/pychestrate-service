@@ -40,6 +40,15 @@ from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import
 from automojo.pychestrate.webservice.plugin_api.runtime import (
     build_and_validate_catalog as build_and_validate_plugin_api_catalog,
 )
+from automojo.pychestrate.webservice.project_templates.restapi.v1.templates_routes import (
+    register_templates_routes,
+)
+from automojo.pychestrate.webservice.secrets.restapi.v1.secrets_routes import (
+    register_secrets_routes,
+)
+from automojo.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
+    register_auth_routes,
+)
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
@@ -119,6 +128,9 @@ def register_service_extensions() -> None:
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
+    register_auth_routes(app=app, version_prefix="/api/v1")
+    register_templates_routes(app=app, version_prefix="/api/v1")
+    register_secrets_routes(app=app, version_prefix="/api/v1")
     return
 
 
