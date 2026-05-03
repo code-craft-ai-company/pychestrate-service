@@ -18,6 +18,12 @@ from automojo.pychestrate.webservice.extensions.registry import (
 )
 
 from automojo.pychestrate.webservice.audit.extensions.event_type import AuditEventTypeExtension
+from automojo.pychestrate.webservice.audit.extensions.flag_events import (
+    FlagCreatedAuditEvents,
+    FlagRemovedAuditEvents,
+    FlagRetiredAuditEvents,
+    FlagUpdatedAuditEvents,
+)
 from automojo.pychestrate.webservice.audit.extensions.project_events import (
     ProjectArchivedAuditEvents,
     ProjectCreatedAuditEvents,
@@ -31,22 +37,39 @@ from automojo.pychestrate.webservice.audit.extensions.secret_events import (
     SecretAccessedAuditEvents,
     SecretCreatedAuditEvents,
 )
+from automojo.pychestrate.webservice.audit.extensions.session_events import (
+    LoginRejectedAuditEvents,
+    MfaChallengeVerifiedAuditEvents,
+    MfaEnrollmentAuditEvents,
+    SessionClosedAuditEvents,
+    SessionOpenedAuditEvents,
+    SessionsRevokedAuditEvents,
+)
+from automojo.pychestrate.webservice.audit.extensions.unknown_events import (
+    UnknownAuditKindAuditEvents,
+)
 from automojo.pychestrate.webservice.audit.extensions.user_events import UserLifecycleAuditEvents
 from automojo.pychestrate.webservice.audit.extensions.variable_events import (
     VariableSetAuditEvents,
     VariableUnsetAuditEvents,
+)
+from automojo.pychestrate.webservice.audit.factories.json_file_sink import (
+    JsonFileAuditSink,
 )
 from automojo.pychestrate.webservice.audit.factories.local_db_sink import LocalDatabaseAuditSink
 
 
 def register_builtin_extensions() -> None:
     """
-        Register the in-tree ``audit_sink`` implementation and the minimal
-        Phase-1 ``AuditEventTypeExtension`` packs.
+        Register the in-tree ``audit_sink`` implementations and
+        the M1 + M2 ``AuditEventTypeExtension`` packs. The
+        ``audit.unknown`` fallback pack is always registered so
+        the writer's catch-all path always has a target.
 
         :returns: None.
     """
     register_factory_implementation(implementation=LocalDatabaseAuditSink)
+    register_factory_implementation(implementation=JsonFileAuditSink)
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=UserLifecycleAuditEvents
     )
@@ -82,5 +105,38 @@ def register_builtin_extensions() -> None:
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=VariableUnsetAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=SessionOpenedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=SessionClosedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=SessionsRevokedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=LoginRejectedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=MfaEnrollmentAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=MfaChallengeVerifiedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=FlagCreatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=FlagUpdatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=FlagRetiredAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=FlagRemovedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=UnknownAuditKindAuditEvents
     )
     return

@@ -123,31 +123,38 @@ def test_chain_tamper_is_detected():
     return
 
 
-def test_unknown_kind_raises_unknown_audit_kind_error():
+def test_unknown_kind_falls_through_to_audit_unknown():
     """
-    **Feature: 1-audit-log**
-    **Property: capture_event with an unregistered kind raises
-    UnknownAuditKindError.**
+    **Feature: 1-audit-log (M2 fallback)**
+    **Property: capture_event with an unregistered kind no
+    longer raises — it reroutes to ``audit.unknown`` so the
+    chain hash stays unbroken when a new feature emits before
+    its ``AuditEventTypeExtension`` registers. The original
+    kind + topic are preserved in the payload.**
     """
     reset_phase1_runtime()
     _engine, session = build_in_memory_session()
 
-    raised = False
-    try:
-        audit_writer.capture_event(
-            db_session=session,
-            source_event_id=new_uuid(),
-            source_topic="entity.test.never",
-            kind="audit.unknown.kind",
-            actor_user_id=None,
-            actor_service_identity=None,
-            target_ref=None,
-            payload={},
-        )
-    except UnknownAuditKindError:
-        raised = True
-
-    testbase.assert_equal(raised, True)
+    record = audit_writer.capture_event(
+        db_session=session,
+        source_event_id=new_uuid(),
+        source_topic="entity.test.never",
+        kind="audit.unknown.kind",
+        actor_user_id=None,
+        actor_service_identity=None,
+        target_ref=None,
+        payload={},
+    )
+    session.commit()
+    testbase.assert_equal(record.kind, "audit.unknown")
+    testbase.assert_equal(
+        record.payload_json["unknown_original_kind"],
+        "audit.unknown.kind",
+    )
+    testbase.assert_equal(
+        record.payload_json["unknown_source_topic"],
+        "entity.test.never",
+    )
     return
 
 

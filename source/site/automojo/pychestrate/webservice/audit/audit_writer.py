@@ -39,6 +39,9 @@ from automojo.pychestrate.webservice.messaging.outbox import enqueue_event
 GENESIS_HASH: bytes = bytes(32)
 
 
+UNKNOWN_KIND: str = "audit.unknown"
+
+
 def _canonical_json_bytes(payload: dict) -> bytes:
     """
         Return bytes of the canonical JSON serialization of a payload.
@@ -97,12 +100,19 @@ def capture_event(
     """
     known = _known_kinds()
     if kind not in known:
-        err_msg_lines = ["Cannot capture audit — kind is not registered."]
-        err_msg_lines.append("KIND: {}".format(kind))
-        err_msg_lines.append("SOURCE_TOPIC: {}".format(source_topic))
-        err_msg_lines.append("KNOWN_COUNT: {}".format(len(known)))
-        err_msg = os.linesep.join(err_msg_lines)
-        raise UnknownAuditKindError(err_msg) from None
+        # M2 fallback: rather than raise, capture the event under
+        # the dedicated ``audit.unknown`` kind and stash the
+        # original kind + topic in the payload so operators can
+        # adopt a proper AuditEventTypeExtension when one of
+        # these shows up. This keeps the chain unbroken when a
+        # new feature emits a topic before its event-type pack
+        # registers.
+        adopted_kind = UNKNOWN_KIND
+        materialized_payload = dict(payload or {})
+        materialized_payload["unknown_original_kind"] = kind
+        materialized_payload["unknown_source_topic"] = source_topic
+        kind = adopted_kind
+        payload = materialized_payload
 
     previous = (
         db_session.query(AuditRecord)
@@ -135,6 +145,15 @@ def capture_event(
     )
     db_session.add(record)
     db_session.flush()
+
+    # Fan out to every registered non-canonical sink via the
+    # per-sink outbox. Imported here to avoid a circular import
+    # at module load time — the dispatcher imports back into
+    # ``audit.models``.
+    from automojo.pychestrate.webservice.audit import sink_dispatcher
+    sink_dispatcher.enqueue_record_for_fanout(
+        db_session=db_session, record=record,
+    )
 
     event_payload = {
         "sequence_number": record.sequence_number,
