@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+#
+# Boot a SQLite-backed local Pychestrate webservice for smoke-testing.
+#
+# Generates a per-checkout dev KEK + password pepper under .cache/dev-secrets/
+# (gitignored) and starts the service with PYCHESTRATE_AUTO_CREATE_SCHEMA=true
+# so the empty SQLite file is populated on first boot. Subsequent runs reuse
+# the same SQLite file and the same dev secrets.
+#
+# Refuses to run with PYCHESTRATE_RUNTIME_ENVIRONMENT=production so an
+# operator who copy-pastes never accidentally points this at a real database.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+REPO_ROOT="$(pwd)"
+
+# ----------------------------------------------------------------------------
+# Refuse production
+# ----------------------------------------------------------------------------
+
+if [[ "${PYCHESTRATE_RUNTIME_ENVIRONMENT:-}" == "production" ]]; then
+    echo "dev-up refuses to run with PYCHESTRATE_RUNTIME_ENVIRONMENT=production." >&2
+    echo "Unset the variable or set it to development/staging/testing." >&2
+    exit 1
+fi
+
+# ----------------------------------------------------------------------------
+# Per-checkout dev secret material (KEK + pepper)
+# ----------------------------------------------------------------------------
+
+SECRETS_DIR="${REPO_ROOT}/.cache/dev-secrets"
+mkdir -p "${SECRETS_DIR}"
+
+KEK_FILE="${SECRETS_DIR}/dev.kek"
+PEPPER_FILE="${SECRETS_DIR}/dev.password-pepper"
+
+if [[ ! -s "${KEK_FILE}" ]]; then
+    head -c 32 /dev/urandom > "${KEK_FILE}"
+    chmod 600 "${KEK_FILE}"
+    echo "dev-up: generated ${KEK_FILE} (32 random bytes)"
+fi
+
+if [[ ! -s "${PEPPER_FILE}" ]]; then
+    head -c 32 /dev/urandom > "${PEPPER_FILE}"
+    chmod 600 "${PEPPER_FILE}"
+    echo "dev-up: generated ${PEPPER_FILE} (32 random bytes)"
+fi
+
+# ----------------------------------------------------------------------------
+# SQLite dev DB
+# ----------------------------------------------------------------------------
+
+DEV_DB_DIR="${REPO_ROOT}/.cache/dev-db"
+mkdir -p "${DEV_DB_DIR}"
+DEV_DB_PATH="${DEV_DB_DIR}/pychestrate.sqlite"
+
+# ----------------------------------------------------------------------------
+# Compose the runtime env from documented PYCHESTRATE_* names
+# ----------------------------------------------------------------------------
+
+export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-development}"
+export PYCHESTRATE_DATABASE_URL="${PYCHESTRATE_DATABASE_URL:-sqlite:///${DEV_DB_PATH}}"
+export PYCHESTRATE_AUTO_CREATE_SCHEMA="${PYCHESTRATE_AUTO_CREATE_SCHEMA:-true}"
+
+export PYCHESTRATE_KEK_SOURCE="${PYCHESTRATE_KEK_SOURCE:-file}"
+export PYCHESTRATE_KEK_ID="${PYCHESTRATE_KEK_ID:-dev-kek-1}"
+export PYCHESTRATE_KEK_FILE_PATH="${PYCHESTRATE_KEK_FILE_PATH:-${KEK_FILE}}"
+
+export PYCHESTRATE_PASSWORD_PEPPER_SOURCE="${PYCHESTRATE_PASSWORD_PEPPER_SOURCE:-file}"
+export PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH="${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH:-${PEPPER_FILE}}"
+
+export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
+export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
+
+# ----------------------------------------------------------------------------
+# PYTHONPATH (mirrors development/run-website.sh)
+# ----------------------------------------------------------------------------
+
+export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:../automojo-webworks/source/packages:../automojo-this-app/source/packages:../automojo-testbase/source/packages:../automojo-configuration/source/packages:../automojo-credentials/source/packages:../automojo-dataprofiles/source/packages:../automojo-errors/source/packages:../pychestrate-core/source/packages:${PYTHONPATH:-}"
+
+echo "dev-up: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
+echo "dev-up: db=${PYCHESTRATE_DATABASE_URL}"
+echo "dev-up: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
+echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
+echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
+echo
+
+if [[ -f "${REPO_ROOT}/.venv/bin/python" ]]; then
+    PYTHON="${REPO_ROOT}/.venv/bin/python"
+else
+    PYTHON="$(command -v python3 || command -v python)"
+fi
+
+exec "${PYTHON}" source/site/app_pychestrate_main.py
