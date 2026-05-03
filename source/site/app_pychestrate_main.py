@@ -46,6 +46,9 @@ from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import
 from automojo.pychestrate.webservice.plugin_api.runtime import (
     build_and_validate_catalog as build_and_validate_plugin_api_catalog,
 )
+from automojo.pychestrate.webservice.retention.restapi.v1.retention_routes import (
+    register_retention_routes,
+)
 from automojo.pychestrate.webservice.runtime_bootstrap import (
     bootstrap_runtime,
     load_config_from_environment,
@@ -147,6 +150,7 @@ def register_service_extensions() -> None:
     register_agents_routes(app=app, version_prefix="/api/v1")
     register_users_routes(app=app, version_prefix="/api/v1")
     register_tags_routes(app=app, version_prefix="/api/v1")
+    register_retention_routes(app=app, version_prefix="/api/v1")
     return
 
 
