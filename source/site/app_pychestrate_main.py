@@ -56,6 +56,9 @@ from automojo.pychestrate.webservice.project_templates.restapi.v1.templates_rout
 from automojo.pychestrate.webservice.secrets.restapi.v1.secrets_routes import (
     register_secrets_routes,
 )
+from automojo.pychestrate.webservice.tagging.restapi.v1.tags_routes import (
+    register_tags_routes,
+)
 from automojo.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
     register_auth_routes,
 )
@@ -143,6 +146,7 @@ def register_service_extensions() -> None:
     register_secrets_routes(app=app, version_prefix="/api/v1")
     register_agents_routes(app=app, version_prefix="/api/v1")
     register_users_routes(app=app, version_prefix="/api/v1")
+    register_tags_routes(app=app, version_prefix="/api/v1")
     return
 
 
