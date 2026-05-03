@@ -28,3 +28,28 @@ class FlagBackendUnavailableError(Exception):
     """
         Raised when the resolved backend cannot serve a request.
     """
+
+
+class FlagKindImmutableError(Exception):
+    """
+        Raised when a caller attempts to change a flag's
+        ``flag_kind`` after creation. The kind is part of the
+        flag's identity contract — every consumer that reads
+        the flag depends on its kind to decode the value.
+    """
+
+
+class FlagValueInvalidError(Exception):
+    """
+        Raised when a default_value does not match the flag's
+        declared kind (e.g. a STRING flag receiving a list,
+        an ENUM flag receiving a value outside the declared
+        choices).
+    """
+
+
+class FlagAlreadyRetiredError(Exception):
+    """
+        Raised when a caller attempts a retirement operation
+        on a flag that is already past ACTIVE.
+    """

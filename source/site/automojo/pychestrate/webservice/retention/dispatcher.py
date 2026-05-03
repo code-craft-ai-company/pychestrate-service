@@ -89,20 +89,50 @@ def dispatch_action_chain(
         entity_id: str,
         steps: Sequence[ActionStep],
         dry_run: bool,
-        now: Optional[datetime] = None
+        now: Optional[datetime] = None,
+        db_session=None,
+        max_attempts: int = 1
     ) -> ChainResult:
     """
         Run ``steps`` in order against ``entity_id``.
 
+        :param db_session: Optional SQLAlchemy session. When
+                           supplied, the dispatcher consults
+                           :func:`legal_hold.is_held` before
+                           every action and records
+                           ``outcome="skipped"`` with
+                           ``reason="legal_hold"`` for held
+                           entities. The chain continues past
+                           a skipped step on real runs so a
+                           ``release_hold`` followed by a
+                           replay applies the remaining
+                           actions normally.
+        :param max_attempts: Optional retry budget per step.
+                             A step that returns
+                             ``outcome="failed"`` (whether by
+                             raising or by reporting a failed
+                             application) is retried up to
+                             ``max_attempts`` times before the
+                             dispatcher records the final
+                             ``failed`` outcome and bails. M3
+                             default of 1 keeps M2 callers'
+                             semantics unchanged.
+
         :raises: SemanticError on an empty step list (a
                  retention policy with no chain is a
-                 configuration bug, not a runtime fallthrough).
+                 configuration bug, not a runtime fallthrough);
+                 ValueError on max_attempts <= 0.
     """
     if steps is None or len(steps) == 0:
         err_lines = ["dispatch_action_chain requires a non-empty chain."]
         err_lines.append("ENTITY_ID: {}".format(entity_id))
         err_msg = os.linesep.join(err_lines)
         raise SemanticError(err_msg) from None
+    if max_attempts <= 0:
+        err_lines = ["dispatch_action_chain max_attempts must be >= 1."]
+        err_lines.append("VALUE: {}".format(max_attempts))
+        err_msg = os.linesep.join(err_lines)
+        raise ValueError(err_msg) from None
 
     materialized_now = (
         now if now is not None else datetime.now(tz=timezone.utc)
@@ -126,6 +156,29 @@ def dispatch_action_chain(
             final_outcome = "failed"
             break
 
+        if (
+            db_session is not None
+            and dry_run is False
+            and _is_action_blocked_by_legal_hold(
+                action_cls=action_cls,
+            )
+            and _is_legal_hold_active(
+                db_session=db_session,
+                entity_kind=entity_kind,
+                entity_id=entity_id,
+            )
+        ):
+            outcome = StepOutcome(
+                action_name=step.action_name,
+                outcome="skipped",
+                reason="legal_hold",
+                terminal=False,
+                applied_at=materialized_now,
+            )
+            outcomes.append(outcome)
+            final_outcome = "skipped"
+            continue
+
         wait_until = _compute_wait_until(
             step=step, last_completed_at=last_completed_at,
         )
@@ -146,20 +199,43 @@ def dispatch_action_chain(
             final_outcome = "deferred"
             break
 
-        try:
-            application = action_cls.apply(
-                entity_kind=entity_kind,
-                entity_id=entity_id,
-                parameters=step.parameters,
-                dry_run=dry_run,
+        application = None
+        last_error: Optional[str] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                application = action_cls.apply(
+                    entity_kind=entity_kind,
+                    entity_id=entity_id,
+                    parameters=step.parameters,
+                    dry_run=dry_run,
+                )
+            except Exception as action_err:
+                last_error = "attempt {}: {}: {}".format(
+                    attempt,
+                    type(action_err).__name__,
+                    action_err,
+                )
+                application = None
+                continue
+            if not isinstance(application, ActionApplication):
+                last_error = (
+                    "attempt {}: action_returned_unexpected_type".format(
+                        attempt,
+                    )
+                )
+                application = None
+                continue
+            if application.outcome != "failed":
+                last_error = None
+                break
+            last_error = "attempt {}: {}".format(
+                attempt, application.reason,
             )
-        except Exception as action_err:
+        if application is None:
             outcome = StepOutcome(
                 action_name=step.action_name,
                 outcome="failed",
-                reason="{}: {}".format(
-                    type(action_err).__name__, action_err,
-                ),
+                reason=last_error or "exhausted_retries",
                 terminal=False,
                 applied_at=materialized_now,
             )
@@ -167,11 +243,11 @@ def dispatch_action_chain(
             final_outcome = "failed"
             break
 
-        if not isinstance(application, ActionApplication):
+        if application.outcome == "failed":
             outcome = StepOutcome(
                 action_name=step.action_name,
                 outcome="failed",
-                reason="action_returned_unexpected_type",
+                reason=last_error or application.reason,
                 terminal=False,
                 applied_at=materialized_now,
             )
@@ -236,4 +312,44 @@ def _compute_wait_until(
     else:
         baseline = last_completed_at
     rtnval = baseline + timedelta(days=wait_days)
+    return rtnval
+
+
+# Action names whose application is destructive enough that a
+# legal_hold must block them. Non-destructive actions (e.g.,
+# ``tier_move``) still apply during a hold so the storage tier
+# moves forward without losing data.
+_LEGAL_HOLD_BLOCKED_ACTIONS = frozenset({
+    "delete", "permanent_archive",
+})
+
+
+def _is_action_blocked_by_legal_hold(*, action_cls) -> bool:
+    """
+        Return ``True`` when ``action_cls.action_name`` is in
+        the destructive set the legal_hold path must block.
+    """
+    name = getattr(action_cls, "action_name", "")
+    rtnval = name in _LEGAL_HOLD_BLOCKED_ACTIONS
+    return rtnval
+
+
+def _is_legal_hold_active(
+        *,
+        db_session,
+        entity_kind: str,
+        entity_id: str
+    ) -> bool:
+    """
+        Consult :func:`legal_hold.is_held` against the
+        supplied session. Imported lazily so the dispatcher's
+        legal-hold integration stays optional from the
+        caller's perspective.
+    """
+    from automojo.pychestrate.webservice.retention import legal_hold
+    rtnval = legal_hold.is_held(
+        db_session=db_session,
+        entity_kind=entity_kind,
+        entity_id=entity_id,
+    )
     return rtnval
