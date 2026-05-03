@@ -37,6 +37,9 @@ from automojo.pychestrate.webservice.metrics.dashboards import (
 from automojo.pychestrate.webservice.metrics.ingest import (
     register_builtin_extensions as metrics_ingest_register,
 )
+from automojo.pychestrate.webservice.metrics.slos import (
+    register_builtin_extensions as slos_register,
+)
 from automojo.pychestrate.webservice.metrics.timeseries import (
     register_builtin_extensions as timeseries_register,
 )
@@ -44,6 +47,7 @@ from automojo.pychestrate.webservice.metrics.timeseries import (
 # Side-effect imports so Layer-7 model tables attach to the metadata.
 from automojo.pychestrate.webservice.metrics.alerts import models as _alerts_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.dashboards import models as _dashboards_models  # noqa: F401
+from automojo.pychestrate.webservice.metrics.slos import models as _slos_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.timeseries import models as _timeseries_models  # noqa: F401
 
 
@@ -71,6 +75,7 @@ def register_phase7_builtin_extensions() -> None:
     metrics_ingest_register()
     dashboards_register()
     alerts_register()
+    slos_register()
     return
 
 

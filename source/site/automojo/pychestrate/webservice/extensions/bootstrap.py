@@ -62,8 +62,10 @@ from automojo.pychestrate.webservice.identity.flags import models as _flags_mode
 from automojo.pychestrate.webservice.identity.users import models as _users_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.progress import models as _ingest_progress_models  # noqa: F401
 from automojo.pychestrate.webservice.ingest.result import models as _ingest_result_models  # noqa: F401
+from automojo.pychestrate.webservice.maintenance import models as _maintenance_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.alerts import models as _metrics_alerts_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.dashboards import models as _metrics_dashboards_models  # noqa: F401
+from automojo.pychestrate.webservice.metrics.slos import models as _metrics_slos_models  # noqa: F401
 from automojo.pychestrate.webservice.metrics.timeseries import models as _metrics_timeseries_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.cancel import models as _jobs_cancel_models  # noqa: F401
 from automojo.pychestrate.webservice.jobs.dispatch import models as _jobs_dispatch_models  # noqa: F401
@@ -95,6 +97,7 @@ from automojo.pychestrate.webservice.resources.lease import models as _resources
 from automojo.pychestrate.webservice.resources.pools import models as _resources_pools_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.scheduler import models as _resources_scheduler_models  # noqa: F401
 from automojo.pychestrate.webservice.resources.usage_history import models as _resources_usage_history_models  # noqa: F401
+from automojo.pychestrate.webservice.webhooks_out import models as _webhooks_out_models  # noqa: F401
 from automojo.pychestrate.webservice.secrets import models as _secrets_models  # noqa: F401
 from automojo.pychestrate.webservice.security.auth import models as _auth_models  # noqa: F401
 from automojo.pychestrate.webservice.security.rbac import models as _rbac_models  # noqa: F401
