@@ -45,3 +45,48 @@ serve-prod-gunicorn:
 		--bind $${PYCHESTRATE_BIND_HOST:-0.0.0.0}:$${PYCHESTRATE_BIND_PORT:-8888} \
 		--workers $${PYCHESTRATE_WORKERS:-4} \
 		--threads $${PYCHESTRATE_THREADS:-2}
+
+# ---------------------------------------------------------------------------
+# Database schema management (alembic)
+# ---------------------------------------------------------------------------
+#
+# All targets read PYCHESTRATE_DATABASE_URL (the same env var the runtime
+# bootstrap consumes). Production is expected to use these targets
+# exclusively; ``dev-up`` short-circuits with auto_create_schema=true for
+# fast local rebuilds (use ``db-upgrade`` against the same SQLite file
+# when you want to test the migration path itself).
+#
+# The MESSAGE variable is required for revision-autogen and is passed
+# verbatim as the migration's slug. Always review the generated script
+# before committing -- autogenerate catches most-but-not-all schema
+# changes.
+
+db-upgrade:
+	@if [ -z "$$PYCHESTRATE_DATABASE_URL" ]; then \
+		echo "PYCHESTRATE_DATABASE_URL is required" >&2; exit 1; \
+	fi
+	.venv/bin/alembic -c alembic.ini upgrade head
+
+db-downgrade:
+	@if [ -z "$$PYCHESTRATE_DATABASE_URL" ]; then \
+		echo "PYCHESTRATE_DATABASE_URL is required" >&2; exit 1; \
+	fi
+	.venv/bin/alembic -c alembic.ini downgrade -1
+
+db-current:
+	@if [ -z "$$PYCHESTRATE_DATABASE_URL" ]; then \
+		echo "PYCHESTRATE_DATABASE_URL is required" >&2; exit 1; \
+	fi
+	.venv/bin/alembic -c alembic.ini current
+
+db-history:
+	.venv/bin/alembic -c alembic.ini history --verbose
+
+db-revision-autogen:
+	@if [ -z "$$PYCHESTRATE_DATABASE_URL" ]; then \
+		echo "PYCHESTRATE_DATABASE_URL is required" >&2; exit 1; \
+	fi
+	@if [ -z "$$MESSAGE" ]; then \
+		echo "Usage: make db-revision-autogen MESSAGE='describe change'" >&2; exit 1; \
+	fi
+	.venv/bin/alembic -c alembic.ini revision --autogenerate -m "$$MESSAGE"
