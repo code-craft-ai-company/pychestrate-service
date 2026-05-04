@@ -86,6 +86,9 @@ from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import
 from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
     register_config_routes,
 )
+from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes import (
+    register_projects_routes as register_projects_web_ui_routes,
+)
 from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     register_resources_routes,
 )
@@ -239,6 +242,7 @@ def register_service_extensions() -> None:
     install_web_ui_templating()
     register_config_routes(app=app)
     register_resources_routes(app=app)
+    register_projects_web_ui_routes(app=app)
     return
 
 

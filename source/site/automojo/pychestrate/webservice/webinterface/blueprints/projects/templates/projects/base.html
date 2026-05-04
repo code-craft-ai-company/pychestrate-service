@@ -323,8 +323,8 @@
     <header class="app-header">
         <h1>Pychestrate Projects</h1>
         <div class="user-info">
-            {% if session.username %}
-            <span>{{ session.username }}</span>
+            {% if username %}
+            <span>{{ username }}</span>
             <form action="{{ url_for('config.logout') }}" method="post" style="margin:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-sm btn-secondary">Logout</button>
@@ -333,61 +333,61 @@
         </div>
     </header>
 
-    {% if session.username %}
+    {% if username %}
     <nav class="sidebar">
         <ul class="sidebar-nav">
             <li class="sidebar-section">Navigation</li>
-            <li><a href="{{ url_for('projects.dashboard') }}" class="{% if request.endpoint == 'projects.dashboard' %}active{% endif %}">
+            <li><a href="{{ url_for('projects.dashboard') }}" class="{% if request_endpoint == 'projects.dashboard' %}active{% endif %}">
                 <span class="material-icons">dashboard</span> Dashboard
             </a></li>
-            <li><a href="{{ url_for('projects.project_list') }}" class="{% if 'project_list' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.project_list') }}" class="{% if 'project_list' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">folder</span> All Projects
             </a></li>
             
             {% if project %}
             <li class="sidebar-section">{{ project.name }}</li>
-            <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="{% if request.endpoint == 'projects.project_detail' %}active{% endif %}">
+            <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="{% if request_endpoint == 'projects.project_detail' %}active{% endif %}">
                 <span class="material-icons">info</span> Overview
             </a></li>
-            <li><a href="{{ url_for('projects.member_list', project_id=project.id) }}" class="{% if 'member' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.member_list', project_id=project.id) }}" class="{% if 'member' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">people</span> Members
             </a></li>
-            <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}" class="{% if 'repository' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}" class="{% if 'repository' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">source</span> Repositories
             </a></li>
             
             <li class="sidebar-section">CI/CD</li>
-            <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}" class="{% if 'build' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}" class="{% if 'build' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">build</span> Builds
             </a></li>
-            <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" class="{% if 'infra' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" class="{% if 'infra' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">cloud</span> Infrastructure
             </a></li>
-            <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" class="{% if 'test' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" class="{% if 'test' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">science</span> Tests
             </a></li>
             
             <li class="sidebar-section">Releases</li>
-            <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" class="{% if 'release' in request.endpoint and 'event' not in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" class="{% if 'release' in request_endpoint and 'event' not in request_endpoint %}active{% endif %}">
                 <span class="material-icons">new_releases</span> Releases
             </a></li>
-            <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" class="{% if 'pipeline' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" class="{% if 'pipeline' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">account_tree</span> Pipelines
             </a></li>
-            <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" class="{% if 'channel' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" class="{% if 'channel' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">rss_feed</span> Channels
             </a></li>
-            <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" class="{% if 'schedule' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" class="{% if 'schedule' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">schedule</span> Schedules
             </a></li>
             
             <li class="sidebar-section">Planning</li>
-            <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="{% if 'calendar' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="{% if 'calendar' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">calendar_today</span> Calendar
             </a></li>
             
             <li class="sidebar-section">Automation</li>
-            <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}" class="{% if 'watch' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}" class="{% if 'watch' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">visibility</span> Watches
             </a></li>
             {% endif %}
@@ -395,15 +395,13 @@
     </nav>
     {% endif %}
 
-    <main class="main-content" {% if not session.username %}style="margin-left:0;"{% endif %}>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
+    <main class="main-content" {% if not username %}style="margin-left:0;"{% endif %}>
+        {% if flashes %}
+            {% for category, message in flashes %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
