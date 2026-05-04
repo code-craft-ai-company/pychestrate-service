@@ -126,18 +126,9 @@ _ROUTE_TABLE = (
 )
 
 
-# Pre-register URL patterns for the E4 endpoints the dashboard
-# sidebar template references. The E4 PR moves these into the
-# real route tables and lands the handlers.
-_FUTURE_ENDPOINT_PATTERNS = (
-    # E4 -- health + tags
-    ("resources.health_dashboard", "/health"),
-    ("resources.health_detail", "/health/{resource_id}"),
-    ("resources.health_config", "/health/{resource_id}/config"),
-    ("resources.health_update", "/health/{resource_id}/update"),
-    ("resources.health_check", "/health/{resource_id}/check"),
-    ("resources.tag_list", "/tags"),
-)
+# All previously-stubbed resources endpoints have shipped. The
+# tuple stays in the source as a hook for any post-E4 additions.
+_FUTURE_ENDPOINT_PATTERNS: tuple = ()
 
 
 _ADMIN_PERMISSION = "resources.manage"
@@ -1190,6 +1181,16 @@ def register_resources_routes(*, app: Any) -> None:
     )
     register_allocations_routes(app=app)
     register_reservations_routes(app=app)
+
+    # E4 features -- health + tags.
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_health import (  # noqa: E402
+        register_health_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_tags import (  # noqa: E402
+        register_tags_routes,
+    )
+    register_health_routes(app=app)
+    register_tags_routes(app=app)
 
     return
 
