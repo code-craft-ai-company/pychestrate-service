@@ -112,16 +112,6 @@ _ROUTE_TABLE = (
 
 
 _FUTURE_ENDPOINT_PATTERNS = (
-    # D3 -- variables + scopes
-    ("config.variable_list", "/variables"),
-    ("config.variable_create", "/variables/create"),
-    ("config.variable_detail", "/variables/{name}"),
-    ("config.variable_edit", "/variables/{name}/edit"),
-    ("config.variable_history", "/variables/{name}/history"),
-    ("config.variable_delete", "/variables/{name}/delete"),
-    ("config.scope_list", "/scopes"),
-    ("config.scope_create", "/scopes/create"),
-    ("config.scope_delete", "/scopes/{scope_id}/delete"),
     # D4 -- secrets + sessions + audit
     ("config.secret_list", "/secrets"),
     ("config.secret_create", "/secrets/create"),
@@ -317,6 +307,24 @@ class MultiFormView:
 
     def __contains__(self, key: str) -> bool:
         rtnval = key in self._data
+        return rtnval
+
+    def __getitem__(self, key: str) -> str:
+        """
+            Dict-shaped subscript access. Used by jinja2 when a
+            template writes ``form_data.var_type`` -- jinja first
+            tries ``getattr`` (no ``var_type`` attribute) then
+            falls back to ``__getitem__``.
+
+            :param key: Form field name.
+
+            :returns: First submitted value.
+            :raises: KeyError when the field is absent.
+        """
+        values = self._data.get(key, None)
+        if values is None or len(values) == 0:
+            raise KeyError(key)
+        rtnval = values[0]
         return rtnval
 
 
@@ -973,6 +981,16 @@ def register_config_routes(*, app: Any) -> None:
     )
     register_users_routes(app=app)
     register_roles_routes(app=app)
+
+    # D3 features -- variables + scopes.
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
+        register_variables_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_scopes import (  # noqa: E402
+        register_scopes_routes,
+    )
+    register_variables_routes(app=app)
+    register_scopes_routes(app=app)
 
     return
 
