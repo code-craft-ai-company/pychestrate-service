@@ -28,8 +28,9 @@ entry that:
   can resolve them
 * (development / testing only) creates every Phase-1/2/3 ORM
   table on the engine via
-  ``PychestratePhase1Base.metadata.create_all`` — production
-  uses out-of-band migrations
+  ``PychestratePhase1Base.metadata.create_all``. Production uses
+  alembic — see ``alembic/`` at the repo root and the
+  ``make db-upgrade`` target.
 * loads the KEK, sets the active password pepper, and wires the
   audit + Phase-2 + Phase-3 bus subscribers in the documented
   order
@@ -435,9 +436,11 @@ def _maybe_create_schema(
             "{} is refused in production.".format(ENV_AUTO_CREATE_SCHEMA)
         ]
         err_msg_lines.append(
-            "Use out-of-band migrations (alembic) for production schema"
+            "Use alembic (``make db-upgrade``) for production schema"
             " management. Set {}=development|testing to enable schema"
-            " auto-create.".format(ENV_RUNTIME_ENVIRONMENT)
+            " auto-create for non-production environments.".format(
+                ENV_RUNTIME_ENVIRONMENT
+            )
         )
         err_msg = os.linesep.join(err_msg_lines)
         raise ConfigurationError(err_msg)
