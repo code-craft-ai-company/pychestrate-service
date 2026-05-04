@@ -369,22 +369,27 @@ def test_register_config_routes_attaches_documented_routes():
     **Feature: webworks config blueprint port T1.1 (D1)**
     **Property: register_config_routes attaches the five
     documented D1 routes (login GET/POST, logout, dashboard
-    root + /dashboard) at ``/config*``.**
+    root + /dashboard) at ``/config*``. Asserted as a subset
+    so the D2/D3 per-feature route attachments (which the
+    same registrar dispatches to) do not break this contract.**
     """
     _reset_global_state()
     try:
         app = _FakeApp()
         config_routes.register_config_routes(app=app)
 
-        actual = tuple((path, methods) for path, methods, _ in app.calls)
-        expected = (
+        actual = set(
+            (path, methods) for path, methods, _ in app.calls
+        )
+        expected_subset = {
             ("/config/login", ("GET",)),
             ("/config/login", ("POST",)),
             ("/config/logout", ("POST",)),
             ("/config", ("GET",)),
             ("/config/dashboard", ("GET",)),
-        )
-        testbase.assert_equal(actual, expected)
+        }
+        missing = expected_subset - actual
+        testbase.assert_equal(missing, set())
     finally:
         _reset_global_state()
     return
