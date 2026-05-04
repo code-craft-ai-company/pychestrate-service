@@ -600,7 +600,9 @@ def test_register_resources_routes_attaches_documented_routes():
     **Property: register_resources_routes attaches the eight
     documented E1 routes (dashboard root + /dashboard, /list,
     /create GET+POST, /<id>, /<id>/edit GET+POST, /<id>/delete,
-    /<id>/checkout) at /resources/*.**
+    /<id>/checkout) at /resources/*. Asserted as a subset so
+    the E2/E3/E4 per-feature route attachments dispatched from
+    the same registrar do not break this contract.**
     """
     _reset_global_state()
     try:
@@ -609,7 +611,7 @@ def test_register_resources_routes_attaches_documented_routes():
         actual = set(
             (path, methods) for path, methods, _ in app.calls
         )
-        expected = {
+        expected_subset = {
             ("/resources", ("GET",)),
             ("/resources/dashboard", ("GET",)),
             ("/resources/list", ("GET",)),
@@ -619,7 +621,8 @@ def test_register_resources_routes_attaches_documented_routes():
             ("/resources/{resource_id}/delete", ("POST",)),
             ("/resources/{resource_id}/checkout", ("POST",)),
         }
-        testbase.assert_equal(actual, expected)
+        missing = expected_subset - actual
+        testbase.assert_equal(missing, set())
     finally:
         _reset_global_state()
     return
