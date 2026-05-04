@@ -126,37 +126,10 @@ _ROUTE_TABLE = (
 )
 
 
-# Pre-register URL patterns for the E3/E4 endpoints the
-# dashboard sidebar template references. Each future PR moves
-# the entry from this table into ``_ROUTE_TABLE`` and lands the
-# handler at the same time.
+# Pre-register URL patterns for the E4 endpoints the dashboard
+# sidebar template references. The E4 PR moves these into the
+# real route tables and lands the handlers.
 _FUTURE_ENDPOINT_PATTERNS = (
-    # E3 -- allocations + reservations
-    ("resources.allocation_list", "/allocations"),
-    ("resources.allocation_history", "/allocations/history"),
-    ("resources.allocation_detail", "/allocations/{allocation_id}"),
-    (
-        "resources.allocation_checkin",
-        "/allocations/{allocation_id}/checkin",
-    ),
-    (
-        "resources.allocation_force_checkin",
-        "/allocations/{allocation_id}/force-checkin",
-    ),
-    ("resources.reservation_list", "/reservations"),
-    ("resources.reservation_create", "/reservations/create"),
-    (
-        "resources.reservation_detail",
-        "/reservations/{reservation_id}",
-    ),
-    (
-        "resources.reservation_edit",
-        "/reservations/{reservation_id}/edit",
-    ),
-    (
-        "resources.reservation_cancel",
-        "/reservations/{reservation_id}/cancel",
-    ),
     # E4 -- health + tags
     ("resources.health_dashboard", "/health"),
     ("resources.health_detail", "/health/{resource_id}"),
@@ -1207,6 +1180,16 @@ def register_resources_routes(*, app: Any) -> None:
     )
     register_pools_routes(app=app)
     register_ip_pools_routes(app=app)
+
+    # E3 features -- allocations + reservations.
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_allocations import (  # noqa: E402
+        register_allocations_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_reservations import (  # noqa: E402
+        register_reservations_routes,
+    )
+    register_allocations_routes(app=app)
+    register_reservations_routes(app=app)
 
     return
 
