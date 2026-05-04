@@ -52,3 +52,4 @@ class SITE_SHARED_GLOBALS:
     SMTP_HOST: str = None
     SMTP_PORT: int = None
     SMTP_CREDENTIAL: BasicCredential = None
+    UI_COOKIE_SECRET: bytes = None

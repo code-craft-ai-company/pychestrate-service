@@ -292,8 +292,8 @@
     <header class="app-header">
         <h1>Pychestrate Configuration</h1>
         <div class="user-info">
-            {% if session.username %}
-            <span>{{ session.username }}</span>
+            {% if username %}
+            <span>{{ username }}</span>
             <form action="{{ url_for('config.logout') }}" method="post" style="margin:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-sm btn-secondary">Logout</button>
@@ -302,55 +302,53 @@
         </div>
     </header>
 
-    {% if session.username %}
+    {% if username %}
     <nav class="sidebar">
         <ul class="sidebar-nav">
             <li class="sidebar-section">Dashboard</li>
-            <li><a href="{{ url_for('config.dashboard') }}" class="{% if request.endpoint == 'config.dashboard' %}active{% endif %}">
+            <li><a href="{{ url_for('config.dashboard') }}" class="{% if request_endpoint == 'config.dashboard' %}active{% endif %}">
                 <span class="material-icons">dashboard</span> Dashboard
             </a></li>
             
             <li class="sidebar-section">User Management</li>
-            <li><a href="{{ url_for('config.user_list') }}" class="{% if 'user' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.user_list') }}" class="{% if 'user' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">people</span> Users
             </a></li>
-            <li><a href="{{ url_for('config.role_list') }}" class="{% if 'role' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.role_list') }}" class="{% if 'role' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">admin_panel_settings</span> Roles
             </a></li>
             
             <li class="sidebar-section">Configuration</li>
-            <li><a href="{{ url_for('config.variable_list') }}" class="{% if 'variable' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.variable_list') }}" class="{% if 'variable' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">settings</span> Variables
             </a></li>
             
             <li class="sidebar-section">Security</li>
-            <li><a href="{{ url_for('config.scope_list') }}" class="{% if 'scope' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.scope_list') }}" class="{% if 'scope' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">folder</span> Secret Scopes
             </a></li>
-            <li><a href="{{ url_for('config.secret_list') }}" class="{% if 'secret' in request.endpoint and 'scope' not in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.secret_list') }}" class="{% if 'secret' in request_endpoint and 'scope' not in request_endpoint %}active{% endif %}">
                 <span class="material-icons">vpn_key</span> Secrets
             </a></li>
-            <li><a href="{{ url_for('config.session_list') }}" class="{% if 'session' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.session_list') }}" class="{% if 'session' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">devices</span> Sessions
             </a></li>
             
             <li class="sidebar-section">Monitoring</li>
-            <li><a href="{{ url_for('config.audit_log_list') }}" class="{% if 'audit' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('config.audit_log_list') }}" class="{% if 'audit' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">history</span> Audit Logs
             </a></li>
         </ul>
     </nav>
     {% endif %}
 
-    <main class="main-content" {% if not session.username %}style="margin-left:0;"{% endif %}>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
+    <main class="main-content" {% if not username %}style="margin-left:0;"{% endif %}>
+        {% if flashes %}
+            {% for category, message in flashes %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
