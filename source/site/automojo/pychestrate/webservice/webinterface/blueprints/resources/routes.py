@@ -126,23 +126,11 @@ _ROUTE_TABLE = (
 )
 
 
-# Pre-register URL patterns for the E2/E3/E4 endpoints the
+# Pre-register URL patterns for the E3/E4 endpoints the
 # dashboard sidebar template references. Each future PR moves
 # the entry from this table into ``_ROUTE_TABLE`` and lands the
 # handler at the same time.
 _FUTURE_ENDPOINT_PATTERNS = (
-    # E2 -- pools + ip pools
-    ("resources.pool_list", "/pools"),
-    ("resources.pool_create", "/pools/create"),
-    ("resources.pool_detail", "/pools/{pool_id}"),
-    ("resources.pool_delete", "/pools/{pool_id}/delete"),
-    ("resources.ip_pool_list", "/ip-pools"),
-    ("resources.ip_pool_create", "/ip-pools/create"),
-    ("resources.ip_pool_detail", "/ip-pools/{pool_id}"),
-    ("resources.ip_pool_edit", "/ip-pools/{pool_id}/edit"),
-    ("resources.ip_pool_delete", "/ip-pools/{pool_id}/delete"),
-    ("resources.ip_pool_checkout", "/ip-pools/{pool_id}/checkout"),
-    ("resources.ip_pool_checkin", "/ip-pools/{pool_id}/checkin"),
     # E3 -- allocations + reservations
     ("resources.allocation_list", "/allocations"),
     ("resources.allocation_history", "/allocations/history"),
@@ -1206,6 +1194,19 @@ def register_resources_routes(*, app: Any) -> None:
         _url_for_module.register_endpoint(
             endpoint=endpoint_name, pattern=full_path
         )
+
+    # E2 features -- pools + ip pools. Lazy-imported so this
+    # module remains importable when a per-feature module fails
+    # to load (matches the config/routes.py register_*_routes
+    # dispatch pattern from D2-D4).
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_pools import (  # noqa: E402
+        register_pools_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes_ip_pools import (  # noqa: E402
+        register_ip_pools_routes,
+    )
+    register_pools_routes(app=app)
+    register_ip_pools_routes(app=app)
 
     return
 
