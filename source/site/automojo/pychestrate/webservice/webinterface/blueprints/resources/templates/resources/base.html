@@ -357,8 +357,8 @@
     <header class="app-header">
         <h1>Pychestrate Resource Management</h1>
         <div class="user-info">
-            {% if session.username %}
-            <span>{{ session.username }}</span>
+            {% if username %}
+            <span>{{ username }}</span>
             <a href="{{ url_for('config.dashboard') }}" class="btn btn-sm btn-secondary">Config</a>
             <form action="{{ url_for('config.logout') }}" method="post" style="margin:0;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -368,58 +368,56 @@
         </div>
     </header>
 
-    {% if session.username %}
+    {% if username %}
     <nav class="sidebar">
         <ul class="sidebar-nav">
             <li class="sidebar-section">Dashboard</li>
-            <li><a href="{{ url_for('resources.dashboard') }}" class="{% if request.endpoint == 'resources.dashboard' %}active{% endif %}">
+            <li><a href="{{ url_for('resources.dashboard') }}" class="{% if request_endpoint == 'resources.dashboard' %}active{% endif %}">
                 <span class="material-icons">dashboard</span> Dashboard
             </a></li>
             
             <li class="sidebar-section">Resources</li>
-            <li><a href="{{ url_for('resources.resource_list') }}" class="{% if 'resource' in request.endpoint and 'pool' not in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.resource_list') }}" class="{% if 'resource' in request_endpoint and 'pool' not in request_endpoint %}active{% endif %}">
                 <span class="material-icons">devices</span> Resources
             </a></li>
-            <li><a href="{{ url_for('resources.pool_list') }}" class="{% if request.endpoint == 'resources.pool_list' or request.endpoint == 'resources.pool_detail' %}active{% endif %}">
+            <li><a href="{{ url_for('resources.pool_list') }}" class="{% if request_endpoint == 'resources.pool_list' or request_endpoint == 'resources.pool_detail' %}active{% endif %}">
                 <span class="material-icons">folder</span> Resource Pools
             </a></li>
-            <li><a href="{{ url_for('resources.tag_list') }}" class="{% if 'tag' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.tag_list') }}" class="{% if 'tag' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">label</span> Tags
             </a></li>
             
             <li class="sidebar-section">IP Management</li>
-            <li><a href="{{ url_for('resources.ip_pool_list') }}" class="{% if 'ip_pool' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.ip_pool_list') }}" class="{% if 'ip_pool' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">lan</span> IP Pools
             </a></li>
             
             <li class="sidebar-section">Allocations</li>
-            <li><a href="{{ url_for('resources.allocation_list') }}" class="{% if 'allocation' in request.endpoint and 'history' not in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.allocation_list') }}" class="{% if 'allocation' in request_endpoint and 'history' not in request_endpoint %}active{% endif %}">
                 <span class="material-icons">assignment</span> Active Allocations
             </a></li>
-            <li><a href="{{ url_for('resources.allocation_history') }}" class="{% if 'allocation_history' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.allocation_history') }}" class="{% if 'allocation_history' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">history</span> Allocation History
             </a></li>
-            <li><a href="{{ url_for('resources.reservation_list') }}" class="{% if 'reservation' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.reservation_list') }}" class="{% if 'reservation' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">event</span> Reservations
             </a></li>
             
             <li class="sidebar-section">Monitoring</li>
-            <li><a href="{{ url_for('resources.health_dashboard') }}" class="{% if 'health' in request.endpoint %}active{% endif %}">
+            <li><a href="{{ url_for('resources.health_dashboard') }}" class="{% if 'health' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">monitor_heart</span> Health Status
             </a></li>
         </ul>
     </nav>
     {% endif %}
 
-    <main class="main-content" {% if not session.username %}style="margin-left:0;"{% endif %}>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
+    <main class="main-content" {% if not username %}style="margin-left:0;"{% endif %}>
+        {% if flashes %}
+            {% for category, message in flashes %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
