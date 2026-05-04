@@ -83,8 +83,19 @@ from automojo.pychestrate.webservice.security.auth.restapi.v1.auth_routes import
 from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
     register_rbac_routes,
 )
+from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
+    register_config_routes,
+)
 from automojo.pychestrate.webservice.webinterface.foundation.static_files import (
     register_static_routes,
+)
+from automojo.pychestrate.webservice.webinterface.foundation.templating import (
+    build_jinja_environment,
+    discover_blueprint_template_paths,
+    set_default_environment,
+)
+from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
+    install_url_for_global,
 )
 from automojo.pychestrate.webservice.metadata import SITE_DIRECTORIES
 from automojo.webworks.webapplication import establish_webapp_persona
@@ -138,6 +149,44 @@ def hello_world(request: Request) -> HTMLResponse:
     """
     return HTMLResponse(content=html_content)
 
+def install_web_ui_templating() -> None:
+    """
+        Build and publish the jinja2 environment the consumer-
+        facing web UI handlers render against. Walks the per-
+        blueprint ``templates/`` subdirectories under
+        ``SITE_DIRECTORIES.DIR_BLUEPRINTS`` and installs the result
+        as the module-level default environment so handlers can
+        call :func:`render_template_response` without threading the
+        env through every callsite.
+
+        Also attaches the :func:`url_for` shim to the environment as
+        a global so blueprint templates can build links the same way
+        the flask-era templates did (``{{ url_for('config.dashboard')
+        }}``).
+
+        Idempotent across calls -- the singleton is overwritten on
+        each invocation; tests reset it with
+        ``reset_default_environment_for_testing``.
+
+        :returns: None.
+    """
+    template_paths = discover_blueprint_template_paths(
+        blueprints_root=SITE_DIRECTORIES.DIR_BLUEPRINTS,
+    )
+    if len(template_paths) == 0:
+        # No blueprints have shipped templates yet; the web UI
+        # handlers will fail later if any handler tries to render.
+        # Still install an environment so the first failure points
+        # at the missing template rather than at "no env configured".
+        template_paths = [SITE_DIRECTORIES.DIR_BLUEPRINTS]
+    environment = build_jinja_environment(
+        template_search_paths=template_paths,
+    )
+    install_url_for_global(environment=environment)
+    set_default_environment(environment=environment)
+    return
+
+
 def register_service_extensions() -> None:
     """
         Register every in-tree factory-protocol implementation and
@@ -184,6 +233,8 @@ def register_service_extensions() -> None:
         url_prefix="/static",
         static_root=SITE_DIRECTORIES.DIR_STATIC,
     )
+    install_web_ui_templating()
+    register_config_routes(app=app)
     return
 
 

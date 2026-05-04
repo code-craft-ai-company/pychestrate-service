@@ -129,6 +129,9 @@ ENV_KEK_ENV_VAR: str = "PYCHESTRATE_KEK_ENV_VAR"
 ENV_PEPPER_SOURCE: str = "PYCHESTRATE_PASSWORD_PEPPER_SOURCE"
 ENV_PEPPER_FILE_PATH: str = "PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH"
 ENV_PEPPER_ENV_VAR: str = "PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR"
+ENV_UI_COOKIE_SECRET_SOURCE: str = "PYCHESTRATE_UI_COOKIE_SECRET_SOURCE"
+ENV_UI_COOKIE_SECRET_FILE_PATH: str = "PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH"
+ENV_UI_COOKIE_SECRET_ENV_VAR: str = "PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR"
 
 
 _VALID_RUNTIME_ENVIRONMENTS = (
@@ -185,6 +188,9 @@ class RuntimeBootstrapConfig:
     password_pepper_source: Optional[str]
     password_pepper_file_path: Optional[str]
     password_pepper_env_var: Optional[str]
+    ui_cookie_secret_source: Optional[str]
+    ui_cookie_secret_file_path: Optional[str]
+    ui_cookie_secret_env_var: Optional[str]
     auto_create_schema: bool
     sql_echo: bool
 
@@ -298,6 +304,15 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         password_pepper_source=_read_env(name=ENV_PEPPER_SOURCE),
         password_pepper_file_path=_read_env(name=ENV_PEPPER_FILE_PATH),
         password_pepper_env_var=_read_env(name=ENV_PEPPER_ENV_VAR),
+        ui_cookie_secret_source=_read_env(
+            name=ENV_UI_COOKIE_SECRET_SOURCE
+        ),
+        ui_cookie_secret_file_path=_read_env(
+            name=ENV_UI_COOKIE_SECRET_FILE_PATH
+        ),
+        ui_cookie_secret_env_var=_read_env(
+            name=ENV_UI_COOKIE_SECRET_ENV_VAR
+        ),
         auto_create_schema=_read_env_bool(name=ENV_AUTO_CREATE_SCHEMA),
         sql_echo=_read_env_bool(name="PYCHESTRATE_SQL_ECHO"),
     )
@@ -363,6 +378,88 @@ def _load_pepper_or_none(
         return rtnval
 
     err_msg_lines = ["Unsupported password pepper source."]
+    err_msg_lines.append("SOURCE: {}".format(source))
+    err_msg_lines.append("SUPPORTED: file, env")
+    err_msg = os.linesep.join(err_msg_lines)
+    raise ConfigurationError(err_msg)
+
+
+# ---------------------------------------------------------------------------
+# UI cookie secret loader
+# ---------------------------------------------------------------------------
+
+
+def _load_ui_cookie_secret_or_none(
+        *, config: RuntimeBootstrapConfig
+    ) -> Optional[bytes]:
+    """
+        Resolve the UI cookie signing secret from the configured
+        source. Returns ``None`` when no source is configured -- a
+        deployment can run without the consumer-facing web UI
+        wired (the REST surface needs no cookie signing). Mirrors
+        the KEK + pepper loader's source dispatch shape exactly.
+
+        Refuses material < 32 bytes so the
+        :func:`cookie_session.sign_session_payload` minimum
+        secret size is met.
+
+        :param config: Full runtime config.
+
+        :returns: Secret bytes (>= 32 bytes) or ``None`` when no
+                  source is configured.
+        :raises: ConfigurationError on misconfiguration.
+    """
+    source = config.ui_cookie_secret_source
+    if source is None:
+        return None
+
+    if source == "file":
+        path = config.ui_cookie_secret_file_path
+        if path is None or len(path) == 0:
+            raise ConfigurationError(
+                "{} 'file' requires {}".format(
+                    ENV_UI_COOKIE_SECRET_SOURCE,
+                    ENV_UI_COOKIE_SECRET_FILE_PATH,
+                )
+            )
+        if os.path.exists(path) is False:
+            err_msg_lines = ["UI cookie secret file not found."]
+            err_msg_lines.append("PATH: {}".format(path))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise ConfigurationError(err_msg)
+        with open(path, "rb") as handle:
+            material = handle.read()
+        if len(material) < 32:
+            raise ConfigurationError(
+                "UI cookie secret material must be >= 32 bytes"
+            )
+        rtnval = bytes(material)
+        return rtnval
+
+    if source == "env":
+        env_var = config.ui_cookie_secret_env_var
+        if env_var is None or len(env_var) == 0:
+            raise ConfigurationError(
+                "{} 'env' requires {}".format(
+                    ENV_UI_COOKIE_SECRET_SOURCE,
+                    ENV_UI_COOKIE_SECRET_ENV_VAR,
+                )
+            )
+        raw = os.environ.get(env_var, None)
+        if raw is None:
+            err_msg_lines = ["UI cookie secret env var not set."]
+            err_msg_lines.append("ENV_VAR: {}".format(env_var))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise ConfigurationError(err_msg)
+        material = raw.encode("utf-8")
+        if len(material) < 32:
+            raise ConfigurationError(
+                "UI cookie secret material must be >= 32 bytes"
+            )
+        rtnval = material
+        return rtnval
+
+    err_msg_lines = ["Unsupported UI cookie secret source."]
     err_msg_lines.append("SOURCE: {}".format(source))
     err_msg_lines.append("SUPPORTED: file, env")
     err_msg = os.linesep.join(err_msg_lines)
@@ -486,6 +583,9 @@ def bootstrap_runtime(
 
     pepper = _load_pepper_or_none(config=config)
 
+    ui_cookie_secret = _load_ui_cookie_secret_or_none(config=config)
+    SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = ui_cookie_secret
+
     phase1_config = Phase1BootstrapConfig(
         kek_source=config.kek_source,
         kek_file_path=config.kek_file_path,
@@ -504,10 +604,12 @@ def bootstrap_runtime(
 
     _module_logger.info(
         "pychestrate.runtime_bootstrap.ready environment=%s kek_id=%s"
-        " pepper_loaded=%s schema_auto_created=%s",
+        " pepper_loaded=%s ui_cookie_secret_loaded=%s"
+        " schema_auto_created=%s",
         config.runtime_environment,
         kek.kek_id,
         pepper is not None,
+        ui_cookie_secret is not None,
         config.auto_create_schema,
     )
 
@@ -530,6 +632,9 @@ __all__ = [
     "ENV_PEPPER_SOURCE",
     "ENV_PEPPER_FILE_PATH",
     "ENV_PEPPER_ENV_VAR",
+    "ENV_UI_COOKIE_SECRET_SOURCE",
+    "ENV_UI_COOKIE_SECRET_FILE_PATH",
+    "ENV_UI_COOKIE_SECRET_ENV_VAR",
     "RuntimeBootstrapConfig",
     "RuntimeBootstrapResult",
     "load_config_from_environment",

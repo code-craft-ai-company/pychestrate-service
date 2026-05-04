@@ -192,6 +192,9 @@ def _make_config(
         password_pepper_source=password_pepper_source,
         password_pepper_file_path=password_pepper_file_path,
         password_pepper_env_var=None,
+        ui_cookie_secret_source=None,
+        ui_cookie_secret_file_path=None,
+        ui_cookie_secret_env_var=None,
         auto_create_schema=auto_create_schema,
         sql_echo=False,
     )
@@ -471,6 +474,9 @@ def test_bootstrap_runtime_runs_create_all_in_development():
             password_pepper_source=None,
             password_pepper_file_path=None,
             password_pepper_env_var=None,
+            ui_cookie_secret_source=None,
+            ui_cookie_secret_file_path=None,
+            ui_cookie_secret_env_var=None,
             auto_create_schema=True,
             sql_echo=False,
         )
