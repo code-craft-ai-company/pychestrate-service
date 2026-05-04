@@ -111,16 +111,10 @@ _ROUTE_TABLE = (
 # ---------------------------------------------------------------------------
 
 
-_FUTURE_ENDPOINT_PATTERNS = (
-    # D4 -- secrets + sessions + audit
-    ("config.secret_list", "/secrets"),
-    ("config.secret_create", "/secrets/create"),
-    ("config.secret_edit", "/secrets/{scope_id}/{name}/edit"),
-    ("config.secret_delete", "/secrets/{scope_id}/{name}/delete"),
-    ("config.session_list", "/sessions"),
-    ("config.session_terminate", "/sessions/{session_id}/terminate"),
-    ("config.audit_log_list", "/audit-logs"),
-)
+# All previously-stubbed config endpoints have shipped. The tuple
+# stays in the source as a hook for any post-D4 additions that
+# need to be reachable by ``url_for`` before their handler lands.
+_FUTURE_ENDPOINT_PATTERNS: Tuple[Tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -991,6 +985,20 @@ def register_config_routes(*, app: Any) -> None:
     )
     register_variables_routes(app=app)
     register_scopes_routes(app=app)
+
+    # D4 features -- secrets + sessions + audit.
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_secrets import (  # noqa: E402
+        register_secrets_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_sessions import (  # noqa: E402
+        register_sessions_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_audit import (  # noqa: E402
+        register_audit_routes,
+    )
+    register_secrets_routes(app=app)
+    register_sessions_routes(app=app)
+    register_audit_routes(app=app)
 
     return
 

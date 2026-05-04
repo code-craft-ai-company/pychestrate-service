@@ -1,0 +1,314 @@
+"""
+.. module:: webinterface.blueprints.config.routes_audit
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: WebWorks-native consumer-facing UI for /config/audit-logs
+               (D4 slice -- audit log viewer).
+
+.. moduleauthor:: Automation Mojo LLC
+
+The single audit-log viewer route ported from the legacy flask
+``config_blueprint``:
+
+* ``GET /config/audit-logs`` -- paginated audit log viewer with
+                                ``?event_type=`` / ``?user_id=``
+                                / ``?start_date=`` /
+                                ``?end_date=`` filters. Date
+                                strings are ISO-8601 (the
+                                template's ``<input
+                                type="datetime-local">``
+                                produces this shape).
+
+The handler dispatches to :class:`AuditLogger.query_logs` which
+returns an :class:`AuditLogListResponse(entries, total, offset,
+limit)`. The legacy template iterated the response object
+directly; the port hands the template the entries list under the
+existing ``logs`` context name so the template iteration shape
+matches.
+"""
+
+__author__ = "Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional
+
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
+
+from automojo.pychestrate.webservice.webinterface.foundation import (
+    flash,
+    url_for as _url_for_module,
+)
+from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
+    CONFIG_PATH,
+    _attach_session_to_response,
+    _build_default_template_context,
+    _render,
+    _resolve_authenticated_request,
+)
+
+
+_ROUTE_TABLE = (
+    ("config.audit_log_list", "/audit-logs", ("GET",)),
+)
+
+
+# ---------------------------------------------------------------------------
+# Lazy-import builder seams
+# ---------------------------------------------------------------------------
+
+
+def _build_audit_logger(*, db_session: Any) -> Any:
+    """
+        Construct an :class:`AuditLogger`. Lazy-import.
+    """
+    from automojo.pychestrate.core.managers.audit_logger import (  # noqa: E402
+        AuditLogger,
+    )
+    rtnval = AuditLogger(db_session)
+    return rtnval
+
+
+def _build_audit_log_query(
+        *,
+        event_types: Optional[List[Any]],
+        user_id: Optional[str],
+        start_date: Optional[datetime],
+        end_date: Optional[datetime],
+        offset: int,
+        limit: int
+    ) -> Any:
+    """
+        Construct an :class:`AuditLogQuery`. Lazy-import.
+    """
+    from automojo.pychestrate.core.managers.audit_logger import (  # noqa: E402
+        AuditLogQuery,
+    )
+    rtnval = AuditLogQuery(
+        event_types=event_types,
+        user_id=user_id,
+        start_date=start_date,
+        end_date=end_date,
+        offset=offset,
+        limit=limit,
+    )
+    return rtnval
+
+
+def _resolve_audit_event_type_or_none(
+        *, event_type_str: Optional[str]
+    ) -> Optional[List[Any]]:
+    """
+        Convert a single event-type string into the
+        ``[AuditEventType]`` list shape ``AuditLogQuery``
+        expects, or ``None`` when the filter is unset / value
+        unknown.
+    """
+    if event_type_str is None or len(event_type_str) == 0:
+        return None
+    try:
+        from automojo.pychestrate.core.orm import AuditEventType  # noqa: E402
+        rtnval = [AuditEventType(event_type_str)]
+        return rtnval
+    except (ValueError, ImportError):
+        return None
+
+
+def _resolve_all_audit_event_types() -> List[str]:
+    """
+        Return every :class:`AuditEventType` value as a string
+        (for the filter <select> dropdown).
+    """
+    try:
+        from automojo.pychestrate.core.orm import AuditEventType  # noqa: E402
+    except ImportError:
+        return []
+    rtnval: List[str] = []
+    for member in AuditEventType:
+        rtnval.append(member.value)
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Local helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_pagination_params(
+        *, request: Request,
+        default_per_page: int = 50
+    ) -> Dict[str, Any]:
+    raw_page = request.query_params.get("page", "1") or "1"
+    try:
+        page = int(raw_page)
+    except (TypeError, ValueError):
+        page = 1
+    if page < 1:
+        page = 1
+
+    raw_per_page = (
+        request.query_params.get("per_page", str(default_per_page))
+        or str(default_per_page)
+    )
+    try:
+        per_page = int(raw_per_page)
+    except (TypeError, ValueError):
+        per_page = default_per_page
+    if per_page < 1:
+        per_page = default_per_page
+
+    rtnval = {"page": page, "per_page": per_page}
+    return rtnval
+
+
+def _parse_iso_datetime_or_none(*, raw: Optional[str]) -> Optional[datetime]:
+    """
+        Parse an ISO-8601 ``YYYY-MM-DDTHH:MM`` (or full ISO)
+        string into a datetime. Returns ``None`` on bad input
+        rather than raising -- matches the legacy handler's
+        try/except ValueError -> pass behavior.
+    """
+    if raw is None or len(raw) == 0:
+        return None
+    try:
+        rtnval = datetime.fromisoformat(raw)
+        return rtnval
+    except (TypeError, ValueError):
+        return None
+
+
+def _audit_log_response_to_entries(*, response: Any) -> List[Any]:
+    """
+        Pull the entries list out of an :class:`AuditLogListResponse`,
+        tolerating both the dataclass shape and a bare list (test
+        fakes may return either).
+    """
+    if response is None:
+        return []
+    entries = getattr(response, "entries", None)
+    if entries is not None:
+        return entries
+    if isinstance(response, list):
+        return response
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Handlers
+# ---------------------------------------------------------------------------
+
+
+def handle_audit_log_list(request: Request) -> Response:
+    """
+        ``GET /config/audit-logs`` -- paginated audit log viewer.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+
+        selected_event_type = (
+            request.query_params.get("event_type", None) or None
+        )
+        filter_user_id = (
+            request.query_params.get("user_id", None) or None
+        )
+        start_date_str = (
+            request.query_params.get("start_date", None) or None
+        )
+        end_date_str = (
+            request.query_params.get("end_date", None) or None
+        )
+
+        start_date = _parse_iso_datetime_or_none(raw=start_date_str)
+        end_date = _parse_iso_datetime_or_none(raw=end_date_str)
+
+        event_types = _resolve_audit_event_type_or_none(
+            event_type_str=selected_event_type
+        )
+
+        query = _build_audit_log_query(
+            event_types=event_types,
+            user_id=filter_user_id,
+            start_date=start_date,
+            end_date=end_date,
+            offset=offset,
+            limit=params["per_page"],
+        )
+
+        audit_logger = _build_audit_logger(db_session=db_session)
+        result = audit_logger.query_logs(query)
+        entries = _audit_log_response_to_entries(response=result)
+        all_event_types = _resolve_all_audit_event_types()
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="config.audit_log_list",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["logs"] = entries
+        context["all_event_types"] = all_event_types
+        context["selected_event_type"] = selected_event_type
+        context["filter_user_id"] = filter_user_id
+        context["start_date"] = start_date_str
+        context["end_date"] = end_date_str
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+
+        response = _render(
+            template_name="config/audit/list.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+
+
+_HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
+    "config.audit_log_list": handle_audit_log_list,
+}
+
+
+def register_audit_routes(*, app: Any) -> None:
+    """
+        Attach the audit-log viewer route to a webworks app and
+        register its endpoint name with the url_for shim.
+    """
+    for endpoint_name, relative_path, methods in _ROUTE_TABLE:
+        full_path = CONFIG_PATH + relative_path
+        _url_for_module.register_endpoint(
+            endpoint=endpoint_name, pattern=full_path
+        )
+        handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
+        app.attach_route(full_path, methods=list(methods))(handler)
+    return
+
+
+__all__ = [
+    "register_audit_routes",
+    "handle_audit_log_list",
+]
