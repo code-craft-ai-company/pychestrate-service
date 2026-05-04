@@ -59,7 +59,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Dict, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qs
 
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import (
@@ -109,36 +111,10 @@ _ROUTE_TABLE = (
 # ---------------------------------------------------------------------------
 
 
-_FUTURE_ENDPOINT_PATTERNS = (
-    # D2 -- users + roles
-    ("config.user_list", "/users"),
-    ("config.user_create", "/users/create"),
-    ("config.user_detail", "/users/{user_id}"),
-    ("config.user_edit", "/users/{user_id}/edit"),
-    ("config.user_delete", "/users/{user_id}/delete"),
-    ("config.role_list", "/roles"),
-    ("config.role_create", "/roles/create"),
-    ("config.role_detail", "/roles/{role_id}"),
-    ("config.role_edit", "/roles/{role_id}/edit"),
-    # D3 -- variables + scopes
-    ("config.variable_list", "/variables"),
-    ("config.variable_create", "/variables/create"),
-    ("config.variable_detail", "/variables/{variable_id}"),
-    ("config.variable_edit", "/variables/{variable_id}/edit"),
-    ("config.variable_history", "/variables/{variable_id}/history"),
-    ("config.variable_delete", "/variables/{variable_id}/delete"),
-    ("config.scope_list", "/scopes"),
-    ("config.scope_create", "/scopes/create"),
-    ("config.scope_detail", "/scopes/{scope_id}"),
-    # D4 -- secrets + sessions + audit
-    ("config.secret_list", "/secrets"),
-    ("config.secret_create", "/secrets/create"),
-    ("config.secret_edit", "/secrets/{secret_id}/edit"),
-    ("config.secret_delete", "/secrets/{secret_id}/delete"),
-    ("config.session_list", "/sessions"),
-    ("config.session_revoke", "/sessions/{session_id}/revoke"),
-    ("config.audit_log_list", "/audit"),
-)
+# All previously-stubbed config endpoints have shipped. The tuple
+# stays in the source as a hook for any post-D4 additions that
+# need to be reachable by ``url_for`` before their handler lands.
+_FUTURE_ENDPOINT_PATTERNS: Tuple[Tuple[str, str], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +215,137 @@ def _parse_form_or_empty(*, request: Request) -> Dict[str, Any]:
     if not isinstance(rtnval, dict):
         return {}
     return rtnval
+
+
+def _parse_form_multi(*, request: Request) -> Dict[str, List[str]]:
+    """
+        Parse the request body as form-encoded data and return
+        every value for every key (preserving multi-checkbox
+        submissions). The webworks ``request.form()`` collapses
+        multi-value keys to the first value, which loses the
+        ``role_ids[]`` / ``permission_ids[]`` shape the legacy
+        flask templates rely on.
+
+        Returns an empty dict on any decode failure so handler
+        callsites can branch on emptiness rather than catching.
+
+        :param request: Webworks Request.
+
+        :returns: Dict of field-name → list-of-values.
+    """
+    try:
+        body_bytes = request.body
+    except Exception:
+        return {}
+    if body_bytes is None or len(body_bytes) == 0:
+        return {}
+    try:
+        body_str = body_bytes.decode("utf-8")
+    except Exception:
+        return {}
+    try:
+        parsed = parse_qs(body_str, keep_blank_values=True)
+    except Exception:
+        return {}
+    rtnval: Dict[str, List[str]] = {}
+    for key, values in parsed.items():
+        cleaned: List[str] = []
+        for v in values:
+            cleaned.append(str(v))
+        rtnval[key] = cleaned
+    return rtnval
+
+
+class MultiFormView:
+    """
+        Tiny wrapper exposing a ``getlist`` / ``get`` shape over a
+        parsed multi-value form dict. Lets the existing flask-era
+        templates -- which call ``form_data.getlist('role_ids')``
+        on form-redirect renders -- port unchanged. Built once per
+        handler from :func:`_parse_form_multi` output.
+
+        :param data: Dict of ``field_name → list-of-string-values``.
+    """
+
+    def __init__(self, *, data: Dict[str, List[str]]) -> None:
+        self._data: Dict[str, List[str]] = data
+        return
+
+    def getlist(self, key: str) -> List[str]:
+        """
+            Return the list of values submitted for ``key``.
+            Empty list when the field was absent.
+
+            :param key: Form field name.
+            :returns: List of submitted values.
+        """
+        rtnval = self._data.get(key, [])
+        return rtnval
+
+    def get(
+            self, key: str, default: Optional[str] = None
+        ) -> Optional[str]:
+        """
+            Return the first submitted value for ``key`` (matches
+            flask MultiDict semantics).
+
+            :param key: Form field name.
+            :param default: Returned when the field is absent.
+            :returns: The first value or ``default``.
+        """
+        values = self._data.get(key, None)
+        if values is None or len(values) == 0:
+            return default
+        rtnval = values[0]
+        return rtnval
+
+    def __contains__(self, key: str) -> bool:
+        rtnval = key in self._data
+        return rtnval
+
+    def __getitem__(self, key: str) -> str:
+        """
+            Dict-shaped subscript access. Used by jinja2 when a
+            template writes ``form_data.var_type`` -- jinja first
+            tries ``getattr`` (no ``var_type`` attribute) then
+            falls back to ``__getitem__``.
+
+            :param key: Form field name.
+
+            :returns: First submitted value.
+            :raises: KeyError when the field is absent.
+        """
+        values = self._data.get(key, None)
+        if values is None or len(values) == 0:
+            raise KeyError(key)
+        rtnval = values[0]
+        return rtnval
+
+
+@dataclass
+class _AuthResolution:
+    """
+        Result of :func:`_resolve_authenticated_request`. Either
+        carries a redirect response (anonymous / expired session)
+        OR the resolved authenticated context.
+
+        :param redirect_response: Set when the request must bounce
+                                  back to the login page.
+        :param session: Mutable session dict (caller writes back
+                        to the response cookie).
+        :param db_session: Open SQLAlchemy session. Caller MUST
+                           close in a finally block.
+        :param user_id: Authenticated user's ID.
+        :param username: Authenticated user's username.
+        :param csrf_token: Server-of-record CSRF token (refreshed
+                           on every authenticated render).
+    """
+    redirect_response: Optional[Response] = None
+    session: Dict[str, Any] = field(default_factory=dict)
+    db_session: Any = None
+    user_id: str = ""
+    username: str = ""
+    csrf_token: str = ""
 
 
 def _build_default_template_context(
@@ -607,6 +714,138 @@ def _validate_session_via_security_manager(
             pass
 
 
+def _redirect_with_flash(
+        *,
+        session: Dict[str, Any],
+        url: str,
+        message: str,
+        category: str = flash.CATEGORY_INFO,
+        status_code: int = 303
+    ) -> RedirectResponse:
+    """
+        Build a redirect response, queue ``message`` on the session
+        as a flash, and attach the (mutated) session cookie. Used
+        by handlers after a successful POST or after looking up an
+        entity that isn't found.
+
+        :param session: Session dict.
+        :param url: Redirect target URL.
+        :param message: Flash message to render after redirect.
+        :param category: Flash category.
+        :param status_code: HTTP status code (default 303 -- see
+                            other after a successful POST per
+                            Post/Redirect/Get).
+
+        :returns: :class:`RedirectResponse` with the cookie
+                  re-signed.
+    """
+    flash.add_flash(
+        session=session, message=message, category=category
+    )
+    response = RedirectResponse(url=url, status_code=status_code)
+    _attach_session_to_response(response=response, session=session)
+    return response
+
+
+def _resolve_authenticated_request(
+        *, request: Request
+    ) -> _AuthResolution:
+    """
+        Single-call auth resolver for handlers that need to:
+
+        * read the cookie session
+        * verify the user is logged in (else redirect to login)
+        * open a SQLAlchemy session
+        * validate the cookie's session_token against the DB
+          (else clear the session + redirect)
+        * return the resolved user_id / username / csrf_token + the
+          OPEN db session for the handler to use
+
+        On the redirect paths the helper attaches the (mutated)
+        session cookie to the redirect response and closes any
+        intermediate DB session it opened.
+
+        On the success path the helper hands the open DB session
+        to the caller -- the caller MUST close it in a finally
+        block.
+
+        :param request: Incoming webworks request.
+
+        :returns: :class:`_AuthResolution`. When
+                  ``redirect_response`` is non-None the caller
+                  returns it immediately and does no further work.
+    """
+    session = _read_session(request=request)
+
+    redirect_response = auth_guard.require_login_or_redirect(
+        session=session,
+        login_url=_url_for_module.url_for("config.login"),
+        flash_message="Please log in to access this page.",
+    )
+    if redirect_response is not None:
+        _attach_session_to_response(
+            response=redirect_response, session=session
+        )
+        rtnval = _AuthResolution(redirect_response=redirect_response)
+        return rtnval
+
+    session_token = session.get(auth_guard.SESSION_TOKEN_KEY, "")
+    db_session = _resolve_db_session()
+    try:
+        security_manager = _build_security_manager(db_session=db_session)
+        try:
+            session_info = security_manager.validate_token(session_token)
+        except Exception:
+            session_info = None
+    except Exception:
+        # Validation infrastructure failure -- close the DB session
+        # before re-raising so we don't leak it.
+        try:
+            db_session.close()
+        except Exception:
+            pass
+        raise
+
+    if session_info is None:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+        # Token expired or revoked -- clear the cookie keys, flash,
+        # redirect to login.
+        session.clear()
+        flash.add_flash(
+            session=session,
+            message="Session expired. Please log in again.",
+            category=flash.CATEGORY_WARNING,
+        )
+        redirect_response = RedirectResponse(
+            url=_url_for_module.url_for("config.login"),
+            status_code=303,
+        )
+        _attach_session_to_response(
+            response=redirect_response, session=session
+        )
+        rtnval = _AuthResolution(redirect_response=redirect_response)
+        return rtnval
+
+    # Refresh server-of-record csrf_token onto the session so any
+    # subsequent POST validates against the same value the renderer
+    # passed to the template.
+    session[csrf.SESSION_KEY] = session_info.csrf_token
+    session["username"] = session_info.username
+
+    rtnval = _AuthResolution(
+        redirect_response=None,
+        session=session,
+        db_session=db_session,
+        user_id=session_info.user_id,
+        username=session_info.username,
+        csrf_token=session_info.csrf_token,
+    )
+    return rtnval
+
+
 def handle_dashboard(request: Request) -> Response:
     """
         ``GET /config/`` and ``GET /config/dashboard`` -- render
@@ -724,6 +963,42 @@ def register_config_routes(*, app: Any) -> None:
         _url_for_module.register_endpoint(
             endpoint=endpoint_name, pattern=full_path
         )
+
+    # D2 features -- users + roles. Lazy import so the auth/dashboard
+    # surface in this file remains importable even if a per-feature
+    # module fails to load (e.g., during a partial port).
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_users import (  # noqa: E402
+        register_users_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_roles import (  # noqa: E402
+        register_roles_routes,
+    )
+    register_users_routes(app=app)
+    register_roles_routes(app=app)
+
+    # D3 features -- variables + scopes.
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
+        register_variables_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_scopes import (  # noqa: E402
+        register_scopes_routes,
+    )
+    register_variables_routes(app=app)
+    register_scopes_routes(app=app)
+
+    # D4 features -- secrets + sessions + audit.
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_secrets import (  # noqa: E402
+        register_secrets_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_sessions import (  # noqa: E402
+        register_sessions_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_audit import (  # noqa: E402
+        register_audit_routes,
+    )
+    register_secrets_routes(app=app)
+    register_sessions_routes(app=app)
+    register_audit_routes(app=app)
 
     return
 
