@@ -127,42 +127,6 @@ _ROUTE_TABLE = (
 # moves the entry from this table into ``_ROUTE_TABLE`` and
 # lands the handler at the same time.
 _FUTURE_ENDPOINT_PATTERNS = (
-    # F4 -- tests + releases
-    ("projects.test_job_list", "/{project_id}/tests"),
-    ("projects.test_spec_list", "/{project_id}/tests/specs"),
-    (
-        "projects.test_spec_detail",
-        "/{project_id}/tests/specs/{spec_id}",
-    ),
-    (
-        "projects.test_job_detail",
-        "/{project_id}/tests/{job_id}",
-    ),
-    (
-        "projects.test_job_logs",
-        "/{project_id}/tests/{job_id}/logs",
-    ),
-    ("projects.release_list", "/{project_id}/releases"),
-    (
-        "projects.release_detail",
-        "/{project_id}/releases/{release_id}",
-    ),
-    (
-        "projects.pipeline_list",
-        "/{project_id}/releases/pipelines",
-    ),
-    (
-        "projects.pipeline_detail",
-        "/{project_id}/releases/pipelines/{pipeline_id}",
-    ),
-    (
-        "projects.channel_list",
-        "/{project_id}/releases/channels",
-    ),
-    (
-        "projects.schedule_list",
-        "/{project_id}/releases/schedules",
-    ),
     # F5 -- calendar + watches
     ("projects.calendar_view", "/{project_id}/calendar"),
     (
@@ -1524,6 +1488,16 @@ def register_projects_routes(*, app: Any) -> None:
     )
     register_builds_routes(app=app)
     register_infrastructure_routes(app=app)
+
+    # F4 features -- tests + releases.
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_tests import (  # noqa: E402
+        register_tests_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_releases import (  # noqa: E402
+        register_releases_routes,
+    )
+    register_tests_routes(app=app)
+    register_releases_routes(app=app)
 
     return
 
