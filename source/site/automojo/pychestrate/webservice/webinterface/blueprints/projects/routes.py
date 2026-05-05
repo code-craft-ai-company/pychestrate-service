@@ -127,32 +127,6 @@ _ROUTE_TABLE = (
 # moves the entry from this table into ``_ROUTE_TABLE`` and
 # lands the handler at the same time.
 _FUTURE_ENDPOINT_PATTERNS = (
-    # F2 -- repositories
-    ("projects.repository_list", "/{project_id}/repositories"),
-    (
-        "projects.repository_create",
-        "/{project_id}/repositories/create",
-    ),
-    (
-        "projects.repository_detail",
-        "/{project_id}/repositories/{repository_id}",
-    ),
-    (
-        "projects.repository_edit",
-        "/{project_id}/repositories/{repository_id}/edit",
-    ),
-    (
-        "projects.repository_delete",
-        "/{project_id}/repositories/{repository_id}/delete",
-    ),
-    (
-        "projects.repository_test",
-        "/{project_id}/repositories/{repository_id}/test",
-    ),
-    (
-        "projects.repository_fetch",
-        "/{project_id}/repositories/{repository_id}/fetch",
-    ),
     # F3 -- builds + infrastructure
     ("projects.build_list", "/{project_id}/builds"),
     ("projects.build_spec_list", "/{project_id}/builds/specs"),
@@ -1577,6 +1551,13 @@ def register_projects_routes(*, app: Any) -> None:
         _url_for_module.register_endpoint(
             endpoint=endpoint_name, pattern=full_path
         )
+
+    # F2 features -- repositories. Lazy-imported so this module
+    # remains importable when a per-feature module fails to load.
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_repositories import (  # noqa: E402
+        register_repositories_routes,
+    )
+    register_repositories_routes(app=app)
 
     return
 
