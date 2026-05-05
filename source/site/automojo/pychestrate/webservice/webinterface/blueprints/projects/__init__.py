@@ -2,21 +2,27 @@
 .. module:: projects
     :platform: Darwin, Linux, Unix, Windows
     :synopsis: Project management web interface blueprint
-               (webworks-side).
+               (webworks).
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask-era ``/projects`` blueprint is being ported to
-webworks across PRs F1/F2/F3/F4/F5. The webworks-native
-handlers + registrar live in
-:mod:`webinterface.blueprints.projects.routes`; the legacy
-``endpoints.py`` (2,529 LOC) is retained until the port
-completes and gets deleted in PR F5.
+The consumer-facing ``/projects`` UI on webworks. The complete
+route surface lives in
+:mod:`webinterface.blueprints.projects.routes` (dashboard +
+project core + members) plus its per-feature siblings:
+
+* :mod:`webinterface.blueprints.projects.routes_repositories`
+* :mod:`webinterface.blueprints.projects.routes_builds`
+* :mod:`webinterface.blueprints.projects.routes_infrastructure`
+* :mod:`webinterface.blueprints.projects.routes_tests`
+* :mod:`webinterface.blueprints.projects.routes_releases`
+* :mod:`webinterface.blueprints.projects.routes_calendar`
+* :mod:`webinterface.blueprints.projects.routes_watches`
 
 This ``__init__`` is intentionally side-effect free -- importing
-the package no longer constructs a flask :class:`Blueprint` (the
-runtime no longer hosts flask). Callers that need the routes
-registrar import ``register_projects_routes`` directly:
+the package does not construct a flask :class:`Blueprint`
+(the runtime no longer hosts flask). Callers wire the routes
+via :func:`register_projects_routes`:
 
 ::
 
