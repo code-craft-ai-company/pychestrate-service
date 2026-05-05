@@ -127,50 +127,6 @@ _ROUTE_TABLE = (
 # moves the entry from this table into ``_ROUTE_TABLE`` and
 # lands the handler at the same time.
 _FUTURE_ENDPOINT_PATTERNS = (
-    # F3 -- builds + infrastructure
-    ("projects.build_list", "/{project_id}/builds"),
-    ("projects.build_spec_list", "/{project_id}/builds/specs"),
-    (
-        "projects.build_spec_create",
-        "/{project_id}/builds/specs/create",
-    ),
-    (
-        "projects.build_spec_detail",
-        "/{project_id}/builds/specs/{spec_id}",
-    ),
-    (
-        "projects.build_detail",
-        "/{project_id}/builds/{build_id}",
-    ),
-    (
-        "projects.build_logs",
-        "/{project_id}/builds/{build_id}/logs",
-    ),
-    ("projects.build_trigger", "/{project_id}/builds/trigger"),
-    (
-        "projects.build_cancel",
-        "/{project_id}/builds/{build_id}/cancel",
-    ),
-    (
-        "projects.infra_job_list",
-        "/{project_id}/infrastructure",
-    ),
-    (
-        "projects.infra_spec_list",
-        "/{project_id}/infrastructure/specs",
-    ),
-    (
-        "projects.infra_spec_detail",
-        "/{project_id}/infrastructure/specs/{spec_id}",
-    ),
-    (
-        "projects.infra_job_detail",
-        "/{project_id}/infrastructure/{job_id}",
-    ),
-    (
-        "projects.infra_job_logs",
-        "/{project_id}/infrastructure/{job_id}/logs",
-    ),
     # F4 -- tests + releases
     ("projects.test_job_list", "/{project_id}/tests"),
     ("projects.test_spec_list", "/{project_id}/tests/specs"),
@@ -1558,6 +1514,16 @@ def register_projects_routes(*, app: Any) -> None:
         register_repositories_routes,
     )
     register_repositories_routes(app=app)
+
+    # F3 features -- builds + infrastructure.
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_builds import (  # noqa: E402
+        register_builds_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_infrastructure import (  # noqa: E402
+        register_infrastructure_routes,
+    )
+    register_builds_routes(app=app)
+    register_infrastructure_routes(app=app)
 
     return
 
