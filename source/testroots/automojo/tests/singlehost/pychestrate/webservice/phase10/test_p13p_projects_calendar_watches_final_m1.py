@@ -330,7 +330,9 @@ class _FakeWatchManager:
         self.get_watch_response: Optional[_FakeWatch] = None
         self.get_trigger_logs_response: List[Any] = []
         self.create_watch_response: Optional[_FakeWatch] = None
+        self.create_watch_calls: List[Dict[str, Any]] = []
         self.update_watch_called: bool = False
+        self.update_watch_calls: List[Dict[str, Any]] = []
         self.delete_watch_called: bool = False
         self.enable_watch_called: bool = False
         self.disable_watch_called: bool = False
@@ -353,12 +355,22 @@ class _FakeWatchManager:
     def create_watch(
             self, project_id: int, request: Any, user_id: str
         ) -> Optional[_FakeWatch]:
+        self.create_watch_calls.append({
+            "project_id": project_id,
+            "request": request,
+            "user_id": user_id,
+        })
         return self.create_watch_response
 
     def update_watch(
             self, watch_id: int, request: Any, user_id: str
         ) -> None:
         self.update_watch_called = True
+        self.update_watch_calls.append({
+            "watch_id": watch_id,
+            "request": request,
+            "user_id": user_id,
+        })
         return
 
     def delete_watch(self, watch_id: int, user_id: str) -> None:
@@ -1557,4 +1569,333 @@ def test_register_web_blueprints_no_longer_exposed():
     except ImportError:
         raised = True
     testbase.assert_equal(raised, True)
+    return
+
+
+# ===========================================================================
+# Form-translation regression tests (PR p13s)
+# ===========================================================================
+#
+# The F5 port preserved the legacy flask handler's call to
+# ``WatchCreateRequest`` / ``WatchUpdateRequest`` with kwargs that
+# never matched the manager's dataclass shape. PR p13s rewrote
+# ``_build_watch_create_request`` / ``_build_watch_update_request``
+# to translate the create / edit form's actual posted fields
+# (``event_type`` / ``repository_id`` / ``branch_pattern`` /
+# ``action_type`` / ``action_spec_id`` / ``enabled``) into
+# ``WatchCreateRequest(name, trigger_source, source_id,
+# conditions, actions, enabled, description)``.
+#
+# The tests below DO NOT patch the ``_build_watch_*_request``
+# seams; they exercise the real translation end-to-end against
+# the stubbed :class:`_FakeWatchManager` and assert the
+# constructed dataclass carries the expected enum / source_id /
+# WatchCondition / WatchActionConfig values.
+
+
+def test_handle_watch_create_post_translates_form_to_dataclass():
+    """
+    **Feature: webworks projects watches T13.19 (p13s)**
+    **Property: POST /watches/create translates the template
+    form fields into a :class:`WatchCreateRequest` whose
+    ``trigger_source``, ``source_id``, ``conditions``, and
+    ``actions`` carry the parsed values from the template's
+    ``event_type`` / ``repository_id`` / ``branch_pattern`` /
+    ``action_type`` / ``action_spec_id`` form fields. Catches
+    any future regression of the legacy "trigger_conditions"
+    bitrot.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    repo_patch = None
+    wm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+        repo_patch = _patch_repository_manager_in(
+            target_module=projects_routes_watches
+        )
+
+        def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.create_watch_response = _FakeWatch(
+                watch_id=99, project_id=7
+            )
+            return
+
+        wm_patch = _patch_watch_manager(configure=_seed_wm)
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh"
+            b"&name=watch-on-main"
+            b"&description=auto+build"
+            b"&repository_id=11"
+            b"&event_type=repository_commit"
+            b"&branch_pattern=main"
+            b"&action_type=trigger_build"
+            b"&action_spec_id=22"
+            b"&enabled=true"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7"},
+            body=body,
+        )
+        response = projects_routes_watches.handle_watch_create(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/watches/99"
+        )
+
+        wm = _FakeWatchManager.last_instance
+        testbase.assert_equal(len(wm.create_watch_calls), 1)
+        call = wm.create_watch_calls[0]
+        testbase.assert_equal(call["project_id"], 7)
+        req_obj = call["request"]
+        testbase.assert_equal(req_obj.name, "watch-on-main")
+        testbase.assert_equal(req_obj.description, "auto build")
+        testbase.assert_equal(req_obj.source_id, 11)
+        testbase.assert_equal(req_obj.enabled, True)
+        # ``trigger_source`` is the WatchTriggerSource enum;
+        # accept either the enum's ``.value`` shape or string
+        # equality (str-Enum) by comparing strings.
+        testbase.assert_equal(
+            str(req_obj.trigger_source.value), "repository_commit"
+        )
+        testbase.assert_equal(
+            req_obj.conditions.branch_pattern, "main"
+        )
+        testbase.assert_equal(len(req_obj.actions), 1)
+        action0 = req_obj.actions[0]
+        testbase.assert_equal(
+            str(action0.action.value), "trigger_build"
+        )
+        testbase.assert_equal(action0.target_id, 22)
+    finally:
+        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_create_post_invalid_event_type_yields_error():
+    """
+    **Feature: webworks projects watches T13.20 (p13s)**
+    **Property: POST /watches/create with an unknown
+    ``event_type`` value re-renders the form with status 400
+    and never invokes ``WatchManager.create_watch``.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    repo_patch = None
+    wm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+        repo_patch = _patch_repository_manager_in(
+            target_module=projects_routes_watches
+        )
+        wm_patch = _patch_watch_manager()
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh"
+            b"&name=watch-bad-event"
+            b"&repository_id=11"
+            b"&event_type=NOT_A_REAL_EVENT"
+            b"&action_type=trigger_build"
+            b"&action_spec_id=22"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7"},
+            body=body,
+        )
+        response = projects_routes_watches.handle_watch_create(request)
+        testbase.assert_equal(response.status_code, 400)
+        wm = _FakeWatchManager.last_instance
+        testbase.assert_equal(len(wm.create_watch_calls), 0)
+    finally:
+        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_create_post_missing_repository_id_yields_error():
+    """
+    **Feature: webworks projects watches T13.21 (p13s)**
+    **Property: POST /watches/create with no ``repository_id``
+    short-circuits with a 400 + flash and never calls
+    ``WatchManager.create_watch`` (the manager's
+    ``WatchCreateRequest.source_id`` is non-optional).**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    repo_patch = None
+    wm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+        repo_patch = _patch_repository_manager_in(
+            target_module=projects_routes_watches
+        )
+        wm_patch = _patch_watch_manager()
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh"
+            b"&name=watch-missing-repo"
+            b"&event_type=repository_commit"
+            b"&action_type=trigger_build"
+            b"&action_spec_id=22"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7"},
+            body=body,
+        )
+        response = projects_routes_watches.handle_watch_create(request)
+        testbase.assert_equal(response.status_code, 400)
+        # The handler short-circuits at the missing-repository
+        # check BEFORE constructing the watch manager, so
+        # ``_FakeWatchManager.last_instance`` is still None.
+        testbase.assert_equal(_FakeWatchManager.last_instance, None)
+    finally:
+        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_edit_post_translates_form_to_update_request():
+    """
+    **Feature: webworks projects watches T13.22 (p13s)**
+    **Property: POST /watches/{wid}/edit translates the
+    template form fields into a
+    :class:`WatchUpdateRequest` whose ``conditions``,
+    ``actions``, and ``enabled`` carry the parsed values; this
+    replaces the F5-era ``_patch_watch_update_request_builder``
+    workaround.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    wm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+
+        def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=7
+            )
+            return
+
+        wm_patch = _patch_watch_manager(configure=_seed_wm)
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh"
+            b"&name=renamed-watch"
+            b"&description=updated+desc"
+            b"&branch_pattern=feature%2F%2A"
+            b"&action_type=trigger_pipeline"
+            b"&action_spec_id=33"
+            b"&enabled=true"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7", "watch_id": "42"},
+            body=body,
+        )
+        response = projects_routes_watches.handle_watch_edit(request)
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/watches/42"
+        )
+
+        wm = _FakeWatchManager.last_instance
+        testbase.assert_equal(len(wm.update_watch_calls), 1)
+        call = wm.update_watch_calls[0]
+        testbase.assert_equal(call["watch_id"], 42)
+        req_obj = call["request"]
+        testbase.assert_equal(req_obj.name, "renamed-watch")
+        testbase.assert_equal(req_obj.description, "updated desc")
+        testbase.assert_equal(
+            req_obj.conditions.branch_pattern, "feature/*"
+        )
+        testbase.assert_equal(len(req_obj.actions), 1)
+        action0 = req_obj.actions[0]
+        testbase.assert_equal(
+            str(action0.action.value), "trigger_pipeline"
+        )
+        testbase.assert_equal(action0.target_id, 33)
+        testbase.assert_equal(req_obj.enabled, True)
+    finally:
+        for p in (wm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
     return
