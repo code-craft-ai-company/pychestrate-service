@@ -1,6 +1,8 @@
 import logging
 import os
 
+from typing import Any
+
 from automojo.pychestrate.webservice.extensions.bootstrap import (
     register_phase1_builtin_extensions,
 )
@@ -108,7 +110,51 @@ from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
 from automojo.webworks.routing.request import Request
-from automojo.webworks.routing.response import HTMLResponse
+from automojo.webworks.routing.response import HTMLResponse, Response
+
+
+def build_wsgi_compat_dispatch(*, app: Any) -> Any:
+    """
+        Return a callable that dispatches a webworks request and
+        backfills the ``content_type`` attribute the bundled
+        :class:`automojo.webworks.wsgi.response.WSGIResponseBuilder`
+        expects on the returned :class:`Response`.
+
+        The webworks library shipped in this venv exposes
+        ``Response`` with the content type stored only in the
+        ``headers`` dict (e.g. ``{"Content-Type": "text/html"}``)
+        but its WSGI response builder reads
+        ``response.content_type`` directly when the body is
+        non-empty. The two halves of the library are version-
+        skewed against each other -- without this shim every
+        non-redirect response (HTML, JSON, plain) raises
+        ``AttributeError`` inside the WSGI envelope and gets
+        swallowed as a 500.
+
+        Backfilling ``content_type = None`` is sufficient: the
+        builder's :meth:`format_headers` already re-emits the
+        Content-Type from ``headers`` when present and only
+        falls back to the parameter when absent.
+
+        :param app: WebWorks application built by
+                    :func:`establish_webapp_persona` and advanced
+                    past ``INFRASTRUCTURE_READY``.
+
+        :returns: A callable suitable for the ``handler`` slot in
+                  :func:`create_wsgi_application`'s config.
+    """
+    dispatch = app.dispatcher.dispatch
+
+    def _dispatch_with_content_type_backfill(
+            request: Request
+        ) -> Response:
+        response = dispatch(request)
+        if not hasattr(response, "content_type"):
+            response.content_type = None
+        return response
+
+    rtnval = _dispatch_with_content_type_backfill
+    return rtnval
 
 DIR_THIS = os.path.dirname(__file__)
 
@@ -256,7 +302,7 @@ def pychestrate_website_main():
 
     install_pychestrate_session_middleware(app=app)
 
-    wsgi_app = create_wsgi_application(config={"handler": app.dispatcher})
+    wsgi_app = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
 
     bind_host = os.environ.get("PYCHESTRATE_BIND_HOST", "127.0.0.1")
     bind_port = int(os.environ.get("PYCHESTRATE_BIND_PORT", "8888"))
@@ -299,7 +345,7 @@ def build_wsgi_application_for_production():
     app.startup()
     install_pychestrate_session_middleware(app=app)
 
-    rtnval = create_wsgi_application(config={"handler": app.dispatcher})
+    rtnval = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     return rtnval
 
 if __name__ == "__main__":
