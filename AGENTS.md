@@ -43,7 +43,7 @@ controls. For example 'xtest/build-info-card'
 ## Implementation
 The REST API surface runs on `automojo.webworks` (the Automation Mojo native web framework).  Routes are registered with `@app.attach_route(...)`; the runtime request type is `automojo.webworks.routing.request.Request` and the response types live under `automojo.webworks.routing.response`.  Flask and flask_restx are NOT installed in the production environment — any module that imports `flask` or `flask_restx` will fail at import time inside the running service.
 
-The customer-facing web interface is still flask-based scaffold pending its own webworks port (see "Web Interface" below).
+The customer-facing web interface also runs on webworks (see "Web Interface" below); flask is no longer used anywhere in the production bootstrap.
 
 For details on the framework state, the dead pre-migration scaffold, and the RFC 7807 problem-document contract, see [userguide/09-00-code-organization-and-conventions.rst](userguide/09-00-code-organization-and-conventions.rst).
 
@@ -51,11 +51,12 @@ For details on the framework state, the dead pre-migration scaffold, and the RFC
 The main entry point is `<repository folder>/source/site/app_pychestrate_main.py`.  It calls `automojo.webworks.webapplication.establish_webapp_persona` to build the app, registers feature routes via `register_service_extensions()`, runs `app.startup()`, installs `PychestrateSessionMiddleware` (per-request SQLAlchemy session + cookie-resolved actor), and then serves with `automojo.webworks.wsgi.server.run_server`.
 
 ## Web Interface
-The customer-facing web interface code is organized under `<repository folder>/source/site/automojo/pychestrate/webservice/webinterface/`.  It is currently flask-based scaffold and is NOT loaded by the production bootstrap — porting it to webworks is deferred work.
+The customer-facing web interface code is organized under `<repository folder>/source/site/automojo/pychestrate/webservice/webinterface/` and runs on webworks alongside the REST API. The three blueprints (`/config`, `/resources`, `/projects`) each expose a top-level `register_<area>_routes(*, app)` registrar that `app_pychestrate_main` invokes during bootstrap. Templates render through the jinja2 + `url_for` shim in `webinterface/foundation`; sessions are HMAC-signed cookies; CSRF is enforced per-POST via `auth_guard.enforce_csrf_or_redirect`.
 
 Rules:
 
 * All interactions with the data model should go through a postback URL and then through functions in the data-access module.  The consumer-facing web interface should not directly use any REST APIs as they require special authentication.
+* Per-feature route modules (`routes_*.py`) define their own lazy-import builder seams locally — never import a builder from a sibling per-feature module, otherwise a mock patch on one freezes the binding in the other.
 
 
 ## REST API Interface

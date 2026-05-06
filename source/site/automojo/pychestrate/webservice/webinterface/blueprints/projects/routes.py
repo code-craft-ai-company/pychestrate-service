@@ -1,16 +1,18 @@
 """
 .. module:: webinterface.blueprints.projects.routes
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: WebWorks-native consumer-facing UI for /projects (F1
-               slice -- dashboard + project core + members).
+    :synopsis: WebWorks-native consumer-facing UI for /projects.
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask projects blueprint at
-``webinterface/blueprints/projects/endpoints.py`` (2,529 LOC,
-53 routes) is being ported to webworks across multiple PRs.
-This first slice (F1) lands the dashboard + the project-core
-CRUD + the members surface:
+The complete consumer-facing ``/projects`` UI on webworks. The
+flask projects blueprint at
+``webinterface/blueprints/projects/endpoints.py`` (53 routes
+across 2,529 LOC) was ported across PRs F1..F5 and the legacy
+file was removed in F5.
+
+Routes landed in this module (the F1 slice -- dashboard +
+project core + members):
 
 * ``GET  /projects/`` and ``/projects/dashboard``
 * ``GET  /projects/list``
@@ -27,11 +29,12 @@ CRUD + the members surface:
 * ``POST /projects/{project_id}/members/{user_id}/edit``
 * ``POST /projects/{project_id}/members/{user_id}/remove``
 
-Pre-registers the URL patterns for the remaining F2/F3/F4/F5
-endpoints (repositories / builds / infrastructure / tests /
-releases / calendar / watches) so the dashboard sidebar's
-``url_for(...)`` calls resolve at template render time before
-those handlers ship.
+The remaining 39 routes live in the per-feature sub-modules
+(``routes_repositories`` / ``routes_builds`` /
+``routes_infrastructure`` / ``routes_tests`` /
+``routes_releases`` / ``routes_calendar`` /
+``routes_watches``) and are cascaded by
+:func:`register_projects_routes`.
 
 Permission model
 ----------------
@@ -123,50 +126,11 @@ _ROUTE_TABLE = (
 )
 
 
-# Pre-register URL patterns for F2/F3/F4/F5. Each future PR
-# moves the entry from this table into ``_ROUTE_TABLE`` and
-# lands the handler at the same time.
-_FUTURE_ENDPOINT_PATTERNS = (
-    # F5 -- calendar + watches
-    ("projects.calendar_view", "/{project_id}/calendar"),
-    (
-        "projects.calendar_event_list",
-        "/{project_id}/calendar/events",
-    ),
-    (
-        "projects.calendar_event_detail",
-        "/{project_id}/calendar/events/{event_id}",
-    ),
-    ("projects.watch_list", "/{project_id}/watches"),
-    (
-        "projects.watch_create",
-        "/{project_id}/watches/create",
-    ),
-    (
-        "projects.watch_detail",
-        "/{project_id}/watches/{watch_id}",
-    ),
-    (
-        "projects.watch_edit",
-        "/{project_id}/watches/{watch_id}/edit",
-    ),
-    (
-        "projects.watch_delete",
-        "/{project_id}/watches/{watch_id}/delete",
-    ),
-    (
-        "projects.watch_enable",
-        "/{project_id}/watches/{watch_id}/enable",
-    ),
-    (
-        "projects.watch_disable",
-        "/{project_id}/watches/{watch_id}/disable",
-    ),
-    (
-        "projects.watch_test",
-        "/{project_id}/watches/{watch_id}/test",
-    ),
-)
+# All eleven projects sub-features (F1 dashboard / core / members,
+# F2 repositories, F3 builds + infrastructure, F4 tests + releases,
+# F5 calendar + watches) are now landed.  Nothing left to
+# pre-register.
+_FUTURE_ENDPOINT_PATTERNS: tuple = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1442,11 +1406,9 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
 
 def register_projects_routes(*, app: Any) -> None:
     """
-        Attach the F1 projects routes to a webworks app and
+        Attach all projects web UI routes to a webworks app and
         register their endpoint names with the url_for shim.
-        Also pre-registers the URL patterns for F2/F3/F4/F5
-        endpoints so the dashboard sidebar's url_for() calls
-        resolve before those handlers ship.
+        Cascades through every per-feature sub-module (F1 .. F5).
 
         :param app: WebWorks application built by
                     ``establish_webapp_persona``.
@@ -1498,6 +1460,16 @@ def register_projects_routes(*, app: Any) -> None:
     )
     register_tests_routes(app=app)
     register_releases_routes(app=app)
+
+    # F5 features -- calendar + watches (final slice).
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_calendar import (  # noqa: E402
+        register_calendar_routes,
+    )
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_watches import (  # noqa: E402
+        register_watches_routes,
+    )
+    register_calendar_routes(app=app)
+    register_watches_routes(app=app)
 
     return
 
