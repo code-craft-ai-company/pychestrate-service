@@ -1,41 +1,37 @@
 """
 .. module:: projects
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Project management web interface blueprints
+    :synopsis: Project management web interface blueprint
+               (webworks).
 
 .. moduleauthor:: Automation Mojo LLC
 
-This package provides web interface blueprints for project management:
-- Project management pages (list, create, edit, detail)
-- Repository management pages
-- Build specification and execution pages
-- Infrastructure specification and job pages
-- Test specification and job pages
-- Release pipeline and release pages
-- Calendar event management pages
-- Watch configuration pages
+The consumer-facing ``/projects`` UI on webworks. The complete
+route surface lives in
+:mod:`webinterface.blueprints.projects.routes` (dashboard +
+project core + members) plus its per-feature siblings:
 
-All data modifications use postback URLs as per project conventions.
+* :mod:`webinterface.blueprints.projects.routes_repositories`
+* :mod:`webinterface.blueprints.projects.routes_builds`
+* :mod:`webinterface.blueprints.projects.routes_infrastructure`
+* :mod:`webinterface.blueprints.projects.routes_tests`
+* :mod:`webinterface.blueprints.projects.routes_releases`
+* :mod:`webinterface.blueprints.projects.routes_calendar`
+* :mod:`webinterface.blueprints.projects.routes_watches`
 
-Requirements: 13.1
+This ``__init__`` is intentionally side-effect free -- importing
+the package does not construct a flask :class:`Blueprint`
+(the runtime no longer hosts flask). Callers wire the routes
+via :func:`register_projects_routes`:
+
+::
+
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes import (
+        register_projects_routes,
+    )
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
-
-
-from flask import Blueprint
-
-# Create the projects blueprint
-projects_blueprint = Blueprint(
-    'projects',
-    __name__,
-    template_folder='templates',
-    static_folder='static',
-    url_prefix='/projects'
-)
-
-# Import and register route modules
-from . import endpoints

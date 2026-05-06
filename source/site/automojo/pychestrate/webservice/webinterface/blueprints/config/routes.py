@@ -747,6 +747,61 @@ def _redirect_with_flash(
     return response
 
 
+def _require_permission_or_redirect(
+        *,
+        auth: _AuthResolution,
+        permission: str,
+        deny_redirect_url: str,
+        deny_message: str = (
+            "You do not have permission to access this page."
+        )
+    ) -> Optional[Response]:
+    """
+        Mirror the legacy flask ``@admin_required`` decorator's
+        check: build a SecurityManager against the auth-resolution's
+        open db_session, call ``check_permission(user_id,
+        permission)``, and either return ``None`` (allowed -- the
+        handler proceeds) or a redirect response with an error
+        flash queued on the session (denied).
+
+        On the deny path the helper attaches the (mutated) session
+        cookie to the redirect response.
+
+        :param auth: Resolution from
+                     :func:`_resolve_authenticated_request`. Must
+                     carry an open db_session.
+        :param permission: Permission string (e.g.
+                           ``"resources.manage"``).
+        :param deny_redirect_url: URL to redirect to on denial.
+        :param deny_message: Optional flash message on denial.
+
+        :returns: ``None`` when the user has the permission;
+                  :class:`RedirectResponse` (302) on denial. On
+                  any unexpected SecurityManager failure the
+                  helper treats that as denial and returns the
+                  redirect.
+    """
+    security_manager = _build_security_manager(db_session=auth.db_session)
+    try:
+        has_permission = security_manager.check_permission(
+            auth.user_id, permission
+        )
+    except Exception:
+        has_permission = False
+
+    if has_permission is True:
+        return None
+
+    flash.add_flash(
+        session=auth.session,
+        message=deny_message,
+        category=flash.CATEGORY_ERROR,
+    )
+    rtnval = RedirectResponse(url=deny_redirect_url, status_code=302)
+    _attach_session_to_response(response=rtnval, session=auth.session)
+    return rtnval
+
+
 def _resolve_authenticated_request(
         *, request: Request
     ) -> _AuthResolution:

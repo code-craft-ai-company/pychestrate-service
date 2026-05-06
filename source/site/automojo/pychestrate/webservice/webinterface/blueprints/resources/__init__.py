@@ -1,39 +1,30 @@
 """
 .. module:: resources
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Resource management web interface blueprints
+    :synopsis: Resource management web interface blueprint
+               (webworks-side).
 
 .. moduleauthor:: Automation Mojo LLC
 
-This package provides web interface blueprints for resource management:
-- Resource management pages (list, create, edit, detail)
-- Pool management pages
-- IP pool management pages
-- Allocation viewing pages
-- Reservation management pages
-- Health monitoring pages
+The flask-era ``/resources`` blueprint is being ported to
+webworks across PRs E1/E2/E3/E4. The webworks-native handlers
++ registrar live in :mod:`webinterface.blueprints.resources.routes`;
+the legacy ``endpoints.py`` (1,657 LOC) is retained until the
+port completes and gets deleted in PR E4.
 
-All data modifications use postback URLs as per project conventions.
+This ``__init__`` is intentionally side-effect free -- importing
+the package no longer constructs a flask :class:`Blueprint` (the
+runtime no longer hosts flask). Callers that need the routes
+registrar import ``register_resources_routes`` directly:
 
-Requirements: 11.1
+::
+
+    from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+        register_resources_routes,
+    )
 """
 
 __author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2025, Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
 __credits__ = []
 __version__ = "1.0.0"
-
-
-from flask import Blueprint
-
-# Create the resources blueprint
-resources_blueprint = Blueprint(
-    'resources',
-    __name__,
-    template_folder='templates',
-    static_folder='static',
-    url_prefix='/resources'
-)
-
-# Import and register route modules
-from . import endpoints
