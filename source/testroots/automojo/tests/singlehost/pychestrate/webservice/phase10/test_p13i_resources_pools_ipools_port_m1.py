@@ -246,8 +246,14 @@ class _FakeResourceManager:
         _FakeResourceManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> List[_FakePool]:
-        return self.list_pools_response
+    def list_pools(self, user_id: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pools=self.list_pools_response,
+            total=len(self.list_pools_response),
+            offset=0,
+            limit=len(self.list_pools_response),
+        )
 
     def get_pool(self, pool_id: int) -> Optional[_FakePool]:
         return self.get_pool_response
@@ -260,9 +266,15 @@ class _FakeResourceManager:
             return _FakePool(pool_id=99, name=request.name)
         return self.create_pool_response
 
-    def list_resources(self, **kwargs: Any) -> List[_FakeResource]:
+    def list_resources(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_resources_calls.append(kwargs)
-        return self.list_resources_response
+        return SimpleNamespace(
+            resources=self.list_resources_response,
+            total=len(self.list_resources_response),
+            offset=0,
+            limit=len(self.list_resources_response),
+        )
 
     def delete_pool(self, pool_id: int, user_id: str) -> None:
         self.delete_pool_calls.append((pool_id, user_id))
@@ -323,16 +335,28 @@ class _FakeIPPoolManager:
         _FakeIPPoolManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> List[_FakeIPPool]:
-        return self.list_pools_response
+    def list_pools(self, user_id: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pools=self.list_pools_response,
+            total=len(self.list_pools_response),
+            offset=0,
+            limit=len(self.list_pools_response),
+        )
 
     def get_pool(self, pool_id: int) -> Optional[_FakeIPPool]:
         return self.get_pool_response
 
     def list_allocations(
             self, *, pool_id: int, status: str
-        ) -> List[Any]:
-        return self.list_allocations_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            allocations=self.list_allocations_response,
+            total=len(self.list_allocations_response),
+            offset=0,
+            limit=len(self.list_allocations_response),
+        )
 
     def get_available_ips(
             self, pool_id: int, *, count: int

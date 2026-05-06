@@ -423,12 +423,17 @@ def handle_dashboard(request: Request) -> Response:
         )
         ip_pool_manager = _build_ip_pool_manager(db_session=db_session)
 
-        resources = resource_manager.list_resources(limit=1000)
-        pools = resource_manager.list_pools(auth.user_id)
-        ip_pools = ip_pool_manager.list_pools(auth.user_id)
+        # Manager list_* methods return ``*ListResponse`` dataclasses
+        # whose ``.<entity>`` attribute is the actual list. Pull
+        # the list out at the call site so callers get something
+        # iterable (templates render ``{% for x in items %}``)
+        # and ``len(...)`` works.
+        resources = resource_manager.list_resources(limit=1000).resources
+        pools = resource_manager.list_pools(auth.user_id).pools
+        ip_pools = ip_pool_manager.list_pools(auth.user_id).pools
         active_allocations = allocation_manager.list_allocations(
             status="active"
-        )
+        ).allocations
 
         health_counts = _summarize_health_counts(resources=resources)
 
@@ -516,9 +521,11 @@ def handle_resource_list(request: Request) -> Response:
             filter_kwargs["tags"] = tag_query
 
         resource_manager = _build_resource_manager(db_session=db_session)
-        resources = resource_manager.list_resources(**filter_kwargs)
-        pools = resource_manager.list_pools(auth.user_id)
-        all_tags = resource_manager.list_tags()
+        resources = resource_manager.list_resources(
+            **filter_kwargs
+        ).resources
+        pools = resource_manager.list_pools(auth.user_id).pools
+        all_tags = resource_manager.list_tags().tags
 
         # Total-pages approximation: the legacy handler used
         # ``page+1`` when the page is full to indicate "more
@@ -576,8 +583,8 @@ def _render_resource_create_form(
         all_tags lists out of the manager and merges them with
         the default context.
     """
-    pools = resource_manager.list_pools(auth.user_id)
-    all_tags = resource_manager.list_tags()
+    pools = resource_manager.list_pools(auth.user_id).pools
+    all_tags = resource_manager.list_tags().tags
 
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -913,8 +920,8 @@ def handle_resource_edit(request: Request) -> Response:
                 )
 
         # GET, or POST that fell through. Re-render the edit form.
-        pools = resource_manager.list_pools(auth.user_id)
-        all_tags = resource_manager.list_tags()
+        pools = resource_manager.list_pools(auth.user_id).pools
+        all_tags = resource_manager.list_tags().tags
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(

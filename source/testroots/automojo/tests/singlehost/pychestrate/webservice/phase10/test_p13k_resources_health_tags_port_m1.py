@@ -258,14 +258,26 @@ class _FakeResourceManager:
         _FakeResourceManager.last_instance = self
         return
 
-    def list_resources(self, **kwargs: Any) -> List[_FakeResource]:
-        return self.list_resources_response
+    def list_resources(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            resources=self.list_resources_response,
+            total=len(self.list_resources_response),
+            offset=0,
+            limit=len(self.list_resources_response),
+        )
 
     def get_resource(self, resource_id: int) -> Optional[_FakeResource]:
         return self.get_resource_response
 
-    def list_tags(self) -> List[Any]:
-        return self.list_tags_response
+    def list_tags(self) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            tags=self.list_tags_response,
+            total=len(self.list_tags_response),
+            offset=0,
+            limit=len(self.list_tags_response),
+        )
 
 
 class _FakeHealthMonitor:

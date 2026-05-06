@@ -247,8 +247,8 @@ def handle_allocation_list(request: Request) -> Response:
         resource_manager = _build_resource_manager(db_session=db_session)
         allocations = allocation_manager.list_allocations(
             **filter_kwargs
-        )
-        resources = resource_manager.list_resources(limit=100)
+        ).allocations
+        resources = resource_manager.list_resources(limit=100).resources
 
         total_pages = _approximate_total_pages(
             page=params["page"],
@@ -329,8 +329,8 @@ def handle_allocation_history(request: Request) -> Response:
             end_date=end_date,
             offset=offset,
             limit=params["per_page"],
-        )
-        resources = resource_manager.list_resources(limit=100)
+        ).allocations
+        resources = resource_manager.list_resources(limit=100).resources
 
         total_pages = _approximate_total_pages(
             page=params["page"],

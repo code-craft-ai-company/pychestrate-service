@@ -294,15 +294,36 @@ class _FakeResourceManager:
         _FakeResourceManager.last_instance = self
         return
 
-    def list_resources(self, **kwargs: Any) -> List[_FakeResource]:
+    def list_resources(self, **kwargs: Any) -> Any:
+        # Mirrors ``ResourceListResponse(resources=..., total=...)``.
+        # Handlers extract the list via ``.resources``; tests can
+        # still set ``list_resources_response`` to a bare list.
+        from types import SimpleNamespace
         self.list_resources_calls.append(kwargs)
-        return self.list_resources_response
+        return SimpleNamespace(
+            resources=self.list_resources_response,
+            total=len(self.list_resources_response),
+            offset=0,
+            limit=len(self.list_resources_response),
+        )
 
-    def list_pools(self, user_id: str) -> List[_FakePool]:
-        return self.list_pools_response
+    def list_pools(self, user_id: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pools=self.list_pools_response,
+            total=len(self.list_pools_response),
+            offset=0,
+            limit=len(self.list_pools_response),
+        )
 
-    def list_tags(self) -> List[Any]:
-        return self.list_tags_response
+    def list_tags(self) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            tags=self.list_tags_response,
+            total=len(self.list_tags_response),
+            offset=0,
+            limit=len(self.list_tags_response),
+        )
 
     def get_resource(self, resource_id: int) -> Optional[_FakeResource]:
         return self.get_resource_response
@@ -349,8 +370,14 @@ class _FakeAllocationManager:
         _FakeAllocationManager.last_instance = self
         return
 
-    def list_allocations(self, *, status: str) -> List[Any]:
-        return self.list_allocations_response
+    def list_allocations(self, *, status: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            allocations=self.list_allocations_response,
+            total=len(self.list_allocations_response),
+            offset=0,
+            limit=len(self.list_allocations_response),
+        )
 
     def get_active_allocations(self, resource_id: int) -> List[Any]:
         return self.get_active_allocations_response
@@ -373,8 +400,14 @@ class _FakeIPPoolManager:
         _FakeIPPoolManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> List[Any]:
-        return self.list_pools_response
+    def list_pools(self, user_id: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pools=self.list_pools_response,
+            total=len(self.list_pools_response),
+            offset=0,
+            limit=len(self.list_pools_response),
+        )
 
 
 # ---------------------------------------------------------------------------

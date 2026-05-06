@@ -264,15 +264,27 @@ class _FakeAllocationManager:
         _FakeAllocationManager.last_instance = self
         return
 
-    def list_allocations(self, **kwargs: Any) -> List[_FakeAllocation]:
+    def list_allocations(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_allocations_calls.append(kwargs)
-        return self.list_allocations_response
+        return SimpleNamespace(
+            allocations=self.list_allocations_response,
+            total=len(self.list_allocations_response),
+            offset=0,
+            limit=len(self.list_allocations_response),
+        )
 
     def get_allocation_history(
             self, **kwargs: Any
-        ) -> List[_FakeAllocation]:
+        ) -> Any:
+        from types import SimpleNamespace
         self.history_calls.append(kwargs)
-        return self.history_response
+        return SimpleNamespace(
+            allocations=self.history_response,
+            total=len(self.history_response),
+            offset=0,
+            limit=len(self.history_response),
+        )
 
     def get_allocation(
             self, allocation_id: int
@@ -297,9 +309,15 @@ class _FakeAllocationManager:
             raise self.force_checkin_raises
         return
 
-    def list_reservations(self, **kwargs: Any) -> List[_FakeReservation]:
+    def list_reservations(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_reservations_calls.append(kwargs)
-        return self.list_reservations_response
+        return SimpleNamespace(
+            reservations=self.list_reservations_response,
+            total=len(self.list_reservations_response),
+            offset=0,
+            limit=len(self.list_reservations_response),
+        )
 
     def create_reservation(
             self, request: Any, user_id: str
@@ -341,8 +359,14 @@ class _FakeResourceManager:
         _FakeResourceManager.last_instance = self
         return
 
-    def list_resources(self, **kwargs: Any) -> List[_FakeResource]:
-        return self.list_resources_response
+    def list_resources(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            resources=self.list_resources_response,
+            total=len(self.list_resources_response),
+            offset=0,
+            limit=len(self.list_resources_response),
+        )
 
 
 # ---------------------------------------------------------------------------

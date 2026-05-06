@@ -230,7 +230,9 @@ def _find_reservation_by_id(
 
         :returns: The reservation row or None.
     """
-    reservations = allocation_manager.list_reservations(limit=1000)
+    reservations = allocation_manager.list_reservations(
+        limit=1000
+    ).reservations
     for r in reservations:
         if getattr(r, "id", None) == reservation_id:
             return r
@@ -279,8 +281,8 @@ def handle_reservation_list(request: Request) -> Response:
             end_before=end_before,
             offset=offset,
             limit=params["per_page"],
-        )
-        resources = resource_manager.list_resources(limit=100)
+        ).reservations
+        resources = resource_manager.list_resources(limit=100).resources
 
         total_pages = _approximate_total_pages(
             page=params["page"],
@@ -329,7 +331,7 @@ def _render_reservation_create_form(
     """
         Helper for both GET and POST-error re-render paths.
     """
-    resources = resource_manager.list_resources(limit=100)
+    resources = resource_manager.list_resources(limit=100).resources
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
         session=auth.session,

@@ -265,7 +265,7 @@ def handle_ip_pool_list(request: Request) -> Response:
     db_session = auth.db_session
     try:
         ip_pool_manager = _build_ip_pool_manager(db_session=db_session)
-        pools = ip_pool_manager.list_pools(auth.user_id)
+        pools = ip_pool_manager.list_pools(auth.user_id).pools
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -458,7 +458,7 @@ def handle_ip_pool_detail(request: Request) -> Response:
 
         allocations = ip_pool_manager.list_allocations(
             pool_id=pool_id, status="active"
-        )
+        ).allocations
         available_ips = ip_pool_manager.get_available_ips(
             pool_id, count=10
         )
