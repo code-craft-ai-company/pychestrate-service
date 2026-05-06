@@ -34,14 +34,16 @@ Permission tiers used here:
 * ``developer`` -- create / edit / enable / disable / test.
 * ``admin`` -- delete (destructive).
 
-The legacy flask handler constructs ``WatchCreateRequest`` and
-``WatchUpdateRequest`` with kwargs that no longer match the
-manager's dataclass shape (``trigger_conditions`` vs.
-``conditions``, etc.). This port preserves that 1:1 -- the
-goal is webworks-shape, not bug-fixing legacy bitrot. The
-construction is tucked behind the lazy ``_build_watch_*``
-seams so a future PR can fix the form translation without
-touching the route topology.
+The create / edit form's actual posted fields
+(``event_type`` / ``repository_id`` / ``branch_pattern`` /
+``action_type`` / ``action_spec_id`` / ``enabled``) are
+translated into the manager's dataclass shape
+(``trigger_source`` / ``source_id`` / ``conditions`` /
+``actions``) by :func:`_build_watch_create_request` and
+:func:`_build_watch_update_request`. The legacy flask
+handler constructed those dataclasses with kwargs that
+never matched the manager's signature; that bitrot was
+preserved through the F5 port and is fixed here.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -50,8 +52,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import json
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import (
@@ -156,29 +157,153 @@ def _build_watch_manager(*, db_session: Any) -> Any:
     return rtnval
 
 
+def _resolve_trigger_source(*, value: str) -> Any:
+    """
+        Resolve an ``event_type`` form-field value (e.g.
+        ``"repository_commit"``) to the matching
+        :class:`WatchTriggerSource` enum member.
+
+        :raises: ValueError on an unknown value.
+    """
+    from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+        WatchTriggerSource,
+    )
+    rtnval = WatchTriggerSource(value)
+    return rtnval
+
+
+def _resolve_watch_action(*, value: str) -> Any:
+    """
+        Resolve an ``action_type`` form-field value (e.g.
+        ``"trigger_build"``) to the matching :class:`WatchAction`
+        enum member.
+
+        :raises: ValueError on an unknown value.
+    """
+    from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+        WatchAction,
+    )
+    rtnval = WatchAction(value)
+    return rtnval
+
+
+def _enumerate_trigger_source_values() -> List[str]:
+    """
+        Return every :class:`WatchTriggerSource` value as a string,
+        for the create / edit form's ``event_type`` selector.
+    """
+    try:
+        from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+            WatchTriggerSource,
+        )
+    except ImportError:
+        return []
+    rtnval: List[str] = []
+    for member in WatchTriggerSource:
+        rtnval.append(member.value)
+    return rtnval
+
+
+def _enumerate_watch_action_values() -> List[str]:
+    """
+        Return every :class:`WatchAction` value as a string, for
+        the create / edit form's ``action_type`` selector.
+    """
+    try:
+        from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+            WatchAction,
+        )
+    except ImportError:
+        return []
+    rtnval: List[str] = []
+    for member in WatchAction:
+        rtnval.append(member.value)
+    return rtnval
+
+
+def _build_watch_condition(*, branch_pattern: str) -> Any:
+    """
+        Construct a :class:`WatchCondition` from the form's
+        single ``branch_pattern`` field. The dataclass also
+        carries ``tag_pattern`` / ``file_pattern`` / ``build_status``
+        slots, but the create / edit forms only expose a branch
+        pattern today; the other slots stay ``None``.
+    """
+    from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+        WatchCondition,
+    )
+    pattern = branch_pattern if len(branch_pattern) > 0 else None
+    rtnval = WatchCondition(branch_pattern=pattern)
+    return rtnval
+
+
+def _build_watch_action_config(
+        *, action_type: str, action_spec_id: int
+    ) -> Any:
+    """
+        Construct a single-element list of
+        :class:`WatchActionConfig` for the form's
+        ``action_type`` + ``action_spec_id`` pair.
+
+        :raises: ValueError on an unknown ``action_type`` (raised
+                 by :func:`_resolve_watch_action`) or when
+                 ``action_spec_id`` is ``None``.
+    """
+    from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
+        WatchActionConfig,
+    )
+    if action_spec_id is None:
+        raise ValueError(
+            "action_spec_id is required for the selected action"
+        )
+    action_enum = _resolve_watch_action(value=action_type)
+    rtnval = WatchActionConfig(
+        action=action_enum,
+        target_id=action_spec_id,
+    )
+    return rtnval
+
+
 def _build_watch_create_request(
         *,
         name: str,
-        trigger_source: str,
-        trigger_conditions: Dict[str, Any],
-        actions: Any,
+        event_type: str,
+        repository_id: int,
+        branch_pattern: str,
+        action_type: str,
+        action_spec_id: Optional[int],
+        enabled: bool,
         description: str
     ) -> Any:
     """
-        Lazy-construct a :class:`WatchCreateRequest` with the same
-        kwargs the legacy flask handler used. Note: the shape
-        does not match the dataclass's actual ``conditions`` /
-        ``source_id`` / ``WatchTriggerSource`` enum fields. This
-        is preserved bitrot -- F5 ports the route topology only.
+        Construct a :class:`WatchCreateRequest` from the create
+        form's actual posted fields. Translates the
+        template-side names (``event_type`` / ``repository_id``
+        / ``branch_pattern`` / ``action_type`` /
+        ``action_spec_id``) to the manager dataclass shape
+        (``trigger_source`` / ``source_id`` / ``conditions`` /
+        ``actions``).
+
+        :raises: ValueError on an unknown ``event_type`` /
+                 ``action_type``, or when ``action_spec_id`` is
+                 missing.
     """
     from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchCreateRequest,
     )
+    trigger_source = _resolve_trigger_source(value=event_type)
+    conditions = _build_watch_condition(branch_pattern=branch_pattern)
+    action_config = _build_watch_action_config(
+        action_type=action_type,
+        action_spec_id=action_spec_id,
+    )
     rtnval = WatchCreateRequest(
         name=name,
         trigger_source=trigger_source,
-        trigger_conditions=trigger_conditions,
-        actions=actions,
+        source_id=repository_id,
+        conditions=conditions,
+        actions=[action_config],
+        enabled=enabled,
         description=description,
     )
     return rtnval
@@ -187,22 +312,40 @@ def _build_watch_create_request(
 def _build_watch_update_request(
         *,
         name: Optional[str],
-        trigger_conditions: Optional[Dict[str, Any]],
-        actions: Any,
+        branch_pattern: Optional[str],
+        action_type: Optional[str],
+        action_spec_id: Optional[int],
+        enabled: Optional[bool],
         description: Optional[str]
     ) -> Any:
     """
-        Lazy-construct a :class:`WatchUpdateRequest` mirroring the
-        legacy kwargs (see :func:`_build_watch_create_request`
-        for the bitrot caveat).
+        Construct a :class:`WatchUpdateRequest` from the edit
+        form's posted fields. Each parameter is ``None`` to
+        indicate "no change"; the conditions / actions slots
+        are rebuilt only when the form supplied the
+        corresponding field.
+
+        :raises: ValueError on an unknown ``action_type``.
     """
     from automojo.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchUpdateRequest,
     )
+    conditions = None
+    if branch_pattern is not None:
+        conditions = _build_watch_condition(branch_pattern=branch_pattern)
+    actions: Optional[List[Any]] = None
+    if action_type is not None and action_spec_id is not None:
+        actions = [
+            _build_watch_action_config(
+                action_type=action_type,
+                action_spec_id=action_spec_id,
+            )
+        ]
     rtnval = WatchUpdateRequest(
         name=name,
-        trigger_conditions=trigger_conditions,
+        conditions=conditions,
         actions=actions,
+        enabled=enabled,
         description=description,
     )
     return rtnval
@@ -256,22 +399,6 @@ def _approximate_total_pages(
             return 1
         return page
     return page + 1
-
-
-def _parse_json_or_default(
-        *, raw: str, default: Any
-    ) -> Any:
-    """
-        Parse a JSON string from a form field. Returns
-        ``default`` for an empty string. Raises
-        :class:`json.JSONDecodeError` for malformed input.
-    """
-    if raw is None:
-        return default
-    if isinstance(raw, str) and len(raw) == 0:
-        return default
-    rtnval = json.loads(raw)
-    return rtnval
 
 
 def _resolve_view_authorized_project(
@@ -414,7 +541,8 @@ def _render_watch_create_form(
         project: Any,
         repositories: Any,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        build_specs: Optional[List[Any]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -426,6 +554,11 @@ def _render_watch_create_form(
     context["project"] = project
     context["repositories"] = repositories
     context["form_data"] = form_data
+    context["event_types"] = _enumerate_trigger_source_values()
+    context["action_types"] = _enumerate_watch_action_values()
+    context["build_specs"] = (
+        build_specs if build_specs is not None else []
+    )
     response = _render(
         template_name="projects/watches/create.html",
         context=context,
@@ -442,7 +575,9 @@ def _render_watch_edit_form(
         auth: _AuthResolution,
         project: Any,
         watch: Any,
-        status_code: int = 200
+        status_code: int = 200,
+        repositories: Optional[List[Any]] = None,
+        build_specs: Optional[List[Any]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -453,6 +588,14 @@ def _render_watch_edit_form(
     )
     context["project"] = project
     context["watch"] = watch
+    context["event_types"] = _enumerate_trigger_source_values()
+    context["action_types"] = _enumerate_watch_action_values()
+    context["repositories"] = (
+        repositories if repositories is not None else []
+    )
+    context["build_specs"] = (
+        build_specs if build_specs is not None else []
+    )
     response = _render(
         template_name="projects/watches/edit.html",
         context=context,
@@ -682,30 +825,35 @@ def handle_watch_create(request: Request) -> Response:
             return csrf_redirect
 
         name = str(single_form.get("name", "")).strip()
-        trigger_source = str(
-            single_form.get("trigger_source", "")
+        event_type = str(
+            single_form.get("event_type", "")
         ).strip()
-        trigger_conditions_raw = str(
-            single_form.get("trigger_conditions", "{}")
+        repository_id = _coerce_int(
+            raw=single_form.get("repository_id", None)
         )
-        actions_raw = str(single_form.get("actions", "[]"))
+        branch_pattern = str(
+            single_form.get("branch_pattern", "")
+        ).strip()
+        action_type = str(
+            single_form.get("action_type", "")
+        ).strip()
+        action_spec_id = _coerce_int(
+            raw=single_form.get("action_spec_id", None)
+        )
+        enabled_raw = single_form.get("enabled", None)
+        enabled = (
+            enabled_raw is not None
+            and str(enabled_raw).lower() in ("true", "1", "on")
+        )
         description = str(
             single_form.get("description", "")
         ).strip()
 
-        try:
-            trigger_conditions = _parse_json_or_default(
-                raw=trigger_conditions_raw, default={}
-            )
-            actions = _parse_json_or_default(
-                raw=actions_raw, default=[]
-            )
-        except json.JSONDecodeError:
+        if repository_id is None:
             flash.add_flash(
                 session=auth.session,
                 message=(
-                    "Invalid JSON in trigger conditions or actions "
-                    "field."
+                    "A repository is required to create a watch."
                 ),
                 category=flash.CATEGORY_ERROR,
             )
@@ -721,9 +869,12 @@ def handle_watch_create(request: Request) -> Response:
         try:
             create_request = _build_watch_create_request(
                 name=name,
-                trigger_source=trigger_source,
-                trigger_conditions=trigger_conditions,
-                actions=actions,
+                event_type=event_type,
+                repository_id=repository_id,
+                branch_pattern=branch_pattern,
+                action_type=action_type,
+                action_spec_id=action_spec_id,
+                enabled=enabled,
                 description=description,
             )
             watch = watch_manager.create_watch(
@@ -823,44 +974,49 @@ def handle_watch_edit(request: Request) -> Response:
             return csrf_redirect
 
         name_raw = str(single_form.get("name", "")).strip()
-        trigger_conditions_raw = str(
-            single_form.get("trigger_conditions", "")
-        )
-        actions_raw = str(single_form.get("actions", ""))
         description_raw = str(
             single_form.get("description", "")
         ).strip()
+        # Edit form: every field comes through on POST. We treat
+        # an empty submitted value as "no change" for the
+        # ``Optional``-typed fields on :class:`WatchUpdateRequest`,
+        # except ``branch_pattern`` (an empty branch_pattern is
+        # legitimate -- "match all branches"), so we forward it
+        # unchanged when the field key is in the form at all.
+        if "branch_pattern" in single_form:
+            branch_pattern: Optional[str] = str(
+                single_form.get("branch_pattern", "")
+            ).strip()
+        else:
+            branch_pattern = None
 
-        try:
-            trigger_conditions: Optional[Dict[str, Any]] = None
-            if len(trigger_conditions_raw) > 0:
-                trigger_conditions = _parse_json_or_default(
-                    raw=trigger_conditions_raw, default=None
-                )
-            actions: Any = None
-            if len(actions_raw) > 0:
-                actions = _parse_json_or_default(
-                    raw=actions_raw, default=None
-                )
-        except json.JSONDecodeError:
-            flash.add_flash(
-                session=auth.session,
-                message=(
-                    "Invalid JSON in trigger conditions or actions "
-                    "field."
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
-            return _render_watch_edit_form(
-                auth=auth, project=project, watch=watch,
-                status_code=400,
-            )
+        action_type_raw = str(
+            single_form.get("action_type", "")
+        ).strip()
+        action_type: Optional[str] = (
+            action_type_raw if len(action_type_raw) > 0 else None
+        )
+        action_spec_id = _coerce_int(
+            raw=single_form.get("action_spec_id", None)
+        )
+
+        # ``enabled`` is a checkbox in the edit form; absence means
+        # "not enabled", presence (any of "true"/"1"/"on") means
+        # enabled. Edit always sends the value either way, so
+        # always forward a definite bool.
+        enabled_raw = single_form.get("enabled", None)
+        enabled: Optional[bool] = (
+            enabled_raw is not None
+            and str(enabled_raw).lower() in ("true", "1", "on")
+        )
 
         try:
             update_request = _build_watch_update_request(
                 name=name_raw if len(name_raw) > 0 else None,
-                trigger_conditions=trigger_conditions,
-                actions=actions,
+                branch_pattern=branch_pattern,
+                action_type=action_type,
+                action_spec_id=action_spec_id,
+                enabled=enabled,
                 description=(
                     description_raw
                     if len(description_raw) > 0 else None
