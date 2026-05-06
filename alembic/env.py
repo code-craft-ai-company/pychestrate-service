@@ -16,16 +16,29 @@ through to a production deploy:
   ``PYCHESTRATE_DATABASE_URL`` (the same env var the runtime
   bootstrap consumes). The ``sqlalchemy.url`` field in
   ``alembic.ini`` is intentionally blank.
-* **Schema target** — :data:`PychestratePhase1Base.metadata`,
-  populated by side-effect-importing the three phase-bootstrap
-  modules from :mod:`webservice.extensions.bootstrap` /
-  :mod:`webservice.extensions.phase2_bootstrap` /
-  :mod:`webservice.extensions.phase3_bootstrap`. Each of those
-  modules re-exports every Phase-1 / 2 / 3 model module via the
-  same noqa-F401 pattern the runtime bootstrap uses, so all 57+
-  in-tree tables register against
-  :class:`PychestratePhase1Base.metadata` before alembic walks
-  the diff.
+* **Schema target** — both :data:`PychestratePhase1Base.metadata`
+  (the modern Phase-1+ models -- ``identity_users``,
+  ``auth_local_credentials``, ``rbac_*``, every webservice
+  feature module's own tables) AND
+  :data:`PychestrateModelBase.metadata` (the legacy ``core.orm``
+  models -- ``user``, ``password_history``, ``sessions``,
+  ``global_variables``, ``permissions``, ``system_roles``, …).
+  Alembic accepts a ``Sequence[MetaData]`` here and treats the
+  union as a single schema target.
+
+  Both bases must be tracked because the consumer-UI login
+  flow is still wired through the legacy ``SecurityManager``
+  (see ``userguide/12-00-consumer-ui-auth-stack.rst``); without
+  the legacy tables in alembic, a production deployment whose
+  schema came from migrations alone has no ``user`` /
+  ``password_history`` / ``sessions`` table for the auth flow
+  to query, and every ``POST /config/login`` 401s silently.
+
+  Phase-bootstrap module imports below pull every model module
+  via noqa-F401 so all 57+ in-tree tables register against
+  ``PychestratePhase1Base.metadata`` before alembic walks the
+  diff. The legacy ``core.orm`` import populates
+  ``PychestrateModelBase.metadata`` the same way.
 
 Online vs offline
 -----------------
@@ -79,6 +92,13 @@ from automojo.pychestrate.webservice.extensions import phase3_bootstrap as _phas
 from automojo.pychestrate.webservice.persistence.schema import (  # noqa: E402
     PychestratePhase1Base,
 )
+# Importing ``core.orm`` registers the legacy ``user`` /
+# ``password_history`` / ``sessions`` / ``permissions`` /
+# ``system_roles`` / ``global_variables`` (etc.) tables on
+# ``PychestrateModelBase.metadata``. Alembic walks both bases.
+from automojo.pychestrate.core.orm import (  # noqa: E402
+    PychestrateModelBase,
+)
 
 
 config = context.config
@@ -90,7 +110,10 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-target_metadata = PychestratePhase1Base.metadata
+target_metadata = (
+    PychestratePhase1Base.metadata,
+    PychestrateModelBase.metadata,
+)
 
 
 # ---------------------------------------------------------------------------

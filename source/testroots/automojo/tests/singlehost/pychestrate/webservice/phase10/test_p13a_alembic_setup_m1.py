@@ -182,20 +182,39 @@ def test_env_py_imports_phase_bootstraps_to_register_models():
     return
 
 
-def test_env_py_target_metadata_is_phase1_base_metadata():
+def test_env_py_target_metadata_includes_phase1_and_legacy_bases():
     """
     **Feature: 0-persistence T1.4 (alembic setup)**
-    **Property: env.py targets PychestratePhase1Base.metadata --
-    the single declarative base that owns every webservice
-    table.**
+    **Property: env.py targets BOTH
+    ``PychestratePhase1Base.metadata`` (the modern Phase-1+
+    models) AND ``PychestrateModelBase.metadata`` (the legacy
+    ``core.orm`` tables: ``user``, ``password_history``,
+    ``sessions``, ``permissions``, …). Alembic accepts a
+    ``Sequence[MetaData]`` here; both bases must appear so the
+    consumer-UI's legacy-``SecurityManager`` login flow has
+    real schema in production.**
     """
     env_path = os.path.join(_alembic_dir(), "env.py")
     with open(env_path, "r", encoding="utf-8") as fh:
         text = fh.read()
-    has_import = "from automojo.pychestrate.webservice.persistence.schema" in text
-    has_target = "target_metadata = PychestratePhase1Base.metadata" in text
-    testbase.assert_equal(has_import, True)
-    testbase.assert_equal(has_target, True)
+    has_phase1_import = (
+        "from automojo.pychestrate.webservice.persistence.schema"
+        in text
+    )
+    has_legacy_import = (
+        "from automojo.pychestrate.core.orm import" in text
+        and "PychestrateModelBase" in text
+    )
+    has_phase1_in_target = (
+        "PychestratePhase1Base.metadata" in text
+    )
+    has_legacy_in_target = (
+        "PychestrateModelBase.metadata" in text
+    )
+    testbase.assert_equal(has_phase1_import, True)
+    testbase.assert_equal(has_legacy_import, True)
+    testbase.assert_equal(has_phase1_in_target, True)
+    testbase.assert_equal(has_legacy_in_target, True)
     return
 
 
@@ -360,4 +379,105 @@ def test_runtime_bootstrap_documents_alembic_for_production():
     has_make_pointer = "make db-upgrade" in text
     testbase.assert_equal(has_doc_pointer, True)
     testbase.assert_equal(has_make_pointer, True)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Legacy core.orm migration (PR p13w)
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_core_orm_migration_exists():
+    """
+    **Feature: 0-persistence T1.5 (legacy core.orm coverage)**
+    **Property: A second migration brings every table on
+    ``PychestrateModelBase.metadata`` (the legacy ``core.orm``
+    base) under alembic management. Without this revision, the
+    consumer-UI's legacy-``SecurityManager`` login flow has no
+    ``user`` / ``password_history`` / ``sessions`` table to
+    query in production; see
+    ``userguide/12-00-consumer-ui-auth-stack.rst`` for context.**
+    """
+    files = _list_version_files()
+    has_legacy = False
+    for path in files:
+        with open(path, "r", encoding="utf-8") as fh:
+            text = fh.read()
+        if (
+            "create_table('user'" in text
+            and "create_table('password_history'" in text
+            and "create_table('sessions'" in text
+        ):
+            has_legacy = True
+            break
+    testbase.assert_equal(has_legacy, True)
+    return
+
+
+def test_legacy_migration_creates_consumer_ui_auth_tables_on_apply():
+    """
+    **Feature: 0-persistence T1.5 (legacy core.orm coverage)**
+    **Property: Running ``alembic upgrade head`` against a
+    fresh SQLite DB results in the consumer-UI's auth tables
+    (``user`` / ``password_history`` / ``sessions`` /
+    ``permissions`` / ``system_roles`` / ``role_permissions``)
+    actually existing. End-to-end test that proves the
+    migration applies without error and produces the schema
+    the consumer UI expects.**
+    """
+    import sys
+    import tempfile
+    import subprocess
+    import sqlite3
+
+    fd, db_path = tempfile.mkstemp(prefix="alembic-test-", suffix=".sqlite")
+    os.close(fd)
+    try:
+        env = os.environ.copy()
+        env["PYCHESTRATE_DATABASE_URL"] = "sqlite:///" + db_path
+
+        # Invoke alembic via ``python -m alembic`` so the test
+        # works regardless of whether the alembic CLI shim is on
+        # PATH (it may not be when tests run from a
+        # not-activated venv).
+        proc = subprocess.run(
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            cwd=_repo_root(),
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            err_msg_lines = ["alembic upgrade head failed."]
+            err_msg_lines.append("STDOUT:")
+            err_msg_lines.append(proc.stdout)
+            err_msg_lines.append("STDERR:")
+            err_msg_lines.append(proc.stderr)
+            err_msg = os.linesep.join(err_msg_lines)
+            raise AssertionError(err_msg)
+
+        db = sqlite3.connect(db_path)
+        try:
+            cursor = db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+            actual_tables = set(row[0] for row in cursor)
+        finally:
+            db.close()
+
+        required = {
+            "user",
+            "password_history",
+            "sessions",
+            "permissions",
+            "system_roles",
+            "role_permissions",
+        }
+        missing = required - actual_tables
+        testbase.assert_equal(missing, set())
+    finally:
+        try:
+            os.unlink(db_path)
+        except OSError:
+            pass
     return
