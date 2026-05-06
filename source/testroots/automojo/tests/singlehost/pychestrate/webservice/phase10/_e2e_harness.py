@@ -685,6 +685,212 @@ def logged_in_cookies(*, wsgi_app: Any) -> Dict[str, str]:
     return cookies
 
 
+# ---------------------------------------------------------------------------
+# RBAC seeding (legacy ``SystemRole`` / ``Permission`` rows)
+# ---------------------------------------------------------------------------
+
+
+# Permission strings used by the consumer UI's
+# ``_require_permission_or_redirect`` calls. Tier-3 tests seed
+# the ones they need; the values track the constants in the
+# production handlers so tests catch any rename drift.
+PERMISSION_RESOURCES_MANAGE: str = "resources.manage"
+PERMISSION_USERS_MANAGE: str = "users.manage"
+PERMISSION_VARIABLES_MANAGE: str = "variables.manage"
+
+
+def grant_permissions_to_role(
+        *, role_name: str, permission_names: List[str]
+    ) -> None:
+    """
+        Idempotently create :class:`SystemRole` + the listed
+        :class:`Permission` rows and the many-to-many bindings
+        between them. Used by tests that need a role with a
+        known permission set.
+
+        :param role_name: Role to create / update.
+        :param permission_names: Permission names to ensure
+                                 exist + are bound to the role.
+    """
+    from automojo.pychestrate.core.orm import (  # noqa: E402
+        Permission,
+        SystemRole,
+    )
+    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    db_session = factory()
+    try:
+        role = (
+            db_session.query(SystemRole)
+            .filter(SystemRole.name == role_name)
+            .first()
+        )
+        if role is None:
+            role = SystemRole(
+                name=role_name,
+                description="seeded by e2e harness",
+                is_system=False,
+            )
+            db_session.add(role)
+            db_session.flush()
+
+        for perm_name in permission_names:
+            perm = (
+                db_session.query(Permission)
+                .filter(Permission.name == perm_name)
+                .first()
+            )
+            if perm is None:
+                perm = Permission(
+                    name=perm_name,
+                    description="seeded by e2e harness",
+                )
+                db_session.add(perm)
+                db_session.flush()
+            if perm not in role.permissions:
+                role.permissions.append(perm)
+
+        db_session.commit()
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+    return
+
+
+_ADMIN_ROLE_PERMISSIONS: List[str] = [
+    PERMISSION_RESOURCES_MANAGE,
+    PERMISSION_USERS_MANAGE,
+    PERMISSION_VARIABLES_MANAGE,
+]
+
+
+def ensure_seeded_admin_role() -> None:
+    """
+        Idempotently ensure the legacy ``"admin"`` SystemRole has
+        the consumer-UI's three top-level admin permissions
+        (resources.manage / users.manage / variables.manage).
+        Tests that exercise admin-gated routes call this once.
+    """
+    grant_permissions_to_role(
+        role_name="admin",
+        permission_names=_ADMIN_ROLE_PERMISSIONS,
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Viewer user seed (a non-admin login for permission-denied tests)
+# ---------------------------------------------------------------------------
+
+
+E2E_VIEWER_LOGIN: str = "e2e-viewer"
+E2E_VIEWER_PASSWORD: str = "e2e-viewer-secret-1!"
+E2E_VIEWER_EMAIL: str = "e2e-viewer@example.invalid"
+
+
+_SEEDED_VIEWER: Optional[SeededAdmin] = None
+
+
+def ensure_seeded_viewer() -> SeededAdmin:
+    """
+        Seed a non-admin user (login ``e2e-viewer``, role
+        ``viewer`` -- which the harness deliberately does NOT
+        grant any admin permissions) and return a
+        :class:`SeededAdmin` handle. Cached.
+
+        Tier-3 tests use this user to exercise the
+        permission-denied branches of admin-gated handlers:
+        the user can log in (so they get past the
+        ``require_login_or_redirect`` guard) but
+        :func:`SecurityManager.check_permission` returns
+        ``False`` for any admin-tier permission, so the handler
+        redirects with a "permission denied" flash.
+    """
+    global _SEEDED_VIEWER
+    if _SEEDED_VIEWER is not None:
+        return _SEEDED_VIEWER
+
+    ensure_app()
+    ensure_shared_in_memory_db_pool()
+
+    from werkzeug.security import generate_password_hash  # noqa: E402
+    from automojo.pychestrate.core.orm import (  # noqa: E402
+        PasswordHistory,
+        User,
+    )
+
+    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    db_session = factory()
+    try:
+        existing = (
+            db_session.query(User)
+            .filter(User.login == E2E_VIEWER_LOGIN)
+            .first()
+        )
+        if existing is not None:
+            _SEEDED_VIEWER = SeededAdmin(
+                user_id=str(existing.id),
+                login=E2E_VIEWER_LOGIN,
+                password=E2E_VIEWER_PASSWORD,
+            )
+            return _SEEDED_VIEWER
+
+        user = User(
+            id=uuid.uuid4(),
+            first_name="E2E",
+            last_name="Viewer",
+            display_name="E2E Viewer",
+            email=E2E_VIEWER_EMAIL,
+            login=E2E_VIEWER_LOGIN,
+            ownertag="e2e",
+            status="active",
+            roles="viewer",
+            authtype="internal",
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        password_hash = generate_password_hash(E2E_VIEWER_PASSWORD)
+        history = PasswordHistory(
+            user_id=user.id,
+            password_hash=password_hash,
+        )
+        db_session.add(history)
+        db_session.commit()
+
+        _SEEDED_VIEWER = SeededAdmin(
+            user_id=str(user.id),
+            login=E2E_VIEWER_LOGIN,
+            password=E2E_VIEWER_PASSWORD,
+        )
+        return _SEEDED_VIEWER
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def login_as(*, wsgi_app: Any, user: SeededAdmin) -> Dict[str, str]:
+    """
+        Convenience: POST credentials for an arbitrary seeded
+        user, return the cookie jar. Raises on non-303
+        responses.
+    """
+    response, cookies = login_via_post(
+        wsgi_app=wsgi_app, login=user.login, password=user.password
+    )
+    if response.status_code != 303:
+        raise AssertionError(
+            "expected login POST for {} to 303 -- got {} ({})".format(
+                user.login, response.status_code,
+                response.text[:120]
+            )
+        )
+    return cookies
+
+
 __all__ = [
     "TEST_UI_COOKIE_SECRET",
     "TestAppHandle",
@@ -703,4 +909,14 @@ __all__ = [
     "extract_csrf_token_from_cookies",
     "login_via_post",
     "logged_in_cookies",
+    "PERMISSION_RESOURCES_MANAGE",
+    "PERMISSION_USERS_MANAGE",
+    "PERMISSION_VARIABLES_MANAGE",
+    "grant_permissions_to_role",
+    "ensure_seeded_admin_role",
+    "E2E_VIEWER_LOGIN",
+    "E2E_VIEWER_PASSWORD",
+    "E2E_VIEWER_EMAIL",
+    "ensure_seeded_viewer",
+    "login_as",
 ]
