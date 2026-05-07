@@ -258,8 +258,14 @@ class _FakeRepositoryManager:
 
     def list_repositories(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeRepository]:
-        return self.list_repositories_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            repositories=self.list_repositories_response,
+            total=len(self.list_repositories_response),
+            offset=0,
+            limit=len(self.list_repositories_response),
+        )
 
     def get_repository(
             self, repository_id: int

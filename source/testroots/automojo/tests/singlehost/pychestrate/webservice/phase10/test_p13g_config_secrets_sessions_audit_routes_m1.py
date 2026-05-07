@@ -245,15 +245,27 @@ class _FakeSecretManager:
     def list_secrets(
             self, *, scope_id: Optional[int], user_id: str,
             offset: int, limit: int
-        ) -> List[_FakeSecretMetadata]:
+        ) -> Any:
+        from types import SimpleNamespace
         self.list_secrets_calls.append({
             "scope_id": scope_id, "user_id": user_id,
             "offset": offset, "limit": limit,
         })
-        return self.list_secrets_response
+        return SimpleNamespace(
+            secrets=self.list_secrets_response,
+            total=len(self.list_secrets_response),
+            offset=offset,
+            limit=limit,
+        )
 
-    def list_scopes(self, user_id: str) -> List[Any]:
-        return self.list_scopes_response
+    def list_scopes(self, user_id: str) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            scopes=self.list_scopes_response,
+            total=len(self.list_scopes_response),
+            offset=0,
+            limit=len(self.list_scopes_response),
+        )
 
     def get_secret_metadata(
             self, name: str, scope_id: int

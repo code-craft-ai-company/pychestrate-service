@@ -269,14 +269,26 @@ class _FakeTestManager:
         _FakeTestManager.last_instance = self
         return
 
-    def list_jobs(self, **kwargs: Any) -> List[_FakeTestJob]:
+    def list_jobs(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_jobs_calls.append(kwargs)
-        return self.list_jobs_response
+        return SimpleNamespace(
+            jobs=self.list_jobs_response,
+            total=len(self.list_jobs_response),
+            offset=0,
+            limit=len(self.list_jobs_response),
+        )
 
     def list_specs(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeTestSpec]:
-        return self.list_specs_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            specs=self.list_specs_response,
+            total=len(self.list_specs_response),
+            offset=0,
+            limit=len(self.list_specs_response),
+        )
 
     def get_spec(self, spec_id: int) -> Optional[_FakeTestSpec]:
         return self.get_spec_response
@@ -308,32 +320,64 @@ class _FakeReleaseManager:
         _FakeReleaseManager.last_instance = self
         return
 
-    def list_releases(self, **kwargs: Any) -> List[_FakeRelease]:
+    def list_releases(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_releases_calls.append(kwargs)
-        return self.list_releases_response
+        return SimpleNamespace(
+            releases=self.list_releases_response,
+            total=len(self.list_releases_response),
+            offset=0,
+            limit=len(self.list_releases_response),
+        )
 
     def get_release(self, release_id: int) -> Optional[_FakeRelease]:
         return self.get_release_response
 
-    def list_artifacts(self, release_id: int) -> List[Any]:
-        return self.list_artifacts_response
+    def list_artifacts(self, release_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            artifacts=self.list_artifacts_response,
+            total=len(self.list_artifacts_response),
+        )
 
-    def list_channels(self, project_id: int) -> List[Any]:
-        return self.list_channels_response
+    def list_channels(self, project_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            channels=self.list_channels_response,
+            total=len(self.list_channels_response),
+        )
 
     def list_pipelines(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakePipeline]:
-        return self.list_pipelines_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pipelines=self.list_pipelines_response,
+            total=len(self.list_pipelines_response),
+            offset=0,
+            limit=len(self.list_pipelines_response),
+        )
 
     def get_pipeline(self, pipeline_id: int) -> Optional[_FakePipeline]:
         return self.get_pipeline_response
 
-    def list_pipeline_runs(self, **kwargs: Any) -> List[Any]:
-        return self.list_pipeline_runs_response
+    def list_pipeline_runs(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            runs=self.list_pipeline_runs_response,
+            total=len(self.list_pipeline_runs_response),
+            offset=0,
+            limit=len(self.list_pipeline_runs_response),
+        )
 
-    def list_schedules(self, project_id: int) -> List[Any]:
-        return self.list_schedules_response
+    def list_schedules(self, project_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            schedules=self.list_schedules_response,
+            total=len(self.list_schedules_response),
+            offset=0,
+            limit=len(self.list_schedules_response),
+        )
 
 
 # ---------------------------------------------------------------------------

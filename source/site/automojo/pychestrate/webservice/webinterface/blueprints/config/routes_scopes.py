@@ -191,7 +191,7 @@ def handle_scope_list(request: Request) -> Response:
             auth.user_id,
             offset=offset,
             limit=params["per_page"],
-        )
+        ).scopes
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(

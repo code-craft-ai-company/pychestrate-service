@@ -340,12 +340,18 @@ class _FakeSecretManager:
         return
 
     def list_scopes(
-            self, user_id: str, *, offset: int, limit: int
-        ) -> List[_FakeScope]:
+            self, user_id: str, *, offset: int = 0, limit: int = 50
+        ) -> Any:
+        from types import SimpleNamespace
         self.list_scopes_calls.append(
             {"user_id": user_id, "offset": offset, "limit": limit}
         )
-        return self.list_scopes_response
+        return SimpleNamespace(
+            scopes=self.list_scopes_response,
+            total=len(self.list_scopes_response),
+            offset=offset,
+            limit=limit,
+        )
 
     def create_scope(self, request: Any, user_id: str) -> None:
         self.create_scope_calls.append((request, user_id))

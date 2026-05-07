@@ -447,7 +447,7 @@ def handle_dashboard(request: Request) -> Response:
         project_manager = _build_project_manager(db_session=db_session)
         projects = project_manager.list_projects(
             auth.user_id, limit=10
-        )
+        ).projects
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -499,7 +499,7 @@ def handle_project_list(request: Request) -> Response:
             offset=offset,
             limit=params["per_page"],
             search=search if len(search) > 0 else None,
-        )
+        ).projects
 
         total_pages = _approximate_total_pages(
             page=params["page"],
@@ -694,16 +694,16 @@ def handle_project_detail(request: Request) -> Response:
 
         repositories = repository_manager.list_repositories(
             project_id, limit=5
-        )
+        ).repositories
         recent_builds = build_manager.list_builds(
             project_id=project_id, limit=5
-        )
+        ).builds
         recent_tests = test_manager.list_jobs(
             project_id=project_id, limit=5
-        )
+        ).jobs
         members = project_manager.list_members(
             project_id, limit=10
-        )
+        ).members
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -980,7 +980,7 @@ def handle_member_list(request: Request) -> Response:
 
         members = project_manager.list_members(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).members
 
         # Separate per-render permission probe (matches legacy
         # template's ``can_manage`` flag).
@@ -1113,7 +1113,7 @@ def handle_member_add(request: Request) -> Response:
         user_manager = _build_user_manager(db_session=db_session)
         current_members = project_manager.list_members(
             project_id, limit=1000
-        )
+        ).members
         member_user_ids = set()
         for m in current_members:
             mid = getattr(m, "user_id", None)
@@ -1253,7 +1253,9 @@ def handle_member_edit(request: Request) -> Response:
                 )
 
         # GET, or POST that fell through.
-        members = project_manager.list_members(project_id, limit=1000)
+        members = project_manager.list_members(
+            project_id, limit=1000
+        ).members
         member = None
         for m in members:
             if getattr(m, "user_id", None) == target_user_id:

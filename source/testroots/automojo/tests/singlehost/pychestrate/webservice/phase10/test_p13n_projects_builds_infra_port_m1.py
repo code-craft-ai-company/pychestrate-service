@@ -275,14 +275,26 @@ class _FakeBuildManager:
         _FakeBuildManager.last_instance = self
         return
 
-    def list_builds(self, **kwargs: Any) -> List[_FakeBuild]:
+    def list_builds(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_builds_calls.append(kwargs)
-        return self.list_builds_response
+        return SimpleNamespace(
+            builds=self.list_builds_response,
+            total=len(self.list_builds_response),
+            offset=0,
+            limit=len(self.list_builds_response),
+        )
 
     def list_specs(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeBuildSpec]:
-        return self.list_specs_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            specs=self.list_specs_response,
+            total=len(self.list_specs_response),
+            offset=0,
+            limit=len(self.list_specs_response),
+        )
 
     def get_spec(self, spec_id: int) -> Optional[_FakeBuildSpec]:
         return self.get_spec_response
@@ -290,8 +302,12 @@ class _FakeBuildManager:
     def get_build(self, build_id: int) -> Optional[_FakeBuild]:
         return self.get_build_response
 
-    def list_artifacts(self, build_id: int) -> List[Any]:
-        return self.list_artifacts_response
+    def list_artifacts(self, build_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            artifacts=self.list_artifacts_response,
+            total=len(self.list_artifacts_response),
+        )
 
     def create_spec(
             self, project_id: int, request: Any, user_id: str
@@ -340,8 +356,14 @@ class _FakeRepositoryManager:
 
     def list_repositories(
             self, project_id: int, **kwargs: Any
-        ) -> List[Any]:
-        return self.list_repositories_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            repositories=self.list_repositories_response,
+            total=len(self.list_repositories_response),
+            offset=0,
+            limit=len(self.list_repositories_response),
+        )
 
 
 class _FakeInfraManager:
@@ -358,14 +380,26 @@ class _FakeInfraManager:
         _FakeInfraManager.last_instance = self
         return
 
-    def list_jobs(self, **kwargs: Any) -> List[_FakeInfraJob]:
+    def list_jobs(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
         self.list_jobs_calls.append(kwargs)
-        return self.list_jobs_response
+        return SimpleNamespace(
+            jobs=self.list_jobs_response,
+            total=len(self.list_jobs_response),
+            offset=0,
+            limit=len(self.list_jobs_response),
+        )
 
     def list_specs(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeInfraSpec]:
-        return self.list_specs_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            specs=self.list_specs_response,
+            total=len(self.list_specs_response),
+            offset=0,
+            limit=len(self.list_specs_response),
+        )
 
     def get_job(self, job_id: int) -> Optional[_FakeInfraJob]:
         return self.get_job_response

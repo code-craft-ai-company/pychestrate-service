@@ -399,8 +399,8 @@ def handle_build_list(request: Request) -> Response:
             status=status,
             offset=offset,
             limit=params["per_page"],
-        )
-        specs = build_manager.list_specs(project_id, limit=100)
+        ).builds
+        specs = build_manager.list_specs(project_id, limit=100).specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -467,7 +467,7 @@ def handle_build_spec_list(request: Request) -> Response:
         build_manager = _build_build_manager(db_session=db_session)
         specs = build_manager.list_specs(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -582,7 +582,7 @@ def handle_build_spec_create(request: Request) -> Response:
         if method == "GET":
             repositories = repository_manager.list_repositories(
                 project_id, limit=100
-            )
+            ).repositories
             return _render_build_spec_create_form(
                 auth=auth,
                 project=project,
@@ -680,7 +680,7 @@ def handle_build_spec_create(request: Request) -> Response:
 
         repositories = repository_manager.list_repositories(
             project_id, limit=100
-        )
+        ).repositories
         return _render_build_spec_create_form(
             auth=auth,
             project=project,
@@ -731,7 +731,7 @@ def handle_build_spec_detail(request: Request) -> Response:
 
         recent_builds = build_manager.list_builds(
             spec_id=spec_id, limit=10
-        )
+        ).builds
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -799,7 +799,7 @@ def handle_build_detail(request: Request) -> Response:
             return build_or_redirect
         build = build_or_redirect
 
-        artifacts = build_manager.list_artifacts(build_id)
+        artifacts = build_manager.list_artifacts(build_id).artifacts
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,

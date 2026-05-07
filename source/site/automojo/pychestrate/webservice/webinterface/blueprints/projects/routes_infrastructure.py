@@ -295,8 +295,8 @@ def handle_infra_job_list(request: Request) -> Response:
             status=status,
             offset=offset,
             limit=params["per_page"],
-        )
-        specs = infra_manager.list_specs(project_id, limit=100)
+        ).jobs
+        specs = infra_manager.list_specs(project_id, limit=100).specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -363,7 +363,7 @@ def handle_infra_spec_list(request: Request) -> Response:
         infra_manager = _build_infra_manager(db_session=db_session)
         specs = infra_manager.list_specs(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -442,7 +442,7 @@ def handle_infra_spec_detail(request: Request) -> Response:
 
         recent_jobs = infra_manager.list_jobs(
             spec_id=spec_id, limit=10
-        )
+        ).jobs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
