@@ -404,7 +404,7 @@ def handle_release_event_list(request: Request) -> Response:
         )
         events = release_manager.list_release_events(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).events
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -482,14 +482,16 @@ def handle_release_event_detail(request: Request) -> Response:
             return event_or_redirect
         event = event_or_redirect
 
-        phases = release_manager.list_phase_events(event_id)
-        branches = release_manager.list_release_branches(event_id)
+        phases = release_manager.list_phase_events(event_id).phases
+        branches = release_manager.list_release_branches(
+            event_id
+        ).branches
         merge_events = release_manager.list_merge_events(
             release_event_id=event_id
-        )
+        ).events
         pull_events = release_manager.list_pull_events(
             release_event_id=event_id
-        )
+        ).events
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,

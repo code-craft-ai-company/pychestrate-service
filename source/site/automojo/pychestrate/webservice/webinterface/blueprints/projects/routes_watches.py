@@ -638,26 +638,16 @@ def handle_watch_list(request: Request) -> Response:
         watch_manager = _build_watch_manager(db_session=db_session)
         watches = watch_manager.list_watches(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).watches
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        try:
-            returned_count = len(watches)
-        except TypeError:
-            # ``WatchListResponse`` dataclass does not implement
-            # __len__; fall back to its ``.watches`` attribute when
-            # present.
-            inner = getattr(watches, "watches", None)
-            returned_count = (
-                len(inner) if inner is not None else 0
-            )
         total_pages = _approximate_total_pages(
             page=params["page"],
             per_page=params["per_page"],
-            returned_count=returned_count,
+            returned_count=len(watches),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -795,7 +785,7 @@ def handle_watch_create(request: Request) -> Response:
         )
         repositories = repository_manager.list_repositories(
             project_id, limit=100
-        )
+        ).repositories
 
         method = request.method.upper()
         if method == "GET":

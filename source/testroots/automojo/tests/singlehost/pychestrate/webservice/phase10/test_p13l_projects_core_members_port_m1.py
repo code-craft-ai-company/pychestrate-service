@@ -273,11 +273,17 @@ class _FakeProjectManager:
 
     def list_projects(
             self, user_id: str, **kwargs: Any
-        ) -> List[_FakeProject]:
+        ) -> Any:
+        from types import SimpleNamespace
         self.list_projects_calls.append(
             {"user_id": user_id, **kwargs}
         )
-        return self.list_projects_response
+        return SimpleNamespace(
+            projects=self.list_projects_response,
+            total=len(self.list_projects_response),
+            offset=0,
+            limit=len(self.list_projects_response),
+        )
 
     def get_project(self, project_id: int) -> Optional[_FakeProject]:
         return self.get_project_response
@@ -319,8 +325,14 @@ class _FakeProjectManager:
 
     def list_members(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeMember]:
-        return self.list_members_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            members=self.list_members_response,
+            total=len(self.list_members_response),
+            offset=0,
+            limit=len(self.list_members_response),
+        )
 
     def add_member(
             self, project_id: int, target_user_id: int,
@@ -375,8 +387,14 @@ class _FakeRepositoryManager:
 
     def list_repositories(
             self, project_id: int, **kwargs: Any
-        ) -> List[Any]:
-        return self.list_repositories_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            repositories=self.list_repositories_response,
+            total=len(self.list_repositories_response),
+            offset=0,
+            limit=len(self.list_repositories_response),
+        )
 
 
 class _FakeBuildManager:
@@ -385,8 +403,14 @@ class _FakeBuildManager:
         self.list_builds_response: List[Any] = []
         return
 
-    def list_builds(self, **kwargs: Any) -> List[Any]:
-        return self.list_builds_response
+    def list_builds(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            builds=self.list_builds_response,
+            total=len(self.list_builds_response),
+            offset=0,
+            limit=len(self.list_builds_response),
+        )
 
 
 class _FakeTestManager:
@@ -395,8 +419,14 @@ class _FakeTestManager:
         self.list_jobs_response: List[Any] = []
         return
 
-    def list_jobs(self, **kwargs: Any) -> List[Any]:
-        return self.list_jobs_response
+    def list_jobs(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            jobs=self.list_jobs_response,
+            total=len(self.list_jobs_response),
+            offset=0,
+            limit=len(self.list_jobs_response),
+        )
 
 
 # ---------------------------------------------------------------------------

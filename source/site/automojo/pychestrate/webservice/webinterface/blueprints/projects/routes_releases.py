@@ -297,8 +297,8 @@ def handle_release_list(request: Request) -> Response:
             channel=channel,
             offset=offset,
             limit=params["per_page"],
-        )
-        channels = release_manager.list_channels(project_id)
+        ).releases
+        channels = release_manager.list_channels(project_id).channels
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -378,8 +378,8 @@ def handle_release_detail(request: Request) -> Response:
             return release_or_redirect
         release = release_or_redirect
 
-        artifacts = release_manager.list_artifacts(release_id)
-        channels = release_manager.list_channels(project_id)
+        artifacts = release_manager.list_artifacts(release_id).artifacts
+        channels = release_manager.list_channels(project_id).channels
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -439,7 +439,7 @@ def handle_pipeline_list(request: Request) -> Response:
         )
         pipelines = release_manager.list_pipelines(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).pipelines
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -518,7 +518,7 @@ def handle_pipeline_detail(request: Request) -> Response:
 
         recent_runs = release_manager.list_pipeline_runs(
             pipeline_id=pipeline_id, limit=10
-        )
+        ).runs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -573,7 +573,7 @@ def handle_channel_list(request: Request) -> Response:
         release_manager = _build_release_manager(
             db_session=db_session
         )
-        channels = release_manager.list_channels(project_id)
+        channels = release_manager.list_channels(project_id).channels
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
@@ -626,7 +626,7 @@ def handle_schedule_list(request: Request) -> Response:
         release_manager = _build_release_manager(
             db_session=db_session
         )
-        schedules = release_manager.list_schedules(project_id)
+        schedules = release_manager.list_schedules(project_id).schedules
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,

@@ -224,8 +224,8 @@ def handle_secret_list(request: Request) -> Response:
             user_id=auth.user_id,
             offset=offset,
             limit=params["per_page"],
-        )
-        scopes = secret_manager.list_scopes(auth.user_id)
+        ).secrets
+        scopes = secret_manager.list_scopes(auth.user_id).scopes
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -268,7 +268,7 @@ def handle_secret_create(request: Request) -> Response:
         secret_manager = _build_secret_manager(db_session=db_session)
 
         if method == "GET":
-            scopes = secret_manager.list_scopes(auth.user_id)
+            scopes = secret_manager.list_scopes(auth.user_id).scopes
             flashes = flash.consume_flashes(session=auth.session)
             context = _build_default_template_context(
                 session=auth.session,
@@ -338,7 +338,7 @@ def handle_secret_create(request: Request) -> Response:
             )
 
         # Re-render the form with the submitted values + flash.
-        scopes = secret_manager.list_scopes(auth.user_id)
+        scopes = secret_manager.list_scopes(auth.user_id).scopes
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,

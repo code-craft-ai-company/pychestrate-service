@@ -266,8 +266,14 @@ class _FakeRepositoryManager:
 
     def list_repositories(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeRepository]:
-        return self.list_repositories_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            repositories=self.list_repositories_response,
+            total=len(self.list_repositories_response),
+            offset=0,
+            limit=len(self.list_repositories_response),
+        )
 
 
 class _FakeReleaseManager:
@@ -300,25 +306,51 @@ class _FakeReleaseManager:
 
     def list_release_events(
             self, project_id: int, **kwargs: Any
-        ) -> List[Any]:
-        return self.list_release_events_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            events=self.list_release_events_response,
+            total=len(self.list_release_events_response),
+            offset=0,
+            limit=len(self.list_release_events_response),
+        )
 
     def get_release_event(
             self, event_id: int
         ) -> Optional[_FakeReleaseEvent]:
         return self.get_release_event_response
 
-    def list_phase_events(self, event_id: int) -> List[Any]:
-        return self.list_phase_events_response
+    def list_phase_events(self, event_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            phases=self.list_phase_events_response,
+            total=len(self.list_phase_events_response),
+        )
 
-    def list_release_branches(self, event_id: int) -> List[Any]:
-        return self.list_release_branches_response
+    def list_release_branches(self, event_id: int) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            branches=self.list_release_branches_response,
+            total=len(self.list_release_branches_response),
+        )
 
-    def list_merge_events(self, **kwargs: Any) -> List[Any]:
-        return self.list_merge_events_response
+    def list_merge_events(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            events=self.list_merge_events_response,
+            total=len(self.list_merge_events_response),
+            offset=0,
+            limit=len(self.list_merge_events_response),
+        )
 
-    def list_pull_events(self, **kwargs: Any) -> List[Any]:
-        return self.list_pull_events_response
+    def list_pull_events(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            events=self.list_pull_events_response,
+            total=len(self.list_pull_events_response),
+            offset=0,
+            limit=len(self.list_pull_events_response),
+        )
 
 
 class _FakeWatchManager:
@@ -343,8 +375,14 @@ class _FakeWatchManager:
 
     def list_watches(
             self, project_id: int, **kwargs: Any
-        ) -> List[_FakeWatch]:
-        return self.list_watches_response
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            watches=self.list_watches_response,
+            total=len(self.list_watches_response),
+            offset=0,
+            limit=len(self.list_watches_response),
+        )
 
     def get_watch(self, watch_id: int) -> Optional[_FakeWatch]:
         return self.get_watch_response

@@ -380,7 +380,7 @@ def handle_repository_list(request: Request) -> Response:
         )
         repositories = repository_manager.list_repositories(
             project_id, offset=offset, limit=params["per_page"]
-        )
+        ).repositories
 
         try:
             can_manage = project_manager.check_permission(
