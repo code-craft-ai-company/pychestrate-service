@@ -79,7 +79,7 @@ def handle_tag_list(request: Request) -> Response:
     db_session = auth.db_session
     try:
         resource_manager = _build_resource_manager(db_session=db_session)
-        tags = resource_manager.list_tags()
+        tags = resource_manager.list_tags().tags
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(

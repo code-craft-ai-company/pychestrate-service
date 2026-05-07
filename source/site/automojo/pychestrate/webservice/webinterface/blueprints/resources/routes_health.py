@@ -243,7 +243,7 @@ def handle_health_dashboard(request: Request) -> Response:
         # health_monitor isn't needed for the dashboard but the
         # legacy handler builds one. Skip in the port -- nothing
         # uses it.
-        resources = resource_manager.list_resources(limit=1000)
+        resources = resource_manager.list_resources(limit=1000).resources
         health_groups = _group_resources_by_health_status(
             resources=resources
         )

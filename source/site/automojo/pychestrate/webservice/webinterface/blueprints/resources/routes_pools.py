@@ -143,7 +143,7 @@ def handle_pool_list(request: Request) -> Response:
     db_session = auth.db_session
     try:
         resource_manager = _build_resource_manager(db_session=db_session)
-        pools = resource_manager.list_pools(auth.user_id)
+        pools = resource_manager.list_pools(auth.user_id).pools
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -319,7 +319,7 @@ def handle_pool_detail(request: Request) -> Response:
 
         resources = resource_manager.list_resources(
             pool_id=pool_id, limit=100
-        )
+        ).resources
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
