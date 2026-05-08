@@ -171,8 +171,21 @@ def register_phase1_builtin_extensions() -> None:
         sessions can reference them), then RBAC, secrets, audit, and
         feature flags.
 
+        Idempotent: a second call is a no-op so callers like
+        :func:`register_service_extensions` (which re-invokes this
+        as part of the production startup sequence) do not need
+        to track whether :func:`bootstrap_phase1_runtime` has
+        already run. The per-feature ``register_builtin_extensions``
+        calls are themselves idempotent; the projects registry
+        freeze step uses :func:`projects_is_registry_frozen` to
+        skip a redundant freeze.
+
         :returns: None.
     """
+    from automojo.pychestrate.webservice.projects.metadata_registry import (  # noqa: E402
+        is_registry_frozen as _projects_is_registry_frozen,
+    )
+
     users_register()
     auth_register()
     rbac_register()
@@ -181,7 +194,8 @@ def register_phase1_builtin_extensions() -> None:
     flags_register()
     clients_register()
     projects_register()
-    projects_freeze_registry()
+    if not _projects_is_registry_frozen():
+        projects_freeze_registry()
     return
 
 
