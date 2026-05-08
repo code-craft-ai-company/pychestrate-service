@@ -4,12 +4,12 @@
 Consumer-UI Auth Stack — Legacy vs Modern Split
 ***********************************************
 
-Pychestrate currently carries **two parallel authentication stacks**.
-Newer code uses one; the consumer-facing web UI uses the other. The
-two stacks back onto disjoint database schemas. This document
-captures what each stack is, which routes use which, and where the
-seams are -- the layout that future contributors should preserve OR
-the work needed to converge on a single stack.
+Pychestrate carries **two parallel authentication stacks**.  As of PR
+p13aa the consumer-UI auth flow (login / session validation / logout)
+is wired to the modern stack via a small adapter; permission checking
+(``check_permission``) still routes through the legacy stack. This
+document captures what each stack is, which routes use which, and the
+remaining work needed to converge on a single stack.
 
 Background
 ==========
@@ -28,9 +28,17 @@ as the canonical declarative base for everything new
 ``rbac_*``, …) and a parallel auth implementation under
 ``automojo.pychestrate.webservice.security.auth.local_flow`` /
 ``factories.password_hasher``. The flask consumer UI was then ported
-to webworks across PRs F1..F5 -- but the port preserved every call to
-``SecurityManager`` 1:1, so the consumer UI still talks to the
-**legacy** stack.
+to webworks across PRs F1..F5; the port preserved every call to the
+legacy ``SecurityManager`` 1:1.
+
+PR p13aa introduced
+``webinterface.blueprints.config.auth_adapter.ConsumerUISecurityAdapter``,
+a thin facade that exposes the same four-method interface
+(``authenticate`` / ``validate_token`` / ``logout`` /
+``check_permission``) the consumer-UI handlers already use. Three of
+those methods now wire to the modern stack (``local_flow`` +
+``session_service``); ``check_permission`` continues to delegate to
+the legacy ``SecurityManager`` until RBAC is migrated separately.
 
 
 The two stacks at a glance
@@ -64,57 +72,64 @@ The two stacks at a glance
 +---------------------------+---------------------------------+----------------------------------+
 
 
-Who uses which
-==============
+Who uses which (as of PR p13aa)
+===============================
 
-**Legacy** (``SecurityManager``) is used by:
-
-* The consumer web UI's login + logout + session-validation handlers
-  in ``webinterface.blueprints.config.routes``
-  (``handle_login_submit`` / ``handle_logout`` /
-  ``_validate_session_via_security_manager``).
-* The web UI's permission gating helper
-  ``_require_permission_or_redirect`` (calls
-  ``SecurityManager.check_permission``).
-
-**Modern** (``local_flow``) is used by:
+**Modern stack** (``local_flow`` + ``session_service``) is used by:
 
 * The REST API auth route surface under
   ``security.auth.restapi.v1.auth_routes``.
+* The consumer-UI's login flow (``handle_login_submit`` -- via
+  ``ConsumerUISecurityAdapter.authenticate`` -> ``verify_local_credentials``
+  + ``open_session``).
+* The consumer-UI's session validation
+  (``_validate_session_via_security_manager`` -> adapter ->
+  ``resolve_session``).
+* The consumer-UI's logout (``handle_logout`` -> adapter ->
+  ``close_session``).
 * The Phase-1 bootstrap that loads the password pepper and wires the
   ``password_hasher`` extension.
+
+**Legacy stack** (``SecurityManager``) is still used by:
+
+* The consumer-UI's permission gating helper
+  ``_require_permission_or_redirect``, which calls
+  ``ConsumerUISecurityAdapter.check_permission``.  The adapter
+  delegates to the legacy ``SecurityManager.check_permission``,
+  which walks ``user.roles`` (CSV) -> ``system_roles`` ->
+  ``permissions`` (many-to-many).
+
+Migrating RBAC to ``rbac_evaluator`` against the modern
+``rbac_*`` tables is the natural next step; once that lands the
+legacy schema can be retired entirely.
 
 
 .. _12-00-production-gap:
 
-The production schema gap
-=========================
+The production schema gap (closed in PR #160 + p13aa)
+=====================================================
 
-Alembic targets ``PychestratePhase1Base.metadata`` (see
-``alembic/env.py``). It generates migrations only for the modern
-stack's tables. The legacy ``user`` / ``password_history`` /
-``sessions`` tables that the consumer-UI login flow queries are
-**not produced by any migration**.
+Alembic originally targeted ``PychestratePhase1Base.metadata`` only,
+so the legacy ``user`` / ``password_history`` / ``sessions`` tables
+that the consumer-UI's *legacy* login flow queried were not produced
+by any migration. The consumer UI's first
+``POST /config/login`` against an alembic-managed deployment would
+hit ``OperationalError: no such table: user``, the handler's broad
+``except Exception`` would swallow it, and the form would re-render
+401 with a generic "Invalid username or password".  That was a P0
+production correctness bug.
 
-Therefore, in a production deployment whose schema is alembic-managed:
+PR #160 (the alembic stopgap) added a second migration that creates
+every table on ``PychestrateModelBase.metadata`` so the legacy schema
+exists in production deployments.
 
-* ``identity_users`` exists.
-* ``user`` does **not** exist (unless an operator created it
-  out-of-band).
-
-The consumer UI's first ``POST /config/login`` against such a
-deployment will hit ``SecurityManager.authenticate()``, which queries
-``User`` (the legacy table). The query raises
-``sqlalchemy.exc.OperationalError: no such table: user`` (SQLite) or
-``UndefinedTable`` (Postgres). The handler's broad ``except Exception``
-swallows the error and the form re-renders 401 with a generic
-"Invalid username or password" -- the user can't tell that the
-backend has no auth schema at all.
-
-**This is a P0 production correctness bug.** It was discovered while
-building the tier-2 e2e tests in PR p13r (#155); the test harness
-papers it over by calling ``PychestrateModelBase.metadata.create_all``
-on the in-memory SQLite engine, which is not how production runs.
+PR p13aa took the strategic step: the consumer-UI's login flow now
+queries ``identity_users`` + ``auth_local_credentials`` +
+``auth_sessions`` via ``ConsumerUISecurityAdapter``. Production deployments
+get a working login flow against the modern schema regardless of
+whether the legacy migration has been applied. The legacy schema is
+now only required by ``check_permission`` (RBAC), and the migration
+from #160 keeps it covered.
 
 
 SQLite testing implications
@@ -160,38 +175,44 @@ SQLite. The modern stack's models do work on SQLite (which is why
 the unit tests in p13a..p13o all pass without any of these patches).
 
 
-Recommendation
-==============
+Status (post p13aa)
+===================
 
-Two fix paths exist, in increasing scope:
+The two-step plan called out earlier in this document has now landed:
 
-1. **Stopgap -- include the legacy tables in alembic.** Add the
-   ``PychestrateModelBase.metadata`` tree to ``alembic/env.py`` so
-   migrations cover ``user`` / ``password_history`` / ``sessions``.
-   Production Postgres can then accommodate the legacy auth flow.
-   This unblocks login but does NOT address the SQLite-incompatibility
-   issues above (which only manifest in tests).
+1. **Stopgap -- legacy tables in alembic.** Done in PR #160. The
+   ``PychestrateModelBase.metadata`` tree is now part of the alembic
+   target, so a fresh deployment's ``alembic upgrade head`` produces
+   the legacy ``user`` / ``password_history`` / ``sessions`` /
+   ``permissions`` / ``system_roles`` / ``role_permissions`` tables.
+2. **Strategic -- consumer UI on ``local_flow``.** Done in this PR
+   (p13aa) for the auth-flow half: ``ConsumerUISecurityAdapter``
+   (``webinterface/blueprints/config/auth_adapter.py``) wires
+   ``authenticate`` / ``validate_token`` / ``logout`` to the modern
+   ``security.auth.local_flow`` + ``session_service`` stack so login,
+   session validation, and logout query
+   ``identity_users`` + ``auth_local_credentials`` +
+   ``auth_sessions`` -- the same tables the REST API uses.
 
-2. **Strategic -- migrate the consumer UI to ``local_flow``.**
-   Rewrite ``webinterface.blueprints.config.routes._build_security_manager``
-   to return an adapter object whose ``authenticate`` /
-   ``validate_token`` / ``check_permission`` methods call
-   ``local_flow.verify_local_credentials`` and the modern session /
-   RBAC helpers, so the consumer UI uses the same ``identity_users``
-   / ``auth_local_credentials`` / ``auth_sessions`` tables as the
-   REST API. Eliminates the schema split and obsoletes the
-   SQLite-specific patches in the tier-2 e2e harness.
+What's still legacy
+-------------------
 
-The strategic option is the right long-term direction; the stopgap
-is a faster bridge if a production deployment is imminent.
+* **Permission checking.** The adapter's ``check_permission``
+  delegates to the legacy ``SecurityManager.check_permission``,
+  which queries ``user.roles`` -> ``system_roles`` ->
+  ``permissions``. Migrating that path to ``rbac_evaluator`` against
+  the modern ``rbac_*`` tables is the natural follow-up; once it
+  lands the legacy schema can be retired entirely.
 
-Until one of these lands:
+* **CSRF token storage.** The legacy ``SecurityManager.authenticate``
+  stored a per-session CSRF token alongside the session row; the
+  modern ``AuthSession`` has no CSRF column. The adapter generates a
+  fresh CSRF at ``authenticate`` time and the consumer-UI handlers
+  carry it on the cookie session payload (cookie is the source of
+  truth). ``validate_token`` returns an empty CSRF; the handler
+  preserves the cookie value rather than overwriting.
 
-* The consumer UI's login flow is **non-functional** in any
-  deployment whose schema came from alembic alone.
-* End-to-end tests that exercise the login flow must seed the legacy
-  tables themselves (see the ``_ensure_seeded_admin`` helper in
-  ``test_p13r_consumer_ui_e2e_authed_m1``).
-* New consumer-UI features that need authenticated context should be
-  prepared to migrate to the modern stack rather than entrenching
-  more callers of the legacy ``SecurityManager``.
+* **The harness's SQLite shims** (``patch_legacy_pk_columns_for_sqlite``
+  + ``patch_utc_now_for_sqlite_tz_compat``) are still required while
+  RBAC keeps the legacy schema in scope for tests. They become dead
+  code once RBAC migrates.
