@@ -511,6 +511,42 @@ def ensure_shared_in_memory_db_pool() -> None:
 # ---------------------------------------------------------------------------
 
 
+_TEST_PASSWORD_PEPPER: bytes = b"\x33" * 32
+
+
+def ensure_pepper_for_tests() -> None:
+    """
+        Install a deterministic 32-byte password pepper.
+        :func:`local_flow.hash_password` and
+        :func:`local_flow.verify_local_credentials` both call
+        :func:`get_active_pepper` and raise ``ConfigurationError``
+        when no pepper has been set. The runtime bootstrap
+        normally loads the pepper from operator config -- the
+        test harness skips that step (no pepper source
+        configured), so install one explicitly.
+
+        Idempotent.
+    """
+    from automojo.pychestrate.webservice.secrets.secret_bytes import (  # noqa: E402
+        SecretBytes,
+    )
+    from automojo.pychestrate.webservice.security.auth.pepper_loader import (  # noqa: E402
+        get_active_pepper,
+        set_active_pepper,
+    )
+    # NB: ``automojo.errors.exceptions.ConfigurationError``
+    # inherits from ``BaseException`` (not ``Exception``), so a
+    # plain ``except Exception`` would not catch the
+    # "no pepper loaded" raise from ``get_active_pepper``.
+    try:
+        get_active_pepper()
+        return
+    except BaseException:
+        pass
+    set_active_pepper(pepper=SecretBytes(_TEST_PASSWORD_PEPPER))
+    return
+
+
 E2E_ADMIN_LOGIN: str = "e2e-admin"
 E2E_ADMIN_PASSWORD: str = "e2e-admin-secret-1!"
 E2E_ADMIN_EMAIL: str = "e2e-admin@example.invalid"
@@ -533,14 +569,112 @@ class SeededAdmin:
 _SEEDED_ADMIN: Optional[SeededAdmin] = None
 
 
+def _seed_user_pair(
+        *,
+        login: str, password: str, email: str, role_csv: str,
+        first_name: str, last_name: str, display_name: str
+    ) -> str:
+    """
+        Idempotently seed a (modern, legacy) user pair sharing
+        the same UUID:
+
+        * :class:`IdentityUser` + :class:`AuthLocalCredentials`
+          on the modern Phase-1+ schema -- the auth-flow side
+          (login / session / logout) reads these.
+        * :class:`User` (with ``roles=role_csv``) on the legacy
+          ``core.orm`` schema -- the consumer-UI's
+          :meth:`check_permission` still queries the legacy
+          ``user.roles`` -> ``system_roles`` -> ``permissions``
+          chain. Same UUID on both rows so
+          :meth:`SecurityManager.check_permission` finds the
+          right roles when the auth-flow's user_id is passed.
+
+        :returns: The shared user_id (UUID string).
+    """
+    from automojo.pychestrate.webservice.security.auth import (  # noqa: E402
+        local_flow,
+    )
+    from automojo.pychestrate.webservice.identity.users.models import (  # noqa: E402
+        IdentityUser,
+        UserStatus,
+    )
+    from automojo.pychestrate.webservice.security.auth.models import (  # noqa: E402
+        AuthLocalCredentials,
+    )
+    from automojo.pychestrate.core.orm import User  # noqa: E402
+
+    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    db_session = factory()
+    try:
+        existing_modern = (
+            db_session.query(IdentityUser)
+            .filter(IdentityUser.login_name == login)
+            .first()
+        )
+        if existing_modern is not None:
+            return str(existing_modern.user_id)
+
+        shared_user_id = uuid.uuid4()
+
+        # Modern half: IdentityUser + AuthLocalCredentials. Hash
+        # via ``local_flow.hash_password`` so the stored hash
+        # matches what ``verify_local_credentials`` will check.
+        modern_user = IdentityUser(
+            user_id=shared_user_id,
+            login_name=login,
+            primary_email=email,
+            display_name=display_name,
+            status=UserStatus.ACTIVE,
+            provisioning_source="local",
+            external_id=None,
+            timezone="UTC",
+        )
+        db_session.add(modern_user)
+        db_session.flush()
+
+        encoded_hash, algo_params = local_flow.hash_password(
+            password=password
+        )
+        credentials = AuthLocalCredentials(
+            user_id=shared_user_id,
+            argon2id_hash=encoded_hash,
+            algo_params=algo_params,
+        )
+        db_session.add(credentials)
+
+        # Legacy half: User row carrying ``roles`` for the
+        # consumer-UI's check_permission until RBAC migrates.
+        legacy_user = User(
+            id=shared_user_id,
+            first_name=first_name,
+            last_name=last_name,
+            display_name=display_name,
+            email=email,
+            login=login,
+            ownertag="e2e",
+            status="active",
+            roles=role_csv,
+            authtype="internal",
+        )
+        db_session.add(legacy_user)
+        db_session.commit()
+
+        return str(shared_user_id)
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 def ensure_seeded_admin() -> SeededAdmin:
     """
-        Create an admin :class:`User` + werkzeug-hashed
-        :class:`PasswordHistory` row once, return the cached
-        handle on subsequent calls. Triggers
-        :func:`ensure_app` + :func:`ensure_shared_in_memory_db_pool`
-        on first invocation so the legacy auth schema exists
-        before the seed runs.
+        Create an admin user with both modern (``identity_users``
+        + ``auth_local_credentials``) and legacy (``user``)
+        schema rows sharing the same UUID. The auth flow uses
+        the modern half; ``check_permission`` still uses the
+        legacy ``user.roles`` -> ``system_roles`` ->
+        ``permissions`` chain.
     """
     global _SEEDED_ADMIN
     if _SEEDED_ADMIN is not None:
@@ -548,63 +682,24 @@ def ensure_seeded_admin() -> SeededAdmin:
 
     ensure_app()
     ensure_shared_in_memory_db_pool()
+    ensure_pepper_for_tests()
 
-    from werkzeug.security import generate_password_hash  # noqa: E402
-    from automojo.pychestrate.core.orm import (  # noqa: E402
-        PasswordHistory,
-        User,
+    user_id = _seed_user_pair(
+        login=E2E_ADMIN_LOGIN,
+        password=E2E_ADMIN_PASSWORD,
+        email=E2E_ADMIN_EMAIL,
+        role_csv="admin",
+        first_name="E2E",
+        last_name="Admin",
+        display_name="E2E Admin",
     )
 
-    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
-    db_session = factory()
-    try:
-        existing = (
-            db_session.query(User)
-            .filter(User.login == E2E_ADMIN_LOGIN)
-            .first()
-        )
-        if existing is not None:
-            _SEEDED_ADMIN = SeededAdmin(
-                user_id=str(existing.id),
-                login=E2E_ADMIN_LOGIN,
-                password=E2E_ADMIN_PASSWORD,
-            )
-            return _SEEDED_ADMIN
-
-        user = User(
-            id=uuid.uuid4(),
-            first_name="E2E",
-            last_name="Admin",
-            display_name="E2E Admin",
-            email=E2E_ADMIN_EMAIL,
-            login=E2E_ADMIN_LOGIN,
-            ownertag="e2e",
-            status="active",
-            roles="admin",
-            authtype="internal",
-        )
-        db_session.add(user)
-        db_session.flush()
-
-        password_hash = generate_password_hash(E2E_ADMIN_PASSWORD)
-        history = PasswordHistory(
-            user_id=user.id,
-            password_hash=password_hash,
-        )
-        db_session.add(history)
-        db_session.commit()
-
-        _SEEDED_ADMIN = SeededAdmin(
-            user_id=str(user.id),
-            login=E2E_ADMIN_LOGIN,
-            password=E2E_ADMIN_PASSWORD,
-        )
-        return _SEEDED_ADMIN
-    finally:
-        try:
-            db_session.close()
-        except Exception:
-            pass
+    _SEEDED_ADMIN = SeededAdmin(
+        user_id=user_id,
+        login=E2E_ADMIN_LOGIN,
+        password=E2E_ADMIN_PASSWORD,
+    )
+    return _SEEDED_ADMIN
 
 
 # ---------------------------------------------------------------------------
@@ -649,7 +744,21 @@ def login_via_post(
         POST credentials to ``/config/login`` and return
         ``(response, cookies)`` -- ``cookies`` is empty on
         failure.
+
+        Resets the modern :mod:`local_flow` backoff state at
+        the start of each call. The backoff state machine
+        accumulates failure counts per (login_name, source_ip);
+        across a sweep of tests where some deliberately submit
+        bad credentials, the bucket gets full and subsequent
+        happy-path logins for the same user are then locked
+        out with ``Too many recent failures``. The reset is a
+        test-only seam and is idempotent.
     """
+    from automojo.pychestrate.webservice.security.auth.local_flow import (  # noqa: E402
+        reset_backoff_for_testing,
+    )
+    reset_backoff_for_testing()
+
     body = (
         "username={username}&password={password}".format(
             username=login, password=password
@@ -813,63 +922,24 @@ def ensure_seeded_viewer() -> SeededAdmin:
 
     ensure_app()
     ensure_shared_in_memory_db_pool()
+    ensure_pepper_for_tests()
 
-    from werkzeug.security import generate_password_hash  # noqa: E402
-    from automojo.pychestrate.core.orm import (  # noqa: E402
-        PasswordHistory,
-        User,
+    user_id = _seed_user_pair(
+        login=E2E_VIEWER_LOGIN,
+        password=E2E_VIEWER_PASSWORD,
+        email=E2E_VIEWER_EMAIL,
+        role_csv="viewer",
+        first_name="E2E",
+        last_name="Viewer",
+        display_name="E2E Viewer",
     )
 
-    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
-    db_session = factory()
-    try:
-        existing = (
-            db_session.query(User)
-            .filter(User.login == E2E_VIEWER_LOGIN)
-            .first()
-        )
-        if existing is not None:
-            _SEEDED_VIEWER = SeededAdmin(
-                user_id=str(existing.id),
-                login=E2E_VIEWER_LOGIN,
-                password=E2E_VIEWER_PASSWORD,
-            )
-            return _SEEDED_VIEWER
-
-        user = User(
-            id=uuid.uuid4(),
-            first_name="E2E",
-            last_name="Viewer",
-            display_name="E2E Viewer",
-            email=E2E_VIEWER_EMAIL,
-            login=E2E_VIEWER_LOGIN,
-            ownertag="e2e",
-            status="active",
-            roles="viewer",
-            authtype="internal",
-        )
-        db_session.add(user)
-        db_session.flush()
-
-        password_hash = generate_password_hash(E2E_VIEWER_PASSWORD)
-        history = PasswordHistory(
-            user_id=user.id,
-            password_hash=password_hash,
-        )
-        db_session.add(history)
-        db_session.commit()
-
-        _SEEDED_VIEWER = SeededAdmin(
-            user_id=str(user.id),
-            login=E2E_VIEWER_LOGIN,
-            password=E2E_VIEWER_PASSWORD,
-        )
-        return _SEEDED_VIEWER
-    finally:
-        try:
-            db_session.close()
-        except Exception:
-            pass
+    _SEEDED_VIEWER = SeededAdmin(
+        user_id=user_id,
+        login=E2E_VIEWER_LOGIN,
+        password=E2E_VIEWER_PASSWORD,
+    )
+    return _SEEDED_VIEWER
 
 
 def login_as(*, wsgi_app: Any, user: SeededAdmin) -> Dict[str, str]:
@@ -900,6 +970,7 @@ __all__ = [
     "patch_utc_now_for_sqlite_tz_compat",
     "patch_legacy_pk_columns_for_sqlite",
     "ensure_shared_in_memory_db_pool",
+    "ensure_pepper_for_tests",
     "E2E_ADMIN_LOGIN",
     "E2E_ADMIN_PASSWORD",
     "E2E_ADMIN_EMAIL",

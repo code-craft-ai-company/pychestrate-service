@@ -414,19 +414,27 @@ def _build_default_template_context(
 
 def _build_security_manager(*, db_session: Any) -> Any:
     """
-        Construct a :class:`SecurityManager` against the supplied
-        SQLAlchemy session. Lazy-imports the class so this module
-        does not pull the manager (and its werkzeug dep) at import
-        time.
+        Construct a :class:`ConsumerUISecurityAdapter` -- the
+        modern auth-stack-backed drop-in replacement for the
+        legacy ``SecurityManager``. Same four-method interface
+        the consumer-UI handlers already use; the adapter wires
+        :meth:`authenticate` / :meth:`validate_token` /
+        :meth:`logout` onto
+        :mod:`security.auth.local_flow` +
+        :mod:`security.auth.session_service` and keeps
+        :meth:`check_permission` delegated to the legacy stack
+        until RBAC migrates separately. See
+        :mod:`webinterface.blueprints.config.auth_adapter` for
+        the adapter contract.
 
         :param db_session: Open SQLAlchemy session.
 
-        :returns: SecurityManager instance.
+        :returns: ConsumerUISecurityAdapter instance.
     """
-    from automojo.pychestrate.core.managers.security_manager import (  # noqa: E402
-        SecurityManager,
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (  # noqa: E402
+        ConsumerUISecurityAdapter,
     )
-    rtnval = SecurityManager(db_session)
+    rtnval = ConsumerUISecurityAdapter(db_session)
     return rtnval
 
 
@@ -444,7 +452,7 @@ def _build_auth_request(
 
         :returns: AuthRequest instance.
     """
-    from automojo.pychestrate.core.managers.security_manager import (  # noqa: E402
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (  # noqa: E402
         AuthRequest,
     )
     rtnval = AuthRequest(
@@ -886,8 +894,16 @@ def _resolve_authenticated_request(
 
     # Refresh server-of-record csrf_token onto the session so any
     # subsequent POST validates against the same value the renderer
-    # passed to the template.
-    session[csrf.SESSION_KEY] = session_info.csrf_token
+    # passed to the template. The modern adapter returns an empty
+    # csrf_token (cookie is the CSRF source of truth under the
+    # modern stack -- see ``auth_adapter`` module docstring); skip
+    # the refresh in that case so we don't clobber the cookie's
+    # CSRF.
+    if (
+        session_info.csrf_token is not None
+        and len(session_info.csrf_token) > 0
+    ):
+        session[csrf.SESSION_KEY] = session_info.csrf_token
     session["username"] = session_info.username
 
     rtnval = _AuthResolution(
@@ -948,7 +964,11 @@ def handle_dashboard(request: Request) -> Response:
 
     # Refresh the session's csrf_token with the server-of-record
     # value so subsequent POSTs validate against the current value.
-    session[csrf.SESSION_KEY] = csrf_token
+    # The modern adapter returns an empty csrf_token (cookie is the
+    # CSRF source of truth under the modern stack); skip the
+    # refresh in that case so we don't clobber the cookie's CSRF.
+    if csrf_token is not None and len(csrf_token) > 0:
+        session[csrf.SESSION_KEY] = csrf_token
     # Refresh the username on the session so anonymous-rendered
     # frames immediately after login pick up the freshest username.
     session["username"] = username
