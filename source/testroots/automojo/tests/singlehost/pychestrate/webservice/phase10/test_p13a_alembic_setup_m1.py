@@ -436,12 +436,21 @@ def test_legacy_migration_creates_consumer_ui_auth_tables_on_apply():
         env = os.environ.copy()
         env["PYCHESTRATE_DATABASE_URL"] = "sqlite:///" + db_path
 
-        # Invoke alembic via ``python -m alembic`` so the test
-        # works regardless of whether the alembic CLI shim is on
-        # PATH (it may not be when tests run from a
-        # not-activated venv).
+        # Invoke alembic via the ``alembic`` console script
+        # installed alongside ``sys.executable``'s venv. Cannot
+        # use ``python -m alembic`` here because the repo root
+        # contains an ``alembic/`` *migrations* directory
+        # (configured in ``alembic.ini``); when ``-m alembic``
+        # runs with cwd at repo root, Python's namespace-package
+        # search picks up the local migrations dir first and
+        # shadows the installed alembic library. The console
+        # script bypasses this because its launcher does not
+        # add cwd to ``sys.path``.
+        alembic_script = os.path.join(
+            os.path.dirname(sys.executable), "alembic"
+        )
         proc = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [alembic_script, "upgrade", "head"],
             cwd=_repo_root(),
             env=env,
             capture_output=True,

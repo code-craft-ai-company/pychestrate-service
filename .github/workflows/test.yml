@@ -113,7 +113,7 @@ jobs:
         env:
           PYCHESTRATE_DATABASE_URL: "sqlite:///./pych-ci-alembic.sqlite"
         run: |
-          poetry run python -m alembic upgrade head
+          poetry run alembic upgrade head
 
       - name: Confirm both metadata trees produced tables
         env:
@@ -309,7 +309,7 @@ jobs:
         env:
           PYCHESTRATE_DATABASE_URL: "postgresql+psycopg2://pychestrate_ci:pychestrate_ci@127.0.0.1:5432/pychestrate_ci"
         run: |
-          poetry run python -m alembic upgrade head
+          poetry run alembic upgrade head
 
       - name: Confirm both metadata trees produced tables on Postgres
         env:

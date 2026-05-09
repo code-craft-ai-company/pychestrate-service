@@ -13,7 +13,10 @@ classifiers = [
 keywords = [
     "python"
 ]
-packages = [{include="automojo", from="source/packages"}]
+packages = [
+    {include="automojo", from="source/packages"},
+    {include="automojo", from="source/site"},
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
@@ -24,9 +27,24 @@ automojo-dataprofiles = { git = "https://github.com/automationmojo/automojo-data
 automojo-storage-database = { git = "https://github.com/automationmojo/automojo-storage-database.git", branch = "main" }
 automojo-testbase = { git = "https://github.com/automationmojo/automojo-testbase.git", branch = "main" }
 automojo-webworks = { git = "https://github.com/automationmojo/automojo-webworks.git", branch = "main" }
-pychestrate-core = { git = "https://github.com/automationmojo/pychestrate-core.git", branch = "main" }
+# NOTE: pychestrate-core was previously a git-source dep but it
+# ships an empty ``automojo/pychestrate/__init__.py`` that
+# converts ``automojo.pychestrate`` from a PEP-420 namespace
+# package into a regular package, blocking access to
+# ``automojo.pychestrate.webservice`` (which lives at
+# ``source/site/automojo/pychestrate/webservice/``). The repo
+# provides the ``automojo.pychestrate.core.*`` modules it
+# actually consumes (``orm``, ``defaults``, ``managers``,
+# ``migrations``) from ``source/packages/automojo/pychestrate/
+# core/`` directly, so the external dep was redundant -- the
+# only file that referenced pychestrate-core's installed content
+# was ``source/packages/automojo/pychestrate/core/dbio.py``,
+# which is dead code (no consumer in the codebase). When dbio
+# is retired (post-alpha cleanup) it can be deleted; for now
+# leaving it in place is harmless because nothing imports it.
 psycopg2-binary = "^2.9.10"
 aiosmtpd = "^1.4.6"
+alembic = "^1.13.0"
 
 [tool.poetry.group.dev.dependencies]
 myst-parser = "^0.18.1"
