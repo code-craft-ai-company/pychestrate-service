@@ -1,0 +1,299 @@
+name: test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-build:
+    name: poetry install + sanity import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: |
+          pipx install poetry
+          poetry --version
+
+      - name: Cache poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            .venv
+          key: ${{ runner.os }}-poetry-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Configure poetry to use in-tree venv
+        run: |
+          poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction
+
+      - name: Sanity import — modern auth + RBAC
+        env:
+          PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
+        run: |
+          poetry run python -c "
+          from automojo.pychestrate.webservice.security.auth import local_flow, session_service
+          from automojo.pychestrate.webservice.security.rbac import rbac_evaluator
+          from automojo.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (
+              ConsumerUISecurityAdapter,
+          )
+          print('OK: modern auth + RBAC + adapter import cleanly')
+          "
+
+  alembic-upgrade-sqlite:
+    name: alembic upgrade head against fresh SQLite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run alembic upgrade head against tempfile sqlite
+        env:
+          PYCHESTRATE_DATABASE_URL: "sqlite:///./pych-ci-alembic.sqlite"
+        run: |
+          poetry run python -m alembic upgrade head
+
+      - name: Confirm both metadata trees produced tables
+        env:
+          PYCHESTRATE_DATABASE_URL: "sqlite:///./pych-ci-alembic.sqlite"
+        run: |
+          poetry run python <<'PY'
+          import sqlite3
+          db = sqlite3.connect("./pych-ci-alembic.sqlite")
+          rows = db.execute(
+              "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+          ).fetchall()
+          names = [r[0] for r in rows]
+          print("tables ({}):".format(len(names)))
+          for n in names:
+              print(" ", n)
+          must_have_phase1 = ["identity_users", "auth_local_credentials", "auth_sessions",
+                              "rbac_roles", "rbac_role_bindings", "rbac_role_permissions"]
+          must_have_legacy = ["user", "password_history", "sessions", "permissions",
+                              "system_roles", "role_permissions"]
+          missing = [t for t in must_have_phase1 + must_have_legacy if t not in names]
+          if len(missing) > 0:
+              raise SystemExit("MISSING TABLES: {}".format(missing))
+          print("OK: phase1 + legacy schema present")
+          PY
+
+  testbase-singlehost-sweep:
+    name: testbase singlehost sweep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run singlehost sweep (excluding pre-existing-broken phase10 e2e modules)
+        env:
+          PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
+        run: |
+          mkdir -p .output/ci-singlehost
+          # The phase10 e2e modules (p13q/p13r/p13u/p13v/p13ac) are
+          # blocked by a pre-existing test-isolation issue in the
+          # full-suite ordering -- they pass cleanly when run alone
+          # (see "phase10 e2e (run alone)" job below). Exclude them
+          # from the broad sweep so CI surfaces the rest of the
+          # suite while the isolation issue is fixed separately.
+          poetry run testbase testing run \
+            --root source/testroots/automojo \
+            --includes=automojo.tests.singlehost \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13q_consumer_ui_e2e_smoke_m1 \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13r_consumer_ui_e2e_authed_m1 \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13u_static_assets_e2e_m1 \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13v_consumer_ui_e2e_rbac_m1 \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ac_consumer_ui_e2e_tier4_m1 \
+            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ae_alpha_acceptance_m1 \
+            --output=./.output/ci-singlehost
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testbase-singlehost-output
+          path: .output/ci-singlehost
+          retention-days: 7
+
+  phase10-e2e-isolated:
+    name: phase10 consumer-UI e2e (run alone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run only the phase10 consumer-UI e2e modules
+        env:
+          PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
+        run: |
+          mkdir -p .output/ci-e2e
+          poetry run testbase testing run \
+            --root source/testroots/automojo \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13q_consumer_ui_e2e_smoke_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13r_consumer_ui_e2e_authed_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13u_static_assets_e2e_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13v_consumer_ui_e2e_rbac_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ac_consumer_ui_e2e_tier4_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ae_alpha_acceptance_m1 \
+            --output=./.output/ci-e2e
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase10-e2e-output
+          path: .output/ci-e2e
+          retention-days: 7
+
+  alembic-upgrade-postgres:
+    name: alembic upgrade head against Postgres 14
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: pychestrate_ci
+          POSTGRES_PASSWORD: pychestrate_ci
+          POSTGRES_DB: pychestrate_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pychestrate_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run alembic upgrade head against Postgres
+        env:
+          PYCHESTRATE_DATABASE_URL: "postgresql+psycopg2://pychestrate_ci:pychestrate_ci@127.0.0.1:5432/pychestrate_ci"
+        run: |
+          poetry run python -m alembic upgrade head
+
+      - name: Confirm both metadata trees produced tables on Postgres
+        env:
+          PGPASSWORD: pychestrate_ci
+        run: |
+          # Use the postgres CLI to dump the table list.
+          sudo apt-get install -y postgresql-client
+          psql -h 127.0.0.1 -U pychestrate_ci -d pychestrate_ci -At -c \
+            "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" \
+            | tee /tmp/pg-tables.txt
+          for required in identity_users auth_local_credentials auth_sessions \
+                          rbac_roles rbac_role_bindings rbac_role_permissions \
+                          audit_records \
+                          "user" password_history sessions permissions \
+                          system_roles role_permissions; do
+              if ! grep -qx "${required}" /tmp/pg-tables.txt; then
+                  echo "MISSING TABLE on Postgres: ${required}" >&2
+                  exit 1
+              fi
+          done
+          echo "OK: phase1 + legacy schema present on Postgres"
+
+  production-startup-smoke:
+    name: production startup smoke (subprocess)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run the production startup smoke (subprocess-isolated)
+        env:
+          PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
+        run: |
+          mkdir -p .output/ci-smoke
+          poetry run testbase testing run \
+            --root source/testroots/automojo \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
+            --output=./.output/ci-smoke
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-smoke-output
+          path: .output/ci-smoke
+          retention-days: 7
