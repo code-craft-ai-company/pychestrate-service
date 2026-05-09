@@ -98,15 +98,51 @@ jobs:
           # Caches the tailscaled binary across runs.
           use-cache: 'true'
 
+      - name: Verify Tailscale session is live
+        run: |
+          # tailscale/github-action@v3 retries 5 times on
+          # auth failure and silently gives up on the 6th -- so
+          # a 403 on the OAuth ``tag:ci`` permission lets the
+          # workflow proceed with a logged-out tailscaled. The
+          # next step's ``tailscale ping`` then prints
+          # ``Logged out.`` and returns 0, masking the
+          # underlying failure.  Hard-check here.
+          set -euo pipefail
+          STATUS=$(tailscale status --json 2>&1 || true)
+          if echo "${STATUS}" | grep -q '"BackendState": *"NeedsLogin"\|Logged out'; then
+              echo "::error::tailscaled is not logged in -- the OAuth client cannot" \
+                   "issue keys with tag:ci. Verify (1) the policy ACL has 'tag:ci'" \
+                   "in tagOwners, and (2) the OAuth client was created with tag:ci" \
+                   "in its Tags field (cannot be added retroactively -- recreate the" \
+                   "client and update TS_OAUTH_CLIENT_ID + TS_OAUTH_SECRET if missing)."
+              exit 1
+          fi
+          if ! echo "${STATUS}" | grep -q '"Self"'; then
+              echo "::error::tailscale status returned no Self node -- daemon never" \
+                   "joined the tailnet. Check the Connect step's retry log."
+              echo "Raw status: ${STATUS}" | head -c 2000
+              exit 1
+          fi
+          echo "tailscaled is logged in."
+
       - name: Verify Tailscale connectivity to target
         run: |
-          # Tailscale's MagicDNS resolves tailnet hostnames.  If
+          # Tailscale's MagicDNS resolves tailnet hostnames. If
           # this fails the ACL probably does not grant tag:ci
-          # access to the target -- fix the policy in the
-          # Tailscale admin and re-run.
-          if ! tailscale ping --c 2 --timeout 5s '${{ inputs.target_host }}' 2>&1 | tee /tmp/tailscale-ping.log; then
+          # access to the target, OR the target is not online
+          # in the tailnet.
+          set -euo pipefail
+          if ! tailscale ping -c 2 --timeout 5s '${{ inputs.target_host }}' 2>&1 | tee /tmp/tailscale-ping.log; then
               echo "::error::tailscale cannot reach ${{ inputs.target_host }}." \
-                   "Check the ACL policy permits tag:ci to reach the target."
+                   "Check (a) the target is online in the tailnet (tailscale status)," \
+                   "and (b) the ACL policy permits tag:ci to reach it."
+              exit 1
+          fi
+          # Also fail if ping returned zero but printed "Logged out."
+          # which can happen when the daemon was logged out
+          # mid-step.
+          if grep -q "Logged out" /tmp/tailscale-ping.log; then
+              echo "::error::tailscale ping reported Logged out -- session ended."
               exit 1
           fi
 
