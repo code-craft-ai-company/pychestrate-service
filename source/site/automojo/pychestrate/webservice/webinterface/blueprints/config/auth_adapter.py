@@ -29,10 +29,14 @@ wires each method to the modern Phase-1+ stack:
 * :meth:`validate_token` ->
   :func:`session_service.resolve_session`.
 * :meth:`logout` -> :func:`session_service.close_session`.
-* :meth:`check_permission` -> still delegated to the legacy
-  :class:`SecurityManager` (queries ``user.roles`` ->
-  ``system_roles`` -> ``permissions``).  RBAC migration is a
-  separate follow-up; this PR scopes only the auth-flow half.
+* :meth:`check_permission` -> :func:`rbac_evaluator.check_permission`
+  against the modern ``rbac_*`` tables on
+  :class:`PychestratePhase1Base`. The legacy
+  ``user.roles`` -> ``system_roles`` -> ``permissions``
+  chain is no longer consulted; consumer-UI permission
+  strings are now canonical ``system:<action>`` keys
+  matched against the catalog produced by the in-tree
+  ``CorePermissionExtension`` / ``SystemAdminRole`` packs.
 
 The adapter holds the same shape as the legacy
 :class:`SecurityManager` so :func:`_build_security_manager` is
@@ -398,41 +402,84 @@ class ConsumerUISecurityAdapter:
         return
 
     # ------------------------------------------------------------------
-    # check_permission (delegated to the legacy SecurityManager for now)
+    # check_permission (modern rbac_evaluator)
     # ------------------------------------------------------------------
 
     def check_permission(
             self, user_id: str, permission: str
         ) -> bool:
         """
-            Delegate to the legacy
-            :meth:`SecurityManager.check_permission`. The legacy
-            method walks ``user.roles`` (CSV) ->
-            ``system_roles`` -> ``permissions`` (many-to-many),
-            and a meaningful migration to the modern
-            ``rbac_evaluator`` requires seeding the modern
-            ``rbac_*`` tables in addition to refactoring the
-            consumer-UI permission gates. That's a separate
-            follow-up.
+            Evaluate a permission for ``user_id`` against the modern
+            :mod:`rbac_evaluator` on the ``rbac_*`` tables.
 
-            For this PR, RBAC stays on the legacy schema. The
-            auth FLOW (authenticate / session validation /
-            logout) is what's migrated to modern primitives.
+            The consumer-UI's permission gates pass canonical
+            ``system:<action>`` keys (e.g.
+            ``"system:resources.manage"``); the evaluator walks
+            the principal's direct + group + organization
+            bindings and returns an :class:`AuthzDecision`. We
+            collapse that to a simple ``bool`` to preserve the
+            legacy ``SecurityManager.check_permission`` contract
+            consumer-UI handlers were written against.
 
-            :param user_id: User id.
-            :param permission: Permission key (e.g.
-                               ``"resources.manage"``).
+            On any unexpected internal failure (malformed key,
+            schema problem, etc.) the helper treats the request
+            as denied -- the call site already swallows the
+            exception and routes through the deny-redirect
+            branch, so a permissive default would mask real
+            bugs.
 
-            :returns: ``True`` if granted.
+            :param user_id: User id (UUID string from the auth
+                            flow's :class:`AuthSession`).
+            :param permission: Canonical permission key (e.g.
+                               ``"system:resources.manage"``).
+
+            :returns: ``True`` if the principal holds the
+                      permission, ``False`` otherwise.
         """
-        from automojo.pychestrate.core.managers.security_manager import (  # noqa: E402
-            SecurityManager as _LegacySecurityManager,
+        from datetime import datetime, timezone  # noqa: E402
+
+        from automojo.pychestrate.webservice.security.auth.session_service import (  # noqa: E402
+            AuthPrincipal,
         )
-        legacy = _LegacySecurityManager(self._db_session)
+        from automojo.pychestrate.webservice.security.auth.models import (  # noqa: E402
+            AuthProviderKind,
+        )
+        from automojo.pychestrate.webservice.security.rbac import (  # noqa: E402
+            rbac_evaluator,
+        )
+
+        # The evaluator's permission_key contract requires a
+        # namespace; reject bare keys early so the caller gets
+        # a deny rather than a ``SemanticError`` bubble.
+        if permission is None or len(permission.strip()) == 0:
+            return False
+        if ":" not in permission:
+            return False
+
+        # Build a minimal AuthPrincipal. The evaluator only reads
+        # ``user_id`` off it for its own group-membership lookup;
+        # ``session_id`` / ``provider_kind`` / ``provider_name``
+        # are not used in the binding-lookup path. We supply the
+        # caller's user_id and benign defaults for the rest.
+        principal = AuthPrincipal(
+            user_id=user_id,
+            session_id="",
+            provider_kind=AuthProviderKind.LOCAL,
+            provider_name="local",
+        )
+        now = datetime.now(timezone.utc)
+
         try:
-            rtnval = legacy.check_permission(user_id, permission)
+            decision = rbac_evaluator.check_permission(
+                db_session=self._db_session,
+                principal=principal,
+                permission_key=permission,
+                now=now,
+            )
         except Exception:
-            rtnval = False
+            return False
+
+        rtnval = decision.allowed
         return rtnval
 
 

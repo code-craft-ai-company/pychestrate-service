@@ -40,6 +40,10 @@ class SystemAdminRole(RoleExtension):
         PermissionGrant(permission_key="system:directory.sync", effect=PermissionEffect.ALLOW),
         PermissionGrant(permission_key="system:auth.admin", effect=PermissionEffect.ALLOW),
         PermissionGrant(permission_key="system:auth.read", effect=PermissionEffect.ALLOW),
+        PermissionGrant(
+            permission_key="system:resources.manage",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 
