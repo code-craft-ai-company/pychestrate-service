@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+#
+# Boot a SQLite-backed STAGING Pychestrate webservice via
+# gunicorn against ``build_wsgi_application_for_production()``.
+#
+# Differences from ``development/dev-up``:
+#
+#   * Uses gunicorn (production WSGI server) rather than the
+#     dev server.
+#   * ``PYCHESTRATE_AUTO_CREATE_SCHEMA`` defaults to ``false`` --
+#     the schema is alembic-managed.  ``alembic upgrade head``
+#     must have been run before invoking this script.
+#   * ``PYCHESTRATE_RUNTIME_ENVIRONMENT`` defaults to
+#     ``staging`` (not ``development``).
+#   * Default bind is ``127.0.0.1:8888`` because the alpha
+#     deploy puts an nginx reverse proxy on the public-facing
+#     interface.  Override via the standard
+#     ``PYCHESTRATE_BIND_HOST`` / ``PYCHESTRATE_BIND_PORT`` env
+#     vars when invoking by hand.
+#
+# Generates a per-checkout 32-byte KEK + password pepper +
+# UI cookie secret under ``.cache/dev-secrets/`` (gitignored,
+# mode 0600) on first run and reuses them on subsequent runs.
+# These are dev-tier secrets -- they are NOT suitable for a
+# production deployment.  For a real production install,
+# operators should set ``PYCHESTRATE_KEK_FILE_PATH`` / etc to
+# operator-managed paths under ``/etc/pychestrate/keys`` and
+# leave the auto-generation step inert.
+#
+# Refuses to run with ``PYCHESTRATE_RUNTIME_ENVIRONMENT=production``
+# so an operator who copy-pastes never accidentally points this
+# at a real database.
+#
+# Usage::
+#
+#   PYCHESTRATE_BIND_HOST=127.0.0.1 \
+#   PYCHESTRATE_BIND_PORT=8888 \
+#       development/run-staging-gunicorn
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+REPO_ROOT="$(pwd)"
+
+# ----------------------------------------------------------------------------
+# Refuse production
+# ----------------------------------------------------------------------------
+
+if [[ "${PYCHESTRATE_RUNTIME_ENVIRONMENT:-}" == "production" ]]; then
+    echo "run-staging-gunicorn refuses to run with PYCHESTRATE_RUNTIME_ENVIRONMENT=production." >&2
+    echo "Unset the variable, or use development/run-website.sh for production." >&2
+    exit 1
+fi
+
+# ----------------------------------------------------------------------------
+# Per-checkout dev secret material (KEK + pepper + cookie secret)
+# Mirrors the logic in development/dev-up so re-running picks up
+# previously-generated material.
+# ----------------------------------------------------------------------------
+
+SECRETS_DIR="${REPO_ROOT}/.cache/dev-secrets"
+mkdir -p "${SECRETS_DIR}"
+
+KEK_FILE="${SECRETS_DIR}/dev.kek"
+PEPPER_FILE="${SECRETS_DIR}/dev.password-pepper"
+UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
+
+if [[ ! -s "${KEK_FILE}" ]]; then
+    head -c 32 /dev/urandom > "${KEK_FILE}"
+    chmod 600 "${KEK_FILE}"
+    echo "run-staging-gunicorn: generated ${KEK_FILE} (32 random bytes)"
+fi
+
+if [[ ! -s "${PEPPER_FILE}" ]]; then
+    head -c 32 /dev/urandom > "${PEPPER_FILE}"
+    chmod 600 "${PEPPER_FILE}"
+    echo "run-staging-gunicorn: generated ${PEPPER_FILE} (32 random bytes)"
+fi
+
+if [[ ! -s "${UI_COOKIE_SECRET_FILE}" ]]; then
+    head -c 32 /dev/urandom > "${UI_COOKIE_SECRET_FILE}"
+    chmod 600 "${UI_COOKIE_SECRET_FILE}"
+    echo "run-staging-gunicorn: generated ${UI_COOKIE_SECRET_FILE} (32 random bytes)"
+fi
+
+# ----------------------------------------------------------------------------
+# SQLite DB path (alembic-managed; auto-create disabled in staging)
+# ----------------------------------------------------------------------------
+
+DEV_DB_DIR="${REPO_ROOT}/.cache/dev-db"
+mkdir -p "${DEV_DB_DIR}"
+DEV_DB_PATH="${DEV_DB_DIR}/pychestrate.sqlite"
+
+# ----------------------------------------------------------------------------
+# Compose the runtime env
+# ----------------------------------------------------------------------------
+
+export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-staging}"
+export PYCHESTRATE_DATABASE_URL="${PYCHESTRATE_DATABASE_URL:-sqlite:///${DEV_DB_PATH}}"
+export PYCHESTRATE_AUTO_CREATE_SCHEMA="${PYCHESTRATE_AUTO_CREATE_SCHEMA:-false}"
+
+export PYCHESTRATE_KEK_SOURCE="${PYCHESTRATE_KEK_SOURCE:-file}"
+export PYCHESTRATE_KEK_ID="${PYCHESTRATE_KEK_ID:-staging-kek-1}"
+export PYCHESTRATE_KEK_FILE_PATH="${PYCHESTRATE_KEK_FILE_PATH:-${KEK_FILE}}"
+
+export PYCHESTRATE_PASSWORD_PEPPER_SOURCE="${PYCHESTRATE_PASSWORD_PEPPER_SOURCE:-file}"
+export PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH="${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH:-${PEPPER_FILE}}"
+
+export PYCHESTRATE_UI_COOKIE_SECRET_SOURCE="${PYCHESTRATE_UI_COOKIE_SECRET_SOURCE:-file}"
+export PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH="${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH:-${UI_COOKIE_SECRET_FILE}}"
+
+export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
+export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
+export PYCHESTRATE_WORKERS="${PYCHESTRATE_WORKERS:-4}"
+export PYCHESTRATE_THREADS="${PYCHESTRATE_THREADS:-2}"
+
+# ----------------------------------------------------------------------------
+# PYTHONPATH (mirrors dev-up + run-website.sh)
+# ----------------------------------------------------------------------------
+
+export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:${PYTHONPATH:-}"
+
+echo "run-staging-gunicorn: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
+echo "run-staging-gunicorn: db=${PYCHESTRATE_DATABASE_URL}"
+echo "run-staging-gunicorn: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
+echo "run-staging-gunicorn: workers=${PYCHESTRATE_WORKERS} threads=${PYCHESTRATE_THREADS}"
+echo "run-staging-gunicorn: kek=${PYCHESTRATE_KEK_FILE_PATH}"
+echo
+
+# ----------------------------------------------------------------------------
+# Locate gunicorn (prefer the venv's, fall back to PATH)
+# ----------------------------------------------------------------------------
+
+if [[ -x "${REPO_ROOT}/.venv/bin/gunicorn" ]]; then
+    GUNICORN="${REPO_ROOT}/.venv/bin/gunicorn"
+else
+    GUNICORN="$(command -v gunicorn || echo "")"
+fi
+
+if [[ -z "${GUNICORN}" ]]; then
+    echo "ERROR: gunicorn not found in .venv/bin/ or PATH." >&2
+    echo "       Run 'poetry install' to install it (it is a direct dep)." >&2
+    exit 2
+fi
+
+# ----------------------------------------------------------------------------
+# exec gunicorn -- the WSGI factory in app_pychestrate_main returns
+# the build-for-production WSGI app.
+# ----------------------------------------------------------------------------
+
+exec "${GUNICORN}" 'app_pychestrate_main:build_wsgi_application_for_production()' \
+    --chdir "${REPO_ROOT}/source/site" \
+    --bind "${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}" \
+    --workers "${PYCHESTRATE_WORKERS}" \
+    --threads "${PYCHESTRATE_THREADS}" \
+    --access-logfile - \
+    --error-logfile - \
+    --capture-output
