@@ -31,6 +31,10 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:directory.sync": "Trigger a user_directory_source sync cycle",
     "system:auth.admin": "Administer authentication provider configuration",
     "system:auth.read": "Introspect active sessions and MFA enrollments",
+    "system:resources.manage": (
+        "Administer the resources surface "
+        "(pools, IP pools, allocations, health probes)"
+    ),
 }
 
 

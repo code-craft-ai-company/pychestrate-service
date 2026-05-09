@@ -4,12 +4,15 @@
 Consumer-UI Auth Stack — Legacy vs Modern Split
 ***********************************************
 
-Pychestrate carries **two parallel authentication stacks**.  As of PR
-p13aa the consumer-UI auth flow (login / session validation / logout)
-is wired to the modern stack via a small adapter; permission checking
-(``check_permission``) still routes through the legacy stack. This
-document captures what each stack is, which routes use which, and the
-remaining work needed to converge on a single stack.
+Pychestrate originally carried **two parallel authentication stacks**.
+As of PR p13aa the consumer-UI auth flow (login / session validation /
+logout) was wired to the modern stack via a small adapter, and as of PR
+p13ad the same adapter's ``check_permission`` was rewired onto the
+modern :mod:`rbac_evaluator` against the modern ``rbac_*`` tables. The
+legacy ``SecurityManager`` is no longer consulted by any consumer-UI
+auth or RBAC path; the auth stack split is closed. This document
+captures the historical context of the migration and the residual
+legacy-schema usage that survives outside the auth/RBAC slice.
 
 Background
 ==========
@@ -72,10 +75,11 @@ The two stacks at a glance
 +---------------------------+---------------------------------+----------------------------------+
 
 
-Who uses which (as of PR p13aa)
+Who uses which (as of PR p13ad)
 ===============================
 
-**Modern stack** (``local_flow`` + ``session_service``) is used by:
+**Modern stack** (``local_flow`` + ``session_service`` +
+``rbac_evaluator``) is used by:
 
 * The REST API auth route surface under
   ``security.auth.restapi.v1.auth_routes``.
@@ -87,21 +91,30 @@ Who uses which (as of PR p13aa)
   ``resolve_session``).
 * The consumer-UI's logout (``handle_logout`` -> adapter ->
   ``close_session``).
-* The Phase-1 bootstrap that loads the password pepper and wires the
-  ``password_hasher`` extension.
+* **The consumer-UI's permission gating** -- as of PR p13ad,
+  ``_require_permission_or_redirect`` -> adapter ->
+  ``rbac_evaluator.check_permission`` against
+  ``rbac_role_bindings`` / ``rbac_role_permissions`` /
+  ``rbac_roles``. Consumer-UI gates pass canonical
+  ``system:<action>`` permission keys (e.g.
+  ``"system:resources.manage"``); the catalog they reference is
+  produced by the in-tree ``CorePermissionExtension`` /
+  ``SystemAdminRole`` packs registered during Phase-1 bootstrap.
+* The Phase-1 bootstrap that loads the password pepper, wires the
+  ``password_hasher`` extension, and registers the in-tree RBAC
+  permission/role packs.
 
-**Legacy stack** (``SecurityManager``) is still used by:
-
-* The consumer-UI's permission gating helper
-  ``_require_permission_or_redirect``, which calls
-  ``ConsumerUISecurityAdapter.check_permission``.  The adapter
-  delegates to the legacy ``SecurityManager.check_permission``,
-  which walks ``user.roles`` (CSV) -> ``system_roles`` ->
-  ``permissions`` (many-to-many).
-
-Migrating RBAC to ``rbac_evaluator`` against the modern
-``rbac_*`` tables is the natural next step; once that lands the
-legacy schema can be retired entirely.
+**Legacy stack** (``SecurityManager`` + ``core.orm`` user/sessions/
+roles tables) is no longer consulted by any consumer-UI auth or RBAC
+path. Other consumer-UI surfaces still call into legacy ``core.managers``
+helpers (``routes_users.py`` -> ``UserManager``, ``routes_secrets.py``
+-> ``SecretManager``, ``routes_sessions.py`` -> ``SecurityManager``'s
+session listing helper, ``routes_audit.py`` -> ``AuditLogger``;
+``projects/`` blueprint -> ``ProjectManager`` /
+``RepositoryManager`` / ``BuildManager`` / ``TestManager`` /
+``ReleaseManager`` / ``InfrastructureManager``); those are tracked as
+separate migrations and keep the legacy ``PychestrateModelBase`` schema
+in production scope until they retire.
 
 
 .. _12-00-production-gap:
@@ -175,34 +188,37 @@ SQLite. The modern stack's models do work on SQLite (which is why
 the unit tests in p13a..p13o all pass without any of these patches).
 
 
-Status (post p13aa)
+Status (post p13ad)
 ===================
 
-The two-step plan called out earlier in this document has now landed:
+The strategic auth-stack split is closed:
 
 1. **Stopgap -- legacy tables in alembic.** Done in PR #160. The
-   ``PychestrateModelBase.metadata`` tree is now part of the alembic
-   target, so a fresh deployment's ``alembic upgrade head`` produces
-   the legacy ``user`` / ``password_history`` / ``sessions`` /
-   ``permissions`` / ``system_roles`` / ``role_permissions`` tables.
-2. **Strategic -- consumer UI on ``local_flow``.** Done in this PR
-   (p13aa) for the auth-flow half: ``ConsumerUISecurityAdapter``
-   (``webinterface/blueprints/config/auth_adapter.py``) wires
-   ``authenticate`` / ``validate_token`` / ``logout`` to the modern
-   ``security.auth.local_flow`` + ``session_service`` stack so login,
-   session validation, and logout query
-   ``identity_users`` + ``auth_local_credentials`` +
-   ``auth_sessions`` -- the same tables the REST API uses.
+   ``PychestrateModelBase.metadata`` tree is part of the alembic
+   target, so ``alembic upgrade head`` produces the legacy
+   ``user`` / ``password_history`` / ``sessions`` /
+   ``permissions`` / ``system_roles`` / ``role_permissions``
+   tables. The migration stays on disk because non-auth surfaces
+   (``routes_users.py``, ``routes_secrets.py``,
+   ``routes_sessions.py``, ``routes_audit.py``, ``projects/``)
+   still query ``core.orm`` and ``core.managers``; their migrations
+   are tracked separately.
+2. **Strategic -- consumer UI auth flow on ``local_flow``.** Done in
+   PR p13aa: ``ConsumerUISecurityAdapter`` wires
+   ``authenticate`` / ``validate_token`` / ``logout`` to
+   ``security.auth.local_flow`` + ``session_service``.
+3. **Strategic -- consumer UI RBAC on ``rbac_evaluator``.** Done in
+   PR p13ad: the same adapter's ``check_permission`` was rewired to
+   ``rbac_evaluator.check_permission`` against the modern
+   ``rbac_role_bindings`` / ``rbac_role_permissions`` /
+   ``rbac_roles`` tables. Consumer-UI gates pass canonical
+   ``system:<action>`` permission keys; the in-tree
+   ``CorePermissionExtension`` ships
+   ``system:resources.manage`` and the ``SystemAdminRole`` preset
+   grants it.
 
 What's still legacy
 -------------------
-
-* **Permission checking.** The adapter's ``check_permission``
-  delegates to the legacy ``SecurityManager.check_permission``,
-  which queries ``user.roles`` -> ``system_roles`` ->
-  ``permissions``. Migrating that path to ``rbac_evaluator`` against
-  the modern ``rbac_*`` tables is the natural follow-up; once it
-  lands the legacy schema can be retired entirely.
 
 * **CSRF token storage.** The legacy ``SecurityManager.authenticate``
   stored a per-session CSRF token alongside the session row; the
@@ -212,7 +228,12 @@ What's still legacy
   truth). ``validate_token`` returns an empty CSRF; the handler
   preserves the cookie value rather than overwriting.
 
-* **The harness's SQLite shims** (``patch_legacy_pk_columns_for_sqlite``
-  + ``patch_utc_now_for_sqlite_tz_compat``) are still required while
-  RBAC keeps the legacy schema in scope for tests. They become dead
-  code once RBAC migrates.
+* **Other consumer-UI managers.** ``routes_users.py``,
+  ``routes_secrets.py``, ``routes_sessions.py``, ``routes_audit.py``,
+  and the ``projects/`` blueprint still call into legacy
+  ``core.managers.*`` modules. Those migrations are tracked outside
+  this document; the harness's
+  ``patch_legacy_pk_columns_for_sqlite`` +
+  ``patch_utc_now_for_sqlite_tz_compat`` shims remain in place while
+  legacy ``core.orm`` rows are still consulted by tests, but
+  ``check_permission`` no longer requires them.

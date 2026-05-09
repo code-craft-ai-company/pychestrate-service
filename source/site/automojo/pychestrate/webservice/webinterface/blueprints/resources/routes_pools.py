@@ -71,7 +71,7 @@ _ROUTE_TABLE = (
 )
 
 
-_ADMIN_PERMISSION = "resources.manage"
+_ADMIN_PERMISSION = "system:resources.manage"
 
 
 # ---------------------------------------------------------------------------

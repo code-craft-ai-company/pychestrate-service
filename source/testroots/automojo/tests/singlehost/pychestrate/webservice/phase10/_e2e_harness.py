@@ -193,6 +193,38 @@ def _install_test_templating() -> None:
     return
 
 
+def _clear_thisapp_singleton_for_test() -> None:
+    """
+        Reset ``automojo.thisapp.wellknown.THISAPPLICATION_SINGLETON``
+        to ``None`` so the upcoming ``establish_webapp_persona``
+        call inside :mod:`app_pychestrate_main` does not bail with
+        :class:`SemanticError`.
+
+        ``testbase`` itself calls :func:`establish_app_persona` at
+        run init -- that sets ``THISAPPLICATION_SINGLETON`` to a
+        :class:`ThisApplication` instance. When the consumer-UI
+        e2e harness later imports :mod:`app_pychestrate_main`,
+        webworks' :func:`establish_webapp_persona` checks
+        ``THISAPPLICATION_SINGLETON is None`` and raises if it
+        already holds a :class:`ThisApplication`. The two
+        personas are not compatible (testbase wants a generic
+        app for results bookkeeping; webworks wants a
+        :class:`WebApplication` for WSGI dispatch), so we clear
+        the testbase-installed singleton just-in-time and let
+        webworks install its own.
+
+        Idempotent.
+    """
+    from automojo.thisapp import wellknown  # noqa: E402
+
+    wellknown.SINGLETON_LOCK.acquire()
+    try:
+        wellknown.THISAPPLICATION_SINGLETON = None
+    finally:
+        wellknown.SINGLETON_LOCK.release()
+    return
+
+
 def _build_consumer_ui_test_app() -> Any:
     """
         Reuse the production ``app`` singleton from
@@ -203,8 +235,13 @@ def _build_consumer_ui_test_app() -> Any:
 
         ``establish_webapp_persona`` is process-global; importing
         ``app_pychestrate_main`` establishes ``"pychestrate"`` as
-        the persona, so we reuse that singleton.
+        the persona, so we reuse that singleton. Before the
+        import we clear the testbase-installed
+        :class:`ThisApplication` singleton so webworks'
+        :func:`establish_webapp_persona` does not fail its
+        "singleton must be unset" precondition.
     """
+    _clear_thisapp_singleton_for_test()
     from app_pychestrate_main import (  # noqa: E402
         app,
         build_wsgi_compat_dispatch,
@@ -579,15 +616,20 @@ def _seed_user_pair(
         the same UUID:
 
         * :class:`IdentityUser` + :class:`AuthLocalCredentials`
-          on the modern Phase-1+ schema -- the auth-flow side
-          (login / session / logout) reads these.
-        * :class:`User` (with ``roles=role_csv``) on the legacy
-          ``core.orm`` schema -- the consumer-UI's
-          :meth:`check_permission` still queries the legacy
-          ``user.roles`` -> ``system_roles`` -> ``permissions``
-          chain. Same UUID on both rows so
-          :meth:`SecurityManager.check_permission` finds the
-          right roles when the auth-flow's user_id is passed.
+          on the modern Phase-1+ schema -- the auth flow
+          (login / session / logout) AND the modern
+          :func:`rbac_evaluator.check_permission` both read
+          these.
+        * :class:`User` on the legacy ``core.orm`` schema --
+          still queried by some consumer-UI surfaces that
+          have not yet migrated off the legacy
+          :class:`UserManager` (``routes_users.py``,
+          ``routes_secrets.py``, ``routes_sessions.py``).
+          The ``roles`` CSV is no longer consulted by
+          :meth:`check_permission` (modern RBAC reads
+          ``rbac_role_bindings``), but the column is preserved
+          on the legacy User row for any legacy queries that
+          still examine it.
 
         :returns: The shared user_id (UUID string).
     """
@@ -800,63 +842,86 @@ def logged_in_cookies(*, wsgi_app: Any) -> Dict[str, str]:
 
 
 # Permission strings used by the consumer UI's
-# ``_require_permission_or_redirect`` calls. Tier-3 tests seed
-# the ones they need; the values track the constants in the
-# production handlers so tests catch any rename drift.
-PERMISSION_RESOURCES_MANAGE: str = "resources.manage"
-PERMISSION_USERS_MANAGE: str = "users.manage"
-PERMISSION_VARIABLES_MANAGE: str = "variables.manage"
+# ``_require_permission_or_redirect`` calls. The values track the
+# canonical ``system:<action>`` keys registered by the in-tree
+# ``CorePermissionExtension`` pack -- tests catch any rename drift
+# between the gates and the catalog.
+PERMISSION_RESOURCES_MANAGE: str = "system:resources.manage"
+PERMISSION_USERS_MANAGE: str = "system:users.write"
+PERMISSION_VARIABLES_MANAGE: str = "system:rbac.admin"
 
 
-def grant_permissions_to_role(
-        *, role_name: str, permission_names: List[str]
+def grant_role_to_user(
+        *, user_id: str, role_name: str
     ) -> None:
     """
-        Idempotently create :class:`SystemRole` + the listed
-        :class:`Permission` rows and the many-to-many bindings
-        between them. Used by tests that need a role with a
-        known permission set.
+        Idempotently bind ``role_name`` to ``user_id`` at SYSTEM
+        scope on the modern :mod:`security.rbac` schema.
 
-        :param role_name: Role to create / update.
-        :param permission_names: Permission names to ensure
-                                 exist + are bound to the role.
+        Looks up (or creates) the :class:`RbacRole` row matching
+        ``role_name``, then inserts an
+        :class:`RbacRoleBinding` with ``principal_kind=USER``
+        and ``scope_kind=SYSTEM`` for the user. The role-to-
+        permissions edges come from the in-tree
+        :class:`SystemAdminRole` / :class:`AuditorRole` /
+        ``Project*Role`` packs at evaluator time -- the
+        evaluator reads the catalog produced by
+        :func:`load_catalog_from_registry`, so the database
+        only needs the role + binding rows seeded.
+
+        :param user_id: User id (UUID string).
+        :param role_name: Role name; must match a registered
+                          :class:`RoleExtension` ``role_name``.
     """
-    from automojo.pychestrate.core.orm import (  # noqa: E402
-        Permission,
-        SystemRole,
+    from automojo.pychestrate.webservice.security.rbac.models import (  # noqa: E402
+        BindingScope,
+        PrincipalKind,
+        RbacRole,
+        RbacRoleBinding,
+        RoleSource,
     )
     factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     db_session = factory()
     try:
         role = (
-            db_session.query(SystemRole)
-            .filter(SystemRole.name == role_name)
+            db_session.query(RbacRole)
+            .filter(RbacRole.role_name == role_name)
             .first()
         )
         if role is None:
-            role = SystemRole(
-                name=role_name,
+            role = RbacRole(
+                role_id=uuid.uuid4(),
+                role_name=role_name,
+                source=RoleSource.BUILTIN,
+                source_name=role_name,
                 description="seeded by e2e harness",
-                is_system=False,
             )
             db_session.add(role)
             db_session.flush()
 
-        for perm_name in permission_names:
-            perm = (
-                db_session.query(Permission)
-                .filter(Permission.name == perm_name)
-                .first()
+        principal_uuid = uuid.UUID(user_id)
+        existing_binding = (
+            db_session.query(RbacRoleBinding)
+            .filter(
+                RbacRoleBinding.role_id == role.role_id,
+                RbacRoleBinding.principal_kind == PrincipalKind.USER,
+                RbacRoleBinding.principal_id == principal_uuid,
+                RbacRoleBinding.scope_kind == BindingScope.SYSTEM,
+                RbacRoleBinding.scope_id.is_(None),
             )
-            if perm is None:
-                perm = Permission(
-                    name=perm_name,
-                    description="seeded by e2e harness",
-                )
-                db_session.add(perm)
-                db_session.flush()
-            if perm not in role.permissions:
-                role.permissions.append(perm)
+            .first()
+        )
+        if existing_binding is None:
+            binding = RbacRoleBinding(
+                binding_id=uuid.uuid4(),
+                role_id=role.role_id,
+                principal_kind=PrincipalKind.USER,
+                principal_id=principal_uuid,
+                scope_kind=BindingScope.SYSTEM,
+                scope_id=None,
+                inherits_into_project=False,
+            )
+            db_session.add(binding)
 
         db_session.commit()
     finally:
@@ -867,24 +932,30 @@ def grant_permissions_to_role(
     return
 
 
-_ADMIN_ROLE_PERMISSIONS: List[str] = [
-    PERMISSION_RESOURCES_MANAGE,
-    PERMISSION_USERS_MANAGE,
-    PERMISSION_VARIABLES_MANAGE,
-]
-
-
 def ensure_seeded_admin_role() -> None:
     """
-        Idempotently ensure the legacy ``"admin"`` SystemRole has
-        the consumer-UI's three top-level admin permissions
-        (resources.manage / users.manage / variables.manage).
-        Tests that exercise admin-gated routes call this once.
+        Idempotently bind the modern ``"system-admin"`` role to
+        the seeded admin user at SYSTEM scope. The role's
+        permission grants come from
+        :class:`SystemAdminRole` (in-tree
+        :class:`RoleExtension`); the evaluator reads them from
+        the catalog at decision time, so this helper only
+        seeds the role + binding rows.
+
+        Also clears the rbac decision cache so a binding seeded
+        mid-test cycle is observed by the next
+        ``check_permission`` call. The cache is keyed by
+        principal + permission_key + scope_id, and entries
+        from a prior test (with no binding present) would
+        otherwise mask the freshly seeded ALLOW.
     """
-    grant_permissions_to_role(
-        role_name="admin",
-        permission_names=_ADMIN_ROLE_PERMISSIONS,
+    from automojo.pychestrate.webservice.security.rbac import cache  # noqa: E402
+
+    admin = ensure_seeded_admin()
+    grant_role_to_user(
+        user_id=admin.user_id, role_name="system-admin"
     )
+    cache.invalidate_principal(principal_id=admin.user_id)
     return
 
 
@@ -911,10 +982,12 @@ def ensure_seeded_viewer() -> SeededAdmin:
         Tier-3 tests use this user to exercise the
         permission-denied branches of admin-gated handlers:
         the user can log in (so they get past the
-        ``require_login_or_redirect`` guard) but
-        :func:`SecurityManager.check_permission` returns
-        ``False`` for any admin-tier permission, so the handler
-        redirects with a "permission denied" flash.
+        ``require_login_or_redirect`` guard) but the modern
+        :func:`rbac_evaluator.check_permission` returns
+        ``allowed=False`` for any admin-tier permission (no
+        :class:`RbacRoleBinding` was seeded for this user),
+        so the handler redirects with a "permission denied"
+        flash.
     """
     global _SEEDED_VIEWER
     if _SEEDED_VIEWER is not None:
@@ -983,7 +1056,7 @@ __all__ = [
     "PERMISSION_RESOURCES_MANAGE",
     "PERMISSION_USERS_MANAGE",
     "PERMISSION_VARIABLES_MANAGE",
-    "grant_permissions_to_role",
+    "grant_role_to_user",
     "ensure_seeded_admin_role",
     "E2E_VIEWER_LOGIN",
     "E2E_VIEWER_PASSWORD",
