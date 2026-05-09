@@ -98,7 +98,7 @@ function ensure_pipx_system_dependencies () {
 
 # Run the dependency checks on the system
 echo "BASE DEPENDENCIES:"
-APT_BASE_DEPENDENCIES="build-essential python3 python3-dev python3-setuptools python3-pip"
+APT_BASE_DEPENDENCIES="build-essential python3 python3-dev python3-setuptools python3-pip python3-venv pipx tmux make nginx"
 ensure_system_dependencies "$APT_BASE_DEPENDENCIES"
 echo
 

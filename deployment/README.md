@@ -33,7 +33,8 @@ export AUTOMOJO_REPO_TOKEN=ghp_xxx     # the same fine-grained
 deployment/deploy-alpha-to-host.sh \
     --host=tc-app-server.local \
     --user=myron \
-    --port=8888
+    --port=8888 \
+    --proxy-port=80
 ```
 
 All three flags default to the values above so most invocations
@@ -93,7 +94,7 @@ The script aborts with a typed error if:
 
 ```bash
 # Probe                                                           
-curl -fsS http://tc-app-server.local:8888/
+curl -fsS http://tc-app-server.local/
 
 # Watch the live log
 ssh myron@tc-app-server.local 'tail -f ~/.pychestrate/server.log'
@@ -173,14 +174,16 @@ Update the ACL policy (Settings → Access controls) to declare
     {
       "action": "accept",
       "src":    ["tag:ci"],
-      "dst":    ["tc-app-server:22"]
+      "dst":    ["tc-app-server:22", "tc-app-server:80"]
     }
   ]
 }
 ```
 
-(Add `tc-app-server:8888` to `dst` if you want to be able to
-probe the deployed instance from the runner after deploy.)
+(Port 22 for SSH-based deploy, port 80 so the runner can probe
+the deployed instance via nginx after deploy. The app's
+internal port — default 8888 — is bound to loopback only and
+doesn't need an ACL grant.)
 
 #### 2. SSH deploy key
 
