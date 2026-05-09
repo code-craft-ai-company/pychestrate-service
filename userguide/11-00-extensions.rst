@@ -454,8 +454,18 @@ Protocol                     Owning feature                                What 
 ``feature_flag_backend``     ``1-feature-flags``                           Delegate specific flag patterns to LaunchDarkly-style.
 ``user_directory_source``    ``1-user-management``                         Sync users from LDAP / SCIM / HR system.
 ``password_hasher``          ``1-authentication``                          This guide's example — swap hashing algorithm.
+``notification_channel``     ``2-notification-hub``                        Add Slack / Teams / PagerDuty / SMS routing.
 ``resource_health_probe``    ``4-resource-health``                         Per-device-kind health probes.
 ===========================  ============================================  ========================================================
+
+The :ref:`Phase 1 exit criterion <implementation-plan-phase-1>` calls
+out ``notification_channel`` specifically: "an out-of-tree extension
+can register a new ``notification_channel`` and receive traffic." The
+mechanism is identical to the Argon2id walk-through above -- the
+in-tree ``notifications/extensions/run_failed_template.py`` registers
+through the same registry that an out-of-tree
+``pychestrate-ext-notif-slack`` would use; the registry does not
+distinguish between the two.
 
 For every protocol the same six steps apply:
 

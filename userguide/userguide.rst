@@ -10,3 +10,4 @@ User Manual
    10-00-coding-standards
    11-00-extensions
    12-00-consumer-ui-auth-stack
+   13-00-alpha-deployment
