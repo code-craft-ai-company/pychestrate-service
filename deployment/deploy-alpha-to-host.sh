@@ -1,34 +1,51 @@
 #!/usr/bin/env bash
 #
 # deploy-alpha-to-host.sh -- one-shot alpha deploy from a workstation
-# to a remote host via SSH.
+# to a remote host via SSH, with nginx fronting the app.
+#
+# Architecture:
+#
+#                       :80 (nginx)
+#       external  -----------------> nginx ---> 127.0.0.1:8888 (app)
+#       clients                       on
+#                                  tc-app-server
+#
+# nginx terminates on the host's external interface and reverse-
+# proxies to the app bound on loopback. Operators access the
+# service at ``http://<host>/`` -- the app port is no longer
+# exposed externally.
 #
 # Drives the existing repository-setup + development bootstrap chain
 # remotely:
 #
 #   1. rsync the working tree to ``<remote>:~/pychestrate-service``
 #      (excludes the venv, output, cache, .claude, .git).
-#   2. Configure git credentials on the remote so the nine private
+#   2. ``repository-setup/setup-debian-machine``    -- system apt
+#      packages (build tools, python, pipx, poetry, nginx, tmux).
+#      Requires sudo on the remote; the user is prompted
+#      interactively.  Skipped under ``--skip-system-setup``;
+#      replaced with a prerequisite probe.
+#   3. Configure git credentials on the remote so the nine private
 #      ``automojo-*`` git-source deps can be cloned (uses
-#      ``AUTOMOJO_REPO_TOKEN`` from the local env -- the same
-#      mechanism as CI).
-#   3. ``repository-setup/setup-debian-machine``    -- system apt
-#      packages + poetry via pipx.  Requires sudo on the remote;
-#      the user is prompted interactively.
+#      ``AUTOMOJO_REPO_TOKEN`` from the local env or repo-root
+#      ``.env`` -- the same mechanism as CI).
 #   4. ``repository-setup/rehome-repository``        -- generates
 #      ``.env`` with PYTHONPATH composition.
 #   5. ``development/setup-environment``             -- creates
 #      ``.venv`` and runs ``poetry install``.
 #   6. ``alembic upgrade head``                       -- against a
-#      SQLite DB at ``~/.pychestrate/pychestrate.sqlite``.
-#   7. ``make dev-up``                                -- starts the
-#      service in a tmux session named ``pychestrate``.  The
-#      ``dev-up`` script auto-generates KEK / pepper / cookie-secret
-#      under ``.cache/dev-secrets/``.  Bind override
-#      (``PYCHESTRATE_BIND_HOST=0.0.0.0``) makes the service
-#      reachable from the rest of the LAN.
-#   8. probe ``http://<host>:<port>/`` from the workstation to
-#      confirm the service is serving.
+#      SQLite DB inside the checkout's ``.cache/dev-db/``.
+#   7. Install / refresh nginx site config and reload nginx.  The
+#      site listens on ``--proxy-port`` (default 80) and proxies
+#      to the app at ``127.0.0.1:--port`` (default 8888).
+#      Skipped under ``--skip-system-setup`` (assumes config
+#      already in place from a workstation-driven first run).
+#   8. ``make dev-up``                                -- starts the
+#      service in a tmux session named ``pychestrate`` bound to
+#      ``127.0.0.1:--port``.  ``dev-up`` auto-generates KEK /
+#      pepper / cookie-secret under ``.cache/dev-secrets/``.
+#   9. probe ``http://<host>:<proxy-port>/`` from the workstation
+#      to confirm nginx + app are serving end-to-end.
 #
 # Usage:
 #
@@ -36,14 +53,17 @@
 #       deployment/deploy-alpha-to-host.sh \
 #           [--host=tc-app-server.local] \
 #           [--user=myron] \
-#           [--port=8888]
+#           [--port=8888] \
+#           [--proxy-port=80] \
+#           [--skip-system-setup]
 #
-# Defaults: tc-app-server.local / myron / 8888.
+# Defaults: tc-app-server.local / myron / app-port 8888 / proxy 80.
 #
-# Idempotent: re-running the script syncs new code + restarts the
-# service.  KEK / pepper / cookie-secret + the SQLite DB persist
-# across runs (under ``.cache/dev-secrets/`` and ``.cache/dev-db/``
-# inside the remote checkout).
+# Idempotent: re-running the script syncs new code, refreshes the
+# nginx config, and restarts the service.  KEK / pepper /
+# cookie-secret + the SQLite DB persist across runs (under
+# ``.cache/dev-secrets/`` and ``.cache/dev-db/`` inside the remote
+# checkout).
 
 set -euo pipefail
 
@@ -53,7 +73,8 @@ set -euo pipefail
 
 REMOTE_HOST="tc-app-server.local"
 REMOTE_USER="myron"
-REMOTE_PORT="8888"
+REMOTE_PORT="8888"          # internal app port (nginx proxies to this)
+PROXY_PORT="80"             # external port nginx listens on
 SKIP_SYSTEM_SETUP="false"
 
 while [ $# -gt 0 ]; do
@@ -61,6 +82,7 @@ while [ $# -gt 0 ]; do
         --host=*) REMOTE_HOST="${1#*=}" ;;
         --user=*) REMOTE_USER="${1#*=}" ;;
         --port=*) REMOTE_PORT="${1#*=}" ;;
+        --proxy-port=*) PROXY_PORT="${1#*=}" ;;
         --skip-system-setup) SKIP_SYSTEM_SETUP="true" ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
@@ -135,9 +157,10 @@ fi
 echo "================================================================"
 echo "  pychestrate-service alpha deploy"
 echo "================================================================"
-echo "  source repo : ${REPO_ROOT}"
-echo "  target      : ${REMOTE_TARGET}"
-echo "  bind port   : ${REMOTE_PORT}"
+echo "  source repo  : ${REPO_ROOT}"
+echo "  target       : ${REMOTE_TARGET}"
+echo "  proxy port   : ${PROXY_PORT}    (nginx, public-facing)"
+echo "  app port     : ${REMOTE_PORT}  (gunicorn / dev-up, loopback only)"
 echo "================================================================"
 echo
 
@@ -185,7 +208,7 @@ echo
 # Step 1 -- rsync the working tree
 # ---------------------------------------------------------------------------
 
-echo "==> Step 1/7: rsync repo to ${REMOTE_TARGET}:~/${REMOTE_PATH}/"
+echo "==> Step 1/8: rsync repo to ${REMOTE_TARGET}:~/${REMOTE_PATH}/"
 ssh "${REMOTE_TARGET}" "mkdir -p ~/${REMOTE_PATH}"
 
 rsync -az --delete --info=progress2 \
@@ -218,9 +241,49 @@ echo
 # ---------------------------------------------------------------------------
 
 if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
-    echo "==> Step 2/7: SKIPPED (--skip-system-setup); target assumed pre-provisioned"
+    echo "==> Step 2/8: --skip-system-setup; verifying prerequisites on target"
+    # Probe each required tool individually so the failure
+    # message lists every missing one, not just the first.
+    MISSING=$(ssh "${REMOTE_TARGET}" '
+        missing=""
+        for cmd in git python3 pipx poetry tmux make nginx; do
+            command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
+        done
+        # python3-venv is a separate package -- check by trying
+        # to invoke its module.
+        python3 -c "import venv" >/dev/null 2>&1 || missing="$missing python3-venv"
+        echo "$missing" | tr -s " "
+    ')
+    if [ -n "${MISSING# }" ] && [ "${MISSING# }" != "" ]; then
+        cat >&2 <<EOF
+ERROR: target ${REMOTE_TARGET} is missing required tools:${MISSING}
+
+CI cannot install these (sudo prompt is interactive). Run the
+following on the target as a one-time bootstrap, then re-run
+the workflow:
+
+  ssh ${REMOTE_TARGET} 'sudo apt-get update && \\
+      sudo apt-get install -y \\
+          git python3 python3-venv python3-dev python3-pip \\
+          build-essential pipx tmux make nginx && \\
+      pipx ensurepath && \\
+      pipx install poetry'
+
+Or run the full ``setup-debian-machine`` script with sudo
+prompt:
+
+  ssh ${REMOTE_TARGET} 'cd ~/${REMOTE_PATH} && \\
+      bash repository-setup/setup-debian-machine'
+
+Or invoke this script once from a workstation WITHOUT
+``--skip-system-setup`` so it runs setup-debian-machine
+interactively.
+EOF
+        exit 5
+    fi
+    echo "    OK (git, python3, python3-venv, pipx, poetry, tmux, make, nginx)"
 else
-    echo "==> Step 2/7: system packages (apt, pipx poetry)"
+    echo "==> Step 2/8: system packages (apt, pipx poetry, nginx)"
     echo "    [you may be prompted for the remote sudo password]"
     ssh -t "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
 fi
@@ -230,7 +293,7 @@ echo
 # Step 3 -- git URL rewrite for private automojo-* repos
 # ---------------------------------------------------------------------------
 
-echo "==> Step 3/7: configure git insteadOf for private automojo-* deps"
+echo "==> Step 3/8: configure git insteadOf for private automojo-* deps"
 ssh "${REMOTE_TARGET}" \
     "git config --global url.\"https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
 echo "    OK"
@@ -240,7 +303,7 @@ echo
 # Step 4 -- rehome-repository (generates .env with PYTHONPATH)
 # ---------------------------------------------------------------------------
 
-echo "==> Step 4/7: rehome-repository (generates .env)"
+echo "==> Step 4/8: rehome-repository (generates .env)"
 ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 repository-setup/rehome-repository --skip-workspaces"
 echo
 
@@ -248,9 +311,12 @@ echo
 # Step 5 -- venv + poetry install
 # ---------------------------------------------------------------------------
 
-echo "==> Step 5/7: setup-environment (venv + poetry install)"
+echo "==> Step 5/8: setup-environment (venv + poetry install)"
 echo "    (cloning nine private deps -- this can take 60-120 sec)"
-ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash development/setup-environment"
+# ``setup-environment`` is a Python script (shebanged
+# ``#!/usr/bin/env python3``) -- invoke with python3 so its
+# Python source isn't parsed as bash.
+ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 development/setup-environment"
 echo
 
 # ---------------------------------------------------------------------------
@@ -261,7 +327,7 @@ echo
 # same path so the next 'make dev-up' reuses it.
 # ---------------------------------------------------------------------------
 
-echo "==> Step 6/7: alembic upgrade head (sqlite, schema + legacy)"
+echo "==> Step 6/8: alembic upgrade head (sqlite, schema + legacy)"
 ssh "${REMOTE_TARGET}" <<'EOF'
 set -euo pipefail
 cd ~/pychestrate-service
@@ -274,14 +340,110 @@ EOF
 echo
 
 # ---------------------------------------------------------------------------
-# Step 7 -- start the service in tmux
+# Step 7 -- nginx site config (reverse-proxy in front of the app)
+#
+# Writes /etc/nginx/sites-available/pychestrate, symlinks to
+# sites-enabled/, removes the default site, runs ``nginx -t``,
+# and ``systemctl reload nginx``.  Skipped under
+# ``--skip-system-setup`` -- nginx config write requires sudo,
+# which CI cannot satisfy.  CI deploys assume the workstation-
+# driven first run already wrote a correct site config.
+# ---------------------------------------------------------------------------
+
+if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
+    echo "==> Step 7/8: SKIPPED (--skip-system-setup); nginx site assumed already configured"
+else
+    echo "==> Step 7/8: nginx site config (proxy ${PROXY_PORT} -> 127.0.0.1:${REMOTE_PORT})"
+    echo "    [you may be prompted for the remote sudo password]"
+    ssh -t "${REMOTE_TARGET}" \
+        REMOTE_PORT="${REMOTE_PORT}" \
+        PROXY_PORT="${PROXY_PORT}" \
+        "bash -s" <<'EOF'
+set -euo pipefail
+
+SITE_AVAILABLE="/etc/nginx/sites-available/pychestrate"
+SITE_ENABLED="/etc/nginx/sites-enabled/pychestrate"
+SITE_DEFAULT="/etc/nginx/sites-enabled/default"
+
+# Render the site config to a tempfile then sudo-mv into place
+# so the operator only types their password once for the whole
+# config block.
+TMP="$(mktemp)"
+cat > "${TMP}" <<NGINX_CONF
+# pychestrate-service alpha -- generated by deployment/deploy-alpha-to-host.sh
+# DO NOT EDIT BY HAND; re-run the deploy to refresh.
+
+server {
+    listen ${PROXY_PORT} default_server;
+    listen [::]:${PROXY_PORT} default_server;
+
+    server_name _;
+
+    # Generous body limit -- the service has uploads
+    # (artifacts, logs) and 1MiB nginx default is too tight.
+    client_max_body_size 50M;
+
+    # Health probes / static / the WSGI app -- all routed to
+    # the same upstream.
+    location / {
+        proxy_pass http://127.0.0.1:${REMOTE_PORT};
+        proxy_http_version 1.1;
+
+        # Forward original client info so the app can log /
+        # rate-limit on real client identity.
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host  \$host;
+
+        # WebSocket / long-poll friendliness.
+        proxy_set_header Upgrade           \$http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        # Long-running HTTP requests (alembic-driven imports,
+        # artifact uploads, etc).  Gunicorn's worker timeout
+        # ultimately bounds this; nginx just shouldn't be the
+        # short-circuit.
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
+}
+NGINX_CONF
+
+sudo mv "${TMP}" "${SITE_AVAILABLE}"
+sudo chown root:root "${SITE_AVAILABLE}"
+sudo chmod 0644 "${SITE_AVAILABLE}"
+
+sudo ln -sfn "${SITE_AVAILABLE}" "${SITE_ENABLED}"
+
+# Remove the stock default site if it's still around.  It
+# would otherwise win for any request to ${PROXY_PORT} on the
+# default server name.
+if [ -e "${SITE_DEFAULT}" ]; then
+    sudo rm -f "${SITE_DEFAULT}"
+fi
+
+sudo nginx -t
+sudo systemctl reload nginx
+
+echo "    nginx reloaded; site enabled at ${SITE_ENABLED}"
+EOF
+fi
+echo
+
+# ---------------------------------------------------------------------------
+# Step 8 -- start the service in tmux
 #
 # We start under ``tmux`` so the service survives the ssh
 # disconnect.  ``make dev-up`` already auto-generates KEK / pepper /
-# UI cookie secret and binds via PYCHESTRATE_BIND_*.
+# UI cookie secret and binds via PYCHESTRATE_BIND_*.  Bind on
+# 127.0.0.1 -- the app is no longer directly exposed externally;
+# nginx fronts it on ${PROXY_PORT}.
 # ---------------------------------------------------------------------------
 
-echo "==> Step 7/7: starting service via 'make dev-up' in tmux"
+echo "==> Step 8/8: starting service via 'make dev-up' in tmux (loopback only)"
 ssh "${REMOTE_TARGET}" REMOTE_PORT="${REMOTE_PORT}" "bash -s" <<'EOF'
 set -euo pipefail
 cd ~/pychestrate-service
@@ -295,9 +457,10 @@ mkdir -p ~/.pychestrate
 LOG_PATH="$HOME/.pychestrate/server.log"
 
 # 'make dev-up' inherits PYCHESTRATE_BIND_HOST/PORT from env.
-# 0.0.0.0 + ${REMOTE_PORT} makes the service reachable from the LAN.
+# 127.0.0.1 binds the app to loopback only -- nginx (Step 7)
+# is the public-facing surface.
 tmux new-session -d -s pychestrate \
-    "cd ~/pychestrate-service && PYCHESTRATE_BIND_HOST=0.0.0.0 PYCHESTRATE_BIND_PORT=${REMOTE_PORT} make dev-up 2>&1 | tee ${LOG_PATH}"
+    "cd ~/pychestrate-service && PYCHESTRATE_BIND_HOST=127.0.0.1 PYCHESTRATE_BIND_PORT=${REMOTE_PORT} make dev-up 2>&1 | tee ${LOG_PATH}"
 
 echo "    started in tmux session 'pychestrate'"
 echo "    logs:   ${LOG_PATH}"
@@ -309,17 +472,19 @@ echo
 # Probe
 # ---------------------------------------------------------------------------
 
-echo "==> Probing http://${REMOTE_HOST}:${REMOTE_PORT}/"
+echo "==> Probing http://${REMOTE_HOST}:${PROXY_PORT}/"
 sleep 4
-PROBE_URL="http://${REMOTE_HOST}:${REMOTE_PORT}/"
+PROBE_URL="http://${REMOTE_HOST}:${PROXY_PORT}/"
 for attempt in 1 2 3 4 5 6 7 8; do
     if curl -fsS -m 5 -o /dev/null "${PROBE_URL}"; then
         echo
         echo "================================================================"
         echo "  DEPLOY COMPLETE"
         echo "================================================================"
-        echo "  consumer UI : http://${REMOTE_HOST}:${REMOTE_PORT}/config"
-        echo "  rest API    : http://${REMOTE_HOST}:${REMOTE_PORT}/api/v1/"
+        echo "  consumer UI : http://${REMOTE_HOST}:${PROXY_PORT}/config"
+        echo "  rest API    : http://${REMOTE_HOST}:${PROXY_PORT}/api/v1/"
+        echo "  proxy port  : ${PROXY_PORT}    (nginx)"
+        echo "  app port    : ${REMOTE_PORT}  (loopback only)"
         echo "  attach logs : ssh ${REMOTE_TARGET} -t tmux attach -t pychestrate"
         echo "  stop server : ssh ${REMOTE_TARGET} tmux kill-session -t pychestrate"
         echo "================================================================"

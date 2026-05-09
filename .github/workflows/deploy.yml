@@ -31,10 +31,14 @@ name: deploy
 #       {
 #         "action": "accept",
 #         "src":    ["tag:ci"],
-#         "dst":    ["tc-app-server:22"]
+#         "dst":    ["tc-app-server:22", "tc-app-server:80"]
 #       }
 #     ]
 #   }
+#
+# Port 22 is for the SSH-based deploy; port 80 is for the
+# post-deploy probe through nginx. The app's loopback port
+# (default 8888) does not need an ACL grant.
 #
 # Target host pre-requisites (one-time, run the script
 # interactively from a workstation FIRST so the apt + poetry
@@ -62,9 +66,14 @@ on:
         default: "myron"
         type: string
       target_port:
-        description: "Service bind port on target"
+        description: "App bind port (loopback; nginx proxies to this)"
         required: true
         default: "8888"
+        type: string
+      target_proxy_port:
+        description: "nginx external listen port"
+        required: true
+        default: "80"
         type: string
       git_ref:
         description: "Git ref to deploy (branch / tag / SHA)"
@@ -182,7 +191,8 @@ jobs:
               --skip-system-setup \
               --host='${{ inputs.target_host }}' \
               --user='${{ inputs.target_user }}' \
-              --port='${{ inputs.target_port }}'
+              --port='${{ inputs.target_port }}' \
+              --proxy-port='${{ inputs.target_proxy_port }}'
 
       - name: Disconnect from Tailscale
         if: always()
