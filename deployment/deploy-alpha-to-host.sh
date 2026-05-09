@@ -218,7 +218,47 @@ echo
 # ---------------------------------------------------------------------------
 
 if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
-    echo "==> Step 2/7: SKIPPED (--skip-system-setup); target assumed pre-provisioned"
+    echo "==> Step 2/7: --skip-system-setup; verifying prerequisites on target"
+    # Check each required tool individually so the failure
+    # message lists every missing one, not just the first.
+    MISSING=$(ssh "${REMOTE_TARGET}" '
+        missing=""
+        for cmd in git python3 pipx poetry tmux make; do
+            command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
+        done
+        # python3-venv is a separate package -- check by trying
+        # to invoke its module.
+        python3 -c "import venv" >/dev/null 2>&1 || missing="$missing python3-venv"
+        echo "$missing" | tr -s " "
+    ')
+    if [ -n "${MISSING# }" ] && [ "${MISSING# }" != "" ]; then
+        cat >&2 <<EOF
+ERROR: target ${REMOTE_TARGET} is missing required tools:${MISSING}
+
+CI cannot install these (sudo prompt is interactive). Run the
+following on the target as a one-time bootstrap, then re-run
+the workflow:
+
+  ssh ${REMOTE_TARGET} 'sudo apt-get update && \\
+      sudo apt-get install -y \\
+          git python3 python3-venv python3-dev python3-pip \\
+          build-essential pipx tmux make && \\
+      pipx ensurepath && \\
+      pipx install poetry'
+
+Or run the full ``setup-debian-machine`` script with sudo
+prompt:
+
+  ssh ${REMOTE_TARGET} 'cd ~/${REMOTE_PATH} && \\
+      bash repository-setup/setup-debian-machine'
+
+Or invoke this script once from a workstation WITHOUT
+``--skip-system-setup`` so it runs setup-debian-machine
+interactively.
+EOF
+        exit 5
+    fi
+    echo "    OK (git, python3, python3-venv, pipx, poetry, tmux, make)"
 else
     echo "==> Step 2/7: system packages (apt, pipx poetry)"
     echo "    [you may be prompted for the remote sudo password]"
@@ -250,7 +290,10 @@ echo
 
 echo "==> Step 5/7: setup-environment (venv + poetry install)"
 echo "    (cloning nine private deps -- this can take 60-120 sec)"
-ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash development/setup-environment"
+# ``setup-environment`` is a Python script (shebanged
+# ``#!/usr/bin/env python3``) -- invoke with python3 so its
+# Python source isn't parsed as bash.
+ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 development/setup-environment"
 echo
 
 # ---------------------------------------------------------------------------
