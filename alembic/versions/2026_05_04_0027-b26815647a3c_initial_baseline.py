@@ -953,7 +953,7 @@ def upgrade() -> None:
     sa.Column('test_case_identity_sha256', sa.String(length=64), nullable=False),
     sa.Column('run_id', sqlalchemy_utils.types.uuid.UUIDType(binary=False), nullable=False),
     sa.Column('runtime_env_digest', sa.String(length=64), nullable=False),
-    sa.Column('outcome', sa.Enum('PASS', 'FAIL', 'ERROR', 'SKIP', 'XFAIL', 'XPASS', name='orch_test_outcome'), nullable=False),
+    sa.Column('outcome', sa.Enum('PASS', 'FAIL', 'ERROR', 'SKIP', 'XFAIL', 'XPASS', name='orch_test_outcome_value'), nullable=False),
     sa.Column('duration_ms', sa.Integer(), nullable=False),
     sa.Column('started_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('outcome_id'),
