@@ -286,6 +286,57 @@ A first-run admin-bootstrap CLI is tracked as a beta enhancement.
 For the alpha, the operator runs the seed step out-of-band.
 
 
+CI prerequisite — ``AUTOMOJO_REPO_TOKEN`` secret
+================================================
+
+The repo's :file:`pyproject.toml` declares git-source dependencies
+on nine private repositories under the ``automationmojo`` org
+(``automojo-errors``, ``automojo-runtime``, ``automojo-arcli``,
+``automojo-credentials``, ``automojo-dataprofiles``,
+``automojo-storage-database``, ``automojo-testbase``,
+``automojo-webworks``, ``pychestrate-core``). GitHub Actions'
+default ``GITHUB_TOKEN`` only authorizes against the repo it runs
+in, so ``poetry install`` fails on a fresh runner with::
+
+    Failed to clone https://github.com/automationmojo/automojo-arcli.git,
+    check your git configuration and permissions for this repository.
+
+Setup (one-time, per repo):
+
+1. Create a **fine-grained Personal Access Token** at
+   https://github.com/settings/personal-access-tokens.
+   - Resource owner: ``automationmojo`` org.
+   - Repository access: **All repositories** (or at minimum every
+     ``automojo-*`` and ``pychestrate-core`` private repo).
+   - Permissions → Repository permissions → **Contents: Read-only**.
+   - Expiration: pick a rotation cadence the team can sustain
+     (90d is reasonable; the workflow fails fast with a clear
+     error if the secret is missing).
+2. Add the PAT as a repo secret on
+   ``automationmojo/pychestrate-service`` named
+   ``AUTOMOJO_REPO_TOKEN``.
+
+The :file:`.github/workflows/test.yml` workflow then injects the
+PAT into a global ``url.<base>.insteadOf`` rewrite right before
+each ``poetry install`` step::
+
+    git config --global \\
+      url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \\
+      "https://github.com/automationmojo/"
+
+so every clone of an ``https://github.com/automationmojo/<repo>``
+URL is silently authenticated.
+
+If the secret is unset, the workflow exits with a typed
+``::error::`` annotation pointing at this section -- it does
+*not* silently skip.
+
+When the alpha graduates and the dependency tree is converted to
+published wheels (post-alpha; tracked alongside the legacy-schema
+retirement in the limitations section below), this prerequisite
+goes away.
+
+
 Known alpha limitations
 =======================
 
