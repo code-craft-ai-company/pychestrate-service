@@ -54,12 +54,14 @@ set -euo pipefail
 REMOTE_HOST="tc-app-server.local"
 REMOTE_USER="myron"
 REMOTE_PORT="8888"
+SKIP_SYSTEM_SETUP="false"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --host=*) REMOTE_HOST="${1#*=}" ;;
         --user=*) REMOTE_USER="${1#*=}" ;;
         --port=*) REMOTE_PORT="${1#*=}" ;;
+        --skip-system-setup) SKIP_SYSTEM_SETUP="true" ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -161,11 +163,19 @@ echo
 #
 # Uses ``ssh -t`` so the sudo prompt inside setup-debian-machine
 # can read a TTY.
+#
+# Skipped under ``--skip-system-setup`` -- CI cannot satisfy an
+# interactive sudo prompt, so the CI deploy workflow assumes the
+# target was pre-provisioned by a workstation-driven first run.
 # ---------------------------------------------------------------------------
 
-echo "==> Step 2/7: system packages (apt, pipx poetry)"
-echo "    [you may be prompted for the remote sudo password]"
-ssh -t "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
+if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
+    echo "==> Step 2/7: SKIPPED (--skip-system-setup); target assumed pre-provisioned"
+else
+    echo "==> Step 2/7: system packages (apt, pipx poetry)"
+    echo "    [you may be prompted for the remote sudo password]"
+    ssh -t "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
+fi
 echo
 
 # ---------------------------------------------------------------------------
