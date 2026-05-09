@@ -45,6 +45,7 @@ automojo-webworks = { git = "https://github.com/automationmojo/automojo-webworks
 psycopg2-binary = "^2.9.10"
 aiosmtpd = "^1.4.6"
 alembic = "^1.13.0"
+gunicorn = "^23.0.0"
 
 [tool.poetry.group.dev.dependencies]
 myst-parser = "^0.18.1"

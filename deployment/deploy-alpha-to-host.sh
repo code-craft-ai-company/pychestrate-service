@@ -40,12 +40,18 @@
 #      to the app at ``127.0.0.1:--port`` (default 8888).
 #      Skipped under ``--skip-system-setup`` (assumes config
 #      already in place from a workstation-driven first run).
-#   8. ``make dev-up``                                -- starts the
-#      service in a tmux session named ``pychestrate`` bound to
-#      ``127.0.0.1:--port``.  ``dev-up`` auto-generates KEK /
-#      pepper / cookie-secret under ``.cache/dev-secrets/``.
+#   8. Install ``pychestrate.service`` systemd unit (rendered
+#      from ``deployment/pychestrate.service.template``) + start
+#      / restart the service.  The unit invokes
+#      ``development/run-staging-gunicorn`` which runs gunicorn
+#      against ``build_wsgi_application_for_production()`` with
+#      ``PYCHESTRATE_RUNTIME_ENVIRONMENT=staging`` and binds
+#      ``127.0.0.1:--port``.  Auto-generated KEK / pepper /
+#      cookie-secret remain under ``.cache/dev-secrets/``.
+#      Skipped under ``--skip-system-setup`` (unit install
+#      requires sudo); replaced with ``systemctl restart``.
 #   9. probe ``http://<host>:<proxy-port>/`` from the workstation
-#      to confirm nginx + app are serving end-to-end.
+#      to confirm nginx + gunicorn are serving end-to-end.
 #
 # Usage:
 #
@@ -447,38 +453,79 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# Step 8 -- start the service in tmux
+# Step 8 -- install systemd unit + restart pychestrate.service
 #
-# We start under ``tmux`` so the service survives the ssh
-# disconnect.  ``make dev-up`` already auto-generates KEK / pepper /
-# UI cookie secret and binds via PYCHESTRATE_BIND_*.  Bind on
-# 127.0.0.1 -- the app is no longer directly exposed externally;
-# nginx fronts it on ${PROXY_PORT}.
+# The unit template at ``deployment/pychestrate.service.template``
+# gets rendered locally (``@USER@`` / ``@PORT@`` substitution) then
+# scp'd to /tmp on the remote and sudo-mv'd into
+# /etc/systemd/system/.  systemd then runs gunicorn under
+# ``run-staging-gunicorn`` (which auto-generates secrets on first
+# run and binds 127.0.0.1:${REMOTE_PORT} -- nginx fronts it).
+#
+# Unit install is gated on --skip-system-setup (sudo is interactive
+# in unit install).  Once installed, ``systemctl restart`` is
+# unprivileged on a system that grants the deploy user a polkit
+# rule, OR the deploy script falls back to ``sudo systemctl
+# restart`` which DOES require sudo on every restart.
+#
+# To avoid that re-prompt cycle, the simplest operator setup is to
+# add a sudoers.d entry granting the deploy user passwordless
+# ``systemctl restart pychestrate.service``.  See
+# deployment/README.md for details.
 # ---------------------------------------------------------------------------
 
-echo "==> Step 8/8: starting service via 'make dev-up' in tmux (loopback only)"
-ssh "${REMOTE_TARGET}" REMOTE_PORT="${REMOTE_PORT}" "bash -s" <<'EOF'
+if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
+    echo "==> Step 8/8: SKIPPED systemd-unit install (--skip-system-setup);" \
+                  "restarting pychestrate.service"
+    # CI uses sudo with NOPASSWD on systemctl restart (configured
+    # by the operator's first interactive deploy below).  If the
+    # operator has not configured passwordless restart, this will
+    # hang in CI and time out -- the script's ssh BatchMode probe
+    # earlier catches that case.
+    ssh "${REMOTE_TARGET}" "sudo systemctl restart pychestrate.service && sudo systemctl --no-pager status pychestrate.service | head -8"
+else
+    echo "==> Step 8/8: rendering + installing pychestrate.service systemd unit"
+    echo "    [you may be prompted for the remote sudo password]"
+
+    # Render the template locally, then scp + sudo-install on the
+    # remote.  ``@USER@`` and ``@PORT@`` are the only placeholders;
+    # everything else (env vars, paths, restart policy, hardening)
+    # is fixed in the template.
+    UNIT_LOCAL="$(mktemp)"
+    sed \
+        -e "s|@USER@|${REMOTE_USER}|g" \
+        -e "s|@PORT@|${REMOTE_PORT}|g" \
+        "${REPO_ROOT}/deployment/pychestrate.service.template" \
+        > "${UNIT_LOCAL}"
+
+    scp -q "${UNIT_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.service"
+    rm -f "${UNIT_LOCAL}"
+
+    ssh -t "${REMOTE_TARGET}" \
+        REMOTE_USER="${REMOTE_USER}" \
+        "bash -s" <<'EOF'
 set -euo pipefail
-cd ~/pychestrate-service
 
-# Stop any existing tmux session named 'pychestrate'.
-tmux kill-session -t pychestrate 2>/dev/null || true
-
-# Start a fresh session.  The redirect into ~/.pychestrate/server.log
-# is the canonical place to find logs after disconnecting.
+# Pre-create the log directory so systemd can append to it on
+# the very first start.
 mkdir -p ~/.pychestrate
-LOG_PATH="$HOME/.pychestrate/server.log"
+touch ~/.pychestrate/server.log
+chmod 0644 ~/.pychestrate/server.log
 
-# 'make dev-up' inherits PYCHESTRATE_BIND_HOST/PORT from env.
-# 127.0.0.1 binds the app to loopback only -- nginx (Step 7)
-# is the public-facing surface.
-tmux new-session -d -s pychestrate \
-    "cd ~/pychestrate-service && PYCHESTRATE_BIND_HOST=127.0.0.1 PYCHESTRATE_BIND_PORT=${REMOTE_PORT} make dev-up 2>&1 | tee ${LOG_PATH}"
+# Install the unit.
+sudo mv /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
+sudo chown root:root /etc/systemd/system/pychestrate.service
+sudo chmod 0644 /etc/systemd/system/pychestrate.service
 
-echo "    started in tmux session 'pychestrate'"
-echo "    logs:   ${LOG_PATH}"
-echo "    attach: ssh ${USER}@${HOSTNAME} -t tmux attach -t pychestrate"
+sudo systemctl daemon-reload
+sudo systemctl enable pychestrate.service
+sudo systemctl restart pychestrate.service
+
+echo
+echo "pychestrate.service status:"
+sudo systemctl --no-pager status pychestrate.service | head -10
 EOF
+fi
 echo
 
 # ---------------------------------------------------------------------------
@@ -498,8 +545,12 @@ for attempt in 1 2 3 4 5 6 7 8; do
         echo "  rest API    : http://${REMOTE_HOST}:${PROXY_PORT}/api/v1/"
         echo "  proxy port  : ${PROXY_PORT}    (nginx)"
         echo "  app port    : ${REMOTE_PORT}  (loopback only)"
-        echo "  attach logs : ssh ${REMOTE_TARGET} -t tmux attach -t pychestrate"
-        echo "  stop server : ssh ${REMOTE_TARGET} tmux kill-session -t pychestrate"
+        echo "  service     : pychestrate.service (systemd)"
+        echo "  status      : ssh ${REMOTE_TARGET} sudo systemctl status pychestrate"
+        echo "  live logs   : ssh ${REMOTE_TARGET} sudo journalctl -u pychestrate -f"
+        echo "  log file    : ssh ${REMOTE_TARGET} 'tail -f ~/.pychestrate/server.log'"
+        echo "  restart     : ssh ${REMOTE_TARGET} sudo systemctl restart pychestrate"
+        echo "  stop        : ssh ${REMOTE_TARGET} sudo systemctl stop pychestrate"
         echo "================================================================"
         exit 0
     fi
@@ -513,10 +564,13 @@ ERROR: Service started but did not respond to probe within 40s.
 
 Investigate from a fresh shell:
 
-  ssh ${REMOTE_TARGET} -t tmux attach -t pychestrate
+  ssh ${REMOTE_TARGET} sudo systemctl status pychestrate
+  ssh ${REMOTE_TARGET} sudo journalctl -u pychestrate -n 200 --no-pager
+  ssh ${REMOTE_TARGET} 'tail -100 ~/.pychestrate/server.log'
 
-Or tail the log:
+If the service is up but nginx isn't proxying correctly:
 
-  ssh ${REMOTE_TARGET} 'tail -f ~/.pychestrate/server.log'
+  ssh ${REMOTE_TARGET} sudo nginx -T
+  ssh ${REMOTE_TARGET} sudo systemctl status nginx
 EOF
 exit 4

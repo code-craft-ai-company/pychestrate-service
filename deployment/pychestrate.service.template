@@ -1,0 +1,71 @@
+# pychestrate-service alpha (gunicorn) -- systemd unit
+#
+# Rendered + installed by ``deployment/deploy-alpha-to-host.sh``.
+# Placeholders:
+#   @USER@   -- the deploy user (e.g. myron)
+#   @PORT@   -- the loopback bind port (e.g. 8888)
+#
+# After install:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable pychestrate.service
+#   sudo systemctl restart pychestrate.service
+#   sudo journalctl -u pychestrate.service -f
+#
+# Operator commands:
+#   systemctl status   pychestrate.service
+#   systemctl stop     pychestrate.service
+#   systemctl restart  pychestrate.service
+#   journalctl -u pychestrate.service -n 200 --no-pager
+[Unit]
+Description=pychestrate-service (alpha, gunicorn)
+Documentation=https://github.com/automationmojo/pychestrate-service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@USER@
+Group=@USER@
+WorkingDirectory=/home/@USER@/pychestrate-service
+
+# ``run-staging-gunicorn`` auto-generates the per-checkout dev
+# secrets on first run, sets PYCHESTRATE_* env, and execs
+# gunicorn against build_wsgi_application_for_production().
+# The systemd-injected env vars below override the script's
+# defaults so we always bind 127.0.0.1 + the chosen port.
+Environment="PYCHESTRATE_RUNTIME_ENVIRONMENT=staging"
+Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
+Environment="PYCHESTRATE_BIND_PORT=@PORT@"
+Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
+
+ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
+
+# Restart on crash with a small backoff; on repeated crashes
+# (5 within 30s) systemd will give up rather than thrash.
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=30
+
+# Tee the service's stdout/stderr to a log file under the
+# user's home directory so ``tail -f ~/.pychestrate/server.log``
+# stays useful for ad-hoc debugging.  ``journalctl -u
+# pychestrate.service`` is the canonical view.
+StandardOutput=append:/home/@USER@/.pychestrate/server.log
+StandardError=append:/home/@USER@/.pychestrate/server.log
+
+# Graceful shutdown: gunicorn handles SIGTERM by stopping
+# accepts and letting in-flight requests finish (capped by
+# this timeout).
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Hardening (lightweight; tighten further as the deployment
+# matures).
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate
+
+[Install]
+WantedBy=multi-user.target

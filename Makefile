@@ -46,6 +46,15 @@ serve-prod-gunicorn:
 		--workers $${PYCHESTRATE_WORKERS:-4} \
 		--threads $${PYCHESTRATE_THREADS:-2}
 
+# ``serve-staging-gunicorn`` is the alpha deploy target -- runs
+# gunicorn against ``build_wsgi_application_for_production()`` with
+# auto-generated dev-tier secrets and
+# ``PYCHESTRATE_RUNTIME_ENVIRONMENT=staging``.  Bound to 127.0.0.1
+# by default for nginx fronting.  This is what the systemd unit
+# installed by ``deployment/deploy-alpha-to-host.sh`` invokes.
+serve-staging-gunicorn:
+	./development/run-staging-gunicorn
+
 # ---------------------------------------------------------------------------
 # Database schema management (alembic)
 # ---------------------------------------------------------------------------
