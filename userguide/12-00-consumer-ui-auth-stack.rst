@@ -237,3 +237,126 @@ What's still legacy
   ``patch_utc_now_for_sqlite_tz_compat`` shims remain in place while
   legacy ``core.orm`` rows are still consulted by tests, but
   ``check_permission`` no longer requires them.
+
+
+.. _12-00-legacy-import-audit:
+
+Legacy import surface (audit)
+=============================
+
+A targeted ``grep`` over ``source/site/`` for
+``from automojo.pychestrate.core`` produces 306 import lines.
+Categorizing them clarifies what is genuine legacy debt versus
+shared utility, and scopes the remaining migration work for
+post-alpha planning.
+
+Tier A — shared utilities (not legacy debt)
+-------------------------------------------
+
+**225 import lines across 167 files.** These reference
+``automojo.pychestrate.core.defaults`` (date/uuid helpers
+``utc_now`` / ``new_uuid``) and
+``automojo.pychestrate.core.orm.SerializableModel`` (a base
+class for SQLAlchemy models, used by both legacy and modern
+schemas).
+
+These are not part of the legacy auth/data stack -- they are
+infrastructure utilities that happen to live inside the
+``core`` package for historical reasons. Modern stack code
+(``security/auth/``, ``security/rbac/``, ``identity/``,
+``audit/``) imports them too. They do **not** force the legacy
+schema to exist.
+
+Future cleanup: relocate them to a non-``core`` namespace so
+the package boundary is honest. Tractable as a single PR but
+touches ~167 files, so probably best deferred until the rest of
+``core`` is gone (point of relocation becomes obvious then).
+
+Tier B — legacy managers (real legacy data path)
+-------------------------------------------------
+
+**81 import lines across 21 files.** These reference
+``automojo.pychestrate.core.managers.*`` modules:
+
+================================  ================
+Manager                           Imports
+================================  ================
+``resource_manager``                          11
+``project_manager``                           11
+``watch_manager``                              7
+``repository_manager``                         7
+``allocation_manager``                         7
+``user_manager``                               5
+``secret_manager``                             5
+``ip_pool_manager``                            5
+``global_variable_store``                      4
+``build_manager``                              4
+``test_manager``                               2
+``release_manager``                            2
+``health_monitor``                             2
+``audit_logger``                               2
+``infrastructure_manager``                     2
+Subtotal of ``orm`` types
+``SystemRole``                                 5
+``Permission``                                 2
+``AuditEventType``                             2
+================================  ================
+
+The 21 consumer files cluster as:
+
+* ``webinterface/blueprints/config/`` -- ``routes_users.py``,
+  ``routes_secrets.py``, ``routes_sessions.py``,
+  ``routes_audit.py``, ``routes_variables.py``,
+  ``routes_scopes.py`` (admin/config surface).
+* ``webinterface/blueprints/projects/`` -- ``routes.py``,
+  ``routes_builds.py``, ``routes_calendar.py``,
+  ``routes_infrastructure.py``, ``routes_releases.py``,
+  ``routes_repositories.py``, ``routes_tests.py``,
+  ``routes_watches.py`` (project management surface).
+* ``webinterface/blueprints/resources/`` -- ``routes.py``,
+  ``routes_allocations.py``, ``routes_health.py``,
+  ``routes_ip_pools.py``, ``routes_pools.py``,
+  ``routes_reservations.py``, ``routes_tags.py`` (resource
+  management surface).
+
+Each of these imports a domain-specific manager that wraps a
+chunk of the legacy ``core.orm`` schema (``Project``,
+``Repository``, ``Resource``, ``Allocation``, ``IPPool``,
+``HealthCheckConfig``, ``GlobalVariable``, ``User``,
+``SystemRole``, etc.). Migrating them off ``core.managers``
+requires a modern-stack equivalent for each manager **and** a
+data-layer story for each domain.
+
+Scope assessment: this is **Phase-2/3 territory**, not alpha
+cleanup. Each domain (projects, resources, builds, releases,
+test-orchestration) is a wave in the implementation plan
+(see ``specs/implementation-plan.md``). Migrating the consumer
+UI off ``core.managers`` happens incrementally as each layer's
+modern services land.
+
+For the alpha, the legacy schema continues to ship via the
+``include_legacy_core_orm_tables`` migration (PR #160; PR #175
+fixed Postgres FK ordering). The userguide's
+``13-00-alpha-deployment.rst`` documents the legacy-schema
+co-residency as a known limitation.
+
+Until the modern services for projects / resources / builds /
+releases / tests have shipped, attempting to retire any one
+``core.managers`` consumer in isolation produces inconsistent
+state (e.g., projects on modern data, resources still on legacy
+``core.orm.Resource``). The right cadence is to migrate
+**per-blueprint** in lockstep with the layer's modern service
+landing.
+
+Out of scope for ``check_permission`` retirement
+------------------------------------------------
+
+The RBAC migration (PR p13ad / #167) retired
+``SecurityManager.check_permission`` from the consumer-UI auth
+path -- the adapter now routes RBAC through
+``rbac_evaluator``. But ``ProjectManager.check_permission``
+(used by ``projects/`` blueprint for project-scoped checks)
+still calls into the legacy ``core.managers`` layer. That is a
+**different** ``check_permission`` -- a domain-specific check,
+not the RBAC top-level gate -- and lives downstream of the
+project-data migration above.
