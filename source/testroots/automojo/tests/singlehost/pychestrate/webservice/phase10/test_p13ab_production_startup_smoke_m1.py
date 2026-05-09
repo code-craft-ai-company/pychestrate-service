@@ -226,8 +226,17 @@ def test_production_startup_completes_against_alembic_migrated_db():
 
     try:
         # Step 1: alembic upgrade head against the fresh DB.
+        # Use the ``alembic`` console script rather than
+        # ``python -m alembic`` -- the repo root contains an
+        # ``alembic/`` migrations dir (configured in
+        # alembic.ini), and ``-m alembic`` from repo root has
+        # Python's namespace-package search resolve it to that
+        # local dir, shadowing the installed library.
+        alembic_script = os.path.join(
+            os.path.dirname(sys.executable), "alembic"
+        )
         upgrade_proc = subprocess.run(
-            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            [alembic_script, "upgrade", "head"],
             cwd=repo_root,
             env=env,
             capture_output=True,
