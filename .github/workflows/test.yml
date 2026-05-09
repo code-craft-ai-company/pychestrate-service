@@ -194,13 +194,38 @@ jobs:
           # for upstream fix in automojo-testbase.)
           #
           # Workaround: enumerate the includes explicitly so the
-          # brittle modules never get picked up. phase1..phase9 +
-          # restapi are broad-included as packages; phase10 is
-          # enumerated by stable-prefix wildcards (p10*/p11*/p12*)
-          # and the 17 stable p13 module names.
+          # brittle modules never get picked up.
+          #
+          # ALSO: testbase's include-path matching uses
+          # ``startswith`` (utilities.find_included_modules_under_
+          # root line 207), so include ``phase1`` ALSO matches
+          # the ``phase10`` directory and pulls in every file
+          # there via ``collect_python_modules_for_tests``.
+          # phase1 is therefore enumerated by specific module
+          # names. phase2..phase9 are safe (no phase20..phase90
+          # siblings exist). phase10 is enumerated separately by
+          # stable-prefix wildcards (p10*/p11*/p12*) and the 17
+          # stable p13 module names.
           poetry run testbase testing run \
             --root source/testroots/automojo \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_audit_writer \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_bootstrap \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_extensions_registry \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_flag_evaluator \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_flag_m2 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_local_flow \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_messaging_bus \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_extensions \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_integration \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_lifecycle_property \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_service \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_slug_property \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_rbac_evaluator \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_rbac_m2 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_secret_bytes \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_secrets_service \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_session_service \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_user_service \
             --includes=automojo.tests.singlehost.pychestrate.webservice.phase2 \
             --includes=automojo.tests.singlehost.pychestrate.webservice.phase3 \
             --includes=automojo.tests.singlehost.pychestrate.webservice.phase4 \
