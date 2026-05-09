@@ -359,3 +359,33 @@ Known alpha limitations
   consumer UI session cookie survives because the
   :class:`AuthSession` row persists, but the in-process bus loses
   any non-yet-captured event between subscriber and downstream.
+* **Postgres FK ordering bug in legacy migration.** The
+  ``include_legacy_core_orm_tables`` alembic revision emits
+  ``CREATE TABLE`` in alphabetical order with inline
+  ``ForeignKeyConstraint`` declarations referencing tables that
+  haven't been created yet (e.g. ``project_pipeline_runs`` →
+  ``project_release_pipelines``). SQLite is lenient; Postgres
+  rejects with ``UndefinedTable``. The CI's
+  ``alembic-upgrade-postgres`` job is marked
+  ``continue-on-error: true`` for the alpha. **Single-host
+  Postgres production deployments need this fixed before going
+  live** -- workaround is to refactor the migration to use
+  ``op.create_foreign_key`` after all tables exist, or set
+  ``use_alter=True`` on the ``ForeignKeyConstraint``s.
+* **CI sweep — 18 of 2267 tests fail under full-suite ordering.**
+  All 18 are HTTP-500 assertion failures in the brittle phase10
+  e2e modules (``p13q_consumer_ui_e2e_smoke_m1`` /
+  ``p13r_consumer_ui_e2e_authed_m1`` /
+  ``p13v_consumer_ui_e2e_rbac_m1``) when they run alongside other
+  phase10 tests. Test-isolation issue at the harness level. They
+  pass cleanly when run alone (the
+  ``phase10-e2e-isolated`` CI job covers them). The
+  ``testbase-singlehost-sweep`` job is marked
+  ``continue-on-error: true`` for the alpha. Two attempts to
+  filter the brittle modules failed because (a) testbase's
+  ``--excludes`` flag is silently a no-op (CLI absolutizes
+  ``--root`` so the prefix-match in
+  ``utilities.find_included_modules_under_root`` can never hit),
+  AND (b) explicit-include enumeration still produces scopes for
+  unwanted sibling modules in the test sequence document.
+  Tracked for harness-level fix post-alpha.
