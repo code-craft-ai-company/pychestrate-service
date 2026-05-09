@@ -81,6 +81,54 @@ REMOTE_PATH="pychestrate-service"  # relative to remote $HOME
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # ---------------------------------------------------------------------------
+# Source repo-root .env (if present)
+#
+# Pulls in any operator-set environment variables -- most notably
+# ``AUTOMOJO_REPO_TOKEN`` -- so the operator does not have to
+# ``export`` them on every invocation.  ``.env`` is gitignored;
+# the rehome-repository script generates a base file that the
+# operator extends.  Already-set environment variables (e.g.
+# ones the workflow_dispatch job populates as ``env:``) take
+# precedence over .env values; the .env merely fills in the
+# blanks.
+# ---------------------------------------------------------------------------
+
+ENV_FILE="${REPO_ROOT}/.env"
+if [ -f "${ENV_FILE}" ]; then
+    echo "==> sourcing ${ENV_FILE}"
+    # ``set -a`` -> auto-export every variable assigned in the
+    # sourced file so subprocesses (rsync / ssh / etc) see them.
+    # We loop line-by-line and only assign vars that are not
+    # already set, so a parent-shell ``export`` always wins.
+    while IFS= read -r _line || [ -n "${_line}" ]; do
+        # Strip leading whitespace, skip blanks and comments.
+        _line="${_line#"${_line%%[![:space:]]*}"}"
+        case "${_line}" in
+            ''|'#'*) continue ;;
+        esac
+        # Only consider ``KEY=...`` and ``export KEY=...`` lines.
+        case "${_line}" in
+            export\ *=*) _line="${_line#export }" ;;
+            *=*) ;;
+            *) continue ;;
+        esac
+        _key="${_line%%=*}"
+        # Skip if the key is already set in the parent env.
+        if [ -n "${!_key+x}" ]; then
+            continue
+        fi
+        # Strip surrounding quotes from the value, then export.
+        _val="${_line#*=}"
+        case "${_val}" in
+            \"*\") _val="${_val#\"}"; _val="${_val%\"}" ;;
+            \'*\') _val="${_val#\'}"; _val="${_val%\'}" ;;
+        esac
+        export "${_key}=${_val}"
+    done < "${ENV_FILE}"
+    unset _line _key _val
+fi
+
+# ---------------------------------------------------------------------------
 # Pre-flight checks
 # ---------------------------------------------------------------------------
 
