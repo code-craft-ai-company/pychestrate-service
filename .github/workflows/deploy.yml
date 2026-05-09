@@ -1,0 +1,158 @@
+name: deploy
+
+# One-click alpha deploy from the GitHub Actions UI.
+#
+# Triggers manually via "Run workflow" on the Actions tab. Joins
+# the runner to the operator's Tailscale tailnet, loads the deploy
+# SSH key, then runs ``deployment/deploy-alpha-to-host.sh``
+# against the target.
+#
+# Required GitHub secrets (org or repo level):
+#
+#   AUTOMOJO_REPO_TOKEN     fine-grained PAT with Contents:Read
+#                           on the nine private automojo-* repos.
+#                           Same secret CI's test workflow uses.
+#
+#   TS_OAUTH_CLIENT_ID      OAuth client ID created in Tailscale
+#   TS_OAUTH_SECRET         admin -> Settings -> OAuth clients.
+#                           Tags scope: tag:ci. Devices: Write.
+#
+#   DEPLOY_SSH_KEY          PEM-format SSH private key whose
+#                           public half is in the deploy user's
+#                           authorized_keys on the target.
+#
+# Tailscale ACL pre-requisites (one-time, in the admin policy):
+#
+#   {
+#     "tagOwners": {
+#       "tag:ci": ["autogroup:admin"]
+#     },
+#     "acls": [
+#       {
+#         "action": "accept",
+#         "src":    ["tag:ci"],
+#         "dst":    ["tc-app-server:22"]
+#       }
+#     ]
+#   }
+#
+# Target host pre-requisites (one-time, run the script
+# interactively from a workstation FIRST so the apt + poetry
+# bootstrap completes -- ``setup-debian-machine`` requires sudo
+# and CI cannot satisfy an interactive password prompt):
+#
+#   AUTOMOJO_REPO_TOKEN=ghp_xxx \\
+#       deployment/deploy-alpha-to-host.sh \\
+#           --host=tc-app-server --user=myron
+#
+# After that, the CI deploy workflow uses --skip-system-setup
+# and deploys are entirely non-interactive.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_host:
+        description: "Target hostname (Tailscale tailnet name)"
+        required: true
+        default: "tc-app-server"
+        type: string
+      target_user:
+        description: "SSH user on target"
+        required: true
+        default: "myron"
+        type: string
+      target_port:
+        description: "Service bind port on target"
+        required: true
+        default: "8888"
+        type: string
+      git_ref:
+        description: "Git ref to deploy (branch / tag / SHA)"
+        required: true
+        default: "main"
+        type: string
+
+# Serialize deploys to the same target so two operators don't
+# stomp each other.  Two deploys to DIFFERENT targets can run
+# concurrently.
+concurrency:
+  group: deploy-${{ inputs.target_host }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy ${{ inputs.git_ref }} to ${{ inputs.target_host }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref }}
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          # Caches the tailscaled binary across runs.
+          use-cache: 'true'
+
+      - name: Verify Tailscale connectivity to target
+        run: |
+          # Tailscale's MagicDNS resolves tailnet hostnames.  If
+          # this fails the ACL probably does not grant tag:ci
+          # access to the target -- fix the policy in the
+          # Tailscale admin and re-run.
+          if ! tailscale ping --c 2 --timeout 5s '${{ inputs.target_host }}' 2>&1 | tee /tmp/tailscale-ping.log; then
+              echo "::error::tailscale cannot reach ${{ inputs.target_host }}." \
+                   "Check the ACL policy permits tag:ci to reach the target."
+              exit 1
+          fi
+
+      - name: Load deploy SSH key into agent
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # The secret is the FULL private key, including the
+          # ``-----BEGIN ... PRIVATE KEY-----`` header / footer.
+          # Newlines must be preserved -- we write to a heredoc
+          # to avoid GitHub Actions stripping them.
+          cat > ~/.ssh/id_deploy <<'KEY'
+          ${{ secrets.DEPLOY_SSH_KEY }}
+          KEY
+          chmod 600 ~/.ssh/id_deploy
+
+      - name: Trust target host key
+        run: |
+          # Pull the target's host key over the tailnet so SSH
+          # does not block on first-connect host-key prompt.
+          # (StrictHostKeyChecking remains on; the script just
+          # has the key cached now.)
+          ssh-keyscan -T 10 -H '${{ inputs.target_host }}' \
+              >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Run deploy
+        env:
+          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+        run: |
+          # Start an ephemeral ssh-agent and load the deploy key.
+          # The deploy script's ssh invocations pick up the
+          # agent automatically.
+          eval "$(ssh-agent -s)"
+          ssh-add ~/.ssh/id_deploy
+
+          ./deployment/deploy-alpha-to-host.sh \
+              --skip-system-setup \
+              --host='${{ inputs.target_host }}' \
+              --user='${{ inputs.target_user }}' \
+              --port='${{ inputs.target_port }}'
+
+      - name: Disconnect from Tailscale
+        if: always()
+        run: |
+          # tailscale/github-action@v3 normally cleans up on its
+          # own at job teardown, but logout-on-failure protects
+          # against leaking an ephemeral device into the tailnet
+          # if a step in the middle of the job blew up.
+          sudo tailscale logout || true
