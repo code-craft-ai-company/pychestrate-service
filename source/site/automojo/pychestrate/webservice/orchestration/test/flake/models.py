@@ -62,7 +62,12 @@ class QuarantineAction(str, enum.Enum):
     CLEAR = "clear"
 
 
-OUTCOME_ENUM = "orch_test_outcome"
+# NOTE: ``orch_test_outcome`` is also a TABLE name (see
+# ``TestOutcome.__tablename__`` below). Postgres treats tables
+# as implicit composite types in the same namespace, so the
+# enum name has to be distinct from the table name. Suffixed
+# with ``_value`` to match the ``outcome`` column it backs.
+OUTCOME_ENUM = "orch_test_outcome_value"
 FLAKE_CLASS_ENUM = "orch_flake_class"
 QUARANTINE_ACTION_ENUM = "orch_flake_quarantine_action"
 

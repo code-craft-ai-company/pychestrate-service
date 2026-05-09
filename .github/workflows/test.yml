@@ -172,26 +172,64 @@ jobs:
       - name: Install dependencies
         run: poetry install --no-interaction
 
-      - name: Run singlehost sweep (excluding pre-existing-broken phase10 e2e modules)
+      - name: Run singlehost sweep (brittle phase10 e2e modules excluded)
         env:
           PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
         run: |
           mkdir -p .output/ci-singlehost
-          # The phase10 e2e modules (p13q/p13r/p13u/p13v/p13ac) are
-          # blocked by a pre-existing test-isolation issue in the
-          # full-suite ordering -- they pass cleanly when run alone
-          # (see "phase10 e2e (run alone)" job below). Exclude them
-          # from the broad sweep so CI surfaces the rest of the
-          # suite while the isolation issue is fixed separately.
+          # The phase10 e2e modules p13q/p13r/p13u/p13v/p13ac/p13ae
+          # are blocked by a pre-existing test-isolation issue in
+          # the full-suite ordering -- they pass cleanly when run
+          # alone (see "phase10 e2e (run alone)" job below).
+          #
+          # Cannot use ``--excludes`` to filter them: testbase
+          # absolutizes ``--root`` (cli/cmdtree/testing/run.py:172
+          # via ``os.path.abspath``) so candidate file paths used
+          # by ``utilities.find_included_modules_under_root``'s
+          # exclusion filter (line 226-228) are absolute, while
+          # the prefix derived from a dotted ``--excludes``
+          # argument can never have a leading ``/``. The exclusion
+          # check ``candidate.startswith(prefix)`` therefore never
+          # matches, and the flag is silently a no-op. (Tracked
+          # for upstream fix in automojo-testbase.)
+          #
+          # Workaround: enumerate the includes explicitly so the
+          # brittle modules never get picked up. phase1..phase9 +
+          # restapi are broad-included as packages; phase10 is
+          # enumerated by stable-prefix wildcards (p10*/p11*/p12*)
+          # and the 17 stable p13 module names.
           poetry run testbase testing run \
             --root source/testroots/automojo \
-            --includes=automojo.tests.singlehost \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13q_consumer_ui_e2e_smoke_m1 \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13r_consumer_ui_e2e_authed_m1 \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13u_static_assets_e2e_m1 \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13v_consumer_ui_e2e_rbac_m1 \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ac_consumer_ui_e2e_tier4_m1 \
-            --excludes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ae_alpha_acceptance_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase2 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase3 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase4 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase5 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase6 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase7 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase8 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase9 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.restapi \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p10 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p11 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p12 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13a_alembic_setup_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13b_webui_foundation_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13c_webui_session_csrf_flash_guard_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13d_config_webui_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13e_config_users_roles_routes_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13f_config_variables_scopes_routes_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13g_config_secrets_sessions_audit_routes_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13h_resources_core_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13i_resources_pools_ipools_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13j_resources_allocations_reservations_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13k_resources_health_tags_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13l_projects_core_members_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13m_projects_repositories_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13n_projects_builds_infra_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13o_projects_tests_releases_port_m1 \
+            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13p_projects_calendar_watches_final_m1 \
             --output=./.output/ci-singlehost
 
       - name: Upload test artifacts
