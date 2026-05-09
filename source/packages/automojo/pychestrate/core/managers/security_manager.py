@@ -33,7 +33,20 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
-from werkzeug.security import generate_password_hash, check_password_hash
+# NOTE: ``werkzeug`` is intentionally NOT imported at module
+# load time. The consumer-UI auth flow has migrated to the
+# modern stack (``security.auth.local_flow`` +
+# ``ConsumerUISecurityAdapter``); the only remaining live
+# consumer of this module is ``routes_sessions.py`` which calls
+# ``list_active_sessions`` / ``terminate_session`` -- neither
+# of which touches password hashing. The two methods below that
+# DO call werkzeug (``_check_password_history``, ``authenticate``)
+# are dead at runtime; their imports stay lazy so this module
+# loads cleanly without werkzeug installed. werkzeug was
+# previously transitive through the (now-removed)
+# ``pychestrate-core`` git-source dep; reintroducing it as a
+# direct dep would defeat the purpose of cutting that branch
+# of the dep tree.
 
 from automojo.pychestrate.core.defaults import utc_now
 
@@ -235,29 +248,13 @@ def is_password_strong(password: str) -> bool:
     return len(validate_password_strength(password)) == 0
 
 
-def hash_password(password: str) -> str:
-    """
-    Hash a password using werkzeug's secure hashing (bcrypt-based).
-    
-    :param password: The plaintext password to hash
-    :returns: The hashed password
-    
-    Validates: Requirement 3.3
-    """
-    return generate_password_hash(password)
 
-
-def verify_password(password: str, password_hash: str) -> bool:
-    """
-    Verify a password against its hash.
-    
-    :param password: The plaintext password to verify
-    :param password_hash: The stored password hash
-    :returns: True if password matches, False otherwise
-    
-    Validates: Requirement 3.3
-    """
-    return check_password_hash(password_hash, password)
+# NOTE: module-level ``hash_password`` / ``verify_password``
+# helpers have been removed. They had zero consumers in the
+# codebase (the modern stack uses ``local_flow.hash_password``
+# and the ``password_hasher`` factory protocol instead) and
+# their werkzeug calls were the only path that forced werkzeug
+# into the install tree at module load time.
 
 
 # =============================================================================
@@ -383,6 +380,12 @@ class SecurityManager:
             .all()
         )
         
+        # Lazy-import werkzeug -- this method is dead at runtime
+        # via the modern ``ConsumerUISecurityAdapter``; importing
+        # the module at top-level would force werkzeug into the
+        # install tree for code that is never called.
+        from werkzeug.security import check_password_hash  # noqa: E402
+
         # Check if the password matches any of the recent hashes
         for entry in history_entries:
             if check_password_hash(entry.password_hash, password):
@@ -529,7 +532,11 @@ class SecurityManager:
                 )
             raise AuthenticationError("Invalid credentials")
         
-        # Verify password
+        # Verify password. Lazy werkzeug import -- this method
+        # path is dead at runtime; consumer-UI auth flows
+        # through the modern ``ConsumerUISecurityAdapter`` now.
+        from werkzeug.security import check_password_hash  # noqa: E402
+
         if not check_password_hash(latest_password.password_hash, request.password):
             # Log authentication failure
             if self._audit_logger:
