@@ -98,9 +98,6 @@ def upgrade() -> None:
     sa.Column('prrun_started_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prrun_completed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prrun_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prpipe_id'], ['project_release_pipelines.prpipe_id'], ),
-    sa.ForeignKeyConstraint(['prrun_release_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['prrun_triggered_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('prrun_id')
     )
     op.create_index('ix_project_pipeline_runs_pipeline_status', 'project_pipeline_runs', ['prpipe_id', 'prrun_status'], unique=False)
@@ -120,10 +117,6 @@ def upgrade() -> None:
     sa.Column('prelease_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prelease_published_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prelease_published_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['prelease_pipeline_run_id'], ['project_pipeline_runs.prrun_id'], ),
-    sa.ForeignKeyConstraint(['prelease_published_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['prelease_schedule_id'], ['project_release_schedules.prsched_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('prelease_id'),
     sa.UniqueConstraint('proj_id', 'prelease_version', name='uq_project_release_version')
     )
@@ -204,7 +197,6 @@ def upgrade() -> None:
     sa.Column('branch_name', sa.VARCHAR(length=128), nullable=False),
     sa.Column('branch_owner', sa.VARCHAR(length=128), nullable=False),
     sa.Column('repo_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['repo_id'], ['repository.repo_id'], ),
     sa.PrimaryKeyConstraint('branch_id'),
     sa.UniqueConstraint('repo_id', 'branch_name', name='uq_branch_repo_name')
     )
@@ -214,8 +206,6 @@ def upgrade() -> None:
     sa.Column('user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('fgm_join_date', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('fgm_departure_date', sa.DateTime(timezone=True), nullable=True),
-    sa.ForeignKeyConstraint(['fg_id'], ['feature_group.fg_id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('fg_id', 'user_id')
     )
     op.create_index(op.f('ix_feature_group_membership_fg_id'), 'feature_group_membership', ['fg_id'], unique=False)
@@ -230,7 +220,6 @@ def upgrade() -> None:
     sa.Column('gvar_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('gvar_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('gvar_updated_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['gvar_updated_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('gvar_id')
     )
     op.create_index(op.f('ix_global_variables_gvar_name'), 'global_variables', ['gvar_name'], unique=True)
@@ -248,7 +237,6 @@ def upgrade() -> None:
     sa.Column('ippool_reserved_ips', sa.JSON(), nullable=False),
     sa.Column('ippool_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('ippool_created_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['ippool_created_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('ippool_id')
     )
     op.create_index(op.f('ix_ip_pools_ippool_name'), 'ip_pools', ['ippool_name'], unique=True)
@@ -257,7 +245,6 @@ def upgrade() -> None:
     sa.Column('pwdhist_user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('pwdhist_password_hash', sa.VARCHAR(length=255), nullable=False),
     sa.Column('pwdhist_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['pwdhist_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('pwdhist_id')
     )
     op.create_index(op.f('ix_password_history_pwdhist_user_id'), 'password_history', ['pwdhist_user_id'], unique=False)
@@ -268,7 +255,6 @@ def upgrade() -> None:
     sa.Column('prt_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prt_expires_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prt_used', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['prt_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('prt_id')
     )
     op.create_index(op.f('ix_password_reset_tokens_prt_token'), 'password_reset_tokens', ['prt_token'], unique=True)
@@ -279,8 +265,6 @@ def upgrade() -> None:
     sa.Column('comp_description', sa.Text(), nullable=True),
     sa.Column('prod_id', sa.BigInteger(), nullable=False),
     sa.Column('repo_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['prod_id'], ['product.prod_id'], ),
-    sa.ForeignKeyConstraint(['repo_id'], ['repository.repo_id'], ),
     sa.PrimaryKeyConstraint('comp_id'),
     sa.UniqueConstraint('prod_id', 'comp_name', name='uq_component_product_name')
     )
@@ -290,8 +274,6 @@ def upgrade() -> None:
     sa.Column('ptor_id', sa.BigInteger(), autoincrement=True, nullable=False),
     sa.Column('prod_id', sa.BigInteger(), nullable=False),
     sa.Column('repo_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['prod_id'], ['product.prod_id'], ),
-    sa.ForeignKeyConstraint(['repo_id'], ['repository.repo_id'], ),
     sa.PrimaryKeyConstraint('ptor_id'),
     sa.UniqueConstraint('prod_id', 'repo_id', name='uq_product_repository')
     )
@@ -308,7 +290,6 @@ def upgrade() -> None:
     sa.Column('prartifact_storage_path', sa.VARCHAR(length=512), nullable=False),
     sa.Column('prartifact_signature', sa.Text(), nullable=True),
     sa.Column('prartifact_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
     sa.PrimaryKeyConstraint('prartifact_id')
     )
     op.create_index(op.f('ix_project_release_artifacts_prelease_id'), 'project_release_artifacts', ['prelease_id'], unique=False)
@@ -325,8 +306,6 @@ def upgrade() -> None:
     sa.Column('pstagerun_completed_at', sa.DateTime(timezone=True), nullable=True),
     sa.Column('pstagerun_logs_path', sa.VARCHAR(length=512), nullable=True),
     sa.Column('pstagerun_output_json', sa.JSON(), nullable=False),
-    sa.ForeignKeyConstraint(['prrun_id'], ['project_pipeline_runs.prrun_id'], ),
-    sa.ForeignKeyConstraint(['pstagerun_approved_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('pstagerun_id')
     )
     op.create_index(op.f('ix_project_stage_runs_prrun_id'), 'project_stage_runs', ['prrun_id'], unique=False)
@@ -339,7 +318,6 @@ def upgrade() -> None:
     sa.Column('proj_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('proj_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('proj_last_activity_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_owner_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('proj_id')
     )
     op.create_index(op.f('ix_projects_proj_name'), 'projects', ['proj_name'], unique=True)
@@ -353,8 +331,6 @@ def upgrade() -> None:
     sa.Column('release_release_date', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prod_id', sa.BigInteger(), nullable=False),
     sa.Column('rtrain_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['prod_id'], ['product.prod_id'], ),
-    sa.ForeignKeyConstraint(['rtrain_id'], ['release_train.rtrain_id'], ),
     sa.PrimaryKeyConstraint('release_id'),
     sa.UniqueConstraint('prod_id', 'release_name', name='uq_release_product_name')
     )
@@ -370,8 +346,6 @@ def upgrade() -> None:
     sa.Column('rtbranch_metadata', sa.JSON(), nullable=True),
     sa.Column('rtrain_id', sa.BigInteger(), nullable=False),
     sa.Column('parent_rtbranch_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['parent_rtbranch_id'], ['release_train_branch.rtbranch_id'], ),
-    sa.ForeignKeyConstraint(['rtrain_id'], ['release_train.rtrain_id'], ),
     sa.PrimaryKeyConstraint('rtbranch_id'),
     sa.UniqueConstraint('rtrain_id', 'rtbranch_name', name='uq_release_train_branch')
     )
@@ -384,15 +358,12 @@ def upgrade() -> None:
     sa.Column('pool_is_default', sa.Boolean(), nullable=False),
     sa.Column('pool_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pool_created_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['pool_created_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('pool_id')
     )
     op.create_index(op.f('ix_resource_pools_pool_name'), 'resource_pools', ['pool_name'], unique=True)
     op.create_table('role_permissions',
     sa.Column('role_id', sa.BigInteger(), nullable=False),
     sa.Column('permission_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['permission_id'], ['permissions.perm_id'], ),
-    sa.ForeignKeyConstraint(['role_id'], ['system_roles.role_id'], ),
     sa.PrimaryKeyConstraint('role_id', 'permission_id')
     )
     op.create_table('secret_scopes',
@@ -402,7 +373,6 @@ def upgrade() -> None:
     sa.Column('scope_is_system', sa.Boolean(), nullable=False),
     sa.Column('scope_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('scope_created_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['scope_created_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('scope_id')
     )
     op.create_index(op.f('ix_secret_scopes_scope_name'), 'secret_scopes', ['scope_name'], unique=True)
@@ -416,7 +386,6 @@ def upgrade() -> None:
     sa.Column('sess_client_ip', sa.VARCHAR(length=45), nullable=True),
     sa.Column('sess_user_agent', sa.VARCHAR(length=255), nullable=True),
     sa.Column('sess_csrf_token', sa.VARCHAR(length=64), nullable=True),
-    sa.ForeignKeyConstraint(['sess_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('sess_id')
     )
     op.create_index(op.f('ix_sessions_sess_token'), 'sessions', ['sess_token'], unique=True)
@@ -426,7 +395,6 @@ def upgrade() -> None:
     sa.Column('tj_title', sa.VARCHAR(length=1024), nullable=False),
     sa.Column('tj_description', sa.Text(), nullable=False),
     sa.Column('owner_fg_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['owner_fg_id'], ['feature_group.fg_id'], ),
     sa.PrimaryKeyConstraint('tj_id')
     )
     op.create_index(op.f('ix_test_job_owner_fg_id'), 'test_job', ['owner_fg_id'], unique=False)
@@ -447,8 +415,6 @@ def upgrade() -> None:
     sa.Column('wkpk_packet', sa.TEXT(), nullable=False),
     sa.Column('queue_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
-    sa.ForeignKeyConstraint(['queue_id'], ['work_queue.queue_id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('wkpack_id')
     )
     op.create_index(op.f('ix_work_packet_queue_id'), 'work_packet', ['queue_id'], unique=False)
@@ -462,7 +428,6 @@ def upgrade() -> None:
     sa.Column('bjob_change', sa.VARCHAR(length=128), nullable=False),
     sa.Column('bjob_status', sa.Enum('QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED', 'CANCELED', 'BLOCKED', name='build_job_status', native_enum=False), nullable=False),
     sa.Column('branch_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['branch_id'], ['branch.branch_id'], ),
     sa.PrimaryKeyConstraint('bjob_id')
     )
     op.create_index(op.f('ix_build_job_branch_id'), 'build_job', ['branch_id'], unique=False)
@@ -474,8 +439,6 @@ def upgrade() -> None:
     sa.Column('gvarhist_new_value_json', sa.Text(), nullable=True),
     sa.Column('gvarhist_changed_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
     sa.Column('gvarhist_changed_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['gvarhist_changed_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['gvarhist_variable_id'], ['global_variables.gvar_id'], ),
     sa.PrimaryKeyConstraint('gvarhist_id')
     )
     op.create_index(op.f('ix_global_variable_history_gvarhist_variable_id'), 'global_variable_history', ['gvarhist_variable_id'], unique=False)
@@ -490,8 +453,6 @@ def upgrade() -> None:
     sa.Column('ipalloc_expected_checkin', sa.DateTime(timezone=True), nullable=True),
     sa.Column('ipalloc_actual_checkin', sa.DateTime(timezone=True), nullable=True),
     sa.Column('ipalloc_reason', sa.VARCHAR(length=512), nullable=True),
-    sa.ForeignKeyConstraint(['ipalloc_pool_id'], ['ip_pools.ippool_id'], ),
-    sa.ForeignKeyConstraint(['ipalloc_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('ipalloc_id')
     )
     op.create_index(op.f('ix_ip_allocations_ipalloc_job_id'), 'ip_allocations', ['ipalloc_job_id'], unique=False)
@@ -506,8 +467,6 @@ def upgrade() -> None:
     sa.Column('can_view', sa.Boolean(), nullable=False),
     sa.Column('can_checkout', sa.Boolean(), nullable=False),
     sa.Column('can_manage', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['pool_id'], ['resource_pools.pool_id'], ),
-    sa.ForeignKeyConstraint(['role_id'], ['system_roles.role_id'], ),
     sa.PrimaryKeyConstraint('pool_id', 'role_id')
     )
     op.create_table('project_calendar_events',
@@ -520,7 +479,6 @@ def upgrade() -> None:
     sa.Column('pcalevent_end_time', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pcalevent_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pcalevent_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pcalevent_id')
     )
     op.create_index(op.f('ix_project_calendar_events_proj_id'), 'project_calendar_events', ['proj_id'], unique=False)
@@ -538,7 +496,6 @@ def upgrade() -> None:
     sa.Column('pispec_version', sa.Integer(), nullable=False),
     sa.Column('pispec_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pispec_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pispec_id'),
     sa.UniqueConstraint('proj_id', 'pispec_name', name='uq_project_infra_spec_name')
     )
@@ -550,8 +507,6 @@ def upgrade() -> None:
     sa.Column('user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('pm_role', sa.VARCHAR(length=32), nullable=False),
     sa.Column('pm_joined_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('pm_id'),
     sa.UniqueConstraint('proj_id', 'user_id', name='uq_project_member')
     )
@@ -567,8 +522,6 @@ def upgrade() -> None:
     sa.Column('prchan_requires_approval', sa.Boolean(), nullable=False),
     sa.Column('prchan_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prchan_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prchan_current_release_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('prchan_id'),
     sa.UniqueConstraint('proj_id', 'prchan_name', name='uq_project_release_channel_name')
     )
@@ -584,8 +537,6 @@ def upgrade() -> None:
     sa.Column('prelevent_end_time', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prelevent_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prelevent_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('prelevent_id')
     )
     op.create_index(op.f('ix_project_release_events_prelease_id'), 'project_release_events', ['prelease_id'], unique=False)
@@ -603,7 +554,6 @@ def upgrade() -> None:
     sa.Column('prpipe_version', sa.Integer(), nullable=False),
     sa.Column('prpipe_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prpipe_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('prpipe_id'),
     sa.UniqueConstraint('proj_id', 'prpipe_name', name='uq_project_release_pipeline_name')
     )
@@ -624,7 +574,6 @@ def upgrade() -> None:
     sa.Column('prepo_last_commit_time', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prepo_last_fetch_time', sa.DateTime(timezone=True), nullable=True),
     sa.Column('prepo_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('prepo_id'),
     sa.UniqueConstraint('proj_id', 'prepo_name', name='uq_project_repository_name')
     )
@@ -640,7 +589,6 @@ def upgrade() -> None:
     sa.Column('pvar_description', sa.VARCHAR(length=512), nullable=True),
     sa.Column('pvar_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pvar_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pvar_id'),
     sa.UniqueConstraint('proj_id', 'pvar_name', name='uq_project_variable_name')
     )
@@ -651,8 +599,6 @@ def upgrade() -> None:
     sa.Column('rba_literal_branch_name', sa.VARCHAR(length=256), nullable=False),
     sa.Column('release_id', sa.BigInteger(), nullable=False),
     sa.Column('rtbranch_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['release_id'], ['release.release_id'], ),
-    sa.ForeignKeyConstraint(['rtbranch_id'], ['release_train_branch.rtbranch_id'], ),
     sa.PrimaryKeyConstraint('rba_id'),
     sa.UniqueConstraint('release_id', 'rtbranch_id', name='uq_release_branch_assignment')
     )
@@ -671,8 +617,6 @@ def upgrade() -> None:
     sa.Column('res_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('res_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('res_created_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['res_created_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['res_pool_id'], ['resource_pools.pool_id'], ),
     sa.PrimaryKeyConstraint('res_id')
     )
     op.create_index('ix_resources_pool_name', 'resources', ['res_pool_id', 'res_name'], unique=True)
@@ -683,8 +627,6 @@ def upgrade() -> None:
     sa.Column('role_id', sa.BigInteger(), nullable=False),
     sa.Column('can_read', sa.Boolean(), nullable=False),
     sa.Column('can_manage', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['role_id'], ['system_roles.role_id'], ),
-    sa.ForeignKeyConstraint(['scope_id'], ['secret_scopes.scope_id'], ),
     sa.PrimaryKeyConstraint('scope_id', 'role_id')
     )
     op.create_table('secrets',
@@ -699,8 +641,6 @@ def upgrade() -> None:
     sa.Column('secret_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('secret_updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('secret_updated_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['secret_scope_id'], ['secret_scopes.scope_id'], ),
-    sa.ForeignKeyConstraint(['secret_updated_by_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('secret_id')
     )
     op.create_index('ix_secrets_scope_name', 'secrets', ['secret_scope_id', 'secret_name'], unique=True)
@@ -718,9 +658,6 @@ def upgrade() -> None:
     sa.Column('job_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
     sa.Column('fg_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['fg_id'], ['feature_group.fg_id'], ),
-    sa.ForeignKeyConstraint(['job_id'], ['test_job.tj_id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('tjr_instance')
     )
     op.create_index(op.f('ix_test_job_run_fg_id'), 'test_job_run', ['fg_id'], unique=False)
@@ -734,7 +671,6 @@ def upgrade() -> None:
     sa.Column('tstrcont_parent', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
     sa.Column('tstrcont_rtype', sa.String(length=50), nullable=False),
     sa.Column('tj_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['tj_id'], ['test_job.tj_id'], ),
     sa.PrimaryKeyConstraint('tstrcont_id')
     )
     op.create_index(op.f('ix_test_result_container_tj_id'), 'test_result_container', ['tj_id'], unique=False)
@@ -753,9 +689,6 @@ def upgrade() -> None:
     sa.Column('alloc_forced_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
     sa.Column('alloc_force_reason', sa.VARCHAR(length=512), nullable=True),
     sa.Column('alloc_metadata_snapshot', sa.JSON(), nullable=False),
-    sa.ForeignKeyConstraint(['alloc_forced_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['alloc_resource_id'], ['resources.res_id'], ),
-    sa.ForeignKeyConstraint(['alloc_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('alloc_id')
     )
     op.create_index(op.f('ix_allocations_alloc_job_id'), 'allocations', ['alloc_job_id'], unique=False)
@@ -772,8 +705,6 @@ def upgrade() -> None:
     sa.Column('build_change', sa.VARCHAR(length=128), nullable=False),
     sa.Column('branch_id', sa.BigInteger(), nullable=False),
     sa.Column('bjob_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['bjob_id'], ['build_job.bjob_id'], ),
-    sa.ForeignKeyConstraint(['branch_id'], ['branch.branch_id'], ),
     sa.PrimaryKeyConstraint('build_id')
     )
     op.create_index(op.f('ix_build_result_bjob_id'), 'build_result', ['bjob_id'], unique=False)
@@ -792,7 +723,6 @@ def upgrade() -> None:
     sa.Column('hcc_last_check_time', sa.DateTime(timezone=True), nullable=True),
     sa.Column('hcc_last_check_result', sa.Boolean(), nullable=True),
     sa.Column('hcc_enabled', sa.Boolean(), nullable=False),
-    sa.ForeignKeyConstraint(['hcc_resource_id'], ['resources.res_id'], ),
     sa.PrimaryKeyConstraint('hcc_id')
     )
     op.create_index(op.f('ix_health_check_configs_hcc_resource_id'), 'health_check_configs', ['hcc_resource_id'], unique=True)
@@ -805,8 +735,6 @@ def upgrade() -> None:
     sa.Column('htl_triggered_by', sa.VARCHAR(length=32), nullable=False),
     sa.Column('htl_user_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
     sa.Column('htl_timestamp', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['htl_resource_id'], ['resources.res_id'], ),
-    sa.ForeignKeyConstraint(['htl_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('htl_id')
     )
     op.create_index(op.f('ix_health_transition_logs_htl_resource_id'), 'health_transition_logs', ['htl_resource_id'], unique=False)
@@ -824,8 +752,6 @@ def upgrade() -> None:
     sa.Column('pbspec_version', sa.Integer(), nullable=False),
     sa.Column('pbspec_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pbspec_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prepo_id'], ['project_repositories.prepo_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pbspec_id'),
     sa.UniqueConstraint('proj_id', 'pbspec_name', name='uq_project_build_spec_name')
     )
@@ -838,9 +764,6 @@ def upgrade() -> None:
     sa.Column('prelease_id', sa.BigInteger(), nullable=False),
     sa.Column('pchanhist_published_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pchanhist_published_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=False),
-    sa.ForeignKeyConstraint(['pchanhist_published_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['prchan_id'], ['project_release_channels.prchan_id'], ),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
     sa.PrimaryKeyConstraint('pchanhist_id')
     )
     op.create_index(op.f('ix_project_channel_history_prchan_id'), 'project_channel_history', ['prchan_id'], unique=False)
@@ -862,9 +785,6 @@ def upgrade() -> None:
     sa.Column('pijob_duration_seconds', sa.Integer(), nullable=True),
     sa.Column('pijob_logs_path', sa.VARCHAR(length=512), nullable=True),
     sa.Column('pijob_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['pijob_triggered_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['pispec_id'], ['project_infra_specs.pispec_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pijob_id')
     )
     op.create_index(op.f('ix_project_infra_jobs_pijob_triggered_by_id'), 'project_infra_jobs', ['pijob_triggered_by_id'], unique=False)
@@ -888,10 +808,6 @@ def upgrade() -> None:
     sa.Column('pmerge_error_message', sa.Text(), nullable=True),
     sa.Column('pmerge_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pmerge_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['pmerge_executed_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['prepo_id'], ['project_repositories.prepo_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pmerge_id')
     )
     op.create_index(op.f('ix_project_merge_events_prelease_id'), 'project_merge_events', ['prelease_id'], unique=False)
@@ -911,7 +827,6 @@ def upgrade() -> None:
     sa.Column('pphase_status', sa.VARCHAR(length=32), nullable=False),
     sa.Column('pphase_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pphase_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prelevent_id'], ['project_release_events.prelevent_id'], ),
     sa.PrimaryKeyConstraint('pphase_id')
     )
     op.create_index(op.f('ix_project_phase_events_prelevent_id'), 'project_phase_events', ['prelevent_id'], unique=False)
@@ -932,10 +847,6 @@ def upgrade() -> None:
     sa.Column('ppull_error_message', sa.Text(), nullable=True),
     sa.Column('ppull_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('ppull_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['ppull_executed_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['prepo_id'], ['project_repositories.prepo_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('ppull_id')
     )
     op.create_index(op.f('ix_project_pull_events_prelease_id'), 'project_pull_events', ['prelease_id'], unique=False)
@@ -951,8 +862,6 @@ def upgrade() -> None:
     sa.Column('prelbranch_branch_name', sa.VARCHAR(length=256), nullable=False),
     sa.Column('prelbranch_description', sa.Text(), nullable=True),
     sa.Column('prelbranch_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prelease_id'], ['project_releases.prelease_id'], ),
-    sa.ForeignKeyConstraint(['prepo_id'], ['project_repositories.prepo_id'], ),
     sa.PrimaryKeyConstraint('prelbranch_id'),
     sa.UniqueConstraint('prelease_id', 'prepo_id', 'prelbranch_branch_name', name='uq_project_release_branch')
     )
@@ -973,8 +882,6 @@ def upgrade() -> None:
     sa.Column('prsched_run_count', sa.Integer(), nullable=False),
     sa.Column('prsched_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('prsched_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
-    sa.ForeignKeyConstraint(['prsched_pipeline_id'], ['project_release_pipelines.prpipe_id'], ),
     sa.PrimaryKeyConstraint('prsched_id'),
     sa.UniqueConstraint('proj_id', 'prsched_name', name='uq_project_release_schedule_name')
     )
@@ -986,9 +893,6 @@ def upgrade() -> None:
     sa.Column('res_id', sa.BigInteger(), nullable=False),
     sa.Column('assigned_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('assigned_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['assigned_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
-    sa.ForeignKeyConstraint(['res_id'], ['resources.res_id'], ),
     sa.PrimaryKeyConstraint('proj_id', 'res_id')
     )
     op.create_table('project_watches',
@@ -1006,8 +910,6 @@ def upgrade() -> None:
     sa.Column('pwatch_trigger_count', sa.Integer(), nullable=False),
     sa.Column('pwatch_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('pwatch_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['prepo_id'], ['project_repositories.prepo_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pwatch_id'),
     sa.UniqueConstraint('proj_id', 'pwatch_name', name='uq_project_watch_name')
     )
@@ -1022,8 +924,6 @@ def upgrade() -> None:
     sa.Column('rmh_new_metadata_json', sa.JSON(), nullable=True),
     sa.Column('rmh_changed_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
     sa.Column('rmh_changed_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['rmh_changed_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['rmh_resource_id'], ['resources.res_id'], ),
     sa.PrimaryKeyConstraint('rmh_id')
     )
     op.create_index('ix_resource_metadata_history_resource_time', 'resource_metadata_history', ['rmh_resource_id', 'rmh_changed_at'], unique=False)
@@ -1031,8 +931,6 @@ def upgrade() -> None:
     op.create_table('resource_tags',
     sa.Column('resource_id', sa.BigInteger(), nullable=False),
     sa.Column('tag_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['resource_id'], ['resources.res_id'], ),
-    sa.ForeignKeyConstraint(['tag_id'], ['resource_tags_def.tag_id'], ),
     sa.PrimaryKeyConstraint('resource_id', 'tag_id')
     )
     op.create_table('secret_versions',
@@ -1041,8 +939,6 @@ def upgrade() -> None:
     sa.Column('secver_version', sa.Integer(), nullable=False),
     sa.Column('secver_changed_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('secver_changed_by_id', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['secver_changed_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['secver_secret_id'], ['secrets.secret_id'], ),
     sa.PrimaryKeyConstraint('secver_id')
     )
     op.create_index(op.f('ix_secret_versions_secver_secret_id'), 'secret_versions', ['secver_secret_id'], unique=False)
@@ -1057,7 +953,6 @@ def upgrade() -> None:
     sa.Column('tstr_stop', sa.DateTime(timezone=True), nullable=True),
     sa.Column('tstr_detail', sa.JSON(), nullable=True),
     sa.Column('tjr_instance', sqlalchemy_utils.types.uuid.UUIDType(), nullable=True),
-    sa.ForeignKeyConstraint(['tjr_instance'], ['test_job_run.tjr_instance'], ),
     sa.PrimaryKeyConstraint('tstr_instance')
     )
     op.create_index(op.f('ix_test_result_tjr_instance'), 'test_result', ['tjr_instance'], unique=False)
@@ -1069,7 +964,6 @@ def upgrade() -> None:
     sa.Column('bbp_flavor', sa.VARCHAR(length=128), nullable=False),
     sa.Column('bbp_result_url', sa.VARCHAR(length=2048), nullable=False),
     sa.Column('build_id', sa.BigInteger(), nullable=False),
-    sa.ForeignKeyConstraint(['build_id'], ['build_result.build_id'], ),
     sa.PrimaryKeyConstraint('bbp_id')
     )
     op.create_index(op.f('ix_build_byproduct_build_id'), 'build_byproduct', ['build_id'], unique=False)
@@ -1090,9 +984,6 @@ def upgrade() -> None:
     sa.Column('pbuild_duration_seconds', sa.Integer(), nullable=True),
     sa.Column('pbuild_logs_path', sa.VARCHAR(length=512), nullable=True),
     sa.Column('pbuild_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['pbspec_id'], ['project_build_specs.pbspec_id'], ),
-    sa.ForeignKeyConstraint(['pbuild_triggered_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
     sa.PrimaryKeyConstraint('pbuild_id')
     )
     op.create_index(op.f('ix_project_builds_pbspec_id'), 'project_builds', ['pbspec_id'], unique=False)
@@ -1116,9 +1007,6 @@ def upgrade() -> None:
     sa.Column('ptspec_version', sa.Integer(), nullable=False),
     sa.Column('ptspec_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('ptspec_updated_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
-    sa.ForeignKeyConstraint(['ptspec_build_ref'], ['project_build_specs.pbspec_id'], ),
-    sa.ForeignKeyConstraint(['ptspec_infra_ref'], ['project_infra_specs.pispec_id'], ),
     sa.PrimaryKeyConstraint('ptspec_id'),
     sa.UniqueConstraint('proj_id', 'ptspec_name', name='uq_project_test_spec_name')
     )
@@ -1132,7 +1020,6 @@ def upgrade() -> None:
     sa.Column('pwatchlog_actions_executed_json', sa.JSON(), nullable=False),
     sa.Column('pwatchlog_success', sa.Boolean(), nullable=False),
     sa.Column('pwatchlog_error_message', sa.Text(), nullable=True),
-    sa.ForeignKeyConstraint(['pwatch_id'], ['project_watches.pwatch_id'], ),
     sa.PrimaryKeyConstraint('pwatchlog_id')
     )
     op.create_index(op.f('ix_project_watch_trigger_logs_pwatch_id'), 'project_watch_trigger_logs', ['pwatch_id'], unique=False)
@@ -1148,9 +1035,6 @@ def upgrade() -> None:
     sa.Column('resv_reason', sa.VARCHAR(length=512), nullable=True),
     sa.Column('resv_created_at', sa.DateTime(timezone=True), nullable=False),
     sa.Column('resv_allocation_id', sa.BigInteger(), nullable=True),
-    sa.ForeignKeyConstraint(['resv_allocation_id'], ['allocations.alloc_id'], ),
-    sa.ForeignKeyConstraint(['resv_resource_id'], ['resources.res_id'], ),
-    sa.ForeignKeyConstraint(['resv_user_id'], ['user.user_id'], ),
     sa.PrimaryKeyConstraint('resv_id')
     )
     op.create_index('ix_reservations_job', 'reservations', ['resv_job_id'], unique=False)
@@ -1167,7 +1051,6 @@ def upgrade() -> None:
     sa.Column('pbartifact_checksum', sa.VARCHAR(length=128), nullable=False),
     sa.Column('pbartifact_checksum_algorithm', sa.VARCHAR(length=16), nullable=False),
     sa.Column('pbartifact_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['pbuild_id'], ['project_builds.pbuild_id'], ),
     sa.PrimaryKeyConstraint('pbartifact_id')
     )
     op.create_index(op.f('ix_project_build_artifacts_pbuild_id'), 'project_build_artifacts', ['pbuild_id'], unique=False)
@@ -1188,11 +1071,6 @@ def upgrade() -> None:
     sa.Column('ptjob_logs_path', sa.VARCHAR(length=512), nullable=True),
     sa.Column('ptjob_results_path', sa.VARCHAR(length=512), nullable=True),
     sa.Column('ptjob_created_at', sa.DateTime(timezone=True), nullable=False),
-    sa.ForeignKeyConstraint(['proj_id'], ['projects.proj_id'], ),
-    sa.ForeignKeyConstraint(['ptjob_build_id'], ['project_builds.pbuild_id'], ),
-    sa.ForeignKeyConstraint(['ptjob_infra_job_id'], ['project_infra_jobs.pijob_id'], ),
-    sa.ForeignKeyConstraint(['ptjob_triggered_by_id'], ['user.user_id'], ),
-    sa.ForeignKeyConstraint(['ptspec_id'], ['project_test_specs.ptspec_id'], ),
     sa.PrimaryKeyConstraint('ptjob_id')
     )
     op.create_index(op.f('ix_project_test_jobs_proj_id'), 'project_test_jobs', ['proj_id'], unique=False)
@@ -1209,15 +1087,284 @@ def upgrade() -> None:
     sa.Column('ptresult_duration_seconds', sa.Float(), nullable=True),
     sa.Column('ptresult_failure_message', sa.Text(), nullable=True),
     sa.Column('ptresult_failure_trace', sa.Text(), nullable=True),
-    sa.ForeignKeyConstraint(['ptjob_id'], ['project_test_jobs.ptjob_id'], ),
     sa.PrimaryKeyConstraint('ptresult_id')
     )
     op.create_index(op.f('ix_project_test_results_ptjob_id'), 'project_test_results', ['ptjob_id'], unique=False)
+
+    # --- Deferred foreign-key constraints (Postgres only) ---
+    # Inline ``ForeignKeyConstraint`` declarations on the
+    # ``op.create_table`` calls above were extracted to here so the FKs
+    # are added in a separate pass after every table exists. The
+    # autogenerated alphabetical CREATE order does not respect FK
+    # dependency order; SQLite is lenient at CREATE-TABLE time but
+    # Postgres rejects with ``UndefinedTable`` when a FK references a
+    # table that hasn't been created yet.
+    #
+    # SQLite does not support ALTER TABLE ADD CONSTRAINT, so on SQLite
+    # the FKs are simply omitted -- this is acceptable because SQLite
+    # does not enforce FK constraints by default anyway (``PRAGMA
+    # foreign_keys=ON`` is opt-in), and this revision only ships the
+    # legacy schema for compatibility while it is being retired.
+    bind = op.get_bind()
+    if bind.dialect.name != 'sqlite':
+        op.create_foreign_key('fk_project_pipeline_runs_prpipe_id', 'project_pipeline_runs', 'project_release_pipelines', ['prpipe_id'], ['prpipe_id'])
+        op.create_foreign_key('fk_project_pipeline_runs_prrun_release_id', 'project_pipeline_runs', 'project_releases', ['prrun_release_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_pipeline_runs_prrun_triggered_by_id', 'project_pipeline_runs', 'user', ['prrun_triggered_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_releases_prelease_pipeline_run_id', 'project_releases', 'project_pipeline_runs', ['prelease_pipeline_run_id'], ['prrun_id'])
+        op.create_foreign_key('fk_project_releases_prelease_published_by_id', 'project_releases', 'user', ['prelease_published_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_releases_prelease_schedule_id', 'project_releases', 'project_release_schedules', ['prelease_schedule_id'], ['prsched_id'])
+        op.create_foreign_key('fk_project_releases_proj_id', 'project_releases', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_branch_repo_id', 'branch', 'repository', ['repo_id'], ['repo_id'])
+        op.create_foreign_key('fk_feature_group_membership_fg_id', 'feature_group_membership', 'feature_group', ['fg_id'], ['fg_id'])
+        op.create_foreign_key('fk_feature_group_membership_user_id', 'feature_group_membership', 'user', ['user_id'], ['user_id'])
+        op.create_foreign_key('fk_global_variables_gvar_updated_by_id', 'global_variables', 'user', ['gvar_updated_by_id'], ['user_id'])
+        op.create_foreign_key('fk_ip_pools_ippool_created_by_id', 'ip_pools', 'user', ['ippool_created_by_id'], ['user_id'])
+        op.create_foreign_key('fk_password_history_pwdhist_user_id', 'password_history', 'user', ['pwdhist_user_id'], ['user_id'])
+        op.create_foreign_key('fk_password_reset_tokens_prt_user_id', 'password_reset_tokens', 'user', ['prt_user_id'], ['user_id'])
+        op.create_foreign_key('fk_product_component_prod_id', 'product_component', 'product', ['prod_id'], ['prod_id'])
+        op.create_foreign_key('fk_product_component_repo_id', 'product_component', 'repository', ['repo_id'], ['repo_id'])
+        op.create_foreign_key('fk_product_to_repository_prod_id', 'product_to_repository', 'product', ['prod_id'], ['prod_id'])
+        op.create_foreign_key('fk_product_to_repository_repo_id', 'product_to_repository', 'repository', ['repo_id'], ['repo_id'])
+        op.create_foreign_key('fk_project_release_artifacts_prelease_id', 'project_release_artifacts', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_stage_runs_prrun_id', 'project_stage_runs', 'project_pipeline_runs', ['prrun_id'], ['prrun_id'])
+        op.create_foreign_key('fk_project_stage_runs_pstagerun_approved_by_id', 'project_stage_runs', 'user', ['pstagerun_approved_by_id'], ['user_id'])
+        op.create_foreign_key('fk_projects_proj_owner_id', 'projects', 'user', ['proj_owner_id'], ['user_id'])
+        op.create_foreign_key('fk_release_prod_id', 'release', 'product', ['prod_id'], ['prod_id'])
+        op.create_foreign_key('fk_release_rtrain_id', 'release', 'release_train', ['rtrain_id'], ['rtrain_id'])
+        op.create_foreign_key('fk_release_train_branch_parent_rtbranch_id', 'release_train_branch', 'release_train_branch', ['parent_rtbranch_id'], ['rtbranch_id'])
+        op.create_foreign_key('fk_release_train_branch_rtrain_id', 'release_train_branch', 'release_train', ['rtrain_id'], ['rtrain_id'])
+        op.create_foreign_key('fk_resource_pools_pool_created_by_id', 'resource_pools', 'user', ['pool_created_by_id'], ['user_id'])
+        op.create_foreign_key('fk_role_permissions_permission_id', 'role_permissions', 'permissions', ['permission_id'], ['perm_id'])
+        op.create_foreign_key('fk_role_permissions_role_id', 'role_permissions', 'system_roles', ['role_id'], ['role_id'])
+        op.create_foreign_key('fk_secret_scopes_scope_created_by_id', 'secret_scopes', 'user', ['scope_created_by_id'], ['user_id'])
+        op.create_foreign_key('fk_sessions_sess_user_id', 'sessions', 'user', ['sess_user_id'], ['user_id'])
+        op.create_foreign_key('fk_test_job_owner_fg_id', 'test_job', 'feature_group', ['owner_fg_id'], ['fg_id'])
+        op.create_foreign_key('fk_work_packet_queue_id', 'work_packet', 'work_queue', ['queue_id'], ['queue_id'])
+        op.create_foreign_key('fk_work_packet_user_id', 'work_packet', 'user', ['user_id'], ['user_id'])
+        op.create_foreign_key('fk_build_job_branch_id', 'build_job', 'branch', ['branch_id'], ['branch_id'])
+        op.create_foreign_key('fk_global_variable_history_gvarhist_changed_by_id', 'global_variable_history', 'user', ['gvarhist_changed_by_id'], ['user_id'])
+        op.create_foreign_key('fk_global_variable_history_gvarhist_variable_id', 'global_variable_history', 'global_variables', ['gvarhist_variable_id'], ['gvar_id'])
+        op.create_foreign_key('fk_ip_allocations_ipalloc_pool_id', 'ip_allocations', 'ip_pools', ['ipalloc_pool_id'], ['ippool_id'])
+        op.create_foreign_key('fk_ip_allocations_ipalloc_user_id', 'ip_allocations', 'user', ['ipalloc_user_id'], ['user_id'])
+        op.create_foreign_key('fk_pool_permissions_pool_id', 'pool_permissions', 'resource_pools', ['pool_id'], ['pool_id'])
+        op.create_foreign_key('fk_pool_permissions_role_id', 'pool_permissions', 'system_roles', ['role_id'], ['role_id'])
+        op.create_foreign_key('fk_project_calendar_events_proj_id', 'project_calendar_events', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_infra_specs_proj_id', 'project_infra_specs', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_members_proj_id', 'project_members', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_members_user_id', 'project_members', 'user', ['user_id'], ['user_id'])
+        op.create_foreign_key('fk_project_release_channels_prchan_current_release_id', 'project_release_channels', 'project_releases', ['prchan_current_release_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_release_channels_proj_id', 'project_release_channels', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_release_events_prelease_id', 'project_release_events', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_release_events_proj_id', 'project_release_events', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_release_pipelines_proj_id', 'project_release_pipelines', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_repositories_proj_id', 'project_repositories', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_variables_proj_id', 'project_variables', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_release_branch_assignment_release_id', 'release_branch_assignment', 'release', ['release_id'], ['release_id'])
+        op.create_foreign_key('fk_release_branch_assignment_rtbranch_id', 'release_branch_assignment', 'release_train_branch', ['rtbranch_id'], ['rtbranch_id'])
+        op.create_foreign_key('fk_resources_res_created_by_id', 'resources', 'user', ['res_created_by_id'], ['user_id'])
+        op.create_foreign_key('fk_resources_res_pool_id', 'resources', 'resource_pools', ['res_pool_id'], ['pool_id'])
+        op.create_foreign_key('fk_scope_permissions_role_id', 'scope_permissions', 'system_roles', ['role_id'], ['role_id'])
+        op.create_foreign_key('fk_scope_permissions_scope_id', 'scope_permissions', 'secret_scopes', ['scope_id'], ['scope_id'])
+        op.create_foreign_key('fk_secrets_secret_scope_id', 'secrets', 'secret_scopes', ['secret_scope_id'], ['scope_id'])
+        op.create_foreign_key('fk_secrets_secret_updated_by_id', 'secrets', 'user', ['secret_updated_by_id'], ['user_id'])
+        op.create_foreign_key('fk_test_job_run_fg_id', 'test_job_run', 'feature_group', ['fg_id'], ['fg_id'])
+        op.create_foreign_key('fk_test_job_run_job_id', 'test_job_run', 'test_job', ['job_id'], ['tj_id'])
+        op.create_foreign_key('fk_test_job_run_user_id', 'test_job_run', 'user', ['user_id'], ['user_id'])
+        op.create_foreign_key('fk_test_result_container_tj_id', 'test_result_container', 'test_job', ['tj_id'], ['tj_id'])
+        op.create_foreign_key('fk_allocations_alloc_forced_by_id', 'allocations', 'user', ['alloc_forced_by_id'], ['user_id'])
+        op.create_foreign_key('fk_allocations_alloc_resource_id', 'allocations', 'resources', ['alloc_resource_id'], ['res_id'])
+        op.create_foreign_key('fk_allocations_alloc_user_id', 'allocations', 'user', ['alloc_user_id'], ['user_id'])
+        op.create_foreign_key('fk_build_result_bjob_id', 'build_result', 'build_job', ['bjob_id'], ['bjob_id'])
+        op.create_foreign_key('fk_build_result_branch_id', 'build_result', 'branch', ['branch_id'], ['branch_id'])
+        op.create_foreign_key('fk_health_check_configs_hcc_resource_id', 'health_check_configs', 'resources', ['hcc_resource_id'], ['res_id'])
+        op.create_foreign_key('fk_health_transition_logs_htl_resource_id', 'health_transition_logs', 'resources', ['htl_resource_id'], ['res_id'])
+        op.create_foreign_key('fk_health_transition_logs_htl_user_id', 'health_transition_logs', 'user', ['htl_user_id'], ['user_id'])
+        op.create_foreign_key('fk_project_build_specs_prepo_id', 'project_build_specs', 'project_repositories', ['prepo_id'], ['prepo_id'])
+        op.create_foreign_key('fk_project_build_specs_proj_id', 'project_build_specs', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_channel_history_pchanhist_published_by_id', 'project_channel_history', 'user', ['pchanhist_published_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_channel_history_prchan_id', 'project_channel_history', 'project_release_channels', ['prchan_id'], ['prchan_id'])
+        op.create_foreign_key('fk_project_channel_history_prelease_id', 'project_channel_history', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_infra_jobs_pijob_triggered_by_id', 'project_infra_jobs', 'user', ['pijob_triggered_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_infra_jobs_pispec_id', 'project_infra_jobs', 'project_infra_specs', ['pispec_id'], ['pispec_id'])
+        op.create_foreign_key('fk_project_infra_jobs_proj_id', 'project_infra_jobs', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_merge_events_pmerge_executed_by_id', 'project_merge_events', 'user', ['pmerge_executed_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_merge_events_prelease_id', 'project_merge_events', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_merge_events_prepo_id', 'project_merge_events', 'project_repositories', ['prepo_id'], ['prepo_id'])
+        op.create_foreign_key('fk_project_merge_events_proj_id', 'project_merge_events', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_phase_events_prelevent_id', 'project_phase_events', 'project_release_events', ['prelevent_id'], ['prelevent_id'])
+        op.create_foreign_key('fk_project_pull_events_ppull_executed_by_id', 'project_pull_events', 'user', ['ppull_executed_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_pull_events_prelease_id', 'project_pull_events', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_pull_events_prepo_id', 'project_pull_events', 'project_repositories', ['prepo_id'], ['prepo_id'])
+        op.create_foreign_key('fk_project_pull_events_proj_id', 'project_pull_events', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_release_branches_prelease_id', 'project_release_branches', 'project_releases', ['prelease_id'], ['prelease_id'])
+        op.create_foreign_key('fk_project_release_branches_prepo_id', 'project_release_branches', 'project_repositories', ['prepo_id'], ['prepo_id'])
+        op.create_foreign_key('fk_project_release_schedules_proj_id', 'project_release_schedules', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_release_schedules_prsched_pipeline_id', 'project_release_schedules', 'project_release_pipelines', ['prsched_pipeline_id'], ['prpipe_id'])
+        op.create_foreign_key('fk_project_resources_assigned_by_id', 'project_resources', 'user', ['assigned_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_resources_proj_id', 'project_resources', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_resources_res_id', 'project_resources', 'resources', ['res_id'], ['res_id'])
+        op.create_foreign_key('fk_project_watches_prepo_id', 'project_watches', 'project_repositories', ['prepo_id'], ['prepo_id'])
+        op.create_foreign_key('fk_project_watches_proj_id', 'project_watches', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_resource_metadata_history_rmh_changed_by_id', 'resource_metadata_history', 'user', ['rmh_changed_by_id'], ['user_id'])
+        op.create_foreign_key('fk_resource_metadata_history_rmh_resource_id', 'resource_metadata_history', 'resources', ['rmh_resource_id'], ['res_id'])
+        op.create_foreign_key('fk_resource_tags_resource_id', 'resource_tags', 'resources', ['resource_id'], ['res_id'])
+        op.create_foreign_key('fk_resource_tags_tag_id', 'resource_tags', 'resource_tags_def', ['tag_id'], ['tag_id'])
+        op.create_foreign_key('fk_secret_versions_secver_changed_by_id', 'secret_versions', 'user', ['secver_changed_by_id'], ['user_id'])
+        op.create_foreign_key('fk_secret_versions_secver_secret_id', 'secret_versions', 'secrets', ['secver_secret_id'], ['secret_id'])
+        op.create_foreign_key('fk_test_result_tjr_instance', 'test_result', 'test_job_run', ['tjr_instance'], ['tjr_instance'])
+        op.create_foreign_key('fk_build_byproduct_build_id', 'build_byproduct', 'build_result', ['build_id'], ['build_id'])
+        op.create_foreign_key('fk_project_builds_pbspec_id', 'project_builds', 'project_build_specs', ['pbspec_id'], ['pbspec_id'])
+        op.create_foreign_key('fk_project_builds_pbuild_triggered_by_id', 'project_builds', 'user', ['pbuild_triggered_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_builds_proj_id', 'project_builds', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_test_specs_proj_id', 'project_test_specs', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_test_specs_ptspec_build_ref', 'project_test_specs', 'project_build_specs', ['ptspec_build_ref'], ['pbspec_id'])
+        op.create_foreign_key('fk_project_test_specs_ptspec_infra_ref', 'project_test_specs', 'project_infra_specs', ['ptspec_infra_ref'], ['pispec_id'])
+        op.create_foreign_key('fk_project_watch_trigger_logs_pwatch_id', 'project_watch_trigger_logs', 'project_watches', ['pwatch_id'], ['pwatch_id'])
+        op.create_foreign_key('fk_reservations_resv_allocation_id', 'reservations', 'allocations', ['resv_allocation_id'], ['alloc_id'])
+        op.create_foreign_key('fk_reservations_resv_resource_id', 'reservations', 'resources', ['resv_resource_id'], ['res_id'])
+        op.create_foreign_key('fk_reservations_resv_user_id', 'reservations', 'user', ['resv_user_id'], ['user_id'])
+        op.create_foreign_key('fk_project_build_artifacts_pbuild_id', 'project_build_artifacts', 'project_builds', ['pbuild_id'], ['pbuild_id'])
+        op.create_foreign_key('fk_project_test_jobs_proj_id', 'project_test_jobs', 'projects', ['proj_id'], ['proj_id'])
+        op.create_foreign_key('fk_project_test_jobs_ptjob_build_id', 'project_test_jobs', 'project_builds', ['ptjob_build_id'], ['pbuild_id'])
+        op.create_foreign_key('fk_project_test_jobs_ptjob_infra_job_id', 'project_test_jobs', 'project_infra_jobs', ['ptjob_infra_job_id'], ['pijob_id'])
+        op.create_foreign_key('fk_project_test_jobs_ptjob_triggered_by_id', 'project_test_jobs', 'user', ['ptjob_triggered_by_id'], ['user_id'])
+        op.create_foreign_key('fk_project_test_jobs_ptspec_id', 'project_test_jobs', 'project_test_specs', ['ptspec_id'], ['ptspec_id'])
+        op.create_foreign_key('fk_project_test_results_ptjob_id', 'project_test_results', 'project_test_jobs', ['ptjob_id'], ['ptjob_id'])
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
+    # --- Drop deferred foreign-key constraints first (Postgres only) ---
+    # Mirror of the deferred-FK creation in ``upgrade()`` -- on
+    # Postgres, drop FKs before dropping their tables. SQLite is a
+    # no-op (it never had the constraints).
+    bind = op.get_bind()
+    if bind.dialect.name != 'sqlite':
+        op.drop_constraint('fk_project_test_results_ptjob_id', 'project_test_results', type_='foreignkey')
+        op.drop_constraint('fk_project_test_jobs_ptspec_id', 'project_test_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_jobs_ptjob_triggered_by_id', 'project_test_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_jobs_ptjob_infra_job_id', 'project_test_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_jobs_ptjob_build_id', 'project_test_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_jobs_proj_id', 'project_test_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_build_artifacts_pbuild_id', 'project_build_artifacts', type_='foreignkey')
+        op.drop_constraint('fk_reservations_resv_user_id', 'reservations', type_='foreignkey')
+        op.drop_constraint('fk_reservations_resv_resource_id', 'reservations', type_='foreignkey')
+        op.drop_constraint('fk_reservations_resv_allocation_id', 'reservations', type_='foreignkey')
+        op.drop_constraint('fk_project_watch_trigger_logs_pwatch_id', 'project_watch_trigger_logs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_specs_ptspec_infra_ref', 'project_test_specs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_specs_ptspec_build_ref', 'project_test_specs', type_='foreignkey')
+        op.drop_constraint('fk_project_test_specs_proj_id', 'project_test_specs', type_='foreignkey')
+        op.drop_constraint('fk_project_builds_proj_id', 'project_builds', type_='foreignkey')
+        op.drop_constraint('fk_project_builds_pbuild_triggered_by_id', 'project_builds', type_='foreignkey')
+        op.drop_constraint('fk_project_builds_pbspec_id', 'project_builds', type_='foreignkey')
+        op.drop_constraint('fk_build_byproduct_build_id', 'build_byproduct', type_='foreignkey')
+        op.drop_constraint('fk_test_result_tjr_instance', 'test_result', type_='foreignkey')
+        op.drop_constraint('fk_secret_versions_secver_secret_id', 'secret_versions', type_='foreignkey')
+        op.drop_constraint('fk_secret_versions_secver_changed_by_id', 'secret_versions', type_='foreignkey')
+        op.drop_constraint('fk_resource_tags_tag_id', 'resource_tags', type_='foreignkey')
+        op.drop_constraint('fk_resource_tags_resource_id', 'resource_tags', type_='foreignkey')
+        op.drop_constraint('fk_resource_metadata_history_rmh_resource_id', 'resource_metadata_history', type_='foreignkey')
+        op.drop_constraint('fk_resource_metadata_history_rmh_changed_by_id', 'resource_metadata_history', type_='foreignkey')
+        op.drop_constraint('fk_project_watches_proj_id', 'project_watches', type_='foreignkey')
+        op.drop_constraint('fk_project_watches_prepo_id', 'project_watches', type_='foreignkey')
+        op.drop_constraint('fk_project_resources_res_id', 'project_resources', type_='foreignkey')
+        op.drop_constraint('fk_project_resources_proj_id', 'project_resources', type_='foreignkey')
+        op.drop_constraint('fk_project_resources_assigned_by_id', 'project_resources', type_='foreignkey')
+        op.drop_constraint('fk_project_release_schedules_prsched_pipeline_id', 'project_release_schedules', type_='foreignkey')
+        op.drop_constraint('fk_project_release_schedules_proj_id', 'project_release_schedules', type_='foreignkey')
+        op.drop_constraint('fk_project_release_branches_prepo_id', 'project_release_branches', type_='foreignkey')
+        op.drop_constraint('fk_project_release_branches_prelease_id', 'project_release_branches', type_='foreignkey')
+        op.drop_constraint('fk_project_pull_events_proj_id', 'project_pull_events', type_='foreignkey')
+        op.drop_constraint('fk_project_pull_events_prepo_id', 'project_pull_events', type_='foreignkey')
+        op.drop_constraint('fk_project_pull_events_prelease_id', 'project_pull_events', type_='foreignkey')
+        op.drop_constraint('fk_project_pull_events_ppull_executed_by_id', 'project_pull_events', type_='foreignkey')
+        op.drop_constraint('fk_project_phase_events_prelevent_id', 'project_phase_events', type_='foreignkey')
+        op.drop_constraint('fk_project_merge_events_proj_id', 'project_merge_events', type_='foreignkey')
+        op.drop_constraint('fk_project_merge_events_prepo_id', 'project_merge_events', type_='foreignkey')
+        op.drop_constraint('fk_project_merge_events_prelease_id', 'project_merge_events', type_='foreignkey')
+        op.drop_constraint('fk_project_merge_events_pmerge_executed_by_id', 'project_merge_events', type_='foreignkey')
+        op.drop_constraint('fk_project_infra_jobs_proj_id', 'project_infra_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_infra_jobs_pispec_id', 'project_infra_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_infra_jobs_pijob_triggered_by_id', 'project_infra_jobs', type_='foreignkey')
+        op.drop_constraint('fk_project_channel_history_prelease_id', 'project_channel_history', type_='foreignkey')
+        op.drop_constraint('fk_project_channel_history_prchan_id', 'project_channel_history', type_='foreignkey')
+        op.drop_constraint('fk_project_channel_history_pchanhist_published_by_id', 'project_channel_history', type_='foreignkey')
+        op.drop_constraint('fk_project_build_specs_proj_id', 'project_build_specs', type_='foreignkey')
+        op.drop_constraint('fk_project_build_specs_prepo_id', 'project_build_specs', type_='foreignkey')
+        op.drop_constraint('fk_health_transition_logs_htl_user_id', 'health_transition_logs', type_='foreignkey')
+        op.drop_constraint('fk_health_transition_logs_htl_resource_id', 'health_transition_logs', type_='foreignkey')
+        op.drop_constraint('fk_health_check_configs_hcc_resource_id', 'health_check_configs', type_='foreignkey')
+        op.drop_constraint('fk_build_result_branch_id', 'build_result', type_='foreignkey')
+        op.drop_constraint('fk_build_result_bjob_id', 'build_result', type_='foreignkey')
+        op.drop_constraint('fk_allocations_alloc_user_id', 'allocations', type_='foreignkey')
+        op.drop_constraint('fk_allocations_alloc_resource_id', 'allocations', type_='foreignkey')
+        op.drop_constraint('fk_allocations_alloc_forced_by_id', 'allocations', type_='foreignkey')
+        op.drop_constraint('fk_test_result_container_tj_id', 'test_result_container', type_='foreignkey')
+        op.drop_constraint('fk_test_job_run_user_id', 'test_job_run', type_='foreignkey')
+        op.drop_constraint('fk_test_job_run_job_id', 'test_job_run', type_='foreignkey')
+        op.drop_constraint('fk_test_job_run_fg_id', 'test_job_run', type_='foreignkey')
+        op.drop_constraint('fk_secrets_secret_updated_by_id', 'secrets', type_='foreignkey')
+        op.drop_constraint('fk_secrets_secret_scope_id', 'secrets', type_='foreignkey')
+        op.drop_constraint('fk_scope_permissions_scope_id', 'scope_permissions', type_='foreignkey')
+        op.drop_constraint('fk_scope_permissions_role_id', 'scope_permissions', type_='foreignkey')
+        op.drop_constraint('fk_resources_res_pool_id', 'resources', type_='foreignkey')
+        op.drop_constraint('fk_resources_res_created_by_id', 'resources', type_='foreignkey')
+        op.drop_constraint('fk_release_branch_assignment_rtbranch_id', 'release_branch_assignment', type_='foreignkey')
+        op.drop_constraint('fk_release_branch_assignment_release_id', 'release_branch_assignment', type_='foreignkey')
+        op.drop_constraint('fk_project_variables_proj_id', 'project_variables', type_='foreignkey')
+        op.drop_constraint('fk_project_repositories_proj_id', 'project_repositories', type_='foreignkey')
+        op.drop_constraint('fk_project_release_pipelines_proj_id', 'project_release_pipelines', type_='foreignkey')
+        op.drop_constraint('fk_project_release_events_proj_id', 'project_release_events', type_='foreignkey')
+        op.drop_constraint('fk_project_release_events_prelease_id', 'project_release_events', type_='foreignkey')
+        op.drop_constraint('fk_project_release_channels_proj_id', 'project_release_channels', type_='foreignkey')
+        op.drop_constraint('fk_project_release_channels_prchan_current_release_id', 'project_release_channels', type_='foreignkey')
+        op.drop_constraint('fk_project_members_user_id', 'project_members', type_='foreignkey')
+        op.drop_constraint('fk_project_members_proj_id', 'project_members', type_='foreignkey')
+        op.drop_constraint('fk_project_infra_specs_proj_id', 'project_infra_specs', type_='foreignkey')
+        op.drop_constraint('fk_project_calendar_events_proj_id', 'project_calendar_events', type_='foreignkey')
+        op.drop_constraint('fk_pool_permissions_role_id', 'pool_permissions', type_='foreignkey')
+        op.drop_constraint('fk_pool_permissions_pool_id', 'pool_permissions', type_='foreignkey')
+        op.drop_constraint('fk_ip_allocations_ipalloc_user_id', 'ip_allocations', type_='foreignkey')
+        op.drop_constraint('fk_ip_allocations_ipalloc_pool_id', 'ip_allocations', type_='foreignkey')
+        op.drop_constraint('fk_global_variable_history_gvarhist_variable_id', 'global_variable_history', type_='foreignkey')
+        op.drop_constraint('fk_global_variable_history_gvarhist_changed_by_id', 'global_variable_history', type_='foreignkey')
+        op.drop_constraint('fk_build_job_branch_id', 'build_job', type_='foreignkey')
+        op.drop_constraint('fk_work_packet_user_id', 'work_packet', type_='foreignkey')
+        op.drop_constraint('fk_work_packet_queue_id', 'work_packet', type_='foreignkey')
+        op.drop_constraint('fk_test_job_owner_fg_id', 'test_job', type_='foreignkey')
+        op.drop_constraint('fk_sessions_sess_user_id', 'sessions', type_='foreignkey')
+        op.drop_constraint('fk_secret_scopes_scope_created_by_id', 'secret_scopes', type_='foreignkey')
+        op.drop_constraint('fk_role_permissions_role_id', 'role_permissions', type_='foreignkey')
+        op.drop_constraint('fk_role_permissions_permission_id', 'role_permissions', type_='foreignkey')
+        op.drop_constraint('fk_resource_pools_pool_created_by_id', 'resource_pools', type_='foreignkey')
+        op.drop_constraint('fk_release_train_branch_rtrain_id', 'release_train_branch', type_='foreignkey')
+        op.drop_constraint('fk_release_train_branch_parent_rtbranch_id', 'release_train_branch', type_='foreignkey')
+        op.drop_constraint('fk_release_rtrain_id', 'release', type_='foreignkey')
+        op.drop_constraint('fk_release_prod_id', 'release', type_='foreignkey')
+        op.drop_constraint('fk_projects_proj_owner_id', 'projects', type_='foreignkey')
+        op.drop_constraint('fk_project_stage_runs_pstagerun_approved_by_id', 'project_stage_runs', type_='foreignkey')
+        op.drop_constraint('fk_project_stage_runs_prrun_id', 'project_stage_runs', type_='foreignkey')
+        op.drop_constraint('fk_project_release_artifacts_prelease_id', 'project_release_artifacts', type_='foreignkey')
+        op.drop_constraint('fk_product_to_repository_repo_id', 'product_to_repository', type_='foreignkey')
+        op.drop_constraint('fk_product_to_repository_prod_id', 'product_to_repository', type_='foreignkey')
+        op.drop_constraint('fk_product_component_repo_id', 'product_component', type_='foreignkey')
+        op.drop_constraint('fk_product_component_prod_id', 'product_component', type_='foreignkey')
+        op.drop_constraint('fk_password_reset_tokens_prt_user_id', 'password_reset_tokens', type_='foreignkey')
+        op.drop_constraint('fk_password_history_pwdhist_user_id', 'password_history', type_='foreignkey')
+        op.drop_constraint('fk_ip_pools_ippool_created_by_id', 'ip_pools', type_='foreignkey')
+        op.drop_constraint('fk_global_variables_gvar_updated_by_id', 'global_variables', type_='foreignkey')
+        op.drop_constraint('fk_feature_group_membership_user_id', 'feature_group_membership', type_='foreignkey')
+        op.drop_constraint('fk_feature_group_membership_fg_id', 'feature_group_membership', type_='foreignkey')
+        op.drop_constraint('fk_branch_repo_id', 'branch', type_='foreignkey')
+        op.drop_constraint('fk_project_releases_proj_id', 'project_releases', type_='foreignkey')
+        op.drop_constraint('fk_project_releases_prelease_schedule_id', 'project_releases', type_='foreignkey')
+        op.drop_constraint('fk_project_releases_prelease_published_by_id', 'project_releases', type_='foreignkey')
+        op.drop_constraint('fk_project_releases_prelease_pipeline_run_id', 'project_releases', type_='foreignkey')
+        op.drop_constraint('fk_project_pipeline_runs_prrun_triggered_by_id', 'project_pipeline_runs', type_='foreignkey')
+        op.drop_constraint('fk_project_pipeline_runs_prrun_release_id', 'project_pipeline_runs', type_='foreignkey')
+        op.drop_constraint('fk_project_pipeline_runs_prpipe_id', 'project_pipeline_runs', type_='foreignkey')
+
     op.drop_index(op.f('ix_project_test_results_ptjob_id'), table_name='project_test_results')
     op.drop_table('project_test_results')
     op.drop_index('ix_project_test_jobs_spec_status', table_name='project_test_jobs')
