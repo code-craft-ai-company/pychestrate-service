@@ -33,20 +33,28 @@ from typing import List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
-# NOTE: ``werkzeug`` is intentionally NOT imported at module
-# load time. The consumer-UI auth flow has migrated to the
-# modern stack (``security.auth.local_flow`` +
-# ``ConsumerUISecurityAdapter``); the only remaining live
-# consumer of this module is ``routes_sessions.py`` which calls
-# ``list_active_sessions`` / ``terminate_session`` -- neither
-# of which touches password hashing. The two methods below that
-# DO call werkzeug (``_check_password_history``, ``authenticate``)
-# are dead at runtime; their imports stay lazy so this module
-# loads cleanly without werkzeug installed. werkzeug was
-# previously transitive through the (now-removed)
-# ``pychestrate-core`` git-source dep; reintroducing it as a
-# direct dep would defeat the purpose of cutting that branch
-# of the dep tree.
+# Password verification for the legacy ``SecurityManager`` paths
+# (``_check_password_history`` and ``authenticate``).  Uses
+# ``automojo.webworks.security.passwords.verify_password`` -- a
+# stdlib pbkdf2-sha256 implementation that ships a wire format
+# identical to ``werkzeug.security.generate_password_hash``'s
+# ``pbkdf2:sha256:<iterations>$<salt>$<hexhash>``.  Any
+# legacy ``password_history.password_hash`` row that was
+# originally minted by werkzeug verifies cleanly through
+# ``verify_password`` without re-hashing.
+#
+# This replaces the ``werkzeug.security.check_password_hash``
+# import path that lived here through PR #172.  werkzeug is no
+# longer installed (was a transitive of the removed
+# pychestrate-core dep); this swap closes the only remaining
+# would-be-runtime ImportError on the legacy auth surface.
+# Downstream of the strategic auth-stack split (PR #164 /
+# p13aa), the consumer-UI auth + RBAC flows route through
+# ``ConsumerUISecurityAdapter`` and never reach
+# ``SecurityManager.authenticate`` / ``_check_password_history``;
+# this swap is defensive (in case any test path or future
+# consumer hits them) rather than a hot path.
+from automojo.webworks.security.passwords import verify_password as _verify_password_pbkdf2
 
 from automojo.pychestrate.core.defaults import utc_now
 
@@ -380,15 +388,13 @@ class SecurityManager:
             .all()
         )
         
-        # Lazy-import werkzeug -- this method is dead at runtime
-        # via the modern ``ConsumerUISecurityAdapter``; importing
-        # the module at top-level would force werkzeug into the
-        # install tree for code that is never called.
-        from werkzeug.security import check_password_hash  # noqa: E402
-
-        # Check if the password matches any of the recent hashes
+        # ``_verify_password_pbkdf2`` (webworks stdlib pbkdf2,
+        # werkzeug-wire-compatible) reads stored hashes minted by
+        # the legacy werkzeug-based code path. Note the arg
+        # order: ``verify_password(plaintext, stored)`` -- inverse
+        # of werkzeug's ``check_password_hash(stored, plaintext)``.
         for entry in history_entries:
-            if check_password_hash(entry.password_hash, password):
+            if _verify_password_pbkdf2(password, entry.password_hash):
                 return True
         
         return False
@@ -532,12 +538,11 @@ class SecurityManager:
                 )
             raise AuthenticationError("Invalid credentials")
         
-        # Verify password. Lazy werkzeug import -- this method
-        # path is dead at runtime; consumer-UI auth flows
-        # through the modern ``ConsumerUISecurityAdapter`` now.
-        from werkzeug.security import check_password_hash  # noqa: E402
-
-        if not check_password_hash(latest_password.password_hash, request.password):
+        # Verify password via webworks stdlib pbkdf2 (werkzeug-
+        # wire-compatible).  Note the arg order:
+        # ``verify_password(plaintext, stored)`` -- inverse of
+        # werkzeug's ``check_password_hash(stored, plaintext)``.
+        if not _verify_password_pbkdf2(request.password, latest_password.password_hash):
             # Log authentication failure
             if self._audit_logger:
                 self._audit_logger.log_auth_failure(
