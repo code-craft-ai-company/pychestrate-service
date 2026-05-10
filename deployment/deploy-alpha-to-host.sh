@@ -458,13 +458,11 @@ SITE_AVAILABLE="/etc/nginx/sites-available/pychestrate"
 SITE_ENABLED="/etc/nginx/sites-enabled/pychestrate"
 SITE_DEFAULT="/etc/nginx/sites-enabled/default"
 
-# Cache sudo creds once at the top so the rest of this block
-# can run without re-prompting.
-sudo -v
-
-sudo mv /tmp/pychestrate.nginx.conf "${SITE_AVAILABLE}"
-sudo chown root:root "${SITE_AVAILABLE}"
-sudo chmod 0644 "${SITE_AVAILABLE}"
+# Use ``install`` to combine mv + chown + chmod into a single
+# privileged operation -- shrinks the sudoers whitelist
+# surface in deployment/sudoers.d/pychestrate-deploy.template.
+sudo install -m 0644 -o root -g root \
+    /tmp/pychestrate.nginx.conf "${SITE_AVAILABLE}"
 
 sudo ln -sfn "${SITE_AVAILABLE}" "${SITE_ENABLED}"
 
@@ -551,14 +549,11 @@ mkdir -p ~/.pychestrate
 touch ~/.pychestrate/server.log
 chmod 0644 ~/.pychestrate/server.log
 
-# Cache sudo creds once at the top so the rest of the install
-# block runs without re-prompting.
-sudo -v
-
-# Install the unit.
-sudo mv /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
-sudo chown root:root /etc/systemd/system/pychestrate.service
-sudo chmod 0644 /etc/systemd/system/pychestrate.service
+# ``install`` combines mv + chown + chmod into a single
+# privileged operation -- shrinks the sudoers whitelist
+# surface in deployment/sudoers.d/pychestrate-deploy.template.
+sudo install -m 0644 -o root -g root \
+    /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 
 sudo systemctl daemon-reload
 sudo systemctl enable pychestrate.service
