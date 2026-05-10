@@ -38,6 +38,13 @@ Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
 Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 
+# Initial-setup wizard runtime state. The service writes the
+# initial-admin token to ``${PYCHESTRATE_RUNTIME_DIR}/initial-
+# admin-token`` (mode 0600) on first boot. The deploy script
+# pre-creates this directory mode 0700 owned by the service
+# user; ReadWritePaths below grants the service write access.
+Environment="PYCHESTRATE_RUNTIME_DIR=/var/lib/pychestrate"
+
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 
 # Restart on crash with a small backoff; on repeated crashes
@@ -65,7 +72,7 @@ TimeoutStopSec=30
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate
+ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate /var/lib/pychestrate
 
 [Install]
 WantedBy=multi-user.target

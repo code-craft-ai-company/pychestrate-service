@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Unlock Pychestrate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #1a1a2e;
+    color: #e1e1e6;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wrap {
+    background: #ffffff;
+    color: #1a1a2e;
+    width: 100%;
+    max-width: 560px;
+    margin: 24px;
+    padding: 32px 36px 28px;
+    border-radius: 8px;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.35);
+  }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 1.4rem;
+  }
+  .lede {
+    margin: 0 0 18px;
+    color: #6c757d;
+    font-size: 0.95rem;
+  }
+  .step {
+    margin: 18px 0;
+  }
+  .step h2 {
+    margin: 0 0 6px;
+    font-size: 1rem;
+    color: #2a2a44;
+  }
+  .step p {
+    margin: 0 0 10px;
+    color: #444;
+    font-size: 0.92rem;
+  }
+  pre.path {
+    margin: 6px 0 0;
+    padding: 10px 12px;
+    background: #f4f5f8;
+    border: 1px solid #d8dae0;
+    border-radius: 4px;
+    font-size: 0.88rem;
+    overflow-x: auto;
+  }
+  form {
+    margin-top: 18px;
+  }
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  input[type=password], input[type=text] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #c5c8cf;
+    border-radius: 4px;
+    font-size: 1rem;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  input:focus {
+    outline: none;
+    border-color: #4060f0;
+    box-shadow: 0 0 0 2px rgba(64,96,240,0.15);
+  }
+  .error {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    background: #fdecea;
+    border: 1px solid #f5c2c0;
+    color: #862c25;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  button {
+    margin-top: 16px;
+    width: 100%;
+    padding: 11px 18px;
+    background: #2a2a44;
+    color: #ffffff;
+    border: 0;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:hover { background: #3b3b62; }
+  .footer {
+    margin-top: 22px;
+    color: #888;
+    font-size: 0.82rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Unlock Pychestrate</h1>
+    <p class="lede">First-run setup. Please enter the initial admin token to continue.</p>
+
+    <div class="step">
+      <h2>1. Read the token from the server</h2>
+      <p>The token was generated on first boot and written to:</p>
+      <pre class="path">{{ token_path }}</pre>
+      <p style="margin-top:10px;">From a shell on the server, run:</p>
+      <pre class="path">sudo cat {{ token_path }}</pre>
+    </div>
+
+    <div class="step">
+      <h2>2. Paste it below</h2>
+      <form method="post" action="/setup/unlock" autocomplete="off">
+        <label for="token">Initial admin token</label>
+        <input type="password" id="token" name="token" required autofocus
+               spellcheck="false" autocapitalize="off"
+               placeholder="paste the token here">
+        {% if error %}
+          <div class="error">{{ error }}</div>
+        {% endif %}
+        <button type="submit">Continue</button>
+      </form>
+    </div>
+
+    <p class="footer">
+      Once setup is complete, this page will no longer be available.
+    </p>
+  </main>
+</body>
+</html>

@@ -62,6 +62,14 @@ DEV_DB_DIR="${REPO_ROOT}/.cache/dev-db"
 mkdir -p "${DEV_DB_DIR}"
 DEV_DB_PATH="${DEV_DB_DIR}/pychestrate.sqlite"
 
+# Per-checkout runtime dir for the initial-setup wizard. The
+# service writes its admin token to ${PYCHESTRATE_RUNTIME_DIR}/
+# initial-admin-token (mode 0600). We default it under .cache so
+# ``rm -rf .cache`` resets the wizard cleanly.
+DEV_RUNTIME_DIR="${REPO_ROOT}/.cache/runtime"
+mkdir -p "${DEV_RUNTIME_DIR}"
+chmod 0700 "${DEV_RUNTIME_DIR}"
+
 # ----------------------------------------------------------------------------
 # Compose the runtime env from documented PYCHESTRATE_* names
 # ----------------------------------------------------------------------------
@@ -83,6 +91,8 @@ export PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH="${PYCHESTRATE_UI_COOKIE_SECRET_FI
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
 
+export PYCHESTRATE_RUNTIME_DIR="${PYCHESTRATE_RUNTIME_DIR:-${DEV_RUNTIME_DIR}}"
+
 # ----------------------------------------------------------------------------
 # PYTHONPATH (mirrors development/run-website.sh)
 # ----------------------------------------------------------------------------
@@ -95,6 +105,7 @@ echo "dev-up: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
 echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
 echo "dev-up: ui-cookie-secret=${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH}"
+echo "dev-up: runtime-dir=${PYCHESTRATE_RUNTIME_DIR}"
 echo
 
 if [[ -f "${REPO_ROOT}/.venv/bin/python" ]]; then

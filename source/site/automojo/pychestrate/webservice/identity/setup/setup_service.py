@@ -321,11 +321,142 @@ def _runtime_dir_or_placeholder() -> str:
     return rtnval
 
 
+def create_initial_admin(
+        *,
+        session_factory: SessionFactory,
+        login_name: str,
+        primary_email: str,
+        password: str,
+        display_name: str,
+    ) -> str:
+    """
+        Seed the first administrator. Mirrors the e2e harness's
+        ``_seed_user_pair`` exactly: inserts a modern
+        :class:`IdentityUser`, an :class:`AuthLocalCredentials` row
+        carrying the password hash, and a legacy
+        :class:`core.orm.User` row with ``roles="admin"`` so the
+        legacy check_permission path resolves to admin until the
+        RBAC cut-over lands.
+
+        Refuses to run when an :class:`IdentityUser` with the
+        requested ``login_name`` already exists, OR when ANY user
+        already exists in the modern table -- the latter guard
+        is what keeps the wizard from being abused as a back door
+        to mint a second admin once the first deploy is up. The
+        gate-middleware + the ``completed_at`` flag are the primary
+        defences; this is belt-and-suspenders.
+
+        :param session_factory: Zero-arg session factory.
+        :param login_name: Desired admin login.
+        :param primary_email: Desired admin email.
+        :param password: Cleartext password (hashed before storage
+                         via ``local_flow.hash_password``).
+        :param display_name: Desired admin display name.
+
+        :returns: Newly created user id (UUID string).
+        :raises: ConfigurationError on validation failure or when
+                 a user already exists.
+    """
+    # Lazy imports to keep this module importable in unit tests
+    # that don't run the full Phase-1 stack.
+    import uuid as _uuid
+
+    from automojo.pychestrate.core.orm import User as _LegacyUser
+    from automojo.pychestrate.webservice.identity.users.models import (
+        IdentityUser,
+        UserStatus,
+    )
+    from automojo.pychestrate.webservice.security.auth import local_flow
+    from automojo.pychestrate.webservice.security.auth.models import (
+        AuthLocalCredentials,
+    )
+
+    if login_name is None or len(login_name) == 0:
+        raise ConfigurationError(
+            "create_initial_admin requires a non-empty login_name"
+        )
+    if primary_email is None or len(primary_email) == 0:
+        raise ConfigurationError(
+            "create_initial_admin requires a non-empty primary_email"
+        )
+    if password is None or len(password) == 0:
+        raise ConfigurationError(
+            "create_initial_admin requires a non-empty password"
+        )
+
+    db_session = session_factory()
+    try:
+        existing_count = db_session.query(IdentityUser).count()
+        if existing_count > 0:
+            raise ConfigurationError(
+                "create_initial_admin refused: identity_users is not empty"
+            )
+
+        admin_user_id = _uuid.uuid4()
+
+        # Modern half.
+        modern_user = IdentityUser(
+            user_id=admin_user_id,
+            login_name=login_name,
+            primary_email=primary_email,
+            display_name=display_name,
+            status=UserStatus.ACTIVE,
+            provisioning_source="local",
+            external_id=None,
+            timezone="UTC",
+        )
+        db_session.add(modern_user)
+        db_session.flush()
+
+        encoded_hash, algo_params = local_flow.hash_password(
+            password=password
+        )
+        credentials = AuthLocalCredentials(
+            user_id=admin_user_id,
+            argon2id_hash=encoded_hash,
+            algo_params=algo_params,
+        )
+        db_session.add(credentials)
+
+        # Legacy half: ``check_permission`` still reads the legacy
+        # ``user.roles`` CSV -> ``system_roles`` -> ``permissions``
+        # chain. ``roles="admin"`` mirrors the e2e harness's
+        # ``ensure_seeded_admin`` exactly.
+        legacy_user = _LegacyUser(
+            id=admin_user_id,
+            first_name="",
+            last_name="",
+            display_name=display_name,
+            email=primary_email,
+            login=login_name,
+            ownertag="initial-setup",
+            status="active",
+            roles="admin",
+            authtype="internal",
+        )
+        db_session.add(legacy_user)
+
+        db_session.commit()
+        _module_logger.info(
+            "pychestrate.setup.initial_admin_created user_id=%s login=%s",
+            str(admin_user_id),
+            login_name,
+        )
+        rtnval = str(admin_user_id)
+        return rtnval
+    except BaseException:
+        db_session.rollback()
+        raise
+    finally:
+        db_session.close()
+
+
 __all__ = [
     "DEFAULT_TOKEN_FILENAME",
     "ENV_RUNTIME_DIR",
     "RUNTIME_DIR_MODE",
     "bootstrap_setup_state",
+    "create_initial_admin",
     "is_setup_complete",
     "mark_setup_complete_in_process_cache",
     "reset_complete_flag_for_testing",
