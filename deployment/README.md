@@ -11,17 +11,33 @@ Debian / Ubuntu install with SSH access for the deploy user.
 Driver script that runs from your workstation and provisions a
 remote host end-to-end. The remote ends up with:
 
+```
+external clients ──> nginx :80 ──> 127.0.0.1:8888 (gunicorn under systemd)
+                                       │
+                                       └── ~/pychestrate-service/
+                                           ├── .venv/             (poetry-installed deps)
+                                           ├── .cache/dev-secrets/  (KEK, pepper, cookie 0600)
+                                           └── .cache/dev-db/pychestrate.sqlite
+```
+
+Specifically:
+
 - `~/pychestrate-service/` — the rsync'd checkout
-- `~/pychestrate-service/.venv/` — poetry-installed deps
+- `~/pychestrate-service/.venv/` — poetry-installed deps including gunicorn
 - `~/pychestrate-service/.cache/dev-secrets/` — generated KEK,
   pepper, UI cookie secret (32 random bytes each, mode 0600)
 - `~/pychestrate-service/.cache/dev-db/pychestrate.sqlite` —
   the SQLite database, upgraded to head via alembic
-- a tmux session named `pychestrate` running the service via
-  `make dev-up` with `PYCHESTRATE_BIND_HOST=0.0.0.0` so the
-  service is reachable on the LAN
+- `/etc/systemd/system/pychestrate.service` — systemd unit
+  rendered from `deployment/pychestrate.service.template`,
+  invoking `development/run-staging-gunicorn` which runs
+  gunicorn against `build_wsgi_application_for_production()`
+  bound to `127.0.0.1:8888`
+- `/etc/nginx/sites-available/pychestrate` — nginx site config,
+  rendered + symlinked to `sites-enabled/`, listening on port 80
+  and reverse-proxying to `127.0.0.1:8888`
 - `~/.pychestrate/server.log` — tee'd stdout / stderr from the
-  service
+  service (also available via `journalctl -u pychestrate`)
 
 ### Usage
 
@@ -83,43 +99,86 @@ The script aborts with a typed error if:
 | Step | Command | Notes |
 |---|---|---|
 | 1 | `rsync` | excludes `.venv`, `.output`, `.cache`, `.git`, `.claude`, `.kiro`, `.vscode`, `__pycache__`, `*.pyc`, `.DS_Store`, `.env`, `*.sqlite`. |
-| 2 | `repository-setup/setup-debian-machine` | installs `build-essential`, `python3`, `python3-dev`, `python3-setuptools`, `python3-pip`, plus poetry via pipx. **Requires sudo on the remote** — you'll be prompted for the password. |
+| 2 | `repository-setup/setup-debian-machine` | installs `build-essential`, `python3`, `python3-dev`, `python3-venv`, `python3-pip`, `pipx`, `tmux`, `make`, `nginx`, plus poetry via pipx. **Requires sudo on the remote** — you'll be prompted for the password. |
 | 3 | `git config --global url.<base>.insteadOf` | injects the PAT for cloning private `automojo-*` deps. |
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
-| 5 | `bash development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
+| 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
 | 6 | `alembic upgrade head` | applies both migrations against `.cache/dev-db/pychestrate.sqlite`. |
+| 7 | nginx site write + reload | `/etc/nginx/sites-available/pychestrate` listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888). |
+| 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`. |
 | 7 | `make dev-up` (in tmux) | starts the service. tmux session name: `pychestrate`. |
 
 ### Verifying / managing the running instance
 
 ```bash
-# Probe                                                           
+# Probe (through nginx)
 curl -fsS http://tc-app-server.local/
 
-# Watch the live log
+# Service status
+ssh myron@tc-app-server.local sudo systemctl status pychestrate
+
+# Live logs (journalctl -- canonical)
+ssh myron@tc-app-server.local sudo journalctl -u pychestrate -f
+
+# Or the file log (tee'd by systemd)
 ssh myron@tc-app-server.local 'tail -f ~/.pychestrate/server.log'
 
-# Attach to the tmux session
-ssh myron@tc-app-server.local -t tmux attach -t pychestrate
+# Restart
+ssh myron@tc-app-server.local sudo systemctl restart pychestrate
 
-# Stop the service
-ssh myron@tc-app-server.local tmux kill-session -t pychestrate
+# Stop
+ssh myron@tc-app-server.local sudo systemctl stop pychestrate
+
+# nginx side
+ssh myron@tc-app-server.local sudo nginx -t          # validate config
+ssh myron@tc-app-server.local sudo systemctl reload nginx
 ```
 
 ### Idempotent re-deploy
 
 Re-running the script:
 
-- **rsync** picks up code changes (no full re-transfer; only
-  diffs).
+- **rsync** picks up code changes (only diffs transferred).
 - **setup-debian-machine** is a no-op if packages are present.
 - **rehome / setup-environment** are no-ops if up-to-date.
 - **alembic upgrade head** applies new revisions only.
-- The tmux session is killed and restarted with the new code.
+- **nginx site config** is overwritten + reloaded.
+- **pychestrate.service** unit is overwritten + `systemctl restart`'d.
 
 The KEK / pepper / cookie-secret + SQLite DB **persist** across
 re-deploys — they live under the checkout's `.cache/` and rsync
 explicitly excludes that path.
+
+### Passwordless `systemctl restart` for CI re-deploys
+
+CI's `--skip-system-setup` mode re-deploys by running
+`sudo systemctl restart pychestrate.service` over SSH. By
+default that prompts for a sudo password, which CI cannot
+satisfy. Two options:
+
+#### Option A (recommended): scoped sudoers entry
+
+Add a `sudoers.d` rule that grants the deploy user
+**passwordless** access to **just** `systemctl restart
+pychestrate.service` (not all of sudo):
+
+```bash
+ssh myron@tc-app-server.local 'sudo tee /etc/sudoers.d/pychestrate-ci > /dev/null <<EOF
+myron ALL=(root) NOPASSWD: /bin/systemctl restart pychestrate.service, /bin/systemctl status pychestrate.service
+EOF
+sudo chmod 0440 /etc/sudoers.d/pychestrate-ci
+sudo visudo -c  # validate
+'
+```
+
+Now CI can `sudo systemctl restart pychestrate` with no
+password, and it can NOT do anything else with sudo.
+
+#### Option B: passwordless sudo (broader; not recommended)
+
+`myron ALL=(ALL) NOPASSWD: ALL` in `/etc/sudoers.d/myron`
+gives passwordless sudo for everything. Easier to set up but
+defeats the principle of least privilege.
 
 ### Limitations
 
