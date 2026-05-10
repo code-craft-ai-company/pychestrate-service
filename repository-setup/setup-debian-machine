@@ -56,20 +56,35 @@ function ensure_pip_dependencies() {
 }
 
 function ensure_pipx_dependencies() {
-    
+
     echo "PIPX INSTALLING: $1"
     read -a dependency_list <<< $1 # Split the dependency string on spaces into a bash array
 
     for nxt_dep in "${dependency_list[@]}"
     do
-        PCHK_OUTPUT="$(pipx list | grep \"package $nxt_dep\")";
-        if [ "$(echo $?)" != 0 ]; then
-            echo "PipX Dependency ($nxt_dep): being installed"
-            sudo apt install $nxt_dep
-        else
+        # Check pipx's installed-package list directly (the ``-q`` form
+        # of grep returns the test status that the if-condition needs).
+        # Pipx's list output looks like ``  package poetry 2.4.1, ...``.
+        #
+        # Previous version of this function used
+        # ``if [ "$(echo $?)" != 0 ]`` which is always-false because
+        # ``echo $?`` itself always returns 0 -- so the install branch
+        # never ran and pipx packages were silently skipped.  And the
+        # install branch fell back to ``sudo apt install`` rather than
+        # ``pipx install``, so even when reached it would not produce a
+        # pipx-managed package.
+        if pipx list 2>/dev/null | grep -q "^[[:space:]]*package $nxt_dep[[:space:]]"; then
             echo "PipX Dependency ($nxt_dep): already installed"
+        else
+            echo "PipX Dependency ($nxt_dep): being installed (pipx)"
+            pipx install "$nxt_dep"
         fi
     done
+
+    # Make sure ~/.local/bin is on PATH for the user's future
+    # interactive + login shells.  pipx writes the appropriate
+    # PATH-extending stanza to ~/.bashrc and ~/.profile.
+    pipx ensurepath
 }
 
 function ensure_system_dependencies () {

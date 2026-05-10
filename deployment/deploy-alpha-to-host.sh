@@ -268,7 +268,17 @@ if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
     echo "==> Step 2/8: --skip-system-setup; verifying prerequisites on target"
     # Probe each required tool individually so the failure
     # message lists every missing one, not just the first.
-    MISSING=$(ssh "${REMOTE_TARGET}" '
+    #
+    # Use ``bash -ls`` (login shell + read script from stdin) so
+    # the user's ~/.profile + ~/.bashrc are sourced before the
+    # probe runs.  This matters for ``pipx``-installed tools
+    # (e.g. ``poetry`` at ~/.local/bin/poetry) -- ``pipx
+    # ensurepath`` writes PATH stanzas into those files, but a
+    # plain ``ssh user@host 'cmd'`` runs a non-interactive
+    # non-login bash that never reads them.  Without this, the
+    # probe falsely reports poetry missing on a target where
+    # poetry IS installed for the deploy user.
+    MISSING=$(ssh "${REMOTE_TARGET}" 'bash -ls' <<'PROBE'
         missing=""
         for cmd in git python3 pipx poetry tmux make nginx; do
             command -v "$cmd" >/dev/null 2>&1 || missing="$missing $cmd"
@@ -277,7 +287,8 @@ if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
         # to invoke its module.
         python3 -c "import venv" >/dev/null 2>&1 || missing="$missing python3-venv"
         echo "$missing" | tr -s " "
-    ')
+PROBE
+)
     if [ -n "${MISSING# }" ] && [ "${MISSING# }" != "" ]; then
         cat >&2 <<EOF
 ERROR: target ${REMOTE_TARGET} is missing required tools:${MISSING}
@@ -339,8 +350,12 @@ echo "==> Step 5/8: setup-environment (venv + poetry install)"
 echo "    (cloning nine private deps -- this can take 60-120 sec)"
 # ``setup-environment`` is a Python script (shebanged
 # ``#!/usr/bin/env python3``) -- invoke with python3 so its
-# Python source isn't parsed as bash.
-ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 development/setup-environment"
+# Python source isn't parsed as bash.  Wrap in ``bash -lc``
+# so the deploy user's ~/.profile + ~/.bashrc are sourced and
+# pipx-installed tools (specifically ``poetry``) are on PATH;
+# setup-environment subprocesses ``poetry env use`` /
+# ``poetry install`` and would fail otherwise.
+ssh "${REMOTE_TARGET}" "bash -lc 'cd ~/${REMOTE_PATH} && python3 development/setup-environment'"
 echo
 
 # ---------------------------------------------------------------------------
