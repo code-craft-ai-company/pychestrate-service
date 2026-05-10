@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Create Administrator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Helvetica Neue", Arial, sans-serif;
+    background: #1a1a2e;
+    color: #e1e1e6;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wrap {
+    background: #ffffff;
+    color: #1a1a2e;
+    width: 100%;
+    max-width: 560px;
+    margin: 24px;
+    padding: 32px 36px 28px;
+    border-radius: 8px;
+    box-shadow: 0 6px 28px rgba(0,0,0,0.35);
+  }
+  h1 { margin: 0 0 6px; font-size: 1.4rem; }
+  .lede { margin: 0 0 18px; color: #6c757d; font-size: 0.95rem; }
+  form { margin-top: 8px; }
+  .field { margin-bottom: 14px; }
+  label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    font-size: 0.92rem;
+  }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #c5c8cf;
+    border-radius: 4px;
+    font-size: 1rem;
+  }
+  input:focus {
+    outline: none;
+    border-color: #4060f0;
+    box-shadow: 0 0 0 2px rgba(64,96,240,0.15);
+  }
+  .hint {
+    display: block;
+    margin-top: 4px;
+    color: #6c757d;
+    font-size: 0.82rem;
+  }
+  .error {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    background: #fdecea;
+    border: 1px solid #f5c2c0;
+    color: #862c25;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+  button {
+    margin-top: 12px;
+    width: 100%;
+    padding: 11px 18px;
+    background: #2a2a44;
+    color: #ffffff;
+    border: 0;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  button:hover { background: #3b3b62; }
+  .footer {
+    margin-top: 22px;
+    color: #888;
+    font-size: 0.82rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>Create the Administrator Account</h1>
+    <p class="lede">This is the first user. Once created, you will be redirected to the login page.</p>
+
+    <form method="post" action="/setup/admin" autocomplete="off">
+      <div class="field">
+        <label for="login_name">Login</label>
+        <input type="text" id="login_name" name="login_name" required
+               autofocus minlength="3" maxlength="64"
+               value="{{ form_values.login_name }}"
+               pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}"
+               spellcheck="false" autocapitalize="off">
+        <span class="hint">3-64 chars, alphanumeric plus underscore or hyphen, must start with a letter or digit.</span>
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required
+               value="{{ form_values.email }}"
+               spellcheck="false" autocapitalize="off">
+      </div>
+
+      <div class="field">
+        <label for="display_name">Display name</label>
+        <input type="text" id="display_name" name="display_name" required
+               value="{{ form_values.display_name }}">
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required
+               minlength="{{ min_password_length }}">
+        <span class="hint">At least {{ min_password_length }} characters.</span>
+      </div>
+
+      <div class="field">
+        <label for="password_confirm">Confirm password</label>
+        <input type="password" id="password_confirm" name="password_confirm" required
+               minlength="{{ min_password_length }}">
+      </div>
+
+      {% if error %}
+        <div class="error">{{ error }}</div>
+      {% endif %}
+
+      <button type="submit">Create administrator</button>
+    </form>
+
+    <p class="footer">After this step, the setup wizard is permanently disabled.</p>
+  </main>
+</body>
+</html>

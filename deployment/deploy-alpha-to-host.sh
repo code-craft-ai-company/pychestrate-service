@@ -539,7 +539,7 @@ else
         > "${UNIT_LOCAL}"
 
     UNIT_INSTALL_LOCAL="$(mktemp)"
-    cat > "${UNIT_INSTALL_LOCAL}" <<'UNIT_INSTALL'
+    cat > "${UNIT_INSTALL_LOCAL}" <<UNIT_INSTALL
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -549,10 +549,15 @@ mkdir -p ~/.pychestrate
 touch ~/.pychestrate/server.log
 chmod 0644 ~/.pychestrate/server.log
 
-# ``install`` combines mv + chown + chmod into a single
+# Pre-create the runtime directory the initial-setup wizard
+# writes its admin token into. Mode 0700 + owned by the service
+# user so other accounts on the box cannot read the token.
+sudo install -d -m 0700 -o ${REMOTE_USER} -g ${REMOTE_USER} /var/lib/pychestrate
+
+# \`\`install\`\` combines mv + chown + chmod into a single
 # privileged operation -- shrinks the sudoers whitelist
 # surface in deployment/sudoers.d/pychestrate-deploy.template.
-sudo install -m 0644 -o root -g root \
+sudo install -m 0644 -o root -g root \\
     /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 
 sudo systemctl daemon-reload

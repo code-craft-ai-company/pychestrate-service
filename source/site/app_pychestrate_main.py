@@ -42,6 +42,9 @@ from automojo.pychestrate.webservice.identity.flags.restapi.v1.flags_routes impo
 from automojo.pychestrate.webservice.identity.users.restapi.v1.users_routes import (
     register_users_routes,
 )
+from automojo.pychestrate.webservice.middleware_setup_gate import (
+    install_pychestrate_setup_gate_middleware,
+)
 from automojo.pychestrate.webservice.middleware_webworks import (
     install_pychestrate_session_middleware,
 )
@@ -62,6 +65,10 @@ from automojo.pychestrate.webservice.plugin_api.runtime import (
 )
 from automojo.pychestrate.webservice.retention.restapi.v1.retention_routes import (
     register_retention_routes,
+)
+from automojo.pychestrate.webservice.identity.setup.setup_service import (
+    bootstrap_setup_state,
+    is_setup_complete as _is_setup_complete,
 )
 from automojo.pychestrate.webservice.runtime_bootstrap import (
     bootstrap_runtime,
@@ -88,6 +95,9 @@ from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import
 from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
     register_config_routes,
 )
+from automojo.pychestrate.webservice.webinterface.blueprints.setup.routes import (
+    register_setup_routes,
+)
 from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     register_projects_routes as register_projects_web_ui_routes,
 )
@@ -105,12 +115,66 @@ from automojo.pychestrate.webservice.webinterface.foundation.templating import (
 from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
-from automojo.pychestrate.webservice.metadata import SITE_DIRECTORIES
+from automojo.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import HTMLResponse, Response
+
+
+def _eager_start_response_wsgi(wsgi_app: Any) -> Any:
+    """
+        Wrap a webworks-built WSGI app so the bundled
+        :class:`webworks.wsgi.worker.Worker` can serve responses.
+
+        The bug: ``wsgi.application.WSGIApplication.__call__`` is a
+        generator that calls ``start_response(status, headers)``
+        BEFORE its first ``yield``. The worker calls
+        ``start_response.send_headers()`` BEFORE iterating the
+        generator (worker.py line 521). Because the generator body
+        has not run yet, ``_status`` is still ``None`` and
+        ``send_headers()`` raises
+        ``RuntimeError("start_response not called before sending
+        headers")`` -- every response ends as a 500 with an empty
+        body. Tests against the dispatcher pass; only the WSGI
+        envelope is broken. This is what produced the "blank page"
+        on the first deploy.
+
+        The fix: drive the generator to its first yield (or end)
+        eagerly inside this wrapper. By the time the wrapper
+        returns, the WSGI app has already called start_response,
+        so the worker's send_headers check passes. We then return
+        an iterable that re-yields the buffered first chunk and
+        continues iterating the remaining chunks lazily, preserving
+        WSGI streaming semantics for callers that care.
+
+        :param wsgi_app: The WSGI callable returned by
+                         :func:`webworks.wsgi.application.create_wsgi_application`.
+
+        :returns: A WSGI callable that does the eager advance.
+    """
+    def _wrapped(environ, start_response):
+        gen = wsgi_app(environ, start_response)
+        try:
+            first_chunk = next(gen)
+        except StopIteration:
+            # The body emitted zero chunks (e.g. a 204) but
+            # start_response WAS called inside the generator body
+            # before the implicit StopIteration, so the worker is
+            # happy.
+            return iter([])
+
+        def _iter():
+            yield first_chunk
+            for chunk in gen:
+                yield chunk
+
+        rtnval = _iter()
+        return rtnval
+
+    rtnval = _wrapped
+    return rtnval
 
 
 def build_wsgi_compat_dispatch(*, app: Any) -> Any:
@@ -329,6 +393,10 @@ def register_service_extensions() -> None:
         static_root=SITE_DIRECTORIES.DIR_STATIC,
     )
     install_web_ui_templating()
+    # Setup wizard routes register BEFORE the rest of the consumer
+    # UI so the gate-redirect target ``/setup/unlock`` is bound on
+    # the dispatcher early.
+    register_setup_routes(app=app)
     register_config_routes(app=app)
     register_resources_routes(app=app)
     register_projects_web_ui_routes(app=app)
@@ -339,13 +407,33 @@ def pychestrate_website_main():
     runtime_config = load_config_from_environment()
     bootstrap_runtime(config=runtime_config)
 
+    # Provision the initial-admin token (idempotent; no-op past
+    # completion). Logs the on-disk token path so operators see it
+    # in journald / stdout immediately.
+    session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    token_path = bootstrap_setup_state(session_factory=session_factory)
+    print("Initial-admin token path: {}".format(token_path))
+
     register_service_extensions()
 
     app.startup()
 
     install_pychestrate_session_middleware(app=app)
 
-    wsgi_app = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    # Gate middleware installs LAST so it is the outermost wrapper:
+    # webworks pipeline ``position="start"`` puts each new entry at
+    # the head of the list, so the LAST install ends up running
+    # FIRST on the way in. This is what we want -- the gate must
+    # decide whether to redirect before any session work happens.
+    install_pychestrate_setup_gate_middleware(
+        app=app,
+        is_complete=lambda: _is_setup_complete(
+            session_factory=SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+        ),
+    )
+
+    wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
 
     bind_host = os.environ.get("PYCHESTRATE_BIND_HOST", "127.0.0.1")
     bind_port = int(os.environ.get("PYCHESTRATE_BIND_PORT", "8888"))
@@ -384,11 +472,25 @@ def build_wsgi_application_for_production():
     runtime_config = load_config_from_environment()
     bootstrap_runtime(config=runtime_config)
 
+    # Provision the initial-admin token. See pychestrate_website_main
+    # for the rationale; the production-WSGI factory mirrors the dev
+    # entry point exactly.
+    session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    token_path = bootstrap_setup_state(session_factory=session_factory)
+    print("Initial-admin token path: {}".format(token_path))
+
     register_service_extensions()
     app.startup()
     install_pychestrate_session_middleware(app=app)
+    install_pychestrate_setup_gate_middleware(
+        app=app,
+        is_complete=lambda: _is_setup_complete(
+            session_factory=SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+        ),
+    )
 
-    rtnval = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
+    rtnval = _eager_start_response_wsgi(rtnval_inner)
     return rtnval
 
 if __name__ == "__main__":
