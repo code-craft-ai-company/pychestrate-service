@@ -251,8 +251,13 @@ echo
 # ---------------------------------------------------------------------------
 # Step 2 -- system apt packages (build-essential, python3, poetry)
 #
-# Uses ``ssh -t`` so the sudo prompt inside setup-debian-machine
-# can read a TTY.
+# Uses ``ssh -tt`` (force TTY allocation) so the sudo prompt
+# inside setup-debian-machine + nginx + systemd-unit-install
+# steps can read /dev/tty.  Plain ``ssh -t`` only REQUESTS a
+# TTY and silently falls back to non-TTY when stdin isn't a
+# terminal -- which happens when the remote command is fed via
+# heredoc, producing a confusing ``sudo: a terminal is required
+# to read the password`` mid-deploy.  ``-tt`` forces it.
 #
 # Skipped under ``--skip-system-setup`` -- CI cannot satisfy an
 # interactive sudo prompt, so the CI deploy workflow assumes the
@@ -304,7 +309,7 @@ EOF
 else
     echo "==> Step 2/8: system packages (apt, pipx poetry, nginx)"
     echo "    [you may be prompted for the remote sudo password]"
-    ssh -t "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
+    ssh -tt "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
 fi
 echo
 
@@ -374,7 +379,7 @@ if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
 else
     echo "==> Step 7/8: nginx site config (proxy ${PROXY_PORT} -> 127.0.0.1:${REMOTE_PORT})"
     echo "    [you may be prompted for the remote sudo password]"
-    ssh -t "${REMOTE_TARGET}" \
+    ssh -tt "${REMOTE_TARGET}" \
         REMOTE_PORT="${REMOTE_PORT}" \
         PROXY_PORT="${PROXY_PORT}" \
         "bash -s" <<'EOF'
@@ -501,7 +506,7 @@ else
     scp -q "${UNIT_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.service"
     rm -f "${UNIT_LOCAL}"
 
-    ssh -t "${REMOTE_TARGET}" \
+    ssh -tt "${REMOTE_TARGET}" \
         REMOTE_USER="${REMOTE_USER}" \
         "bash -s" <<'EOF'
 set -euo pipefail
