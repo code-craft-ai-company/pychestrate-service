@@ -211,7 +211,20 @@ echo
 echo "==> Step 1/8: rsync repo to ${REMOTE_TARGET}:~/${REMOTE_PATH}/"
 ssh "${REMOTE_TARGET}" "mkdir -p ~/${REMOTE_PATH}"
 
-rsync -az --delete --info=progress2 \
+# ``--info=progress2`` is a rsync 3.1+ flag (single-line live
+# progress display).  macOS Sequoia ships ``openrsync`` (Apple's
+# OpenBSD-derived reimplementation, protocol-29) by default,
+# which rejects the flag with an "unrecognized option" error.
+# Probe rsync's version and fall back to ``--stats`` (universal;
+# prints summary at the end) when the live-progress flag is
+# unsupported.  Operators on macOS who want live progress can
+# ``brew install rsync`` to pick up GNU rsync 3.x.
+RSYNC_PROGRESS_OPT="--stats"
+if rsync --version 2>/dev/null | grep -qE "version (3|[4-9])\."; then
+    RSYNC_PROGRESS_OPT="--info=progress2"
+fi
+
+rsync -az --delete "${RSYNC_PROGRESS_OPT}" \
     --exclude='.venv' \
     --exclude='.output' \
     --exclude='.cache' \
