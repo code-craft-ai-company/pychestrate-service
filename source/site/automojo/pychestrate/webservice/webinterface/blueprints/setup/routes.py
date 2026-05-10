@@ -206,38 +206,34 @@ def _build_404_response() -> Response:
         "<h1>404 Not Found</h1>"
         "<p>The setup wizard has already been completed.</p>"
     )
-    rtnval = HTMLResponse(body=body, status_code=404)
+    rtnval = HTMLResponse(content=body, status_code=404)
     return rtnval
 
 
 def _parse_form_or_empty(*, request: Request) -> Dict[str, str]:
     """
-        Parse an x-www-form-urlencoded body into a flat
-        ``{name: value}`` dict. Multi-value fields keep the LAST
-        submitted value -- the wizard has no multi-valued forms
-        so this is fine.
+        Parse the request body as form-encoded data via webworks'
+        ``Request.form()`` method, which is the canonical entry
+        point. Returns an empty dict on decode failure or
+        non-form body so handler validation logic can branch on
+        missing fields rather than catching exceptions.
 
         :param request: Webworks request.
 
         :returns: Dict of form fields. Empty on parse failure.
     """
     try:
-        body_bytes = request.body
-        if body_bytes is None:
-            return {}
-        if isinstance(body_bytes, bytes):
-            body_text = body_bytes.decode("utf-8", errors="replace")
-        else:
-            body_text = str(body_bytes)
-        parsed = parse_qs(body_text, keep_blank_values=True)
+        parsed = request.form()
     except Exception:
         return {}
-
-    flat: Dict[str, str] = {}
-    for key, values in parsed.items():
-        if len(values) > 0:
-            flat[key] = values[-1]
-    rtnval = flat
+    if isinstance(parsed, dict) is False:
+        return {}
+    rtnval: Dict[str, str] = {}
+    for key, value in parsed.items():
+        # webworks' Request.form() collapses multi-value keys to
+        # the first value -- the wizard has no multi-valued forms
+        # so a flat str-to-str dict is correct.
+        rtnval[str(key)] = str(value)
     return rtnval
 
 
@@ -369,7 +365,7 @@ def _attach_unlock_cookie(
     """
     cookie_value = _build_unlock_cookie_value(manager=manager)
     response.set_cookie(
-        key=UNLOCK_COOKIE_NAME,
+        name=UNLOCK_COOKIE_NAME,
         value=cookie_value,
         max_age=UNLOCK_COOKIE_TTL_SECONDS,
         path=UNLOCK_COOKIE_PATH,
@@ -390,7 +386,7 @@ def _clear_unlock_cookie(*, response: Response) -> None:
         :returns: None.
     """
     response.set_cookie(
-        key=UNLOCK_COOKIE_NAME,
+        name=UNLOCK_COOKIE_NAME,
         value="",
         max_age=0,
         path=UNLOCK_COOKIE_PATH,
@@ -624,6 +620,18 @@ def handle_admin_submit(request: Request) -> Response:
         :returns: RedirectResponse on success, HTMLResponse on
                   failure.
     """
+    try:
+        return _handle_admin_submit_inner(request=request)
+    except BaseException:
+        import traceback
+        _module_logger.error(
+            "pychestrate.setup.admin_submit.crashed exc=%s",
+            traceback.format_exc(),
+        )
+        raise
+
+
+def _handle_admin_submit_inner(*, request: Request) -> Response:
     if _is_already_complete() is True:
         return _build_404_response()
 

@@ -422,6 +422,17 @@ def create_initial_admin(
         # ``user.roles`` CSV -> ``system_roles`` -> ``permissions``
         # chain. ``roles="admin"`` mirrors the e2e harness's
         # ``ensure_seeded_admin`` exactly.
+        #
+        # The legacy ``user`` table comes from migrations 001-003
+        # (``PychestrateModelBase``). When the operator runs with
+        # ``PYCHESTRATE_AUTO_CREATE_SCHEMA=true`` (dev-up only --
+        # production uses alembic), only the modern Phase-1 tables
+        # are created and the legacy ``user`` table is absent. We
+        # try the insert and fall back to a savepoint rollback so
+        # the modern half (which IS the auth source of truth) still
+        # commits cleanly.
+        from sqlalchemy.exc import OperationalError as _OpError
+
         legacy_user = _LegacyUser(
             id=admin_user_id,
             first_name="",
@@ -434,7 +445,17 @@ def create_initial_admin(
             roles="admin",
             authtype="internal",
         )
-        db_session.add(legacy_user)
+        legacy_savepoint = db_session.begin_nested()
+        try:
+            db_session.add(legacy_user)
+            db_session.flush()
+            legacy_savepoint.commit()
+        except _OpError as op_exc:
+            legacy_savepoint.rollback()
+            _module_logger.warning(
+                "pychestrate.setup.legacy_user_skipped reason=%s",
+                str(op_exc).split(os.linesep)[0],
+            )
 
         db_session.commit()
         _module_logger.info(
