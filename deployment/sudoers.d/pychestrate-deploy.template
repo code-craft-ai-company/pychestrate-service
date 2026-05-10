@@ -1,0 +1,61 @@
+# pychestrate-service alpha deploy -- scoped passwordless sudo
+#
+# Rendered + installed by ``deployment/install-deploy-sudoers.sh``
+# OR by hand via ``visudo -f /etc/sudoers.d/pychestrate-deploy``
+# after substituting ``@USER@`` with the deploy user (e.g. myron).
+#
+# Lets the deploy user run JUST the privileged operations the
+# alpha deploy needs -- nothing more.  Both the workstation
+# first-deploy and the CI re-deploys run with no password
+# prompts; cut-and-paste prompt fatigue is gone.
+#
+# Scope (least privilege):
+#   * ``install`` of nginx site config + systemd unit (combines
+#     mv + chown + chmod, so a single rule covers each).
+#   * ``ln -sfn``, ``rm -f`` against the specific symlinks the
+#     deploy manages.
+#   * ``nginx -t`` (config validation).
+#   * ``systemctl`` operations on ``nginx`` and
+#     ``pychestrate.service`` only.
+#
+# Everything outside this list still requires a password,
+# including any other systemctl target -- so a compromised
+# deploy user can't (e.g.) ``systemctl stop ssh`` without
+# auth.
+#
+# Use ``sudo visudo -c -f /etc/sudoers.d/pychestrate-deploy``
+# after install to validate; a malformed sudoers file is
+# refused outright by sudo.
+#
+# Path note: Debian/Ubuntu may ship ``systemctl`` at
+# ``/usr/bin/systemctl`` (modern) or ``/bin/systemctl``
+# (legacy symlink to the same binary).  Both are listed so
+# whichever sudo's ``secure_path`` hits is allowed.
+#
+# Path note: ``nginx`` typically lives at ``/usr/sbin/nginx``
+# on Debian/Ubuntu.  Adjust if your install uses a different
+# location.
+
+# nginx site config -- single ``install`` covers mv + chown + chmod.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.nginx.conf /etc/nginx/sites-available/pychestrate
+
+# nginx symlink management.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/ln -sfn /etc/nginx/sites-available/pychestrate /etc/nginx/sites-enabled/pychestrate
+@USER@ ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/nginx/sites-enabled/default
+
+# nginx config check + reload.
+@USER@ ALL=(root) NOPASSWD: /usr/sbin/nginx -t
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx, /bin/systemctl reload nginx
+
+# systemd unit install (single ``install`` covers mv + chown + chmod).
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
+
+# systemd lifecycle for pychestrate.service ONLY.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload, /bin/systemctl daemon-reload
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl enable pychestrate.service, /bin/systemctl enable pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl disable pychestrate.service, /bin/systemctl disable pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl start pychestrate.service, /bin/systemctl start pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl stop pychestrate.service, /bin/systemctl stop pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart pychestrate.service, /bin/systemctl restart pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl status pychestrate.service, /bin/systemctl status pychestrate.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl --no-pager status pychestrate.service, /bin/systemctl --no-pager status pychestrate.service
