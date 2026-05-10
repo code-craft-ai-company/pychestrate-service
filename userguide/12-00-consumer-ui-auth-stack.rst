@@ -66,8 +66,10 @@ The two stacks at a glance
 | Declarative base          | ``PychestrateModelBase``        | ``PychestratePhase1Base``        |
 |                           | (``core.orm``)                  | (``persistence.schema``)         |
 +---------------------------+---------------------------------+----------------------------------+
-| Hashing                   | ``werkzeug.security``           | ``factories.password_hasher``    |
-|                           | (``generate_password_hash``)    | (default scrypt; pluggable)      |
+| Hashing                   | ``webworks.security.passwords`` | ``factories.password_hasher``    |
+|                           | (stdlib pbkdf2-sha256;          | (default scrypt; pluggable)      |
+|                           | wire-compatible with            |                                  |
+|                           | ``werkzeug 2.3``)               |                                  |
 +---------------------------+---------------------------------+----------------------------------+
 | Pluggable via             | (none)                          | ``E-factory-protocols``          |
 | extension                 |                                 | (``password_hasher`` /           |
