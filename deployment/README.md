@@ -134,6 +134,66 @@ ssh myron@tc-app-server.local sudo nginx -t          # validate config
 ssh myron@tc-app-server.local sudo systemctl reload nginx
 ```
 
+### First-login: the initial-setup wizard
+
+A fresh deploy lands with **no admin user**. The first time you
+hit the service in a browser you go through a Jenkins-style
+unlock-then-create-admin flow.
+
+#### 1. Read the initial-admin token
+
+The service writes a high-entropy token to a 0600 file under
+`PYCHESTRATE_RUNTIME_DIR` (`/var/lib/pychestrate/initial-admin-token`
+in production) on first boot. The systemd unit logs the path on
+startup:
+
+```bash
+ssh myron@tc-app-server.local sudo journalctl -u pychestrate -n 30 --no-pager | grep "Initial-admin token path"
+# Initial-admin token path: /var/lib/pychestrate/initial-admin-token
+
+ssh myron@tc-app-server.local sudo cat /var/lib/pychestrate/initial-admin-token
+# fwoxEWV8UmSJ5qPXqgbdu89v14bzSVU-71_EWPUTCMY
+```
+
+#### 2. Walk through the wizard
+
+Open `http://tc-app-server.local/` (or any URL on the service).
+While setup is pending, every request 302-redirects to
+`/setup/unlock`.
+
+1. **Paste the token** on the unlock page → submit.
+2. **Create the administrator** (login, email, display name,
+   password ≥ 12 chars) → submit.
+3. You land on `/config/login`. Sign in with the credentials you
+   just chose.
+
+#### 3. Verify the wizard is one-way
+
+```bash
+# Should 404 — wizard is permanently disabled.
+curl -I http://tc-app-server.local/setup/unlock
+
+# Should be gone — the file is deleted on completion.
+ssh myron@tc-app-server.local ls -l /var/lib/pychestrate/
+```
+
+#### Recovery: lost the token before completing setup
+
+If you lose the cleartext token but haven't finished the wizard,
+restart the service. The bootstrap detects the missing file,
+generates a fresh token, updates the stored hash, and writes a
+new file:
+
+```bash
+ssh myron@tc-app-server.local sudo systemctl restart pychestrate
+ssh myron@tc-app-server.local sudo cat /var/lib/pychestrate/initial-admin-token
+```
+
+The wizard is one-way **after completion** — there is no operator
+path that re-enables setup mode once an admin exists. Resetting
+requires a manual `UPDATE system_initial_setup SET completed_at = NULL` plus
+`DELETE FROM identity_users` plus a service restart.
+
 ### Idempotent re-deploy
 
 Re-running the script:
