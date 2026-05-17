@@ -47,9 +47,6 @@
 @USER@ ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 @USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx, /bin/systemctl reload nginx
 
-# Initial-setup runtime directory (mode 0700 owned by deploy user).
-@USER@ ALL=(root) NOPASSWD: /usr/bin/install -d -m 0700 -o @USER@ -g @USER@ /var/lib/pychestrate
-
 # systemd unit install (single ``install`` covers mv + chown + chmod).
 @USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 

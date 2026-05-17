@@ -366,12 +366,19 @@ echo
 # same path so the next 'make dev-up' reuses it.
 # ---------------------------------------------------------------------------
 
-echo "==> Step 6/8: alembic upgrade head (sqlite, schema + legacy)"
+echo "==> Step 6/8: alembic upgrade head (sqlite in ~/pychestrate/)"
 ssh "${REMOTE_TARGET}" <<'EOF'
 set -euo pipefail
 cd ~/pychestrate-service
-mkdir -p .cache/dev-db
-DB_PATH="$HOME/pychestrate-service/.cache/dev-db/pychestrate.sqlite"
+# The SQLite DB lives in the pychestrate "presence directory"
+# under the service user's $HOME -- NOT under the checkout's
+# .cache/. ``setup-environment reset`` would otherwise wipe it.
+# The dir is created mode 0700 here (idempotent) and ALSO at
+# service-boot time by the systemd unit; both producers agree.
+PRESENCE_DIR="$HOME/pychestrate"
+mkdir -p "${PRESENCE_DIR}"
+chmod 0700 "${PRESENCE_DIR}"
+DB_PATH="${PRESENCE_DIR}/pychestrate.sqlite"
 export PYCHESTRATE_DATABASE_URL="sqlite:///${DB_PATH}"
 .venv/bin/alembic -c alembic.ini upgrade head
 echo "    DB: ${DB_PATH}"
@@ -549,10 +556,12 @@ mkdir -p ~/.pychestrate
 touch ~/.pychestrate/server.log
 chmod 0644 ~/.pychestrate/server.log
 
-# Pre-create the runtime directory the initial-setup wizard
-# writes its admin token into. Mode 0700 + owned by the service
-# user so other accounts on the box cannot read the token.
-sudo install -d -m 0700 -o ${REMOTE_USER} -g ${REMOTE_USER} /var/lib/pychestrate
+# Pre-create the pychestrate "presence directory" mode 0700.
+# Lives under \$HOME so no sudo is needed; survives any
+# ``setup-environment reset`` (which only wipes the checkout's
+# .cache/). Holds the SQLite DB + the initial-admin-token.
+mkdir -p ~/pychestrate
+chmod 0700 ~/pychestrate
 
 # \`\`install\`\` combines mv + chown + chmod into a single
 # privileged operation -- shrinks the sudoers whitelist
