@@ -403,47 +403,57 @@ patch.deactivate()
 
 
 # Evaluating Test Results
-There is a machine processable JSOS stream file in the output folder.
 
-"*outputfolder*/testrun_results_stream.jsos"
+After a ``testbase testing run`` finishes, the output folder
+contains both human-friendly summaries and machine-readable
+streams. AI agents should consume results through the
+``testbase agents`` command tree rather than parsing JSOS
+directly.
 
-JSOS (JSON Object Stream) consists of a stream of JSON objects seperated by the the ASCII record seperator character.  When a
-test starts it writes a preview to the stream.  The test preview has a 'result' equal to 'UNSET'.  Example Preview:
-
-```
-{
-    "name": "automojo.tests.singlehost.interop.protocols.dns.test_dnsaddress#test_write_passes_address",
-    "monikers": [],
-    "pivots": {},
-    "instance": "abb868e4-ce97-4bae-b0af-715da0d61d92",
-    "parent": "5aad244e-41dc-438f-97a6-bd8365cccdd2",
-    "rtype": "TEST",
-    "result": "UNSET",
-    "start": "2025-07-15T22:07:03.275239",
-    "stop": ""
-}
-```
-
-When a test finishes it writes a result to the stream.  A test result will always have a 'detail' attribute. Example Result:
+## Quick path for agents
 
 ```
-{
-    "name": "automojo.tests.singlehost.interop.protocols.dns.test_dnsaddress#test_write_passes_address",
-    "monikers": [],
-    "pivots": {},
-    "instance": "abb868e4-ce97-4bae-b0af-715da0d61d92",
-    "parent": "5aad244e-41dc-438f-97a6-bd8365cccdd2",
-    "rtype": "TEST",
-    "result": "PASSED",
-    "start": "2025-07-15T22:07:03.275239",
-    "stop": "2025-07-15T22:07:03.276034",
-    "detail": {
-        "errors": [],
-        "failures": [],
-        "warnings": []
-    }
-}
+# Compact pass/fail/total + duration summary.
+.venv/bin/testbase agents summary extract \
+    --summary-file .output/testrun_summary.json
+
+# Per-test verdict list (one line per test, "PASSED" / "FAILED" / etc.).
+.venv/bin/testbase agents testresult list \
+    --results-file .output/testrun_results_stream.jsos
+
+# Only on failures: detailed error blocks for failed + errored tests.
+.venv/bin/testbase agents testresult failures \
+    --results-file .output/testrun_results_stream.jsos
+
+# Run configuration (root, includes/excludes, output path, etc.).
+.venv/bin/testbase agents config extract \
+    --config-file .output/startup-configuration.json
 ```
+
+These commands print compact, scriptable output (one record per
+line, YAML-ish key/value blocks). Default loop:
+
+1. Run ``testbase agents summary extract`` after the suite.
+2. If ``passed == total``, you are done.
+3. Otherwise, ``testbase agents testresult failures`` drills
+   into the failed-test traceback + assertion detail.
+
+## Raw streams (only when the agents tree is insufficient)
+
+The output folder also carries the underlying JSON files the
+``agents`` commands consume:
+
+* ``testrun_summary.json`` -- final summary for the whole run.
+* ``testrun_results_stream.jsos`` -- JSOS (JSON Object Stream)
+  with one record per test-start (``result == "UNSET"``) and
+  one per test-finish (``result`` set, ``detail`` populated).
+  Records are separated by the ASCII record-separator character.
+* ``startup-configuration.json`` -- the resolved run config:
+  root, includes, excludes, marker expressions, output path.
+
+Parse these directly only if you need a field the ``agents``
+commands do not surface. Prefer the agent tree for everything
+else -- it is the supported, stable contract.
 
 # Change Recommendations
 Before making a recommendation to change a file.  Make sure you have the latest version of the file.
