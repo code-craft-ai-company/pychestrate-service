@@ -31,7 +31,7 @@ import os
 
 
 ENV_BASE_URL: str = "PYCHESTRATE_TEST_BASE_URL"
-DEFAULT_BASE_URL: str = "http://tc-app-server/"
+DEFAULT_BASE_URL: str = "https://tc-app-server.tailb75ce6.ts.net/"
 
 
 def _resolve_base_url() -> str:
