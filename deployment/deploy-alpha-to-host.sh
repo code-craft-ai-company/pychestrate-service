@@ -81,6 +81,12 @@ REMOTE_HOST="tc-app-server.local"
 REMOTE_USER="myron"
 REMOTE_PORT="8888"          # internal app port (nginx proxies to this)
 PROXY_PORT="80"             # external port nginx listens on
+# Canonical public hostname for the deploy -- must match the
+# subject on the TLS cert at /etc/nginx/ssl/pychestrate.crt.
+# The :80 redirect lands users here regardless of what they
+# typed (bare ``tc-app-server`` vs. full tailnet name), so
+# the browser never sees a cert/hostname mismatch.
+PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
 SKIP_SYSTEM_SETUP="false"
 
 while [ $# -gt 0 ]; do
@@ -89,6 +95,7 @@ while [ $# -gt 0 ]; do
         --user=*) REMOTE_USER="${1#*=}" ;;
         --port=*) REMOTE_PORT="${1#*=}" ;;
         --proxy-port=*) PROXY_PORT="${1#*=}" ;;
+        --public-hostname=*) PUBLIC_HOSTNAME="${1#*=}" ;;
         --skip-system-setup) SKIP_SYSTEM_SETUP="true" ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
@@ -426,7 +433,7 @@ server {
 
     server_name _;
 
-    return 301 https://\$host\$request_uri;
+    return 301 https://${PUBLIC_HOSTNAME}\$request_uri;
 }
 
 # HTTPS listener -- terminates TLS with the Tailscale-issued
