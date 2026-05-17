@@ -116,6 +116,9 @@ from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
 from automojo.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
+from automojo.pychestrate.webservice.pychestrate_variables import (
+    PychestrateVariables,
+)
 from automojo.webworks.webapplication import establish_webapp_persona
 from automojo.webworks.wsgi.application import create_wsgi_application
 from automojo.webworks.wsgi.server import run_server
@@ -450,8 +453,8 @@ def pychestrate_website_main():
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
 
-    bind_host = os.environ.get("PYCHESTRATE_BIND_HOST", "127.0.0.1")
-    bind_port = int(os.environ.get("PYCHESTRATE_BIND_PORT", "8888"))
+    bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
+    bind_port = int(PychestrateVariables.PYCHESTRATE_BIND_PORT)
     workers = int(os.environ.get("PYCHESTRATE_WORKERS", "1"))
     threads = int(os.environ.get("PYCHESTRATE_THREADS", "1"))
 
