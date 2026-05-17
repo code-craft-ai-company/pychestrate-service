@@ -85,18 +85,34 @@ fi
 
 # ----------------------------------------------------------------------------
 # SQLite DB path (alembic-managed; auto-create disabled in staging)
+#
+# The DB lives in the pychestrate "presence directory" -- the
+# persona default registered by ``establish_webapp_persona``
+# (``~/pychestrate``).  ``setup-environment reset`` cannot touch
+# this path (it only wipes the checkout's .cache/), and the alpha
+# deploy script's step 6 alembic targets the same file.
+#
+# ``PYCHESTRATE_DATABASE_URL`` below is intentionally NOT exported.
+# When unset, the runtime's ``DATASTORAGE`` variable accessor
+# computes ``sqlite:///<presence-dir>/pychestrate.sqlite`` lazily
+# from the persona singleton -- the operator does not have to keep
+# this shell script in sync with the python-side default.
 # ----------------------------------------------------------------------------
 
-DEV_DB_DIR="${REPO_ROOT}/.cache/dev-db"
-mkdir -p "${DEV_DB_DIR}"
-DEV_DB_PATH="${DEV_DB_DIR}/pychestrate.sqlite"
+PRESENCE_DIR="${HOME}/pychestrate"
+mkdir -p "${PRESENCE_DIR}"
+chmod 0700 "${PRESENCE_DIR}" 2>/dev/null || true
+DEV_DB_PATH="${PRESENCE_DIR}/pychestrate.sqlite"
 
 # ----------------------------------------------------------------------------
 # Compose the runtime env
 # ----------------------------------------------------------------------------
 
 export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-staging}"
-export PYCHESTRATE_DATABASE_URL="${PYCHESTRATE_DATABASE_URL:-sqlite:///${DEV_DB_PATH}}"
+# PYCHESTRATE_DATABASE_URL is left UNSET on purpose -- the runtime
+# computes the persona-derived default. Operators who want a
+# different URL (e.g. Postgres) should set it in the systemd
+# unit's ``Environment=`` block, not here.
 export PYCHESTRATE_AUTO_CREATE_SCHEMA="${PYCHESTRATE_AUTO_CREATE_SCHEMA:-false}"
 
 export PYCHESTRATE_KEK_SOURCE="${PYCHESTRATE_KEK_SOURCE:-file}"
@@ -121,7 +137,7 @@ export PYCHESTRATE_THREADS="${PYCHESTRATE_THREADS:-2}"
 export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:${PYTHONPATH:-}"
 
 echo "run-staging-gunicorn: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
-echo "run-staging-gunicorn: db=${PYCHESTRATE_DATABASE_URL}"
+echo "run-staging-gunicorn: db=${PYCHESTRATE_DATABASE_URL:-<persona default sqlite:///${DEV_DB_PATH}>}"
 echo "run-staging-gunicorn: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
 echo "run-staging-gunicorn: workers=${PYCHESTRATE_WORKERS} threads=${PYCHESTRATE_THREADS}"
 echo "run-staging-gunicorn: kek=${PYCHESTRATE_KEK_FILE_PATH}"
