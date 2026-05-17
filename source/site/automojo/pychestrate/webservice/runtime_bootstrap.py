@@ -104,6 +104,10 @@ from automojo.pychestrate.webservice.metadata import (
     RUNTIME_ENVIRONMENTS,
     SITE_SHARED_GLOBALS,
 )
+from automojo.pychestrate.webservice.pychestrate_variables import (
+    PychestrateVariables,
+    PychestrateVariablesDesc,
+)
 from automojo.pychestrate.webservice.persistence.schema import (
     PychestratePhase1Base,
 )
@@ -223,6 +227,12 @@ def _read_env(*, name: str, default: Optional[str] = None) -> Optional[str]:
         unset or empty. Pulled out so tests can patch a single
         function rather than every ``os.environ.get`` call.
 
+        Used only for ad-hoc operator-named env vars (e.g. the
+        env-var name the operator chose to hold the password
+        pepper). Documented ``PYCHESTRATE_*`` config vars are read
+        via :func:`_read_app_var` so they flow through the
+        :class:`PychestrateVariables` accessor's precedence chain.
+
         :param name: Environment variable name.
         :param default: Default value when unset / empty.
 
@@ -235,11 +245,65 @@ def _read_env(*, name: str, default: Optional[str] = None) -> Optional[str]:
     return rtnval
 
 
+def _read_app_var(
+        *, accessor_name: str, default: Optional[str] = None
+    ) -> Optional[str]:
+    """
+        Read a documented ``PYCHESTRATE_*`` variable through the
+        :class:`PychestrateVariables` accessor and apply the same
+        "unset or empty string -> default" semantic the legacy
+        :func:`_read_env` enforced. The descriptor cache is forgotten
+        before the read so each call re-resolves against the current
+        ``os.environ`` -- matches the eager ``os.environ.get`` flow
+        callers expect from this loader.
+
+        :param accessor_name: Attribute name on
+                              :class:`PychestrateVariables` (also the
+                              env-var name -- they match by design).
+        :param default: Default value when unset / empty.
+
+        :returns: The resolved value, or ``default``.
+    """
+    var_desc = getattr(PychestrateVariablesDesc, accessor_name)
+
+    from automojo.thisapp.wellknown import ThisApplicationSingleton
+    this_app = ThisApplicationSingleton()
+    this_app.forget_variable(var_desc)
+
+    value = getattr(PychestrateVariables, accessor_name)
+    if value is None or (isinstance(value, str) and len(value) == 0):
+        return default
+    rtnval = value
+    return rtnval
+
+
+def _read_app_var_bool(*, accessor_name: str, default: bool = False) -> bool:
+    """
+        Read a documented ``PYCHESTRATE_*`` variable through
+        :func:`_read_app_var` and parse it as a boolean. ``true`` /
+        ``yes`` / ``1`` (case-insensitive) -> True; everything else
+        -> False; absent -> ``default``.
+
+        :param accessor_name: Attribute name on
+                              :class:`PychestrateVariables`.
+        :param default: Value to return when the variable is unset.
+
+        :returns: Boolean value.
+    """
+    raw = _read_app_var(accessor_name=accessor_name)
+    if raw is None:
+        return default
+    normalized = raw.strip().lower()
+    rtnval = normalized in ("true", "yes", "1")
+    return rtnval
+
+
 def _read_env_bool(*, name: str, default: bool = False) -> bool:
     """
-        Read an environment variable as a boolean. ``true`` /
-        ``yes`` / ``1`` (case-insensitive) → True; everything else
-        → False; absent → ``default``.
+        Read an arbitrary OS environment variable as a boolean.
+        Kept for parity with :func:`_read_env` -- callers that read
+        operator-named env vars (not documented ``PYCHESTRATE_*``
+        config) still use this helper.
 
         :param name: Environment variable name.
         :param default: Value to return when the env var is unset.
@@ -265,15 +329,19 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         :raises: ConfigurationError on missing required fields.
     """
     # Database URL resolves through the ``DATASTORAGE`` variable
-    # accessor: env (PYCHESTRATE_DATABASE_URL) → settings.config →
+    # accessor: env (PYCHESTRATE_DATABASE_URL) -> settings.config ->
     # persona-derived default (sqlite at
     # ${presence_dir}/pychestrate.sqlite). The accessor is
     # ``required=True`` so the lookup raises KeyError if no value
     # surfaces -- reclassify into ConfigurationError so the error
     # message points operators at the canonical env / settings
-    # source.
-    from automojo.pychestrate.webservice.pychestrate_variables import (
-        PychestrateVariables,
+    # source. Forget first so a fresh ``os.environ`` snapshot is
+    # honored on every loader invocation (matches the eager-read
+    # semantic the loader had pre-refactor).
+    from automojo.thisapp.wellknown import ThisApplicationSingleton
+    this_app = ThisApplicationSingleton()
+    this_app.forget_variable(
+        PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL
     )
     try:
         database_url = PychestrateVariables.PYCHESTRATE_DATABASE_URL
@@ -283,8 +351,8 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
             " runtime: {}".format(str(key_exc))
         ) from key_exc
 
-    runtime_environment = _read_env(
-        name=ENV_RUNTIME_ENVIRONMENT,
+    runtime_environment = _read_app_var(
+        accessor_name="PYCHESTRATE_RUNTIME_ENVIRONMENT",
         default=RUNTIME_ENVIRONMENTS.PRODUCTION,
     )
     if runtime_environment not in _VALID_RUNTIME_ENVIRONMENTS:
@@ -296,12 +364,22 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         err_msg = os.linesep.join(err_msg_lines)
         raise ConfigurationError(err_msg)
 
-    kek_source = _read_env(name=ENV_KEK_SOURCE)
+    # KEK_SOURCE / KEK_ID are ``required=True`` on the descriptor so
+    # missing values raise KeyError out of the accessor. Reclassify
+    # to ConfigurationError preserving the historical error message
+    # text -- operators grep for these strings in deploy logs.
+    try:
+        kek_source = _read_app_var(accessor_name="PYCHESTRATE_KEK_SOURCE")
+    except KeyError:
+        kek_source = None
     if kek_source is None:
         raise ConfigurationError(
             "{} is required to bootstrap the runtime".format(ENV_KEK_SOURCE)
         )
-    kek_id = _read_env(name=ENV_KEK_ID)
+    try:
+        kek_id = _read_app_var(accessor_name="PYCHESTRATE_KEK_ID")
+    except KeyError:
+        kek_id = None
     if kek_id is None:
         raise ConfigurationError(
             "{} is required to bootstrap the runtime".format(ENV_KEK_ID)
@@ -312,21 +390,33 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         runtime_environment=runtime_environment,
         kek_source=kek_source,
         kek_id=kek_id,
-        kek_file_path=_read_env(name=ENV_KEK_FILE_PATH),
-        kek_env_var=_read_env(name=ENV_KEK_ENV_VAR),
-        password_pepper_source=_read_env(name=ENV_PEPPER_SOURCE),
-        password_pepper_file_path=_read_env(name=ENV_PEPPER_FILE_PATH),
-        password_pepper_env_var=_read_env(name=ENV_PEPPER_ENV_VAR),
-        ui_cookie_secret_source=_read_env(
-            name=ENV_UI_COOKIE_SECRET_SOURCE
+        kek_file_path=_read_app_var(
+            accessor_name="PYCHESTRATE_KEK_FILE_PATH"
         ),
-        ui_cookie_secret_file_path=_read_env(
-            name=ENV_UI_COOKIE_SECRET_FILE_PATH
+        kek_env_var=_read_app_var(
+            accessor_name="PYCHESTRATE_KEK_ENV_VAR"
         ),
-        ui_cookie_secret_env_var=_read_env(
-            name=ENV_UI_COOKIE_SECRET_ENV_VAR
+        password_pepper_source=_read_app_var(
+            accessor_name="PYCHESTRATE_PASSWORD_PEPPER_SOURCE"
         ),
-        auto_create_schema=_read_env_bool(name=ENV_AUTO_CREATE_SCHEMA),
+        password_pepper_file_path=_read_app_var(
+            accessor_name="PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH"
+        ),
+        password_pepper_env_var=_read_app_var(
+            accessor_name="PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR"
+        ),
+        ui_cookie_secret_source=_read_app_var(
+            accessor_name="PYCHESTRATE_UI_COOKIE_SECRET_SOURCE"
+        ),
+        ui_cookie_secret_file_path=_read_app_var(
+            accessor_name="PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH"
+        ),
+        ui_cookie_secret_env_var=_read_app_var(
+            accessor_name="PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR"
+        ),
+        auto_create_schema=_read_app_var_bool(
+            accessor_name="PYCHESTRATE_AUTO_CREATE_SCHEMA"
+        ),
         sql_echo=_read_env_bool(name="PYCHESTRATE_SQL_ECHO"),
     )
     return rtnval

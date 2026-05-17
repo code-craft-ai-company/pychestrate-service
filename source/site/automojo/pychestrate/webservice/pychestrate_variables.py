@@ -13,8 +13,10 @@ Declarative pychestrate application variables using
     application overrides  >  environment  >  settings file  >  default
 
 Sections are named by **function** -- ``DATASTORAGE`` for anything
-that touches persistent state, future sections (``SECURITY`` for
-KEK / pepper, ``NETWORK`` for bind host / port, etc.) come later.
+that touches persistent state, ``SECURITY`` for KEK / pepper /
+cookie material, ``NETWORK`` for bind host / port, ``RUNTIME``
+for environment / schema-create flags. Future sections continue
+the pattern.
 
 Variable attribute names are also the env-var names and the
 settings.config keys, e.g. ``PYCHESTRATE_DATABASE_URL`` is read
@@ -55,6 +57,9 @@ from automojo.thisapp.personavariables import PersonaVariables
 # by ``PersonaVariables`` (which puts persona-management variables
 # in section "DEFAULT" by virtue of source=NONE).
 SECTION_DATASTORAGE: str = "DATASTORAGE"
+SECTION_SECURITY: str = "SECURITY"
+SECTION_NETWORK: str = "NETWORK"
+SECTION_RUNTIME: str = "RUNTIME"
 
 
 # Default-value computers. Pulled out as named functions (not
@@ -91,9 +96,9 @@ class PychestrateVariablesDesc(AppVarSet):
         Declarative pychestrate variable descriptors.
 
         Add new variables here, grouped into functional sections
-        (``DATASTORAGE``, ``SECURITY``, ``NETWORK``, etc.). Each
-        :class:`AppVarDesc`'s ``source`` flag controls which input
-        channels the resolver consults:
+        (``DATASTORAGE``, ``SECURITY``, ``NETWORK``, ``RUNTIME``,
+        etc.). Each :class:`AppVarDesc`'s ``source`` flag controls
+        which input channels the resolver consults:
 
         * ``VariableSource.ENVIRONMENT`` -- read ``os.environ[NAME]``.
         * ``VariableSource.SETTINGS`` -- read from settings.config.
@@ -109,6 +114,111 @@ class PychestrateVariablesDesc(AppVarSet):
         source=VariableSource.BOTH,
         default=_default_database_url,
         required=True,
+    )
+
+    # ------------------------------------------------------------------
+    # SECURITY section -- KEK, password pepper, UI cookie secret
+    # ------------------------------------------------------------------
+
+    PYCHESTRATE_KEK_SOURCE = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        required=True,
+    )
+
+    PYCHESTRATE_KEK_ID = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        required=True,
+    )
+
+    PYCHESTRATE_KEK_FILE_PATH = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_KEK_ENV_VAR = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_PASSWORD_PEPPER_SOURCE = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_UI_COOKIE_SECRET_SOURCE = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    # ------------------------------------------------------------------
+    # NETWORK section -- bind host / port for the embedded server
+    # ------------------------------------------------------------------
+
+    PYCHESTRATE_BIND_HOST = AppVarDesc(
+        section=SECTION_NETWORK,
+        source=VariableSource.ENVIRONMENT,
+        default="127.0.0.1",
+    )
+
+    # Kept as a string so the existing ``int(...)`` cast at the call
+    # site continues to work unchanged.
+    PYCHESTRATE_BIND_PORT = AppVarDesc(
+        section=SECTION_NETWORK,
+        source=VariableSource.ENVIRONMENT,
+        default="8888",
+    )
+
+    # ------------------------------------------------------------------
+    # RUNTIME section -- runtime-environment + schema-create flag
+    # ------------------------------------------------------------------
+
+    # Default kept as a literal "production" string rather than
+    # ``RUNTIME_ENVIRONMENTS.PRODUCTION`` to avoid pulling
+    # ``automojo.pychestrate.webservice.metadata`` into this module
+    # (keeps the variable-declaration module dependency-light, and
+    # the literal matches the metadata constant exactly).
+    PYCHESTRATE_RUNTIME_ENVIRONMENT = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="production",
+    )
+
+    # Kept as a string so the existing ``_read_env_bool`` parser at
+    # the call site continues to interpret ``true|yes|1`` unchanged.
+    PYCHESTRATE_AUTO_CREATE_SCHEMA = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="false",
     )
 
 
@@ -130,9 +240,57 @@ class PychestrateVariables:
         PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL
     )
 
+    PYCHESTRATE_KEK_SOURCE = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_KEK_SOURCE
+    )
+    PYCHESTRATE_KEK_ID = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_KEK_ID
+    )
+    PYCHESTRATE_KEK_FILE_PATH = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_KEK_FILE_PATH
+    )
+    PYCHESTRATE_KEK_ENV_VAR = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_KEK_ENV_VAR
+    )
+    PYCHESTRATE_PASSWORD_PEPPER_SOURCE = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_PASSWORD_PEPPER_SOURCE
+    )
+    PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH
+    )
+    PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR
+    )
+    PYCHESTRATE_UI_COOKIE_SECRET_SOURCE = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_UI_COOKIE_SECRET_SOURCE
+    )
+    PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH
+    )
+    PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR
+    )
+
+    PYCHESTRATE_BIND_HOST = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_BIND_HOST
+    )
+    PYCHESTRATE_BIND_PORT = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_BIND_PORT
+    )
+
+    PYCHESTRATE_RUNTIME_ENVIRONMENT = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_RUNTIME_ENVIRONMENT
+    )
+    PYCHESTRATE_AUTO_CREATE_SCHEMA = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_AUTO_CREATE_SCHEMA
+    )
+
 
 __all__ = [
     "PychestrateVariables",
     "PychestrateVariablesDesc",
     "SECTION_DATASTORAGE",
+    "SECTION_SECURITY",
+    "SECTION_NETWORK",
+    "SECTION_RUNTIME",
 ]
