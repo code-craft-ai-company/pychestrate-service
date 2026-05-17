@@ -155,6 +155,122 @@ def test_use_landscape(lscape: Landscape):
 
 The test tree should only contain resource origination declarations and tests.  It should not contain factories unless the usage of the factory is very isolated.  It is preferable to place factories in a folder such as a factory that creates the AutomationPodSimple object might be located at 'source/testroots/automojo/testshared/factories/automationpods/automationpodsimple.py'
 
+## Test Granularity
+
+Each test should verify a SINGLE property of the system in
+isolation. Composite tests that walk through multiple components
+or check multiple properties in one function lose isolation -- if
+an early assertion fails, the later checks never run and the
+result loses fidelity.
+
+Annotate each test with a docstring stating the feature and the
+property under test:
+
+```
+def test_unauthenticated_root_redirects_to_unlock_page():
+    """
+    **Feature: initial-setup-wizard**
+    **Property: GET / on a fresh deploy renders the unlock page
+    after a 302 redirect.**
+    """
+    ...
+```
+
+When two tests differ only in inputs, parameterize rather than
+loop assertions inside one test.
+
+## Resource Lifespan
+
+Factory-produced resources have an explicit lifespan declared at
+the call site:
+
+```
+from automojo.testbase.resourcelifespan import ResourceLifespan
+
+testbase.originate.parameter(
+    create_browser,
+    identifier="browser",
+    life_span=ResourceLifespan.Session,
+)
+```
+
+Available lifespans (from `automojo.testbase.resourcelifespan.ResourceLifespan`):
+
+| Lifespan          | Created                            | Use for                                          |
+|-------------------|------------------------------------|--------------------------------------------------|
+| `Session`         | Once per full test run             | Expensive shared resources: browser, DB pool     |
+| `Package`         | Once per test package              | Per-feature setup, e.g. seeded admin account     |
+| `Test`            | Once per test function (default)   | Request-scoped state                             |
+| `Task`            | Per parameterized task             | Constraint-combo runs                            |
+
+`ResourceLifespan.Test` is the default and cannot be explicitly
+passed to `originate.parameter` -- for test-scoped resources, use
+`@testbase.attach.parameter()` on the test function instead.
+
+### Example: session-scoped Playwright browser
+
+A real browser launch costs ~1 second. Declare the browser at
+`Session` scope so the cost is paid once, and take a fresh
+`BrowserContext` per test for cookie isolation:
+
+```
+from typing import Generator
+
+from playwright.sync_api import Browser, sync_playwright
+
+from automojo import testbase
+from automojo.testbase.resourcelifespan import ResourceLifespan
+
+
+@testbase.register.resource_factory()
+def create_browser(
+        constraints: dict = {}
+    ) -> Generator[Browser, None, None]:
+    """
+        Session-scoped Playwright Browser. One process, reused
+        across every UI test in the run.
+    """
+    headless = bool(constraints.get("headless", True))
+    playwright_handle = sync_playwright().start()
+    try:
+        browser = playwright_handle.chromium.launch(headless=headless)
+        try:
+            yield browser
+        finally:
+            browser.close()
+    finally:
+        playwright_handle.stop()
+    return
+
+
+testbase.originate.parameter(
+    create_browser,
+    identifier="browser",
+    life_span=ResourceLifespan.Session,
+)
+
+
+def test_root_redirects_to_unlock_page(browser: Browser):
+    """
+    **Feature: initial-setup-wizard**
+    **Property: GET / on a fresh deploy redirects to /setup/unlock.**
+    """
+    context = browser.new_context()
+    try:
+        page = context.new_page()
+        page.goto(BASE_URL + "/")
+        testbase.assert_true(page.url.endswith("/setup/unlock"))
+    finally:
+        context.close()
+    return
+```
+
+Browser tests can run from any OS (macOS / Linux / Windows) since
+Playwright bundles its own browser binaries. On a fresh checkout
+or CI runner the one-time setup is `playwright install chromium`
+(plus `--with-deps` on minimal Linux containers for the X11 /
+font system libs).
+
 # Using TestBase Mocking
 
 The testbase framework provides its own mocking module that should be used instead of `unittest.mock`. Import the mocking utilities from `automojo.testbase.mocking`.
