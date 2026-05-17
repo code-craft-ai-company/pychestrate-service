@@ -39,12 +39,10 @@ Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 
 # Pychestrate "presence directory" -- the canonical home for
-# the application's per-host state. Aligns with the persona
-# default registered by
-# ``automojo.webworks.webapplication.establish_webapp_persona``
-# (``presence_dir = ~/<name>`` when name="pychestrate"). Holds:
+# the application's per-host state. Holds:
 #
-#   * pychestrate.sqlite       -- the alpha-tier persistent DB
+#   * settings.config          -- this_app variable overrides
+#   * pychestrate.sqlite       -- alpha-tier persistent DB
 #   * initial-admin-token      -- mode 0600, written on first
 #                                  boot by the setup wizard
 #   * logs/                    -- future home for application
@@ -52,11 +50,22 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #                                  gunicorn stdout to
 #                                  ~/.pychestrate/server.log)
 #
-# Lives under the service user's $HOME so ``setup-environment
-# reset`` (which wipes the checkout's .cache/) cannot touch it.
-# Created mode 0700 owned by the service user; no sudo required.
-Environment="PYCHESTRATE_RUNTIME_DIR=/home/@USER@/pychestrate"
-Environment="PYCHESTRATE_DATABASE_URL=sqlite:////home/@USER@/pychestrate/pychestrate.sqlite"
+# Resolved at entrypoint time by ``pychestrate_presence.
+# resolve_presence_dir``: CLI flag ``--presence-dir`` first, then
+# ``PYCHESTRATE_PRESENCE_DIR`` env var, then the pychestrate
+# default ``~/pychestrate``. With no override the default lands
+# under the service user's $HOME, which:
+#
+#   * survives ``development/setup-environment reset`` (which
+#     wipes the checkout's .cache/)
+#   * needs no sudo to create (lives in $HOME)
+#
+# Uncomment + set PYCHESTRATE_PRESENCE_DIR below to relocate to a
+# system-wide path like /var/lib/pychestrate (requires that the
+# operator pre-create the directory mode 0700 owned by the
+# service user).
+#
+#Environment="PYCHESTRATE_PRESENCE_DIR=/var/lib/pychestrate"
 
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 

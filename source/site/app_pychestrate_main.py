@@ -267,10 +267,25 @@ DIR_THIS = os.path.dirname(__file__)
 
 logger = logging.getLogger("scms")
 
+# Resolve the persona presence directory BEFORE persona init.
+# Precedence: ``--presence-dir`` CLI flag, ``PYCHESTRATE_PRESENCE_DIR``
+# env var, then the pychestrate default ``~/pychestrate``. This
+# bootstrap step deliberately bypasses ``AppVarAccessor`` because
+# the presence_dir holds the settings file -- it cannot itself be
+# read from settings without a chicken-and-egg.
+import sys
+
+from automojo.pychestrate.webservice.pychestrate_presence import (
+    resolve_presence_dir,
+)
+
+_presence_dir = resolve_presence_dir(argv=sys.argv[1:])
+
 app = establish_webapp_persona(
     name="pychestrate",
     logger_name="scms",
-    log_basename="pychestrate"
+    log_basename="pychestrate",
+    presence_dir=_presence_dir,
 )
 
 @app.attach_route("/", methods=["GET"])

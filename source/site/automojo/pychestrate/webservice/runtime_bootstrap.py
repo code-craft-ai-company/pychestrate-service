@@ -264,11 +264,24 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         :returns: Populated :class:`RuntimeBootstrapConfig`.
         :raises: ConfigurationError on missing required fields.
     """
-    database_url = _read_env(name=ENV_DATABASE_URL)
-    if database_url is None:
+    # Database URL resolves through the ``DATASTORAGE`` variable
+    # accessor: env (PYCHESTRATE_DATABASE_URL) → settings.config →
+    # persona-derived default (sqlite at
+    # ${presence_dir}/pychestrate.sqlite). The accessor is
+    # ``required=True`` so the lookup raises KeyError if no value
+    # surfaces -- reclassify into ConfigurationError so the error
+    # message points operators at the canonical env / settings
+    # source.
+    from automojo.pychestrate.webservice.pychestrate_variables import (
+        PychestrateVariables,
+    )
+    try:
+        database_url = PychestrateVariables.PYCHESTRATE_DATABASE_URL
+    except KeyError as key_exc:
         raise ConfigurationError(
-            "{} is required to bootstrap the runtime".format(ENV_DATABASE_URL)
-        )
+            "PYCHESTRATE_DATABASE_URL is required to bootstrap the"
+            " runtime: {}".format(str(key_exc))
+        ) from key_exc
 
     runtime_environment = _read_env(
         name=ENV_RUNTIME_ENVIRONMENT,

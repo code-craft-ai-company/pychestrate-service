@@ -60,7 +60,15 @@ _module_logger = logging.getLogger(__name__)
 # Operator-facing env var. Operators set this in the systemd unit's
 # ``Environment=`` block; ``dev-up`` defaults it to a per-checkout
 # directory under ``.cache/runtime``.
-ENV_RUNTIME_DIR: str = "PYCHESTRATE_RUNTIME_DIR"
+#
+# Resolution now goes through the persona presence directory --
+# whatever was passed to ``establish_webapp_persona(presence_dir=...)``
+# at process boot. The entrypoint resolves that value from CLI flag
+# / ``PYCHESTRATE_PRESENCE_DIR`` env var / pychestrate default.
+# This constant is preserved for backward compatibility of imports
+# only; the manager-construction path reads from
+# ``PersonaVariables.AM_PRESENCE_DIR``.
+ENV_RUNTIME_DIR: str = "PYCHESTRATE_PRESENCE_DIR"
 
 
 # Mode applied to the runtime directory when the bootstrap creates
@@ -79,34 +87,31 @@ _setup_complete_flag: bool = False
 _completion_lock: threading.Lock = threading.Lock()
 
 
-def _read_env_runtime_dir() -> str:
+def _read_persona_presence_dir() -> str:
     """
-        Resolve :data:`ENV_RUNTIME_DIR`. Refuses an unset / empty
-        value -- the deployment must be explicit about where runtime
-        state lives.
+        Resolve the presence directory from the persona singleton.
+
+        The presence directory is fixed at
+        ``establish_webapp_persona`` time (see
+        :mod:`pychestrate_presence` for the resolution chain --
+        CLI flag, ``PYCHESTRATE_PRESENCE_DIR`` env var,
+        pychestrate default ``~/pychestrate``). This function
+        reads through the canonical this_app accessor so any
+        downstream override
+        (``ThisApplicationSingleton().override_variable_value(...)``)
+        is honored.
 
         :returns: Absolute path string.
-        :raises: ConfigurationError when the env var is unset.
+        :raises: SemanticError when the persona singleton has not
+                 been established yet -- the entrypoint must have
+                 called ``establish_webapp_persona`` before the
+                 wizard bootstrap runs.
     """
-    raw = os.environ.get(ENV_RUNTIME_DIR, None)
-    if raw is None or len(raw) == 0:
-        err_msg_lines = [
-            "{} is required to bootstrap the initial-setup wizard.".format(
-                ENV_RUNTIME_DIR
-            )
-        ]
-        err_msg_lines.append(
-            "Set it in the systemd unit (production) or in dev-up"
-            " (development) to the directory that should hold runtime"
-            " state."
-        )
-        err_msg_lines.append(
-            "PRODUCTION DEFAULT: /var/lib/pychestrate"
-        )
-        err_msg = os.linesep.join(err_msg_lines)
-        raise ConfigurationError(err_msg)
+    from automojo.thisapp.personavariables import PersonaVariables
 
-    rtnval = os.path.abspath(raw)
+    raw = PersonaVariables.AM_PRESENCE_DIR
+    expanded = os.path.expanduser(raw)
+    rtnval = os.path.abspath(expanded)
     return rtnval
 
 
@@ -182,7 +187,7 @@ def bootstrap_setup_state(*, session_factory: SessionFactory) -> str:
                   written or pre-existing).
         :raises: ConfigurationError on env / filesystem misconfig.
     """
-    runtime_dir = _read_env_runtime_dir()
+    runtime_dir = _read_persona_presence_dir()
     _ensure_runtime_dir(runtime_dir=runtime_dir)
 
     db_session = session_factory()
@@ -292,7 +297,7 @@ def is_setup_complete(*, session_factory: SessionFactory) -> bool:
             # the manager constructor demands a non-empty value.
             # Use a placeholder; we never call the file-writing
             # methods on this short-lived instance.
-            runtime_dir=_runtime_dir_or_placeholder(),
+            runtime_dir=_read_persona_presence_dir(),
         )
         complete = manager.is_complete()
     finally:
@@ -301,23 +306,6 @@ def is_setup_complete(*, session_factory: SessionFactory) -> bool:
     if complete is True:
         _set_complete_flag(value=True)
     rtnval = complete
-    return rtnval
-
-
-def _runtime_dir_or_placeholder() -> str:
-    """
-        Read :data:`ENV_RUNTIME_DIR` if set; otherwise return a
-        harmless placeholder. Used by the read-only path of
-        :func:`is_setup_complete` -- the manager constructor demands
-        a non-empty runtime_dir, but no file operation is performed
-        on the instance built there.
-
-        :returns: A path string, never empty.
-    """
-    raw = os.environ.get(ENV_RUNTIME_DIR, None)
-    if raw is None or len(raw) == 0:
-        return "/tmp"
-    rtnval = raw
     return rtnval
 
 
