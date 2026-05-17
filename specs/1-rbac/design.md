@@ -171,7 +171,11 @@ class PermissionExtension(ResourceExtension):
 
 Reference implementations (in-tree):
 `CorePermissionExtension` (declares `system:users.read`,
-`system:users.write`, `system:rbac.admin`, etc.),
+`system:users.write`, `system:rbac.admin`,
+`system:ui.admin.view` — the UX-gating key consumed by
+`9-site-shell` to decide whether to render the "Admin" sidebar group;
+not a security boundary, individual admin actions carry their own
+per-action permission keys — etc.),
 `ProjectPermissionExtension` (declares `project:<id>:variables.write`,
 `project:<id>:runs.dispatch`, etc.).
 
@@ -297,6 +301,15 @@ source/site/automojo/pychestrate/webservice/security/rbac/
 - Catalog load failures are visible on
   `E-extension-registry-ui`; in-tree permissions and roles load
   regardless of extension failures.
+- `system:ui.admin.view` is intentionally a UX-gating key, not a
+  security boundary. The site shell consults it only to decide whether
+  to render the "Admin" sidebar group; every admin route is still
+  guarded server-side by the owning feature's per-action permission
+  (e.g., `system:users.write`, `system:secrets.read`). Granting
+  `ui.admin.view` to a non-admin role would expose admin navigation
+  but would NOT grant any admin action — clicking entries would 403
+  per the owning feature's route guard. The built-in `SystemAdminRole`
+  is the only in-tree role that holds it.
 
 ## Observability
 

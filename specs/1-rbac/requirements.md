@@ -113,6 +113,27 @@ creation.
    `allow`; deny bindings SHALL continue to override regardless of
    specificity.
 
+### Requirement 5: UX-Gating Permission `ui.admin.view`
+
+**User Story:** As an operator standing up the unified site shell, I
+want a single permission key that determines whether the shell renders
+its "Admin" sidebar group, so that non-admin users do not see admin
+navigation at all.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN the catalog loads THEN it SHALL include the built-in
+   permission key `system:ui.admin.view` (shorthand `ui.admin.view`
+   in non-RBAC spec prose) declared by `CorePermissionExtension`,
+   scoped to `system:`, AND granted by default ONLY to the built-in
+   `admin` role (`SystemAdminRole`). The `9-site-shell` consumes this
+   key to decide whether to render the "Admin" sidebar group; it is a
+   UX-gating signal, NOT a security boundary — individual admin
+   actions remain protected by their own per-action permissions
+   (`system:users.write`, `system:feature_flags.write`,
+   `system:secrets.read`, etc.) enforced by each owning feature's
+   server-side route guards.
+
 ## Property-Based Test Requirements
 
 ### Property 1: Deny Beats Allow
