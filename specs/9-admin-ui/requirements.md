@@ -3,30 +3,40 @@
 ## Introduction
 
 `9-admin-ui` is the Pychestrate administration surface. It composes
-existing WebComponents and REST endpoints into a navigable application with
-tabs for Users/Groups, Roles/Permissions, Secrets (hosting
-`9-wc-secret-editor`), Feature Flags, System Health, Audit Log, Maintenance
-Mode, and Extensions (hosting `E-extension-registry-ui`). The admin surface
-itself is a composition shell — it owns navigation, breadcrumbs, a global
-command palette, and the RBAC-driven tab visibility logic. Ships in
-**Phase 10** when the extension registry UI and secret editor land. Sits at
-the top of Layer 9, consuming Layer 1 (identity/auth/secrets), Layer 0
-(system health/maintenance), and Layer E (extension registry). The admin UI
-does not own data; every action flows through `8-rest-api-v1`.
+existing WebComponents and REST endpoints into a set of pages — Users/Groups,
+Roles/Permissions, Secrets (hosting `9-wc-secret-editor`), Feature Flags,
+System Health, Audit Log, Maintenance Mode, and Extensions (hosting
+`E-extension-registry-ui`) — mounted as a **section within the unified
+site shell** defined by `9-site-shell`. The admin surface is NOT a
+standalone application: it does not own login, header chrome, or
+top-level navigation. It contributes a sidebar group ("Admin") and a
+family of routes under `/admin/*` (NOT `/config/*`), each declaring
+the permissions the site shell uses to gate sidebar visibility. The
+admin surface owns its in-section affordances — per-page command-palette
+contributions, audit-log deep-link toasts, tab-RBAC enforcement —
+while every cross-cutting concern (login, sidebar, header, empty
+state) is delegated to `9-site-shell`. Ships in **Phase 10** when the
+extension registry UI, secret editor, and unified site shell land.
+Sits at the top of Layer 9, consuming Layer 1 (identity/auth/secrets),
+Layer 0 (system health/maintenance), and Layer E (extension registry).
+The admin UI does not own data; every action flows through
+`8-rest-api-v1`.
 
 ## Requirements
 
 ### Requirement 1: RBAC-Driven Navigation and Tab Visibility
 
 **User Story:** As an auditor without admin rights, I should see only the
-tabs I have permission to view, so that I do not see forbidden controls.
+admin tabs I have permission to view (and the "Admin" sidebar group
+should disappear entirely if I hold none of them), so that I do not see
+forbidden controls.
 
 **Acceptance Criteria (EARS):**
 
-1. WHEN the admin UI mounts THEN it SHALL call `GET /api/v1/me/permissions` AND compute the visible tab set by intersecting declared tab requirements against granted permissions.
-2. IF the caller lacks every permission in the computed set THEN the UI SHALL render a "no admin access" empty state AND SHALL NOT expose any tab.
-3. WHEN the caller lacks a specific tab's permission THEN the tab SHALL be hidden from navigation AND direct-URL access SHALL render a "forbidden" state.
-4. WHERE `maintenance_mode.toggle` is held THEN the global header SHALL expose a maintenance-mode toggle affordance guarded by a typed-confirm dialog.
+1. WHEN the admin section mounts under the unified site shell THEN it SHALL declare each admin page to the shell's sidebar registry (see `9-site-shell`) with the page's `required_permissions`; the shell SHALL compute visibility by intersecting those declarations against `GET /api/v1/me/permissions`. The admin surface SHALL NOT fetch `/me/permissions` itself for the purpose of sidebar gating — the shell is authoritative.
+2. IF the caller lacks `ui.admin.view` (defined in `1-rbac`) THEN the shell SHALL NOT render the "Admin" sidebar group at all, AND any direct navigation to `/admin/*` SHALL render the shell's standard 403 forbidden state.
+3. WHEN the caller holds `ui.admin.view` but lacks a specific admin page's permission THEN the page's sidebar entry SHALL be hidden from the "Admin" group AND direct-URL access to that page SHALL render the shell's standard forbidden state — server-side route guards (existing per-page RBAC enforcement) remain the authoritative security layer; sidebar visibility is UX only.
+4. WHERE `maintenance_mode.toggle` is held THEN the Maintenance Mode page SHALL expose a maintenance-mode toggle affordance guarded by a typed-confirm dialog. The site shell's global header is NOT used as the toggle surface — the toggle lives inside the page so it inherits page-level audit + reason capture.
 
 ### Requirement 2: Extensions Registry Tab Hosts E-extension-registry-ui
 
@@ -43,16 +53,17 @@ extension issues without SSH.
 
 ### Requirement 3: Command Palette and Cross-Tab Deep Linking
 
-**User Story:** As an admin power user, I want a keyboard-invoked palette
-that lets me jump to any admin target (user, secret, flag, extension, role),
-so that I can navigate without mousing.
+**User Story:** As an admin power user, I want admin-specific entries
+(users, secrets, flags, extensions, roles) to appear in the unified
+site shell's command palette, so that I can jump to any admin target
+without mousing.
 
 **Acceptance Criteria (EARS):**
 
-1. WHEN the user presses `Ctrl/Cmd + K` THEN the UI SHALL open a command palette dialog with `role="dialog"` AND focus the search input.
-2. WHEN the user types at least 2 characters THEN the UI SHALL query `GET /api/v1/admin/search?q=<q>` AND render grouped results (users, secrets, flags, extensions, roles).
-3. WHEN the user selects a result THEN the UI SHALL navigate to the tab and entity context AND emit `pyc-admin-ui-navigated` with `{kind, id}`.
-4. IF the search endpoint is unavailable THEN the palette SHALL fall back to client-side filtering over a limited cached index AND SHALL surface a non-blocking banner.
+1. WHEN the admin section loads under the site shell THEN it SHALL contribute an admin search provider to the shell's command palette (see `9-site-shell`); the shell — not the admin surface — owns the `Ctrl/Cmd + K` keybinding, the dialog chrome, and focus management.
+2. WHEN the user types at least 2 characters AND the palette has admin scope active THEN the contributed provider SHALL query `GET /api/v1/admin/search?q=<q>` AND return grouped results (users, secrets, flags, extensions, roles) to the shell for rendering.
+3. WHEN the user selects an admin result THEN the shell SHALL navigate to the corresponding `/admin/<page>/<id>` route AND the admin surface SHALL emit `pyc-admin-ui-navigated` with `{kind, id}`.
+4. IF the admin search endpoint is unavailable THEN the contributed provider SHALL fall back to a limited client-side index AND SHALL surface a non-blocking banner inside the palette result group.
 
 ### Requirement 4: Audit Log Deep Links on Every Mutation
 
@@ -69,15 +80,15 @@ entity, so that changes are traceable.
 
 ### Requirement 5: Accessibility
 
-**User Story:** As a keyboard user, I want to navigate the admin UI fully
-with the keyboard, so that I do not need a mouse.
+**User Story:** As a keyboard user, I want to navigate the admin pages
+fully with the keyboard, so that I do not need a mouse.
 
 **Acceptance Criteria (EARS):**
 
-1. WHEN the UI mounts THEN the tab bar SHALL expose `role="tablist"` AND each tab SHALL expose `role="tab"` with proper `aria-selected`.
-2. WHEN the user presses `Tab` THEN focus SHALL traverse the header, tablist, then the active tabpanel in a predictable order.
-3. WHEN the palette opens THEN focus SHALL be trapped inside the dialog until dismissed.
-4. IF a mutation completes THEN the toast SHALL land in a visually-hidden live region for screen readers.
+1. WHEN an admin page mounts inside the site shell THEN its in-page tab strip (where applicable) SHALL expose `role="tablist"` AND each tab SHALL expose `role="tab"` with proper `aria-selected`. The site shell owns sidebar a11y (arrow-key navigation, type-to-jump) and is not redeclared here.
+2. WHEN the user presses `Tab` inside an admin page THEN focus SHALL traverse the page's tablist (if any), then the active tabpanel, in a predictable order.
+3. WHEN the shell's palette opens with admin results focused THEN focus SHALL be trapped inside the dialog until dismissed (delegated to the shell).
+4. IF a mutation completes THEN the toast SHALL land in a visually-hidden live region for screen readers; the live region MAY be the shell's shared one or a page-local one, but it SHALL be `aria-live="polite"`.
 
 ## Property-Based Test Requirements
 
@@ -117,6 +128,6 @@ with the keyboard, so that I do not need a mouse.
 
 ## Dependencies
 
-- **Depends on:** `9-ui-design-tokens`, `1-authentication`, `1-user-management`, `1-rbac`, `1-secrets-vault`, `1-audit-log`, `1-feature-flags`, `0-maintenance-mode`, `0-system-health`, `E-extension-host`, `E-extension-registry-ui`, `9-wc-secret-editor`, `8-rest-api-v1`.
+- **Depends on:** `9-site-shell` (owns login, sidebar, header chrome, palette, empty-state), `9-ui-design-tokens`, `1-authentication`, `1-user-management`, `1-rbac` (contributes `ui.admin.view`), `1-secrets-vault`, `1-audit-log`, `1-feature-flags`, `0-maintenance-mode`, `0-system-health`, `E-extension-host`, `E-extension-registry-ui`, `9-wc-secret-editor`, `8-rest-api-v1`.
 - **Depended on by:** operators and administrators.
 - **Extension points exposed:** None directly; hosts `E-extension-registry-ui` which exposes extension-registry actions.

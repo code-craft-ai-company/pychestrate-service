@@ -79,6 +79,27 @@ REST routes:
   current partial session.
 - `POST /api/v1/auth/mfa/verify` — submit a method-specific response.
 
+HTML browser surface (Requirement 5 — unified login):
+
+- `GET /login` — render the canonical HTML login page; honors `next`
+  query parameter (validated per NFR-2 before being echoed into the
+  form action / hidden field). Chromeless (rendered outside the site
+  shell — see `9-site-shell`).
+- `POST /login` — thin HTML adapter that translates the form payload
+  into the appropriate provider call (today: delegate to
+  `local_flow.verify_local_credentials`; for OIDC/SAML the form posts a
+  provider-selection that 302s into `/auth/oidc/...` or
+  `/auth/saml/...`). On success, issue the session cookie and 303 to
+  the validated `next` target (or `/`). On failure, re-render `/login`
+  with an inline error and HTTP 400.
+- `GET /logout` *(browser convenience)* — invokes the same logic as
+  `POST /api/v1/auth/logout` and 303s the browser to `/login`.
+
+The legacy `/config/login` and `/config/logout` paths are explicitly
+retired by this design; the setup-gate middleware in `0-web-app-host`
+continues to own `/setup/*` and takes precedence over `/login` while
+the first-run wizard is incomplete.
+
 ### Internal API
 
 Module `automojo.pychestrate.webservice.security.auth.session_service`:
@@ -296,6 +317,10 @@ source/site/automojo/pychestrate/webservice/security/auth/
         v1/
             auth_controller.py
             mfa_controller.py
+    htmlui/
+        login_view.py                 # GET/POST /login (Requirement 5)
+        logout_view.py                # GET /logout convenience
+        next_validator.py             # same-origin `next` parameter guard
     models.py                         # AuthSession, AuthLocalCredentials, ...
     events.py
     exceptions.py
@@ -373,6 +398,11 @@ Token payloads are only ever passed in sealed bytes or in-memory
   wrapped by the KEK that `1-secrets-vault` owns.
 - `system:auth.admin` permission gates provider configuration;
   session introspection requires `system:auth.read`.
+- The HTML login surface's `next` query parameter is run through
+  `htmlui.next_validator.is_safe_same_origin_target` before any
+  redirect; any absolute, protocol-relative, credentialed, or
+  cross-host value is rejected and falls back to `/`. This is the only
+  user-controlled input that influences a post-login redirect target.
 
 ## Observability
 

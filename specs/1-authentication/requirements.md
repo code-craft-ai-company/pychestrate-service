@@ -119,6 +119,49 @@ standards evolve on our schedule.
    `pychestrate_auth_mfa_failures_total{method}`, and SHALL NOT open a
    session.
 
+### Requirement 5: Unified HTML Login Surface
+
+**User Story:** As any human visitor — administrator, project member, or
+auditor alike — I want one well-known login page that every protected
+route redirects me to, so that I never have to learn separate login
+URLs for admin vs non-admin areas of the product.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN an unauthenticated browser issues `GET /login` THEN the system
+   SHALL serve the HTML login page at the canonical path `/login` (NOT
+   `/config/login` and NOT any admin-scoped path) with
+   `Content-Type: text/html; charset=utf-8` and HTTP 200.
+2. WHEN the login form is submitted THEN the browser SHALL `POST` to
+   `/login`, which the system SHALL accept as a thin HTML adapter
+   delegating to the existing `POST /api/v1/auth/local/login` (and any
+   future provider-specific form posts) declared in this feature's
+   Public API, and SHALL set the `pychestrate_session` cookie on
+   success per Requirement 3.
+3. WHEN an unauthenticated request targets any protected HTML page
+   (any HTML route that is not itself chromeless — see `9-site-shell`)
+   THEN the system SHALL respond with HTTP 303 to
+   `/login?next=<percent-encoded-original-path-and-query>`, and SHALL
+   NOT carry the original request's body or non-cookie headers into
+   the redirect target.
+4. WHEN a login completes successfully AND the request carries a
+   `next` query parameter THEN the system SHALL redirect the browser
+   to that target if and only if it passes the same-origin safety
+   check defined in NFR-2; otherwise the system SHALL redirect to
+   `/`.
+5. WHILE the first-run setup wizard owned by `0-web-app-host` /
+   `1-user-management` is incomplete (the setup gate middleware is
+   diverting every browser navigation to `/setup/*`) the system SHALL
+   treat `/login` as gated identically to any other non-setup route:
+   any `GET /login` SHALL 303 to `/setup/unlock`. WHEN the wizard
+   completes THEN `/login` SHALL become the unauthenticated entry
+   point on the very next request without a process restart.
+6. WHEN a user signs out from a browser session via the logout
+   endpoint THEN the system SHALL clear the `pychestrate_session`
+   cookie per Requirement 3 AND SHALL respond with HTTP 303 to
+   `/login` (no `next` parameter), so the next navigation lands on
+   the login page rather than a 401 fragment.
+
 ## Property-Based Test Requirements
 
 ### Property 1: Session Cookie Scope Invariant
@@ -174,7 +217,17 @@ standards evolve on our schedule.
   SHALL always carry `HttpOnly`, `Secure`, and `SameSite=Lax` (or
   `Strict` when `session.strict_samesite` is set). CSRF protection
   SHALL apply to every non-idempotent request on session-cookie-backed
-  endpoints.
+  endpoints. The post-login `next` parameter (Requirement 5) SHALL be
+  validated as same-origin before redirect: the system SHALL accept
+  only values that, when resolved against the request's own origin,
+  produce a URL whose scheme + host + port match the request's own
+  scheme + host + port and whose path begins with `/`. Any value that
+  is absolute (contains a scheme or authority), is protocol-relative
+  (`//host/...`), contains an embedded credential, or resolves to a
+  different host SHALL be rejected and the post-login redirect SHALL
+  fall back to `/`. Rejections SHALL emit a structured
+  `auth.login.next_rejected` log event with the offending value
+  hashed for forensics.
 - **NFR-3 (Observability):** The feature SHALL emit
   `pychestrate_auth_login_duration_seconds{provider,outcome}`
   (histogram), `pychestrate_auth_login_total{provider,outcome}`,

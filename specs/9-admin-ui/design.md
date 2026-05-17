@@ -2,16 +2,22 @@
 
 ## Architecture
 
-`9-admin-ui` is a composition shell implemented as a parent Custom Element
-`<pyc-admin-ui>` that hosts a deterministic set of tab panels. Each tab is
-itself a Custom Element that consumes existing Layer-1/Layer-0 REST surfaces
-and, where relevant, embeds a single-purpose `9-wc-*` element (e.g.,
-`9-wc-secret-editor`). Routing is handled via a lightweight hash router
-owned by the shell; browser history is respected. Permission state is
-fetched once at mount and cached per-session; tab visibility and in-tab
-affordances are a pure function of that state. The Extensions tab embeds
-`E-extension-registry-ui`'s Custom Element and delegates to it. Ships in
-**Phase 10** when secrets management, extension-registry UI, and
+`9-admin-ui` is a family of pages mounted under `/admin/*` (NOT
+`/config/*`) inside the unified site shell defined by `9-site-shell`.
+Each admin page is a Custom Element that consumes existing
+Layer-1/Layer-0 REST surfaces and, where relevant, embeds a
+single-purpose `9-wc-*` element (e.g., `9-wc-secret-editor`). Routing,
+header chrome, sidebar gating, command-palette dispatch, login
+redirection, and the no-access empty state are owned by `9-site-shell`;
+this feature only contributes (a) the per-page Custom Elements, (b) a
+single sidebar group ("Admin") declaration registered with the shell's
+sidebar registry, and (c) an admin search provider plugged into the
+shell's command palette. Permission state is fetched and cached by the
+shell on every full navigation; pages read it via the shell's
+`PermissionSet` accessor — they do NOT fetch `/me/permissions`
+themselves. The Extensions page embeds `E-extension-registry-ui`'s
+Custom Element and delegates to it. Ships in **Phase 10** when the
+unified site shell, secrets management, extension-registry UI, and
 maintenance-mode toggle all land.
 
 ## Data Model
@@ -152,30 +158,64 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/co
 - `styles.css` — multi-line CSS referencing `--pyc-admin-ui-*` tokens.
 - `tests/`.
 
-Bundle emitted at `/ui/components/pyc-admin-ui/pyc-admin-ui.js`. The admin page server-side route is `GET /admin` which serves the document shell importing the bundle.
+Bundle emitted at `/ui/components/pyc-admin-ui/pyc-admin-ui.js`. The
+admin pages are mounted under `/admin/*` (NOT `/config/*`) and the
+server-side route family (`/admin`, `/admin/users`, `/admin/roles`,
+`/admin/secrets`, `/admin/feature-flags`, `/admin/system-health`,
+`/admin/audit`, `/admin/maintenance`, `/admin/extensions`) all serve
+the unified site shell document from `9-site-shell` with the
+appropriate admin page Custom Element wired in. The legacy `/config/*`
+routes are explicitly retired.
+
+### Sidebar Registration
+
+At bundle load, the admin surface registers a single sidebar group with
+the site shell's registry (see `9-site-shell` for the registry shape):
+
+```typescript
+shell.sidebar.registerGroup({
+    groupId: "admin",
+    label: "Admin",
+    icon: "shield",
+    requiredPermissions: ["ui.admin.view"],
+    entries: [
+        {label: "Users",         route: "/admin/users",         requiredPermissions: ["users.read"]},
+        {label: "Roles",         route: "/admin/roles",         requiredPermissions: ["rbac.read"]},
+        {label: "Secrets",       route: "/admin/secrets",       requiredPermissions: ["secrets.read"]},
+        {label: "Feature Flags", route: "/admin/feature-flags", requiredPermissions: ["feature_flags.read"]},
+        {label: "System Health", route: "/admin/system-health", requiredPermissions: ["system_health.read"]},
+        {label: "Audit Log",     route: "/admin/audit",         requiredPermissions: ["audit_log.view"]},
+        {label: "Maintenance",   route: "/admin/maintenance",   requiredPermissions: ["maintenance_mode.view"]},
+        {label: "Extensions",    route: "/admin/extensions",    requiredPermissions: ["extensions.read"]}
+    ]
+});
+```
+
+The shell intersects each entry's `requiredPermissions` against the
+live permission payload to decide what to render; the group itself is
+hidden entirely if the caller lacks `ui.admin.view`.
 
 ## Key Flows
 
 ### Flow 1 — Boot
 
-1. `pyc-admin-ui` mounts, loads design tokens, fetches `GET /me/permissions`.
-2. `TabRegistry.visibleTabs(perms)` determines navigation.
-3. Router parses `location.hash`; activates default or hash-specified tab.
-4. Element emits `pyc-admin-ui-ready`.
+1. The site shell handles login and mounts a chrome with header + sidebar; it fetches `GET /api/v1/me/permissions` once per navigation and computes the visible sidebar set, including the "Admin" group declared by this surface.
+2. On a navigation to any `/admin/*` route, the shell instantiates the corresponding admin page Custom Element inside its main content area and passes the shared `PermissionSet`.
+3. The page reads its scoped permissions from the shell, renders its in-page tablist (when applicable), and emits `pyc-admin-ui-ready`.
 
 ### Flow 2 — Edit a secret
 
-1. User opens Secrets tab; list renders; user clicks a secret.
-2. Router pushes `#secrets/<id>`; tab mounts `<pyc-secret-editor secret-id="<id>">`.
+1. User opens Secrets via the sidebar; the shell navigates to `/admin/secrets`; the page renders the list.
+2. User clicks a secret; the shell navigates to `/admin/secrets/<id>`; the page mounts `<pyc-secret-editor secret-id="<id>">`.
 3. User edits metadata and saves; `pyc-secret-editor-saved` fires.
-4. Shell translates the event into a toast with audit deep-link; emits `pyc-admin-ui-mutation`.
+4. The page translates the event into a toast with audit deep-link; emits `pyc-admin-ui-mutation`.
 
 ### Flow 3 — Palette navigation
 
-1. User presses `Ctrl/Cmd+K`; palette dialog opens; focus traps on the input.
-2. Each keystroke (after 150 ms debounce) calls `/api/v1/admin/search?q=...`.
+1. User presses `Ctrl/Cmd+K`; the site shell opens the palette dialog and focus-traps on the input.
+2. Each keystroke (after 150 ms debounce) fans out to registered providers; this surface's admin provider calls `/api/v1/admin/search?q=...`.
 3. Grouped results render; user navigates via arrows; `Enter` activates.
-4. Shell navigates to `(tab, entityId)` and closes palette.
+4. The shell navigates to `/admin/<page>/<entityId>` and closes the palette.
 
 ### Flow 4 — Extensions rescan
 
