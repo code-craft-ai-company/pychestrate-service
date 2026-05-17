@@ -89,6 +89,14 @@ from automojo.pychestrate.webservice.extensions import bootstrap as _phase1_boot
 from automojo.pychestrate.webservice.extensions import phase2_bootstrap as _phase2_bootstrap  # noqa: E402, F401
 from automojo.pychestrate.webservice.extensions import phase3_bootstrap as _phase3_bootstrap  # noqa: E402, F401
 
+# Setup-wizard model. Lives outside the phase-bootstrap import
+# chain because it is operator infrastructure (first-run flow)
+# rather than a business-feature module. Imported explicitly here
+# so ``system_initial_setup`` is on
+# :data:`PychestratePhase1Base.metadata` when alembic autogenerate
+# walks the diff and when ``upgrade head`` reads target_metadata.
+from automojo.pychestrate.webservice.identity.setup import models as _setup_models  # noqa: E402, F401
+
 from automojo.pychestrate.webservice.persistence.schema import (  # noqa: E402
     PychestratePhase1Base,
 )
