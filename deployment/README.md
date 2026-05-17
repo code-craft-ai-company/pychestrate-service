@@ -142,18 +142,21 @@ unlock-then-create-admin flow.
 
 #### 1. Read the initial-admin token
 
-The service writes a high-entropy token to a 0600 file under
-`PYCHESTRATE_RUNTIME_DIR` (`/var/lib/pychestrate/initial-admin-token`
-in production) on first boot. The systemd unit logs the path on
-startup:
+The service writes a high-entropy token to a 0600 file in the
+pychestrate **presence directory** — `~/pychestrate/` under the
+service user's home, which is the
+`automojo.thisapp.persona`-default for `name="pychestrate"`. The
+systemd unit logs the path on startup:
 
 ```bash
-ssh myron@tc-app-server.local sudo journalctl -u pychestrate -n 30 --no-pager | grep "Initial-admin token path"
-# Initial-admin token path: /var/lib/pychestrate/initial-admin-token
+ssh myron@tc-app-server.local 'grep "Initial-admin token path" ~/.pychestrate/server.log | tail -1'
+# Initial-admin token path: /home/myron/pychestrate/initial-admin-token
 
-ssh myron@tc-app-server.local sudo cat /var/lib/pychestrate/initial-admin-token
+ssh myron@tc-app-server.local cat ~/pychestrate/initial-admin-token
 # fwoxEWV8UmSJ5qPXqgbdu89v14bzSVU-71_EWPUTCMY
 ```
+
+No `sudo` needed — the file is owned by the service user.
 
 #### 2. Walk through the wizard
 
@@ -173,8 +176,10 @@ While setup is pending, every request 302-redirects to
 # Should 404 — wizard is permanently disabled.
 curl -I http://tc-app-server.local/setup/unlock
 
-# Should be gone — the file is deleted on completion.
-ssh myron@tc-app-server.local ls -l /var/lib/pychestrate/
+# Should show only pychestrate.sqlite — the token file is
+# deleted on completion. ~/pychestrate/ is mode 0700 so other
+# accounts on the box cannot enumerate it.
+ssh myron@tc-app-server.local ls -l ~/pychestrate/
 ```
 
 #### Recovery: lost the token before completing setup
@@ -186,7 +191,7 @@ new file:
 
 ```bash
 ssh myron@tc-app-server.local sudo systemctl restart pychestrate
-ssh myron@tc-app-server.local sudo cat /var/lib/pychestrate/initial-admin-token
+ssh myron@tc-app-server.local cat ~/pychestrate/initial-admin-token
 ```
 
 The wizard is one-way **after completion** — there is no operator

@@ -38,12 +38,34 @@ Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
 Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 
-# Initial-setup wizard runtime state. The service writes the
-# initial-admin token to ``${PYCHESTRATE_RUNTIME_DIR}/initial-
-# admin-token`` (mode 0600) on first boot. The deploy script
-# pre-creates this directory mode 0700 owned by the service
-# user; ReadWritePaths below grants the service write access.
-Environment="PYCHESTRATE_RUNTIME_DIR=/var/lib/pychestrate"
+# Pychestrate "presence directory" -- the canonical home for
+# the application's per-host state. Holds:
+#
+#   * settings.config          -- this_app variable overrides
+#   * pychestrate.sqlite       -- alpha-tier persistent DB
+#   * initial-admin-token      -- mode 0600, written on first
+#                                  boot by the setup wizard
+#   * logs/                    -- future home for application
+#                                  logs (the alpha still tees
+#                                  gunicorn stdout to
+#                                  ~/.pychestrate/server.log)
+#
+# Resolved at entrypoint time by ``pychestrate_presence.
+# resolve_presence_dir``: CLI flag ``--presence-dir`` first, then
+# ``PYCHESTRATE_PRESENCE_DIR`` env var, then the pychestrate
+# default ``~/pychestrate``. With no override the default lands
+# under the service user's $HOME, which:
+#
+#   * survives ``development/setup-environment reset`` (which
+#     wipes the checkout's .cache/)
+#   * needs no sudo to create (lives in $HOME)
+#
+# Uncomment + set PYCHESTRATE_PRESENCE_DIR below to relocate to a
+# system-wide path like /var/lib/pychestrate (requires that the
+# operator pre-create the directory mode 0700 owned by the
+# service user).
+#
+#Environment="PYCHESTRATE_PRESENCE_DIR=/var/lib/pychestrate"
 
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 
@@ -72,7 +94,7 @@ TimeoutStopSec=30
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate /var/lib/pychestrate
+ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate /home/@USER@/pychestrate
 
 [Install]
 WantedBy=multi-user.target

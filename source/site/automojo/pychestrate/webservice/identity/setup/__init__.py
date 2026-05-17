@@ -9,8 +9,11 @@ The setup package implements the one-time bootstrap flow that runs
 the very first time the webservice boots into an empty database.
 
 * On first boot, :mod:`setup_service` writes a high-entropy initial
-  admin token to ``${PYCHESTRATE_RUNTIME_DIR}/initial-admin-token``
-  and records its sha256 in :class:`InitialSetup`.
+  admin token to ``<presence-dir>/initial-admin-token`` and records
+  its sha256 in :class:`InitialSetup`. The presence-dir is the
+  persona presence directory resolved by
+  :mod:`pychestrate_presence` (CLI flag / env var / pychestrate
+  default ``~/pychestrate``).
 * The :mod:`middleware_setup_gate` intercepts every non-setup
   request and redirects to ``/setup/unlock`` while
   ``InitialSetup.completed_at`` is NULL.

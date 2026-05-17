@@ -62,20 +62,27 @@ DEV_DB_DIR="${REPO_ROOT}/.cache/dev-db"
 mkdir -p "${DEV_DB_DIR}"
 DEV_DB_PATH="${DEV_DB_DIR}/pychestrate.sqlite"
 
-# Per-checkout runtime dir for the initial-setup wizard. The
-# service writes its admin token to ${PYCHESTRATE_RUNTIME_DIR}/
-# initial-admin-token (mode 0600). We default it under .cache so
-# ``rm -rf .cache`` resets the wizard cleanly.
-DEV_RUNTIME_DIR="${REPO_ROOT}/.cache/runtime"
-mkdir -p "${DEV_RUNTIME_DIR}"
-chmod 0700 "${DEV_RUNTIME_DIR}"
+# Per-checkout presence dir for dev runs. Holds the setup
+# wizard's initial-admin-token, the SQLite DB, and (eventually)
+# settings.config + logs/. Under .cache/ so ``rm -rf .cache``
+# resets dev state cleanly without touching anyone's real
+# ~/pychestrate/ if they happen to be running a deploy on the
+# same machine.
+DEV_PRESENCE_DIR="${REPO_ROOT}/.cache/presence"
+mkdir -p "${DEV_PRESENCE_DIR}"
+chmod 0700 "${DEV_PRESENCE_DIR}"
 
 # ----------------------------------------------------------------------------
 # Compose the runtime env from documented PYCHESTRATE_* names
 # ----------------------------------------------------------------------------
 
 export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-development}"
-export PYCHESTRATE_DATABASE_URL="${PYCHESTRATE_DATABASE_URL:-sqlite:///${DEV_DB_PATH}}"
+# PYCHESTRATE_DATABASE_URL is now optional -- the persona-derived
+# default (DATASTORAGE section in pychestrate_variables.py)
+# computes ``sqlite:///<presence-dir>/pychestrate.sqlite``, so the
+# DB ends up alongside the wizard token in ``.cache/presence/``.
+# Override here if you want a different DB URL (e.g. Postgres).
+#export PYCHESTRATE_DATABASE_URL="sqlite:///${DEV_PRESENCE_DIR}/pychestrate.sqlite"
 export PYCHESTRATE_AUTO_CREATE_SCHEMA="${PYCHESTRATE_AUTO_CREATE_SCHEMA:-true}"
 
 export PYCHESTRATE_KEK_SOURCE="${PYCHESTRATE_KEK_SOURCE:-file}"
@@ -91,7 +98,7 @@ export PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH="${PYCHESTRATE_UI_COOKIE_SECRET_FI
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
 
-export PYCHESTRATE_RUNTIME_DIR="${PYCHESTRATE_RUNTIME_DIR:-${DEV_RUNTIME_DIR}}"
+export PYCHESTRATE_PRESENCE_DIR="${PYCHESTRATE_PRESENCE_DIR:-${DEV_PRESENCE_DIR}}"
 
 # ----------------------------------------------------------------------------
 # PYTHONPATH (mirrors development/run-website.sh)
@@ -100,12 +107,12 @@ export PYCHESTRATE_RUNTIME_DIR="${PYCHESTRATE_RUNTIME_DIR:-${DEV_RUNTIME_DIR}}"
 export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:../automojo-webworks/source/packages:../automojo-this-app/source/packages:../automojo-testbase/source/packages:../automojo-configuration/source/packages:../automojo-credentials/source/packages:../automojo-dataprofiles/source/packages:../automojo-errors/source/packages:../pychestrate-core/source/packages:${PYTHONPATH:-}"
 
 echo "dev-up: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
-echo "dev-up: db=${PYCHESTRATE_DATABASE_URL}"
+echo "dev-up: db=${PYCHESTRATE_DATABASE_URL:-<persona default>}"
 echo "dev-up: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
 echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
 echo "dev-up: ui-cookie-secret=${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH}"
-echo "dev-up: runtime-dir=${PYCHESTRATE_RUNTIME_DIR}"
+echo "dev-up: presence-dir=${PYCHESTRATE_PRESENCE_DIR}"
 echo
 
 if [[ -f "${REPO_ROOT}/.venv/bin/python" ]]; then
