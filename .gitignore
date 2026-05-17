@@ -146,3 +146,4 @@ dmypy.json
 .claude/scheduled_tasks.lock
 .output
 .output_*/
+.DS_Store
