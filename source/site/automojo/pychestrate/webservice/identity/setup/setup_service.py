@@ -445,6 +445,26 @@ def create_initial_admin(
                 str(op_exc).split(os.linesep)[0],
             )
 
+        # Modern RBAC half: seed the ``system-admin`` role row
+        # and a ``RbacRoleBinding`` linking this admin to it at
+        # SYSTEM scope. The legacy ``user.roles="admin"`` CSV
+        # above is for the legacy ``check_permission`` path; the
+        # modern ``rbac_evaluator.check_permission`` joins
+        # ``rbac_role_bindings`` -> ``rbac_roles`` and looks the
+        # grants up in the in-memory catalog
+        # (:class:`SystemAdminRole`). Without this binding, the
+        # site shell's ``/api/v1/me/permissions`` returns an
+        # empty array for the seeded admin and the Admin
+        # sidebar group does not render.
+        from automojo.pychestrate.webservice.security.rbac.seeding import (
+            ensure_system_admin_binding_for_user,
+        )
+        ensure_system_admin_binding_for_user(
+            db_session=db_session,
+            user_id=str(admin_user_id),
+            actor_user_id=None,
+        )
+
         db_session.commit()
         _module_logger.info(
             "pychestrate.setup.initial_admin_created user_id=%s login=%s",

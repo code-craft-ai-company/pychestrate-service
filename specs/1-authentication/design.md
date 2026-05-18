@@ -438,3 +438,18 @@ Trace spans: `oidc.callback`, `oidc.token_exchange`, `oidc.refresh`,
 - Device binding: do we include a stable device id in the session or
   rely solely on IP/UA fingerprint? Defer until `1-feature-flags`
   ships.
+- **Unified session primitive** (PR2 of the unified-login refactor,
+  2026-05-17): the service currently runs two cookie shapes in
+  parallel -- `pychestrate_session` (DB-backed, set by
+  `/api/v1/auth/local/login`) and `pychestrate_ui_session` (signed
+  cookie, set by the consumer-UI `/login` POST). PR2 made the REST
+  session middleware accept BOTH shapes on `/api/v1/me/*` so the
+  site shell's `/me/permissions` call works from a UI-only session
+  (Option B in the PR design). The longer-term cleanup (Option A)
+  is to drop the dual cookie surface entirely -- have the UI login
+  store the same DB-backed session id the REST flow uses, then
+  delete `pychestrate_ui_session` (or relegate it to a client-side
+  hint with no auth value). Revisit before beta; gated on auditing
+  every consumer of the UI cookie payload (CSRF token, flash
+  messages, etc.) and moving anything that needs to survive into
+  the session row.
