@@ -1,0 +1,78 @@
+/**
+ * Build script for the Pychestrate frontend TypeScript bundles.
+ *
+ * Each entry in ``ENTRY_POINTS`` is bundled into a single ES module
+ * under ``DIST_DIR``. The dist directory is committed to git so the
+ * Python deploy does not require Node.
+ *
+ * Run with: ``npm run build``
+ */
+
+import * as esbuild from "esbuild"
+import * as fs from "node:fs"
+import * as path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
+
+const DIST_DIR = path.resolve(
+    HERE,
+    "..",
+    "source",
+    "site",
+    "automojo",
+    "pychestrate",
+    "webservice",
+    "webinterface",
+    "static",
+    "javascript",
+    "dist",
+)
+
+const ENTRY_POINTS = [
+    {
+        entry: path.join(HERE, "src", "pyc-site-shell", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-site-shell.js"),
+    },
+]
+
+async function build_all() {
+    if (fs.existsSync(DIST_DIR) === false) {
+        fs.mkdirSync(DIST_DIR, { recursive: true })
+    }
+
+    for (const ep of ENTRY_POINTS) {
+        const result = await esbuild.build({
+            entryPoints: [ep.entry],
+            bundle: true,
+            format: "esm",
+            target: "es2022",
+            outfile: ep.outfile,
+            sourcemap: true,
+            logLevel: "info",
+            minify: false,
+            platform: "browser",
+        })
+        if (result.errors.length > 0) {
+            for (const err of result.errors) {
+                console.error(err)
+            }
+            process.exit(1)
+        }
+    }
+
+    // Copy the stylesheet alongside the bundle so the shell document
+    // can reference a stable URL.
+    const css_source = path.join(HERE, "src", "pyc-site-shell", "styles.css")
+    const css_target = path.join(DIST_DIR, "pyc-site-shell.css")
+    if (fs.existsSync(css_source) === true) {
+        fs.copyFileSync(css_source, css_target)
+    }
+
+    console.log("Build complete. Output dir: " + DIST_DIR)
+}
+
+build_all().catch((reason) => {
+    console.error(reason)
+    process.exit(1)
+})

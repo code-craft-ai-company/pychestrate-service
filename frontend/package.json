@@ -1,0 +1,17 @@
+{
+    "name": "pychestrate-frontend",
+    "version": "0.1.0",
+    "private": true,
+    "description": "TypeScript build chain for Pychestrate web components. Outputs ES modules under source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/. The built artifacts ARE committed to git so the Python deploy never needs Node.",
+    "type": "module",
+    "scripts": {
+        "build": "node build.mjs",
+        "typecheck": "tsc --noEmit",
+        "test": "node --test tests/*.test.mjs",
+        "clean": "node -e \"import('node:fs').then(fs => fs.rmSync('../source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist', { recursive: true, force: true }))\""
+    },
+    "devDependencies": {
+        "esbuild": "0.24.0",
+        "typescript": "5.6.3"
+    }
+}

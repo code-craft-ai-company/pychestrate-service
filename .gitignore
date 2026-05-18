@@ -18,6 +18,11 @@ build/
 source/site/automojo/pychestrate/webservice/orchestration/build/**/__pycache__/
 develop-eggs/
 dist/
+# Source-tree exception: the prebuilt frontend bundles emitted by
+# the frontend/ TypeScript toolchain are checked in so the Python
+# deploy does not need Node. See frontend/README.md for policy.
+!source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/
+!source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/**
 downloads/
 eggs/
 .eggs/

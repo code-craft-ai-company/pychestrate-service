@@ -115,6 +115,15 @@ from automojo.pychestrate.webservice.webinterface.foundation.templating import (
     discover_blueprint_template_paths,
     set_default_environment,
 )
+from automojo.pychestrate.webservice.webinterface.site_shell.bundle_registry import (
+    install_default_bundles as install_shell_default_bundles,
+)
+from automojo.pychestrate.webservice.webinterface.site_shell.catchall_route import (
+    register_shell_catchall,
+)
+from automojo.pychestrate.webservice.webinterface.site_shell.shell_document import (
+    get_shell_template_search_path,
+)
 from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
@@ -294,40 +303,13 @@ app = establish_webapp_persona(
     presence_dir=_presence_dir,
 )
 
-@app.attach_route("/", methods=["GET"])
-def hello_world(request: Request) -> HTMLResponse:
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Pychestrate SCM</title>
-        <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f5f7fa; color: #333; }
-            header { background-color: #2c3e50; color: white; padding: 1rem 2rem; }
-            .container { padding: 2rem; max-width: 1200px; margin: 0 auto; }
-            .card { background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-            h1 { margin-top: 0; }
-        </style>
-    </head>
-    <body>
-        <header>
-            <h1>⚙️ Pychestrate SCM</h1>
-        </header>
-        <div class="container">
-            <div class="card">
-                <h2>Welcome to Pychestrate</h2>
-                <p>The Software Configuration Management system powered by Automation Mojo WebWorks.</p>
-                <p>This is the initial web interface scaffolding.</p>
-                <hr>
-                <p><em>Status:</em> Online and Orchestrating.</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
+# The legacy hard-coded ``/`` handler was replaced by the site-
+# shell catch-all (see ``register_shell_catchall``). The shell
+# bundle is now responsible for the landing page once a user is
+# authenticated. The catch-all is wired during
+# ``register_service_extensions`` AFTER every other blueprint has
+# registered, so any explicit blueprint route (``/admin/...``,
+# ``/projects/...``, ``/login``, ``/api/...``) takes precedence.
 
 def install_web_ui_templating() -> None:
     """
@@ -359,6 +341,12 @@ def install_web_ui_templating() -> None:
         # Still install an environment so the first failure points
         # at the missing template rather than at "no env configured".
         template_paths = [SITE_DIRECTORIES.DIR_BLUEPRINTS]
+
+    # Site-shell template directory -- carries the shell document
+    # host page (``site_shell/shell_document.html``). Appended so
+    # blueprint templates retain priority on any name collision.
+    shell_template_path = get_shell_template_search_path()
+    template_paths = list(template_paths) + [shell_template_path]
     environment = build_jinja_environment(
         template_search_paths=template_paths,
     )
@@ -422,6 +410,17 @@ def register_service_extensions() -> None:
     register_config_routes(app=app)
     register_resources_routes(app=app)
     register_projects_web_ui_routes(app=app)
+
+    # Site-shell catch-all is registered LAST so every explicit
+    # blueprint route wins the dispatcher match. The shell only
+    # claims paths no other blueprint owns -- ``/`` and any future
+    # routes that have not yet been ported to shell-resident
+    # bundles. Per spec ``9-site-shell`` Requirement 1.1 / 3.2,
+    # chromeless prefixes (``/login``, ``/logout``, ``/setup``,
+    # ``/__health``, ``/errors``) and the API surface are also
+    # explicitly skipped by the catch-all.
+    install_shell_default_bundles()
+    register_shell_catchall(app=app)
     return
 
 
