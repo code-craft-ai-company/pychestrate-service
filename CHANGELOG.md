@@ -5,9 +5,53 @@ All notable changes to `pychestrate-service` are recorded here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Pre-1.0 alpha releases use the `0.MAJOR.MINOR-alphaN` convention. Backward
-compatibility is not guaranteed across alpha tags; the schema and runtime
-contracts are still in flux.
+Pre-1.0 releases use the milestone suffixes defined in
+[`ROADMAP.md`](ROADMAP.md) (`-preview`, `-alpha`, `-beta`, `-rc`).
+Backward compatibility is not guaranteed across pre-1.0 tags; the schema
+and runtime contracts are still in flux. A `-preview` tag does not
+progress to `-alpha` of the same `MAJOR.MINOR` version — the version is
+bumped when the project crosses the preview-to-alpha threshold.
+
+## [0.0.3-preview] — 2026-05-17
+
+Renamed the active release line from `v0.1.0-alpha` to `v0.0.x-preview`
+to set honest expectations. The previously published `v0.1.0-alpha` and
+`v0.1.0-alpha.2` tags overstated the project's maturity — alpha implies
+feature-complete for a slice, and at the time those tags were cut
+roughly two-thirds of the spec catalog was unstarted. Those tags remain
+in the git history for reference.
+
+### Changed
+
+- Active release line is now `v0.0.x-preview`. See
+  [`ROADMAP.md`](ROADMAP.md) for milestone definitions and what
+  `v0.0.3-preview` includes.
+
+### Added (since `v0.1.0-alpha.2`)
+
+- **Unified `/login` HTML surface** with `?next=<path>` redirect and
+  same-origin validation; the legacy `/config/login` is retired (#200).
+- **`/admin/*` route mount** for the administrator surface; the legacy
+  `/config/*` blueprint moved verbatim (#200).
+- **`system:ui.admin.view` permission** granted by `SystemAdminRole`,
+  intended as the UX-gating key for the upcoming sidebar (#200).
+- **`GET /api/v1/me/permissions`** endpoint returning the principal's
+  full system-permission set (#200).
+- **`htmlui/next_validator.NextValidator`** enforcing the
+  spec-1-authentication NFR-2 same-origin rules on the `?next` parameter
+  (#200).
+- **Cookie bridge in `PychestrateSessionMiddleware`** so `/api/v1/me/*`
+  resolves principals from both the UI signed cookie and the REST
+  DB-backed cookie (#201).
+- **`RbacRoleBinding` seed helper + alembic backfill migration** so the
+  modern RBAC evaluator returns the expected permission set for the
+  setup-wizard-created admin user (#201).
+- **Tailscale-issued HTTPS** at the nginx frontend, with `:80` → `:443`
+  redirect to the canonical hostname (#197, #198).
+- **`SECURITY` / `NETWORK` / `RUNTIME` env vars** routed through
+  `PychestrateVariables` (#196).
+- **Phase-11 login-flow tests** (httpx + Playwright) targeting the live
+  HTTPS deploy; 14/14 passing (#195, #201).
 
 ## [0.1.0-alpha] — 2026-05-09
 
