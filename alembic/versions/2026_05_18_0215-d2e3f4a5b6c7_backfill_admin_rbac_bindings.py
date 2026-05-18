@@ -113,7 +113,9 @@ def _ensure_system_admin_role_row(
         rtnval = str(existing[0])
         return rtnval
 
-    role_id = str(uuid.uuid4())
+    # 32 lowercase hex, no dashes -- the on-disk storage form
+    # ``sqlalchemy_utils.UUIDType(binary=False)`` writes.
+    role_id = uuid.uuid4().hex
     bind.execute(
         sa.text(
             "INSERT INTO rbac_roles ("
@@ -199,7 +201,13 @@ def _normalize_uuid(*, raw_value: object) -> Union[str, None]:
     if raw_value is None:
         return None
     if isinstance(raw_value, uuid.UUID):
-        rtnval = str(raw_value)
+        # Match the SQLite storage form
+        # ``sqlalchemy_utils.UUIDType(binary=False)`` writes:
+        # 32 lowercase hex chars, no dashes. Raw SQL inserts
+        # bypass the type's process_bind_param, so any other
+        # form (dashes, uppercase) will not compare equal to
+        # the existing identity_users / auth_sessions rows.
+        rtnval = raw_value.hex
         return rtnval
     if isinstance(raw_value, bytes):
         if len(raw_value) != 16:
@@ -208,14 +216,14 @@ def _normalize_uuid(*, raw_value: object) -> Union[str, None]:
             normalized = uuid.UUID(bytes=raw_value)
         except (ValueError, TypeError):
             return None
-        rtnval = str(normalized)
+        rtnval = normalized.hex
         return rtnval
     if isinstance(raw_value, str):
         try:
             normalized = uuid.UUID(raw_value)
         except (ValueError, TypeError):
             return None
-        rtnval = str(normalized)
+        rtnval = normalized.hex
         return rtnval
     rtnval = None
     return rtnval
@@ -256,7 +264,7 @@ def _ensure_system_admin_binding(
     if existing is not None:
         return
 
-    binding_id = str(uuid.uuid4())
+    binding_id = uuid.uuid4().hex
     bind.execute(
         sa.text(
             "INSERT INTO rbac_role_bindings ("

@@ -67,7 +67,12 @@ def _normalize_uuid(*, raw_value: object) -> Union[str, None]:
     if raw_value is None:
         return None
     if isinstance(raw_value, uuid.UUID):
-        rtnval = str(raw_value)
+        # Match the SQLite storage form ``sqlalchemy_utils.UUIDType
+        # (binary=False)`` writes: 32 lowercase hex chars, no dashes.
+        # Raw SQL inserts bypass the type's process_bind_param, so
+        # any other form (dashes, uppercase) will not compare equal
+        # to the existing identity_users / auth_sessions rows.
+        rtnval = raw_value.hex
         return rtnval
     if isinstance(raw_value, bytes):
         if len(raw_value) != 16:
@@ -76,38 +81,45 @@ def _normalize_uuid(*, raw_value: object) -> Union[str, None]:
             normalized = uuid.UUID(bytes=raw_value)
         except (ValueError, TypeError):
             return None
-        rtnval = str(normalized)
+        rtnval = normalized.hex
         return rtnval
     if isinstance(raw_value, str):
         try:
             normalized = uuid.UUID(raw_value)
         except (ValueError, TypeError):
             return None
-        rtnval = str(normalized)
+        rtnval = normalized.hex
         return rtnval
     rtnval = None
     return rtnval
 
 
-def _is_well_formed_uuid_text(*, value: str) -> bool:
+def _is_canonical_storage_uuid(*, value: str) -> bool:
     """
-        Return True when ``value`` parses cleanly as a UUID
-        (with or without dashes). ``sqlalchemy_utils.UUIDType``
-        stores UUIDs as 32-hex-character strings on SQLite, so
-        the bound storage form is dash-less; both forms are
-        accepted here.
+        Return True when ``value`` is in the on-disk storage
+        form ``sqlalchemy_utils.UUIDType(binary=False)`` writes
+        on SQLite: exactly 32 lowercase hex characters, no
+        dashes. Dashed forms / mixed-case forms / shorter
+        strings all return False -- those rows were written
+        through raw SQL that bypassed the type's
+        ``process_bind_param`` and will not compare equal to
+        the existing identity_users rows at query time.
 
         :param value: Candidate string.
 
-        :returns: True when parseable as a UUID.
+        :returns: True when the value is in canonical storage form.
     """
     if value is None:
         return False
     if not isinstance(value, str):
         return False
+    if len(value) != 32:
+        return False
     try:
-        uuid.UUID(value)
+        parsed = uuid.UUID(value)
     except (ValueError, TypeError):
+        return False
+    if parsed.hex != value:
         return False
     return True
 
@@ -134,7 +146,7 @@ def upgrade() -> None:
     """
     bind = op.get_bind()
 
-    # Step 1: locate the system-admin role row (created by
+    # Step 1a: locate the system-admin role row (created by
     # the previous migration; no-op fallback if missing).
     role_row = bind.execute(
         sa.text(
@@ -144,12 +156,56 @@ def upgrade() -> None:
     ).fetchone()
     if role_row is None:
         return
-    role_id = str(role_row[0])
+    raw_role_id = role_row[0]
+
+    # Step 1b: normalize the role_id on disk to the canonical
+    # storage form (32 lowercase hex, no dashes). The first
+    # cut of ``d2e3f4a5b6c7`` wrote it as a 36-char dashed
+    # string via raw SQL; that worked for SQLAlchemy ORM joins
+    # because the type's bind processor normalizes both sides,
+    # but the raw-SQL inserts below need the on-disk forms to
+    # already match. Rewrite in place if needed.
+    normalized_role_id = _normalize_uuid(raw_value=raw_role_id)
+    if normalized_role_id is None:
+        return
+    if normalized_role_id != raw_role_id:
+        bind.execute(
+            sa.text(
+                "UPDATE rbac_roles SET role_id = :new_role_id"
+                " WHERE role_name = :role_name"
+            ),
+            {
+                "new_role_id": normalized_role_id,
+                "role_name": SYSTEM_ADMIN_ROLE_NAME,
+            },
+        )
+        # Carry the rename across any existing bindings so the
+        # foreign-key join keeps working after the role_id
+        # change. (SQLite has FK ON UPDATE CASCADE only when the
+        # FK is defined that way; the rbac models do not declare
+        # it, so we do the cascade manually here.)
+        bind.execute(
+            sa.text(
+                "UPDATE rbac_role_bindings SET role_id = :new_role_id"
+                " WHERE role_id = :old_role_id"
+            ),
+            {
+                "new_role_id": normalized_role_id,
+                "old_role_id": raw_role_id,
+            },
+        )
+    role_id = normalized_role_id
 
     # Step 2: scan every SYSTEM-scope binding for the role and
-    # delete the ones whose principal_id does not parse as a
-    # UUID. Well-formed bindings (including ones a future
-    # admin tool may have inserted) survive untouched.
+    # delete the ones whose principal_id is not in the on-disk
+    # storage form ``sqlalchemy_utils.UUIDType(binary=False)``
+    # writes on SQLite (32 lowercase hex chars, no dashes). Both
+    # the ``b'...'`` repr rows written by the first cut of
+    # ``d2e3f4a5b6c7`` AND the dashed-form rows written by this
+    # revision's own first cut are caught by the same check --
+    # the canonical storage form is dashless hex, and any other
+    # shape will never compare equal to the existing
+    # identity_users / auth_sessions rows.
     binding_rows = bind.execute(
         sa.text(
             "SELECT binding_id, principal_id FROM rbac_role_bindings"
@@ -163,7 +219,7 @@ def upgrade() -> None:
     for binding_row in binding_rows:
         binding_id = binding_row[0]
         principal_id = binding_row[1]
-        if _is_well_formed_uuid_text(value=principal_id) is True:
+        if _is_canonical_storage_uuid(value=principal_id) is True:
             continue
         bind.execute(
             sa.text(
@@ -218,7 +274,7 @@ def upgrade() -> None:
         if existing is not None:
             continue
 
-        binding_id = str(uuid.uuid4())
+        binding_id = uuid.uuid4().hex
         bind.execute(
             sa.text(
                 "INSERT INTO rbac_role_bindings ("
