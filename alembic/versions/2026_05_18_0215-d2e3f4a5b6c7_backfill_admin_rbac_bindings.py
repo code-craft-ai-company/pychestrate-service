@@ -160,16 +160,64 @@ def _collect_legacy_admin_user_ids(
 
     rtnval = []
     for row in rows:
-        user_id = row[0]
+        raw_user_id = row[0]
         roles_csv = row[1]
-        if user_id is None:
+        if raw_user_id is None:
             continue
         if roles_csv is None:
             continue
         tokens = [tok.strip().lower() for tok in roles_csv.split(",")]
         if "admin" not in tokens:
             continue
-        rtnval.append(str(user_id))
+        # The legacy ``user.user_id`` column is declared
+        # ``UUIDType()`` (binary mode = 16 raw bytes on SQLite),
+        # while the modern ``rbac_role_bindings.principal_id``
+        # column is declared ``UUIDType(binary=False)`` (hex string).
+        # The evaluator joins on the hex form, so the legacy blob
+        # must be normalized to a canonical UUID string before
+        # the binding is inserted -- otherwise the binding row
+        # will never match the principal at evaluation time.
+        normalized = _normalize_uuid(raw_value=raw_user_id)
+        if normalized is None:
+            continue
+        rtnval.append(normalized)
+    return rtnval
+
+
+def _normalize_uuid(*, raw_value: object) -> Union[str, None]:
+    """
+        Coerce a value pulled out of a SQL row to a canonical
+        UUID hex-with-dashes string, regardless of whether the
+        column stored it as 16 raw bytes (``UUIDType`` binary
+        mode), a hex string, or already a :class:`uuid.UUID`.
+        Returns ``None`` when the value cannot be coerced.
+
+        :param raw_value: Whatever the driver returned.
+
+        :returns: Canonical UUID string or ``None``.
+    """
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, uuid.UUID):
+        rtnval = str(raw_value)
+        return rtnval
+    if isinstance(raw_value, bytes):
+        if len(raw_value) != 16:
+            return None
+        try:
+            normalized = uuid.UUID(bytes=raw_value)
+        except (ValueError, TypeError):
+            return None
+        rtnval = str(normalized)
+        return rtnval
+    if isinstance(raw_value, str):
+        try:
+            normalized = uuid.UUID(raw_value)
+        except (ValueError, TypeError):
+            return None
+        rtnval = str(normalized)
+        return rtnval
+    rtnval = None
     return rtnval
 
 
