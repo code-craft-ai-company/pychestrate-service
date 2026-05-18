@@ -44,6 +44,8 @@ from typing import Sequence, Union
 
 import uuid
 
+from datetime import datetime, timezone
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -128,7 +130,7 @@ def _ensure_system_admin_role_row(
             "source": "BUILTIN",
             "source_name": SYSTEM_ADMIN_ROLE_NAME,
             "description": SYSTEM_ADMIN_ROLE_DESCRIPTION,
-            "created_at": sa.func.now(),
+            "created_at": datetime.now(timezone.utc),
         },
     )
 
@@ -226,7 +228,7 @@ def _ensure_system_admin_binding(
             "principal_id": user_id,
             "scope_kind": "SYSTEM",
             "inherits_into_project": False,
-            "created_at": sa.func.now(),
+            "created_at": datetime.now(timezone.utc),
         },
     )
     return
