@@ -85,9 +85,8 @@ def test_login_form_submission_lands_on_post_login_page(browser: Browser):
     **Feature: consumer-ui-login**
     **Property: Filling the login form with valid admin
     credentials and clicking submit in a real browser navigates
-    to a /config/* URL that is NOT /config/login -- proves the
-    form action + DOM submit handler + redirect chain work
-    end-to-end.**
+    away from /login -- proves the form action + DOM submit
+    handler + redirect chain work end-to-end.**
     """
     login_name, password = _resolve_admin_credentials()
 
@@ -96,15 +95,20 @@ def test_login_form_submission_lands_on_post_login_page(browser: Browser):
         page = context.new_page()
         page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
 
-        page.goto(BASE_URL + "/config/login")
+        page.goto(BASE_URL + "/login")
         page.fill("input[name='username']", login_name)
         page.fill("input[name='password']", password)
         page.click("button[type='submit']")
         page.wait_for_load_state("networkidle")
 
         landed_url = page.url
-        testbase.assert_true(landed_url.startswith(BASE_URL + "/config"))
-        testbase.assert_true("/config/login" not in landed_url)
+        # Direct check: after login the URL bar must be on the
+        # deployed host and must not still be the login page (a
+        # login that bounced back to the form would land here,
+        # signalling auth failure).
+        testbase.assert_true(landed_url.startswith(BASE_URL))
+        landed_path = landed_url.split("?", 1)[0].rstrip("/")
+        testbase.assert_true(landed_path.endswith("/login") is False)
     finally:
         context.close()
     return
@@ -116,8 +120,8 @@ def test_login_form_with_wrong_password_stays_on_login_page(
     """
     **Feature: consumer-ui-login**
     **Property: Submitting the login form with a wrong password
-    leaves the browser ON /config/login (no navigation away)
-    and the URL bar reflects the failure.**
+    leaves the browser ON /login (no navigation away) and the
+    URL bar reflects the failure.**
     """
     login_name, _ = _resolve_admin_credentials()
 
@@ -126,7 +130,7 @@ def test_login_form_with_wrong_password_stays_on_login_page(
         page = context.new_page()
         page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
 
-        page.goto(BASE_URL + "/config/login")
+        page.goto(BASE_URL + "/login")
         page.fill("input[name='username']", login_name)
         page.fill(
             "input[name='password']",
@@ -136,7 +140,7 @@ def test_login_form_with_wrong_password_stays_on_login_page(
         page.wait_for_load_state("networkidle")
 
         landed_url = page.url
-        testbase.assert_true("/config/login" in landed_url)
+        testbase.assert_true(landed_url.rstrip("/").endswith("/login"))
     finally:
         context.close()
     return

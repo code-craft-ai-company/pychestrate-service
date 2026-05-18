@@ -382,11 +382,11 @@ def test_register_config_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected_subset = {
-            ("/config/login", ("GET",)),
-            ("/config/login", ("POST",)),
-            ("/config/logout", ("POST",)),
-            ("/config", ("GET",)),
-            ("/config/dashboard", ("GET",)),
+            ("/login", ("GET",)),
+            ("/login", ("POST",)),
+            ("/logout", ("GET", "POST")),
+            ("/admin", ("GET",)),
+            ("/admin/dashboard", ("GET",)),
         }
         missing = expected_subset - actual
         testbase.assert_equal(missing, set())
@@ -408,10 +408,10 @@ def test_register_config_routes_registers_endpoint_names_for_d1_routes():
         config_routes.register_config_routes(app=app)
 
         snapshot = url_for_module.get_registry_snapshot()
-        testbase.assert_equal(snapshot["config.login"], "/config/login")
-        testbase.assert_equal(snapshot["config.logout"], "/config/logout")
-        testbase.assert_equal(snapshot["config.dashboard"], "/config/dashboard")
-        testbase.assert_equal(snapshot["config.dashboard_root"], "/config")
+        testbase.assert_equal(snapshot["config.login"], "/login")
+        testbase.assert_equal(snapshot["config.logout"], "/logout")
+        testbase.assert_equal(snapshot["config.dashboard"], "/admin/dashboard")
+        testbase.assert_equal(snapshot["config.dashboard_root"], "/admin")
     finally:
         _reset_global_state()
     return
@@ -445,7 +445,7 @@ def test_register_config_routes_pre_registers_future_endpoint_patterns():
         # And: future endpoints with path params keep their {name}
         # placeholder so url_for can substitute kwargs.
         testbase.assert_equal(
-            snapshot["config.user_detail"], "/config/users/{user_id}"
+            snapshot["config.user_detail"], "/admin/users/{user_id}"
         )
     finally:
         _reset_global_state()
@@ -453,14 +453,14 @@ def test_register_config_routes_pre_registers_future_endpoint_patterns():
 
 
 # ===========================================================================
-# handle_login_form (GET /config/login)
+# handle_login_form (GET /login)
 # ===========================================================================
 
 
 def test_handle_login_form_renders_login_template_with_drained_flashes():
     """
     **Feature: webworks config blueprint port T1.2 (D1)**
-    **Property: GET /config/login renders config/login.html with
+    **Property: GET /login renders config/login.html with
     the drained flashes list and writes the (now-cleared)
     session cookie back on the response.**
     """
@@ -498,7 +498,7 @@ def test_handle_login_form_renders_login_template_with_drained_flashes():
 
 
 # ===========================================================================
-# handle_login_submit (POST /config/login)
+# handle_login_submit (POST /login)
 # ===========================================================================
 
 
@@ -529,12 +529,13 @@ def test_handle_login_submit_returns_400_when_username_or_password_missing():
     return
 
 
-def test_handle_login_submit_happy_path_redirects_to_dashboard():
+def test_handle_login_submit_happy_path_redirects_to_root():
     """
-    **Feature: webworks config blueprint port T1.3 (D1)**
+    **Feature: webworks config blueprint port T1.3 (D1, p17b)**
     **Property: A successful authenticate call yields a 303
-    RedirectResponse to /config/dashboard. The session cookie
-    written on the redirect carries user_id, username,
+    RedirectResponse to ``/`` (the same-origin fallback target
+    when no ``next`` query parameter is present). The session
+    cookie written on the redirect carries user_id, username,
     session_token, and csrf_token from the AuthResponse.**
     """
     _reset_global_state()
@@ -576,7 +577,7 @@ def test_handle_login_submit_happy_path_redirects_to_dashboard():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/dashboard"
+            response.headers["Location"], "/"
         )
         # SecurityManager was constructed with the resolved db
         # session AND received the AuthRequest.
@@ -600,7 +601,7 @@ def test_handle_login_submit_happy_path_redirects_to_dashboard():
 def test_handle_login_submit_honors_next_query_param_on_success():
     """
     **Feature: webworks config blueprint port T1.3 (D1)**
-    **Property: When the request URL carries ``?next=/config/users``,
+    **Property: When the request URL carries ``?next=/admin/users``,
     the redirect lands on that path rather than the dashboard.**
     """
     _reset_global_state()
@@ -628,13 +629,13 @@ def test_handle_login_submit_honors_next_query_param_on_success():
 
         request = _FakeRequest(
             form={"username": "admin", "password": "pw"},
-            query_mapping={"next": "/config/users"},
+            query_mapping={"next": "/admin/users"},
         )
         response = config_routes.handle_login_submit(request)
 
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users"
+            response.headers["Location"], "/admin/users"
         )
     finally:
         if ar_patch is not None:
@@ -691,7 +692,7 @@ def test_handle_login_submit_returns_401_when_authenticate_raises():
 
 
 # ===========================================================================
-# handle_logout (POST /config/logout)
+# handle_logout (POST /logout)
 # ===========================================================================
 
 
@@ -700,7 +701,7 @@ def test_handle_logout_calls_security_manager_logout_and_redirects_to_login():
     **Feature: webworks config blueprint port T1.4 (D1)**
     **Property: With a session token in the cookie, logout calls
     SecurityManager.logout(token) and returns a 303 redirect to
-    /config/login. A "logged out" flash rides on the redirect.**
+    /login. A "logged out" flash rides on the redirect.**
     """
     _reset_global_state()
     sm_patch = None
@@ -731,7 +732,7 @@ def test_handle_logout_calls_security_manager_logout_and_redirects_to_login():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
 
         instance = _FakeSecurityManager.last_instance
@@ -781,7 +782,7 @@ def test_handle_logout_redirects_without_security_manager_call_when_no_token():
 
 
 # ===========================================================================
-# handle_dashboard (GET /config and /config/dashboard)
+# handle_dashboard (GET /config and /admin/dashboard)
 # ===========================================================================
 
 
@@ -789,7 +790,7 @@ def test_handle_dashboard_redirects_anonymous_to_login_with_flash():
     """
     **Feature: webworks config blueprint port T1.5 (D1)**
     **Property: An anonymous request to the dashboard returns a
-    302 redirect to /config/login, with a warning-category flash
+    302 redirect to /login, with a warning-category flash
     queued on the session cookie.**
     """
     _reset_global_state()
@@ -806,7 +807,7 @@ def test_handle_dashboard_redirects_anonymous_to_login_with_flash():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 302)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
     finally:
         _reset_global_state()
@@ -819,7 +820,7 @@ def test_handle_dashboard_redirects_when_token_no_longer_valid():
     **Property: A cookie with a session_token whose
     SecurityManager.validate_token returns None (expired /
     revoked) is treated as expired -- the cookie is reset and
-    the user is redirected to /config/login.**
+    the user is redirected to /login.**
     """
     _reset_global_state()
     sm_patch = None
@@ -855,7 +856,7 @@ def test_handle_dashboard_redirects_when_token_no_longer_valid():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
         instance = _FakeSecurityManager.last_instance
         testbase.assert_equal(instance.validate_token_calls, ["tok-abc"])
@@ -1108,12 +1109,12 @@ def test_url_for_substitutes_path_parameters_on_registered_endpoint():
     try:
         url_for_module.register_endpoint(
             endpoint="config.user_detail",
-            pattern="/config/users/{user_id}",
+            pattern="/admin/users/{user_id}",
         )
         rtnval = url_for_module.url_for(
             "config.user_detail", user_id="u-42"
         )
-        testbase.assert_equal(rtnval, "/config/users/u-42")
+        testbase.assert_equal(rtnval, "/admin/users/u-42")
     finally:
         _reset_global_state()
     return
@@ -1152,7 +1153,7 @@ def test_url_for_raises_keyerror_when_path_param_kwarg_missing():
     try:
         url_for_module.register_endpoint(
             endpoint="config.user_detail",
-            pattern="/config/users/{user_id}",
+            pattern="/admin/users/{user_id}",
         )
         try:
             url_for_module.url_for("config.user_detail")
@@ -1175,12 +1176,12 @@ def test_url_for_drops_converter_qualifier_in_placeholder():
     try:
         url_for_module.register_endpoint(
             endpoint="config.role_detail",
-            pattern="/config/roles/{role_id:int}",
+            pattern="/admin/roles/{role_id:int}",
         )
         rtnval = url_for_module.url_for(
             "config.role_detail", role_id=99
         )
-        testbase.assert_equal(rtnval, "/config/roles/99")
+        testbase.assert_equal(rtnval, "/admin/roles/99")
     finally:
         _reset_global_state()
     return

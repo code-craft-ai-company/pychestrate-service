@@ -92,9 +92,9 @@ def test_viewer_can_login_and_renders_resources_dashboard():
     )
     # Dashboard renders (200) OR redirects to its canonical
     # alias path -- in either case it must NOT redirect to
-    # /config/login.
+    # /login.
     location = response.header("Location") or ""
-    redirected_to_login = location.endswith("/config/login")
+    redirected_to_login = location.endswith("/login")
     testbase.assert_equal(redirected_to_login, False)
     return
 
@@ -108,7 +108,7 @@ def test_viewer_denied_from_resources_create_form():
     than seeing the form. The redirect target proves the
     ``_require_permission_or_redirect`` deny branch fired,
     not the unauthenticated branch (which would target
-    ``/config/login``).**
+    ``/login``).**
     """
     handle = ensure_app()
     viewer = ensure_seeded_viewer()
@@ -127,10 +127,10 @@ def test_viewer_denied_from_resources_create_form():
     # endpoint). Some pages emit ``/resources/dashboard``
     # depending on the alias the route table fires; either
     # is acceptable here. We DO require it to NOT be a
-    # redirect to ``/config/login``, which would mean the
+    # redirect to ``/login``, which would mean the
     # auth-resolver decided we were anonymous.
     testbase.assert_equal(
-        location.endswith("/config/login"), False
+        location.endswith("/login"), False
     )
     testbase.assert_equal(
         location.startswith("/resources"), True
@@ -260,7 +260,7 @@ def test_anonymous_resources_create_redirects_to_login_not_dashboard():
     """
     **Feature: consumer UI tier-3 RBAC T17.5**
     **Property: An ANONYMOUS request to ``/resources/create``
-    redirects to ``/config/login`` (the unauthenticated
+    redirects to ``/login`` (the unauthenticated
     branch), NOT to ``/resources`` (which would be the
     permission-denied branch). The two branches must not
     collapse -- "logged in but unprivileged" and "not logged
@@ -275,6 +275,6 @@ def test_anonymous_resources_create_redirects_to_login_not_dashboard():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location") or ""
     testbase.assert_equal(
-        location.endswith("/config/login"), True
+        location.endswith("/login"), True
     )
     return

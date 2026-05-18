@@ -101,12 +101,14 @@ def _resolve_admin_credentials() -> Tuple[str, str]:
     return rtnval
 
 
-def test_login_post_with_valid_credentials_redirects_to_config():
+def test_login_post_with_valid_credentials_redirects_to_safe_target():
     """
     **Feature: consumer-ui-login**
-    **Property: POST /config/login with valid admin credentials
-    returns a 303 redirect whose Location points under
-    /config/.**
+    **Property: POST /login with valid admin credentials
+    returns a 303 redirect whose Location is a same-origin
+    absolute path. With no ``next`` query parameter the post-
+    login redirect falls back to ``/`` per
+    1-authentication Requirement 5.4.**
     """
     login_name, password = _resolve_admin_credentials()
 
@@ -116,25 +118,28 @@ def test_login_post_with_valid_credentials_redirects_to_config():
             follow_redirects=False,
         ) as client:
         # GET the form first so any prep cookies are in the jar.
-        client.get("/config/login")
+        client.get("/login")
 
         response = client.post(
-            "/config/login",
+            "/login",
             data={"username": login_name, "password": password},
         )
 
         testbase.assert_equal(response.status_code, 303)
         location = response.headers.get("location", "")
-        testbase.assert_true(location.startswith("/config"))
+        testbase.assert_true(location.startswith("/"))
+        testbase.assert_true(location.startswith("//") is False)
     return
 
 
 def test_authenticated_session_grants_dashboard_access():
     """
     **Feature: consumer-ui-login**
-    **Property: After a successful POST /config/login, the
-    cookie jar grants access to the post-login destination
-    (200, not a login-form redirect).**
+    **Property: After a successful POST /login, the cookie
+    jar grants access to the post-login destination (200, not
+    a login-form redirect). With no ``next`` carried in, the
+    final landing path is the safe-target fallback ``/`` and
+    is NOT ``/login``.**
     """
     login_name, password = _resolve_admin_credentials()
 
@@ -143,9 +148,9 @@ def test_authenticated_session_grants_dashboard_access():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=True,
         ) as client:
-        client.get("/config/login")
+        client.get("/login")
         response = client.post(
-            "/config/login",
+            "/login",
             data={"username": login_name, "password": password},
         )
 
@@ -154,16 +159,15 @@ def test_authenticated_session_grants_dashboard_access():
         # login page itself -- that would indicate an auth
         # failure that bounced us back.
         final_path = str(response.url.path)
-        testbase.assert_true(final_path.startswith("/config"))
-        testbase.assert_true(final_path != "/config/login")
+        testbase.assert_true(final_path != "/login")
     return
 
 
 def test_login_post_with_wrong_password_does_not_authenticate():
     """
     **Feature: consumer-ui-login**
-    **Property: POST /config/login with the right username but
-    a wrong password does NOT issue a 303 redirect -- the
+    **Property: POST /login with the right username but a
+    wrong password does NOT issue a 303 redirect -- the
     response is a 4xx with the form re-rendered.**
     """
     login_name, _ = _resolve_admin_credentials()
@@ -173,9 +177,9 @@ def test_login_post_with_wrong_password_does_not_authenticate():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
-        client.get("/config/login")
+        client.get("/login")
         response = client.post(
-            "/config/login",
+            "/login",
             data={
                 "username": login_name,
                 "password": "obviously-not-the-right-password",

@@ -622,7 +622,7 @@ def _register_url_for_endpoints() -> None:
         which (post-E2) cascades into pool + ip_pool registrars
         too. So this gives us the full url_for surface for both
         E1 and E2 endpoints. Also registers config endpoints
-        (/config/login is the redirect target on auth failure).
+        (/login is the redirect target on auth failure).
     """
     from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
         register_config_routes,

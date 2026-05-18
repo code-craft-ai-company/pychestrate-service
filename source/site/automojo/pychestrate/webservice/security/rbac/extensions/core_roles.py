@@ -44,6 +44,14 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:resources.manage",
             effect=PermissionEffect.ALLOW,
         ),
+        # 1-rbac Requirement 5: the built-in admin role grants
+        # ``system:ui.admin.view`` so the site shell renders the
+        # Admin sidebar group for admin sessions and hides it for
+        # everyone else.
+        PermissionGrant(
+            permission_key="system:ui.admin.view",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

@@ -603,7 +603,7 @@ def test_register_secrets_routes_attaches_documented_routes():
     """
     **Feature: webworks config secrets port T4.1 (D4)**
     **Property: register_secrets_routes attaches the four
-    secret-management routes at /config/secrets*.**
+    secret-management routes at /admin/secrets*.**
     """
     _reset_global_state()
     try:
@@ -613,14 +613,14 @@ def test_register_secrets_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/secrets", ("GET",)),
-            ("/config/secrets/create", ("GET", "POST")),
+            ("/admin/secrets", ("GET",)),
+            ("/admin/secrets/create", ("GET", "POST")),
             (
-                "/config/secrets/{scope_id}/{name}/edit",
+                "/admin/secrets/{scope_id}/{name}/edit",
                 ("GET", "POST"),
             ),
             (
-                "/config/secrets/{scope_id}/{name}/delete",
+                "/admin/secrets/{scope_id}/{name}/delete",
                 ("POST",),
             ),
         }
@@ -634,7 +634,7 @@ def test_register_sessions_routes_attaches_documented_routes():
     """
     **Feature: webworks config sessions port T4.2 (D4)**
     **Property: register_sessions_routes attaches the two
-    session-admin routes at /config/sessions*.**
+    session-admin routes at /admin/sessions*.**
     """
     _reset_global_state()
     try:
@@ -644,9 +644,9 @@ def test_register_sessions_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/sessions", ("GET",)),
+            ("/admin/sessions", ("GET",)),
             (
-                "/config/sessions/{session_id}/terminate",
+                "/admin/sessions/{session_id}/terminate",
                 ("POST",),
             ),
         }
@@ -660,7 +660,7 @@ def test_register_audit_routes_attaches_documented_routes():
     """
     **Feature: webworks config audit port T4.3 (D4)**
     **Property: register_audit_routes attaches the single
-    audit-log viewer route at /config/audit-logs.**
+    audit-log viewer route at /admin/audit-logs.**
     """
     _reset_global_state()
     try:
@@ -670,7 +670,7 @@ def test_register_audit_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/audit-logs", ("GET",)),
+            ("/admin/audit-logs", ("GET",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -686,7 +686,7 @@ def test_register_audit_routes_attaches_documented_routes():
 def test_handle_secret_list_renders_with_filters():
     """
     **Feature: webworks config secrets port T4.4**
-    **Property: GET /config/secrets renders config/secrets/
+    **Property: GET /admin/secrets renders config/secrets/
     list.html with the secret_manager outputs and the
     selected_scope_id filter passed through.**
     """
@@ -743,7 +743,7 @@ def test_handle_secret_create_post_happy_path_redirects_to_list():
     """
     **Feature: webworks config secrets port T4.5**
     **Property: A valid POST creates the secret via SecretManager
-    and redirects to /config/secrets with a success flash.**
+    and redirects to /admin/secrets with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -775,7 +775,7 @@ def test_handle_secret_create_post_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/secrets"
+            response.headers["Location"], "/admin/secrets"
         )
         sm = _FakeSecretManager.last_instance
         testbase.assert_equal(len(sm.create_secret_calls), 1)
@@ -878,7 +878,7 @@ def test_handle_secret_edit_post_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/secrets"
+            response.headers["Location"], "/admin/secrets"
         )
         sm = _FakeSecretManager.last_instance
         testbase.assert_equal(len(sm.update_secret_calls), 1)
@@ -899,7 +899,7 @@ def test_handle_secret_edit_get_redirects_when_metadata_missing():
     """
     **Feature: webworks config secrets port T4.6**
     **Property: get_secret_metadata returning None yields a
-    redirect to /config/secrets with an error flash.**
+    redirect to /admin/secrets with an error flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -922,7 +922,7 @@ def test_handle_secret_edit_get_redirects_when_metadata_missing():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/secrets"
+            response.headers["Location"], "/admin/secrets"
         )
     finally:
         for p in (secret_patch, sm_patch):
@@ -962,7 +962,7 @@ def test_handle_secret_delete_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/secrets"
+            response.headers["Location"], "/admin/secrets"
         )
         sm = _FakeSecretManager.last_instance
         testbase.assert_equal(
@@ -1023,7 +1023,7 @@ def test_handle_secret_delete_unparsable_scope_id_short_circuits():
 def test_handle_session_list_renders_with_active_sessions():
     """
     **Feature: webworks config sessions port T4.8**
-    **Property: GET /config/sessions renders the sessions list
+    **Property: GET /admin/sessions renders the sessions list
     template with the SecurityManager.list_active_sessions
     output and passes filter_user_id through.**
     """
@@ -1075,7 +1075,7 @@ def test_handle_session_terminate_happy_path_redirects():
     """
     **Feature: webworks config sessions port T4.9**
     **Property: A valid POST calls terminate_session with the
-    session_id and redirects to /config/sessions.**
+    session_id and redirects to /admin/sessions.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1103,7 +1103,7 @@ def test_handle_session_terminate_happy_path_redirects():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/sessions"
+            response.headers["Location"], "/admin/sessions"
         )
         sa = _FakeSessionAdmin.last_instance
         testbase.assert_equal(sa.terminate_session_calls, [55])
@@ -1211,7 +1211,7 @@ def test_handle_session_terminate_unparsable_id_short_circuits():
 def test_handle_audit_log_list_renders_with_filters():
     """
     **Feature: webworks config audit port T4.10**
-    **Property: GET /config/audit-logs renders config/audit/
+    **Property: GET /admin/audit-logs renders config/audit/
     list.html with logs (entries), all_event_types,
     filter_user_id, selected_event_type, and the original ISO
     date strings passed back through.**

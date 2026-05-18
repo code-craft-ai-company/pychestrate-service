@@ -1048,7 +1048,7 @@ def test_handle_tag_list_redirects_anonymous_to_config_login():
     """
     **Feature: webworks resources port T8.9 (E4)**
     **Property: An unauthenticated request redirects to
-    /config/login.**
+    /login.**
     """
     _reset_global_state()
     try:
@@ -1060,7 +1060,7 @@ def test_handle_tag_list_redirects_anonymous_to_config_login():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
     finally:
         _reset_global_state()

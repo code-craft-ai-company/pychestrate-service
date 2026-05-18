@@ -21,7 +21,7 @@ module fills in the session-lifecycle properties:
   :class:`AuthSession` row's ``expires_at`` and confirm a
   follow-up dashboard request is treated as anonymous.
 * **Post-logout cookie invalidation** -- after
-  ``POST /config/logout`` closes the underlying
+  ``POST /logout`` closes the underlying
   :class:`AuthSession`, the SAME cookie can no longer
   authorize requests (the modern adapter's
   ``validate_token`` returns ``None`` because
@@ -107,13 +107,13 @@ def test_admin_and_viewer_can_hold_concurrent_sessions():
     admin_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/dashboard",
+        path="/admin/dashboard",
         cookies=admin_cookies,
     )
     viewer_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/dashboard",
+        path="/admin/dashboard",
         cookies=viewer_cookies,
     )
     testbase.assert_equal(admin_response.status_code, 200)
@@ -224,7 +224,7 @@ def test_post_with_stale_csrf_after_relogin_is_rejected():
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="POST",
-        path="/config/variables/create",
+        path="/admin/variables/create",
         body=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -237,7 +237,7 @@ def test_post_with_stale_csrf_after_relogin_is_rejected():
     # POST is the create form itself.
     location = response.header("Location") or ""
     testbase.assert_equal(
-        location.endswith("/config/variables/create"), True
+        location.endswith("/admin/variables/create"), True
     )
     return
 
@@ -305,14 +305,18 @@ def test_expired_auth_session_redirects_dashboard_to_login():
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/dashboard",
+        path="/admin/dashboard",
         cookies=cookies,
     )
     is_redirect = response.status_code in (301, 302, 303, 307, 308)
     testbase.assert_equal(is_redirect, True)
     location = response.header("Location") or ""
+    # Per 1-authentication Requirement 5.3 the redirect carries
+    # a ``?next=<original-path>`` query string -- match the path
+    # head, not the trailing characters.
+    location_path = location.split("?", 1)[0]
     testbase.assert_equal(
-        location.endswith("/config/login"), True
+        location_path.endswith("/login"), True
     )
     return
 
@@ -325,7 +329,7 @@ def test_expired_auth_session_redirects_dashboard_to_login():
 def test_post_logout_cookie_cannot_re_authorize():
     """
     **Feature: consumer UI tier-4 T19.5**
-    **Property: After ``POST /config/logout`` closes the
+    **Property: After ``POST /logout`` closes the
     underlying :class:`AuthSession` row, presenting the
     SAME cookie (without re-authenticating) does not
     re-authorize the dashboard. The adapter's
@@ -344,7 +348,7 @@ def test_post_logout_cookie_cannot_re_authorize():
     logout_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="POST",
-        path="/config/logout",
+        path="/logout",
         body=body,
         headers={
             "Content-Type": "application/x-www-form-urlencoded",
@@ -361,14 +365,17 @@ def test_post_logout_cookie_cannot_re_authorize():
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/dashboard",
+        path="/admin/dashboard",
         cookies=cookies,
     )
+    # The redirect carries ``?next=<original-path>`` per
+    # 1-authentication Requirement 5.3; match the path head
+    # rather than the trailing chars.
+    location = response.header("Location") or ""
+    location_path = location.split("?", 1)[0]
     is_redirect_to_login = (
         response.status_code in (301, 302, 303, 307, 308)
-        and (response.header("Location") or "").endswith(
-            "/config/login"
-        )
+        and location_path.endswith("/login")
     )
     testbase.assert_equal(is_redirect_to_login, True)
     return

@@ -551,7 +551,7 @@ def test_register_users_routes_attaches_documented_routes():
     """
     **Feature: webworks config users port T2.1 (D2)**
     **Property: register_users_routes attaches the five user-
-    management routes at /config/users*.**
+    management routes at /admin/users*.**
     """
     _reset_global_state()
     try:
@@ -561,11 +561,11 @@ def test_register_users_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/users", ("GET",)),
-            ("/config/users/create", ("GET", "POST")),
-            ("/config/users/{user_id}", ("GET",)),
-            ("/config/users/{user_id}/edit", ("GET", "POST")),
-            ("/config/users/{user_id}/deactivate", ("POST",)),
+            ("/admin/users", ("GET",)),
+            ("/admin/users/create", ("GET", "POST")),
+            ("/admin/users/{user_id}", ("GET",)),
+            ("/admin/users/{user_id}/edit", ("GET", "POST")),
+            ("/admin/users/{user_id}/deactivate", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -577,7 +577,7 @@ def test_register_roles_routes_attaches_documented_routes():
     """
     **Feature: webworks config roles port T2.2 (D2)**
     **Property: register_roles_routes attaches the four role-
-    management routes at /config/roles*.**
+    management routes at /admin/roles*.**
     """
     _reset_global_state()
     try:
@@ -587,10 +587,10 @@ def test_register_roles_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/roles", ("GET",)),
-            ("/config/roles/create", ("GET", "POST")),
-            ("/config/roles/{role_id}", ("GET",)),
-            ("/config/roles/{role_id}/edit", ("GET", "POST")),
+            ("/admin/roles", ("GET",)),
+            ("/admin/roles/create", ("GET", "POST")),
+            ("/admin/roles/{role_id}", ("GET",)),
+            ("/admin/roles/{role_id}/edit", ("GET", "POST")),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -607,7 +607,7 @@ def test_resolve_authenticated_request_redirects_anonymous():
     """
     **Feature: D2 helpers T2.3**
     **Property: A request with no session cookie returns an
-    _AuthResolution carrying a 302 redirect to /config/login --
+    _AuthResolution carrying a 302 redirect to /login --
     no DB session is opened.**
     """
     _reset_global_state()
@@ -761,14 +761,14 @@ def test_multi_form_view_getlist_returns_list_or_empty():
 
 
 # ===========================================================================
-# handle_user_list (GET /config/users)
+# handle_user_list (GET /admin/users)
 # ===========================================================================
 
 
 def test_handle_user_list_renders_with_pagination_and_search():
     """
     **Feature: webworks config users port T2.5**
-    **Property: GET /config/users renders config/users/list.html
+    **Property: GET /admin/users renders config/users/list.html
     with the paginated UserManager output, computed total_pages,
     and the search query passed through.**
     """
@@ -833,8 +833,8 @@ def test_handle_user_list_renders_with_pagination_and_search():
 def test_handle_user_list_redirects_anonymous():
     """
     **Feature: webworks config users port T2.5**
-    **Property: An unauthenticated GET /config/users redirects
-    to /config/login.**
+    **Property: An unauthenticated GET /admin/users redirects
+    to /login.**
     """
     _reset_global_state()
     try:
@@ -846,7 +846,7 @@ def test_handle_user_list_redirects_anonymous():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
     finally:
         _reset_global_state()
@@ -861,7 +861,7 @@ def test_handle_user_list_redirects_anonymous():
 def test_handle_user_create_get_renders_form_with_roles():
     """
     **Feature: webworks config users port T2.6**
-    **Property: GET /config/users/create renders the create form
+    **Property: GET /admin/users/create renders the create form
     with the current SystemRole list.**
     """
     _reset_global_state()
@@ -906,7 +906,7 @@ def test_handle_user_create_post_happy_path_redirects_to_list():
     """
     **Feature: webworks config users port T2.6**
     **Property: A valid POST creates the user via UserManager
-    and redirects to /config/users with a success flash.**
+    and redirects to /admin/users with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -941,7 +941,7 @@ def test_handle_user_create_post_happy_path_redirects_to_list():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users"
+            response.headers["Location"], "/admin/users"
         )
         # UserManager.create_user invoked with the submitted values
         # carried on the namespace returned by the patched factory.
@@ -1070,7 +1070,7 @@ def test_handle_user_create_post_validation_error_re_renders_with_flash():
 def test_handle_user_detail_renders_when_user_found():
     """
     **Feature: webworks config users port T2.7**
-    **Property: GET /config/users/{user_id} renders the detail
+    **Property: GET /admin/users/{user_id} renders the detail
     template with the resolved user.**
     """
     _reset_global_state()
@@ -1117,7 +1117,7 @@ def test_handle_user_detail_redirects_when_user_missing():
     """
     **Feature: webworks config users port T2.7**
     **Property: A user_id not found by the manager redirects to
-    /config/users with an error flash.**
+    /admin/users with an error flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1140,7 +1140,7 @@ def test_handle_user_detail_redirects_when_user_missing():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users"
+            response.headers["Location"], "/admin/users"
         )
     finally:
         if um_patch is not None:
@@ -1160,7 +1160,7 @@ def test_handle_user_edit_post_happy_path_redirects_to_detail():
     """
     **Feature: webworks config users port T2.8**
     **Property: A valid edit POST calls update_user and
-    redirects to /config/users/{user_id} with a success flash.**
+    redirects to /admin/users/{user_id} with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1195,7 +1195,7 @@ def test_handle_user_edit_post_happy_path_redirects_to_detail():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(response.status_code, 303)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users/u-7"
+            response.headers["Location"], "/admin/users/u-7"
         )
         um = _FakeUserManager.last_instance
         testbase.assert_equal(len(um.update_user_calls), 1)
@@ -1269,7 +1269,7 @@ def test_handle_user_deactivate_happy_path_redirects_to_list():
     """
     **Feature: webworks config users port T2.9**
     **Property: A valid deactivate POST calls deactivate_user
-    and redirects to /config/users with a success flash.**
+    and redirects to /admin/users with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1297,7 +1297,7 @@ def test_handle_user_deactivate_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users"
+            response.headers["Location"], "/admin/users"
         )
         um = _FakeUserManager.last_instance
         testbase.assert_equal(um.deactivate_user_calls, ["u-7"])
@@ -1348,7 +1348,7 @@ def test_handle_user_deactivate_user_not_found_flashes_error():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/users"
+            response.headers["Location"], "/admin/users"
         )
     finally:
         for p in (exc_patch, um_patch, sm_patch):
@@ -1487,7 +1487,7 @@ def _patch_rollback() -> Any:
 def test_handle_role_list_renders_with_roles():
     """
     **Feature: webworks config roles port T2.10**
-    **Property: GET /config/roles renders config/roles/list.html
+    **Property: GET /admin/roles renders config/roles/list.html
     with every SystemRole row.**
     """
     _reset_global_state()
@@ -1527,7 +1527,7 @@ def test_handle_role_create_post_happy_path_persists_and_redirects():
     """
     **Feature: webworks config roles port T2.11**
     **Property: A valid POST builds + commits a SystemRole and
-    redirects to /config/roles with a success flash.**
+    redirects to /admin/roles with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1575,7 +1575,7 @@ def test_handle_role_create_post_happy_path_persists_and_redirects():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/roles"
+            response.headers["Location"], "/admin/roles"
         )
         # Built role + permissions assigned + persisted.
         testbase.assert_equal(len(captured_roles), 1)
@@ -1642,7 +1642,7 @@ def test_handle_role_create_post_duplicate_name_re_renders_with_flash():
 def test_handle_role_detail_renders_when_role_found():
     """
     **Feature: webworks config roles port T2.12**
-    **Property: GET /config/roles/{role_id} renders the detail
+    **Property: GET /admin/roles/{role_id} renders the detail
     template with the resolved role.**
     """
     _reset_global_state()
@@ -1680,7 +1680,7 @@ def test_handle_role_detail_redirects_when_role_missing():
     """
     **Feature: webworks config roles port T2.12**
     **Property: A role_id whose lookup returns None redirects to
-    /config/roles with an error flash.**
+    /admin/roles with an error flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1703,7 +1703,7 @@ def test_handle_role_detail_redirects_when_role_missing():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/roles"
+            response.headers["Location"], "/admin/roles"
         )
     finally:
         if role_patch is not None:
@@ -1718,7 +1718,7 @@ def test_handle_role_edit_post_refuses_system_role():
     """
     **Feature: webworks config roles port T2.13**
     **Property: An edit POST against a role with is_system=True
-    redirects to /config/roles/{role_id} with a "System roles
+    redirects to /admin/roles/{role_id} with a "System roles
     cannot be modified" error flash and does NOT call commit.**
     """
     _reset_global_state()
@@ -1750,7 +1750,7 @@ def test_handle_role_edit_post_refuses_system_role():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/roles/1"
+            response.headers["Location"], "/admin/roles/1"
         )
         # No commit happened.
         testbase.assert_equal(commit_patch.captured, [])
@@ -1766,7 +1766,7 @@ def test_handle_role_edit_post_happy_path_commits_and_redirects():
     """
     **Feature: webworks config roles port T2.13**
     **Property: A valid edit POST mutates the role + permissions
-    and commits, then redirects to /config/roles/{role_id} with
+    and commits, then redirects to /admin/roles/{role_id} with
     a success flash.**
     """
     _reset_global_state()
@@ -1806,7 +1806,7 @@ def test_handle_role_edit_post_happy_path_commits_and_redirects():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/roles/2"
+            response.headers["Location"], "/admin/roles/2"
         )
         testbase.assert_equal(role.description, "Updated desc")
         testbase.assert_equal(role.permissions, new_perms)

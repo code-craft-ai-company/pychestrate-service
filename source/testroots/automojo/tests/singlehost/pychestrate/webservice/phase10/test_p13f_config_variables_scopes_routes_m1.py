@@ -543,7 +543,7 @@ def test_register_variables_routes_attaches_documented_routes():
     """
     **Feature: webworks config variables port T3.1 (D3)**
     **Property: register_variables_routes attaches the six
-    variable routes at /config/variables*.**
+    variable routes at /admin/variables*.**
     """
     _reset_global_state()
     try:
@@ -553,12 +553,12 @@ def test_register_variables_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/variables", ("GET",)),
-            ("/config/variables/create", ("GET", "POST")),
-            ("/config/variables/{name}", ("GET",)),
-            ("/config/variables/{name}/edit", ("GET", "POST")),
-            ("/config/variables/{name}/delete", ("POST",)),
-            ("/config/variables/{name}/history", ("GET",)),
+            ("/admin/variables", ("GET",)),
+            ("/admin/variables/create", ("GET", "POST")),
+            ("/admin/variables/{name}", ("GET",)),
+            ("/admin/variables/{name}/edit", ("GET", "POST")),
+            ("/admin/variables/{name}/delete", ("POST",)),
+            ("/admin/variables/{name}/history", ("GET",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -570,7 +570,7 @@ def test_register_scopes_routes_attaches_documented_routes():
     """
     **Feature: webworks config scopes port T3.2 (D3)**
     **Property: register_scopes_routes attaches the three scope
-    routes at /config/scopes*.**
+    routes at /admin/scopes*.**
     """
     _reset_global_state()
     try:
@@ -580,9 +580,9 @@ def test_register_scopes_routes_attaches_documented_routes():
             (path, methods) for path, methods, _ in app.calls
         )
         expected = {
-            ("/config/scopes", ("GET",)),
-            ("/config/scopes/create", ("GET", "POST")),
-            ("/config/scopes/{scope_id}/delete", ("POST",)),
+            ("/admin/scopes", ("GET",)),
+            ("/admin/scopes/create", ("GET", "POST")),
+            ("/admin/scopes/{scope_id}/delete", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -631,7 +631,7 @@ def test_multi_form_view_subscript_returns_first_value_or_raises():
 def test_handle_variable_list_renders_with_pagination():
     """
     **Feature: webworks config variables port T3.4**
-    **Property: GET /config/variables renders config/variables/
+    **Property: GET /admin/variables renders config/variables/
     list.html with the paginated store output and total_pages.**
     """
     _reset_global_state()
@@ -686,7 +686,7 @@ def test_handle_variable_list_renders_with_pagination():
 def test_handle_variable_create_get_renders_form():
     """
     **Feature: webworks config variables port T3.5**
-    **Property: GET /config/variables/create renders the
+    **Property: GET /admin/variables/create renders the
     create template with form_data=None.**
     """
     _reset_global_state()
@@ -722,7 +722,7 @@ def test_handle_variable_create_post_happy_path_redirects_to_list():
     """
     **Feature: webworks config variables port T3.5**
     **Property: A valid POST creates the variable via the store
-    and redirects to /config/variables.**
+    and redirects to /admin/variables.**
     """
     _reset_global_state()
     sm_patch = None
@@ -754,7 +754,7 @@ def test_handle_variable_create_post_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/variables"
+            response.headers["Location"], "/admin/variables"
         )
         vs = _FakeVariableStore.last_instance
         testbase.assert_equal(len(vs.create_variable_calls), 1)
@@ -869,7 +869,7 @@ def test_handle_variable_create_post_csrf_mismatch_redirects():
 def test_handle_variable_detail_renders_when_variable_found():
     """
     **Feature: webworks config variables port T3.6**
-    **Property: GET /config/variables/{name} renders the detail
+    **Property: GET /admin/variables/{name} renders the detail
     template with the variable.**
     """
     _reset_global_state()
@@ -934,7 +934,7 @@ def test_handle_variable_detail_redirects_when_missing():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/variables"
+            response.headers["Location"], "/admin/variables"
         )
     finally:
         for p in (vs_patch, sm_patch):
@@ -953,7 +953,7 @@ def test_handle_variable_edit_post_happy_path_redirects_to_detail():
     """
     **Feature: webworks config variables port T3.7**
     **Property: A valid POST updates the variable and redirects
-    to /config/variables/{name}.**
+    to /admin/variables/{name}.**
     """
     _reset_global_state()
     sm_patch = None
@@ -989,7 +989,7 @@ def test_handle_variable_edit_post_happy_path_redirects_to_detail():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/variables/feature_x"
+            response.headers["Location"], "/admin/variables/feature_x"
         )
         vs = _FakeVariableStore.last_instance
         testbase.assert_equal(len(vs.update_variable_calls), 1)
@@ -1014,7 +1014,7 @@ def test_handle_variable_delete_happy_path_redirects_to_list():
     """
     **Feature: webworks config variables port T3.8**
     **Property: A valid POST calls store.delete_variable and
-    redirects to /config/variables with a success flash.**
+    redirects to /admin/variables with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1040,7 +1040,7 @@ def test_handle_variable_delete_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/variables"
+            response.headers["Location"], "/admin/variables"
         )
         vs = _FakeVariableStore.last_instance
         testbase.assert_equal(
@@ -1091,7 +1091,7 @@ def test_handle_variable_delete_manager_error_flashes_error():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/variables"
+            response.headers["Location"], "/admin/variables"
         )
     finally:
         for p in (vs_patch, sm_patch):
@@ -1109,7 +1109,7 @@ def test_handle_variable_delete_manager_error_flashes_error():
 def test_handle_variable_history_renders_with_history():
     """
     **Feature: webworks config variables port T3.9**
-    **Property: GET /config/variables/{name}/history renders
+    **Property: GET /admin/variables/{name}/history renders
     the history template with the variable + change-history
     list + pagination params.**
     """
@@ -1193,7 +1193,7 @@ def test_handle_variable_history_redirects_when_missing():
 def test_handle_scope_list_renders_with_scopes():
     """
     **Feature: webworks config scopes port T3.10**
-    **Property: GET /config/scopes renders the scope_list
+    **Property: GET /admin/scopes renders the scope_list
     template with the secret_manager.list_scopes output.**
     """
     _reset_global_state()
@@ -1246,7 +1246,7 @@ def test_handle_scope_create_post_happy_path_redirects_to_list():
     """
     **Feature: webworks config scopes port T3.11**
     **Property: A valid POST creates the scope and redirects
-    to /config/scopes with a success flash.**
+    to /admin/scopes with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1273,7 +1273,7 @@ def test_handle_scope_create_post_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/scopes"
+            response.headers["Location"], "/admin/scopes"
         )
         sm = _FakeSecretManager.last_instance
         testbase.assert_equal(len(sm.create_scope_calls), 1)
@@ -1342,7 +1342,7 @@ def test_handle_scope_delete_happy_path_redirects_to_list():
     """
     **Feature: webworks config scopes port T3.12**
     **Property: A valid POST calls secret_manager.delete_scope
-    with the scope_id and redirects to /config/scopes.**
+    with the scope_id and redirects to /admin/scopes.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1368,7 +1368,7 @@ def test_handle_scope_delete_happy_path_redirects_to_list():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/scopes"
+            response.headers["Location"], "/admin/scopes"
         )
         sm = _FakeSecretManager.last_instance
         testbase.assert_equal(sm.delete_scope_calls, [(3, "u-admin")])
@@ -1458,7 +1458,7 @@ def test_handle_scope_delete_manager_error_flashes_error():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/scopes"
+            response.headers["Location"], "/admin/scopes"
         )
     finally:
         for p in (secret_patch, sm_patch):

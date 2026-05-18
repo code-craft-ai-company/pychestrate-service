@@ -783,7 +783,7 @@ def login_via_post(
         *, wsgi_app: Any, login: str, password: str
     ) -> Tuple[WsgiResponse, Dict[str, str]]:
     """
-        POST credentials to ``/config/login`` and return
+        POST credentials to ``/login`` and return
         ``(response, cookies)`` -- ``cookies`` is empty on
         failure.
 
@@ -809,7 +809,7 @@ def login_via_post(
     response = drive_request(
         wsgi_app=wsgi_app,
         method="POST",
-        path="/config/login",
+        path="/login",
         body=body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )

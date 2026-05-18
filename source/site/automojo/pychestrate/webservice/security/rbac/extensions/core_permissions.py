@@ -35,6 +35,15 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Administer the resources surface "
         "(pools, IP pools, allocations, health probes)"
     ),
+    # UX-gating permission introduced by 1-rbac Requirement 5.
+    # Consumed by 9-site-shell to decide whether to render the
+    # "Admin" sidebar group. It is NOT a security boundary --
+    # individual admin actions remain protected by their own
+    # per-action permissions enforced server-side by each owning
+    # feature's route guards.
+    "system:ui.admin.view": (
+        "UX signal: render the admin sidebar group in the site shell"
+    ),
 }
 
 
