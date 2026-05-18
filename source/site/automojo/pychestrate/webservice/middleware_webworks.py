@@ -79,13 +79,21 @@ __version__ = "1.0.0"
 import logging
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 
 _module_logger = logging.getLogger(__name__)
 
 
 SESSION_MIDDLEWARE_NAME: str = "pychestrate-session"
+
+
+# Type alias for the secondary-cookie-to-session-id callable. The
+# function receives the raw cookie value (e.g. the signed
+# ``pychestrate_ui_session`` blob) and returns the embedded session
+# id (the same opaque id the primary REST cookie carries) on
+# success, or ``None`` on missing / tampered / malformed input.
+CookieValueToSessionId = Callable[[str], Optional[str]]
 
 
 class PychestrateSessionMiddleware:
@@ -128,6 +136,9 @@ class PychestrateSessionMiddleware:
         resolve_actor: Callable[[Any, str, datetime], Optional[Any]],
         cookie_name: str,
         path_prefixes: Tuple[str, ...],
+        fallback_cookie_resolvers: Optional[
+            List[Tuple[str, CookieValueToSessionId]]
+        ] = None,
         ctx_logger: Optional[logging.Logger] = None,
         clock: Optional[Callable[[], datetime]] = None
     ) -> None:
@@ -138,6 +149,19 @@ class PychestrateSessionMiddleware:
             :param resolve_actor: See class docstring.
             :param cookie_name: See class docstring.
             :param path_prefixes: See class docstring.
+            :param fallback_cookie_resolvers: Optional list of
+                ``(cookie_name, value_to_session_id)`` pairs that
+                the middleware consults in order when the primary
+                cookie is absent or fails to resolve. Each
+                ``value_to_session_id`` callable receives the raw
+                cookie value and returns the embedded REST session
+                id (or ``None`` on tamper / missing / malformed).
+                The resolved session id is then passed through the
+                same ``resolve_actor`` pipeline as the primary
+                cookie. Used to let
+                ``/api/v1/me/*`` endpoints accept the UI-side
+                ``pychestrate_ui_session`` cookie. See PR2 of the
+                unified-login refactor.
             :param ctx_logger: See class docstring.
             :param clock: See class docstring.
         """
@@ -147,6 +171,12 @@ class PychestrateSessionMiddleware:
         )
         self._cookie_name: str = cookie_name
         self._path_prefixes: Tuple[str, ...] = path_prefixes
+        if fallback_cookie_resolvers is None:
+            self._fallback_cookie_resolvers: List[
+                Tuple[str, CookieValueToSessionId]
+            ] = []
+        else:
+            self._fallback_cookie_resolvers = list(fallback_cookie_resolvers)
         self._logger: logging.Logger = (
             ctx_logger if ctx_logger is not None else _module_logger
         )
@@ -181,14 +211,8 @@ class PychestrateSessionMiddleware:
 
             :returns: None.
         """
-        cookie_value = request.cookies.get(self._cookie_name, None)
-        if cookie_value is None or len(cookie_value) == 0:
-            request.auth_principal = None
-            request.actor_user_id = None
-            return
-
-        principal = self._resolve_actor(
-            db_session, cookie_value, self._clock()
+        principal = self._resolve_principal_from_cookies(
+            request=request, db_session=db_session
         )
         if principal is not None:
             request.auth_principal = principal
@@ -198,6 +222,62 @@ class PychestrateSessionMiddleware:
             request.actor_user_id = None
 
         return
+
+    def _resolve_principal_from_cookies(
+            self, *, request: Any, db_session: Any
+        ) -> Optional[Any]:
+        """
+            Resolve the request's :class:`AuthPrincipal` by trying
+            the primary REST session cookie first and falling
+            through to each configured fallback cookie resolver in
+            order. The first cookie that yields a non-empty session
+            id and that ``resolve_actor`` accepts wins.
+
+            PR2 of the unified-login refactor wires the UI-side
+            ``pychestrate_ui_session`` cookie as a fallback so the
+            ``/api/v1/me/*`` endpoints reachable by the site shell
+            from a UI-cookie-only session resolve cleanly. The REST
+            cookie remains the canonical channel; the UI cookie is
+            only consulted when the REST cookie is absent or fails
+            to resolve.
+
+            TODO (PR-future): unify into a single session primitive
+            so this dual-cookie code path can be deleted. See the
+            ``Open Questions`` entry in
+            ``specs/1-authentication/design.md``.
+
+            :param request: Webworks Request instance.
+            :param db_session: Open SQLAlchemy session.
+
+            :returns: Resolved :class:`AuthPrincipal` or ``None``.
+        """
+        now = self._clock()
+
+        cookie_value = request.cookies.get(self._cookie_name, None)
+        if cookie_value is not None and len(cookie_value) > 0:
+            principal = self._resolve_actor(db_session, cookie_value, now)
+            if principal is not None:
+                return principal
+
+        for fallback_name, value_to_session_id in self._fallback_cookie_resolvers:
+            raw = request.cookies.get(fallback_name, None)
+            if raw is None or len(raw) == 0:
+                continue
+            try:
+                session_id = value_to_session_id(raw)
+            except Exception:
+                # A malformed fallback cookie must not break the
+                # request -- treat as anonymous-on-that-cookie and
+                # keep trying the rest of the chain.
+                session_id = None
+            if session_id is None or len(session_id) == 0:
+                continue
+            principal = self._resolve_actor(db_session, session_id, now)
+            if principal is not None:
+                return principal
+
+        rtnval = None
+        return rtnval
 
     def __call__(
         self,
@@ -365,6 +445,65 @@ def default_resolve_actor(
     return rtnval
 
 
+def default_ui_cookie_value_to_session_id(
+        cookie_value: str
+    ) -> Optional[str]:
+    """
+        Production default for the UI-cookie fallback resolver
+        wired by :func:`install_pychestrate_session_middleware`.
+
+        Verifies the signed ``pychestrate_ui_session`` cookie
+        against the configured UI cookie secret and returns the
+        embedded ``session_token`` (= the REST-side session id)
+        on success. Returns ``None`` on any failure -- missing
+        secret, missing cookie, tampered signature, malformed
+        payload, or payload without a ``session_token`` field --
+        so the middleware can treat the request as unauthenticated
+        and continue without raising.
+
+        The UI login flow at ``/login`` stores the session id it
+        receives from ``SecurityManager.authenticate`` into the
+        cookie under :data:`auth_guard.SESSION_TOKEN_KEY` (the
+        string ``"session_token"``); see
+        :mod:`webinterface.blueprints.config.routes`.
+
+        :param cookie_value: Raw cookie value from
+                             ``request.cookies``.
+
+        :returns: REST session id (string) or ``None``.
+    """
+    from automojo.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
+    from automojo.pychestrate.webservice.webinterface.foundation import (
+        auth_guard,
+        cookie_session,
+    )
+
+    secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
+    if secret is None or len(secret) < 16:
+        # The deployment is not configured for the UI cookie at
+        # all -- treat as "no UI cookie present" rather than
+        # raising; the request continues as anonymous and the
+        # REST cookie path keeps working.
+        return None
+
+    payload = cookie_session.verify_session_payload(
+        cookie_value=cookie_value, secret=secret
+    )
+    if payload is None:
+        return None
+
+    session_token = payload.get(auth_guard.SESSION_TOKEN_KEY, None)
+    if session_token is None:
+        return None
+    if not isinstance(session_token, str):
+        return None
+    if len(session_token) == 0:
+        return None
+
+    rtnval = session_token
+    return rtnval
+
+
 def install_pychestrate_session_middleware(
         *,
         app: Any,
@@ -373,6 +512,9 @@ def install_pychestrate_session_middleware(
         open_session: Optional[Callable[[], Any]] = None,
         resolve_actor: Optional[
             Callable[[Any, str, datetime], Optional[Any]]
+        ] = None,
+        fallback_cookie_resolvers: Optional[
+            List[Tuple[str, CookieValueToSessionId]]
         ] = None,
         ctx_logger: Optional[logging.Logger] = None,
         clock: Optional[Callable[[], datetime]] = None
@@ -435,11 +577,27 @@ def install_pychestrate_session_middleware(
     else:
         resolved_resolve_actor = resolve_actor
 
+    if fallback_cookie_resolvers is None:
+        # Default fallback: accept the consumer-UI signed cookie
+        # so ``/api/v1/me/*`` calls made from a UI-only session
+        # (e.g. the site shell calling ``/me/permissions`` during
+        # a full navigation) resolve to the same principal as the
+        # REST cookie would. PR2 of the unified-login refactor.
+        from automojo.pychestrate.webservice.webinterface.foundation.cookie_session import (
+            COOKIE_NAME as UI_COOKIE_NAME,
+        )
+        resolved_fallback_cookie_resolvers = [
+            (UI_COOKIE_NAME, default_ui_cookie_value_to_session_id),
+        ]
+    else:
+        resolved_fallback_cookie_resolvers = fallback_cookie_resolvers
+
     middleware = PychestrateSessionMiddleware(
         open_session=resolved_open_session,
         resolve_actor=resolved_resolve_actor,
         cookie_name=resolved_cookie_name,
         path_prefixes=resolved_path_prefixes,
+        fallback_cookie_resolvers=resolved_fallback_cookie_resolvers,
         ctx_logger=ctx_logger,
         clock=clock,
     )
@@ -453,8 +611,10 @@ def install_pychestrate_session_middleware(
 
 __all__ = [
     "SESSION_MIDDLEWARE_NAME",
+    "CookieValueToSessionId",
     "PychestrateSessionMiddleware",
     "default_open_session",
     "default_resolve_actor",
+    "default_ui_cookie_value_to_session_id",
     "install_pychestrate_session_middleware",
 ]
