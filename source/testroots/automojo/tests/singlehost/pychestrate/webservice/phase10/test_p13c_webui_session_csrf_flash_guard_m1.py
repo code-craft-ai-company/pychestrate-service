@@ -506,7 +506,7 @@ def test_require_login_or_redirect_returns_none_when_authenticated():
     """
     session = {"user_id": "u-1", "session_token": "t-1"}
     result = auth_guard.require_login_or_redirect(
-        session=session, login_url="/config/login"
+        session=session, login_url="/login"
     )
     testbase.assert_equal(result, None)
     return
@@ -520,12 +520,12 @@ def test_require_login_or_redirect_redirects_anonymous_to_login_url():
     """
     session: Dict[str, Any] = {}
     result = auth_guard.require_login_or_redirect(
-        session=session, login_url="/config/login"
+        session=session, login_url="/login"
     )
     is_redirect = isinstance(result, RedirectResponse)
     testbase.assert_equal(is_redirect, True)
     testbase.assert_equal(result.status_code, 302)
-    testbase.assert_equal(result.headers["Location"], "/config/login")
+    testbase.assert_equal(result.headers["Location"], "/login")
     return
 
 
@@ -539,7 +539,7 @@ def test_require_login_or_redirect_queues_flash_message_when_supplied():
     session: Dict[str, Any] = {}
     auth_guard.require_login_or_redirect(
         session=session,
-        login_url="/config/login",
+        login_url="/login",
         flash_message="Please log in to access this page.",
     )
     queue = session[flash.SESSION_KEY]
@@ -559,7 +559,7 @@ def test_enforce_csrf_or_redirect_returns_none_on_valid_token():
     session = {csrf.SESSION_KEY: "expected-tok"}
     form = {"csrf_token": "expected-tok"}
     result = auth_guard.enforce_csrf_or_redirect(
-        form=form, session=session, fallback_url="/config/dashboard"
+        form=form, session=session, fallback_url="/admin/dashboard"
     )
     testbase.assert_equal(result, None)
     return
@@ -578,12 +578,12 @@ def test_enforce_csrf_or_redirect_redirects_on_mismatch_and_flashes_error():
     result = auth_guard.enforce_csrf_or_redirect(
         form=form,
         session=session,
-        fallback_url="/config/users",
+        fallback_url="/admin/users",
     )
     is_redirect = isinstance(result, RedirectResponse)
     testbase.assert_equal(is_redirect, True)
     testbase.assert_equal(result.status_code, 302)
-    testbase.assert_equal(result.headers["Location"], "/config/users")
+    testbase.assert_equal(result.headers["Location"], "/admin/users")
     queue = session[flash.SESSION_KEY]
     testbase.assert_equal(len(queue), 1)
     testbase.assert_equal(queue[0][0], "error")

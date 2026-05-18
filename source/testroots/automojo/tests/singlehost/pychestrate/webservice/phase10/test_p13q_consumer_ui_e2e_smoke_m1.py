@@ -87,7 +87,7 @@ def test_consumer_ui_app_bootstraps_cleanly():
 def test_login_page_renders_for_anonymous_user():
     """
     **Feature: consumer UI e2e smoke T14.2**
-    **Property: GET /config/login returns a 200 with the login
+    **Property: GET /login returns a 200 with the login
     form fields the consumer expects (username + password). The
     login surface intentionally does not carry a CSRF token --
     there is no prior session to bind it to. Subsequent POSTs
@@ -98,7 +98,7 @@ def test_login_page_renders_for_anonymous_user():
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/login",
+        path="/login",
     )
     testbase.assert_equal(response.status_code, 200)
     body_text = response.text
@@ -125,17 +125,17 @@ def test_config_dashboard_redirects_anonymous_to_login():
     """
     **Feature: consumer UI e2e smoke T14.3**
     **Property: An anonymous GET /config redirects to
-    /config/login (not 500, not the dashboard rendered without
+    /login (not 500, not the dashboard rendered without
     auth).**
     """
     handle = ensure_app()
     response = drive_request(
-        wsgi_app=handle.wsgi_app, method="GET", path="/config",
+        wsgi_app=handle.wsgi_app, method="GET", path="/admin",
     )
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/config/login"),
+        location is not None and location.endswith("/login"),
         True,
     )
     return
@@ -145,7 +145,7 @@ def test_resources_dashboard_redirects_anonymous_to_login():
     """
     **Feature: consumer UI e2e smoke T14.4**
     **Property: An anonymous GET /resources redirects to
-    /config/login (the consumer UI shares one auth domain
+    /login (the consumer UI shares one auth domain
     across all three blueprints).**
     """
     handle = ensure_app()
@@ -155,7 +155,7 @@ def test_resources_dashboard_redirects_anonymous_to_login():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/config/login"),
+        location is not None and location.endswith("/login"),
         True,
     )
     return
@@ -165,7 +165,7 @@ def test_projects_dashboard_redirects_anonymous_to_login():
     """
     **Feature: consumer UI e2e smoke T14.5**
     **Property: An anonymous GET /projects redirects to
-    /config/login.**
+    /login.**
     """
     handle = ensure_app()
     response = drive_request(
@@ -174,7 +174,7 @@ def test_projects_dashboard_redirects_anonymous_to_login():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/config/login"),
+        location is not None and location.endswith("/login"),
         True,
     )
     return
@@ -195,7 +195,7 @@ def test_projects_alternate_dashboard_path_redirects_anonymous():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/config/login"),
+        location is not None and location.endswith("/login"),
         True,
     )
     return

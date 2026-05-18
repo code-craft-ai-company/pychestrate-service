@@ -98,11 +98,11 @@ def test_admin_page_returns_404_after_wizard_completion():
 def test_login_page_returns_200():
     """
     **Feature: consumer-ui-login**
-    **Property: GET /config/login renders the login form HTML
+    **Property: GET /login renders the login form HTML
     with a 200 status -- the consumer UI surface is reachable
     after the wizard completes.**
     """
-    response = _get(path="/config/login", follow_redirects=False)
+    response = _get(path="/login", follow_redirects=False)
     testbase.assert_equal(response.status_code, 200)
     return
 
@@ -110,11 +110,11 @@ def test_login_page_returns_200():
 def test_login_page_html_mentions_login():
     """
     **Feature: consumer-ui-login**
-    **Property: The /config/login response body is HTML that
+    **Property: The /login response body is HTML that
     contains the word "login" (case-insensitive) -- guards
     against an empty 200 or a wrong-page response.**
     """
-    response = _get(path="/config/login", follow_redirects=False)
+    response = _get(path="/login", follow_redirects=False)
     body_lower = response.text.lower()
     testbase.assert_true("login" in body_lower)
     return
@@ -123,10 +123,10 @@ def test_login_page_html_mentions_login():
 def test_login_page_advertises_html_content_type():
     """
     **Feature: consumer-ui-login**
-    **Property: /config/login returns ``text/html`` so browsers
+    **Property: /login returns ``text/html`` so browsers
     render the page rather than offering a download.**
     """
-    response = _get(path="/config/login", follow_redirects=False)
+    response = _get(path="/login", follow_redirects=False)
     content_type = response.headers.get("content-type", "")
     testbase.assert_true(content_type.startswith("text/html"))
     return

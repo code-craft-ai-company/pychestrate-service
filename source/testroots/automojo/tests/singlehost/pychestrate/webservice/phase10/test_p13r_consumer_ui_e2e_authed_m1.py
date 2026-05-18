@@ -21,7 +21,7 @@ surface:
   (no info leak).
 * Authenticated dashboard render -- log in, GET /config with the
   cookie, verify the dashboard HTML.
-* Logout -- POST /config/logout, verify the cookie clears and
+* Logout -- POST /logout, verify the cookie clears and
   the next dashboard hit redirects to login.
 * CRUD round-trip on global variables -- log in, render the
   create form (capture CSRF), POST a new variable, verify the
@@ -64,13 +64,14 @@ from automojo.tests.singlehost.pychestrate.webservice.phase10._e2e_harness impor
 # ===========================================================================
 
 
-def test_login_post_happy_path_redirects_to_dashboard():
+def test_login_post_happy_path_redirects_to_safe_target():
     """
-    **Feature: consumer UI e2e tier-2 T15.1**
-    **Property: POST /config/login with valid credentials
-    returns 303 to /config/dashboard and sets a session cookie
+    **Feature: consumer UI e2e tier-2 T15.1 (p17b)**
+    **Property: POST /login with valid credentials
+    returns 303 to a same-origin path and sets a session cookie
     whose decoded payload carries the user_id, the session_token,
-    and a CSRF token.**
+    and a CSRF token. With no ``next`` param the same-origin
+    fallback is ``/`` per 1-authentication Requirement 5.4.**
     """
     handle = ensure_app()
     admin = ensure_seeded_admin()
@@ -83,7 +84,8 @@ def test_login_post_happy_path_redirects_to_dashboard():
     location = response.header("Location")
     testbase.assert_equal(
         location is not None
-        and location.endswith("/config/dashboard"),
+        and location.startswith("/")
+        and not location.startswith("//"),
         True,
     )
     testbase.assert_equal(
@@ -112,7 +114,7 @@ def test_login_post_happy_path_redirects_to_dashboard():
 def test_login_post_bad_credentials_renders_login_with_401():
     """
     **Feature: consumer UI e2e tier-2 T15.2**
-    **Property: POST /config/login with the right username but
+    **Property: POST /login with the right username but
     the wrong password re-renders the login form with status
     401 and a generic "Invalid username or password" flash --
     the response must NOT leak that the username exists.**
@@ -147,7 +149,7 @@ def test_login_post_bad_credentials_renders_login_with_401():
 def test_login_post_with_unknown_username_returns_401_no_leak():
     """
     **Feature: consumer UI e2e tier-2 T15.3**
-    **Property: POST /config/login with a username that does
+    **Property: POST /login with a username that does
     not exist returns the same 401 + same generic flash as a
     bad password -- timing channel aside, the surface text
     must not differ.**
@@ -184,20 +186,20 @@ def test_authenticated_dashboard_renders_for_logged_in_user():
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config",
+        path="/admin",
         cookies=cookies,
     )
     # The dashboard handler may return a 200 directly OR redirect
-    # via 302/303 to /config/dashboard depending on which alias
+    # via 302/303 to /admin/dashboard depending on which alias
     # the route table fires. Either way we must NOT see a
-    # redirect to /config/login.
+    # redirect to /login.
     location = response.header("Location") or ""
-    redirected_to_login = location.endswith("/config/login")
+    redirected_to_login = location.endswith("/login")
     testbase.assert_equal(redirected_to_login, False)
 
-    # Follow any internal redirect to /config/dashboard.
+    # Follow any internal redirect to /admin/dashboard.
     if response.status_code in (301, 302, 303, 307, 308):
-        target = response.header("Location") or "/config/dashboard"
+        target = response.header("Location") or "/admin/dashboard"
         if target.startswith("http"):
             from urllib.parse import urlparse
             parsed = urlparse(target)
@@ -232,9 +234,9 @@ def test_authenticated_dashboard_renders_for_logged_in_user():
 def test_logout_clears_session_and_subsequent_dashboard_redirects():
     """
     **Feature: consumer UI e2e tier-2 T15.5**
-    **Property: POST /config/logout clears the session cookie
+    **Property: POST /logout clears the session cookie
     (or returns one without ``user_id``) and a follow-up GET
-    /config 302s back to /config/login.**
+    /config 302s back to /login.**
     """
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
@@ -247,7 +249,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     logout_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="POST",
-        path="/config/logout",
+        path="/logout",
         body=body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         cookies=cookies,
@@ -255,7 +257,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     is_redirect = logout_response.status_code in (302, 303)
     testbase.assert_equal(is_redirect, True)
     location = logout_response.header("Location") or ""
-    redirected_to_login = location.endswith("/config/login")
+    redirected_to_login = location.endswith("/login")
     testbase.assert_equal(redirected_to_login, True)
 
     new_cookies = logout_response.collect_set_cookies()
@@ -266,7 +268,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     next_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config",
+        path="/admin",
         cookies=refreshed_jar,
     )
     is_redirect_after_logout = next_response.status_code in (
@@ -275,7 +277,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     testbase.assert_equal(is_redirect_after_logout, True)
     testbase.assert_equal(
         (next_response.header("Location") or "").endswith(
-            "/config/login"
+            "/login"
         ),
         True,
     )
@@ -291,9 +293,9 @@ def test_crud_roundtrip_create_and_list_global_variable():
     """
     **Feature: consumer UI e2e tier-2 T15.6**
     **Property: A logged-in user can hit
-    GET /config/variables/create, POST a new variable with the
+    GET /admin/variables/create, POST a new variable with the
     captured CSRF token, follow the redirect to
-    /config/variables, and see the new variable's name in the
+    /admin/variables, and see the new variable's name in the
     list HTML. Exercises the full
     cookie-based-session + CSRF-validated-POST + jinja-list-
     rendering loop end-to-end.**
@@ -308,7 +310,7 @@ def test_crud_roundtrip_create_and_list_global_variable():
     create_form = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/variables/create",
+        path="/admin/variables/create",
         cookies=cookies,
     )
     testbase.assert_equal(create_form.status_code, 200)
@@ -325,7 +327,7 @@ def test_crud_roundtrip_create_and_list_global_variable():
     create_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="POST",
-        path="/config/variables/create",
+        path="/admin/variables/create",
         body=body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         cookies=cookies,
@@ -333,13 +335,13 @@ def test_crud_roundtrip_create_and_list_global_variable():
     is_redirect = create_response.status_code in (302, 303)
     testbase.assert_equal(is_redirect, True)
     target = create_response.header("Location") or ""
-    landed_at_list = target.endswith("/config/variables")
+    landed_at_list = target.endswith("/admin/variables")
     testbase.assert_equal(landed_at_list, True)
 
     list_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/config/variables",
+        path="/admin/variables",
         cookies=cookies,
     )
     testbase.assert_equal(list_response.status_code, 200)

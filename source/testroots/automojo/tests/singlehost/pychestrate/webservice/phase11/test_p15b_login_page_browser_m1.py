@@ -42,7 +42,7 @@ NAVIGATION_TIMEOUT_MS: int = 15_000
 def test_login_page_renders_with_login_in_title(browser: Browser):
     """
     **Feature: consumer-ui-login**
-    **Property: GET /config/login rendered in a real browser
+    **Property: GET /login rendered in a real browser
     produces a page whose ``<title>`` contains "Login" --
     validates the template inheritance chain end-to-end.**
     """
@@ -51,7 +51,7 @@ def test_login_page_renders_with_login_in_title(browser: Browser):
         page = context.new_page()
         page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
 
-        response = page.goto(BASE_URL + "/config/login")
+        response = page.goto(BASE_URL + "/login")
         page_title = page.title()
 
         testbase.assert_true(response is not None)
@@ -74,7 +74,7 @@ def test_login_page_has_username_password_inputs(browser: Browser):
         page = context.new_page()
         page.set_default_navigation_timeout(NAVIGATION_TIMEOUT_MS)
 
-        page.goto(BASE_URL + "/config/login")
+        page.goto(BASE_URL + "/login")
         username_count = page.locator("input[name='username']").count()
         password_count = page.locator("input[name='password']").count()
 

@@ -168,7 +168,7 @@ def test_alpha_acceptance_admin_login_rbac_audit_chain():
     # exercises ``ConsumerUISecurityAdapter.check_permission``
     # -> ``rbac_evaluator.check_permission``; if RBAC is wired
     # correctly the request is admitted (status NOT a redirect
-    # to /resources or /config/login).
+    # to /resources or /login).
     response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
@@ -176,7 +176,7 @@ def test_alpha_acceptance_admin_login_rbac_audit_chain():
         cookies=cookies,
     )
     location = response.header("Location") or ""
-    is_login_redirect = location.endswith("/config/login")
+    is_login_redirect = location.endswith("/login")
     is_dashboard_deny = (
         response.status_code in (301, 302, 303, 307, 308)
         and location.endswith("/resources")

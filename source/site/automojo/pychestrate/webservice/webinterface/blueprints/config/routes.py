@@ -61,7 +61,7 @@ __version__ = "1.0.0"
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, quote
 
 from automojo.webworks.routing.request import Request
 from automojo.webworks.routing.response import (
@@ -79,27 +79,75 @@ from automojo.pychestrate.webservice.webinterface.foundation import (
     templating,
     url_for as _url_for_module,
 )
-
-
-CONFIG_PATH = "/config"
+from automojo.pychestrate.webservice.webinterface.htmlui.next_validator import (
+    NextValidator,
+)
 
 
 # ---------------------------------------------------------------------------
-# Endpoint registrations -- (endpoint_name, pattern_relative_to_base, methods)
+# URL constants
+# ---------------------------------------------------------------------------
 #
-# The blueprint owns this list so the per-PR additions are
-# discoverable in one place. Each new route in D2/D3/D4 appends
-# its tuple here AND its handler below.
+# Two URL surfaces live in this blueprint after the p17b unified-
+# login refactor:
+#
+# * ``ADMIN_PATH`` (``/admin``) hosts the authenticated admin UI
+#   (dashboard, users, roles, variables, scopes, secrets,
+#   sessions, audit). Every ``routes_*.py`` sibling module mounts
+#   under this prefix.
+# * The login + logout HTML surface lives at unprefixed
+#   ``/login`` and ``/logout`` per 1-authentication Requirement
+#   5 -- the unified login page that every protected route
+#   redirects unauthenticated browsers to.
+#
+# ``CONFIG_PATH`` is preserved as an alias of ``ADMIN_PATH`` so
+# the per-feature sibling modules (which import ``CONFIG_PATH``
+# at top level) keep working without a churn-PR touching every
+# one of them. The variable name is wrong post-rename; the
+# follow-on shell PR (p17c) renames the imports cluster-wide.
+
+ADMIN_PATH = "/admin"
+CONFIG_PATH = ADMIN_PATH
+
+# Canonical browser-side URLs for the unified login flow.
+LOGIN_PATH = "/login"
+LOGOUT_PATH = "/logout"
+
+
+# ---------------------------------------------------------------------------
+# Endpoint registrations -- (endpoint_name, full_path, methods)
+#
+# Templates link via ``url_for('config.X')``; the endpoint name
+# stays as ``config.<action>`` for back-compat with existing
+# templates even though the dashboard now lives under
+# ``/admin``. The per-PR sibling modules append handlers below
+# via their own ``register_*_routes`` functions.
 # ---------------------------------------------------------------------------
 
 
-_ROUTE_TABLE = (
-    ("config.login", "/login", ("GET",)),
-    ("config.login_submit", "/login", ("POST",)),
-    ("config.logout", "/logout", ("POST",)),
+# Auth routes registered at unprefixed root paths (1-auth
+# Requirement 5).
+_AUTH_ROUTE_TABLE = (
+    ("config.login", LOGIN_PATH, ("GET",)),
+    ("config.login_submit", LOGIN_PATH, ("POST",)),
+    # ``GET /logout`` is the convenience entrypoint sidebar
+    # links bind to; ``POST /logout`` is the legacy form-post
+    # the existing base template uses. Both share the same
+    # session-clearing primitive.
+    ("config.logout", LOGOUT_PATH, ("GET", "POST")),
+)
+
+
+# Authenticated dashboard pages under the ``/admin`` prefix.
+_ADMIN_ROUTE_TABLE = (
     ("config.dashboard_root", "/", ("GET",)),
     ("config.dashboard", "/dashboard", ("GET",)),
 )
+
+
+
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -602,9 +650,18 @@ def handle_login_submit(request: Request) -> Response:
             category=flash.CATEGORY_SUCCESS,
         )
 
-        next_url = request.query_params.get("next", None)
-        if next_url is None or len(next_url) == 0:
-            next_url = _url_for_module.url_for("config.dashboard")
+        # Resolve the post-login redirect target. The browser
+        # may have carried a ``next=...`` parameter from the
+        # protected page that bounced it here; run the value
+        # through the same-origin validator (NFR-2 of
+        # 1-authentication/requirements.md) before honoring it.
+        # Reject paths that are absolute / protocol-relative /
+        # credentialed / cross-host and fall back to ``/``.
+        candidate_next = request.query_params.get("next", None)
+        validator = NextValidator(fallback_target="/")
+        next_url = validator.resolve_safe_target(
+            candidate=candidate_next, fallback="/"
+        )
 
         response = RedirectResponse(url=next_url, status_code=303)
         _attach_session_to_response(response=response, session=session)
@@ -810,6 +867,52 @@ def _require_permission_or_redirect(
     return rtnval
 
 
+def _build_login_url_with_next(*, request: Request) -> str:
+    """
+        Build the login-page URL with a percent-encoded ``next``
+        query parameter carrying the original request path (and
+        query string when present). Used by the auth guard so an
+        unauthenticated browser hitting a protected page bounces
+        through ``/login?next=<original>`` and lands back on
+        the originally-requested target after a successful
+        sign-in per 1-authentication Requirement 5.
+
+        :param request: Incoming webworks request.
+
+        :returns: Login URL with ``?next=...`` appended.
+    """
+    login_path = _url_for_module.url_for("config.login")
+
+    try:
+        request_path = request.path
+    except Exception:
+        request_path = ""
+
+    try:
+        query_string = request.query_string
+    except Exception:
+        query_string = ""
+
+    if request_path is None or len(request_path) == 0:
+        rtnval = login_path
+        return rtnval
+
+    if isinstance(query_string, bytes):
+        try:
+            query_string = query_string.decode("utf-8")
+        except Exception:
+            query_string = ""
+
+    if query_string is not None and len(query_string) > 0:
+        next_target = "{}?{}".format(request_path, query_string)
+    else:
+        next_target = request_path
+
+    encoded_next = quote(next_target, safe="")
+    rtnval = "{}?next={}".format(login_path, encoded_next)
+    return rtnval
+
+
 def _resolve_authenticated_request(
         *, request: Request
     ) -> _AuthResolution:
@@ -840,9 +943,10 @@ def _resolve_authenticated_request(
     """
     session = _read_session(request=request)
 
+    login_url_with_next = _build_login_url_with_next(request=request)
     redirect_response = auth_guard.require_login_or_redirect(
         session=session,
-        login_url=_url_for_module.url_for("config.login"),
+        login_url=login_url_with_next,
         flash_message="Please log in to access this page.",
     )
     if redirect_response is not None:
@@ -883,7 +987,7 @@ def _resolve_authenticated_request(
             category=flash.CATEGORY_WARNING,
         )
         redirect_response = RedirectResponse(
-            url=_url_for_module.url_for("config.login"),
+            url=login_url_with_next,
             status_code=303,
         )
         _attach_session_to_response(
@@ -931,9 +1035,10 @@ def handle_dashboard(request: Request) -> Response:
     """
     session = _read_session(request=request)
 
+    login_url_with_next = _build_login_url_with_next(request=request)
     redirect_response = auth_guard.require_login_or_redirect(
         session=session,
-        login_url=_url_for_module.url_for("config.login"),
+        login_url=login_url_with_next,
         flash_message="Please log in to access this page.",
     )
     if redirect_response is not None:
@@ -953,7 +1058,7 @@ def handle_dashboard(request: Request) -> Response:
             category=flash.CATEGORY_WARNING,
         )
         response = RedirectResponse(
-            url=_url_for_module.url_for("config.login"),
+            url=login_url_with_next,
             status_code=303,
         )
         _attach_session_to_response(response=response, session=session)
@@ -1018,13 +1123,22 @@ def register_config_routes(*, app: Any) -> None:
 
         :returns: None.
     """
-    for endpoint_name, relative_path, methods in _ROUTE_TABLE:
-        full_path = CONFIG_PATH + relative_path
+    # Auth surface (unprefixed): /login + /logout.
+    for endpoint_name, full_path, methods in _AUTH_ROUTE_TABLE:
+        _url_for_module.register_endpoint(
+            endpoint=endpoint_name, pattern=full_path
+        )
+        handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
+        app.attach_route(full_path, methods=list(methods))(handler)
+
+    # Admin dashboard surface (/admin/...).
+    for endpoint_name, relative_path, methods in _ADMIN_ROUTE_TABLE:
+        full_path = ADMIN_PATH + relative_path
         if full_path.endswith("/") and full_path != "/":
-            # Drop trailing slash to keep the / and /dashboard
-            # routes distinct after CONFIG_PATH concatenation.
-            # The "/" relative_path becomes CONFIG_PATH alone.
-            full_path = CONFIG_PATH if relative_path == "/" else full_path
+            # Drop trailing slash so /admin (no slash) maps to
+            # the dashboard-root handler; the "/" relative_path
+            # becomes ADMIN_PATH alone.
+            full_path = ADMIN_PATH if relative_path == "/" else full_path
 
         _url_for_module.register_endpoint(
             endpoint=endpoint_name, pattern=full_path
@@ -1079,7 +1193,10 @@ def register_config_routes(*, app: Any) -> None:
 
 
 __all__ = [
+    "ADMIN_PATH",
     "CONFIG_PATH",
+    "LOGIN_PATH",
+    "LOGOUT_PATH",
     "register_config_routes",
     "handle_login_form",
     "handle_login_submit",

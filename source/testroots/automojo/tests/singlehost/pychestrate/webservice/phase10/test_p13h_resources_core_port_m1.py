@@ -611,7 +611,7 @@ def _register_url_for_endpoints() -> None:
         so url_for can resolve resources.* endpoints + the
         E2/E3/E4 future patterns. Also registers config endpoints
         because the dashboard sidebar uses ``url_for('config.*')``
-        helpers and the auth resolver redirects to /config/login
+        helpers and the auth resolver redirects to /login
         on anonymous access.
     """
     from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -979,7 +979,7 @@ def test_handle_dashboard_redirects_anonymous_to_config_login():
     """
     **Feature: webworks resources port T5.5 (E1)**
     **Property: An unauthenticated request to /resources/
-    redirects to /config/login (the shared login URL the auth
+    redirects to /login (the shared login URL the auth
     resolver builds).**
     """
     _reset_global_state()
@@ -992,7 +992,7 @@ def test_handle_dashboard_redirects_anonymous_to_config_login():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/config/login"
+            response.headers["Location"], "/login"
         )
     finally:
         _reset_global_state()
