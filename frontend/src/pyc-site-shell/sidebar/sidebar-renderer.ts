@@ -1,5 +1,9 @@
 import type { SidebarRegistry, VisibleSidebar } from "./sidebar-registry.js"
 import { PermissionSet } from "../permissions/permission-set.js"
+import {
+    attach_sidebar_keyboard,
+    initialize_sidebar_roving_tabindex,
+} from "./sidebar-keyboard.js"
 
 /**
  * Render the visible sidebar into the supplied container element.
@@ -15,13 +19,22 @@ import { PermissionSet } from "../permissions/permission-set.js"
 export class SidebarRenderer {
     private readonly _container: HTMLElement
     private readonly _on_navigate: (route: string) => void
+    private readonly _on_entry_clicked:
+        | ((entryRoute: string, entryLabel: string) => void)
+        | null
+    private _detach_keyboard: (() => void) | null
 
     public constructor(
         container: HTMLElement,
         on_navigate: (route: string) => void,
+        on_entry_clicked:
+            | ((entryRoute: string, entryLabel: string) => void)
+            | null = null,
     ) {
         this._container = container
         this._on_navigate = on_navigate
+        this._on_entry_clicked = on_entry_clicked
+        this._detach_keyboard = null
     }
 
     /**
@@ -38,6 +51,10 @@ export class SidebarRenderer {
         active_path: string,
     ): void {
         const visible_sidebar = registry.visible(perms)
+        if (this._detach_keyboard !== null) {
+            this._detach_keyboard()
+            this._detach_keyboard = null
+        }
         this._container.replaceChildren()
 
         const nav = document.createElement("nav")
@@ -73,6 +90,8 @@ export class SidebarRenderer {
         }
 
         this._container.appendChild(nav)
+        initialize_sidebar_roving_tabindex(this._container)
+        this._detach_keyboard = attach_sidebar_keyboard(this._container)
         return
     }
 
@@ -90,6 +109,7 @@ export class SidebarRenderer {
         link.href = route
         link.textContent = label
         link.classList.add("pyc-site-shell__sidebar-entry")
+        link.setAttribute("tabindex", "-1")
         if (route === active_path) {
             link.setAttribute("aria-current", "page")
         }
@@ -113,6 +133,9 @@ export class SidebarRenderer {
                 return
             }
             event.preventDefault()
+            if (this._on_entry_clicked !== null) {
+                this._on_entry_clicked(route, label)
+            }
             this._on_navigate(route)
         })
         return link

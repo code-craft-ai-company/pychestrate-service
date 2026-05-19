@@ -170,3 +170,150 @@ pyc-site-shell {
 .pyc-site-shell__empty-state-heading {
     margin-top: 0;
 }
+
+/*
+ * Command palette dialog (M2).
+ */
+.pyc-site-shell__palette-backdrop {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 6rem;
+    z-index: 1000;
+}
+
+.pyc-site-shell__palette-dialog {
+    width: min(40rem, calc(100vw - 2rem));
+    background-color: var(
+        --pyc-color-surface-elevated,
+        #ffffff
+    );
+    color: var(--pyc-color-on-surface-elevated, #1f2933);
+    border-radius: 0.5rem;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.35);
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 70vh;
+}
+
+.pyc-site-shell__palette-input {
+    font-size: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--pyc-color-border, #cbd5f5);
+    border-radius: 0.375rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.pyc-site-shell__palette-status {
+    font-size: 0.875rem;
+    color: var(--pyc-color-on-surface-muted, #52606d);
+    padding: 0.25rem 0.25rem 0 0.25rem;
+}
+
+.pyc-site-shell__palette-results {
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pyc-site-shell__palette-group-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--pyc-color-on-surface-muted, #52606d);
+    padding: 0.25rem 0.5rem;
+}
+
+.pyc-site-shell__palette-option {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-site-shell__palette-option--active {
+    background-color: var(
+        --pyc-color-accent-surface,
+        rgba(56, 132, 255, 0.12)
+    );
+}
+
+.pyc-site-shell__palette-option-label {
+    font-size: 0.9375rem;
+}
+
+.pyc-site-shell__palette-option-description {
+    font-size: 0.8125rem;
+    color: var(--pyc-color-on-surface-muted, #52606d);
+}
+
+.pyc-site-shell__palette-provider-error,
+.pyc-site-shell__palette-empty {
+    font-size: 0.8125rem;
+    color: var(--pyc-color-on-surface-muted, #52606d);
+    padding: 0.25rem 0.75rem;
+}
+
+/*
+ * Degraded banner.
+ */
+.pyc-site-shell__degraded-banner {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    background-color: var(
+        --pyc-color-warning-surface,
+        rgba(255, 196, 87, 0.2)
+    );
+    color: var(--pyc-color-on-warning-surface, #5a3e0e);
+    border-radius: 0.375rem;
+}
+
+.pyc-site-shell__degraded-banner-message {
+    flex: 1;
+    font-size: 0.875rem;
+}
+
+.pyc-site-shell__degraded-banner-dismiss {
+    border: none;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-decoration: underline;
+}
+
+/*
+ * Session-expired toast.
+ */
+.pyc-site-shell__session-toast {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background-color: var(
+        --pyc-color-surface-elevated,
+        #ffffff
+    );
+    color: var(--pyc-color-on-surface-elevated, #1f2933);
+    border-radius: 0.5rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.25);
+    z-index: 900;
+}
+
+.pyc-site-shell__session-toast-action {
+    color: var(--pyc-color-accent, #3884ff);
+    font-weight: 600;
+    text-decoration: none;
+}
