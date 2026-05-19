@@ -6,6 +6,92 @@ The scripts in this directory drive the existing
 the remote does not need to be pre-provisioned beyond a stock
 Debian / Ubuntu install with SSH access for the deploy user.
 
+## mTLS for orchestration-ingest endpoints
+
+The nginx :443 server block verifies client certificates for
+the three orchestration-ingest endpoints (worker callbacks):
+
+- `POST /api/v1/runs/<id>/progress`
+- `POST /api/v1/runs/<id>/results/complete`
+- `POST /api/v1/runs/<id>/dispatch-ack`
+
+`ssl_verify_client` is `optional` so the bulk of the surface
+(cookie-session UI + API-key REST) keeps working without a
+client cert. The three paths above are gated explicitly in
+nginx (`if ($ssl_client_verify != "SUCCESS") return 401;`) and
+again at the application layer
+(`_require_mtls_client_cn(request)` consumes the
+`SSL_CLIENT_S_DN_CN` WSGI environ key forwarded by nginx).
+
+### 1. Bootstrap the client-CA (one-time)
+
+```bash
+deployment/bootstrap-client-ca.sh \
+    --host=tc-app-server.local --user=myron
+```
+
+This mints a self-signed root CA on the remote at:
+
+- `/etc/nginx/ssl/client-ca.crt` (0644 root) — the cert that
+  nginx loads via `ssl_client_certificate`
+- `/etc/nginx/ssl/client-ca.key` (0600 root) — the private key
+  used to issue client certs against this CA
+
+The script is **idempotent**: re-running it against a host that
+already has the CA in place is a clean no-op (regenerating
+would invalidate previously-issued client certs).
+
+You'll be prompted for the remote sudo password **once** —
+the bootstrap is intentionally not in the passwordless-sudo
+scope.
+
+### 2. Issue a client cert against the CA
+
+```bash
+# Local: generate the worker's keypair + CSR.
+openssl req -new -newkey rsa:2048 -nodes \
+    -keyout client.key -out client.csr \
+    -subj /CN=worker-1
+
+# Remote: sign the CSR with the CA (requires sudo to read the
+# CA private key).
+ssh myron@tc-app-server.local 'sudo openssl x509 -req \
+    -in /dev/stdin \
+    -CA /etc/nginx/ssl/client-ca.crt \
+    -CAkey /etc/nginx/ssl/client-ca.key \
+    -CAcreateserial \
+    -days 365 -sha256' < client.csr > client.crt
+```
+
+The CN you set in the CSR is what nginx forwards to the app as
+`SSL_CLIENT_S_DN_CN`. The app uses it to bind the request to
+the calling worker.
+
+### 3. Present the cert in client traffic
+
+```bash
+# curl
+curl --cert client.crt --key client.key \
+    -X POST https://tc-app-server.tailb75ce6.ts.net/api/v1/runs/<uuid>/progress \
+    -H 'Content-Type: application/json' \
+    -d '{"percent": 50}'
+
+# python (httpx)
+client = httpx.Client(cert=("client.crt", "client.key"))
+client.post(url, json=payload)
+```
+
+Without a client cert the orchestration-ingest endpoints
+return **401 Unauthorized** (nginx fails fast at the location
+block; the app never sees the request).
+
+### Alpha-stage caveats
+
+The self-signed root CA is fine for the alpha. A production-
+grade PKI would: (a) integrate Vault / Step CA / equivalent;
+(b) rotate / renew certs on a schedule; (c) check revocation
+via OCSP or CRL. All three are out of scope for the alpha.
+
 ## `deploy-alpha-to-host.sh`
 
 Driver script that runs from your workstation and provisions a

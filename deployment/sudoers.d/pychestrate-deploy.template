@@ -47,6 +47,25 @@
 @USER@ ALL=(root) NOPASSWD: /usr/sbin/nginx -t
 @USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx, /bin/systemctl reload nginx
 
+# mTLS client-CA bootstrap (``deployment/bootstrap-client-ca.sh``).
+# A self-signed root CA is minted in /tmp by the deploy user
+# (no privilege needed), then installed under /etc/nginx/ssl/
+# with the correct ownership + mode via a single ``install``
+# call per file.  Idempotency checks read the target paths
+# back -- guarded by ``test`` -- so a second bootstrap run is
+# a clean no-op.  Operator-only ``openssl x509 -req`` for
+# issuing client certs against the CA is NOT covered by this
+# sudoers file -- it requires an interactive sudo session by
+# design.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/test -f /etc/nginx/ssl/client-ca.crt
+@USER@ ALL=(root) NOPASSWD: /usr/bin/test -f /etc/nginx/ssl/client-ca.key
+@USER@ ALL=(root) NOPASSWD: /bin/mkdir -p /etc/nginx/ssl
+@USER@ ALL=(root) NOPASSWD: /bin/chmod 0755 /etc/nginx/ssl
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate-client-ca.crt /etc/nginx/ssl/client-ca.crt
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0600 -o root -g root /tmp/pychestrate-client-ca.key /etc/nginx/ssl/client-ca.key
+@USER@ ALL=(root) NOPASSWD: /usr/bin/openssl x509 -in /etc/nginx/ssl/client-ca.crt -noout -fingerprint -sha256
+@USER@ ALL=(root) NOPASSWD: /usr/bin/openssl x509 -in /etc/nginx/ssl/client-ca.crt -noout -subject -enddate
+
 # systemd unit install (single ``install`` covers mv + chown + chmod).
 @USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 
