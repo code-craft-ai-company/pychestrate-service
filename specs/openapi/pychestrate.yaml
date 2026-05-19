@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.3-preview
+  version: 0.0.4-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -1293,6 +1293,81 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/AgentRollout' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # ---------------------------------------------------------------------
+  # Agent pull surface — PR p19g
+  # ---------------------------------------------------------------------
+
+  /agents/{client_id}/dispatches:next:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    get:
+      tags: [dispatch]
+      summary: Long-poll for the next signed dispatch envelope.
+      operationId: agents_dispatches_next
+      x-pychestrate-status: planned
+      description: |
+        Long-polling pull endpoint the pod-client agent calls to
+        fetch the next signed envelope queued for it by the server
+        dispatcher.
+
+        The server blocks the request for up to `timeout_seconds`
+        (default 30, hard cap 60). On a queued dispatch the server
+        returns 200 with a `PendingDispatch` body and the record
+        is dequeued — the agent MUST then POST
+        `/runs/{run_id}/dispatch-ack` before the embedded
+        `ack_deadline_at`, otherwise the dispatch reconciler will
+        roll the attempt back. On a timeout the server returns 204
+        and the agent immediately re-polls.
+
+        The cert common-name nginx forwards must match the path
+        `client_id` — a mismatch returns 403.
+      security:
+        - pychestrate_mtls: []
+      parameters:
+        - in: query
+          name: timeout_seconds
+          description: How long the server may block before returning 204.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 60
+            default: 30
+      responses:
+        '200':
+          description: Dispatch dequeued for this agent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendingDispatch' }
+        '204':
+          description: No dispatch became available within `timeout_seconds`.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /agents/{client_id}/heartbeat:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    get:
+      tags: [agents]
+      summary: Pod-client agent liveness ping.
+      operationId: agents_heartbeat
+      x-pychestrate-status: planned
+      description: |
+        Lightweight ping the pod-client agent calls between
+        long-poll cycles to keep its registry row `last_seen`
+        current. Returns 204 unconditionally on a successful mTLS
+        handshake; rows missing from the registry are logged
+        server-side and still answered 204.
+      security:
+        - pychestrate_mtls: []
+      responses:
+        '204':
+          description: Heartbeat recorded.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # pods (nested under /projects/{project_id})
@@ -2942,6 +3017,48 @@ components:
       properties:
         soft_deadline_at: { type: string, format: date-time }
         hard_deadline_at: { type: string, format: date-time }
+
+    PendingDispatch:
+      type: object
+      description: |
+        Server response to `GET /api/v1/agents/{client_id}/dispatches:next`
+        when a queued dispatch is available. Carries the signed
+        `JobEnvelope` plus its detached Ed25519 signature and the
+        ack-deadline the agent must beat. The signature is hex-encoded;
+        agents re-verify against the canonical JSON serialization of the
+        embedded `envelope` field.
+      required:
+        - dispatch_attempt_id
+        - run_id
+        - client_id
+        - pod_id
+        - envelope_id
+        - enqueued_at
+        - ack_deadline_at
+        - envelope
+        - signature
+        - signature_key_id
+        - signed_at
+        - transport_name
+      properties:
+        dispatch_attempt_id: { type: string, format: uuid }
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        pod_id: { type: string, format: uuid }
+        envelope_id: { type: string, format: uuid }
+        enqueued_at: { type: string, format: date-time }
+        ack_deadline_at: { type: string, format: date-time }
+        envelope: { $ref: '#/components/schemas/JobEnvelope' }
+        signature:
+          type: string
+          description: Hex-encoded Ed25519 detached signature.
+        signature_key_id:
+          type: string
+          description: JWKS key id for the signing key.
+        signed_at: { type: string, format: date-time }
+        transport_name:
+          type: string
+          description: Stable transport identifier (`http-long-poll`).
     ScopedSecret:
       type: object
       required: [name, value, expires_at, token_type]

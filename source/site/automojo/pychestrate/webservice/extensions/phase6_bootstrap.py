@@ -15,15 +15,13 @@ service object — no factory protocol — so the live hub is
 constructed and held inside the request layer rather than the
 extension registry.
 
-PR p19f adds the ``TestOrchestrator`` construction step. The
-trigger-run REST route (``POST /api/v1/projects/{project_id}/
-test-runs``, PR p19d) reads a module-level seam
-``ACTIVE_TEST_ORCHESTRATOR`` and answers 503 when it is ``None``.
-:func:`bootstrap_phase6_runtime` now constructs the orchestrator
-with its dependencies (a :class:`JobDispatcher` over the
-:class:`InMemoryTransport` reference adapter; the real client
-transport lands with PR G) and publishes it on the route seam so
-the endpoint can answer real requests.
+PR p19f adds the ``TestOrchestrator`` construction step. PR p19g
+swaps the dispatcher's reference :class:`InMemoryTransport` for
+the production :class:`LongPollTransport` so signed envelopes
+queue up for the remote pod-client agent to pull via ``GET
+/api/v1/agents/{client_id}/dispatches:next``. Tests can still pass
+an explicit :class:`InMemoryTransport` through
+:class:`Phase6BootstrapConfig` to keep call-recording semantics.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -39,6 +37,12 @@ from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from automojo.pychestrate.webservice.agents.factories.long_poll_transport import (
+    LongPollTransport,
+)
+from automojo.pychestrate.webservice.agents.restapi.v1 import (
+    agent_dispatch_routes,
+)
 from automojo.pychestrate.webservice.jobs.dispatch import (
     JobDispatcher,
 )
@@ -136,9 +140,11 @@ class Phase6BootstrapConfig:
                                 -- the orchestrator construction step
                                 is skipped because trigger_run needs a
                                 real session at request time anyway.
-        :param transport: Optional dispatcher transport override. M1
-                          defaults to :class:`InMemoryTransport`; the
-                          real client transport lands with PR G.
+        :param transport: Optional dispatcher transport override.
+                          Production defaults to
+                          :class:`LongPollTransport` (PR p19g); tests
+                          pass an explicit :class:`InMemoryTransport`
+                          to keep call-recording semantics.
         :param results_backend: Optional shared-results backend
                                 override; defaults to the
                                 ``local-test`` backend the orchestrator
@@ -206,7 +212,19 @@ def _build_test_orchestrator(
     """
     transport = config.transport
     if transport is None:
-        transport = InMemoryTransport()
+        transport = LongPollTransport()
+
+    # Publish the active long-poll transport on the agent-pull
+    # route seam so ``GET /api/v1/agents/{client_id}/dispatches:next``
+    # can dequeue the same records the dispatcher enqueues. When the
+    # transport is anything other than a LongPollTransport (e.g. the
+    # InMemoryTransport used in tests), we leave the seam alone --
+    # the route then answers 503 which is the documented "not
+    # configured" behaviour.
+    if isinstance(transport, LongPollTransport):
+        agent_dispatch_routes.set_active_long_poll_transport(
+            transport=transport,
+        )
 
     dispatcher = JobDispatcher(transport=transport)
     orchestrator = TestOrchestrator(
