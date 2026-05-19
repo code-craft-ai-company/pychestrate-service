@@ -11,3 +11,4 @@ User Manual
    11-00-extensions
    12-00-consumer-ui-auth-stack
    13-00-alpha-deployment
+   17-00-site-shell

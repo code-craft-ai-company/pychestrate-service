@@ -12,6 +12,10 @@ import { PermissionSet } from "./permissions/permission-set.js"
 import { ShellRouter } from "./routing/shell-router.js"
 import { SidebarRegistry } from "./sidebar/sidebar-registry.js"
 import { SidebarRenderer } from "./sidebar/sidebar-renderer.js"
+import {
+    MetricsBeacon,
+    SHELL_METRICS,
+} from "./observability/metrics-beacon.js"
 
 const ATTR_INITIAL_ROUTE: string = "initial-route"
 const ATTR_PERMISSIONS_ENDPOINT: string = "permissions-endpoint"
@@ -46,6 +50,10 @@ export class PycSiteShell extends HTMLElement {
     private _global_keydown: ((event: KeyboardEvent) => void) | null
     private _global_session_401: (() => void) | null
     private _ready: boolean
+    private _metrics: MetricsBeacon
+    private _metrics_lifecycle_detach: (() => void) | null
+    private _boot_started_perf_now: number
+    private _palette_open_keydown_perf_now: number | null
 
     public static readonly observedAttributes: readonly string[] = [
         ATTR_INITIAL_ROUTE,
@@ -75,6 +83,21 @@ export class PycSiteShell extends HTMLElement {
         this._global_keydown = null
         this._global_session_401 = null
         this._ready = false
+        this._metrics = new MetricsBeacon()
+        this._metrics_lifecycle_detach = null
+        this._boot_started_perf_now =
+            typeof performance !== "undefined" ? performance.now() : 0
+        this._palette_open_keydown_perf_now = null
+    }
+
+    /**
+     * Diagnostic accessor for tests + bench harness -- returns the
+     * metrics beacon instance the shell uses. Not part of the
+     * long-term public API.
+     */
+    public get metrics(): MetricsBeacon {
+        const rtnval = this._metrics
+        return rtnval
     }
 
     public get sidebar(): SidebarRegistry {
@@ -93,6 +116,9 @@ export class PycSiteShell extends HTMLElement {
     }
 
     public connectedCallback(): void {
+        this._boot_started_perf_now =
+            typeof performance !== "undefined" ? performance.now() : 0
+        this._metrics_lifecycle_detach = this._metrics.attachLifecycle()
         this._render_skeleton()
         this._wire_permission_listeners()
         this._wire_global_keydown()
@@ -114,6 +140,11 @@ export class PycSiteShell extends HTMLElement {
     }
 
     public disconnectedCallback(): void {
+        if (this._metrics_lifecycle_detach !== null) {
+            this._metrics_lifecycle_detach()
+            this._metrics_lifecycle_detach = null
+        }
+        this._metrics.flush()
         if (this._global_keydown !== null) {
             window.removeEventListener("keydown", this._global_keydown)
             this._global_keydown = null
@@ -134,6 +165,10 @@ export class PycSiteShell extends HTMLElement {
      * a keystroke.
      */
     public openPalette(): void {
+        if (this._palette_open_keydown_perf_now === null) {
+            this._palette_open_keydown_perf_now =
+                typeof performance !== "undefined" ? performance.now() : 0
+        }
         if (this._palette_dialog !== null) {
             this._palette_dialog.open()
         }
@@ -202,6 +237,29 @@ export class PycSiteShell extends HTMLElement {
                 ) => {
                     this._emit(event_name, detail)
                 },
+                observePaletteOpened: () => {
+                    if (this._palette_open_keydown_perf_now !== null) {
+                        const now_value =
+                            typeof performance !== "undefined"
+                                ? performance.now()
+                                : 0
+                        const seconds =
+                            (now_value -
+                                this._palette_open_keydown_perf_now) /
+                            1000
+                        this._palette_open_keydown_perf_now = null
+                        this._metrics.observeHistogram(
+                            SHELL_METRICS.PALETTE_OPEN,
+                            seconds,
+                        )
+                    }
+                },
+                observePaletteFanout: (seconds: number) => {
+                    this._metrics.observeHistogram(
+                        SHELL_METRICS.PALETTE_FANOUT,
+                        seconds,
+                    )
+                },
             },
         )
 
@@ -219,11 +277,23 @@ export class PycSiteShell extends HTMLElement {
                         entryLabel: entry_label,
                     },
                 )
+                this._metrics.incrementCounter(
+                    SHELL_METRICS.SIDEBAR_ENTRY_CLICKED,
+                    { entry_route },
+                )
             },
         )
 
         this._router.onNavigate(async (next_ctx, prev_ctx) => {
+            const refetch_started =
+                typeof performance !== "undefined" ? performance.now() : 0
             await this._permission_cache.refresh(true)
+            const refetch_finished =
+                typeof performance !== "undefined" ? performance.now() : 0
+            this._metrics.observeHistogram(
+                SHELL_METRICS.PERMISSION_REFETCH,
+                (refetch_finished - refetch_started) / 1000,
+            )
             this._render_sidebar_and_empty_state()
             this._emit(
                 "pyc-site-shell-navigated",
@@ -274,6 +344,10 @@ export class PycSiteShell extends HTMLElement {
                 event.key.toLowerCase() === "k"
             if (is_palette_combo === true) {
                 event.preventDefault()
+                this._palette_open_keydown_perf_now =
+                    typeof performance !== "undefined"
+                        ? performance.now()
+                        : 0
                 this.openPalette()
             }
         }
@@ -310,6 +384,14 @@ export class PycSiteShell extends HTMLElement {
         await this._permission_cache.refresh(true)
         this._render_sidebar_and_empty_state()
         this._ready = true
+        const ready_perf_now =
+            typeof performance !== "undefined" ? performance.now() : 0
+        const tti_seconds =
+            (ready_perf_now - this._boot_started_perf_now) / 1000
+        this._metrics.observeHistogram(SHELL_METRICS.TTI, tti_seconds)
+        // Flush on ready so the TTI metric is delivered before the
+        // user navigates away.
+        this._metrics.flush()
         this._emit(
             "pyc-site-shell-ready",
             {
@@ -328,6 +410,8 @@ export class PycSiteShell extends HTMLElement {
             this._router !== null
                 ? this._router.current().path
                 : window.location.pathname
+        const render_started =
+            typeof performance !== "undefined" ? performance.now() : 0
         if (this._sidebar_renderer !== null && this._sidebar_region !== null) {
             this._sidebar_renderer.render(
                 this._sidebar_registry,
@@ -335,6 +419,12 @@ export class PycSiteShell extends HTMLElement {
                 active_path,
             )
         }
+        const render_finished =
+            typeof performance !== "undefined" ? performance.now() : 0
+        this._metrics.observeHistogram(
+            SHELL_METRICS.SIDEBAR_RENDER,
+            (render_finished - render_started) / 1000,
+        )
         const visible_entry_count = this._sidebar_registry.visibleEntryCount(
             perms,
         )
