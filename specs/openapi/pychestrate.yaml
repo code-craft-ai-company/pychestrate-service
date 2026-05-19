@@ -1,0 +1,3362 @@
+openapi: 3.1.0
+info:
+  title: Pychestrate Service API
+  version: 0.0.3-preview
+  description: |
+    Authoritative REST contract for the **Pychestrate** continuous integration
+    and orchestration service.
+
+    This document is the single source of truth for the `/api/v1/*` HTTP
+    surface. It is consumed by:
+
+    * `automojo-restclient-base`'s `RestClientGenerator`, which produces the
+      typed Python client `automojo-restclient-pychestrate`.
+    * Server-side route implementations in the `pychestrate-service` repo
+      (route handlers are expected to conform to the schemas declared here).
+    * External integrators and tooling authors.
+
+    ## Scope
+
+    * Every endpoint currently implemented under
+      `source/site/automojo/pychestrate/webservice/**/restapi/v1/*_routes.py`
+      is described.
+    * Endpoints planned for the Phase 3 minimum-viable test-run slice
+      (runs, dispatch ack, progress, results, test catalog, artifacts,
+      SSE events) are also described — these are flagged with the
+      `x-pychestrate-status: planned` extension on the operation.
+
+    The HTML admin / consumer UI surfaces under `/admin/*`, `/setup/*`,
+    `/login`, and the projects / resources blueprints are **not** part of
+    this contract; they are server-rendered HTML.
+
+    ## Conventions
+
+    * All paths are versioned under `/api/v1/`.
+    * Path / query / request / response field names are `snake_case`.
+    * Resource identifiers in paths use snake_case (`run_id`,
+      `project_id`, `pod_id`, ...).
+    * Non-CRUD verbs on a resource use the colon-action form
+      (`/projects/{project_id}/test-catalog:import`).
+    * All timestamps are ISO-8601 / RFC 3339 UTC strings
+      (`2026-05-17T19:42:00Z`).
+    * Every 4xx / 5xx response is a RFC 7807 Problem Document
+      (`application/problem+json`) — see the `Problem` schema.
+    * Paginated list endpoints return a `Page<T>` envelope (see the
+      `Page` schema for the shape) so the codegen surfaces them through
+      `automojo.restclient.base.pagedlist.PagedList`.
+  contact:
+    name: Automation Mojo LLC
+    url: https://github.com/automationmojo/pychestrate-service
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://tc-app-server.tailb75ce6.ts.net/api/v1
+    description: Author's live alpha deployment (Tailscale-fronted).
+  - url: https://{host}/api/v1
+    description: Generic templated server; supply the deployment host.
+    variables:
+      host:
+        default: pychestrate.example.com
+        description: Hostname of the Pychestrate service.
+
+tags:
+  - name: auth
+    description: Local-credential authentication and session lifecycle.
+  - name: me
+    description: Permissions and identity of the currently-authenticated actor.
+  - name: users
+    description: User account administration.
+  - name: rbac
+    description: Roles, permissions, role bindings, and permission checks.
+  - name: audit
+    description: Append-only audit log access.
+  - name: secrets
+    description: Encrypted-secrets read API (writes are out-of-band today).
+  - name: variables
+    description: Hierarchical typed configuration variables.
+  - name: flags
+    description: Feature flags (runtime toggles).
+  - name: tagging
+    description: Shared tag model across entities.
+  - name: retention
+    description: Per-data-class retention policies.
+  - name: notifications
+    description: Notification channels (email, Slack, webhook, ...).
+  - name: project_templates
+    description: Scaffolded new-project presets.
+  - name: projects
+    description: Project workspaces — the top-level entity that owns runs,
+      pods, members, repositories, builds, and tests.
+  - name: clients
+    description: Registered pod client agents.
+  - name: enrollment
+    description: Client-enrollment bootstrap tokens (mTLS issuance).
+  - name: agents
+    description: Agent rollouts and per-client capability inventory.
+  - name: pods
+    description: Pod definitions, registrations, topology, and templates.
+  - name: plugin_api
+    description: Plugin-API catalog metadata for installed extensions.
+  - name: runs
+    description: Run-state reads (`GET /runs/...`).
+  - name: test_runs
+    description: Trigger a new test run on a project + pod.
+  - name: test_catalog
+    description: Per-project test-catalog entries.
+  - name: dispatch
+    description: Pod-client → server dispatch acknowledgements.
+  - name: progress
+    description: Pod-client → server live progress ingestion.
+  - name: results
+    description: Pod-client → server final-result manifests.
+  - name: artifacts
+    description: Artifact listings and browsing for a run.
+  - name: metrics
+    description: UI-facing metrics endpoints (planned).
+
+security:
+  - pychestrate_session: []
+  - pychestrate_api_key: []
+
+paths:
+
+  # =====================================================================
+  # auth
+  # =====================================================================
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Close the current session.
+      operationId: auth_logout
+      description: |
+        Close the session named in the request body. Returns
+        `{session_id, status: "closed"}` on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: Session closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogoutResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  # =====================================================================
+  # me
+  # =====================================================================
+
+  /me/permissions:
+    get:
+      tags: [me]
+      summary: List the current actor's effective permissions.
+      operationId: me_get_permissions
+      description: |
+        Returns the set of permission keys granted to the calling actor by
+        the RBAC evaluator, plus the actor's user_id and a list of role
+        bindings.
+      responses:
+        '200':
+          description: Effective permission snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MePermissions'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =====================================================================
+  # users
+  # =====================================================================
+
+  /identity/users:
+    post:
+      tags: [users]
+      summary: Create a user account.
+      operationId: users_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateRequest'
+      responses:
+        '201':
+          description: User created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /identity/users/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags: [users]
+      summary: Read a user account.
+      operationId: users_get_by_id
+      responses:
+        '200':
+          description: User account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # rbac
+  # =====================================================================
+
+  /rbac/permissions:
+    get:
+      tags: [rbac]
+      summary: List declared RBAC permission keys.
+      operationId: rbac_list_permissions
+      responses:
+        '200':
+          description: All declared permissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RbacPermission' }
+  /rbac/roles:
+    get:
+      tags: [rbac]
+      summary: List declared roles.
+      operationId: rbac_list_roles
+      responses:
+        '200':
+          description: All declared roles.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RbacRole' }
+  /rbac/bindings:
+    get:
+      tags: [rbac]
+      summary: List role bindings.
+      operationId: rbac_list_bindings
+      parameters:
+        - in: query
+          name: user_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Matching role bindings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RbacRoleBinding' }
+    post:
+      tags: [rbac]
+      summary: Create a role binding.
+      operationId: rbac_create_binding
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RbacRoleBindingCreateRequest'
+      responses:
+        '201':
+          description: Role binding created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RbacRoleBinding' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /rbac/bindings/{binding_id}:
+    parameters:
+      - in: path
+        name: binding_id
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [rbac]
+      summary: Delete a role binding.
+      operationId: rbac_delete_binding
+      responses:
+        '204':
+          description: Binding deleted.
+        '404': { $ref: '#/components/responses/NotFound' }
+  /rbac/check:
+    post:
+      tags: [rbac]
+      summary: Check whether the actor has a permission in a scope.
+      operationId: rbac_check_permission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RbacCheckRequest'
+      responses:
+        '200':
+          description: Permission decision.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RbacCheckResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  # =====================================================================
+  # audit
+  # =====================================================================
+
+  /audit:
+    get:
+      tags: [audit]
+      summary: List audit-log records.
+      operationId: audit_list
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
+        - in: query
+          name: after_sequence
+          description: Only return records whose sequence_number is greater than this value.
+          schema: { type: integer, minimum: 0 }
+        - in: query
+          name: actor_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: action
+          schema: { type: string }
+      responses:
+        '200':
+          description: Audit records (ordered by sequence_number ascending).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/AuditRecord' }
+  /audit/{sequence_number}:
+    parameters:
+      - in: path
+        name: sequence_number
+        required: true
+        schema: { type: integer, minimum: 0 }
+    get:
+      tags: [audit]
+      summary: Read a single audit record by sequence number.
+      operationId: audit_get_by_sequence
+      responses:
+        '200':
+          description: Audit record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditRecord' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # secrets
+  # =====================================================================
+
+  /secrets:
+    get:
+      tags: [secrets]
+      summary: List secret references (metadata only — no plaintext).
+      operationId: secrets_list
+      responses:
+        '200':
+          description: Secret references.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/SecretRef' }
+  /secrets/{secret_ref}:
+    parameters:
+      - in: path
+        name: secret_ref
+        description: Slash-delimited secret reference path (e.g. `vault/myteam/api-token`).
+        required: true
+        schema: { type: string }
+    get:
+      tags: [secrets]
+      summary: Read a single secret reference (metadata only).
+      operationId: secrets_get_by_ref
+      responses:
+        '200':
+          description: Secret reference.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretRef' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # variables
+  # =====================================================================
+
+  /variables/effective:
+    get:
+      tags: [variables]
+      summary: Resolve effective variable values for a project / pod / run scope.
+      operationId: variables_get_effective
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: pod_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: run_id
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Effective variable map with inheritance trace.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VariableEffectiveSet' }
+
+  /variables/{scope}/{scope_id}:
+    parameters:
+      - $ref: '#/components/parameters/VariableScopeParam'
+      - $ref: '#/components/parameters/VariableScopeIdParam'
+    get:
+      tags: [variables]
+      summary: List variables declared at a specific scope.
+      operationId: variables_list_scope
+      responses:
+        '200':
+          description: Variables declared at the scope.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Variable' }
+
+  /variables/{scope}/{scope_id}/{name}:
+    parameters:
+      - $ref: '#/components/parameters/VariableScopeParam'
+      - $ref: '#/components/parameters/VariableScopeIdParam'
+      - in: path
+        name: name
+        required: true
+        schema: { type: string }
+    get:
+      tags: [variables]
+      summary: Read one variable at a specific scope.
+      operationId: variables_get_one
+      responses:
+        '200':
+          description: Variable definition at the scope.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variable' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [variables]
+      summary: Upsert one variable at a specific scope.
+      operationId: variables_put_one
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VariableUpsertRequest' }
+      responses:
+        '200':
+          description: Variable upserted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variable' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [variables]
+      summary: Delete one variable at a specific scope.
+      operationId: variables_delete_one
+      responses:
+        '204':
+          description: Variable deleted.
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # flags
+  # =====================================================================
+
+  /flags:
+    get:
+      tags: [flags]
+      summary: List feature flags.
+      operationId: flags_list
+      responses:
+        '200':
+          description: Declared flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/FeatureFlag' }
+    post:
+      tags: [flags]
+      summary: Create a new feature flag.
+      operationId: flags_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeatureFlagCreateRequest' }
+      responses:
+        '201':
+          description: Flag created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeatureFlag' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /flags/backends:
+    get:
+      tags: [flags]
+      summary: List installed feature-flag backends.
+      operationId: flags_list_backends
+      responses:
+        '200':
+          description: Registered backends.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/FeatureFlagBackend' }
+  /flags/{flag_key}:
+    parameters:
+      - $ref: '#/components/parameters/FlagKeyParam'
+    get:
+      tags: [flags]
+      summary: Read a feature flag.
+      operationId: flags_get_by_key
+      responses:
+        '200':
+          description: Flag.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeatureFlag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [flags]
+      summary: Update a feature flag.
+      operationId: flags_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeatureFlagUpdateRequest' }
+      responses:
+        '200':
+          description: Flag updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeatureFlag' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /flags/{flag_key}/retire:
+    parameters:
+      - $ref: '#/components/parameters/FlagKeyParam'
+    post:
+      tags: [flags]
+      summary: Retire a feature flag.
+      operationId: flags_retire
+      responses:
+        '200':
+          description: Flag retired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeatureFlag' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /flags/{flag_key}/history:
+    parameters:
+      - $ref: '#/components/parameters/FlagKeyParam'
+    get:
+      tags: [flags]
+      summary: Read change history for a feature flag.
+      operationId: flags_get_history
+      responses:
+        '200':
+          description: History entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/FeatureFlagHistoryEntry' }
+  /flags/{flag_key}/evaluate:
+    parameters:
+      - $ref: '#/components/parameters/FlagKeyParam'
+    post:
+      tags: [flags]
+      summary: Evaluate a feature flag against an actor / context.
+      operationId: flags_evaluate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeatureFlagEvaluateRequest' }
+      responses:
+        '200':
+          description: Evaluation result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FeatureFlagEvaluateResponse' }
+
+  # =====================================================================
+  # tagging
+  # =====================================================================
+
+  /tags/search:
+    get:
+      tags: [tagging]
+      summary: Search tag definitions.
+      operationId: tagging_search
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: taxonomy
+          schema: { type: string }
+      responses:
+        '200':
+          description: Matching tags.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Tag' }
+  /tags/taxonomies:
+    get:
+      tags: [tagging]
+      summary: List declared tag taxonomies.
+      operationId: tagging_list_taxonomies
+      responses:
+        '200':
+          description: Taxonomies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/TagTaxonomy' }
+  /tags/{entity_kind}/{entity_id}:
+    parameters:
+      - $ref: '#/components/parameters/EntityKindParam'
+      - $ref: '#/components/parameters/EntityIdParam'
+    get:
+      tags: [tagging]
+      summary: List tags attached to an entity.
+      operationId: tagging_list_for_entity
+      responses:
+        '200':
+          description: Tag attachments.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Tag' }
+    post:
+      tags: [tagging]
+      summary: Attach a tag to an entity.
+      operationId: tagging_attach
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TagAttachRequest' }
+      responses:
+        '201':
+          description: Tag attached.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tag' }
+  /tags/{entity_kind}/{entity_id}/{tag}:
+    parameters:
+      - $ref: '#/components/parameters/EntityKindParam'
+      - $ref: '#/components/parameters/EntityIdParam'
+      - in: path
+        name: tag
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [tagging]
+      summary: Detach a tag from an entity.
+      operationId: tagging_detach
+      responses:
+        '204':
+          description: Tag detached.
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # retention
+  # =====================================================================
+
+  /retention/policies:
+    get:
+      tags: [retention]
+      summary: List retention policies.
+      operationId: retention_list
+      responses:
+        '200':
+          description: Retention policies.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RetentionPolicy' }
+    post:
+      tags: [retention]
+      summary: Create a retention policy.
+      operationId: retention_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RetentionPolicyCreateRequest' }
+      responses:
+        '201':
+          description: Policy created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /retention/policies/{policy_id}:
+    parameters:
+      - in: path
+        name: policy_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [retention]
+      summary: Read a retention policy.
+      operationId: retention_get_by_id
+      responses:
+        '200':
+          description: Policy.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /retention/policies/{policy_id}/publish:
+    parameters:
+      - in: path
+        name: policy_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [retention]
+      summary: Publish (activate) a retention policy.
+      operationId: retention_publish
+      responses:
+        '200':
+          description: Policy published.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RetentionPolicy' }
+
+  # =====================================================================
+  # notifications
+  # =====================================================================
+
+  /notifications/channels:
+    get:
+      tags: [notifications]
+      summary: List notification channels.
+      operationId: notifications_list_channels
+      responses:
+        '200':
+          description: Channels.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/NotificationChannel' }
+    post:
+      tags: [notifications]
+      summary: Create a notification channel.
+      operationId: notifications_create_channel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NotificationChannelCreateRequest' }
+      responses:
+        '201':
+          description: Channel created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationChannel' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /notifications/channels/{channel_id}:
+    parameters:
+      - in: path
+        name: channel_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [notifications]
+      summary: Read a notification channel.
+      operationId: notifications_get_channel
+      responses:
+        '200':
+          description: Channel.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationChannel' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # project_templates
+  # =====================================================================
+
+  /project-templates:
+    get:
+      tags: [project_templates]
+      summary: List project templates.
+      operationId: project_templates_list
+      responses:
+        '200':
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProjectTemplate' }
+  /project-templates/{template_id}:
+    parameters:
+      - in: path
+        name: template_id
+        required: true
+        schema: { type: string }
+    get:
+      tags: [project_templates]
+      summary: Read a project template.
+      operationId: project_templates_get_by_id
+      responses:
+        '200':
+          description: Template.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectTemplate' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # projects
+  # =====================================================================
+
+  /projects:
+    post:
+      tags: [projects]
+      summary: Create a project.
+      operationId: projects_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectCreateRequest' }
+      responses:
+        '201':
+          description: Project created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /projects/{slug}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+    get:
+      tags: [projects]
+      summary: Read a project by slug.
+      operationId: projects_get_by_slug
+      responses:
+        '200':
+          description: Project.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [projects]
+      summary: Patch a project.
+      operationId: projects_patch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectPatchRequest' }
+      responses:
+        '200':
+          description: Project patched.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [projects]
+      summary: Delete a project.
+      operationId: projects_delete
+      responses:
+        '204':
+          description: Project deleted.
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /projects/{slug}/archive:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+    post:
+      tags: [projects]
+      summary: Archive a project.
+      operationId: projects_archive
+      responses:
+        '200':
+          description: Project archived.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+  /projects/{slug}/unarchive:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+    post:
+      tags: [projects]
+      summary: Un-archive a project.
+      operationId: projects_unarchive
+      responses:
+        '200':
+          description: Project un-archived.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Project' }
+  /projects/{slug}/members:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+    get:
+      tags: [projects]
+      summary: List project members.
+      operationId: projects_list_members
+      responses:
+        '200':
+          description: Members.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/ProjectMember' }
+    post:
+      tags: [projects]
+      summary: Add a member to a project.
+      operationId: projects_add_member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProjectMemberAddRequest' }
+      responses:
+        '201':
+          description: Member added.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectMember' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /projects/{slug}/members/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+      - $ref: '#/components/parameters/UserIdParam'
+    delete:
+      tags: [projects]
+      summary: Remove a member's owner binding from the project.
+      operationId: projects_remove_member
+      responses:
+        '204':
+          description: Owner binding removed.
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{slug}/members/{user_id}/{role_name}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectSlugParam'
+      - $ref: '#/components/parameters/UserIdParam'
+      - in: path
+        name: role_name
+        required: true
+        schema: { type: string }
+    delete:
+      tags: [projects]
+      summary: Remove a specific role binding from a member of the project.
+      operationId: projects_remove_member_role
+      responses:
+        '204':
+          description: Role binding removed.
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # clients
+  # =====================================================================
+
+  /clients:
+    get:
+      tags: [clients]
+      summary: List enrolled clients.
+      operationId: clients_list
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Client' }
+  /clients/{client_id}:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    get:
+      tags: [clients]
+      summary: Read a client.
+      operationId: clients_get_by_id
+      responses:
+        '200':
+          description: Client.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /clients/{client_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    post:
+      tags: [clients]
+      summary: Revoke a client's enrollment.
+      operationId: clients_revoke
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientRevokeRequest' }
+      responses:
+        '200':
+          description: Client revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /clients/{client_id}/attributes:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    put:
+      tags: [clients]
+      summary: Replace a client's attributes.
+      operationId: clients_update_attributes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientAttributesUpdateRequest' }
+      responses:
+        '200':
+          description: Attributes updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # enrollment
+  # =====================================================================
+
+  /enrollment-tokens:
+    get:
+      tags: [enrollment]
+      summary: List enrollment tokens.
+      operationId: enrollment_list_tokens
+      responses:
+        '200':
+          description: Tokens.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/EnrollmentToken' }
+    post:
+      tags: [enrollment]
+      summary: Issue a new enrollment token.
+      operationId: enrollment_create_token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnrollmentTokenCreateRequest' }
+      responses:
+        '201':
+          description: Token issued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollmentTokenWithSecret' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /enrollment-tokens/redeem:
+    post:
+      tags: [enrollment]
+      summary: Redeem an enrollment token for an mTLS identity.
+      operationId: enrollment_redeem
+      description: |
+        The client agent calls this endpoint with the bootstrap token it
+        received out-of-band and a CSR; the response carries the signed
+        client certificate plus the issued client_id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnrollmentRedeemRequest' }
+      responses:
+        '200':
+          description: mTLS identity issued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnrollmentRedeemResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /enrollment-tokens/{token_id}:
+    parameters:
+      - in: path
+        name: token_id
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [enrollment]
+      summary: Revoke an enrollment token.
+      operationId: enrollment_delete_token
+      responses:
+        '204':
+          description: Token revoked.
+        '404': { $ref: '#/components/responses/NotFound' }
+  /enrollment-tokens/clients/{client_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    post:
+      tags: [enrollment]
+      summary: Revoke an enrolled client's mTLS identity.
+      operationId: enrollment_revoke_client
+      responses:
+        '200':
+          description: Client revoked.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Client' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # agents
+  # =====================================================================
+
+  /clients:inventory:
+    get:
+      tags: [agents]
+      summary: Cross-fleet inventory of clients.
+      operationId: agents_get_client_inventory
+      responses:
+        '200':
+          description: Inventory snapshot.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientInventory' }
+  /clients/{client_id}/capabilities:
+    parameters:
+      - $ref: '#/components/parameters/ClientIdParam'
+    get:
+      tags: [agents]
+      summary: Read advertised capabilities for a client.
+      operationId: agents_get_client_capabilities
+      responses:
+        '200':
+          description: Capabilities.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientCapabilities' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /agent-rollouts:
+    post:
+      tags: [agents]
+      summary: Create an agent rollout plan.
+      operationId: agents_create_rollout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AgentRolloutCreateRequest' }
+      responses:
+        '201':
+          description: Rollout created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentRollout' }
+  /agent-rollouts/{rollout_id}:start:
+    parameters:
+      - in: path
+        name: rollout_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [agents]
+      summary: Start an agent rollout.
+      operationId: agents_start_rollout
+      responses:
+        '200':
+          description: Rollout started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AgentRollout' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # pods (nested under /projects/{project_id})
+  # =====================================================================
+
+  /projects/{project_id}/pod-definitions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [pods]
+      summary: List pod definitions for a project.
+      operationId: pods_list_definitions
+      responses:
+        '200':
+          description: Pod definitions.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PodDefinition' }
+    post:
+      tags: [pods]
+      summary: Create a pod definition.
+      operationId: pods_create_definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PodDefinitionCreateRequest' }
+      responses:
+        '201':
+          description: Pod definition created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodDefinition' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /projects/{project_id}/pod-definitions/{pod_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: Read a pod definition.
+      operationId: pods_get_definition
+      responses:
+        '200':
+          description: Pod definition.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodDefinition' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/pods/{pod_id}/state:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: Read a pod's current lifecycle state.
+      operationId: pods_get_state
+      responses:
+        '200':
+          description: Pod state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodState' }
+  /projects/{project_id}/pods/{pod_id}/state/history:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: Read a pod's lifecycle state history.
+      operationId: pods_get_state_history
+      responses:
+        '200':
+          description: State history.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PodStateTransition' }
+  /projects/{project_id}/pods/{pod_id}/registration:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: Read the latest pod registration.
+      operationId: pods_get_registration
+      responses:
+        '200':
+          description: Registration.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodRegistration' }
+  /projects/{project_id}/pods/{pod_id}/registrations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: List all historical pod registrations.
+      operationId: pods_list_registrations
+      responses:
+        '200':
+          description: Registrations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PodRegistration' }
+  /projects/{project_id}/pods/{pod_id}/topology:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    get:
+      tags: [pods]
+      summary: Read a pod's topology graph.
+      operationId: pods_get_topology
+      responses:
+        '200':
+          description: Topology.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodTopology' }
+  /projects/{project_id}/pod-templates:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [pods]
+      summary: List pod templates.
+      operationId: pods_list_templates
+      responses:
+        '200':
+          description: Templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PodTemplate' }
+    post:
+      tags: [pods]
+      summary: Create a pod template.
+      operationId: pods_create_template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PodTemplateCreateRequest' }
+      responses:
+        '201':
+          description: Template created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodTemplate' }
+  /projects/{project_id}/pod-templates/{template_id}:materialize:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: template_id
+        required: true
+        schema: { type: string }
+    post:
+      tags: [pods]
+      summary: Materialize a pod from a template.
+      operationId: pods_materialize_template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PodTemplateMaterializeRequest' }
+      responses:
+        '202':
+          description: Materialization accepted (async).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodDefinition' }
+  /projects/{project_id}/pod-templates/{template_id}/parameters:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: template_id
+        required: true
+        schema: { type: string }
+    put:
+      tags: [pods]
+      summary: Update template parameters.
+      operationId: pods_update_template_parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Parameters updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodTemplate' }
+    delete:
+      tags: [pods]
+      summary: Delete a pod template.
+      operationId: pods_delete_template
+      responses:
+        '204':
+          description: Template deleted.
+
+  # =====================================================================
+  # plugin_api
+  # =====================================================================
+
+  /plugin-api/_meta/catalog:
+    get:
+      tags: [plugin_api]
+      summary: List the plugin-API protocol catalog.
+      operationId: plugin_api_list_catalog
+      responses:
+        '200':
+          description: Catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PluginApiProtocol' }
+  /plugin-api/_meta/catalog/{protocol_name}:
+    parameters:
+      - in: path
+        name: protocol_name
+        required: true
+        schema: { type: string }
+    get:
+      tags: [plugin_api]
+      summary: Read one plugin-API protocol's metadata.
+      operationId: plugin_api_get_protocol
+      responses:
+        '200':
+          description: Protocol metadata.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PluginApiProtocol' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /plugin-api/_meta/mounts:
+    get:
+      tags: [plugin_api]
+      summary: List extension mounts.
+      operationId: plugin_api_list_mounts
+      responses:
+        '200':
+          description: Mounts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PluginApiMount' }
+
+  # =====================================================================
+  # PLANNED — runs / test_runs / test_catalog / progress / dispatch /
+  #            results / artifacts
+  #
+  # These endpoints are NOT yet implemented in the codebase. They are
+  # declared here so that:
+  #   1. The generated client surfaces them as soon as the spec lands.
+  #   2. Parallel implementation PRs target a stable, agreed-upon shape.
+  #
+  # Each operation carries `x-pychestrate-status: planned`.
+  # =====================================================================
+
+  /runs:
+    get:
+      tags: [runs]
+      summary: List runs (with filters).
+      operationId: runs_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: project_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: pod_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: state
+          schema: { $ref: '#/components/schemas/RunState' }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RunPage' }
+  /runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [runs]
+      summary: Read a run.
+      operationId: runs_get_by_id
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Run' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /runs/{run_id}/events:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [runs]
+      summary: Subscribe to run events via Server-Sent Events.
+      operationId: runs_subscribe_events
+      x-pychestrate-status: planned
+      description: |
+        Long-lived response stream encoded as `text/event-stream`
+        (Server-Sent Events). Each SSE frame's `data:` payload is a
+        JSON document conforming to the `RunEvent` schema; the SSE
+        `event:` line carries the event type
+        (`state_changed` | `progress` | `result_manifest` | `heartbeat`).
+
+        Clients should send `Accept: text/event-stream` and reconnect
+        with `Last-Event-ID` to resume from a known sequence number.
+      responses:
+        '200':
+          description: SSE stream of run events.
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/RunEvent' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /runs/{run_id}/dispatch-ack:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    post:
+      tags: [dispatch]
+      summary: Client agent acknowledges receipt of a dispatched envelope.
+      operationId: dispatch_ack_run
+      x-pychestrate-status: planned
+      description: |
+        Posted by the pod client agent over mTLS after it has accepted
+        a dispatch and minted a local run identifier. Signals that the
+        envelope was received and is being prepared for execution; the
+        server transitions the run's state from `DISPATCHING` to
+        `DISPATCHED` on success.
+      security:
+        - pychestrate_mtls: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DispatchAck' }
+      responses:
+        '204':
+          description: Ack recorded.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /runs/{run_id}/progress:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    post:
+      tags: [progress]
+      summary: Ingest a live-progress frame for a run.
+      operationId: progress_post_frame
+      x-pychestrate-status: planned
+      description: |
+        Posted by the pod client agent over mTLS at intervals during the
+        run. Payload shape matches the `automojo-testbase`
+        `ProgressConcentratorServer` / `ForwardingInfo` contract so an
+        unmodified testbase client can post directly without
+        translation.
+
+        Returns 202 on accept; the ingester is passive and never blocks
+        the caller. Errors in downstream parsing are surfaced via the
+        `RunEvent` SSE stream rather than the HTTP response.
+      security:
+        - pychestrate_mtls: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProgressFrame' }
+      responses:
+        '202':
+          description: Progress frame accepted.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /runs/{run_id}/results/complete:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    post:
+      tags: [results]
+      summary: Signal that the result tree for a run is fully uploaded.
+      operationId: results_post_complete
+      x-pychestrate-status: planned
+      description: |
+        Posted by the pod client agent over mTLS once it has finished
+        writing the testbase result tree (`testrun_summary.json`,
+        `testrun_results_stream.jsos`, `testrun_results.json`,
+        `testsummary.html`, plus the `artifacts/`, `taskings/`,
+        `tc-by-products/`, `diagnostics/` subtrees) to the shared
+        results backend.
+
+        The server transitions the run to a terminal state
+        (`COMPLETED` / `FAILED`) based on the manifest's
+        `terminal_outcome` field and kicks off the
+        `result_tree_parser` extension chain.
+      security:
+        - pychestrate_mtls: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResultManifest' }
+      responses:
+        '202':
+          description: Manifest accepted; result-tree parsing scheduled.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /runs/{run_id}/artifacts:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [artifacts]
+      summary: List artifacts for a run.
+      operationId: artifacts_list_for_run
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: prefix
+          description: Limit results to artifacts whose path starts with this prefix.
+          schema: { type: string }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of artifact entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactEntryPage' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /runs/{run_id}/artifacts/{artifact_path}:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+      - in: path
+        name: artifact_path
+        required: true
+        description: Slash-delimited artifact path relative to the run's results root.
+        schema: { type: string }
+    get:
+      tags: [artifacts]
+      summary: Read metadata for one artifact entry.
+      operationId: artifacts_get_entry
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Artifact entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactEntry' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/test-runs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    post:
+      tags: [test_runs]
+      summary: Trigger a new test run on a project.
+      operationId: test_runs_trigger
+      x-pychestrate-status: planned
+      description: |
+        Creates a new run from a catalog entry and a pod selector.
+        Returns the freshly-created run in `PENDING` state; the
+        dispatcher transitions it to `DISPATCHING` asynchronously.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestRunCreateRequest' }
+      responses:
+        '202':
+          description: Run accepted (queued for dispatch).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Run' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/test-catalog:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [test_catalog]
+      summary: List test-catalog entries for a project.
+      operationId: test_catalog_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: importer_tag
+          schema: { type: string }
+        - in: query
+          name: include_retired
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of catalog entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCatalogEntryPage' }
+    post:
+      tags: [test_catalog]
+      summary: Upsert a test-catalog entry.
+      operationId: test_catalog_upsert
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestCatalogEntryUpsertRequest' }
+      responses:
+        '200':
+          description: Entry upserted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCatalogEntry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /projects/{project_id}/test-catalog:import:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    post:
+      tags: [test_catalog]
+      summary: Run a test-catalog importer (e.g., testbase project discovery).
+      operationId: test_catalog_import
+      x-pychestrate-status: planned
+      description: |
+        Invokes the named importer (resolved via the
+        `test_catalog_importer` factory protocol) against the project.
+        Each import overwrites entries with the same
+        `(project_id, importer_tag, entry_key)` key in place.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TestCatalogImportRequest' }
+      responses:
+        '202':
+          description: Import accepted (runs asynchronously).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestCatalogImportSummary' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+
+  securitySchemes:
+    pychestrate_session:
+      type: apiKey
+      in: cookie
+      name: pych_session
+      description: |
+        HMAC-signed session cookie issued by the local-login flow at
+        `/login` (HTML form, not part of the REST surface). The
+        webworks `PychestrateSessionMiddleware` resolves this cookie
+        to a request-scoped actor on every request.
+    pychestrate_api_key:
+      type: apiKey
+      in: header
+      name: X-Pychestrate-Api-Key
+      description: |
+        Long-lived API key for tooling and CI integrations. Issued
+        out-of-band through the admin UI.
+    pychestrate_mtls:
+      type: mutualTLS
+      description: |
+        Mutual TLS using the client certificate issued by
+        `POST /enrollment-tokens/redeem`. Required on every endpoint
+        the pod client agent calls (`dispatch-ack`, `progress`,
+        `results/complete`, plus any future client-pull endpoints).
+
+  parameters:
+
+    PageParam:
+      in: query
+      name: page
+      description: One-based page index for paginated list endpoints.
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPageParam:
+      in: query
+      name: per_page
+      description: Page size for paginated list endpoints.
+      schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+    UserIdParam:
+      in: path
+      name: user_id
+      required: true
+      schema: { type: string, format: uuid }
+    ProjectIdParam:
+      in: path
+      name: project_id
+      required: true
+      schema: { type: string, format: uuid }
+    ProjectSlugParam:
+      in: path
+      name: slug
+      required: true
+      description: Project slug — kebab-case, globally unique.
+      schema: { type: string, pattern: '^[a-z0-9][a-z0-9-]*$' }
+    ClientIdParam:
+      in: path
+      name: client_id
+      required: true
+      schema: { type: string, format: uuid }
+    PodIdParam:
+      in: path
+      name: pod_id
+      required: true
+      schema: { type: string, format: uuid }
+    RunIdParam:
+      in: path
+      name: run_id
+      required: true
+      schema: { type: string, format: uuid }
+    FlagKeyParam:
+      in: path
+      name: flag_key
+      required: true
+      schema: { type: string }
+    VariableScopeParam:
+      in: path
+      name: scope
+      required: true
+      description: Variable scope kind.
+      schema:
+        type: string
+        enum: [global, project, pod, run]
+    VariableScopeIdParam:
+      in: path
+      name: scope_id
+      required: true
+      schema: { type: string }
+    EntityKindParam:
+      in: path
+      name: entity_kind
+      required: true
+      description: Type of entity the tag is attached to.
+      schema:
+        type: string
+        enum: [project, pod, client, run, resource, artifact, run_artifact]
+    EntityIdParam:
+      in: path
+      name: entity_id
+      required: true
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Request was malformed or failed validation.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Caller is not authenticated.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Forbidden:
+      description: Caller is authenticated but lacks the required permission.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Target resource was not found.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: Request conflicts with current resource state.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unprocessable:
+      description: Request was well-formed but semantically invalid.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Server-side dependency unavailable.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    # ----------------------------------------------------------------
+    # Error / pagination envelopes
+    # ----------------------------------------------------------------
+
+    Problem:
+      type: object
+      description: |
+        RFC 7807 Problem Document. Every 4xx / 5xx response in this API
+        is served as `application/problem+json` with this shape.
+      required: [type, title, status, detail]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI identifying the problem class (`about:blank` for generic statuses).
+          default: about:blank
+        title:
+          type: string
+          description: Short, human-readable summary of the problem type.
+        status:
+          type: integer
+          description: HTTP status code generated by the origin server.
+        detail:
+          type: string
+          description: Occurrence-specific explanation.
+        instance:
+          type: string
+          format: uri-reference
+          description: URI reference identifying this specific occurrence.
+
+    PageMeta:
+      type: object
+      description: Pagination metadata returned alongside every paged `items` array.
+      required: [page, per_page, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        per_page: { type: integer, minimum: 1 }
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of items across all pages (when known).
+        next_cursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page (when cursor-based).
+
+    # ----------------------------------------------------------------
+    # auth / me
+    # ----------------------------------------------------------------
+
+    LogoutRequest:
+      type: object
+      required: [session_id]
+      properties:
+        session_id: { type: string }
+    LogoutResponse:
+      type: object
+      required: [session_id, status]
+      properties:
+        session_id: { type: string }
+        status:
+          type: string
+          enum: [closed]
+
+    MePermissions:
+      type: object
+      required: [user_id, permissions]
+      properties:
+        user_id: { type: string, format: uuid }
+        permissions:
+          type: array
+          items: { type: string }
+        role_bindings:
+          type: array
+          items: { $ref: '#/components/schemas/RbacRoleBinding' }
+
+    # ----------------------------------------------------------------
+    # users / rbac
+    # ----------------------------------------------------------------
+
+    User:
+      type: object
+      required: [user_id, username, status, created_at]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: string }
+        display_name: { type: string }
+        email: { type: string, format: email }
+        status:
+          type: string
+          enum: [active, suspended, deleted]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    UserCreateRequest:
+      type: object
+      required: [username]
+      properties:
+        username: { type: string }
+        display_name: { type: string }
+        email: { type: string, format: email }
+        initial_password:
+          type: string
+          description: Optional initial password for local-auth users.
+
+    RbacPermission:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+    RbacRole:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+    RbacRoleBinding:
+      type: object
+      required: [binding_id, user_id, role_name]
+      properties:
+        binding_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role_name: { type: string }
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Project scope of the binding; `null` for site-wide bindings.
+        created_at: { type: string, format: date-time }
+    RbacRoleBindingCreateRequest:
+      type: object
+      required: [user_id, role_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        role_name: { type: string }
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+    RbacCheckRequest:
+      type: object
+      required: [permission]
+      properties:
+        permission: { type: string }
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        user_id:
+          type: string
+          format: uuid
+          description: When omitted, the check runs against the calling actor.
+    RbacCheckResponse:
+      type: object
+      required: [allowed, permission]
+      properties:
+        allowed: { type: boolean }
+        permission: { type: string }
+        project_id:
+          type: string
+          format: uuid
+          nullable: true
+        reason: { type: string }
+
+    # ----------------------------------------------------------------
+    # audit
+    # ----------------------------------------------------------------
+
+    AuditRecord:
+      type: object
+      required: [sequence_number, action, recorded_at]
+      properties:
+        sequence_number: { type: integer, minimum: 0 }
+        action: { type: string, description: 'Action key (e.g. `project.created`).' }
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        target_kind: { type: string }
+        target_id: { type: string }
+        recorded_at: { type: string, format: date-time }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Action-specific payload bag.
+
+    # ----------------------------------------------------------------
+    # secrets
+    # ----------------------------------------------------------------
+
+    SecretRef:
+      type: object
+      required: [secret_ref, backend, created_at]
+      properties:
+        secret_ref:
+          type: string
+          description: Backend-qualified secret path (e.g. `vault/myteam/api-token`).
+        backend: { type: string }
+        description: { type: string }
+        last_rotated_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at: { type: string, format: date-time }
+
+    # ----------------------------------------------------------------
+    # variables
+    # ----------------------------------------------------------------
+
+    Variable:
+      type: object
+      required: [name, scope, scope_id, value_type, value]
+      properties:
+        name: { type: string }
+        scope:
+          type: string
+          enum: [global, project, pod, run]
+        scope_id: { type: string }
+        value_type:
+          type: string
+          enum: [string, integer, float, boolean, json, secret_ref]
+        value: {}
+        description: { type: string }
+        sensitive: { type: boolean, default: false }
+        updated_at: { type: string, format: date-time }
+    VariableUpsertRequest:
+      type: object
+      required: [value_type, value]
+      properties:
+        value_type:
+          type: string
+          enum: [string, integer, float, boolean, json, secret_ref]
+        value: {}
+        description: { type: string }
+        sensitive: { type: boolean, default: false }
+    VariableEffectiveSet:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/VariableEffectiveEntry' }
+    VariableEffectiveEntry:
+      type: object
+      required: [name, value_type, value, resolved_from]
+      properties:
+        name: { type: string }
+        value_type:
+          type: string
+          enum: [string, integer, float, boolean, json, secret_ref]
+        value: {}
+        resolved_from:
+          type: string
+          enum: [global, project, pod, run]
+          description: Scope that won inheritance for this variable.
+
+    # ----------------------------------------------------------------
+    # flags
+    # ----------------------------------------------------------------
+
+    FeatureFlag:
+      type: object
+      required: [flag_key, enabled, created_at]
+      properties:
+        flag_key: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        rollout_percent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        retired: { type: boolean, default: false }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    FeatureFlagCreateRequest:
+      type: object
+      required: [flag_key]
+      properties:
+        flag_key: { type: string }
+        description: { type: string }
+        enabled: { type: boolean, default: false }
+        rollout_percent: { type: integer, minimum: 0, maximum: 100 }
+    FeatureFlagUpdateRequest:
+      type: object
+      properties:
+        description: { type: string }
+        enabled: { type: boolean }
+        rollout_percent: { type: integer, minimum: 0, maximum: 100 }
+    FeatureFlagBackend:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        active: { type: boolean }
+    FeatureFlagHistoryEntry:
+      type: object
+      required: [recorded_at, action]
+      properties:
+        recorded_at: { type: string, format: date-time }
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        action: { type: string }
+        before:
+          type: object
+          additionalProperties: true
+        after:
+          type: object
+          additionalProperties: true
+    FeatureFlagEvaluateRequest:
+      type: object
+      properties:
+        context:
+          type: object
+          additionalProperties: true
+          description: Evaluation context bag (user_id, project_id, attrs).
+    FeatureFlagEvaluateResponse:
+      type: object
+      required: [flag_key, value]
+      properties:
+        flag_key: { type: string }
+        value: { type: boolean }
+        reason: { type: string }
+
+    # ----------------------------------------------------------------
+    # tagging
+    # ----------------------------------------------------------------
+
+    Tag:
+      type: object
+      required: [tag, entity_kind, entity_id]
+      properties:
+        tag: { type: string }
+        entity_kind: { type: string }
+        entity_id: { type: string }
+        taxonomy: { type: string }
+        attached_at: { type: string, format: date-time }
+    TagAttachRequest:
+      type: object
+      required: [tag]
+      properties:
+        tag: { type: string }
+        taxonomy: { type: string }
+    TagTaxonomy:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+
+    # ----------------------------------------------------------------
+    # retention
+    # ----------------------------------------------------------------
+
+    RetentionPolicy:
+      type: object
+      required: [policy_id, name, data_class, action, status, created_at]
+      properties:
+        policy_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        data_class: { type: string }
+        action:
+          type: string
+          enum: [archive, cold_tier, delete, custom]
+        retention_period_days: { type: integer, minimum: 0 }
+        status:
+          type: string
+          enum: [draft, published, archived]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RetentionPolicyCreateRequest:
+      type: object
+      required: [name, data_class, action]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        data_class: { type: string }
+        action:
+          type: string
+          enum: [archive, cold_tier, delete, custom]
+        retention_period_days: { type: integer, minimum: 0 }
+
+    # ----------------------------------------------------------------
+    # notifications
+    # ----------------------------------------------------------------
+
+    NotificationChannel:
+      type: object
+      required: [channel_id, name, kind, status, created_at]
+      properties:
+        channel_id: { type: string, format: uuid }
+        name: { type: string }
+        kind:
+          type: string
+          enum: [email, slack, webhook, pagerduty]
+        config:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [active, disabled, error]
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotificationChannelCreateRequest:
+      type: object
+      required: [name, kind, config]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [email, slack, webhook, pagerduty]
+        config:
+          type: object
+          additionalProperties: true
+
+    # ----------------------------------------------------------------
+    # project_templates
+    # ----------------------------------------------------------------
+
+    ProjectTemplate:
+      type: object
+      required: [template_id, name]
+      properties:
+        template_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        version: { type: string }
+        provided_by: { type: string }
+
+    # ----------------------------------------------------------------
+    # projects
+    # ----------------------------------------------------------------
+
+    Project:
+      type: object
+      required: [project_id, slug, display_name, status, created_at]
+      properties:
+        project_id: { type: string, format: uuid }
+        slug: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        owning_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        template_id:
+          type: string
+          nullable: true
+        template_version:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, archived, deleted]
+        extension_fields:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProjectCreateRequest:
+      type: object
+      required: [slug, display_name]
+      properties:
+        slug: { type: string, pattern: '^[a-z0-9][a-z0-9-]*$' }
+        display_name: { type: string }
+        description: { type: string }
+        owning_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        template_id:
+          type: string
+          nullable: true
+        template_version:
+          type: string
+          nullable: true
+    ProjectPatchRequest:
+      type: object
+      properties:
+        display_name: { type: string }
+        description: { type: string }
+        extension_fields:
+          type: object
+          additionalProperties: true
+    ProjectMember:
+      type: object
+      required: [user_id, role_bindings]
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: string }
+        display_name: { type: string }
+        role_bindings:
+          type: array
+          items: { $ref: '#/components/schemas/RbacRoleBinding' }
+    ProjectMemberAddRequest:
+      type: object
+      required: [user_id, role_name]
+      properties:
+        user_id: { type: string, format: uuid }
+        role_name: { type: string }
+
+    # ----------------------------------------------------------------
+    # clients / enrollment / agents
+    # ----------------------------------------------------------------
+
+    Client:
+      type: object
+      required: [client_id, status, created_at]
+      properties:
+        client_id: { type: string, format: uuid }
+        display_name: { type: string }
+        status:
+          type: string
+          enum: [pending, active, revoked]
+        attributes:
+          type: object
+          additionalProperties: true
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        agent_version: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ClientRevokeRequest:
+      type: object
+      properties:
+        reason: { type: string }
+    ClientAttributesUpdateRequest:
+      type: object
+      required: [attributes]
+      properties:
+        attributes:
+          type: object
+          additionalProperties: true
+    ClientInventory:
+      type: object
+      required: [items, generated_at]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Client' }
+        generated_at: { type: string, format: date-time }
+    ClientCapabilities:
+      type: object
+      required: [client_id, capabilities, advertised_at]
+      properties:
+        client_id: { type: string, format: uuid }
+        capabilities:
+          type: array
+          items: { $ref: '#/components/schemas/CapabilityEntry' }
+        advertised_at: { type: string, format: date-time }
+    CapabilityEntry:
+      type: object
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          description: Capability kind name (resolves a `CapabilityKindExtension`).
+        name: { type: string }
+        version: { type: string }
+        attributes:
+          type: object
+          additionalProperties: true
+
+    EnrollmentToken:
+      type: object
+      required: [token_id, created_at]
+      properties:
+        token_id: { type: string, format: uuid }
+        description: { type: string }
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        max_redemptions: { type: integer, minimum: 1 }
+        redeemed_count: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+    EnrollmentTokenCreateRequest:
+      type: object
+      properties:
+        description: { type: string }
+        ttl_seconds: { type: integer, minimum: 60 }
+        max_redemptions: { type: integer, minimum: 1, default: 1 }
+    EnrollmentTokenWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/EnrollmentToken'
+        - type: object
+          required: [bootstrap_secret]
+          properties:
+            bootstrap_secret:
+              type: string
+              description: One-time secret returned only at issuance.
+    EnrollmentRedeemRequest:
+      type: object
+      required: [bootstrap_secret, csr_pem]
+      properties:
+        bootstrap_secret: { type: string }
+        csr_pem:
+          type: string
+          description: PEM-encoded PKCS#10 certificate signing request.
+        display_name: { type: string }
+        attributes:
+          type: object
+          additionalProperties: true
+    EnrollmentRedeemResponse:
+      type: object
+      required: [client_id, client_certificate_pem, ca_chain_pem]
+      properties:
+        client_id: { type: string, format: uuid }
+        client_certificate_pem: { type: string }
+        ca_chain_pem: { type: string }
+        not_after: { type: string, format: date-time }
+
+    AgentRollout:
+      type: object
+      required: [rollout_id, status, created_at]
+      properties:
+        rollout_id: { type: string, format: uuid }
+        agent_version: { type: string }
+        targeting:
+          type: object
+          additionalProperties: true
+        status:
+          type: string
+          enum: [draft, scheduled, running, completed, halted]
+        created_at: { type: string, format: date-time }
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+    AgentRolloutCreateRequest:
+      type: object
+      required: [agent_version]
+      properties:
+        agent_version: { type: string }
+        targeting:
+          type: object
+          additionalProperties: true
+
+    # ----------------------------------------------------------------
+    # pods
+    # ----------------------------------------------------------------
+
+    PodDefinition:
+      type: object
+      required: [pod_id, project_id, name, created_at]
+      properties:
+        pod_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/PodMember' }
+        attributes:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    PodDefinitionCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/PodMember' }
+        attributes:
+          type: object
+          additionalProperties: true
+    PodMember:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          description: Pod-member kind name (resolves a `PodMemberKindExtension`).
+        attributes:
+          type: object
+          additionalProperties: true
+    PodState:
+      type: object
+      required: [pod_id, state, updated_at]
+      properties:
+        pod_id: { type: string, format: uuid }
+        state:
+          type: string
+          enum:
+            - declared
+            - provisioning
+            - registering
+            - ready
+            - busy
+            - draining
+            - offline
+            - error
+            - retired
+        updated_at: { type: string, format: date-time }
+        last_message: { type: string }
+    PodStateTransition:
+      type: object
+      required: [pod_id, from_state, to_state, occurred_at]
+      properties:
+        pod_id: { type: string, format: uuid }
+        from_state: { type: string }
+        to_state: { type: string }
+        occurred_at: { type: string, format: date-time }
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        reason: { type: string }
+    PodRegistration:
+      type: object
+      required: [pod_id, client_id, registered_at]
+      properties:
+        pod_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        registered_at: { type: string, format: date-time }
+        attributes:
+          type: object
+          additionalProperties: true
+    PodTopology:
+      type: object
+      required: [pod_id, members, links]
+      properties:
+        pod_id: { type: string, format: uuid }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/PodMember' }
+        links:
+          type: array
+          items: { $ref: '#/components/schemas/PodTopologyLink' }
+    PodTopologyLink:
+      type: object
+      required: [from_member, to_member, kind]
+      properties:
+        from_member: { type: string }
+        to_member: { type: string }
+        kind: { type: string }
+        attributes:
+          type: object
+          additionalProperties: true
+    PodTemplate:
+      type: object
+      required: [template_id, project_id, name]
+      properties:
+        template_id: { type: string }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        parameters:
+          type: object
+          additionalProperties: true
+    PodTemplateCreateRequest:
+      type: object
+      required: [template_id, name]
+      properties:
+        template_id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        parameters:
+          type: object
+          additionalProperties: true
+    PodTemplateMaterializeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Optional name override for the materialized pod.
+        parameters:
+          type: object
+          additionalProperties: true
+
+    # ----------------------------------------------------------------
+    # plugin_api
+    # ----------------------------------------------------------------
+
+    PluginApiProtocol:
+      type: object
+      required: [protocol_name]
+      properties:
+        protocol_name: { type: string }
+        description: { type: string }
+        schema_version: { type: string }
+        implementations:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              precedence: { type: integer }
+              package: { type: string }
+    PluginApiMount:
+      type: object
+      required: [mount_path]
+      properties:
+        mount_path: { type: string }
+        extension_name: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+
+    # ----------------------------------------------------------------
+    # JobEnvelope (planned — surfaced as a referenced schema, not a top-
+    # level operation body, because it travels as the payload of a
+    # signed dispatch and is not POST'd as JSON by clients of the
+    # public REST surface.)
+    # ----------------------------------------------------------------
+
+    JobEnvelope:
+      type: object
+      description: |
+        Canonical dispatch envelope. Matches the dataclass in
+        `source/site/automojo/pychestrate/webservice/jobs/envelope/schema.py`.
+        Serialized with RFC 8785 (JCS) canonical JSON; consumers MUST
+        verify against the declared `schema_version`
+        (current: `2026-04-24`).
+      required:
+        - schema_version
+        - envelope_id
+        - issued_at
+        - issuer
+        - project_id
+        - job_id
+        - job_name
+        - job_type
+        - run_id
+        - client_id
+        - pod_id
+        - refs
+        - params
+        - scoped_secrets
+        - results
+        - forwarding
+        - deadline
+        - extension_claims
+      properties:
+        schema_version: { type: string }
+        envelope_id: { type: string }
+        issued_at: { type: string, format: date-time }
+        issuer: { type: string }
+        project_id: { type: string, format: uuid }
+        job_id: { type: string, format: uuid }
+        job_name: { type: string }
+        job_type: { type: string }
+        pipeline:
+          nullable: true
+          $ref: '#/components/schemas/JobPipelineRef'
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        pod_id: { type: string, format: uuid }
+        refs: { $ref: '#/components/schemas/JobRefs' }
+        params:
+          type: object
+          additionalProperties: true
+        scoped_secrets:
+          type: array
+          items: { $ref: '#/components/schemas/ScopedSecret' }
+        results: { $ref: '#/components/schemas/JobResultsLocator' }
+        forwarding: { $ref: '#/components/schemas/JobForwardingInfo' }
+        deadline: { $ref: '#/components/schemas/JobDeadline' }
+        extension_claims:
+          type: object
+          additionalProperties: true
+    JobRefs:
+      type: object
+      required: [branch, build, flavor, release, commit_sha]
+      properties:
+        branch: { type: string }
+        build: { type: string }
+        flavor: { type: string }
+        release: { type: string }
+        commit_sha: { type: string }
+    JobPipelineRef:
+      type: object
+      required: [pipeline_id, instance_id]
+      properties:
+        pipeline_id: { type: string }
+        instance_id: { type: string }
+    JobResultsLocator:
+      type: object
+      required: [backend_key_prefix, backend_driver]
+      properties:
+        backend_key_prefix: { type: string }
+        backend_driver: { type: string }
+    JobForwardingInfo:
+      type: object
+      required: [progress_url, summary_url, auth_method]
+      properties:
+        progress_url: { type: string, format: uri }
+        summary_url: { type: string, format: uri }
+        auth_method:
+          type: string
+          enum: [bearer, mtls]
+    JobDeadline:
+      type: object
+      required: [soft_deadline_at, hard_deadline_at]
+      properties:
+        soft_deadline_at: { type: string, format: date-time }
+        hard_deadline_at: { type: string, format: date-time }
+    ScopedSecret:
+      type: object
+      required: [name, value, expires_at, token_type]
+      properties:
+        name: { type: string }
+        value: { type: string }
+        expires_at: { type: string, format: date-time }
+        token_type: { type: string }
+
+    # ----------------------------------------------------------------
+    # RunState / Run
+    # ----------------------------------------------------------------
+
+    RunState:
+      type: string
+      description: |
+        Run lifecycle state. Mirrors
+        `jobs.run.state.enums.RunState`.
+      enum:
+        - pending
+        - dispatching
+        - dispatched
+        - dispatch_unconfirmed
+        - dispatch_lost
+        - dispatch_failed
+        - running
+        - progress_stalled
+        - cancel_requested
+        - cancelling
+        - cancelled
+        - completing
+        - completed
+        - failed
+        - needs_investigation
+
+    TerminalOutcome:
+      type: string
+      enum:
+        - success
+        - failure
+        - cancelled
+        - dispatch_failed
+        - dispatch_lost
+
+    Run:
+      type: object
+      required: [run_id, project_id, pod_id, job_type, state, created_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        pod_id: { type: string, format: uuid }
+        client_id:
+          type: string
+          format: uuid
+          nullable: true
+        job_id: { type: string, format: uuid }
+        job_name: { type: string }
+        job_type: { type: string }
+        state: { $ref: '#/components/schemas/RunState' }
+        terminal_outcome:
+          nullable: true
+          $ref: '#/components/schemas/TerminalOutcome'
+        current_dispatch_attempt_id:
+          type: string
+          format: uuid
+          nullable: true
+        progress_summary:
+          nullable: true
+          $ref: '#/components/schemas/ProgressSummary'
+        created_at: { type: string, format: date-time }
+        dispatched_at:
+          type: string
+          format: date-time
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        labels:
+          type: object
+          additionalProperties: { type: string }
+    RunPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Run' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # SSE events
+    # ----------------------------------------------------------------
+
+    RunEvent:
+      type: object
+      description: |
+        One event emitted on the `/runs/{run_id}/events` SSE stream.
+        The SSE `event:` field carries the event type tag; the SSE
+        `data:` field carries this JSON object.
+      required: [run_id, event_type, sequence, occurred_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        event_type:
+          type: string
+          enum: [state_changed, progress, result_manifest, heartbeat]
+        sequence: { type: integer, minimum: 0 }
+        occurred_at: { type: string, format: date-time }
+        state: { $ref: '#/components/schemas/RunState' }
+        terminal_outcome:
+          nullable: true
+          $ref: '#/components/schemas/TerminalOutcome'
+        progress:
+          nullable: true
+          $ref: '#/components/schemas/ProgressSummary'
+        manifest:
+          nullable: true
+          $ref: '#/components/schemas/ResultManifest'
+
+    # ----------------------------------------------------------------
+    # dispatch / progress / results
+    # ----------------------------------------------------------------
+
+    DispatchAck:
+      type: object
+      description: |
+        Posted by the pod client agent to `POST /runs/{run_id}/dispatch-ack`
+        to confirm receipt of a dispatched envelope.
+      required: [envelope_id, dispatch_attempt_id, client_id, local_run_id, accepted_at]
+      properties:
+        envelope_id: { type: string }
+        dispatch_attempt_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        local_run_id:
+          type: string
+          description: Local identifier minted by the client agent for reconciliation.
+        accepted_at: { type: string, format: date-time }
+        notes: { type: string }
+
+    ProgressSummary:
+      type: object
+      description: |
+        Roll-up the client agent emits at intervals. Matches the
+        testbase `ForwardingInfo` shape; see
+        `ingest.progress.schema.ProgressSummary`.
+      required: [run_id, client_id, format_tag, tests_passed, tests_failed, tests_skipped, tests_errored, recorded_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        format_tag:
+          type: string
+          description: Parser tag (`testbase` for the in-tree default).
+        tests_total:
+          type: integer
+          nullable: true
+        tests_passed: { type: integer, minimum: 0 }
+        tests_failed: { type: integer, minimum: 0 }
+        tests_skipped: { type: integer, minimum: 0 }
+        tests_errored: { type: integer, minimum: 0 }
+        percent_complete:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        recorded_at: { type: string, format: date-time }
+        raw:
+          type: object
+          additionalProperties: true
+
+    ProgressRecord:
+      type: object
+      description: |
+        One progress record from the testbase
+        `testrun_results_stream.jsos` stream — represents one test
+        scope completion (or preview).
+      required: [run_id, client_id, record_index, test_name, result]
+      properties:
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        record_index: { type: integer, minimum: 0 }
+        test_name: { type: string }
+        result:
+          type: string
+          enum: [PASSED, FAILED, SKIPPED, ERRORED, UNSET]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: number
+          nullable: true
+        raw:
+          type: object
+          additionalProperties: true
+
+    ProgressFrame:
+      type: object
+      description: |
+        Body of `POST /runs/{run_id}/progress`. One frame carries either
+        a summary roll-up, or a batch of per-test records, or both.
+      properties:
+        summary:
+          nullable: true
+          $ref: '#/components/schemas/ProgressSummary'
+        records:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressRecord' }
+
+    ResultManifest:
+      type: object
+      description: |
+        Body of `POST /runs/{run_id}/results/complete`. Signals that
+        the agent has finished writing the full testbase result tree
+        to the shared results backend and tells the server where the
+        tree lives + how it should be classified.
+      required:
+        - run_id
+        - client_id
+        - format_tag
+        - backend_key_prefix
+        - completed_at
+        - terminal_outcome
+      properties:
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        format_tag:
+          type: string
+          description: Parser tag (`testbase` for testbase result trees).
+        backend_key_prefix:
+          type: string
+          description: Per-run prefix the agent wrote the tree under
+            (echoes `JobResultsLocator.backend_key_prefix`).
+        backend_driver:
+          type: string
+          description: Object-store driver name the agent used.
+        completed_at: { type: string, format: date-time }
+        terminal_outcome: { $ref: '#/components/schemas/TerminalOutcome' }
+        summary_artifact_path:
+          type: string
+          description: Path (relative to `backend_key_prefix`) of
+            `testrun_summary.json`.
+          default: testrun_summary.json
+        results_stream_artifact_path:
+          type: string
+          description: Path of `testrun_results_stream.jsos`.
+          default: testrun_results_stream.jsos
+        results_artifact_path:
+          type: string
+          description: Path of the consolidated `testrun_results.json`.
+          default: testrun_results.json
+        html_summary_artifact_path:
+          type: string
+          description: Path of `testsummary.html`.
+          default: testsummary.html
+        tests_passed: { type: integer, minimum: 0 }
+        tests_failed: { type: integer, minimum: 0 }
+        tests_skipped: { type: integer, minimum: 0 }
+        tests_errored: { type: integer, minimum: 0 }
+        notes: { type: string }
+        extras:
+          type: object
+          additionalProperties: true
+
+    # ----------------------------------------------------------------
+    # artifacts
+    # ----------------------------------------------------------------
+
+    ArtifactEntry:
+      type: object
+      required: [path, size_bytes, content_type]
+      properties:
+        path:
+          type: string
+          description: Slash-delimited path relative to the run's results root.
+        size_bytes: { type: integer, minimum: 0 }
+        content_type: { type: string }
+        artifact_type:
+          type: string
+          description: Logical category assigned by an `ArtifactClassifierExtension`.
+        download_url:
+          type: string
+          format: uri
+          description: Signed URL the caller can use to download the bytes.
+        download_url_expires_at:
+          type: string
+          format: date-time
+        sha256: { type: string }
+        recorded_at: { type: string, format: date-time }
+    ArtifactEntryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ArtifactEntry' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # test_runs
+    # ----------------------------------------------------------------
+
+    TestRunCreateRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/test-runs`. Either
+        `catalog_entry_id` or `(importer_tag, entry_key)` MUST be
+        provided so the server can resolve the catalog row.
+      required: [pod_id]
+      properties:
+        catalog_entry_id:
+          type: string
+          format: uuid
+        importer_tag: { type: string }
+        entry_key: { type: string }
+        pod_id: { type: string, format: uuid }
+        params:
+          type: object
+          additionalProperties: true
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        soft_deadline_seconds: { type: integer, minimum: 1 }
+        hard_deadline_seconds: { type: integer, minimum: 1 }
+
+    # ----------------------------------------------------------------
+    # test_catalog
+    # ----------------------------------------------------------------
+
+    TestCatalogEntry:
+      type: object
+      description: |
+        Matches the SQLAlchemy model in
+        `orchestration.test.catalog.models.TestCatalogEntry`.
+      required:
+        - entry_id
+        - project_id
+        - importer_tag
+        - entry_key
+        - display_name
+        - canonical_digest
+        - retired
+        - created_at
+      properties:
+        entry_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        importer_tag: { type: string }
+        entry_key: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        required_capability_tags:
+          type: array
+          items: { type: string }
+        param_schema:
+          type: object
+          additionalProperties: true
+        raw_metadata:
+          type: object
+          additionalProperties: true
+        canonical_digest: { type: string }
+        retired: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TestCatalogEntryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/TestCatalogEntry' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    TestCatalogEntryUpsertRequest:
+      type: object
+      required: [importer_tag, entry_key, display_name]
+      properties:
+        importer_tag: { type: string }
+        entry_key: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        required_capability_tags:
+          type: array
+          items: { type: string }
+        param_schema:
+          type: object
+          additionalProperties: true
+        raw_metadata:
+          type: object
+          additionalProperties: true
+        retired: { type: boolean, default: false }
+    TestCatalogImportRequest:
+      type: object
+      required: [importer_tag]
+      properties:
+        importer_tag:
+          type: string
+          description: Importer factory tag (e.g. `testbase-project`).
+        source:
+          type: object
+          additionalProperties: true
+          description: Importer-specific source descriptor (repo URL, branch, path).
+    TestCatalogImportSummary:
+      type: object
+      required: [importer_tag, started_at]
+      properties:
+        importer_tag: { type: string }
+        started_at: { type: string, format: date-time }
+        entries_imported: { type: integer, minimum: 0 }
+        entries_retired: { type: integer, minimum: 0 }
+        errors:
+          type: array
+          items: { type: string }
