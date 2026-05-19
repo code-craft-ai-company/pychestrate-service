@@ -15,6 +15,26 @@ docs-clean:
 	rm -fr docs/_build docs/extensions/protocols docs/extensions/resources
 
 # ---------------------------------------------------------------------------
+# OpenAPI spec validation
+# ---------------------------------------------------------------------------
+#
+# ``openapi-validate`` runs the Python ``openapi-spec-validator`` package
+# against ``specs/openapi/pychestrate.yaml`` -- the single-file authoritative
+# REST contract that drives both the generated ``automojo-restclient-pychestrate``
+# client and the route handler implementations. Every PR that adds, removes,
+# or modifies a REST endpoint must update the spec and this target must pass.
+#
+# Install the validator into the active venv with:
+#
+#     poetry install --with dev
+#
+
+OPENAPI_SPEC := specs/openapi/pychestrate.yaml
+
+openapi-validate:
+	.venv/bin/openapi-spec-validator $(OPENAPI_SPEC)
+
+# ---------------------------------------------------------------------------
 # Service runtime targets
 # ---------------------------------------------------------------------------
 #

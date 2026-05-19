@@ -111,6 +111,20 @@ implemented surface has functional tests, the ~20 broken phase-10 tests
 are either fixed or retired, and a Playwright suite covers the unified
 shell's critical paths.
 
+## REST API Contract
+
+The authoritative contract for the `/api/v1/*` REST surface lives in
+[`specs/openapi/pychestrate.yaml`](specs/openapi/pychestrate.yaml).
+It covers every currently-implemented endpoint and the Phase 3
+minimum-viable test-run slice (planned operations are flagged with
+`x-pychestrate-status: planned`). The same file is consumed by
+`automojo-restclient-base`'s `RestClientGenerator` to generate the
+typed `automojo-restclient-pychestrate` Python client in a follow-on
+PR, and is the reference the parallel server-side route
+implementations conform to. Every PR that touches the REST surface
+must update this spec in the same PR; `make openapi-validate` is the
+enforcement gate.
+
 ## Current Refactor Sequence (PR1–PR6)
 
 This is the in-flight work that bridges `-preview` to the navigation
