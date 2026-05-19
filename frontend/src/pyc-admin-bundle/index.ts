@@ -27,6 +27,8 @@
  * per-entry required_permissions further filter individual entries.
  */
 
+import { register_admin_palette_provider } from "./palette/admin-search-provider.js"
+
 interface SidebarEntryDescriptor {
     entryId: string
     label: string
@@ -46,8 +48,26 @@ interface SidebarRegistryApi {
     registerEntry(entry: SidebarEntryDescriptor): void
 }
 
+interface PaletteProviderDescriptor {
+    providerId: string
+    label: string
+    requiredPermissions?: readonly string[]
+    timeoutMs?: number
+    query: (q: string) => Promise<Array<{
+        id: string
+        label: string
+        description?: string | null
+        route?: string | null
+    }>>
+}
+
+interface PaletteRegistryApi {
+    registerProvider(provider: PaletteProviderDescriptor): void
+}
+
 interface PycSiteShellRegistryHandle {
     sidebar: SidebarRegistryApi
+    palette?: PaletteRegistryApi
 }
 
 const ADMIN_GROUP_ID: string = "admin"
@@ -140,6 +160,14 @@ export function register_admin_sidebar(sidebar: SidebarRegistryApi): void {
  * synchronously during `connectedCallback`, so a microtask
  * suffices.
  */
+function _register_against(handle: PycSiteShellRegistryHandle): void {
+    register_admin_sidebar(handle.sidebar)
+    if (handle.palette !== undefined && handle.palette !== null) {
+        register_admin_palette_provider(handle.palette)
+    }
+    return
+}
+
 function _boot(): void {
     const target = window as unknown as {
         pychestrateShell?: PycSiteShellRegistryHandle
@@ -147,14 +175,14 @@ function _boot(): void {
 
     const handle = target.pychestrateShell
     if (handle !== undefined && handle.sidebar !== undefined) {
-        register_admin_sidebar(handle.sidebar)
+        _register_against(handle)
         return
     }
 
     queueMicrotask(() => {
         const retry = target.pychestrateShell
         if (retry !== undefined && retry.sidebar !== undefined) {
-            register_admin_sidebar(retry.sidebar)
+            _register_against(retry)
             return
         }
         console.warn(

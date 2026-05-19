@@ -18,6 +18,17 @@ export type {
     SidebarEntry,
     VisibleSidebar,
 } from "./sidebar/sidebar-registry.js"
+export { PaletteRegistry } from "./palette/palette-registry.js"
+export type {
+    PaletteProvider,
+    PaletteResult,
+    PaletteProviderOutcome,
+} from "./palette/palette-registry.js"
+export { PaletteDialog } from "./palette/palette-dialog.js"
+export {
+    attach_sidebar_keyboard,
+    initialize_sidebar_roving_tabindex,
+} from "./sidebar/sidebar-keyboard.js"
 export type { PycSiteShellRegistryHandle } from "./pyc-site-shell.js"
 
 const TAG_NAME: string = "pyc-site-shell"

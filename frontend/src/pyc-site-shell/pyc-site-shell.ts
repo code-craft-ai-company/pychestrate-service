@@ -1,5 +1,9 @@
 import { build_empty_state } from "./chrome/empty-state.js"
 import { build_header } from "./chrome/header.js"
+import { DegradedBanner } from "./chrome/degraded-banner.js"
+import { SessionExpiredToast } from "./chrome/session-toast.js"
+import { PaletteRegistry } from "./palette/palette-registry.js"
+import { PaletteDialog } from "./palette/palette-dialog.js"
 import {
     DEFAULT_PERMISSIONS_ENDPOINT,
     PermissionCache,
@@ -15,24 +19,32 @@ const ATTR_PALETTE_TIMEOUT_MS: string = "palette-timeout-ms"
 const ATTR_BRAND_LABEL: string = "brand-label"
 
 /**
- * `<pyc-site-shell>` — the unified UI chrome.
+ * `<pyc-site-shell>` -- the unified UI chrome.
  *
- * M1 scope: header, sidebar (rendered from a permission-gated
- * registry), main region, empty state. Palette / degraded banner /
- * mid-session 401 toast are M2.
+ * M2 scope (PR5): adds command palette, mid-session 401 toast,
+ * degraded banner, keyboard sidebar navigation, and the
+ * ``pyc-site-shell-permissions-changed`` diff event on top of the
+ * M1 skeleton.
  *
- * The shell registry is exposed at `window.pychestrateShell` so
- * feature bundles can call `pychestrateShell.sidebar.registerGroup`
- * etc. at load time without needing a JS module import path. PR4
- * will use this hook to wire admin / project sidebars.
+ * The shell registry is exposed at ``window.pychestrateShell`` so
+ * feature bundles can call ``pychestrateShell.sidebar.registerGroup``
+ * etc. at load time without needing a JS module import path. The
+ * same handle now exposes ``palette.registerProvider`` for the
+ * command-palette providers contributed by feature bundles.
  */
 export class PycSiteShell extends HTMLElement {
     private _sidebar_registry: SidebarRegistry
+    private _palette_registry: PaletteRegistry
     private _permission_cache: PermissionCache
     private _router: ShellRouter | null
     private _sidebar_renderer: SidebarRenderer | null
     private _main_region: HTMLElement | null
     private _sidebar_region: HTMLElement | null
+    private _palette_dialog: PaletteDialog | null
+    private _degraded_banner: DegradedBanner | null
+    private _session_toast: SessionExpiredToast | null
+    private _global_keydown: ((event: KeyboardEvent) => void) | null
+    private _global_session_401: (() => void) | null
     private _ready: boolean
 
     public static readonly observedAttributes: readonly string[] = [
@@ -46,6 +58,7 @@ export class PycSiteShell extends HTMLElement {
     public constructor() {
         super()
         this._sidebar_registry = new SidebarRegistry()
+        this._palette_registry = new PaletteRegistry()
         const endpoint = this.getAttribute(ATTR_PERMISSIONS_ENDPOINT)
         const resolved_endpoint =
             endpoint !== null && endpoint.length > 0
@@ -56,11 +69,21 @@ export class PycSiteShell extends HTMLElement {
         this._sidebar_renderer = null
         this._main_region = null
         this._sidebar_region = null
+        this._palette_dialog = null
+        this._degraded_banner = null
+        this._session_toast = null
+        this._global_keydown = null
+        this._global_session_401 = null
         this._ready = false
     }
 
     public get sidebar(): SidebarRegistry {
         const rtnval = this._sidebar_registry
+        return rtnval
+    }
+
+    public get palette(): PaletteRegistry {
+        const rtnval = this._palette_registry
         return rtnval
     }
 
@@ -71,10 +94,13 @@ export class PycSiteShell extends HTMLElement {
 
     public connectedCallback(): void {
         this._render_skeleton()
+        this._wire_permission_listeners()
+        this._wire_global_keydown()
+        this._wire_global_session_401()
         this._wire_window_registry()
         // Boot asynchronously so feature bundles loaded after the
         // shell tag also get a chance to register before the first
-        // sidebar render. A microtask is enough — the bundles run
+        // sidebar render. A microtask is enough -- the bundles run
         // synchronously after their module body loads.
         queueMicrotask(() => {
             this._boot().catch((reason: unknown) => {
@@ -84,6 +110,43 @@ export class PycSiteShell extends HTMLElement {
                 )
             })
         })
+        return
+    }
+
+    public disconnectedCallback(): void {
+        if (this._global_keydown !== null) {
+            window.removeEventListener("keydown", this._global_keydown)
+            this._global_keydown = null
+        }
+        if (this._global_session_401 !== null) {
+            window.removeEventListener(
+                "pyc-session-401",
+                this._global_session_401,
+            )
+            this._global_session_401 = null
+        }
+        return
+    }
+
+    /**
+     * Public hook -- open the command palette. Exposed so feature
+     * bundles or tests can trigger the palette without simulating
+     * a keystroke.
+     */
+    public openPalette(): void {
+        if (this._palette_dialog !== null) {
+            this._palette_dialog.open()
+        }
+        return
+    }
+
+    /**
+     * Public hook -- close the command palette.
+     */
+    public closePalette(): void {
+        if (this._palette_dialog !== null) {
+            this._palette_dialog.close()
+        }
         return
     }
 
@@ -122,15 +185,111 @@ export class PycSiteShell extends HTMLElement {
 
         this.appendChild(layout)
 
-        this._router = new ShellRouter(initial_path, () => this._main_region)
-        this._sidebar_renderer = new SidebarRenderer(sidebar, (route) => {
-            void this._router?.navigateTo(route)
-        })
+        this._degraded_banner = new DegradedBanner(main)
+        this._session_toast = new SessionExpiredToast(main)
+        this._palette_dialog = new PaletteDialog(
+            this._palette_registry,
+            {
+                getPermissions: () => this._permission_cache.current(),
+                navigate: (route: string) => {
+                    if (this._router !== null) {
+                        void this._router.navigateTo(route)
+                    }
+                },
+                emit: (
+                    event_name: string,
+                    detail: Record<string, unknown>,
+                ) => {
+                    this._emit(event_name, detail)
+                },
+            },
+        )
 
-        this._router.onNavigate(async () => {
-            await this._permission_cache.refresh()
+        this._router = new ShellRouter(initial_path, () => this._main_region)
+        this._sidebar_renderer = new SidebarRenderer(
+            sidebar,
+            (route) => {
+                void this._router?.navigateTo(route)
+            },
+            (entry_route: string, entry_label: string) => {
+                this._emit(
+                    "pyc-site-shell-sidebar-clicked",
+                    {
+                        entryRoute: entry_route,
+                        entryLabel: entry_label,
+                    },
+                )
+            },
+        )
+
+        this._router.onNavigate(async (next_ctx, prev_ctx) => {
+            await this._permission_cache.refresh(true)
+            this._render_sidebar_and_empty_state()
+            this._emit(
+                "pyc-site-shell-navigated",
+                {
+                    from: prev_ctx !== null ? prev_ctx.path : null,
+                    to: next_ctx.path,
+                },
+            )
+        })
+        return
+    }
+
+    private _wire_permission_listeners(): void {
+        this._permission_cache.onPermissionsChanged((diff) => {
+            this._emit(
+                "pyc-site-shell-permissions-changed",
+                { added: diff.added, removed: diff.removed },
+            )
             this._render_sidebar_and_empty_state()
         })
+        this._permission_cache.onFetchFailed(() => {
+            if (this._degraded_banner !== null) {
+                this._degraded_banner.show()
+            }
+            this._emit_window_event(
+                "pyc-permissions-fetch-failed",
+                {},
+            )
+        })
+        this._permission_cache.onFetchSucceeded(() => {
+            if (this._degraded_banner !== null) {
+                this._degraded_banner.hide()
+            }
+        })
+        this._permission_cache.onSession401(() => {
+            this._emit_window_event("pyc-session-401", {})
+        })
+        return
+    }
+
+    private _wire_global_keydown(): void {
+        const handler = (event: KeyboardEvent): void => {
+            if (event.defaultPrevented === true) {
+                return
+            }
+            const is_palette_combo =
+                (event.ctrlKey === true || event.metaKey === true) &&
+                event.key.toLowerCase() === "k"
+            if (is_palette_combo === true) {
+                event.preventDefault()
+                this.openPalette()
+            }
+        }
+        window.addEventListener("keydown", handler)
+        this._global_keydown = handler
+        return
+    }
+
+    private _wire_global_session_401(): void {
+        const handler = (): void => {
+            if (this._session_toast !== null) {
+                this._session_toast.show()
+            }
+        }
+        window.addEventListener("pyc-session-401", handler)
+        this._global_session_401 = handler
         return
     }
 
@@ -140,6 +299,7 @@ export class PycSiteShell extends HTMLElement {
         }
         const handle: PycSiteShellRegistryHandle = {
             sidebar: this._sidebar_registry,
+            palette: this._palette_registry,
             element: this,
         }
         global_target.pychestrateShell = handle
@@ -147,20 +307,17 @@ export class PycSiteShell extends HTMLElement {
     }
 
     private async _boot(): Promise<void> {
-        await this._permission_cache.refresh()
+        await this._permission_cache.refresh(true)
         this._render_sidebar_and_empty_state()
         this._ready = true
-        this.dispatchEvent(
-            new CustomEvent("pyc-site-shell-ready", {
-                bubbles: true,
-                composed: true,
-                detail: {
-                    visibleEntryCount: this._sidebar_registry.visibleEntryCount(
-                        this._permission_cache.current(),
-                    ),
-                    degraded: this._permission_cache.degraded,
-                },
-            }),
+        this._emit(
+            "pyc-site-shell-ready",
+            {
+                visibleEntryCount: this._sidebar_registry.visibleEntryCount(
+                    this._permission_cache.current(),
+                ),
+                degraded: this._permission_cache.degraded,
+            },
         )
         return
     }
@@ -182,15 +339,54 @@ export class PycSiteShell extends HTMLElement {
             perms,
         )
         if (visible_entry_count === 0 && this._main_region !== null) {
-            this._main_region.replaceChildren(build_empty_state())
-            this.dispatchEvent(
-                new CustomEvent("pyc-site-shell-empty-state-rendered", {
-                    bubbles: true,
-                    composed: true,
-                    detail: {},
-                }),
+            // Keep degraded banner / session toast around when
+            // present; the empty-state replaces only the rest.
+            const preserved: HTMLElement[] = []
+            for (const child of Array.from(this._main_region.children)) {
+                if (
+                    child.classList.contains(
+                        "pyc-site-shell__degraded-banner",
+                    ) === true ||
+                    child.classList.contains(
+                        "pyc-site-shell__session-toast",
+                    ) === true
+                ) {
+                    preserved.push(child as HTMLElement)
+                }
+            }
+            this._main_region.replaceChildren(...preserved, build_empty_state())
+            this._emit(
+                "pyc-site-shell-empty-state-rendered",
+                {},
             )
         }
+        return
+    }
+
+    private _emit(
+        event_name: string,
+        detail: Record<string, unknown>,
+    ): void {
+        this.dispatchEvent(
+            new CustomEvent(event_name, {
+                bubbles: true,
+                composed: true,
+                detail,
+            }),
+        )
+        return
+    }
+
+    private _emit_window_event(
+        event_name: string,
+        detail: Record<string, unknown>,
+    ): void {
+        window.dispatchEvent(
+            new CustomEvent(event_name, {
+                bubbles: false,
+                detail,
+            }),
+        )
         return
     }
 
@@ -200,7 +396,7 @@ export class PycSiteShell extends HTMLElement {
     }
 
     /**
-     * Test/diagnostic helper — returns the current permission set.
+     * Test/diagnostic helper -- returns the current permission set.
      * Not part of the long-term public API surface (which goes
      * through DOM CustomEvents).
      */
@@ -211,11 +407,12 @@ export class PycSiteShell extends HTMLElement {
 }
 
 /**
- * Shape of the `window.pychestrateShell` handle feature bundles
+ * Shape of the ``window.pychestrateShell`` handle feature bundles
  * see. Exporting the interface lets bundle authors type their
- * `(window as any).pychestrateShell` cast.
+ * ``(window as any).pychestrateShell`` cast.
  */
 export interface PycSiteShellRegistryHandle {
     sidebar: SidebarRegistry
+    palette: PaletteRegistry
     element: PycSiteShell
 }
