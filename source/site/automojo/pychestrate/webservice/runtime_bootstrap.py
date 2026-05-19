@@ -100,6 +100,15 @@ from automojo.pychestrate.webservice.extensions.phase3_bootstrap import (
     Phase3BootstrapConfig,
     bootstrap_phase3_runtime,
 )
+from automojo.pychestrate.webservice.extensions.phase5_bootstrap import (
+    Phase5BootstrapConfig,
+    bootstrap_phase5_runtime,
+)
+from automojo.pychestrate.webservice.extensions.phase6_bootstrap import (
+    Phase6BootstrapConfig,
+    bootstrap_phase6_runtime,
+)
+from automojo.pychestrate.webservice.jobs.scheduling import SchedulerHandle
 from automojo.pychestrate.webservice.metadata import (
     RUNTIME_ENVIRONMENTS,
     SITE_SHARED_GLOBALS,
@@ -214,6 +223,7 @@ class RuntimeBootstrapResult:
     engine: Engine
     session_factory: SessionFactory
     kek: KekHandle
+    phase5_scheduler_handle: Optional[SchedulerHandle] = None
 
 
 # ---------------------------------------------------------------------------
@@ -705,6 +715,12 @@ def bootstrap_runtime(
     phase3_config = Phase3BootstrapConfig(session_factory=session_factory)
     bootstrap_phase3_runtime(config=phase3_config)
 
+    phase5_config = Phase5BootstrapConfig(session_factory=session_factory)
+    phase5_handle = bootstrap_phase5_runtime(config=phase5_config)
+
+    phase6_config = Phase6BootstrapConfig(session_factory=session_factory)
+    bootstrap_phase6_runtime(config=phase6_config)
+
     _module_logger.info(
         "pychestrate.runtime_bootstrap.ready environment=%s kek_id=%s"
         " pepper_loaded=%s ui_cookie_secret_loaded=%s"
@@ -720,6 +736,7 @@ def bootstrap_runtime(
         engine=engine,
         session_factory=session_factory,
         kek=kek,
+        phase5_scheduler_handle=phase5_handle,
     )
     return rtnval
 

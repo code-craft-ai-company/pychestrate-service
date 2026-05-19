@@ -27,6 +27,7 @@ from automojo.pychestrate.webservice.jobs.reconcile.models import (
     ReconcileOutcome,
 )
 from automojo.pychestrate.webservice.jobs.run.state import (
+    Run,
     RunState,
     TERMINAL_STATES,
     get_snapshot,
@@ -39,6 +40,33 @@ class RunReconciler:
     """
         Decision engine for client-reconnect reconciliation.
     """
+
+    def scan_once(
+            self,
+            *,
+            db_session: DbSession
+        ) -> int:
+        """
+            Periodic-tick entry point. Counts the runs currently in
+            a non-terminal state — the population the reconciler is
+            responsible for tracking. PR A wires the scheduler to
+            invoke this method on a cadence so the loop is alive
+            even though the policy-driven scan (compare client
+            truth, emit divergence events) lands in a subsequent
+            PR. Idempotent and side-effect-free.
+
+            :param db_session: Active SQLAlchemy session.
+
+            :returns: Count of non-terminal runs observed.
+        """
+        terminal_members = list(TERMINAL_STATES)
+        rows = (
+            db_session.query(Run)
+            .filter(~Run.state.in_(terminal_members))
+            .all()
+        )
+        rtnval = len(rows)
+        return rtnval
 
     def reconcile_on_reconnect(
             self,

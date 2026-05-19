@@ -158,6 +158,36 @@ class PodOfflineStateService:
         # for dispatch.
         return row.tier
 
+    def evaluate_all_pods(
+            self,
+            *,
+            db_session: DbSession,
+            now: Optional[datetime] = None
+        ) -> List[str]:
+        """
+            Walk every tracked pod, re-evaluating its liveness
+            tier. Used by the phase-5 periodic offline-tolerance
+            tick so DEGRADED pods become OFFLINE after their
+            offline-grace window elapses, even when no further
+            events arrive.
+
+            :param db_session: Active SQLAlchemy session.
+            :param now: Optional override for the current time.
+
+            :returns: List of pod ids whose tier was re-evaluated
+                      (the row may or may not have transitioned).
+        """
+        rows = db_session.query(PodOfflineState).all()
+        evaluated: List[str] = []
+        for row in rows:
+            pod_id = str(row.pod_id)
+            self.evaluate_tier(
+                db_session=db_session, pod_id=pod_id, now=now,
+            )
+            evaluated.append(pod_id)
+        rtnval = evaluated
+        return rtnval
+
     def is_eligible_for_dispatch(
             self,
             *,

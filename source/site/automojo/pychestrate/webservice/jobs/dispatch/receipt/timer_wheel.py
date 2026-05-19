@@ -189,3 +189,38 @@ class TimerWheel:
         with self._lock:
             self._entries = {}
         return
+
+
+_DEFAULT_WHEEL_LOCK = threading.Lock()
+_DEFAULT_WHEEL: Optional[TimerWheel] = None
+
+
+def default_timer_wheel() -> TimerWheel:
+    """
+        Return the process-wide default :class:`TimerWheel`,
+        constructing it lazily on first call. The phase-5 bootstrap
+        scheduler ticks against this shared wheel so the wheel an
+        in-process dispatcher arms is the same wheel the periodic
+        ``fire_expired`` task scans.
+
+        :returns: Singleton :class:`TimerWheel`.
+    """
+    global _DEFAULT_WHEEL
+    with _DEFAULT_WHEEL_LOCK:
+        if _DEFAULT_WHEEL is None:
+            _DEFAULT_WHEEL = TimerWheel()
+        rtnval = _DEFAULT_WHEEL
+    return rtnval
+
+
+def reset_default_timer_wheel_for_testing() -> None:
+    """
+        Discard the module-level default wheel so each test starts
+        from a clean slate.
+
+        :returns: None.
+    """
+    global _DEFAULT_WHEEL
+    with _DEFAULT_WHEEL_LOCK:
+        _DEFAULT_WHEEL = None
+    return
