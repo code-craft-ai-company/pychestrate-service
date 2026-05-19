@@ -130,6 +130,8 @@ def _capture_phase_calls() -> Dict[str, Any]:
         "phase1_calls": [],
         "phase2_calls": [],
         "phase3_calls": [],
+        "phase5_calls": [],
+        "phase6_calls": [],
     }
 
     class _FakeKek:
@@ -148,9 +150,19 @@ def _capture_phase_calls() -> Dict[str, Any]:
         state["phase3_calls"].append(config)
         return
 
+    def fake_phase5(*, config: Any) -> Any:
+        state["phase5_calls"].append(config)
+        return None
+
+    def fake_phase6(*, config: Any) -> None:
+        state["phase6_calls"].append(config)
+        return
+
     p1 = create_module_patch(runtime_bootstrap, "bootstrap_phase1_runtime")
     p2 = create_module_patch(runtime_bootstrap, "bootstrap_phase2_runtime")
     p3 = create_module_patch(runtime_bootstrap, "bootstrap_phase3_runtime")
+    p5 = create_module_patch(runtime_bootstrap, "bootstrap_phase5_runtime")
+    p6 = create_module_patch(runtime_bootstrap, "bootstrap_phase6_runtime")
 
     m1 = p1.activate()
     m1.configure(side_effect=fake_phase1)
@@ -158,8 +170,12 @@ def _capture_phase_calls() -> Dict[str, Any]:
     m2.configure(side_effect=fake_phase2)
     m3 = p3.activate()
     m3.configure(side_effect=fake_phase3)
+    m5 = p5.activate()
+    m5.configure(side_effect=fake_phase5)
+    m6 = p6.activate()
+    m6.configure(side_effect=fake_phase6)
 
-    state["patches"] = [p1, p2, p3]
+    state["patches"] = [p1, p2, p3, p5, p6]
     return state
 
 
