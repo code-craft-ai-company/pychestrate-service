@@ -54,6 +54,7 @@ from automojo.pychestrate.webservice.webinterface.blueprints.config.routes impor
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
+    _wrap_admin_handler_in_shell,
 )
 
 
@@ -238,7 +239,8 @@ def register_sessions_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 
 

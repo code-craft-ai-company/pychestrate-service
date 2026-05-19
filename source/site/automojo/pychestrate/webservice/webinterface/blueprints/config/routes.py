@@ -512,6 +512,78 @@ def _build_auth_request(
     return rtnval
 
 
+def _wrap_admin_handler_in_shell(handler: Any) -> Any:
+    """
+        Wrap an admin-blueprint handler so its HTML response body
+        renders as a content fragment inside the site shell's main
+        slot.
+
+        The blueprint handlers under ``/admin/*`` render templates
+        that extend the fragment-style ``config/base.html`` -- a
+        bare section, no ``<html>/<head>/<body>``, no header /
+        sidebar, no Vue bootstrap chrome. This wrapper takes the
+        rendered fragment and re-emits it inside the shell document
+        (``site_shell/shell_document.html``) so the unified header +
+        sidebar render around it.
+
+        Non-HTML responses (e.g. ``RedirectResponse`` after a POST)
+        pass through unchanged. The response status code is preserved.
+
+        Per ``9-site-shell`` PR4 task F-1 / strategy A: the explicit
+        blueprint route still owns ``/admin/*`` (so we can keep the
+        existing webworks dispatch), but every authenticated render
+        now boots inside the shell. The shell bundle plus the admin
+        sidebar bundle (``pyc-admin-bundle``) are selected by
+        :func:`bundles_for` against the request's path, so the
+        admin sidebar group only loads on ``/admin/*`` paths.
+
+        :param handler: The original handler taking a webworks
+                        ``Request`` and returning a ``Response``.
+
+        :returns: A new callable with the same signature that wraps
+                  the response body in the shell document when the
+                  response is an HTML render.
+    """
+    from automojo.pychestrate.webservice.webinterface.site_shell.shell_document import (  # noqa: E402
+        render_shell_document,
+    )
+
+    def _wrapped(request: Request) -> Response:
+        inner = handler(request)
+        if isinstance(inner, HTMLResponse) is False:
+            return inner
+
+        try:
+            inner_body_bytes = inner._body
+        except AttributeError:
+            return inner
+
+        if inner_body_bytes is None:
+            inner_html = ""
+        else:
+            try:
+                inner_html = inner_body_bytes.decode("utf-8")
+            except Exception:
+                return inner
+
+        page_title = "Pychestrate"
+        rtnval = render_shell_document(
+            request=request,
+            page_title=page_title,
+            content_html=inner_html,
+        )
+        try:
+            rtnval._status_code = inner._status_code
+        except AttributeError:
+            pass
+        return rtnval
+
+    _wrapped.__name__ = "{}_in_shell".format(
+        getattr(handler, "__name__", "admin_handler")
+    )
+    return _wrapped
+
+
 def _render(
         *, template_name: str, context: Optional[Dict[str, Any]] = None,
         status_code: int = 200
@@ -1131,7 +1203,9 @@ def register_config_routes(*, app: Any) -> None:
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
         app.attach_route(full_path, methods=list(methods))(handler)
 
-    # Admin dashboard surface (/admin/...).
+    # Admin dashboard surface (/admin/...). Each handler is wrapped
+    # so its rendered fragment is injected into the site shell's main
+    # slot (PR4 task F-1 -- strategy A).
     for endpoint_name, relative_path, methods in _ADMIN_ROUTE_TABLE:
         full_path = ADMIN_PATH + relative_path
         if full_path.endswith("/") and full_path != "/":
@@ -1145,7 +1219,8 @@ def register_config_routes(*, app: Any) -> None:
         )
 
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
 
     for endpoint_name, relative_path in _FUTURE_ENDPOINT_PATTERNS:
         full_path = CONFIG_PATH + relative_path
@@ -1202,4 +1277,5 @@ __all__ = [
     "handle_login_submit",
     "handle_logout",
     "handle_dashboard",
+    "_wrap_admin_handler_in_shell",
 ]

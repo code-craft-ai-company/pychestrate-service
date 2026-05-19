@@ -133,13 +133,21 @@ def bundles_for(*, path: str) -> List[str]:
 
 def install_default_bundles() -> None:
     """
-        Register the M1 default bundles. Called once during
-        ``register_service_extensions`` so the shell document has
-        something to emit.
+        Register the M1 default bundles plus the PR4 admin bundle.
+        Called once during ``register_service_extensions`` so the
+        shell document has something to emit.
+
+        Bundles registered here:
+
+        * ``pyc-site-shell`` -- prefix ``""`` -- shell itself,
+          loaded on every shell-served path.
+        * ``pyc-admin-bundle`` -- prefix ``/admin`` -- admin
+          sidebar registration, loaded only on ``/admin/*`` paths.
 
         :returns: None.
     """
     register_bundle(route_prefix="", bundle_name="pyc-site-shell")
+    register_bundle(route_prefix="/admin", bundle_name="pyc-admin-bundle")
     return
 
 
