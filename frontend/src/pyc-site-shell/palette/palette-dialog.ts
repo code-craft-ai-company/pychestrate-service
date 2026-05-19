@@ -21,6 +21,8 @@ export interface PaletteDialogHost {
     getPermissions: () => PermissionSet
     navigate: (route: string) => void
     emit: (event_name: string, detail: Record<string, unknown>) => void
+    observePaletteOpened?: () => void
+    observePaletteFanout?: (seconds: number) => void
 }
 
 /**
@@ -110,6 +112,9 @@ export class PaletteDialog {
         }
         this._render_status("Type to search across registered providers.")
         this._host.emit("pyc-site-shell-palette-opened", {})
+        if (typeof this._host.observePaletteOpened === "function") {
+            this._host.observePaletteOpened()
+        }
         return
     }
 
@@ -237,7 +242,16 @@ export class PaletteDialog {
         }
 
         this._render_status("Searching...")
+        const fanout_started =
+            typeof performance !== "undefined" ? performance.now() : 0
         const outcomes = await this._registry.queryAll(raw_query, perms)
+        const fanout_finished =
+            typeof performance !== "undefined" ? performance.now() : 0
+        if (typeof this._host.observePaletteFanout === "function") {
+            this._host.observePaletteFanout(
+                (fanout_finished - fanout_started) / 1000,
+            )
+        }
         if (token !== this._query_token) {
             return
         }

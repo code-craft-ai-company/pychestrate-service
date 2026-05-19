@@ -1,0 +1,46 @@
+{
+  "suite": "pyc-site-shell",
+  "generated_at": "2026-05-19T14:02:24.541Z",
+  "cases": [
+    {
+      "name": "shell_tti",
+      "target_p95_ms": 400,
+      "p50_ms": 1.63,
+      "p95_ms": 2.04,
+      "samples": 30,
+      "meets_target": true
+    },
+    {
+      "name": "sidebar_render_100",
+      "target_p95_ms": 50,
+      "p50_ms": 0.005,
+      "p95_ms": 0.012,
+      "samples": 100,
+      "meets_target": true
+    },
+    {
+      "name": "permission_refetch",
+      "target_p95_ms": 80,
+      "p50_ms": 0.001,
+      "p95_ms": 0.001,
+      "samples": 60,
+      "meets_target": true
+    },
+    {
+      "name": "palette_open",
+      "target_p95_ms": 80,
+      "p50_ms": 0.129,
+      "p95_ms": 0.21,
+      "samples": 60,
+      "meets_target": true
+    },
+    {
+      "name": "palette_fanout_5_providers",
+      "target_p95_ms": 250,
+      "p50_ms": 27.543,
+      "p95_ms": 29.807,
+      "samples": 30,
+      "meets_target": true
+    }
+  ]
+}

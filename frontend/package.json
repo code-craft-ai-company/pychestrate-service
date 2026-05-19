@@ -7,11 +7,17 @@
     "scripts": {
         "build": "node build.mjs",
         "typecheck": "tsc --noEmit",
-        "test": "node --test tests/*.test.mjs",
+        "test": "node --test tests/*.test.mjs tests/properties/*.test.mjs",
+        "bench": "node bench/shell-bench.mjs",
+        "a11y": "node a11y/axe-audit.mjs",
         "clean": "node -e \"import('node:fs').then(fs => fs.rmSync('../source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist', { recursive: true, force: true }))\""
     },
     "devDependencies": {
+        "axe-core": "^4.11.4",
         "esbuild": "0.24.0",
+        "fast-check": "^4.8.0",
+        "jsdom": "^29.1.1",
+        "tinybench": "^6.0.2",
         "typescript": "5.6.3"
     }
 }

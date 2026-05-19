@@ -360,6 +360,9 @@ var PaletteDialog = class {
     }
     this._render_status("Type to search across registered providers.");
     this._host.emit("pyc-site-shell-palette-opened", {});
+    if (typeof this._host.observePaletteOpened === "function") {
+      this._host.observePaletteOpened();
+    }
     return;
   }
   /**
@@ -471,7 +474,14 @@ var PaletteDialog = class {
       return;
     }
     this._render_status("Searching...");
+    const fanout_started = typeof performance !== "undefined" ? performance.now() : 0;
     const outcomes = await this._registry.queryAll(raw_query, perms);
+    const fanout_finished = typeof performance !== "undefined" ? performance.now() : 0;
+    if (typeof this._host.observePaletteFanout === "function") {
+      this._host.observePaletteFanout(
+        (fanout_finished - fanout_started) / 1e3
+      );
+    }
     if (token !== this._query_token) {
       return;
     }
@@ -1464,6 +1474,201 @@ var SidebarRenderer = class {
   }
 };
 
+// src/pyc-site-shell/observability/metrics-beacon.ts
+var DEFAULT_METRICS_ENDPOINT = "/api/v1/_metrics/ui";
+var DEFAULT_BUFFER_CAPACITY = 100;
+var DEFAULT_FLUSH_WINDOW_MS = 3e4;
+var MetricsBeacon = class {
+  _endpoint;
+  _buffer_capacity;
+  _flush_window_ms;
+  _now;
+  _send_beacon;
+  _buffer;
+  _disabled_reason;
+  _pagehide_handler;
+  constructor(options = null) {
+    const opts = options !== null ? options : {};
+    this._endpoint = typeof opts.endpoint === "string" && opts.endpoint.length > 0 ? opts.endpoint : DEFAULT_METRICS_ENDPOINT;
+    this._buffer_capacity = typeof opts.bufferCapacity === "number" && opts.bufferCapacity > 0 ? opts.bufferCapacity : DEFAULT_BUFFER_CAPACITY;
+    this._flush_window_ms = typeof opts.flushWindowMs === "number" && opts.flushWindowMs > 0 ? opts.flushWindowMs : DEFAULT_FLUSH_WINDOW_MS;
+    this._now = typeof opts.now === "function" ? opts.now : () => {
+      if (typeof performance !== "undefined") {
+        return performance.now();
+      }
+      return Date.now();
+    };
+    const provided_sender = opts.sendBeacon;
+    if (typeof provided_sender === "function") {
+      this._send_beacon = provided_sender;
+    } else if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+      const bound = (url, body) => {
+        const result = navigator.sendBeacon(url, body);
+        return result;
+      };
+      this._send_beacon = bound;
+    } else {
+      this._send_beacon = null;
+    }
+    this._buffer = [];
+    this._disabled_reason = null;
+    this._pagehide_handler = null;
+  }
+  /**
+   * Wire ``pagehide`` so the buffer is flushed when the user
+   * navigates away. Optional -- the shell calls this once after
+   * construction. Returns a detach handle.
+   */
+  attachLifecycle() {
+    if (typeof window === "undefined") {
+      const noop = () => {
+        return;
+      };
+      return noop;
+    }
+    const handler = () => {
+      this.flush();
+    };
+    window.addEventListener("pagehide", handler);
+    this._pagehide_handler = handler;
+    const detach = () => {
+      if (this._pagehide_handler !== null) {
+        window.removeEventListener("pagehide", this._pagehide_handler);
+        this._pagehide_handler = null;
+      }
+    };
+    return detach;
+  }
+  /**
+   * Record a histogram observation (seconds).
+   *
+   * @param metric Metric name (must match the design.md catalog).
+   * @param seconds Observation value in seconds.
+   * @param labels Optional label dictionary; values must be
+   *               strings. Pass ``null`` for unlabeled metrics.
+   */
+  observeHistogram(metric, seconds, labels = null) {
+    if (this._disabled_reason !== null) {
+      return;
+    }
+    if (typeof metric !== "string" || metric.length === 0) {
+      return;
+    }
+    if (typeof seconds !== "number" || Number.isFinite(seconds) === false) {
+      return;
+    }
+    const entry = {
+      metric,
+      value: seconds,
+      labels: labels !== null ? labels : null,
+      timestamp_ms: Date.now()
+    };
+    this._buffer.push(entry);
+    this._maybe_flush();
+    return;
+  }
+  /**
+   * Increment a counter metric by 1 (or the supplied amount).
+   */
+  incrementCounter(metric, labels = null, amount = 1) {
+    if (this._disabled_reason !== null) {
+      return;
+    }
+    if (typeof metric !== "string" || metric.length === 0) {
+      return;
+    }
+    const value = typeof amount === "number" && Number.isFinite(amount) === true ? amount : 1;
+    const entry = {
+      metric,
+      value,
+      labels: labels !== null ? labels : null,
+      timestamp_ms: Date.now()
+    };
+    this._buffer.push(entry);
+    this._maybe_flush();
+    return;
+  }
+  /**
+   * Flush the current buffer to the backend. Drops the buffer
+   * after the call regardless of delivery outcome -- there is
+   * no retry queue.
+   */
+  flush() {
+    if (this._buffer.length === 0) {
+      return;
+    }
+    const batch = this._buffer;
+    this._buffer = [];
+    if (this._send_beacon === null) {
+      return;
+    }
+    const payload = JSON.stringify(batch);
+    try {
+      const delivered = this._send_beacon(this._endpoint, payload);
+      if (delivered === false) {
+        this._disabled_reason = "sendBeacon_refused";
+        console.warn(
+          "pychestrate.ui.shell.metrics_beacon_disabled",
+          { reason: this._disabled_reason }
+        );
+      }
+    } catch (reason) {
+      this._disabled_reason = "sendBeacon_threw";
+      console.warn(
+        "pychestrate.ui.shell.metrics_beacon_disabled",
+        { reason: String(reason) }
+      );
+    }
+    return;
+  }
+  /**
+   * Permanently disable this beacon (e.g. after a 404 on the
+   * endpoint) and drop any buffered entries.
+   */
+  disable(reason) {
+    this._disabled_reason = reason;
+    this._buffer = [];
+    return;
+  }
+  /**
+   * Diagnostic accessor for tests.
+   */
+  bufferLength() {
+    const rtnval = this._buffer.length;
+    return rtnval;
+  }
+  /**
+   * Diagnostic accessor for tests.
+   */
+  get disabledReason() {
+    const rtnval = this._disabled_reason;
+    return rtnval;
+  }
+  _maybe_flush() {
+    if (this._buffer.length >= this._buffer_capacity) {
+      this.flush();
+      return;
+    }
+    if (this._buffer.length > 0) {
+      const oldest = this._buffer[0];
+      const age_ms = Date.now() - oldest.timestamp_ms;
+      if (age_ms >= this._flush_window_ms) {
+        this.flush();
+        return;
+      }
+    }
+    return;
+  }
+};
+var SHELL_METRICS = {
+  TTI: "pychestrate_ui_shell_tti_seconds",
+  SIDEBAR_RENDER: "pychestrate_ui_shell_sidebar_render_duration_seconds",
+  PERMISSION_REFETCH: "pychestrate_ui_shell_navigation_permission_refetch_seconds",
+  PALETTE_OPEN: "pychestrate_ui_shell_palette_open_duration_seconds",
+  PALETTE_FANOUT: "pychestrate_ui_shell_palette_fanout_duration_seconds",
+  SIDEBAR_ENTRY_CLICKED: "pychestrate_ui_shell_sidebar_entry_clicked_total"
+};
+
 // src/pyc-site-shell/pyc-site-shell.ts
 var ATTR_INITIAL_ROUTE = "initial-route";
 var ATTR_PERMISSIONS_ENDPOINT = "permissions-endpoint";
@@ -1483,6 +1688,10 @@ var PycSiteShell = class extends HTMLElement {
   _global_keydown;
   _global_session_401;
   _ready;
+  _metrics;
+  _metrics_lifecycle_detach;
+  _boot_started_perf_now;
+  _palette_open_keydown_perf_now;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -1507,6 +1716,19 @@ var PycSiteShell = class extends HTMLElement {
     this._global_keydown = null;
     this._global_session_401 = null;
     this._ready = false;
+    this._metrics = new MetricsBeacon();
+    this._metrics_lifecycle_detach = null;
+    this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
+    this._palette_open_keydown_perf_now = null;
+  }
+  /**
+   * Diagnostic accessor for tests + bench harness -- returns the
+   * metrics beacon instance the shell uses. Not part of the
+   * long-term public API.
+   */
+  get metrics() {
+    const rtnval = this._metrics;
+    return rtnval;
   }
   get sidebar() {
     const rtnval = this._sidebar_registry;
@@ -1521,6 +1743,8 @@ var PycSiteShell = class extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
+    this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
+    this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();
     this._wire_permission_listeners();
     this._wire_global_keydown();
@@ -1537,6 +1761,11 @@ var PycSiteShell = class extends HTMLElement {
     return;
   }
   disconnectedCallback() {
+    if (this._metrics_lifecycle_detach !== null) {
+      this._metrics_lifecycle_detach();
+      this._metrics_lifecycle_detach = null;
+    }
+    this._metrics.flush();
     if (this._global_keydown !== null) {
       window.removeEventListener("keydown", this._global_keydown);
       this._global_keydown = null;
@@ -1556,6 +1785,9 @@ var PycSiteShell = class extends HTMLElement {
    * a keystroke.
    */
   openPalette() {
+    if (this._palette_open_keydown_perf_now === null) {
+      this._palette_open_keydown_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
+    }
     if (this._palette_dialog !== null) {
       this._palette_dialog.open();
     }
@@ -1605,6 +1837,23 @@ var PycSiteShell = class extends HTMLElement {
         },
         emit: (event_name, detail) => {
           this._emit(event_name, detail);
+        },
+        observePaletteOpened: () => {
+          if (this._palette_open_keydown_perf_now !== null) {
+            const now_value = typeof performance !== "undefined" ? performance.now() : 0;
+            const seconds = (now_value - this._palette_open_keydown_perf_now) / 1e3;
+            this._palette_open_keydown_perf_now = null;
+            this._metrics.observeHistogram(
+              SHELL_METRICS.PALETTE_OPEN,
+              seconds
+            );
+          }
+        },
+        observePaletteFanout: (seconds) => {
+          this._metrics.observeHistogram(
+            SHELL_METRICS.PALETTE_FANOUT,
+            seconds
+          );
         }
       }
     );
@@ -1622,10 +1871,20 @@ var PycSiteShell = class extends HTMLElement {
             entryLabel: entry_label
           }
         );
+        this._metrics.incrementCounter(
+          SHELL_METRICS.SIDEBAR_ENTRY_CLICKED,
+          { entry_route }
+        );
       }
     );
     this._router.onNavigate(async (next_ctx, prev_ctx) => {
+      const refetch_started = typeof performance !== "undefined" ? performance.now() : 0;
       await this._permission_cache.refresh(true);
+      const refetch_finished = typeof performance !== "undefined" ? performance.now() : 0;
+      this._metrics.observeHistogram(
+        SHELL_METRICS.PERMISSION_REFETCH,
+        (refetch_finished - refetch_started) / 1e3
+      );
       this._render_sidebar_and_empty_state();
       this._emit(
         "pyc-site-shell-navigated",
@@ -1672,6 +1931,7 @@ var PycSiteShell = class extends HTMLElement {
       const is_palette_combo = (event.ctrlKey === true || event.metaKey === true) && event.key.toLowerCase() === "k";
       if (is_palette_combo === true) {
         event.preventDefault();
+        this._palette_open_keydown_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
         this.openPalette();
       }
     };
@@ -1703,6 +1963,10 @@ var PycSiteShell = class extends HTMLElement {
     await this._permission_cache.refresh(true);
     this._render_sidebar_and_empty_state();
     this._ready = true;
+    const ready_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
+    const tti_seconds = (ready_perf_now - this._boot_started_perf_now) / 1e3;
+    this._metrics.observeHistogram(SHELL_METRICS.TTI, tti_seconds);
+    this._metrics.flush();
     this._emit(
       "pyc-site-shell-ready",
       {
@@ -1717,6 +1981,7 @@ var PycSiteShell = class extends HTMLElement {
   _render_sidebar_and_empty_state() {
     const perms = this._permission_cache.current();
     const active_path = this._router !== null ? this._router.current().path : window.location.pathname;
+    const render_started = typeof performance !== "undefined" ? performance.now() : 0;
     if (this._sidebar_renderer !== null && this._sidebar_region !== null) {
       this._sidebar_renderer.render(
         this._sidebar_registry,
@@ -1724,6 +1989,11 @@ var PycSiteShell = class extends HTMLElement {
         active_path
       );
     }
+    const render_finished = typeof performance !== "undefined" ? performance.now() : 0;
+    this._metrics.observeHistogram(
+      SHELL_METRICS.SIDEBAR_RENDER,
+      (render_finished - render_started) / 1e3
+    );
     const visible_entry_count = this._sidebar_registry.visibleEntryCount(
       perms
     );
@@ -1788,11 +2058,14 @@ if (typeof customElements !== "undefined") {
   }
 }
 export {
+  DEFAULT_METRICS_ENDPOINT,
+  MetricsBeacon,
   PaletteDialog,
   PaletteRegistry,
   PermissionCache,
   PermissionSet,
   PycSiteShell,
+  SHELL_METRICS,
   SidebarRegistry,
   attach_sidebar_keyboard,
   initialize_sidebar_roving_tabindex

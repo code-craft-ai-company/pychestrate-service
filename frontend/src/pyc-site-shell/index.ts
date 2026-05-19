@@ -30,6 +30,15 @@ export {
     initialize_sidebar_roving_tabindex,
 } from "./sidebar/sidebar-keyboard.js"
 export type { PycSiteShellRegistryHandle } from "./pyc-site-shell.js"
+export {
+    MetricsBeacon,
+    SHELL_METRICS,
+    DEFAULT_METRICS_ENDPOINT,
+} from "./observability/metrics-beacon.js"
+export type {
+    ClientMetric,
+    MetricsBeaconOptions,
+} from "./observability/metrics-beacon.js"
 
 const TAG_NAME: string = "pyc-site-shell"
 
