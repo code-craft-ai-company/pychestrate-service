@@ -52,6 +52,12 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:ui.admin.view",
             effect=PermissionEffect.ALLOW,
         ),
+        # 5-run-state-machine PR p19c: operator-facing read access
+        # to the run REST surface.
+        PermissionGrant(
+            permission_key="system:runs.read",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

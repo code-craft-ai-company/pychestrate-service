@@ -44,6 +44,12 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:ui.admin.view": (
         "UX signal: render the admin sidebar group in the site shell"
     ),
+    # Operator-facing read access for the run-state surface
+    # (GET /api/v1/runs and GET /api/v1/runs/{id}). Required by
+    # 5-run-state-machine PR p19c.
+    "system:runs.read": (
+        "Read runs and run-state listings via the REST surface"
+    ),
 }
 
 
