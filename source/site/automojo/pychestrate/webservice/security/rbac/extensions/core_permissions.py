@@ -50,6 +50,23 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:runs.read": (
         "Read runs and run-state listings via the REST surface"
     ),
+    # Operator-facing read access for the test-catalog REST
+    # surface (GET /api/v1/projects/{id}/test-catalog). Introduced
+    # by 6-test-orchestration PR p19d.
+    "system:test_catalog.read": (
+        "Read test-catalog entries via the REST surface"
+    ),
+    # Operator/CI write access for catalog upserts and importer
+    # runs. Introduced by 6-test-orchestration PR p19d.
+    "system:test_catalog.write": (
+        "Create, update, and import test-catalog entries via the REST surface"
+    ),
+    # Operator-facing trigger access for
+    # POST /api/v1/projects/{id}/test-runs. Introduced by
+    # 6-test-orchestration PR p19d.
+    "system:test_runs.create": (
+        "Trigger new test runs via the REST surface"
+    ),
 }
 
 
