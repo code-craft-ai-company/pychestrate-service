@@ -88,6 +88,12 @@ PROXY_PORT="80"             # external port nginx listens on
 # the browser never sees a cert/hostname mismatch.
 PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
 SKIP_SYSTEM_SETUP="false"
+# Path on the REMOTE to the CA cert used by nginx to verify
+# incoming client certificates for the mTLS-gated routes
+# (orchestration-ingest endpoints).  The deploy errors out
+# if this file does not exist on the remote -- bootstrap it
+# with ``deployment/bootstrap-client-ca.sh`` first.
+CLIENT_CA_PATH="/etc/nginx/ssl/client-ca.crt"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -96,6 +102,7 @@ while [ $# -gt 0 ]; do
         --port=*) REMOTE_PORT="${1#*=}" ;;
         --proxy-port=*) PROXY_PORT="${1#*=}" ;;
         --public-hostname=*) PUBLIC_HOSTNAME="${1#*=}" ;;
+        --client-ca-path=*) CLIENT_CA_PATH="${1#*=}" ;;
         --skip-system-setup) SKIP_SYSTEM_SETUP="true" ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
@@ -409,6 +416,32 @@ else
     echo "==> Step 7/8: nginx site config (proxy ${PROXY_PORT} -> 127.0.0.1:${REMOTE_PORT})"
     echo "    [you may be prompted for the remote sudo password]"
 
+    # Pre-flight: ensure the client-CA bundle exists on the
+    # remote before we render an nginx config that references
+    # it -- otherwise ``nginx -t`` would fail and the deploy
+    # would refuse to reload.
+    if ! ssh "${REMOTE_TARGET}" "test -f ${CLIENT_CA_PATH}"; then
+        cat >&2 <<EOF
+ERROR: client-CA cert ${CLIENT_CA_PATH} missing on ${REMOTE_TARGET}.
+
+The nginx :443 server block now requires a client-CA bundle to
+verify incoming client certificates for the mTLS-gated
+orchestration-ingest endpoints (/api/v1/runs/<id>/{progress,
+results/complete,dispatch-ack}).
+
+Bootstrap it once with the dedicated script:
+
+    deployment/bootstrap-client-ca.sh \\
+        --host=${REMOTE_HOST} --user=${REMOTE_USER}
+
+That generates a self-signed root CA at
+${CLIENT_CA_PATH} (and the corresponding key at
+\${CLIENT_CA_PATH%.crt}.key, mode 0600 root) if one does not
+already exist.  Then re-run this deploy.
+EOF
+        exit 6
+    fi
+
     # Render the nginx site config locally (interpolates the
     # proxy + app ports) and the install-script that places it.
     # scp both to /tmp on the remote, then ``ssh -t`` to execute.
@@ -448,9 +481,53 @@ server {
     ssl_certificate     /etc/nginx/ssl/pychestrate.crt;
     ssl_certificate_key /etc/nginx/ssl/pychestrate.key;
 
+    # Mutual-TLS client-cert verification.
+    #
+    # ``optional`` (not ``on``) lets the bulk of the surface --
+    # cookie-session UI traffic + API-key REST traffic -- keep
+    # working without a client cert.  The orchestration-ingest
+    # endpoints below are gated explicitly with an
+    # ``\$ssl_client_verify`` check, double-gated by the
+    # application-level mTLS check that consumes the
+    # ``SSL_CLIENT_S_DN_CN`` forwarded header.
+    ssl_client_certificate ${CLIENT_CA_PATH};
+    ssl_verify_client       optional;
+    ssl_verify_depth        2;
+
     # Generous body limit -- the service has uploads
     # (artifacts, logs) and 1MiB nginx default is too tight.
     client_max_body_size 50M;
+
+    # Orchestration-ingest endpoints -- worker -> service
+    # progress / results / dispatch-ack callbacks.  These MUST
+    # present a client cert verified against our CA bundle.
+    # nginx fails fast with 401 for unverified clients; the
+    # application STILL re-checks ``SSL_CLIENT_S_DN_CN`` so a
+    # misconfigured proxy cannot grant ingress unauthenticated.
+    location ~ ^/api/v1/runs/[^/]+/(progress|results/complete|dispatch-ack)\$ {
+        if (\$ssl_client_verify != "SUCCESS") {
+            return 401;
+        }
+
+        proxy_pass http://127.0.0.1:${REMOTE_PORT};
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-Host  \$host;
+
+        # Forward the verified subject + verify result so the
+        # app's _require_mtls_client_cn() helper can read the
+        # CN and bind the request to the calling worker.
+        proxy_set_header SSL_CLIENT_S_DN_CN \$ssl_client_s_dn_cn;
+        proxy_set_header SSL_CLIENT_VERIFY  \$ssl_client_verify;
+
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
 
     # Health probes / static / the WSGI app -- all routed to
     # the same upstream.
@@ -465,6 +542,13 @@ server {
         proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host  \$host;
+
+        # Forward mTLS-verified subject + verify result even on
+        # the catch-all so future routes that opt into the mTLS
+        # check see the same environ keys without a separate
+        # location block.
+        proxy_set_header SSL_CLIENT_S_DN_CN \$ssl_client_s_dn_cn;
+        proxy_set_header SSL_CLIENT_VERIFY  \$ssl_client_verify;
 
         # WebSocket / long-poll friendliness.
         proxy_set_header Upgrade           \$http_upgrade;
