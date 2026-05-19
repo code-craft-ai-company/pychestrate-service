@@ -205,6 +205,47 @@ def render_template_response(
     return rtnval
 
 
+def render_template_to_string(
+        *,
+        template_name: str,
+        context: Optional[Dict[str, Any]] = None,
+        environment: Optional[jinja2.Environment] = None
+    ) -> str:
+    """
+        Render a template with the supplied context and return the
+        rendered HTML as a string (no HTTP response wrapping).
+
+        Used by the site-shell integration in PR4 to render an
+        admin page as a content fragment, which is then injected
+        into the shell document via
+        ``render_shell_document(content_html=...)``.
+
+        :param template_name: Template path relative to the search
+                              paths.
+        :param context: Optional render context dict.
+        :param environment: Optional environment override. Defaults
+                            to the module-level singleton.
+
+        :returns: Rendered HTML as a unicode string.
+        :raises: jinja2.TemplateNotFound when the template is not
+                 found. RuntimeError when no environment is
+                 available.
+    """
+    if environment is None:
+        env = get_default_environment()
+    else:
+        env = environment
+
+    if context is None:
+        render_context: Dict[str, Any] = {}
+    else:
+        render_context = context
+
+    template = env.get_template(template_name)
+    rtnval = template.render(render_context)
+    return rtnval
+
+
 def discover_blueprint_template_paths(
         *, blueprints_root: str
     ) -> List[str]:

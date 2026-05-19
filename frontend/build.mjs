@@ -34,6 +34,10 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-site-shell", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-site-shell.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-admin-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-admin-bundle.js"),
+    },
 ]
 
 async function build_all() {
