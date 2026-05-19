@@ -1,7 +1,8 @@
 """
 .. module:: extensions.phase6_bootstrap
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Register the in-tree Layer-6 (orchestration) extensions.
+    :synopsis: Register the in-tree Layer-6 (orchestration) extensions
+               and construct the live :class:`TestOrchestrator`.
 
 .. moduleauthor:: Automation Mojo LLC
 
@@ -13,6 +14,16 @@ and :class:`TestbaseProjectImporter` under
 service object — no factory protocol — so the live hub is
 constructed and held inside the request layer rather than the
 extension registry.
+
+PR p19f adds the ``TestOrchestrator`` construction step. The
+trigger-run REST route (``POST /api/v1/projects/{project_id}/
+test-runs``, PR p19d) reads a module-level seam
+``ACTIVE_TEST_ORCHESTRATOR`` and answers 503 when it is ``None``.
+:func:`bootstrap_phase6_runtime` now constructs the orchestrator
+with its dependencies (a :class:`JobDispatcher` over the
+:class:`InMemoryTransport` reference adapter; the real client
+transport lands with PR G) and publishes it on the route seam so
+the endpoint can answer real requests.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -21,10 +32,29 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 from sqlalchemy.orm import Session as DbSession
+
+from automojo.pychestrate.webservice.jobs.dispatch import (
+    JobDispatcher,
+)
+from automojo.pychestrate.webservice.jobs.dispatch.transport_adapter import (
+    ClientTransportProtocol,
+    InMemoryTransport,
+)
+from automojo.pychestrate.webservice.jobs.results import (
+    SharedResultsBackend,
+)
+from automojo.pychestrate.webservice.orchestration.test.orchestrator import (
+    TestOrchestrator,
+)
+from automojo.pychestrate.webservice.orchestration.test.restapi.v1 import (
+    test_runs_routes,
+)
 
 from automojo.pychestrate.webservice.orchestration.build import (
     register_builtin_extensions as build_orch_register,
@@ -89,12 +119,54 @@ from automojo.pychestrate.webservice.orchestration.test.triage import models as 
 SessionFactory = Callable[[], DbSession]
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass(frozen=True)
 class Phase6BootstrapConfig:
     """
         Operator-supplied Phase-6 bootstrap configuration.
+
+        :param session_factory: Session factory used by the
+                                orchestration plane. When ``None``
+                                the bootstrap runs the
+                                extension-registration path only
+                                (matching the register-only callsite
+                                used by ``register_service_extensions``)
+                                -- the orchestrator construction step
+                                is skipped because trigger_run needs a
+                                real session at request time anyway.
+        :param transport: Optional dispatcher transport override. M1
+                          defaults to :class:`InMemoryTransport`; the
+                          real client transport lands with PR G.
+        :param results_backend: Optional shared-results backend
+                                override; defaults to the
+                                ``local-test`` backend the orchestrator
+                                constructs on its own when ``None``.
     """
     session_factory: Optional[SessionFactory]
+    transport: Optional[ClientTransportProtocol] = None
+    results_backend: Optional[SharedResultsBackend] = None
+
+
+@dataclass(frozen=True)
+class Phase6BootstrapResult:
+    """
+        Return value from :func:`bootstrap_phase6_runtime` carrying
+        the constructed singletons so callers can keep a reference
+        for diagnostics / tests.
+
+        :param orchestrator: The active :class:`TestOrchestrator` or
+                             ``None`` when the bootstrap ran in
+                             register-only mode (no session factory).
+        :param dispatcher: The :class:`JobDispatcher` the orchestrator
+                           was constructed with.
+        :param transport: The :class:`ClientTransportProtocol` the
+                          dispatcher was constructed with.
+    """
+    orchestrator: Optional[TestOrchestrator]
+    dispatcher: Optional[JobDispatcher]
+    transport: Optional[ClientTransportProtocol]
 
 
 def register_phase6_builtin_extensions() -> None:
@@ -118,12 +190,80 @@ def register_phase6_builtin_extensions() -> None:
     return
 
 
-def bootstrap_phase6_runtime(*, config: Phase6BootstrapConfig) -> None:
+def _build_test_orchestrator(
+        *, config: Phase6BootstrapConfig
+    ) -> Phase6BootstrapResult:
     """
-        Layer-6 runtime bootstrap. M1 only registers extensions;
-        future M2 work (live-run hub bus subscriber wiring) extends
-        this function.
+        Construct the :class:`TestOrchestrator` with its
+        dependencies and publish it on the trigger-run route's
+        module-level seam.
+
+        :param config: Caller-supplied
+                       :class:`Phase6BootstrapConfig`.
+
+        :returns: :class:`Phase6BootstrapResult` carrying the
+                  constructed singletons.
+    """
+    transport = config.transport
+    if transport is None:
+        transport = InMemoryTransport()
+
+    dispatcher = JobDispatcher(transport=transport)
+    orchestrator = TestOrchestrator(
+        dispatcher=dispatcher,
+        results_backend=config.results_backend,
+    )
+
+    test_runs_routes.set_active_test_orchestrator(orchestrator=orchestrator)
+
+    logger.info(
+        "phase6.bootstrap.test_orchestrator_ready transport=%s",
+        transport.transport_name(),
+    )
+
+    rtnval = Phase6BootstrapResult(
+        orchestrator=orchestrator,
+        dispatcher=dispatcher,
+        transport=transport,
+    )
+    return rtnval
+
+
+def bootstrap_phase6_runtime(
+        *, config: Phase6BootstrapConfig
+    ) -> Phase6BootstrapResult:
+    """
+        Layer-6 runtime bootstrap.
+
+        Registers the in-tree Layer-6 factory implementations and,
+        when a session factory is supplied, constructs the live
+        :class:`TestOrchestrator` and publishes it on the
+        trigger-run route's ``ACTIVE_TEST_ORCHESTRATOR`` seam.
+
+        When ``config.session_factory`` is ``None``, the
+        orchestrator construction is skipped -- this matches the
+        register-only callsite used by ``register_service_extensions``
+        which only needs the factories on the registry. The runtime
+        bootstrap path passes a real session factory so the
+        orchestrator is wired and the trigger-run REST endpoint
+        stops returning 503.
+
+        :param config: Caller-supplied
+                       :class:`Phase6BootstrapConfig`.
+
+        :returns: :class:`Phase6BootstrapResult` carrying the
+                  constructed orchestrator + dispatcher + transport
+                  (each ``None`` in register-only mode).
     """
     register_phase6_builtin_extensions()
-    _ = config
-    return
+
+    if config.session_factory is None:
+        rtnval = Phase6BootstrapResult(
+            orchestrator=None,
+            dispatcher=None,
+            transport=None,
+        )
+        return rtnval
+
+    rtnval = _build_test_orchestrator(config=config)
+    return rtnval
