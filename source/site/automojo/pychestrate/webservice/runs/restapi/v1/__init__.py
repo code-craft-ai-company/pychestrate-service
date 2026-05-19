@@ -1,0 +1,12 @@
+"""
+.. module:: webservice.runs.restapi.v1
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: ``/api/v1`` runs REST routes.
+
+.. moduleauthor:: Automation Mojo LLC
+"""
+
+__author__ = "Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
+__credits__ = []
+__version__ = "1.0.0"
