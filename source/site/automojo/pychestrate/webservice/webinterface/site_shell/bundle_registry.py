@@ -196,6 +196,18 @@ def install_default_bundles() -> None:
           registration / lifecycle history, enrolled-clients table
           with liveness, client detail with capabilities), loaded
           only on ``/pods``, ``/clients`` and their sub-paths.
+        * ``pyc-resources-bundle`` -- prefix ``/resource-pools`` --
+          resources sidebar registration plus the
+          ``<pyc-resource-pools>``, ``<pyc-pool-detail>`` and
+          ``<pyc-resource-detail>`` views (resource-pools table with
+          capability tags and member counts, pool detail with
+          resources / reservations / reserve + release actions,
+          resource detail with health and a token-styled
+          usage-history timeline). The resource-detail view mounts
+          on the nested ``/resource-pools/resources/{id}`` route
+          because the top-level ``/resources`` prefix is claimed by
+          the legacy resources blueprint. Loaded only on
+          ``/resource-pools`` and its sub-paths.
 
         :returns: None.
     """
@@ -230,6 +242,10 @@ def install_default_bundles() -> None:
     register_bundle(route_prefix="/pods", bundle_name="pyc-pods-bundle")
     register_bundle(
         route_prefix="/clients", bundle_name="pyc-pods-bundle"
+    )
+    register_bundle(
+        route_prefix="/resource-pools",
+        bundle_name="pyc-resources-bundle",
     )
     return
 

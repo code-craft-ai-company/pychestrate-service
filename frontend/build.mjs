@@ -70,6 +70,10 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-pods-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-pods-bundle.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-resources-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-resources-bundle.js"),
+    },
 ]
 
 // Bundle stylesheets copied alongside their bundle so the bundle
@@ -106,6 +110,12 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-pods-bundle", "pods.css"),
         target: "pyc-pods-bundle.css",
+    },
+    {
+        source: path.join(
+            HERE, "src", "pyc-resources-bundle", "resources.css",
+        ),
+        target: "pyc-resources-bundle.css",
     },
 ]
 
