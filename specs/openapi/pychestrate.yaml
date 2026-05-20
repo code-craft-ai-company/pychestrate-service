@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.15-preview
+  version: 0.0.16-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -164,6 +164,18 @@ tags:
     description: >-
       Published release-channel entries -- releases advertised on
       the canary / beta / stable channels.
+  - name: webhooks
+    description: >-
+      Inbound and outbound webhook surface -- the unauthenticated
+      inbound receiver, operator-facing inbound integration
+      configurations and delivery ledger, plus outbound
+      subscription CRUD, delivery history, and test events.
+  - name: backups
+    description: >-
+      Backup and disaster-recovery -- manually-triggered backups
+      that snapshot the database, object-store references, and
+      secrets metadata into an archive, plus backup listing,
+      status / manifest reads, and restore.
 
 security:
   - pychestrate_session: []
@@ -3846,6 +3858,380 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # webhooks (inbound + outbound)
+  # =====================================================================
+
+  /webhooks/in/{provider}/{hook_name}:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        description: Provider key the integration was registered under.
+        schema: { type: string }
+      - in: path
+        name: hook_name
+        required: true
+        description: Logical hook name within the provider.
+        schema: { type: string }
+    post:
+      tags: [webhooks]
+      summary: Receive an inbound webhook delivery.
+      operationId: webhooks_in_receive
+      description: |
+        The unauthenticated inbound receiver. External systems POST
+        provider-native events here. The handler runs per-integration
+        signature verification, replay-cache de-duplication,
+        normalization, and dispatch. This endpoint is NOT cookie/RBAC
+        gated -- it authenticates via the integration's signature
+        verification. Answers in webhook-conventional terms.
+      security: []
+      requestBody:
+        required: true
+        description: Provider-native event payload (opaque to this contract).
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Delivery accepted and dispatched.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '404':
+          description: No integration is configured for this provider / hook.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '401':
+          description: Signature verification failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '409':
+          description: Delivery was already seen (replay ignored).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /webhooks/in/integrations:
+    get:
+      tags: [webhooks]
+      summary: List inbound webhook integration configurations.
+      operationId: webhooks_in_list_integrations
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Page of inbound integration configurations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInIntegrationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [webhooks]
+      summary: Register an inbound webhook integration configuration.
+      operationId: webhooks_in_create_integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookInIntegrationCreate' }
+      responses:
+        '201':
+          description: Integration configuration registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInIntegration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /webhooks/in/deliveries:
+    get:
+      tags: [webhooks]
+      summary: List recent inbound webhook deliveries.
+      operationId: webhooks_in_list_deliveries
+      description: |
+        Recent inbound deliveries (the replay-cache ledger) for
+        audit / debug, newest-first.
+      parameters:
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: hook_name
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Page of inbound delivery ledger rows.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInDeliveryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /webhooks/out/subscriptions:
+    get:
+      tags: [webhooks]
+      summary: List outbound webhook subscriptions.
+      operationId: webhooks_out_list_subscriptions
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Page of outbound subscriptions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscriptionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [webhooks]
+      summary: Register an outbound webhook subscription.
+      operationId: webhooks_out_create_subscription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookOutSubscriptionCreate' }
+      responses:
+        '201':
+          description: Subscription registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /webhooks/out/subscriptions/{subscription_id}:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [webhooks]
+      summary: Read an outbound webhook subscription.
+      operationId: webhooks_out_read_subscription
+      responses:
+        '200':
+          description: Outbound subscription.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [webhooks]
+      summary: Disable an outbound webhook subscription.
+      operationId: webhooks_out_delete_subscription
+      description: |
+        Disables the subscription (idempotent). The domain retains
+        the row for the delivery-history audit trail.
+      responses:
+        '200':
+          description: Subscription disabled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhooks/out/subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [webhooks]
+      summary: List delivery history for an outbound subscription.
+      operationId: webhooks_out_list_deliveries
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Page of outbound delivery attempts, newest-first.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutDeliveryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhooks/out/subscriptions/{subscription_id}/test:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [webhooks]
+      summary: Send a test event for an outbound subscription.
+      operationId: webhooks_out_test_subscription
+      description: |
+        Builds a signed test event for the subscription and records
+        the delivery attempt. Exposed as a trailing `/test`
+        sub-resource because the route matcher cannot place a
+        literal `:test` action suffix on a param segment.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookOutTestRequest' }
+      responses:
+        '202':
+          description: Test event built and recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutTestResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  # =====================================================================
+  # backups
+  # =====================================================================
+
+  /backups:
+    get:
+      tags: [backups]
+      summary: List backup records.
+      operationId: backups_list
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, running, completed, failed]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of backup records.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRecordPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [backups]
+      summary: Trigger a backup.
+      operationId: backups_create
+      description: |
+        Triggers a manual backup. Snapshots the database, object-store
+        references, and secrets metadata into an archive written
+        through the configured `BackupStorageBackend`. Returns the
+        backup record with its terminal status synchronously.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupCreateRequest' }
+      responses:
+        '201':
+          description: Backup completed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRecord' }
+        '202':
+          description: Backup accepted and recorded (terminal state pending).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /backups/{backup_id}:
+    parameters:
+      - in: path
+        name: backup_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [backups]
+      summary: Read a backup record's status and manifest.
+      operationId: backups_read
+      responses:
+        '200':
+          description: Backup record with status and manifest.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRecord' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /backups/{backup_id}:restore:
+    parameters:
+      - in: path
+        name: backup_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [backups]
+      summary: Restore from a backup.
+      operationId: backups_restore
+      description: |
+        Restore from a completed backup. Restore is scoped as a
+        documented follow-up in this release -- the endpoint
+        validates the target backup and records a restore request,
+        returning `501 Not Implemented` until the restore executor
+        lands.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
+      responses:
+        '202':
+          description: Restore accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '501':
+          description: Restore execution is not yet implemented.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
 components:
 
@@ -7532,3 +7918,263 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ReleaseChannelEntry' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # webhooks (inbound + outbound)
+    # ----------------------------------------------------------------
+
+    WebhookInReceiveResult:
+      type: object
+      description: >-
+        Accept / reject envelope returned by the unauthenticated
+        inbound receiver.
+      required: [status, provider, hook_name]
+      properties:
+        status:
+          type: string
+          enum: [accepted, replay_ignored, rejected]
+        provider: { type: string }
+        hook_name: { type: string }
+        request_id: { type: string, nullable: true }
+        delivery_id: { type: string, nullable: true }
+        domain_event_count: { type: integer, minimum: 0 }
+        reason:
+          type: string
+          nullable: true
+          description: Rejection reason when `status` is `rejected`.
+
+    WebhookInIntegration:
+      type: object
+      description: An inbound webhook integration configuration.
+      required: [webhook_id, project_id, provider, hook_name, enabled]
+      properties:
+        webhook_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        provider: { type: string }
+        hook_name: { type: string }
+        secret_ref: { type: string }
+        mtls_required: { type: boolean }
+        description: { type: string }
+        enabled: { type: boolean }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        disabled_at: { type: string, format: date-time, nullable: true }
+        receiver_path:
+          type: string
+          description: Relative path of the inbound receiver for this hook.
+
+    WebhookInIntegrationCreate:
+      type: object
+      required: [project_id, provider, hook_name, secret_ref]
+      properties:
+        project_id: { type: string, format: uuid }
+        provider: { type: string }
+        hook_name: { type: string }
+        secret_ref: { type: string }
+        mtls_required: { type: boolean, default: false }
+        description: { type: string }
+
+    WebhookInIntegrationPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookInIntegration' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookInDelivery:
+      type: object
+      description: An inbound delivery row from the replay-cache ledger.
+      required: [provider, hook_name, delivery_id]
+      properties:
+        provider: { type: string }
+        hook_name: { type: string }
+        delivery_id: { type: string }
+        first_seen_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+
+    WebhookInDeliveryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookInDelivery' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookOutSubscription:
+      type: object
+      description: An outbound webhook subscription (a delivery target).
+      required: [subscription_id, project_id, name, url, enabled]
+      properties:
+        subscription_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        url: { type: string, format: uri }
+        signature_scheme: { type: string }
+        topic_filters:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        custom_headers:
+          type: object
+          additionalProperties: { type: string }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
+
+    WebhookOutSubscriptionCreate:
+      type: object
+      required: [project_id, name, url]
+      properties:
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        url: { type: string, format: uri }
+        description: { type: string }
+        secret_ref: { type: string }
+        topic_filters:
+          type: array
+          items: { type: string }
+        custom_headers:
+          type: object
+          additionalProperties: { type: string }
+
+    WebhookOutSubscriptionPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookOutDelivery:
+      type: object
+      description: One outbound delivery attempt.
+      required: [delivery_id, subscription_id, project_id, topic, outcome]
+      properties:
+        delivery_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        topic: { type: string }
+        payload_digest_sha256: { type: string, nullable: true }
+        signature: { type: string, nullable: true }
+        outcome:
+          type: string
+          enum: [pending, success, failure, retrying]
+        response_status: { type: integer, nullable: true }
+        response_excerpt: { type: string, nullable: true }
+        duration_ms: { type: integer, nullable: true }
+        attempted_at: { type: string, format: date-time, nullable: true }
+
+    WebhookOutDeliveryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookOutDelivery' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookOutTestRequest:
+      type: object
+      description: Optional payload for a test-event send.
+      properties:
+        topic: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+
+    WebhookOutTestResult:
+      type: object
+      required: [status, delivery]
+      properties:
+        status:
+          type: string
+          enum: [queued]
+        delivery: { $ref: '#/components/schemas/WebhookOutDelivery' }
+
+    # ----------------------------------------------------------------
+    # backups / disaster-recovery
+    # ----------------------------------------------------------------
+
+    BackupManifest:
+      type: object
+      description: >-
+        Inventory of what a completed backup archive contains.
+      properties:
+        database:
+          type: object
+          properties:
+            included: { type: boolean }
+            artifact: { type: string, nullable: true }
+            size_bytes: { type: integer, minimum: 0, nullable: true }
+        object_store:
+          type: object
+          properties:
+            included: { type: boolean }
+            object_count: { type: integer, minimum: 0, nullable: true }
+        secrets:
+          type: object
+          properties:
+            included: { type: boolean }
+            entry_count: { type: integer, minimum: 0, nullable: true }
+
+    BackupRecord:
+      type: object
+      description: A backup record describing a triggered backup run.
+      required: [backup_id, status, created_at]
+      properties:
+        backup_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        backend: { type: string, description: Storage-backend kind. }
+        archive_uri:
+          type: string
+          nullable: true
+          description: Backend-resolved location of the backup archive.
+        archive_sha256: { type: string, nullable: true }
+        size_bytes: { type: integer, minimum: 0, nullable: true }
+        manifest: { $ref: '#/components/schemas/BackupManifest' }
+        error_detail: { type: string, nullable: true }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    BackupCreateRequest:
+      type: object
+      description: Optional knobs for a backup trigger.
+      properties:
+        include_database: { type: boolean, default: true }
+        include_object_store: { type: boolean, default: true }
+        include_secrets: { type: boolean, default: true }
+        note: { type: string }
+
+    BackupRecordPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BackupRecord' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    BackupRestoreRequest:
+      type: object
+      properties:
+        confirm:
+          type: boolean
+          description: Operator confirmation that a restore is intended.
+
+    BackupRestoreResult:
+      type: object
+      required: [backup_id, status]
+      properties:
+        backup_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [accepted, not_implemented]
+        detail: { type: string }
