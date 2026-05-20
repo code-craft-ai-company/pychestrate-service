@@ -54,6 +54,7 @@ from automojo.pychestrate.webservice.orchestration.pipelines.definition.dag impo
     build_dag,
 )
 from automojo.pychestrate.webservice.orchestration.pipelines.definition.errors import (
+    PipelineDagCycleError,
     PipelineDocumentInvalidError,
     PipelineRunNotFoundError,
     PipelineStepKindUnknownError,
@@ -155,6 +156,304 @@ class PipelineRunView:
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     final_state_reason: str = ""
+
+
+@dataclass(frozen=True)
+class PipelineStepView:
+    """
+        Caller-facing read-model for a single step of a
+        pipeline-definition document.
+    """
+    step_id: str
+    kind_name: str
+    uses: Optional[str] = None
+    inputs: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PipelineStageView:
+    """
+        Caller-facing read-model for a single stage of a
+        pipeline-definition document.
+    """
+    stage_id: str
+    when_clause: str
+    needs: Tuple[str, ...] = ()
+    steps: Tuple[PipelineStepView, ...] = ()
+
+
+@dataclass(frozen=True)
+class PipelineDefinitionView:
+    """
+        Caller-facing read-model for a pipeline-definition
+        document. The ``pipeline_id`` is the canonical-document
+        SHA-256 digest -- a definition with identical content
+        always resolves to the same id.
+    """
+    pipeline_id: str
+    project_id: str
+    name: str
+    schema_version: int
+    commit_sha: str
+    filename: str
+    stages: Tuple[PipelineStageView, ...] = ()
+    cached_at: Optional[datetime] = None
+
+
+@dataclass(frozen=True)
+class DagValidationView:
+    """
+        Caller-facing read-model for a pipeline-definition DAG
+        validation. ``valid`` is True only when parsing, DAG
+        cycle detection, and stage-reference checks all pass.
+    """
+    valid: bool
+    stage_count: int
+    topological_order: Tuple[str, ...] = ()
+    issues: Tuple[str, ...] = ()
+
+
+def _document_to_definition_view(
+        *,
+        document: PipelineDocument,
+        project_id: str,
+        commit_sha: str,
+        filename: str,
+        cached_at: Optional[datetime]
+    ) -> PipelineDefinitionView:
+    """
+        Materialize a :class:`PipelineDefinitionView` from a parsed
+        :class:`PipelineDocument`.
+    """
+    stage_views: List[PipelineStageView] = []
+    for stage in document.stages:
+        step_views: List[PipelineStepView] = []
+        for step in stage.steps:
+            step_views.append(
+                PipelineStepView(
+                    step_id=step.step_id,
+                    kind_name=step.kind_name,
+                    uses=step.uses,
+                    inputs=dict(step.inputs),
+                )
+            )
+        stage_views.append(
+            PipelineStageView(
+                stage_id=stage.stage_id,
+                when_clause=stage.when,
+                needs=tuple(stage.needs),
+                steps=tuple(step_views),
+            )
+        )
+    digest = compute_pipeline_digest(document=document)
+    rtnval = PipelineDefinitionView(
+        pipeline_id=digest,
+        project_id=project_id,
+        name=document.name,
+        schema_version=document.schema_version,
+        commit_sha=commit_sha,
+        filename=filename,
+        stages=tuple(stage_views),
+        cached_at=cached_at,
+    )
+    return rtnval
+
+
+def validate_document(*, document_bytes: bytes, filename: str) -> DagValidationView:
+    """
+        Pure parse + DAG validation of a pipeline-definition
+        document. No persistence, no events. Surfaces parse,
+        schema, cycle, and stage-reference issues in a single
+        :class:`DagValidationView`.
+
+        :param document_bytes: Raw document bytes (YAML or JSON).
+        :param filename: Document filename; selects the parser.
+
+        :returns: A :class:`DagValidationView`.
+    """
+    try:
+        document = parse_document(
+            document_bytes=document_bytes, filename=filename,
+        )
+    except PipelineDocumentInvalidError as parse_err:
+        rtnval = DagValidationView(
+            valid=False,
+            stage_count=0,
+            topological_order=(),
+            issues=(str(parse_err),),
+        )
+        return rtnval
+
+    try:
+        dag = build_dag(document=document)
+    except (
+        PipelineDocumentInvalidError,
+        PipelineDagCycleError,
+    ) as dag_err:
+        rtnval = DagValidationView(
+            valid=False,
+            stage_count=len(document.stages),
+            topological_order=(),
+            issues=(str(dag_err),),
+        )
+        return rtnval
+
+    rtnval = DagValidationView(
+        valid=True,
+        stage_count=len(document.stages),
+        topological_order=dag.topological_order,
+        issues=(),
+    )
+    return rtnval
+
+
+def upsert_definition(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        commit_sha: str,
+        filename: str,
+        document_bytes: bytes
+    ) -> PipelineDefinitionView:
+    """
+        Parse + validate + DAG-check + canonicalize + cache a
+        pipeline-definition document. Thin wrapper over
+        :func:`load_from_source` that returns the caller-facing
+        :class:`PipelineDefinitionView`.
+
+        :raises: PipelineDocumentInvalidError, PipelineDagCycleError,
+                 PipelineStepKindUnknownError.
+    """
+    document = load_from_source(
+        db_session=db_session,
+        project_id=project_id,
+        commit_sha=commit_sha,
+        filename=filename,
+        document_bytes=document_bytes,
+    )
+    cache_row = repository.find_document_cache(
+        db_session=db_session,
+        project_id=project_id,
+        commit_sha=commit_sha,
+        filename=filename,
+    )
+    cached_at = cache_row.cached_at if cache_row is not None else None
+    rtnval = _document_to_definition_view(
+        document=document,
+        project_id=project_id,
+        commit_sha=commit_sha,
+        filename=filename,
+        cached_at=cached_at,
+    )
+    return rtnval
+
+
+def list_definitions(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        limit: int
+    ) -> List[PipelineDefinitionView]:
+    """
+        List cached pipeline-definition documents for a project,
+        newest-cached first.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param limit: Maximum number of rows to return.
+
+        :returns: List of :class:`PipelineDefinitionView`.
+    """
+    rows = repository.list_document_cache_for_project(
+        db_session=db_session,
+        project_id=project_id,
+        limit=limit,
+    )
+    rtnval: List[PipelineDefinitionView] = []
+    for row in rows:
+        view = _definition_view_from_cache(row=row)
+        rtnval.append(view)
+    return rtnval
+
+
+def get_definition(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        pipeline_id: str
+    ) -> PipelineDefinitionView:
+    """
+        Read a single cached pipeline-definition document by its
+        canonical-document digest (``pipeline_id``).
+
+        :raises: PipelineRunNotFoundError when nothing matches.
+    """
+    row = repository.find_document_cache_by_digest(
+        db_session=db_session,
+        project_id=project_id,
+        pipeline_digest_sha256=pipeline_id,
+    )
+    if row is None:
+        err_lines = ["Pipeline definition not found."]
+        err_lines.append("PROJECT_ID: {}".format(project_id))
+        err_lines.append("PIPELINE_ID: {}".format(pipeline_id))
+        err_msg = os.linesep.join(err_lines)
+        raise PipelineRunNotFoundError(err_msg) from None
+    rtnval = _definition_view_from_cache(row=row)
+    return rtnval
+
+
+def delete_definition(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        pipeline_id: str
+    ) -> None:
+    """
+        Delete a cached pipeline-definition document by its
+        canonical-document digest (``pipeline_id``).
+
+        :raises: PipelineRunNotFoundError when nothing matches.
+    """
+    row = repository.find_document_cache_by_digest(
+        db_session=db_session,
+        project_id=project_id,
+        pipeline_digest_sha256=pipeline_id,
+    )
+    if row is None:
+        err_lines = ["Pipeline definition not found."]
+        err_lines.append("PROJECT_ID: {}".format(project_id))
+        err_lines.append("PIPELINE_ID: {}".format(pipeline_id))
+        err_msg = os.linesep.join(err_lines)
+        raise PipelineRunNotFoundError(err_msg) from None
+    repository.delete_document_cache(
+        db_session=db_session,
+        project_id=project_id,
+        commit_sha=row.commit_sha,
+        filename=row.filename,
+    )
+    db_session.commit()
+    return
+
+
+def _definition_view_from_cache(*, row: Any) -> PipelineDefinitionView:
+    """
+        Re-parse the canonical JSON cached on a
+        :class:`PipelineDocumentCache` row into a
+        :class:`PipelineDefinitionView`.
+    """
+    canonical_bytes = row.canonical_json.encode("utf-8")
+    document = parse_document(
+        document_bytes=canonical_bytes, filename="pipeline.json",
+    )
+    rtnval = _document_to_definition_view(
+        document=document,
+        project_id=str(row.project_id),
+        commit_sha=row.commit_sha,
+        filename=row.filename,
+        cached_at=row.cached_at,
+    )
+    return rtnval
 
 
 def load_from_source(

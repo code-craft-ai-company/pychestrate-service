@@ -133,6 +133,77 @@ class ShardSetView:
     shards: Tuple[ShardSpecView, ...] = ()
 
 
+@dataclass(frozen=True)
+class ExpansionPreviewShard:
+    """
+        One shard of a non-persisted matrix-expansion preview.
+    """
+    shard_id: str
+    parallel_group: str
+    sequence_in_group: int
+    dimension_values: Dict[str, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ExpansionPreview:
+    """
+        Caller-facing read-model for a non-persisted matrix
+        expansion. Computed by :func:`preview_expansion` -- it
+        shows how a :class:`MatrixSpec` fans out into concrete
+        shards without writing any rows or emitting any events.
+    """
+    strategy_name: str
+    matrix_spec_canonical_sha256: str
+    shard_count: int
+    shards: Tuple[ExpansionPreviewShard, ...] = ()
+
+
+def preview_expansion(
+        *,
+        matrix_spec: MatrixSpec,
+        strategy_name: str
+    ) -> ExpansionPreview:
+    """
+        Expand ``matrix_spec`` with the named strategy and return
+        the resulting shard set as a pure, non-persisted preview.
+        No :class:`ShardSet` / :class:`ShardSpec` rows are written
+        and no events are emitted.
+
+        :param matrix_spec: Caller-supplied matrix specification.
+        :param strategy_name: Registered sharding-strategy name.
+
+        :returns: An :class:`ExpansionPreview`.
+        :raises: ShardingStrategyNotFoundError when no registered
+                 implementation declares ``strategy_name``.
+        :raises: MatrixSpecInvalidError on malformed matrix specs.
+    """
+    strategy_cls = _resolve_strategy(strategy_name=strategy_name)
+    expanded = strategy_cls.expand(
+        matrix_spec=matrix_spec, runtime_history=None,
+    )
+    canonical_sha = matrix_spec_sha256(matrix_spec=matrix_spec)
+
+    shard_views: List[ExpansionPreviewShard] = []
+    for shard in expanded:
+        dim_dict = dict(shard.dimension_values)
+        shard_views.append(
+            ExpansionPreviewShard(
+                shard_id=shard.shard_id,
+                parallel_group=shard.parallel_group,
+                sequence_in_group=shard.sequence_in_group,
+                dimension_values=dim_dict,
+            )
+        )
+
+    rtnval = ExpansionPreview(
+        strategy_name=strategy_name,
+        matrix_spec_canonical_sha256=canonical_sha,
+        shard_count=len(shard_views),
+        shards=tuple(shard_views),
+    )
+    return rtnval
+
+
 def expand_matrix(
         *,
         db_session: DbSession,
