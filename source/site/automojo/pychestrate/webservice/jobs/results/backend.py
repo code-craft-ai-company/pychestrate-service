@@ -16,7 +16,7 @@ import os
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -28,6 +28,11 @@ from automojo.pychestrate.webservice.jobs.results.errors import (
 )
 from automojo.pychestrate.webservice.jobs.results.path_builder import (
     build_canonical_prefix,
+)
+from automojo.pychestrate.webservice.jobs.results.presign import (
+    ArtifactUploadTarget,
+    DEFAULT_PRESIGN_TTL_SECONDS,
+    mint_local_upload_targets,
 )
 
 
@@ -156,6 +161,62 @@ class SharedResultsBackend:
             err_msg = os.linesep.join(err_lines)
             raise AllocationNotFoundError(err_msg) from None
         rtnval = _to_record(row=existing)
+        return rtnval
+
+    def presign_put(
+            self,
+            *,
+            run_id: str,
+            version_prefix: str,
+            relative_paths: List[str],
+            signing_secret: bytes,
+            now: Optional[datetime] = None,
+            ttl_seconds: int = DEFAULT_PRESIGN_TTL_SECONDS
+        ) -> List[ArtifactUploadTarget]:
+        """
+            Mint one short-lived presigned PUT target per relative
+            artifact path, each scoped to the run.
+
+            The dev / alpha deploy has no S3-compatible object
+            store -- the result tree is a local filesystem subtree
+            the result-ingest scanner reads verbatim. This method
+            therefore delegates to the local-filesystem presign
+            fallback: each minted URL points back at the service's
+            own ``_local-upload`` endpoint and carries an
+            HMAC-signed query string so object-store credentials
+            never reach the client. When an operator later wires a
+            real object store this seam dispatches to the driver's
+            native presign instead; the HTTP surface does not
+            change.
+
+            The caller is responsible for verifying run ownership
+            and accepting state *before* calling this method --
+            ``presign_put`` only mints URLs.
+
+            :param run_id: Run UUID.
+            :param version_prefix: Versioned API prefix
+                                   (``/api/v1``).
+            :param relative_paths: Canonicalized relative artifact
+                                   paths (see
+                                   :func:`presign.validate_artifact_path_batch`).
+            :param signing_secret: Server-held HMAC signing secret.
+            :param now: Optional override for the current UTC time.
+            :param ttl_seconds: Lifetime of the minted URLs.
+
+            :returns: List of :class:`ArtifactUploadTarget`.
+        """
+        minted_now = now
+        if minted_now is None:
+            minted_now = utc_now()
+        targets = mint_local_upload_targets(
+            secret=signing_secret,
+            run_id=run_id,
+            version_prefix=version_prefix,
+            relative_paths=relative_paths,
+            now=minted_now,
+            ttl_seconds=ttl_seconds,
+        )
+        rtnval = targets
         return rtnval
 
 
