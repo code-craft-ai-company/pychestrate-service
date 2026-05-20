@@ -36,6 +36,15 @@ class ProgressSnapshot:
         :param sequence: Monotonically-increasing event sequence
                          the relay assigns. Subscribers use this
                          as the SSE ``id:`` field for replay.
+        :param latest_progress_frame: The most recent generalized
+                                      build / provision progress
+                                      frame payload merged, or
+                                      ``None`` for a test run (or a
+                                      build / provision run before
+                                      its first frame). Lets a
+                                      late-joining SSE subscriber
+                                      snapshot the current build /
+                                      provision progress.
     """
     run_id: str
     project_id: str
@@ -48,6 +57,7 @@ class ProgressSnapshot:
     state: str
     latest_event_at: datetime
     sequence: int
+    latest_progress_frame: Optional[Mapping[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +100,7 @@ def empty_snapshot(*, run_id: str, project_id: str) -> ProgressSnapshot:
         state="",
         latest_event_at=datetime.now(timezone.utc),
         sequence=0,
+        latest_progress_frame=None,
     )
     return rtnval
 
@@ -107,6 +118,9 @@ def merge_event(
 
         - ``"progress.summary"`` — overwrites the count fields
           from the event payload.
+        - ``"progress.frame"`` — stores the generalized build /
+          provision progress frame payload as
+          ``latest_progress_frame``.
         - ``"state_changed"`` — overwrites ``state``.
         - others — only update ``latest_event_at`` + ``sequence``.
 
@@ -122,6 +136,7 @@ def merge_event(
     tests_errored = snapshot.tests_errored
     percent_complete = snapshot.percent_complete
     state = snapshot.state
+    latest_progress_frame = snapshot.latest_progress_frame
 
     if event.kind == "progress.summary":
         payload = event.payload
@@ -132,6 +147,14 @@ def merge_event(
             tests_skipped = int(payload.get("tests_skipped", tests_skipped))
             tests_errored = int(payload.get("tests_errored", tests_errored))
             percent_complete = payload.get("percent_complete", percent_complete)
+
+    if event.kind == "progress.frame":
+        payload = event.payload
+        if isinstance(payload, Mapping):
+            latest_progress_frame = dict(payload)
+            frame_percent = payload.get("percent_complete", None)
+            if frame_percent is not None:
+                percent_complete = frame_percent
 
     if event.kind == "state_changed":
         if isinstance(event.payload, Mapping):
@@ -151,5 +174,6 @@ def merge_event(
         state=state,
         latest_event_at=event.recorded_at,
         sequence=event.sequence,
+        latest_progress_frame=latest_progress_frame,
     )
     return rtnval

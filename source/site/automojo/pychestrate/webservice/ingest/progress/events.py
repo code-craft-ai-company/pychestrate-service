@@ -19,3 +19,8 @@ class ProgressEventTopics:
     RECEIVED = "entity.progress.received"
     SUMMARY_LANDED = "entity.progress.summary_landed"
     RECORD_INGESTED = "entity.progress.record_ingested"
+    #: Emitted when a generalized build / provision progress frame
+    #: (``frame_kind != test``) lands. The live-run bus bridge
+    #: forwards this onto the run's SSE relay as a ``progress``
+    #: RunEvent.
+    FRAME_LANDED = "entity.progress.frame_landed"

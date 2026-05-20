@@ -44,17 +44,26 @@ from automojo.pychestrate.webservice.ingest.progress.factories.testbase_v1 impor
 )
 from automojo.pychestrate.webservice.ingest.progress.models import (
     RunProgressCounters,
+    RunProgressFrame,
     RunProgressRecord,
     RunProgressSummary,
 )
 from automojo.pychestrate.webservice.ingest.progress.schema import (
+    SUPPORTED_FRAME_KINDS,
+    FRAME_KIND_BUILD,
+    FRAME_KIND_PROVISION,
+    FRAME_KIND_TEST,
+    ProgressFrameEnvelope,
     ProgressRecord,
     ProgressSummary,
 )
 from automojo.pychestrate.webservice.ingest.progress.service import (
+    get_latest_frame,
     get_summary,
+    ingest_frame,
     ingest_record,
     ingest_summary,
+    list_frames,
     list_records,
 )
 

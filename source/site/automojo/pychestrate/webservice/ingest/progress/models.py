@@ -97,6 +97,45 @@ class RunProgressRecord(PychestratePhase1Base, SerializableModel):
     )
 
 
+class RunProgressFrame(PychestratePhase1Base, SerializableModel):
+    """
+        One generalized progress frame for a ``build`` /
+        ``provision`` run.
+
+        Test runs persist their progress through the test-shaped
+        ``RunProgressSummary`` / ``RunProgressRecord`` tables. Build
+        and provision runs are not test-shaped — a build emits
+        phase transitions + log-line excerpts, a provision run
+        emits plan/apply step transitions — so they land here. The
+        ``(run_id, frame_kind, frame_index)`` triple is unique so a
+        client re-posting the same frame is a no-op.
+    """
+
+    __tablename__ = "ingest_run_progress_frame"
+
+    frame_id = Column(UUIDType(binary=False), primary_key=True)
+    run_id = Column(UUIDType(binary=False), nullable=False)
+    client_id = Column(UUIDType(binary=False), nullable=False)
+    frame_kind = Column(String(32), nullable=False, default="build")
+    frame_index = Column(Integer, nullable=False)
+    phase = Column(String(128), nullable=True)
+    status = Column(String(32), nullable=True)
+    percent_complete = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "frame_kind", "frame_index",
+            name="uq_ingest_run_progress_frame_run_kind_index",
+        ),
+        Index("ix_ingest_run_progress_frame_run_id", "run_id"),
+        Index("ix_ingest_run_progress_frame_received_at", "received_at"),
+    )
+
+
 class RunProgressCounters(PychestratePhase1Base, SerializableModel):
     """
         Rolling counter row — one per run. Updated whenever a

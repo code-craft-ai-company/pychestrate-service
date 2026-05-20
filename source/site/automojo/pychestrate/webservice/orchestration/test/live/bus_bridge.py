@@ -61,6 +61,7 @@ _TOPIC_TO_KIND: Mapping[str, str] = {
     RunStateEventTopics.RECONCILED: "state_changed",
     ProgressEventTopics.SUMMARY_LANDED: "progress.summary",
     ProgressEventTopics.RECORD_INGESTED: "progress.record",
+    ProgressEventTopics.FRAME_LANDED: "progress.frame",
 }
 
 

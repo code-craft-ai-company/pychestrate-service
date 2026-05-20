@@ -21,10 +21,12 @@ from automojo.pychestrate.core.defaults import new_uuid
 
 from automojo.pychestrate.webservice.ingest.progress.models import (
     RunProgressCounters,
+    RunProgressFrame,
     RunProgressRecord,
     RunProgressSummary,
 )
 from automojo.pychestrate.webservice.ingest.progress.schema import (
+    ProgressFrameEnvelope,
     ProgressRecord,
     ProgressSummary,
 )
@@ -120,6 +122,98 @@ def list_records(
         .all()
     )
     rtnval = list(rows)
+    return rtnval
+
+
+def find_frame(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        frame_kind: str,
+        frame_index: int
+    ) -> Optional[RunProgressFrame]:
+    """
+        Look up a generalized progress frame by
+        ``(run_id, frame_kind, frame_index)``.
+    """
+    rtnval = (
+        db_session.query(RunProgressFrame)
+        .filter(RunProgressFrame.run_id == run_id)
+        .filter(RunProgressFrame.frame_kind == frame_kind)
+        .filter(RunProgressFrame.frame_index == frame_index)
+        .first()
+    )
+    return rtnval
+
+
+def insert_frame(
+        *,
+        db_session: DbSession,
+        frame: ProgressFrameEnvelope,
+        received_at: datetime
+    ) -> RunProgressFrame:
+    """
+        Persist one ``RunProgressFrame`` row.
+    """
+    row = RunProgressFrame(
+        frame_id=new_uuid(),
+        run_id=frame.run_id,
+        client_id=frame.client_id,
+        frame_kind=frame.frame_kind,
+        frame_index=frame.frame_index,
+        phase=frame.phase,
+        status=frame.status,
+        percent_complete=frame.percent_complete,
+        notes=frame.notes,
+        recorded_at=frame.recorded_at,
+        received_at=received_at,
+        raw_payload=dict(frame.payload),
+    )
+    db_session.add(row)
+    db_session.flush()
+    return row
+
+
+def list_frames(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> List[RunProgressFrame]:
+    """
+        Return every generalized progress frame for ``run_id``
+        ordered by ``(received_at, frame_index)``.
+    """
+    rows = (
+        db_session.query(RunProgressFrame)
+        .filter(RunProgressFrame.run_id == run_id)
+        .order_by(
+            RunProgressFrame.received_at.asc(),
+            RunProgressFrame.frame_index.asc(),
+        )
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
+def latest_frame(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> Optional[RunProgressFrame]:
+    """
+        Return the most recently received generalized progress
+        frame for ``run_id``, or ``None`` when none has landed.
+    """
+    rtnval = (
+        db_session.query(RunProgressFrame)
+        .filter(RunProgressFrame.run_id == run_id)
+        .order_by(
+            RunProgressFrame.received_at.desc(),
+            RunProgressFrame.frame_index.desc(),
+        )
+        .first()
+    )
     return rtnval
 
 

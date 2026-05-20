@@ -4797,10 +4797,47 @@ components:
           $ref: '#/components/schemas/TerminalOutcome'
         progress:
           nullable: true
-          $ref: '#/components/schemas/ProgressSummary'
+          $ref: '#/components/schemas/RunProgress'
         manifest:
           nullable: true
           $ref: '#/components/schemas/ResultManifest'
+
+    RunProgress:
+      type: object
+      description: |
+        The `progress` block of a `RunEvent`. Generalized across
+        run kinds: the `frame_kind` discriminator (default `test`)
+        selects the shape. A `test` block carries the per-test
+        counter fields of a `ProgressSummary`; a `build` /
+        `provision` block carries phase / status / a free-form
+        `payload`. The run-detail UI renders whatever block arrives.
+      required: [frame_kind]
+      properties:
+        run_id: { type: string, format: uuid, nullable: true }
+        client_id: { type: string, format: uuid, nullable: true }
+        frame_kind:
+          type: string
+          enum: [test, build, provision]
+          default: test
+        format_tag: { type: string }
+        recorded_at: { type: string, format: date-time, nullable: true }
+        tests_total: { type: integer, nullable: true }
+        tests_passed: { type: integer, nullable: true }
+        tests_failed: { type: integer, nullable: true }
+        tests_skipped: { type: integer, nullable: true }
+        tests_errored: { type: integer, nullable: true }
+        percent_complete:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+        frame_index: { type: integer, nullable: true }
+        phase: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        payload:
+          type: object
+          additionalProperties: true
 
     # ----------------------------------------------------------------
     # dispatch / progress / results
@@ -4885,18 +4922,93 @@ components:
           type: object
           additionalProperties: true
 
+    ProgressFrameEnvelope:
+      type: object
+      description: |
+        One generalized progress frame for a `build` / `provision`
+        run. Build and provision runs are not test-shaped — a build
+        emits phase transitions + log-line excerpts, a provision run
+        emits plan/apply step transitions — so they carry a free-form
+        `payload` block the live hub forwards verbatim instead of the
+        test-shaped `ProgressSummary` / `ProgressRecord` pair.
+        See `ingest.progress.schema.ProgressFrameEnvelope`.
+      required: [client_id, frame_index]
+      properties:
+        run_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        frame_kind:
+          type: string
+          enum: [build, provision]
+          description: Frame-kind discriminator.
+        frame_index:
+          type: integer
+          minimum: 0
+          description: |
+            Monotonically-increasing index of the frame within the
+            run's stream. The `(run_id, frame_kind, frame_index)`
+            triple is unique so a re-posted frame is a no-op.
+        phase:
+          type: string
+          nullable: true
+          description: |
+            Current phase / step name (`cloning` / `building` /
+            `packaging` for build; `plan` / `apply` for provision).
+        status:
+          type: string
+          nullable: true
+          description: Status of the current phase / step.
+        percent_complete:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        recorded_at: { type: string, format: date-time }
+        payload:
+          type: object
+          additionalProperties: true
+          description: |
+            Untyped kind-specific passthrough — build log-line
+            excerpts, provision step detail, etc.
+
     ProgressFrame:
       type: object
       description: |
-        Body of `POST /runs/{run_id}/progress`. One frame carries either
-        a summary roll-up, or a batch of per-test records, or both.
+        Body of `POST /runs/{run_id}/progress`. The optional
+        `frame_kind` discriminator selects the frame shape:
+
+        * `test` (the default when `frame_kind` is absent) — the
+          test-shaped frame carrying a `summary` roll-up and / or a
+          `records` array of per-test records. An unmodified
+          testbase client posts this body unchanged.
+        * `build` / `provision` — a generalized progress frame
+          (a single `frame` object, or a `frames` array) carrying
+          phase / status / log-line excerpts. Persisted by the
+          progress ingest service without testbase parsing and
+          streamed onto the run's SSE events route as a `progress`
+          `RunEvent`.
       properties:
+        frame_kind:
+          type: string
+          enum: [test, build, provision]
+          default: test
+          description: |
+            Frame-kind discriminator. Absent / `test` selects the
+            legacy test-shaped `summary` / `records` body.
         summary:
           nullable: true
           $ref: '#/components/schemas/ProgressSummary'
         records:
           type: array
           items: { $ref: '#/components/schemas/ProgressRecord' }
+        frame:
+          nullable: true
+          $ref: '#/components/schemas/ProgressFrameEnvelope'
+        frames:
+          type: array
+          items: { $ref: '#/components/schemas/ProgressFrameEnvelope' }
 
     ResultManifest:
       type: object
