@@ -55,6 +55,7 @@ from automojo.pychestrate.webservice.secrets.factories.local_backend import (
 )
 from automojo.pychestrate.webservice.secrets.models import (
     SecretRecord,
+    SecretScopeKind,
     SecretVersion,
     SecretVersionState,
 )
@@ -84,32 +85,192 @@ class SecretRead:
     metadata: Optional[dict]
 
 
+# ---------------------------------------------------------------------------
+# Scope-aware permission evaluation (PR p20g)
+# ---------------------------------------------------------------------------
+#
+# A secret belongs to exactly one scope:
+#
+#   ORG     -- service-wide; gated by ``system:secrets.*``.
+#   PROJECT -- bound to ``scope_ref`` (a project_id); gated by project
+#              membership PLUS ``system:project_secrets.*`` (admins with
+#              ``system:secrets.admin`` bypass the membership check).
+#   USER    -- bound to ``scope_ref`` (a user_id); the owning user OR an
+#              admin holding ``system:secrets.admin``.
+#
+# A holder of ``system:secrets.admin`` may always read / write / delete
+# any secret at any scope.
+
+
+def _holds_permission(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        permission_key: str
+    ) -> bool:
+    """
+        Return True when the principal holds ``permission_key`` now.
+
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param permission_key: RBAC permission key to evaluate.
+
+        :returns: True when the RBAC decision allows.
+    """
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=datetime.now(timezone.utc),
+    )
+    rtnval = decision.allowed
+    return rtnval
+
+
+def _is_project_member(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        project_id: str
+    ) -> bool:
+    """
+        Return True when the principal has at least one member binding
+        on the given project.
+
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param project_id: The project the secret is scoped to.
+
+        :returns: True when a binding exists.
+    """
+    from automojo.pychestrate.webservice.projects.models import (
+        ProjectMemberBinding,
+    )
+
+    binding = (
+        db_session.query(ProjectMemberBinding)
+        .filter(ProjectMemberBinding.project_id == project_id)
+        .filter(ProjectMemberBinding.user_id == principal.user_id)
+        .first()
+    )
+    rtnval = binding is not None
+    return rtnval
+
+
+def _has_scope_permission(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        scope_kind: SecretScopeKind,
+        scope_ref: Optional[str],
+        write: bool
+    ) -> bool:
+    """
+        Evaluate the scope-aware permission decision for a secret.
+
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param scope_kind: The :class:`SecretScopeKind` of the secret.
+        :param scope_ref: The project_id (PROJECT) or user_id (USER);
+                          None for ORG scope.
+        :param write: True for write / rotate / delete; False for read.
+
+        :returns: True when the principal is authorized.
+    """
+    # A secrets admin may always act on any scope.
+    if _holds_permission(
+            db_session=db_session,
+            principal=principal,
+            permission_key="system:secrets.admin") is True:
+        return True
+
+    if scope_kind == SecretScopeKind.ORG:
+        if write is True:
+            rtnval = _holds_permission(
+                db_session=db_session,
+                principal=principal,
+                permission_key="system:secrets.write",
+            )
+            return rtnval
+        rtnval = _holds_permission(
+            db_session=db_session,
+            principal=principal,
+            permission_key="system:secrets.read",
+        )
+        return rtnval
+
+    if scope_kind == SecretScopeKind.USER:
+        # A user manages their own personal secrets.
+        if scope_ref is not None and str(scope_ref) == str(principal.user_id):
+            return True
+        rtnval = False
+        return rtnval
+
+    # PROJECT scope: project membership PLUS the project-secrets
+    # permission.
+    if scope_ref is None:
+        rtnval = False
+        return rtnval
+
+    if _is_project_member(
+            db_session=db_session,
+            principal=principal,
+            project_id=scope_ref) is False:
+        rtnval = False
+        return rtnval
+
+    if write is True:
+        rtnval = _holds_permission(
+            db_session=db_session,
+            principal=principal,
+            permission_key="system:project_secrets.write",
+        )
+        return rtnval
+    rtnval = _holds_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key="system:project_secrets.read",
+    )
+    return rtnval
+
+
 def _has_write_permission(
         *,
         db_session: DbSession,
         principal: AuthPrincipal,
-        record: Optional[SecretRecord]
+        record: Optional[SecretRecord],
+        scope_kind: Optional[SecretScopeKind] = None,
+        scope_ref: Optional[str] = None
     ) -> bool:
     """
-        Evaluate the M1 write-ACL decision.
+        Evaluate the write decision for a create / rotate / delete.
+
+        When ``record`` is supplied the scope is read from the row;
+        otherwise the explicit ``scope_kind`` / ``scope_ref`` of the
+        pending create are used.
 
         :param db_session: Active SQLAlchemy session.
         :param principal: The authenticated principal.
-        :param record: The owning :class:`SecretRecord` when it already exists.
+        :param record: The owning :class:`SecretRecord` when it exists.
+        :param scope_kind: Scope kind for a pending create.
+        :param scope_ref: Scope ref for a pending create.
 
         :returns: True when the principal may write / rotate / delete.
     """
-    if record is not None and record.owner_user_id is not None:
-        if str(record.owner_user_id) == str(principal.user_id):
-            return True
+    if record is not None:
+        resolved_kind = record.scope_kind
+        resolved_ref = record.scope_ref
+    else:
+        resolved_kind = scope_kind if scope_kind is not None else SecretScopeKind.ORG
+        resolved_ref = scope_ref
 
-    decision = rbac_evaluator.check_permission(
+    rtnval = _has_scope_permission(
         db_session=db_session,
         principal=principal,
-        permission_key="system:secrets.admin",
-        now=datetime.now(timezone.utc),
+        scope_kind=resolved_kind,
+        scope_ref=resolved_ref,
+        write=True,
     )
-    rtnval = decision.allowed
     return rtnval
 
 
@@ -120,35 +281,21 @@ def _has_read_permission(
         record: SecretRecord
     ) -> bool:
     """
-        Evaluate the M1 read-ACL decision.
+        Evaluate the scope-aware read decision for a secret value read.
 
         :param db_session: Active SQLAlchemy session.
         :param principal: The authenticated principal.
         :param record: The owning :class:`SecretRecord`.
 
-        :returns: True when the principal may read the latest version.
+        :returns: True when the principal may read the secret value.
     """
-    if record.owner_user_id is not None:
-        if str(record.owner_user_id) == str(principal.user_id):
-            return True
-
-    now = datetime.now(timezone.utc)
-    admin_decision = rbac_evaluator.check_permission(
+    rtnval = _has_scope_permission(
         db_session=db_session,
         principal=principal,
-        permission_key="system:secrets.admin",
-        now=now,
+        scope_kind=record.scope_kind,
+        scope_ref=record.scope_ref,
+        write=False,
     )
-    if admin_decision.allowed is True:
-        return True
-
-    read_decision = rbac_evaluator.check_permission(
-        db_session=db_session,
-        principal=principal,
-        permission_key="system:secrets.read",
-        now=now,
-    )
-    rtnval = read_decision.allowed
     return rtnval
 
 
@@ -170,6 +317,99 @@ def _raise_access_denied(*, secret_ref: str, action: str) -> None:
     raise SecretAccessDeniedError(err_msg) from None
 
 
+def _resolve_scope_or_raise(
+        *,
+        secret_ref: str,
+        scope_kind: SecretScopeKind,
+        scope_ref: Optional[str]
+    ) -> Optional[str]:
+    """
+        Validate that ``scope_ref`` is consistent with ``scope_kind``.
+
+        :param secret_ref: Canonical secret reference (for messages).
+        :param scope_kind: The requested :class:`SecretScopeKind`.
+        :param scope_ref: The requested project_id / user_id.
+
+        :returns: The normalized ``scope_ref`` (None for ORG scope).
+        :raises: SemanticError
+    """
+    from automojo.errors.exceptions import SemanticError
+
+    if scope_kind == SecretScopeKind.ORG:
+        if scope_ref is not None and len(str(scope_ref)) > 0:
+            err_msg_lines = ["ORG-scoped secrets must not carry a scope_ref."]
+            err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise SemanticError(err_msg) from None
+        rtnval = None
+        return rtnval
+
+    if scope_ref is None or len(str(scope_ref)) == 0:
+        err_msg_lines = ["PROJECT / USER scoped secrets require a scope_ref."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg_lines.append("SCOPE_KIND: {}".format(scope_kind.value))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SemanticError(err_msg) from None
+
+    rtnval = str(scope_ref)
+    return rtnval
+
+
+def list_secrets(
+        *,
+        db_session: DbSession,
+        scope_kind: Optional[SecretScopeKind] = None,
+        scope_ref: Optional[str] = None
+    ) -> list:
+    """
+        Return secret metadata rows, optionally filtered by scope. No
+        plaintext or ciphertext is touched by this function.
+
+        :param db_session: Active SQLAlchemy session.
+        :param scope_kind: Optional :class:`SecretScopeKind` filter.
+        :param scope_ref: Optional scope_ref filter.
+
+        :returns: List of :class:`SecretRecord` rows.
+    """
+    query = db_session.query(SecretRecord)
+    if scope_kind is not None:
+        query = query.filter(SecretRecord.scope_kind == scope_kind)
+    if scope_ref is not None and len(scope_ref) > 0:
+        query = query.filter(SecretRecord.scope_ref == scope_ref)
+
+    rtnval = query.order_by(SecretRecord.secret_ref.asc()).all()
+    return rtnval
+
+
+def get_secret_record(
+        *,
+        db_session: DbSession,
+        secret_ref: str
+    ) -> SecretRecord:
+    """
+        Return a single secret metadata row.
+
+        :param db_session: Active SQLAlchemy session.
+        :param secret_ref: Canonical secret reference.
+
+        :returns: The :class:`SecretRecord`.
+        :raises: SecretNotFoundError
+    """
+    record = (
+        db_session.query(SecretRecord)
+        .filter(SecretRecord.secret_ref == secret_ref)
+        .first()
+    )
+    if record is None:
+        err_msg_lines = ["Cannot read secret — record not found."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretNotFoundError(err_msg) from None
+
+    rtnval = record
+    return rtnval
+
+
 def put_secret(
         *,
         db_session: DbSession,
@@ -177,25 +417,38 @@ def put_secret(
         secret_ref: str,
         plaintext: SecretBytes,
         aspects: SecretsAspects,
+        scope_kind: SecretScopeKind = SecretScopeKind.ORG,
+        scope_ref: Optional[str] = None,
         owner_user_id: Optional[str] = None
     ) -> SecretVersion:
     """
         Store a secret at version 1 using the local backend's AES-GCM
-        encryption. ACL is enforced, an audit record is captured in the
-        same transaction, and ``entity.secret.created`` is staged for
-        after-commit publication.
+        encryption. The scope-aware ACL is enforced, an audit record is
+        captured in the same transaction, and ``entity.secret.created``
+        is staged for after-commit publication.
 
         :param db_session: Active SQLAlchemy session.
         :param principal: The authenticated principal.
         :param secret_ref: Canonical secret reference.
         :param plaintext: The :class:`SecretBytes` payload.
         :param aspects: Caller behavior knobs.
+        :param scope_kind: The :class:`SecretScopeKind` of the new
+                           secret. Defaults to ORG (service-wide).
+        :param scope_ref: The project_id (PROJECT) or user_id (USER);
+                          must be None for ORG scope.
         :param owner_user_id: Owner for the new record. Defaults to the
                               principal's ``user_id`` when None.
 
         :returns: The persisted :class:`SecretVersion`.
-        :raises: SecretAlreadyExistsError, SecretAccessDeniedError
+        :raises: SecretAlreadyExistsError, SecretAccessDeniedError,
+                 SemanticError
     """
+    resolved_scope_ref = _resolve_scope_or_raise(
+        secret_ref=secret_ref,
+        scope_kind=scope_kind,
+        scope_ref=scope_ref,
+    )
+
     existing = (
         db_session.query(SecretRecord).filter(SecretRecord.secret_ref == secret_ref).first()
     )
@@ -205,12 +458,23 @@ def put_secret(
         err_msg = os.linesep.join(err_msg_lines)
         raise SecretAlreadyExistsError(err_msg) from None
 
-    if _has_write_permission(db_session=db_session, principal=principal, record=None) is False:
+    if _has_write_permission(
+            db_session=db_session,
+            principal=principal,
+            record=None,
+            scope_kind=scope_kind,
+            scope_ref=resolved_scope_ref) is False:
         _raise_access_denied(secret_ref=secret_ref, action="write")
 
     resolved_owner = owner_user_id
     if resolved_owner is None:
         resolved_owner = principal.user_id
+
+    resolved_project_id: Optional[str] = None
+    if scope_kind == SecretScopeKind.PROJECT:
+        resolved_project_id = resolved_scope_ref
+    if scope_kind == SecretScopeKind.USER:
+        resolved_owner = resolved_scope_ref
 
     now = utc_now()
     record = SecretRecord(
@@ -218,7 +482,9 @@ def put_secret(
         current_version_id=None,
         backend_name=LOCAL_BACKEND_NAME,
         owner_user_id=resolved_owner,
-        owner_project_id=None,
+        owner_project_id=resolved_project_id,
+        scope_kind=scope_kind,
+        scope_ref=resolved_scope_ref,
         created_at=now,
         updated_at=now,
     )
@@ -382,4 +648,169 @@ def read_secret(
         version_number=int(version.version_number),
         metadata=metadata,
     )
+    return rtnval
+
+
+def update_secret(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        secret_ref: str,
+        plaintext: SecretBytes,
+        aspects: SecretsAspects
+    ) -> SecretVersion:
+    """
+        Rotate / update a secret's value. The current ACTIVE version is
+        marked SUPERSEDED and a new ACTIVE version is installed with a
+        fresh DEK. The scope-aware write ACL is enforced, an audit
+        record (``audit.secret.updated``) is captured in the same
+        transaction, and ``entity.secret.rotated`` is staged.
+
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param secret_ref: Canonical secret reference.
+        :param plaintext: The new :class:`SecretBytes` payload.
+        :param aspects: Caller behavior knobs.
+
+        :returns: The persisted new :class:`SecretVersion`.
+        :raises: SecretNotFoundError, SecretAccessDeniedError
+    """
+    record = get_secret_record(db_session=db_session, secret_ref=secret_ref)
+
+    if _has_write_permission(
+            db_session=db_session,
+            principal=principal,
+            record=record) is False:
+        _raise_access_denied(secret_ref=secret_ref, action="rotate")
+
+    previous = (
+        db_session.query(SecretVersion)
+        .filter(SecretVersion.secret_ref == secret_ref)
+        .order_by(SecretVersion.version_number.desc())
+        .first()
+    )
+    next_number = 1
+    if previous is not None:
+        next_number = int(previous.version_number) + 1
+        previous.state = SecretVersionState.SUPERSEDED
+
+    now = utc_now()
+    payload = encrypt_plaintext(plaintext=plaintext, secret_ref=secret_ref)
+    version = SecretVersion(
+        version_id=new_uuid(),
+        secret_ref=secret_ref,
+        version_number=next_number,
+        state=SecretVersionState.ACTIVE,
+        ciphertext_ref=None,
+        ciphertext_bytes=payload.ciphertext_bytes,
+        wrapped_dek=payload.wrapped_dek,
+        kek_id=payload.kek_id,
+        grace_expires_at=None,
+        created_at=now,
+        created_by=principal.user_id,
+    )
+    db_session.add(version)
+    db_session.flush()
+
+    record.current_version_id = version.version_id
+    record.updated_at = now
+    db_session.flush()
+
+    audit_payload = {
+        "secret_ref": secret_ref,
+        "backend_name": record.backend_name,
+        "version_id": str(version.version_id),
+        "principal_id": principal.user_id,
+        "updated_at": now.isoformat(),
+    }
+    audit_capture(
+        db_session=db_session,
+        source_event_id=new_uuid(),
+        source_topic="entity.secret.rotated",
+        kind="audit.secret.updated",
+        actor_user_id=principal.user_id,
+        actor_service_identity=None,
+        target_ref="secret:{}".format(secret_ref),
+        payload=audit_payload,
+    )
+
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=SecretEventTopics.SECRET_ROTATED,
+            payload=audit_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+
+    db_session.commit()
+
+    rtnval = version
+    return rtnval
+
+
+def delete_secret(
+        *,
+        db_session: DbSession,
+        principal: AuthPrincipal,
+        secret_ref: str,
+        aspects: SecretsAspects
+    ) -> None:
+    """
+        Delete a secret and every version row. The scope-aware write
+        ACL is enforced, an audit record (``audit.secret.deleted``) is
+        captured in the same transaction, and
+        ``entity.secret.force_expired`` is staged.
+
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param secret_ref: Canonical secret reference.
+        :param aspects: Caller behavior knobs.
+
+        :returns: None.
+        :raises: SecretNotFoundError, SecretAccessDeniedError
+    """
+    record = get_secret_record(db_session=db_session, secret_ref=secret_ref)
+
+    if _has_write_permission(
+            db_session=db_session,
+            principal=principal,
+            record=record) is False:
+        _raise_access_denied(secret_ref=secret_ref, action="delete")
+
+    backend_name = record.backend_name
+    now = utc_now()
+    audit_payload = {
+        "secret_ref": secret_ref,
+        "backend_name": backend_name,
+        "principal_id": principal.user_id,
+        "deleted_at": now.isoformat(),
+    }
+    audit_capture(
+        db_session=db_session,
+        source_event_id=new_uuid(),
+        source_topic="entity.secret.force_expired",
+        kind="audit.secret.deleted",
+        actor_user_id=principal.user_id,
+        actor_service_identity=None,
+        target_ref="secret:{}".format(secret_ref),
+        payload=audit_payload,
+    )
+
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=SecretEventTopics.SECRET_FORCE_EXPIRED,
+            payload=audit_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+
+    db_session.query(SecretVersion).filter(
+        SecretVersion.secret_ref == secret_ref
+    ).delete(synchronize_session=False)
+    db_session.delete(record)
+    db_session.commit()
+
+    rtnval = None
     return rtnval

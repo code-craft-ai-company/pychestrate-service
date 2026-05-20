@@ -134,6 +134,23 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:projects.members.manage",
             effect=PermissionEffect.ALLOW,
         ),
+        # 1-secrets-vault PR p20g: org/project/user-scoped secrets
+        # full-CRUD REST surface grants for the admin role.
+        # ``system:secrets.admin`` already authorizes every scope,
+        # but the explicit write / project-secrets grants keep the
+        # admin role's catalog complete.
+        PermissionGrant(
+            permission_key="system:secrets.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:project_secrets.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:project_secrets.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

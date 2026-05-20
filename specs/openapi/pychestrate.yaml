@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.10-preview
+  version: 0.0.11-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -73,7 +73,10 @@ tags:
   - name: audit
     description: Append-only audit log access.
   - name: secrets
-    description: Encrypted-secrets read API (writes are out-of-band today).
+    description: >-
+      Org / project / user-scoped encrypted-secrets management with full CRUD.
+      Metadata responses never carry the secret value; only the dedicated
+      value-read endpoint returns plaintext, and only to authorized callers.
   - name: variables
     description: Hierarchical typed configuration variables.
   - name: flags
@@ -398,20 +401,65 @@ paths:
   /secrets:
     get:
       tags: [secrets]
-      summary: List secret references (metadata only — no plaintext).
+      summary: List secret metadata (no plaintext), filtered by scope.
       operationId: secrets_list
+      parameters:
+        - in: query
+          name: scope_kind
+          description: Restrict the listing to one scope kind.
+          schema: { $ref: '#/components/schemas/SecretScopeKind' }
+        - in: query
+          name: scope_ref
+          description: >-
+            Restrict the listing to one scope_ref (a project_id for
+            PROJECT scope or a user_id for USER scope).
+          schema: { type: string }
       responses:
         '200':
-          description: Secret references.
+          description: Secret metadata records (never carries values).
           content:
             application/json:
               schema:
-                type: object
-                required: [items]
-                properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/SecretRef' }
+                type: array
+                items: { $ref: '#/components/schemas/Secret' }
+    post:
+      tags: [secrets]
+      summary: Create a secret (value KEK-encrypted at rest).
+      operationId: secrets_create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SecretCreateRequest' }
+      responses:
+        '201':
+          description: The created secret metadata (never carries the value).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Secret' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /secrets/value/{secret_ref}:
+    parameters:
+      - in: path
+        name: secret_ref
+        description: Slash-delimited secret reference path (e.g. `vault/myteam/api-token`).
+        required: true
+        schema: { type: string }
+    get:
+      tags: [secrets]
+      summary: Read the decrypted secret value (permission-gated, audit-logged).
+      operationId: secrets_get_value
+      responses:
+        '200':
+          description: The decrypted secret value.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SecretValue' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '410': { $ref: '#/components/responses/Gone' }
   /secrets/{secret_ref}:
     parameters:
       - in: path
@@ -421,14 +469,41 @@ paths:
         schema: { type: string }
     get:
       tags: [secrets]
-      summary: Read a single secret reference (metadata only).
+      summary: Read a single secret's metadata (never the value).
       operationId: secrets_get_by_ref
       responses:
         '200':
-          description: Secret reference.
+          description: Secret metadata.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/SecretRef' }
+              schema: { $ref: '#/components/schemas/Secret' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [secrets]
+      summary: Rotate / update a secret value.
+      operationId: secrets_update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SecretUpdateRequest' }
+      responses:
+        '200':
+          description: The updated secret metadata (never carries the value).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Secret' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [secrets]
+      summary: Delete a secret and every version.
+      operationId: secrets_delete
+      responses:
+        '204':
+          description: The secret was deleted.
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
   # =====================================================================
@@ -2675,6 +2750,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    Gone:
+      description: The target resource is no longer available.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     PayloadTooLarge:
       description: Request body exceeds the server-side size cap.
       content:
@@ -2881,20 +2961,76 @@ components:
     # secrets
     # ----------------------------------------------------------------
 
-    SecretRef:
+    SecretScopeKind:
+      type: string
+      description: >-
+        Ownership scope of a secret. `ORG` is service-wide; `PROJECT`
+        is bound to a project_id; `USER` is a personal secret bound to
+        a user_id.
+      enum: [ORG, PROJECT, USER]
+
+    Secret:
       type: object
-      required: [secret_ref, backend, created_at]
+      description: >-
+        Secret metadata. NEVER carries the secret value — use the
+        dedicated value-read endpoint for plaintext.
+      required: [secret_ref, backend_name, scope_kind, created_at, updated_at]
       properties:
         secret_ref:
           type: string
-          description: Backend-qualified secret path (e.g. `vault/myteam/api-token`).
-        backend: { type: string }
-        description: { type: string }
-        last_rotated_at:
+          description: Canonical secret reference (e.g. `vault/myteam/api-token`).
+        backend_name: { type: string }
+        scope_kind: { $ref: '#/components/schemas/SecretScopeKind' }
+        scope_ref:
           type: string
-          format: date-time
+          nullable: true
+          description: >-
+            The project_id (PROJECT scope) or user_id (USER scope);
+            null for ORG-scoped secrets.
+        current_version_id:
+          type: string
           nullable: true
         created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SecretCreateRequest:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+          description: Canonical secret reference for the new secret.
+        scope_kind:
+          allOf: [ { $ref: '#/components/schemas/SecretScopeKind' } ]
+          default: ORG
+        scope_ref:
+          type: string
+          nullable: true
+          description: >-
+            Required for PROJECT / USER scope (project_id or user_id);
+            must be omitted / null for ORG scope.
+        value:
+          type: string
+          description: The plaintext secret value. KEK-encrypted at rest.
+
+    SecretUpdateRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: string
+          description: The new plaintext secret value. KEK-encrypted at rest.
+
+    SecretValue:
+      type: object
+      description: >-
+        The decrypted secret value. Returned ONLY by the value-read
+        endpoint, ONLY to authorized callers, and the read is audited.
+      required: [secret_ref, version_number, value]
+      properties:
+        secret_ref: { type: string }
+        version_number: { type: integer }
+        value: { type: string }
 
     # ----------------------------------------------------------------
     # variables

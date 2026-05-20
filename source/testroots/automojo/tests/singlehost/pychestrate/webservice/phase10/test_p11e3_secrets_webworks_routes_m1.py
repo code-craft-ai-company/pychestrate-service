@@ -40,10 +40,14 @@ class _FakeRequest:
         *,
         path: str,
         path_params: Optional[Dict[str, Any]] = None,
+        query_params: Optional[Dict[str, Any]] = None,
         db_session: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
+        self.query_params: Dict[str, Any] = (
+            query_params if query_params is not None else {}
+        )
         self.db_session: Optional[Any] = db_session
         return
 
@@ -67,6 +71,17 @@ class _FakeApp:
         return rtnval
 
 
+class _FakeScopeKind:
+    """
+        Minimal stand-in for :class:`SecretScopeKind` — carries a
+        ``.value`` attribute the route serializer reads.
+    """
+
+    def __init__(self, value: str) -> None:
+        self.value: str = value
+        return
+
+
 class _FakeRecord:
     def __init__(
         self,
@@ -74,10 +89,14 @@ class _FakeRecord:
         secret_ref: str,
         backend_name: str = "vault",
         current_version_id: Optional[str] = None,
+        scope_kind: str = "ORG",
+        scope_ref: Optional[str] = None,
     ) -> None:
         self.secret_ref: str = secret_ref
         self.backend_name: str = backend_name
         self.current_version_id: Optional[str] = current_version_id
+        self.scope_kind: _FakeScopeKind = _FakeScopeKind(scope_kind)
+        self.scope_ref: Optional[str] = scope_ref
         self.created_at: datetime = datetime(
             2026, 5, 2, 12, 0, 0, tzinfo=timezone.utc
         )
@@ -139,13 +158,14 @@ def _decode_body(response: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_secrets_routes_attaches_two_routes_with_path_converter():
+def test_register_secrets_routes_attaches_full_crud_matrix():
     """
-    **Feature: 1-secrets-vault T1.1 (webworks routes)**
-    **Property: register_secrets_routes attaches the same two
-    method+path pairs the flask_restx controller exposed, with the
-    documented ``:path`` converter on the secret_ref so multi-segment
-    refs (``project/team/key``) match.**
+    **Feature: 1-secrets-vault PR p20g (scope-aware CRUD routes)**
+    **Property: register_secrets_routes attaches the full CRUD matrix
+    -- list + create on the collection, the dedicated value-read
+    route, and metadata-read / update / delete on the parameterized
+    ``:path`` route so multi-segment refs (``project/team/key``)
+    match.**
     """
     app = _FakeApp()
     secrets_routes.register_secrets_routes(
@@ -154,30 +174,41 @@ def test_register_secrets_routes_attaches_two_routes_with_path_converter():
 
     expected_pairs = (
         ("/api/v1/secrets", ("GET",)),
+        ("/api/v1/secrets", ("POST",)),
+        ("/api/v1/secrets/value/{secret_ref:path}", ("GET",)),
         ("/api/v1/secrets/{secret_ref:path}", ("GET",)),
+        ("/api/v1/secrets/{secret_ref:path}", ("PUT",)),
+        ("/api/v1/secrets/{secret_ref:path}", ("DELETE",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)
     return
 
 
-def test_register_secrets_routes_declares_collection_before_parameterized():
+def test_register_secrets_routes_declares_fixed_prefixes_before_parameterized():
     """
-    **Feature: 1-secrets-vault T1.1 (webworks routes)**
-    **Property: Fixed collection registers BEFORE the parameterized
-    route. With ``:path`` matching multiple segments, the ordering
-    is even more important than the simple-string case to avoid
-    greedy match.**
+    **Feature: 1-secrets-vault PR p20g (scope-aware CRUD routes)**
+    **Property: The fixed ``/secrets`` collection AND the fixed
+    ``/secrets/value/...`` value route register BEFORE the
+    parameterized ``:path`` route. With ``:path`` matching multiple
+    segments the ordering avoids a greedy match swallowing the fixed
+    prefixes.**
     """
     app = _FakeApp()
     secrets_routes.register_secrets_routes(
         app=app, version_prefix="/api/v1"
     )
     fixed_index = None
+    value_index = None
     parameterized_index = None
     for index, (path, _, _) in enumerate(app.calls):
         if path == "/api/v1/secrets" and fixed_index is None:
             fixed_index = index
+        if (
+            path == "/api/v1/secrets/value/{secret_ref:path}"
+            and value_index is None
+        ):
+            value_index = index
         if (
             path == "/api/v1/secrets/{secret_ref:path}"
             and parameterized_index is None
@@ -185,6 +216,7 @@ def test_register_secrets_routes_declares_collection_before_parameterized():
             parameterized_index = index
 
     testbase.assert_equal(fixed_index < parameterized_index, True)
+    testbase.assert_equal(value_index < parameterized_index, True)
     return
 
 
@@ -247,8 +279,8 @@ def test_handle_list_returns_serialized_metadata_only():
     body = _decode_body(response)
     testbase.assert_equal(len(body), 2)
     expected_keys = sorted([
-        "secret_ref", "backend_name", "current_version_id",
-        "created_at", "updated_at",
+        "secret_ref", "backend_name", "scope_kind", "scope_ref",
+        "current_version_id", "created_at", "updated_at",
     ])
     actual_keys = sorted(list(body[0].keys()))
     testbase.assert_equal(actual_keys, expected_keys)
