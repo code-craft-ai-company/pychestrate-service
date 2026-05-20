@@ -214,6 +214,16 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:resource_pools.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 8-webhooks-in / 8-webhooks-out PR p21a: operator-facing
+        # webhooks REST surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:webhooks.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:webhooks.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

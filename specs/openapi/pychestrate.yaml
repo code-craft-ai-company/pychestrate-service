@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.14-preview
+  version: 0.0.15-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -146,6 +146,13 @@ tags:
     description: >-
       Per-resource reads -- the resource record, current health
       probe state, and the resource usage-history timeline.
+  - name: webhooks
+    description: >-
+      Inbound + outbound webhooks. The inbound receiver
+      (POST /webhooks/in/{provider}/{hook_name}) is
+      unauthenticated and verified by per-integration
+      signature. The operator-facing integration, subscription,
+      and delivery-history routes are cookie/RBAC gated.
 
 security:
   - pychestrate_session: []
@@ -3400,6 +3407,276 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  # ---- 8-webhooks-in / 8-webhooks-out PR p21a ----
+  /webhooks/in/{provider}/{hook_name}:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        schema: { type: string }
+      - in: path
+        name: hook_name
+        required: true
+        schema: { type: string }
+    post:
+      tags: [webhooks]
+      summary: Inbound webhook receiver.
+      operationId: webhooks_in_receive
+      x-pychestrate-status: planned
+      security: []
+      description: |
+        The unauthenticated inbound receiver. External systems
+        POST provider-native events here. The handler runs the
+        domain's signature verification, replay-cache de-dup,
+        normalization, and dispatch. Authentication is the
+        per-integration signature compare -- no cookie/RBAC gate
+        applies. Answers `202` on accept, `401` on a bad or
+        missing signature, `409` on a replayed delivery, `404`
+        for an unknown provider/integration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '202':
+          description: Event accepted (dispatched or replay-ignored).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '401':
+          description: Signature verification failed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '404':
+          description: No configured integration for provider/hook_name.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+        '409':
+          description: Replayed delivery -- already seen.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
+
+  /webhooks/in/integrations:
+    get:
+      tags: [webhooks]
+      summary: List inbound webhook integrations.
+      operationId: webhooks_in_integrations_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Page of inbound integrations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInIntegrationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [webhooks]
+      summary: Register an inbound webhook integration.
+      operationId: webhooks_in_integrations_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookInIntegrationCreateRequest' }
+      responses:
+        '201':
+          description: Integration registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInIntegration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /webhooks/in/deliveries:
+    get:
+      tags: [webhooks]
+      summary: List recent inbound deliveries.
+      operationId: webhooks_in_deliveries_list
+      x-pychestrate-status: planned
+      description: |
+        Recent inbound deliveries from the replay-cache ledger
+        for audit/debug.
+      parameters:
+        - in: query
+          name: provider
+          schema: { type: string }
+        - in: query
+          name: hook_name
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Page of inbound deliveries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInDeliveryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /webhooks/out/subscriptions:
+    get:
+      tags: [webhooks]
+      summary: List outbound webhook subscriptions.
+      operationId: webhooks_out_subscriptions_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Page of outbound subscriptions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscriptionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    post:
+      tags: [webhooks]
+      summary: Register an outbound webhook subscription.
+      operationId: webhooks_out_subscriptions_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookOutSubscriptionCreateRequest' }
+      responses:
+        '201':
+          description: Subscription registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /webhooks/out/subscriptions/{subscription_id}:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [webhooks]
+      summary: Read an outbound webhook subscription.
+      operationId: webhooks_out_subscriptions_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Subscription detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [webhooks]
+      summary: Disable an outbound webhook subscription.
+      operationId: webhooks_out_subscriptions_delete
+      x-pychestrate-status: planned
+      description: |
+        Disables the subscription (idempotent). The row is
+        retained for the delivery-history audit trail.
+      responses:
+        '200':
+          description: Subscription disabled.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhooks/out/subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [webhooks]
+      summary: List delivery history for a subscription.
+      operationId: webhooks_out_subscription_deliveries_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        '200':
+          description: Page of delivery attempts (newest first).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutDeliveryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhooks/out/subscriptions/{subscription_id}/test:
+    parameters:
+      - in: path
+        name: subscription_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [webhooks]
+      summary: Send a test event to a subscription.
+      operationId: webhooks_out_subscription_test
+      x-pychestrate-status: planned
+      description: |
+        Builds a signed test event and records the delivery
+        attempt. The actual HTTP write lands in the M2
+        dispatcher -- this route records the attempt as
+        `PENDING` so the operator sees the test in the delivery
+        history.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookOutTestRequest' }
+      responses:
+        '202':
+          description: Test event queued.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutTestResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
 components:
 
@@ -6748,3 +7025,181 @@ components:
           type: array
           items: { $ref: '#/components/schemas/UsageRecord' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ---- 8-webhooks-in / 8-webhooks-out PR p21a ----
+
+    WebhookInIntegration:
+      type: object
+      required:
+        - webhook_id
+        - project_id
+        - provider
+        - hook_name
+        - enabled
+      properties:
+        webhook_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        provider: { type: string }
+        hook_name: { type: string }
+        secret_ref: { type: string }
+        mtls_required: { type: boolean }
+        description: { type: string }
+        enabled: { type: boolean }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        disabled_at: { type: string, format: date-time, nullable: true }
+        receiver_path:
+          type: string
+          description: REST path external systems POST events to.
+
+    WebhookInIntegrationCreateRequest:
+      type: object
+      required: [project_id, provider, hook_name, secret_ref]
+      properties:
+        project_id: { type: string, format: uuid }
+        provider: { type: string }
+        hook_name: { type: string }
+        secret_ref:
+          type: string
+          description: Verification shared-secret reference.
+        mtls_required: { type: boolean, default: false }
+        description: { type: string }
+
+    WebhookInIntegrationPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookInIntegration' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookInDelivery:
+      type: object
+      required: [provider, hook_name, delivery_id]
+      properties:
+        provider: { type: string }
+        hook_name: { type: string }
+        delivery_id: { type: string }
+        first_seen_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+
+    WebhookInDeliveryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookInDelivery' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookInReceiveResult:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [accepted, replay_ignored, rejected]
+        reason: { type: string }
+        request_id: { type: string }
+        provider: { type: string }
+        hook_name: { type: string }
+        delivery_id: { type: string, nullable: true }
+        domain_event_count: { type: integer }
+
+    WebhookOutSubscription:
+      type: object
+      required:
+        - subscription_id
+        - project_id
+        - name
+        - url
+        - enabled
+      properties:
+        subscription_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        url: { type: string }
+        signature_scheme: { type: string }
+        topic_filters:
+          type: array
+          items: { type: string }
+        enabled: { type: boolean }
+        custom_headers:
+          type: object
+          additionalProperties: { type: string }
+        created_by: { type: string, nullable: true }
+        created_at: { type: string, format: date-time, nullable: true }
+        updated_at: { type: string, format: date-time, nullable: true }
+
+    WebhookOutSubscriptionCreateRequest:
+      type: object
+      required: [project_id, name, url]
+      properties:
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        url:
+          type: string
+          description: Subscriber URL; must start with http:// or https://.
+        description: { type: string }
+        secret_ref: { type: string }
+        topic_filters:
+          type: array
+          items: { type: string }
+        custom_headers:
+          type: object
+          additionalProperties: { type: string }
+
+    WebhookOutSubscriptionPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookOutDelivery:
+      type: object
+      required: [delivery_id, subscription_id, project_id, outcome]
+      properties:
+        delivery_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        topic: { type: string }
+        payload_digest_sha256: { type: string }
+        signature: { type: string }
+        outcome:
+          type: string
+          enum: [pending, succeeded, failed, rejected_disabled]
+        response_status: { type: integer, nullable: true }
+        response_excerpt: { type: string, nullable: true }
+        duration_ms: { type: integer, nullable: true }
+        attempted_at: { type: string, format: date-time, nullable: true }
+
+    WebhookOutDeliveryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookOutDelivery' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    WebhookOutTestRequest:
+      type: object
+      properties:
+        topic: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+
+    WebhookOutTestResult:
+      type: object
+      required: [status, delivery]
+      properties:
+        status:
+          type: string
+          enum: [queued]
+        delivery: { $ref: '#/components/schemas/WebhookOutDelivery' }

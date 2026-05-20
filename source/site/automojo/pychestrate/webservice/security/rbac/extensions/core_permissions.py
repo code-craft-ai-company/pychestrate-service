@@ -234,6 +234,20 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Create resource pools and manage pool members and "
         "reservations via the REST surface"
     ),
+    # 8-webhooks-in / 8-webhooks-out PR p21a: operator-facing
+    # webhooks REST surface (inbound integration configs +
+    # deliveries, outbound subscriptions + delivery history).
+    # The unauthenticated inbound receiver authenticates via
+    # the domain's signature verification, not these keys.
+    "system:webhooks.read": (
+        "Read inbound webhook integrations, inbound deliveries, "
+        "outbound subscriptions, and delivery history via the "
+        "REST surface"
+    ),
+    "system:webhooks.write": (
+        "Register and manage inbound webhook integrations and "
+        "outbound subscriptions via the REST surface"
+    ),
 }
 
 
