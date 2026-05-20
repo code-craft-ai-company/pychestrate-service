@@ -119,6 +119,13 @@ var ADMIN_ENTRIES = [
     route: "/admin/audit-logs",
     requiredPermissions: ["system:audit.read"],
     group: ADMIN_GROUP_ID
+  },
+  {
+    entryId: "admin.enrollment-tokens",
+    label: "Enrollment Tokens",
+    route: "/admin/enrollment-tokens",
+    requiredPermissions: ["system:resources.manage"],
+    group: ADMIN_GROUP_ID
   }
 ];
 function register_admin_sidebar(sidebar) {

@@ -1,0 +1,104 @@
+{% extends "config/base.html" %}
+
+{% block title %}Enrollment Tokens - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Client Enrollment Tokens</h2>
+    <p>Mint, list, and revoke client enrollment bootstrap tokens</p>
+</div>
+
+<div class="card" style="max-width: 640px; margin-bottom: 24px;">
+    <h3>Mint New Token</h3>
+    <form method="post"
+          action="{{ url_for('config.enrollment_token_mint') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="form-group">
+            <label for="project_id">Project ID *</label>
+            <input type="text" id="project_id" name="project_id"
+                   class="form-control" required>
+            <p class="form-text">UUID of the project the token is scoped to.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="pod_name">Pod Name *</label>
+            <input type="text" id="pod_name" name="pod_name"
+                   class="form-control" required>
+            <p class="form-text">Pod label the token commits to.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="ttl_seconds">Expiry (TTL seconds)</label>
+            <input type="number" id="ttl_seconds" name="ttl_seconds"
+                   class="form-control" min="1"
+                   placeholder="{{ default_ttl_seconds }}">
+            <p class="form-text">
+                Optional. Blank defaults to {{ default_ttl_seconds }}
+                seconds.
+            </p>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" name="one_shot" value="1" checked>
+                One-shot (consumed on first redemption)
+            </label>
+        </div>
+
+        <button type="submit" class="btn btn-primary">
+            <span class="material-icons">add</span> Mint Token
+        </button>
+    </form>
+</div>
+
+<table class="data-table">
+    <thead>
+        <tr>
+            <th>Token ID</th>
+            <th>Project</th>
+            <th>Pod</th>
+            <th>Status</th>
+            <th>Issued</th>
+            <th>Expires</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for token in tokens %}
+        <tr>
+            <td>{{ token.token_id }}</td>
+            <td>{{ token.project_id }}</td>
+            <td>{{ token.pod_name }}</td>
+            <td><span class="badge badge-info">{{ token.status.value }}</span></td>
+            <td>{{ token.issued_at_iso or '-' }}</td>
+            <td>{{ token.expires_at_iso or '-' }}</td>
+            <td>
+                {% if token.status.value == 'PENDING' %}
+                <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"
+                      method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger"
+                            onclick="return confirm('Revoke this token?')">
+                        Revoke
+                    </button>
+                </form>
+                {% else %}
+                <span style="color: #6c757d;">-</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" style="text-align: center; color: #6c757d;">
+                No enrollment tokens found
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<p style="margin-top: 20px; color: #6c757d;">
+    Total: {{ tokens | length }} tokens
+</p>
+{% endblock %}
