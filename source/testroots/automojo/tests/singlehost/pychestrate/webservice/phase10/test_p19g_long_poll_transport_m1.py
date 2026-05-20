@@ -1,7 +1,7 @@
 """
 .. module:: test_p19g_long_poll_transport_m1
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Tests for the PR p19g LongPollTransport + agent-pull
+    :synopsis: Tests for the PR p19g LongPollTransport + client-pull
                REST routes.
 
 .. moduleauthor:: Automation Mojo LLC
@@ -9,11 +9,11 @@
 Covers:
 
 * :class:`LongPollTransport` enqueue / dequeue / timeout shapes.
-* ``GET /api/v1/agents/{client_id}/dispatches:next`` route shape:
+* ``GET /api/v1/clients/{client_id}/dispatches:next`` route shape:
   401 when no mTLS, 403 on cert/client mismatch, 422 on bad
   ``timeout_seconds``, 503 when transport unconfigured, 204 on
   timeout, 200 + envelope body when a dispatch is queued.
-* ``GET /api/v1/agents/{client_id}/heartbeat`` route shape: 204
+* ``GET /api/v1/clients/{client_id}/heartbeat`` route shape: 204
   on success, 401 / 403 problem responses on auth failure.
 * Integration: dispatcher -> long-poll queue -> route dequeues.
 """
@@ -40,8 +40,8 @@ from automojo.pychestrate.webservice.agents.factories.long_poll_transport import
     LongPollTransport,
     MAX_LONG_POLL_TIMEOUT_SECONDS,
 )
-from automojo.pychestrate.webservice.agents.restapi.v1 import (
-    agent_dispatch_routes,
+from automojo.pychestrate.webservice.clients.restapi.v1 import (
+    client_dispatch_routes,
 )
 from automojo.pychestrate.webservice.jobs.dispatch.errors import (
     DispatchTransportError,
@@ -307,13 +307,13 @@ def test_long_poll_transport_concurrent_transmit_and_await():
 def _install_transport(*, transport: Optional[LongPollTransport]) -> None:
     """
         Override the module-level transport seam on
-        :mod:`agent_dispatch_routes`.
+        :mod:`client_dispatch_routes`.
 
         :param transport: Transport instance (or ``None``).
 
         :returns: None.
     """
-    agent_dispatch_routes.set_active_long_poll_transport(transport=transport)
+    client_dispatch_routes.set_active_long_poll_transport(transport=transport)
     return
 
 
@@ -325,16 +325,16 @@ def _install_transport(*, transport: Optional[LongPollTransport]) -> None:
 def test_next_dispatch_returns_401_when_mtls_cn_absent():
     """
     **Feature: PR p19g**
-    **Property: GET /agents/{client_id}/dispatches:next returns
+    **Property: GET /clients/{client_id}/dispatches:next returns
     401 when no mTLS handshake forwarded a client common-name.**
     """
     _install_transport(transport=LongPollTransport())
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
         )
-        response = agent_dispatch_routes.handle_next_dispatch(request)
+        response = client_dispatch_routes.handle_next_dispatch(request)
     finally:
         _install_transport(transport=None)
     testbase.assert_equal(response.status_code, 401)
@@ -350,11 +350,11 @@ def test_next_dispatch_returns_403_when_cert_cn_mismatches_path():
     _install_transport(transport=LongPollTransport())
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
             mtls_client_cn=_OTHER_CLIENT_ID,
         )
-        response = agent_dispatch_routes.handle_next_dispatch(request)
+        response = client_dispatch_routes.handle_next_dispatch(request)
     finally:
         _install_transport(transport=None)
     testbase.assert_equal(response.status_code, 403)
@@ -372,12 +372,12 @@ def test_next_dispatch_returns_422_on_malformed_timeout():
     _install_transport(transport=LongPollTransport())
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
             query_params={"timeout_seconds": "not-a-number"},
             mtls_client_cn=_TEST_CLIENT_ID,
         )
-        response = agent_dispatch_routes.handle_next_dispatch(request)
+        response = client_dispatch_routes.handle_next_dispatch(request)
     finally:
         _install_transport(transport=None)
     testbase.assert_equal(response.status_code, 422)
@@ -392,11 +392,11 @@ def test_next_dispatch_returns_503_when_transport_unconfigured():
     """
     _install_transport(transport=None)
     request = _FakeRequest(
-        path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+        path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
         path_params={"client_id": _TEST_CLIENT_ID},
         mtls_client_cn=_TEST_CLIENT_ID,
     )
-    response = agent_dispatch_routes.handle_next_dispatch(request)
+    response = client_dispatch_routes.handle_next_dispatch(request)
     testbase.assert_equal(response.status_code, 503)
     return
 
@@ -411,12 +411,12 @@ def test_next_dispatch_returns_204_on_timeout():
     _install_transport(transport=transport)
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
             query_params={"timeout_seconds": "0"},
             mtls_client_cn=_TEST_CLIENT_ID,
         )
-        response = agent_dispatch_routes.handle_next_dispatch(request)
+        response = client_dispatch_routes.handle_next_dispatch(request)
     finally:
         _install_transport(transport=None)
     testbase.assert_equal(response.status_code, 204)
@@ -439,12 +439,12 @@ def test_next_dispatch_returns_200_with_envelope_when_queued():
     _install_transport(transport=transport)
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
             query_params={"timeout_seconds": "1"},
             mtls_client_cn=_TEST_CLIENT_ID,
         )
-        response = agent_dispatch_routes.handle_next_dispatch(request)
+        response = client_dispatch_routes.handle_next_dispatch(request)
     finally:
         _install_transport(transport=None)
     testbase.assert_equal(response.status_code, 200)
@@ -472,10 +472,10 @@ def test_heartbeat_returns_401_without_mtls():
     **Property: heartbeat returns 401 when no mTLS cert.**
     """
     request = _FakeRequest(
-        path="/api/v1/agents/{}/heartbeat".format(_TEST_CLIENT_ID),
+        path="/api/v1/clients/{}/heartbeat".format(_TEST_CLIENT_ID),
         path_params={"client_id": _TEST_CLIENT_ID},
     )
-    response = agent_dispatch_routes.handle_agent_heartbeat(request)
+    response = client_dispatch_routes.handle_client_heartbeat(request)
     testbase.assert_equal(response.status_code, 401)
     return
 
@@ -487,11 +487,11 @@ def test_heartbeat_returns_403_on_cert_mismatch():
     path client_id.**
     """
     request = _FakeRequest(
-        path="/api/v1/agents/{}/heartbeat".format(_TEST_CLIENT_ID),
+        path="/api/v1/clients/{}/heartbeat".format(_TEST_CLIENT_ID),
         path_params={"client_id": _TEST_CLIENT_ID},
         mtls_client_cn=_OTHER_CLIENT_ID,
     )
-    response = agent_dispatch_routes.handle_agent_heartbeat(request)
+    response = client_dispatch_routes.handle_client_heartbeat(request)
     testbase.assert_equal(response.status_code, 403)
     return
 
@@ -504,11 +504,11 @@ def test_heartbeat_returns_204_when_no_db_session_bound():
     success answer).**
     """
     request = _FakeRequest(
-        path="/api/v1/agents/{}/heartbeat".format(_TEST_CLIENT_ID),
+        path="/api/v1/clients/{}/heartbeat".format(_TEST_CLIENT_ID),
         path_params={"client_id": _TEST_CLIENT_ID},
         mtls_client_cn=_TEST_CLIENT_ID,
     )
-    response = agent_dispatch_routes.handle_agent_heartbeat(request)
+    response = client_dispatch_routes.handle_client_heartbeat(request)
     testbase.assert_equal(response.status_code, 204)
     return
 
@@ -527,18 +527,18 @@ def test_heartbeat_invokes_registry_record_heartbeat():
         return
 
     patch = create_module_patch(
-        agent_dispatch_routes.client_registry_service, "record_heartbeat",
+        client_dispatch_routes.client_registry_service, "record_heartbeat",
     )
     mock = patch.activate()
     mock.configure(side_effect=fake_record_heartbeat)
     try:
         request = _FakeRequest(
-            path="/api/v1/agents/{}/heartbeat".format(_TEST_CLIENT_ID),
+            path="/api/v1/clients/{}/heartbeat".format(_TEST_CLIENT_ID),
             path_params={"client_id": _TEST_CLIENT_ID},
             mtls_client_cn=_TEST_CLIENT_ID,
             db_session=object(),
         )
-        response = agent_dispatch_routes.handle_agent_heartbeat(request)
+        response = client_dispatch_routes.handle_client_heartbeat(request)
     finally:
         patch.deactivate()
     testbase.assert_equal(response.status_code, 204)

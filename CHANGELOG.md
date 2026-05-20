@@ -12,6 +12,25 @@ and runtime contracts are still in flux. A `-preview` tag does not
 progress to `-alpha` of the same `MAJOR.MINOR` version — the version is
 bumped when the project crosses the preview-to-alpha threshold.
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** Renamed the PR p19g long-poll routes from the
+  `/api/v1/agents/{client_id}/...` namespace to
+  `/api/v1/clients/{client_id}/...` to match the canonical "client"
+  naming for the pod-side runtime. The two affected operations are
+  `GET /clients/{client_id}/dispatches:next` and
+  `GET /clients/{client_id}/heartbeat`. The supporting code module
+  moved from
+  `automojo.pychestrate.webservice.agents.restapi.v1.agent_dispatch_routes`
+  to
+  `automojo.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes`,
+  and the registration symbol from `register_agent_dispatch_routes`
+  to `register_client_dispatch_routes`. No redirect shim is provided
+  — this is an alpha pre-stability rename. OpenAPI spec bumped to
+  `0.0.5-preview` (PR p19h).
+
 ## [0.0.3-preview] — 2026-05-17
 
 Renamed the active release line from `v0.1.0-alpha` to `v0.0.x-preview`

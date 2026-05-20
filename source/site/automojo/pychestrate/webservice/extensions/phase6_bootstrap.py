@@ -18,8 +18,8 @@ extension registry.
 PR p19f adds the ``TestOrchestrator`` construction step. PR p19g
 swaps the dispatcher's reference :class:`InMemoryTransport` for
 the production :class:`LongPollTransport` so signed envelopes
-queue up for the remote pod-client agent to pull via ``GET
-/api/v1/agents/{client_id}/dispatches:next``. Tests can still pass
+queue up for the remote pod-client to pull via ``GET
+/api/v1/clients/{client_id}/dispatches:next``. Tests can still pass
 an explicit :class:`InMemoryTransport` through
 :class:`Phase6BootstrapConfig` to keep call-recording semantics.
 """
@@ -40,8 +40,8 @@ from sqlalchemy.orm import Session as DbSession
 from automojo.pychestrate.webservice.agents.factories.long_poll_transport import (
     LongPollTransport,
 )
-from automojo.pychestrate.webservice.agents.restapi.v1 import (
-    agent_dispatch_routes,
+from automojo.pychestrate.webservice.clients.restapi.v1 import (
+    client_dispatch_routes,
 )
 from automojo.pychestrate.webservice.jobs.dispatch import (
     JobDispatcher,
@@ -214,15 +214,15 @@ def _build_test_orchestrator(
     if transport is None:
         transport = LongPollTransport()
 
-    # Publish the active long-poll transport on the agent-pull
-    # route seam so ``GET /api/v1/agents/{client_id}/dispatches:next``
+    # Publish the active long-poll transport on the client-pull
+    # route seam so ``GET /api/v1/clients/{client_id}/dispatches:next``
     # can dequeue the same records the dispatcher enqueues. When the
     # transport is anything other than a LongPollTransport (e.g. the
     # InMemoryTransport used in tests), we leave the seam alone --
     # the route then answers 503 which is the documented "not
     # configured" behaviour.
     if isinstance(transport, LongPollTransport):
-        agent_dispatch_routes.set_active_long_poll_transport(
+        client_dispatch_routes.set_active_long_poll_transport(
             transport=transport,
         )
 

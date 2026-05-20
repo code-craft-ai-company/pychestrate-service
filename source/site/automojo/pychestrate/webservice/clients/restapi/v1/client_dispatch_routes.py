@@ -1,28 +1,28 @@
 """
-.. module:: agents.restapi.v1.agent_dispatch_routes
+.. module:: clients.restapi.v1.client_dispatch_routes
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Agent-pull long-poll endpoints.
+    :synopsis: Client-pull long-poll endpoints.
 
 .. moduleauthor:: Automation Mojo LLC
 
-PR p19g adds two pod-client-agent-facing endpoints sitting on the
-``/api/v1/agents/...`` namespace:
+PR p19g adds two pod-client-facing endpoints sitting on the
+``/api/v1/clients/...`` namespace:
 
-* ``GET /api/v1/agents/{client_id}/dispatches:next``
+* ``GET /api/v1/clients/{client_id}/dispatches:next``
 
   Long-polls for the next signed envelope queued for the calling
-  agent. Returns 200 with the envelope body when a dispatch is
+  client. Returns 200 with the envelope body when a dispatch is
   available, 204 No Content when the wait window elapses with no
   pending work, 401 when no mTLS cert was forwarded, 403 when the
   cert common-name does not match the path ``client_id``.
 
-* ``GET /api/v1/agents/{client_id}/heartbeat``
+* ``GET /api/v1/clients/{client_id}/heartbeat``
 
-  Lightweight ping that records the agent's liveness via the
+  Lightweight ping that records the client's liveness via the
   existing :func:`clients.registry.service.record_heartbeat` seam
   and returns 204.
 
-The endpoints are mTLS-only — there is no ``system:*`` permission
+The endpoints are mTLS-only -- there is no ``system:*`` permission
 gate. The presence of an nginx-verified client certificate plus a
 cert-CN that matches the path ``client_id`` is the auth contract.
 
@@ -30,6 +30,13 @@ The :class:`LongPollTransport` instance is published on the
 module-level ``ACTIVE_LONG_POLL_TRANSPORT`` seam by the Phase-6
 bootstrap; the handler resolves it lazily so the route module can
 import cleanly during register-only callsites.
+
+PR p19h renames this module from ``agent_dispatch_routes`` to
+``client_dispatch_routes`` and moves it into the
+``clients/restapi/v1`` package so the route prefix
+(``/api/v1/clients/...``) matches the canonical "client" naming
+used for the pod-side runtime. The pre-existing ``webservice/agents``
+package retains the older inventory + capability surface.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -65,7 +72,7 @@ from automojo.pychestrate.webservice.jobs.envelope.canonical import (
 )
 
 
-AGENTS_BASE_PATH = "/agents"
+CLIENTS_BASE_PATH = "/clients"
 
 #: WSGI environ key nginx populates with the verified client cert
 #: common-name after a successful mTLS handshake. Mirrors the seam
@@ -79,7 +86,7 @@ MTLS_CLIENT_CN_ENVIRON_KEY = "SSL_CLIENT_S_DN_CN"
 ACTIVE_LONG_POLL_TRANSPORT: Optional[LongPollTransport] = None
 
 
-_LOGGER = logging.getLogger("pychestrate.agents.dispatch_routes")
+_LOGGER = logging.getLogger("pychestrate.clients.dispatch_routes")
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +229,8 @@ def _require_cert_matches_client_id(
     ) -> None:
     """
         Enforce that the mTLS-verified client common-name matches
-        the path ``client_id``. The cert CN is the agent's enrolled
-        client UUID; a mismatch indicates a misrouted or spoofed
-        call.
+        the path ``client_id``. The cert CN is the client's enrolled
+        UUID; a mismatch indicates a misrouted or spoofed call.
 
         :param request: Incoming webworks request.
         :param client_cn: Common-name nginx forwarded.
@@ -307,7 +313,7 @@ def _validate_client_id_or_abort(
     """
         Reject empty / obviously malformed path client ids.
 
-        The agent enrollment flow issues UUIDv4 client ids; we keep
+        The client enrollment flow issues UUIDv4 client ids; we keep
         the validation cheap (non-empty + length cap) and rely on
         the cert-match check to reject anything that does not match
         a known enrolled identity.
@@ -341,9 +347,9 @@ def _validate_client_id_or_abort(
 def _signed_envelope_signature_hex(*, signature: bytes) -> str:
     """
         Render the Ed25519 detached signature bytes as a hex string
-        suitable for embedding in the JSON response. The agent
+        suitable for embedding in the JSON response. The client
         re-verifies against the canonical payload, so the encoding
-        choice is opaque to the server — hex keeps the body
+        choice is opaque to the server -- hex keeps the body
         human-readable without dragging base64 padding gotchas in.
 
         :param signature: Raw signature bytes.
@@ -386,15 +392,15 @@ def _pending_dispatch_to_dict(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/agents/{client_id}/dispatches:next
+# GET /api/v1/clients/{client_id}/dispatches:next
 # ---------------------------------------------------------------------------
 
 
 def handle_next_dispatch(request: Request) -> Response:
     """
-        ``GET /api/v1/agents/{client_id}/dispatches:next`` —
+        ``GET /api/v1/clients/{client_id}/dispatches:next`` --
         long-poll for the next signed dispatch envelope queued for
-        the calling agent.
+        the calling client.
 
         :param request: Incoming webworks request.
 
@@ -432,7 +438,7 @@ def handle_next_dispatch(request: Request) -> Response:
 
         if record is None:
             _LOGGER.info(
-                "agents.dispatches_next.timeout client_id=%s wait=%d",
+                "clients.dispatches_next.timeout client_id=%s wait=%d",
                 client_id,
                 timeout_seconds,
             )
@@ -441,7 +447,7 @@ def handle_next_dispatch(request: Request) -> Response:
 
         body = _pending_dispatch_to_dict(record=record)
         _LOGGER.info(
-            "agents.dispatches_next.delivered client_id=%s run_id=%s envelope_id=%s",
+            "clients.dispatches_next.delivered client_id=%s run_id=%s envelope_id=%s",
             client_id,
             record.run_id,
             record.envelope_id,
@@ -453,21 +459,21 @@ def handle_next_dispatch(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/agents/{client_id}/heartbeat
+# GET /api/v1/clients/{client_id}/heartbeat
 # ---------------------------------------------------------------------------
 
 
-def handle_agent_heartbeat(request: Request) -> Response:
+def handle_client_heartbeat(request: Request) -> Response:
     """
-        ``GET /api/v1/agents/{client_id}/heartbeat`` — lightweight
+        ``GET /api/v1/clients/{client_id}/heartbeat`` -- lightweight
         liveness ping. Updates ``last_seen`` on the client row via
         :func:`clients.registry.service.record_heartbeat` and
         answers 204.
 
         Returns 204 even when the registry has no row for
-        ``client_id`` (the cert match already proved the agent
+        ``client_id`` (the cert match already proved the client
         enrolled; a missing row is a server-side bookkeeping issue
-        we surface in logs rather than the agent's UI).
+        we surface in logs rather than the client's UI).
 
         :param request: Incoming webworks request.
 
@@ -495,7 +501,7 @@ def handle_agent_heartbeat(request: Request) -> Response:
                 )
             except ClientNotFoundError as xcpt:
                 _LOGGER.warning(
-                    "agents.heartbeat.client_not_found client_id=%s err=%s",
+                    "clients.heartbeat.client_not_found client_id=%s err=%s",
                     client_id,
                     xcpt,
                 )
@@ -511,9 +517,9 @@ def handle_agent_heartbeat(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-def register_agent_dispatch_routes(*, app: Any, version_prefix: str) -> None:
+def register_client_dispatch_routes(*, app: Any, version_prefix: str) -> None:
     """
-        Attach the agent-pull long-poll routes to a webworks
+        Attach the client-pull long-poll routes to a webworks
         application.
 
         :param app: WebWorks application built by
@@ -523,16 +529,16 @@ def register_agent_dispatch_routes(*, app: Any, version_prefix: str) -> None:
 
         :returns: None.
     """
-    base = version_prefix + AGENTS_BASE_PATH
+    base = version_prefix + CLIENTS_BASE_PATH
     app.attach_route(
         base + "/{client_id}/dispatches:next", methods=["GET"],
     )(handle_next_dispatch)
     app.attach_route(
         base + "/{client_id}/heartbeat", methods=["GET"],
-    )(handle_agent_heartbeat)
+    )(handle_client_heartbeat)
 
     _LOGGER.warning(
-        "pychestrate.agents.dispatch_routes.mtls_not_wired: agent"
+        "pychestrate.clients.dispatch_routes.mtls_not_wired: client"
         " pull endpoints require nginx mTLS but will reject every"
         " request with 401 until SSL_CLIENT_S_DN_CN is forwarded."
     )
@@ -541,10 +547,10 @@ def register_agent_dispatch_routes(*, app: Any, version_prefix: str) -> None:
 
 __all__ = [
     "ACTIVE_LONG_POLL_TRANSPORT",
-    "AGENTS_BASE_PATH",
+    "CLIENTS_BASE_PATH",
     "MTLS_CLIENT_CN_ENVIRON_KEY",
-    "handle_agent_heartbeat",
+    "handle_client_heartbeat",
     "handle_next_dispatch",
-    "register_agent_dispatch_routes",
+    "register_client_dispatch_routes",
     "set_active_long_poll_transport",
 ]
