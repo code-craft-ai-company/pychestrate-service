@@ -151,6 +151,11 @@ def install_default_bundles() -> None:
           ``<pyc-test-catalog>`` view (catalog table, import action,
           per-entry trigger-run action), loaded only on
           ``/test-catalog`` and ``/test-catalog/*`` paths.
+        * ``pyc-builds-bundle`` -- prefix ``/builds`` -- builds
+          sidebar registration plus the ``<pyc-builds-list>`` and
+          ``<pyc-build-detail>`` views (builds table, trigger-build
+          action, build detail with artifacts), loaded only on
+          ``/builds`` and ``/builds/*`` paths.
 
         :returns: None.
     """
@@ -160,6 +165,7 @@ def install_default_bundles() -> None:
     register_bundle(
         route_prefix="/test-catalog", bundle_name="pyc-catalog-bundle"
     )
+    register_bundle(route_prefix="/builds", bundle_name="pyc-builds-bundle")
     return
 
 
