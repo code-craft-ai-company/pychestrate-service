@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.13-preview
+  version: 0.0.14-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -2495,6 +2495,93 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+
+  # =====================================================================
+  # pipeline-runs
+  # =====================================================================
+
+  /projects/{project_id}/pipeline-runs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [pipelines]
+      summary: List pipeline runs for a project.
+      operationId: pipeline_runs_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated page of pipeline runs for the project,
+        newest-started first. Each run carries its per-stage and
+        per-step status.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of pipeline runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineRunPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [pipelines]
+      summary: Trigger a pipeline run.
+      operationId: pipeline_runs_trigger
+      x-pychestrate-status: planned
+      description: |
+        Triggers a pipeline run from a supplied pipeline-definition
+        document. The DAG-walking `PipelineOrchestrator` parses and
+        DAG-checks the document, persists a `PipelineRun` plus its
+        per-stage and per-step rows, and dispatches the root stages'
+        jobs through the existing build / test / provision dispatch.
+        A stage becomes eligible once every stage it `needs` has
+        completed successfully; a stage failure skips its dependents
+        and fails the run. An optional `matrix` object requests
+        matrix expansion of the stage set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PipelineRunTriggerRequest' }
+      responses:
+        '201':
+          description: Pipeline run triggered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/pipeline-runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Pipeline-run UUID.
+    get:
+      tags: [pipelines]
+      summary: Read a single pipeline run.
+      operationId: pipeline_runs_read
+      x-pychestrate-status: planned
+      description: |
+        Reads a single pipeline run including its per-stage status
+        (each stage's state, the dispatched stage jobs, and the
+        per-step outcomes).
+      responses:
+        '200':
+          description: Pipeline run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # =====================================================================
   # metrics
@@ -5096,6 +5183,164 @@ components:
         shards:
           type: array
           items: { $ref: '#/components/schemas/ShardExpansionShard' }
+
+    # ----------------------------------------------------------------
+    # pipeline-runs (6-pipeline-execution PR p20q)
+    # ----------------------------------------------------------------
+
+    PipelineRunTriggerRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/pipeline-runs`. The
+        pipeline document is supplied inline; the DAG-walking
+        orchestrator parses, DAG-checks, persists, and dispatches the
+        root stages' jobs.
+      required: [commit_sha, filename, document]
+      properties:
+        commit_sha:
+          type: string
+          description: Commit the pipeline document was read at.
+        ref:
+          type: string
+          description: Git ref (branch / tag) the run targets.
+        filename:
+          type: string
+          description: Pipeline-document filename (selects the parser).
+        document:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+          description: |
+            The pipeline document inline -- a YAML/JSON string or a
+            JSON object.
+        matrix:
+          type: object
+          additionalProperties: true
+          description: |
+            Optional matrix-expansion dimensions. When present the
+            orchestrator records the expanded shard set on the run.
+
+    PipelineStepStatus:
+      type: object
+      description: |
+        Per-step status of a pipeline run. Matches `PipelineStepRun`
+        in `orchestration.pipelines.definition.models`.
+      required: [step_run_id, step_id, state]
+      properties:
+        step_run_id: { type: string, format: uuid }
+        step_id: { type: string }
+        step_index: { type: integer }
+        kind_name: { type: string }
+        job_kind:
+          type: string
+          description: Dispatch route -- `build` / `test` / `infra` / `script`.
+        layer5_run_id:
+          type: string
+          nullable: true
+          description: |
+            The dispatched build / test / provision orchestration run
+            id, or `null` for a step that did not dispatch a job.
+        state:
+          type: string
+          enum: [pending, dispatched, running, completed, failed, cancelled, skipped]
+        final_state_reason: { type: string }
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PipelineStageStatus:
+      type: object
+      description: |
+        Per-stage status of a pipeline run. Matches
+        `PipelineStageRun` in
+        `orchestration.pipelines.definition.models`. A stage becomes
+        eligible once every stage it `needs` has completed; a stage
+        whose dependency failed is `skipped`.
+      required: [stage_run_id, stage_id, state]
+      properties:
+        stage_run_id: { type: string, format: uuid }
+        stage_id: { type: string }
+        stage_index: { type: integer }
+        state:
+          type: string
+          enum: [pending, running, skipped, completed, failed, cancelled]
+        when_clause:
+          type: string
+          enum: [succeeded, failed, always]
+        needs:
+          type: array
+          items: { type: string }
+          description: Stage ids this stage depends on.
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineStepStatus' }
+        final_state_reason: { type: string }
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PipelineRun:
+      type: object
+      description: |
+        One execution of a pipeline definition. Matches the
+        `PipelineRun` row in
+        `orchestration.pipelines.definition.models`, walked by the
+        `PipelineOrchestrator`.
+      required:
+        - run_id
+        - project_id
+        - state
+        - stages
+      properties:
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        pipeline_id:
+          type: string
+          description: Canonical-document SHA-256 digest of the definition.
+        commit_sha: { type: string }
+        ref: { type: string }
+        filename: { type: string }
+        state:
+          type: string
+          enum: [pending, running, completed, failed, cancelled, rejected]
+        trigger_cause:
+          type: string
+          enum: [manual, webhook, schedule, api]
+        actor_id:
+          type: string
+          nullable: true
+        stages:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineStageStatus' }
+        final_state_reason: { type: string }
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PipelineRunPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineRun' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
 
     # ----------------------------------------------------------------
     # source_integrations (6-source-integrations PR p20a)

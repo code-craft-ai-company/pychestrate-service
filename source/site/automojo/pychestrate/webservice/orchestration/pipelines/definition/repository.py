@@ -129,6 +129,32 @@ def find_run_by_id(
     return rtnval
 
 
+def list_runs_for_project(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        limit: int
+    ) -> List[PipelineRun]:
+    """
+        List pipeline runs for a project, newest-started first.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param limit: Maximum number of rows to return.
+
+        :returns: List of :class:`PipelineRun` rows.
+    """
+    rows = (
+        db_session.query(PipelineRun)
+        .filter(PipelineRun.project_id == project_id)
+        .order_by(PipelineRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
 def find_step_run_by_id(
         *,
         db_session: DbSession,

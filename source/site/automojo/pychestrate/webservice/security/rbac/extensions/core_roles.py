@@ -95,6 +95,14 @@ class SystemAdminRole(RoleExtension):
             effect=PermissionEffect.ALLOW,
         ),
         PermissionGrant(
+            permission_key="system:pipelines.run",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:pipeline_runs.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
             permission_key="system:source_integrations.read",
             effect=PermissionEffect.ALLOW,
         ),

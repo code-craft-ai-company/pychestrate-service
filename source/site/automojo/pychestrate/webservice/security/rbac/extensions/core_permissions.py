@@ -111,6 +111,18 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:pipelines.write": (
         "Create, update, and delete pipeline definitions via the REST surface"
     ),
+    # Operator/CI access to trigger a pipeline run -- the DAG-walking
+    # orchestrator that dispatches each stage's build / test /
+    # provision job. Introduced by 6-pipeline-execution PR p20q.
+    "system:pipelines.run": (
+        "Trigger pipeline runs (DAG-walking stage-job dispatch) via"
+        " the REST surface"
+    ),
+    # Operator-facing read access for pipeline runs and their
+    # per-stage status. Introduced by 6-pipeline-execution PR p20q.
+    "system:pipeline_runs.read": (
+        "Read pipeline runs and per-stage status via the REST surface"
+    ),
     # Operator-facing read access for the source-integrations REST
     # surface (GET /api/v1/projects/{id}/source-integrations).
     # Introduced by 6-source-integrations PR p20a.

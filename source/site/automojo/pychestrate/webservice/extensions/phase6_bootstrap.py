@@ -97,6 +97,10 @@ from automojo.pychestrate.webservice.orchestration.infra.runs import (
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import (
     register_builtin_extensions as pipeline_definition_register,
 )
+from automojo.pychestrate.webservice.orchestration.pipelines.execution.orchestrator import (
+    PipelineOrchestrator,
+    set_active_pipeline_orchestrator,
+)
 from automojo.pychestrate.webservice.orchestration.pipelines.sharding import (
     register_builtin_extensions as sharding_register,
 )
@@ -294,9 +298,29 @@ def _build_test_orchestrator(
         backend=config.results_backend,
     )
 
+    # Construct the PipelineOrchestrator (6-pipeline-execution PR
+    # p20q). It walks a pipeline definition's stage DAG and dispatches
+    # each eligible stage's job through the SAME build / test /
+    # provision dispatch handles wired above -- it coordinates, it does
+    # not re-implement job dispatch. The orchestrator subscribes to the
+    # run-state machine's terminal bus topics so a stage-job terminal
+    # event re-drives the DAG walk; the bus subscriber needs its own
+    # session, hence the session factory.
+    pipeline_orchestrator = PipelineOrchestrator(
+        session_factory=config.session_factory,
+        test_orchestrator=orchestrator,
+        build_service_module=build_service,
+        infra_service_module=infra_runs_service,
+    )
+    pipeline_orchestrator.attach_bus_subscribers()
+    set_active_pipeline_orchestrator(orchestrator=pipeline_orchestrator)
+
     logger.info(
         "phase6.bootstrap.test_orchestrator_ready transport=%s",
         transport.transport_name(),
+    )
+    logger.info(
+        "phase6.bootstrap.pipeline_orchestrator_ready",
     )
     logger.info(
         "phase6.bootstrap.build_dispatch_wired transport=%s",
