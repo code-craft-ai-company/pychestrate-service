@@ -53,11 +53,20 @@ from automojo.pychestrate.webservice.jobs.dispatch.transport_adapter import (
 from automojo.pychestrate.webservice.jobs.results import (
     SharedResultsBackend,
 )
+from automojo.pychestrate.webservice.orchestration.test.live.bus_bridge import (
+    LiveRunBusBridge,
+)
+from automojo.pychestrate.webservice.orchestration.test.live.hub import (
+    LiveRunHub,
+)
 from automojo.pychestrate.webservice.orchestration.test.orchestrator import (
     TestOrchestrator,
 )
 from automojo.pychestrate.webservice.orchestration.test.restapi.v1 import (
     test_runs_routes,
+)
+from automojo.pychestrate.webservice.runs.restapi.v1 import (
+    runs_events_routes,
 )
 
 from automojo.pychestrate.webservice.orchestration.build import (
@@ -247,6 +256,36 @@ def _build_test_orchestrator(
     return rtnval
 
 
+def bootstrap_live_run_view() -> LiveRunBusBridge:
+    """
+        Construct the ``6-live-run-view`` singletons and publish the
+        bus bridge on the SSE route's module seam.
+
+        ``6-live-run-view`` is a singleton service object -- no
+        factory protocol -- so the :class:`LiveRunHub` is constructed
+        here and held inside the request layer. A
+        :class:`LiveRunBusBridge` is wrapped around the hub and
+        attached to the in-process bus so run-state-change + progress
+        events forward onto the hub relays the SSE route streams.
+
+        Idempotent at the bus level: :meth:`LiveRunBusBridge.attach`
+        no-ops on a second call so re-running the bootstrap does not
+        double-subscribe.
+
+        :returns: The constructed :class:`LiveRunBusBridge`.
+    """
+    hub = LiveRunHub()
+    bridge = LiveRunBusBridge(hub=hub)
+    bridge.attach()
+
+    runs_events_routes.set_active_live_run_bridge(bridge=bridge)
+
+    logger.info("phase6.bootstrap.live_run_view_ready")
+
+    rtnval = bridge
+    return rtnval
+
+
 def bootstrap_phase6_runtime(
         *, config: Phase6BootstrapConfig
     ) -> Phase6BootstrapResult:
@@ -274,6 +313,11 @@ def bootstrap_phase6_runtime(
                   (each ``None`` in register-only mode).
     """
     register_phase6_builtin_extensions()
+
+    # The live-run-view bridge needs no db session -- it is a pure
+    # in-process pub/sub bridge -- so construct it unconditionally
+    # so the SSE route is wired even in register-only mode.
+    bootstrap_live_run_view()
 
     if config.session_factory is None:
         rtnval = Phase6BootstrapResult(
