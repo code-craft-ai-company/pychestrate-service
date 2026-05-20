@@ -68,6 +68,15 @@ from automojo.pychestrate.webservice.ingest.result.errors import (
     ResultTreeNotFoundError,
 )
 from automojo.pychestrate.webservice.ingest.result import scanner as result_scanner
+from automojo.pychestrate.webservice.ingest.result import (
+    completion as result_completion,
+)
+from automojo.pychestrate.webservice.orchestration.build.errors import (
+    BuildRunNotFoundError,
+)
+from automojo.pychestrate.webservice.orchestration.infra.runs.errors import (
+    InfraRunNotFoundError,
+)
 from automojo.pychestrate.webservice.jobs.dispatch import repository as dispatch_repo
 from automojo.pychestrate.webservice.jobs.dispatch.receipt import (
     service as receipt_service,
@@ -883,16 +892,101 @@ def handle_post_progress(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _handle_build_provision_completion(
+        *,
+        request: Request,
+        db_session: Any,
+        run_id: str,
+        format_tag: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+    """
+        Job-kind-aware completion ingest for a ``build`` /
+        ``provision`` ``ResultManifest``.
+
+        Build and provision runs flow a ``run_id`` through the same
+        ``results/complete`` surface as test runs, but their
+        uploaded trees are not testbase trees -- they carry raw
+        artifact files only. This helper takes the direct,
+        non-testbase completion path
+        (:mod:`ingest.result.completion`): it advances the
+        :class:`BuildRun` / :class:`InfraRun` to its terminal
+        state, records the uploaded artifacts, and drives the
+        run-state machine terminal. The testbase result scanner is
+        not invoked.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the path.
+        :param format_tag: ``"build"`` or ``"provision"``.
+        :param payload: The decoded ``ResultManifest`` dict.
+
+        :returns: The completion summary dict the handler echoes in
+                  its 202 body.
+    """
+    try:
+        if format_tag == result_completion.BUILD_FORMAT_TAG:
+            outcome = result_completion.complete_build_run(
+                db_session=db_session,
+                run_id=run_id,
+                manifest=payload,
+            )
+        else:
+            outcome = result_completion.complete_provision_run(
+                db_session=db_session,
+                run_id=run_id,
+                manifest=payload,
+            )
+    except BuildRunNotFoundError as xcpt:
+        _abort_problem(
+            request=request,
+            status=404,
+            detail=str(xcpt),
+            extensions={"run_id": run_id, "format_tag": format_tag},
+        )
+        outcome = None  # unreachable -- _abort_problem raises.
+    except InfraRunNotFoundError as xcpt:
+        _abort_problem(
+            request=request,
+            status=404,
+            detail=str(xcpt),
+            extensions={"run_id": run_id, "format_tag": format_tag},
+        )
+        outcome = None  # unreachable
+
+    rtnval: Dict[str, Any] = {
+        "job_kind": outcome.job_kind,
+        "domain_state": outcome.domain_state,
+        "run_state": outcome.run_state,
+        "artifacts_recorded": outcome.artifacts_recorded,
+    }
+    if outcome.manifest_id is not None:
+        rtnval["manifest_id"] = outcome.manifest_id
+    return rtnval
+
+
 def handle_post_results_complete(request: Request) -> Response:
     """
         ``POST /api/v1/runs/{run_id}/results/complete`` -- pod
-        client agent signals that the testbase result tree is
-        fully uploaded.
+        client agent signals that a result tree is fully uploaded.
 
-        For PR p19c the scan is triggered synchronously inside the
-        handler; later milestones move it to the scheduler from PR
-        p19b. The handler is tolerant of scanner errors: a missing
-        tree returns 409, a parse failure returns 502.
+        The handler is job-kind-aware. The posted ``ResultManifest``
+        carries a ``format_tag``:
+
+        * ``testbase`` -- the result tree is parsed + persisted by
+          the testbase result scanner, exactly as in PR p19c.
+        * ``build`` / ``provision`` -- the run is a build /
+          provisioning run; the manifest is routed to the direct
+          completion path (:mod:`ingest.result.completion`), which
+          advances the :class:`BuildRun` / :class:`InfraRun` to a
+          terminal state, records the uploaded artifacts, and
+          drives the run-state machine terminal. The testbase
+          scanner is not invoked for these job kinds.
+
+        For testbase the scan is triggered synchronously inside the
+        handler; later milestones move it to the scheduler. The
+        handler is tolerant of scanner errors: a missing tree
+        returns 409, a parse failure is deferred (still 202).
 
         :param request: Incoming webworks request.
 
@@ -936,42 +1030,68 @@ def handle_post_results_complete(request: Request) -> Response:
 
         scan_status = "scheduled"
         scan_detail: Optional[str] = None
-        try:
-            outcome = result_scanner.scan_once(
+        completion_summary: Optional[Dict[str, Any]] = None
+
+        is_build_or_provision = format_tag in (
+            result_completion.BUILD_FORMAT_TAG,
+            result_completion.PROVISION_FORMAT_TAG,
+        )
+
+        if is_build_or_provision is True:
+            # Build / provision runs take the direct completion
+            # path -- the uploaded tree is not a testbase tree, so
+            # the testbase result scanner is bypassed entirely.
+            completion_summary = _handle_build_provision_completion(
+                request=request,
                 db_session=db_session,
                 run_id=run_id,
-                tree_path=backend_key_prefix,
+                format_tag=format_tag,
+                payload=payload,
             )
-            scan_status = "scanned"
-            scan_detail = getattr(outcome, "status", None)
-        except ResultTreeNotFoundError as xcpt:
-            _abort_problem(
-                request=request,
-                status=409,
-                detail=str(xcpt),
-                extensions={
-                    "run_id": run_id,
-                    "backend_key_prefix": backend_key_prefix,
-                },
-            )
-        except ResultIngestError as xcpt:
-            # Parse failures shouldn't deny the manifest; record the
-            # failure and let the operator inspect via the run-event
-            # SSE stream + audit log. Per the OpenAPI description
-            # "errors in downstream parsing are surfaced via the
-            # RunEvent SSE stream" -- we still return 202 here.
-            _LOGGER.warning(
-                "pychestrate.runs.results_complete.scan_error run_id=%s err=%s",
-                run_id,
-                xcpt,
-            )
-            scan_status = "scan_deferred"
-            scan_detail = str(xcpt)
+            scan_status = "completed"
+        else:
+            # testbase result tree -- parse + persist via the
+            # result scanner exactly as PR p19c established.
+            try:
+                outcome = result_scanner.scan_once(
+                    db_session=db_session,
+                    run_id=run_id,
+                    tree_path=backend_key_prefix,
+                )
+                scan_status = "scanned"
+                scan_detail = getattr(outcome, "status", None)
+            except ResultTreeNotFoundError as xcpt:
+                _abort_problem(
+                    request=request,
+                    status=409,
+                    detail=str(xcpt),
+                    extensions={
+                        "run_id": run_id,
+                        "backend_key_prefix": backend_key_prefix,
+                    },
+                )
+            except ResultIngestError as xcpt:
+                # Parse failures shouldn't deny the manifest; record
+                # the failure and let the operator inspect via the
+                # run-event SSE stream + audit log. Per the OpenAPI
+                # description "errors in downstream parsing are
+                # surfaced via the RunEvent SSE stream" -- we still
+                # return 202 here.
+                _LOGGER.warning(
+                    "pychestrate.runs.results_complete.scan_error"
+                    " run_id=%s err=%s",
+                    run_id,
+                    xcpt,
+                )
+                scan_status = "scan_deferred"
+                scan_detail = str(xcpt)
 
         _LOGGER.info(
-            "pychestrate.runs.results_complete run_id=%s client_cn=%s status=%s",
+            "pychestrate.runs.results_complete run_id=%s client_cn=%s"
+            " format_tag=%s status=%s",
             run_id,
             client_cn,
+            format_tag,
             scan_status,
         )
 
@@ -982,6 +1102,8 @@ def handle_post_results_complete(request: Request) -> Response:
         }
         if scan_detail is not None:
             body["scan_detail"] = scan_detail
+        if completion_summary is not None:
+            body.update(completion_summary)
         rtnval: Response = JSONResponse(content=body, status_code=202)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response

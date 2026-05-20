@@ -1915,16 +1915,27 @@ paths:
       x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS once it has finished
-        writing the testbase result tree (`testrun_summary.json`,
-        `testrun_results_stream.jsos`, `testrun_results.json`,
-        `testsummary.html`, plus the `artifacts/`, `taskings/`,
-        `tc-by-products/`, `diagnostics/` subtrees) to the shared
-        results backend.
+        writing a run's result tree to the shared results backend.
 
-        The server transitions the run to a terminal state
-        (`COMPLETED` / `FAILED`) based on the manifest's
-        `terminal_outcome` field and kicks off the
-        `result_tree_parser` extension chain.
+        The handler is job-kind-aware -- it branches on the
+        manifest's `format_tag`:
+
+        * `testbase` -- the uploaded tree is a testbase result tree
+          (`testrun_summary.json`, `testrun_results_stream.jsos`,
+          `testrun_results.json`, `testsummary.html`, plus the
+          `artifacts/`, `taskings/`, `tc-by-products/`,
+          `diagnostics/` subtrees). The server kicks off the
+          `result_tree_parser` extension chain.
+        * `build` / `provision` -- the run is a build / provisioning
+          run. The uploaded tree carries raw artifact files only
+          (no per-test records), so the server takes a direct
+          completion path: it advances the `BuildRun` / `InfraRun`
+          to a terminal state and, for build runs, registers the
+          uploaded artifacts as a build-artifacts manifest.
+
+        In every case the server transitions the run to a terminal
+        state (`COMPLETED` / `FAILED`) based on the manifest's
+        `terminal_outcome` field.
       security:
         - pychestrate_mtls: []
       requestBody:
@@ -4448,7 +4459,11 @@ components:
         client_id: { type: string, format: uuid }
         format_tag:
           type: string
-          description: Parser tag (`testbase` for testbase result trees).
+          description: >-
+            Job-kind tag selecting the server-side ingest path:
+            `testbase` for a testbase result tree, `build` for a
+            build artifact tree, `provision` for a provisioning
+            artifact tree.
         backend_key_prefix:
           type: string
           description: Per-run prefix the agent wrote the tree under
