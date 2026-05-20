@@ -774,6 +774,36 @@ def get_pipeline_run(
     return rtnval
 
 
+def list_pipeline_runs(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        limit: int
+    ) -> List[PipelineRunView]:
+    """
+        List pipeline runs for a project, newest-started first.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param limit: Maximum number of rows to return.
+
+        :returns: List of :class:`PipelineRunView` (each fully
+                  populated with its per-stage + per-step status).
+    """
+    rows = repository.list_runs_for_project(
+        db_session=db_session,
+        project_id=project_id,
+        limit=limit,
+    )
+    rtnval: List[PipelineRunView] = []
+    for row in rows:
+        view = get_pipeline_run(
+            db_session=db_session, run_id=str(row.run_id),
+        )
+        rtnval.append(view)
+    return rtnval
+
+
 def _maybe_complete_stage(
         *,
         db_session: DbSession,

@@ -12,6 +12,7 @@ __version__ = "1.0.0"
 import enum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Enum,
@@ -111,6 +112,11 @@ class PipelineRun(PychestratePhase1Base, SerializableModel):
         default=TriggerCause.MANUAL,
     )
     actor_id = Column(UUIDType(binary=False), nullable=True)
+    # True when the run is driven by the PipelineOrchestrator (the
+    # DAG-walking stage-job dispatch added by 6-pipeline-execution
+    # PR p20q). False on M1 definition-only ``trigger_run`` rows that
+    # persist stages/steps but never dispatch a Layer-5 job.
+    orchestrated = Column(Boolean, nullable=False, default=False)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
