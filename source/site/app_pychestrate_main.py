@@ -57,6 +57,9 @@ from automojo.pychestrate.webservice.notifications.restapi.v1.channels_routes im
 from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
+from automojo.pychestrate.webservice.embed.restapi.v1.embed_routes import (
+    register_embed_routes,
+)
 from automojo.pychestrate.webservice.pods.restapi.v1.pods_routes import (
     register_pods_routes,
 )
@@ -148,6 +151,15 @@ from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.provisioning
 )
 from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.drift_routes import (
     register_drift_routes,
+)
+from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.guards_routes import (
+    register_guards_routes,
+)
+from automojo.pychestrate.webservice.metrics.restapi.v1.slos_routes import (
+    register_slos_routes,
+)
+from automojo.pychestrate.webservice.ops.release.restapi.v1.release_channels_routes import (
+    register_release_channels_routes,
 )
 from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
     register_rbac_routes,
@@ -451,6 +463,7 @@ def register_service_extensions() -> None:
     register_flags_routes(app=app, version_prefix="/api/v1")
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
+    register_embed_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_me_routes(app=app, version_prefix="/api/v1")
@@ -484,6 +497,9 @@ def register_service_extensions() -> None:
     register_environments_routes(app=app, version_prefix="/api/v1")
     register_provisioning_runs_routes(app=app, version_prefix="/api/v1")
     register_drift_routes(app=app, version_prefix="/api/v1")
+    register_guards_routes(app=app, version_prefix="/api/v1")
+    register_slos_routes(app=app, version_prefix="/api/v1")
+    register_release_channels_routes(app=app, version_prefix="/api/v1")
     register_resource_pools_routes(app=app, version_prefix="/api/v1")
     register_resources_api_routes(app=app, version_prefix="/api/v1")
     register_webhooks_in_routes(app=app, version_prefix="/api/v1")

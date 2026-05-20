@@ -102,6 +102,11 @@ tags:
     description: Pod definitions, registrations, topology, and templates.
   - name: plugin_api
     description: Plugin-API catalog metadata for installed extensions.
+  - name: embed
+    description: >-
+      Embeddable-views catalog and signed-URL issuance. The signed
+      embed-serving route (`GET /embed/{view_key}`) is token-authed
+      and outside the `/api/v1` surface.
   - name: runs
     description: Run-state reads (`GET /runs/...`).
   - name: test_runs
@@ -146,13 +151,19 @@ tags:
     description: >-
       Per-resource reads -- the resource record, current health
       probe state, and the resource usage-history timeline.
-  - name: webhooks
+  - name: blast_radius_guards
     description: >-
-      Inbound + outbound webhooks. The inbound receiver
-      (POST /webhooks/in/{provider}/{hook_name}) is
-      unauthenticated and verified by per-integration
-      signature. The operator-facing integration, subscription,
-      and delivery-history routes are cookie/RBAC gated.
+      Blast-radius guards -- per-environment attachments of
+      registry-defined guard rules that cap provisioning blast
+      radius, plus a guard-evaluation preview.
+  - name: slos
+    description: >-
+      SLO definitions and the current burn-rate / error-budget
+      status surfaced per SLO.
+  - name: release_channels
+    description: >-
+      Published release-channel entries -- releases advertised on
+      the canary / beta / stable channels.
 
 security:
   - pychestrate_session: []
@@ -1782,6 +1793,98 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/PluginApiMount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /ext:
+    get:
+      tags: [plugin_api]
+      summary: List extension-contributed REST endpoints.
+      description: >-
+        Operator-facing listing of the extension REST endpoints the
+        host discovered at startup, each mounted under the
+        `/api/v1/ext/<extension_name>/...` namespace. The dynamic
+        binding of each manifest row to a live route is a scoped
+        follow-up; `dynamic_mount` reports `deferred` until that
+        lands. RBAC-gated on `system:plugin_api.read`.
+      operationId: plugin_api_list_ext
+      responses:
+        '200':
+          description: Discovered extension endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, dynamic_mount]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PluginApiMount' }
+                  total: { type: integer }
+                  dynamic_mount:
+                    type: string
+                    enum: [deferred, active]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # =====================================================================
+  # embed
+  # =====================================================================
+
+  /embed/views:
+    get:
+      tags: [embed]
+      summary: List the embeddable-views catalog.
+      description: >-
+        Returns the fixed catalog of embeddable view kinds. RBAC-gated
+        on `system:embed.read`.
+      operationId: embed_list_views
+      responses:
+        '200':
+          description: Embeddable-views catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/EmbedViewKind' }
+                  total: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /embed/views/{view_key}:sign:
+    parameters:
+      - in: path
+        name: view_key
+        required: true
+        schema: { type: string }
+    post:
+      tags: [embed]
+      summary: Mint a signed embed URL for a view kind.
+      description: >-
+        Mints an HMAC-SHA-256 signed embed URL with a TTL. RBAC-gated
+        on `system:embed.sign`. The returned URL embeds every field
+        the `GET /embed/{view_key}` serving route needs to verify the
+        signature; that serving route is token-authed, not
+        session-authed.
+      operationId: embed_sign_view
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmbedSignRequest' }
+      responses:
+        '200':
+          description: Signed embed URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedSignedUrl' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # PLANNED — runs / test_runs / test_catalog / progress / dispatch /
@@ -3408,275 +3511,341 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
-  # ---- 8-webhooks-in / 8-webhooks-out PR p21a ----
-  /webhooks/in/{provider}/{hook_name}:
+  /projects/{project_id}/blast-radius-guards:
     parameters:
       - in: path
-        name: provider
+        name: project_id
         required: true
-        schema: { type: string }
-      - in: path
-        name: hook_name
-        required: true
-        schema: { type: string }
-    post:
-      tags: [webhooks]
-      summary: Inbound webhook receiver.
-      operationId: webhooks_in_receive
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    get:
+      tags: [blast_radius_guards]
+      summary: List blast-radius guards for an environment.
+      operationId: blast_radius_guards_list
       x-pychestrate-status: planned
-      security: []
-      description: |
-        The unauthenticated inbound receiver. External systems
-        POST provider-native events here. The handler runs the
-        domain's signature verification, replay-cache de-dup,
-        normalization, and dispatch. Authentication is the
-        per-integration signature compare -- no cookie/RBAC gate
-        applies. Answers `202` on accept, `401` on a bad or
-        missing signature, `409` on a replayed delivery, `404`
-        for an unknown provider/integration.
+      description: >-
+        The guards domain is environment scoped; the
+        `environment_id` query param is required. Returns guard
+        attachments as an `{items, meta}` page.
+      parameters:
+        - in: query
+          name: environment_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of blast-radius guards.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuardPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [blast_radius_guards]
+      summary: Attach a blast-radius guard onto an environment.
+      operationId: blast_radius_guards_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlastRadiusGuardCreate' }
+      responses:
+        '201':
+          description: Blast-radius guard attached.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/blast-radius-guards:evaluate:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    post:
+      tags: [blast_radius_guards]
+      summary: Evaluate a proposed change against the guards.
+      operationId: blast_radius_guards_evaluate
+      x-pychestrate-status: planned
+      description: >-
+        Previews whether a proposed change would be blocked.
+        Walks every registered guard rule regardless of attachment
+        state and returns the per-rule verdict trace.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '202':
-          description: Event accepted (dispatched or replay-ignored).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-        '401':
-          description: Signature verification failed.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-        '404':
-          description: No configured integration for provider/hook_name.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-        '409':
-          description: Replayed delivery -- already seen.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-
-  /webhooks/in/integrations:
-    get:
-      tags: [webhooks]
-      summary: List inbound webhook integrations.
-      operationId: webhooks_in_integrations_list
-      x-pychestrate-status: planned
-      parameters:
-        - in: query
-          name: project_id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: query
-          name: enabled_only
-          schema: { type: boolean, default: false }
+              $ref: '#/components/schemas/BlastRadiusGuardEvaluationRequest'
       responses:
         '200':
-          description: Page of inbound integrations.
+          description: Guard evaluation trace.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookInIntegrationPage' }
+              schema:
+                $ref: '#/components/schemas/BlastRadiusGuardEvaluation'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/Unprocessable' }
-    post:
-      tags: [webhooks]
-      summary: Register an inbound webhook integration.
-      operationId: webhooks_in_integrations_create
+
+  /projects/{project_id}/blast-radius-guards/{guard_id}:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+      - in: path
+        name: guard_id
+        required: true
+        schema: { type: string }
+        description: >-
+          Composite guard identifier (`{environment_id}.{rule_id}`).
+    get:
+      tags: [blast_radius_guards]
+      summary: Read a blast-radius guard.
+      operationId: blast_radius_guards_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Blast-radius guard.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [blast_radius_guards]
+      summary: Toggle a blast-radius guard's enabled flag.
+      operationId: blast_radius_guards_patch
       x-pychestrate-status: planned
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WebhookInIntegrationCreateRequest' }
-      responses:
-        '201':
-          description: Integration registered.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookInIntegration' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
-
-  /webhooks/in/deliveries:
-    get:
-      tags: [webhooks]
-      summary: List recent inbound deliveries.
-      operationId: webhooks_in_deliveries_list
-      x-pychestrate-status: planned
-      description: |
-        Recent inbound deliveries from the replay-cache ledger
-        for audit/debug.
-      parameters:
-        - in: query
-          name: provider
-          schema: { type: string }
-        - in: query
-          name: hook_name
-          schema: { type: string }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+            schema: { $ref: '#/components/schemas/BlastRadiusGuardPatch' }
       responses:
         '200':
-          description: Page of inbound deliveries.
+          description: Updated blast-radius guard.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookInDeliveryPage' }
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [blast_radius_guards]
+      summary: Disable a blast-radius guard.
+      operationId: blast_radius_guards_delete
+      x-pychestrate-status: planned
+      description: >-
+        The guards domain has no hard delete -- the attachment
+        row is flipped to a disabled state.
+      responses:
+        '204':
+          description: Blast-radius guard disabled.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/slos:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    get:
+      tags: [slos]
+      summary: List SLO definitions for a project.
+      operationId: slos_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: kind
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of SLO definitions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SloPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-
-  /webhooks/out/subscriptions:
-    get:
-      tags: [webhooks]
-      summary: List outbound webhook subscriptions.
-      operationId: webhooks_out_subscriptions_list
-      x-pychestrate-status: planned
-      parameters:
-        - in: query
-          name: project_id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: query
-          name: enabled_only
-          schema: { type: boolean, default: false }
-      responses:
-        '200':
-          description: Page of outbound subscriptions.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutSubscriptionPage' }
-        '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
+        '404': { $ref: '#/components/responses/NotFound' }
     post:
-      tags: [webhooks]
-      summary: Register an outbound webhook subscription.
-      operationId: webhooks_out_subscriptions_create
+      tags: [slos]
+      summary: Create an SLO definition.
+      operationId: slos_create
       x-pychestrate-status: planned
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WebhookOutSubscriptionCreateRequest' }
+            schema: { $ref: '#/components/schemas/SloCreate' }
       responses:
         '201':
-          description: Subscription registered.
+          description: SLO definition created.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+              schema: { $ref: '#/components/schemas/Slo' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
-  /webhooks/out/subscriptions/{subscription_id}:
+  /projects/{project_id}/slos/{slo_id}:
     parameters:
       - in: path
-        name: subscription_id
+        name: project_id
         required: true
         schema: { type: string, format: uuid }
+        description: Project identifier.
+      - in: path
+        name: slo_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: SLO identifier.
     get:
-      tags: [webhooks]
-      summary: Read an outbound webhook subscription.
-      operationId: webhooks_out_subscriptions_read
+      tags: [slos]
+      summary: Read an SLO definition with current status.
+      operationId: slos_read
       x-pychestrate-status: planned
+      description: >-
+        Returns the SLO definition with an embedded `status`
+        block carrying the current achieved ratio, error-budget
+        remaining, and burn-rate state.
       responses:
         '200':
-          description: Subscription detail.
+          description: SLO definition with status.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+              schema: { $ref: '#/components/schemas/SloWithStatus' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
-      tags: [webhooks]
-      summary: Disable an outbound webhook subscription.
-      operationId: webhooks_out_subscriptions_delete
+      tags: [slos]
+      summary: Delete an SLO definition.
+      operationId: slos_delete
       x-pychestrate-status: planned
-      description: |
-        Disables the subscription (idempotent). The row is
-        retained for the delivery-history audit trail.
+      description: >-
+        Idempotent delete -- the burn-rate-state row cascades via
+        the foreign key.
       responses:
-        '200':
-          description: Subscription disabled.
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '204':
+          description: SLO definition deleted.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
-  /webhooks/out/subscriptions/{subscription_id}/deliveries:
-    parameters:
-      - in: path
-        name: subscription_id
-        required: true
-        schema: { type: string, format: uuid }
+  /release-channels:
     get:
-      tags: [webhooks]
-      summary: List delivery history for a subscription.
-      operationId: webhooks_out_subscription_deliveries_list
+      tags: [release_channels]
+      summary: List published release-channel entries.
+      operationId: release_channels_list
       x-pychestrate-status: planned
+      description: >-
+        A release-channel entry is a published release row. The
+        M1 release domain ships publish + read only; promotion and
+        rollback are M2 milestones.
       parameters:
         - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+          name: component
+          schema: { type: string, enum: [service, agent] }
+        - in: query
+          name: channel
+          schema: { type: string, enum: [canary, beta, stable] }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, superseded, rolled_back, withdrawn]
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
       responses:
         '200':
-          description: Page of delivery attempts (newest first).
+          description: Page of release-channel entries.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutDeliveryPage' }
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntryPage' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '404': { $ref: '#/components/responses/NotFound' }
-
-  /webhooks/out/subscriptions/{subscription_id}/test:
-    parameters:
-      - in: path
-        name: subscription_id
-        required: true
-        schema: { type: string, format: uuid }
     post:
-      tags: [webhooks]
-      summary: Send a test event to a subscription.
-      operationId: webhooks_out_subscription_test
+      tags: [release_channels]
+      summary: Publish a release onto a channel.
+      operationId: release_channels_create
       x-pychestrate-status: planned
-      description: |
-        Builds a signed test event and records the delivery
-        attempt. The actual HTTP write lands in the M2
-        dispatcher -- this route records the attempt as
-        `PENDING` so the operator sees the test in the delivery
-        history.
       requestBody:
-        required: false
+        required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/WebhookOutTestRequest' }
+            schema: { $ref: '#/components/schemas/ReleaseChannelEntryCreate' }
       responses:
-        '202':
-          description: Test event queued.
+        '201':
+          description: Release published onto the channel.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutTestResult' }
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /release-channels/{channel_id}:
+    parameters:
+      - in: path
+        name: channel_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Release-channel entry identifier (release UUID).
+    get:
+      tags: [release_channels]
+      summary: Read a release-channel entry.
+      operationId: release_channels_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Release-channel entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntry' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/Unprocessable' }
 
 components:
 
@@ -4755,6 +4924,75 @@ components:
         capabilities:
           type: array
           items: { type: string }
+
+    # ----------------------------------------------------------------
+    # embed (8-embeddable-views)
+    # ----------------------------------------------------------------
+
+    EmbedViewKind:
+      type: object
+      description: One row in the fixed embeddable-views catalog.
+      required: [view_kind, component_tag, declared_read_scope, supports_anonymous]
+      properties:
+        view_kind:
+          type: string
+          description: Stable identifier in URLs and audit records.
+        component_tag:
+          type: string
+          description: Layer 9 WebComponent tag the embed renderer hosts.
+        declared_read_scope:
+          type: array
+          items: { type: string }
+          description: Permission keys the embed's inline token is scoped to.
+        supports_anonymous:
+          type: boolean
+          description: True iff the kind tolerates anonymous (kiosk) access.
+    EmbedSignRequest:
+      type: object
+      description: >-
+        Optional issuance inputs. Absent fields default: `resource_id`
+        to the view key, `audience` to the calling principal's email,
+        `ttl_seconds` to 3600 (capped at 86400).
+      properties:
+        resource_id: { type: string }
+        audience: { type: string }
+        ttl_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+    EmbedSignedUrl:
+      type: object
+      description: A minted signed embed URL plus ready-to-paste snippets.
+      required:
+        - url
+        - key_id
+        - expires_unix
+        - expires_at
+        - ttl_seconds
+        - view_kind
+        - resource_id
+        - audience
+        - iframe_snippet
+        - webcomponent_snippet
+      properties:
+        url:
+          type: string
+          description: The fully-rendered signed `/embed/...` URL.
+        key_id: { type: string }
+        expires_unix: { type: integer }
+        expires_at:
+          type: string
+          format: date-time
+        ttl_seconds: { type: integer }
+        view_kind: { type: string }
+        resource_id: { type: string }
+        audience: { type: string }
+        iframe_snippet:
+          type: string
+          description: Ready-to-paste `<iframe>` snippet.
+        webcomponent_snippet:
+          type: string
+          description: Ready-to-paste WebComponent snippet.
 
     # ----------------------------------------------------------------
     # JobEnvelope (planned — surfaced as a referenced schema, not a top-
@@ -7026,180 +7264,271 @@ components:
           items: { $ref: '#/components/schemas/UsageRecord' }
         meta: { $ref: '#/components/schemas/PageMeta' }
 
-    # ---- 8-webhooks-in / 8-webhooks-out PR p21a ----
+    # ----------------------------------------------------------------
+    # blast-radius guards (PR p21c)
+    # ----------------------------------------------------------------
 
-    WebhookInIntegration:
+    BlastRadiusGuard:
       type: object
+      description: >-
+        A blast-radius guard -- the attachment of a registry-defined
+        guard rule onto a single environment.
       required:
-        - webhook_id
+        - guard_id
         - project_id
-        - provider
-        - hook_name
+        - environment_id
+        - rule_id
         - enabled
       properties:
-        webhook_id: { type: string, format: uuid }
+        guard_id:
+          type: string
+          description: Composite identifier (`{environment_id}.{rule_id}`).
         project_id: { type: string, format: uuid }
-        provider: { type: string }
-        hook_name: { type: string }
-        secret_ref: { type: string }
-        mtls_required: { type: boolean }
-        description: { type: string }
+        environment_id: { type: string, format: uuid }
+        rule_id:
+          type: string
+          description: Registry-defined guard-rule identifier.
         enabled: { type: boolean }
-        created_by: { type: string, nullable: true }
-        created_at: { type: string, format: date-time, nullable: true }
-        disabled_at: { type: string, format: date-time, nullable: true }
-        receiver_path:
+        added_by:
           type: string
-          description: REST path external systems POST events to.
+          format: uuid
+          nullable: true
+        added_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
 
-    WebhookInIntegrationCreateRequest:
+    BlastRadiusGuardCreate:
       type: object
-      required: [project_id, provider, hook_name, secret_ref]
+      required: [environment_id, rule_id]
       properties:
-        project_id: { type: string, format: uuid }
-        provider: { type: string }
-        hook_name: { type: string }
-        secret_ref:
-          type: string
-          description: Verification shared-secret reference.
-        mtls_required: { type: boolean, default: false }
-        description: { type: string }
+        environment_id: { type: string, format: uuid }
+        rule_id: { type: string }
+        enabled: { type: boolean, default: true }
 
-    WebhookInIntegrationPage:
+    BlastRadiusGuardPatch:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
+    BlastRadiusGuardPage:
       type: object
       required: [items, meta]
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/WebhookInIntegration' }
+          items: { $ref: '#/components/schemas/BlastRadiusGuard' }
         meta: { $ref: '#/components/schemas/PageMeta' }
 
-    WebhookInDelivery:
+    BlastRadiusGuardEvaluationRequest:
       type: object
-      required: [provider, hook_name, delivery_id]
+      required: [environment_id, action]
       properties:
-        provider: { type: string }
-        hook_name: { type: string }
-        delivery_id: { type: string }
-        first_seen_at: { type: string, format: date-time, nullable: true }
-        expires_at: { type: string, format: date-time, nullable: true }
-
-    WebhookInDeliveryPage:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/WebhookInDelivery' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    WebhookInReceiveResult:
-      type: object
-      required: [status]
-      properties:
-        status:
+        environment_id: { type: string, format: uuid }
+        action:
           type: string
-          enum: [accepted, replay_ignored, rejected]
+          description: The proposed change action being evaluated.
+        requester_id:
+          type: string
+        actor_role_set:
+          type: array
+          items: { type: string }
+
+    BlastRadiusGuardEvaluationEntry:
+      type: object
+      required: [rule_id, verdict, reason]
+      properties:
+        rule_id: { type: string }
+        verdict: { type: string }
         reason: { type: string }
-        request_id: { type: string }
-        provider: { type: string }
-        hook_name: { type: string }
-        delivery_id: { type: string, nullable: true }
-        domain_event_count: { type: integer }
 
-    WebhookOutSubscription:
+    BlastRadiusGuardEvaluation:
       type: object
+      required: [allowed, failing_rule_id, entries]
+      properties:
+        allowed: { type: boolean }
+        failing_rule_id:
+          type: string
+          description: First rule that denied; empty when `allowed`.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlastRadiusGuardEvaluationEntry'
+
+    # ----------------------------------------------------------------
+    # SLO views (PR p21c)
+    # ----------------------------------------------------------------
+
+    Slo:
+      type: object
+      description: A per-project SLO definition.
       required:
-        - subscription_id
+        - slo_id
         - project_id
         - name
-        - url
-        - enabled
+        - kind
+        - target
+        - window_seconds
       properties:
-        subscription_id: { type: string, format: uuid }
+        slo_id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
         name: { type: string }
         description: { type: string }
-        url: { type: string }
-        signature_scheme: { type: string }
-        topic_filters:
-          type: array
-          items: { type: string }
-        enabled: { type: boolean }
-        custom_headers:
-          type: object
-          additionalProperties: { type: string }
-        created_by: { type: string, nullable: true }
-        created_at: { type: string, format: date-time, nullable: true }
-        updated_at: { type: string, format: date-time, nullable: true }
-
-    WebhookOutSubscriptionCreateRequest:
-      type: object
-      required: [project_id, name, url]
-      properties:
-        project_id: { type: string, format: uuid }
-        name: { type: string }
-        url:
-          type: string
-          description: Subscriber URL; must start with http:// or https://.
-        description: { type: string }
-        secret_ref: { type: string }
-        topic_filters:
-          type: array
-          items: { type: string }
-        custom_headers:
-          type: object
-          additionalProperties: { type: string }
-
-    WebhookOutSubscriptionPage:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/WebhookOutSubscription' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    WebhookOutDelivery:
-      type: object
-      required: [delivery_id, subscription_id, project_id, outcome]
-      properties:
-        delivery_id: { type: string, format: uuid }
-        subscription_id: { type: string, format: uuid }
-        project_id: { type: string, format: uuid }
-        topic: { type: string }
-        payload_digest_sha256: { type: string }
-        signature: { type: string }
-        outcome:
-          type: string
-          enum: [pending, succeeded, failed, rejected_disabled]
-        response_status: { type: integer, nullable: true }
-        response_excerpt: { type: string, nullable: true }
-        duration_ms: { type: integer, nullable: true }
-        attempted_at: { type: string, format: date-time, nullable: true }
-
-    WebhookOutDeliveryPage:
-      type: object
-      required: [items, meta]
-      properties:
-        items:
-          type: array
-          items: { $ref: '#/components/schemas/WebhookOutDelivery' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    WebhookOutTestRequest:
-      type: object
-      properties:
-        topic: { type: string }
-        payload:
+        kind: { type: string }
+        target: { type: number, minimum: 0.0, maximum: 1.0 }
+        window_seconds: { type: integer, minimum: 1 }
+        definition_config:
           type: object
           additionalProperties: true
+        default_notification_route_key:
+          type: string
+          nullable: true
+        auto_attach_burn_rate_alerts: { type: boolean }
+        version: { type: integer }
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
 
-    WebhookOutTestResult:
+    SloCreate:
       type: object
-      required: [status, delivery]
+      required: [name, kind, target]
       properties:
+        name: { type: string }
+        kind: { type: string }
+        target: { type: number, minimum: 0.0, maximum: 1.0 }
+        window_seconds: { type: integer, minimum: 1 }
+        description: { type: string }
+        definition_config:
+          type: object
+          additionalProperties: true
+        default_notification_route_key:
+          type: string
+          nullable: true
+        auto_attach_burn_rate_alerts: { type: boolean, default: false }
+
+    SloStatus:
+      type: object
+      description: The current burn-rate / error-budget status for an SLO.
+      required: [slo_id, target, breaching]
+      properties:
+        slo_id: { type: string, format: uuid }
+        achieved_ratio:
+          type: number
+          nullable: true
+        error_budget_remaining_ratio:
+          type: number
+          nullable: true
+        target: { type: number }
+        window_start:
+          type: string
+          format: date-time
+          nullable: true
+        window_end:
+          type: string
+          format: date-time
+          nullable: true
+        good_count: { type: integer }
+        total_count: { type: integer }
+        breaching: { type: boolean }
+        reason: { type: string }
+
+    SloWithStatus:
+      allOf:
+        - $ref: '#/components/schemas/Slo'
+        - type: object
+          properties:
+            status:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/SloStatus'
+
+    SloPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Slo' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # release channels (PR p21c)
+    # ----------------------------------------------------------------
+
+    ReleaseChannelEntry:
+      type: object
+      description: >-
+        A published release-channel entry -- a release row
+        advertised on a channel.
+      required:
+        - channel_id
+        - release_id
+        - component
+        - version
+        - channel
+        - status
+      properties:
+        channel_id:
+          type: string
+          format: uuid
+          description: Release-channel entry identifier (release UUID).
+        release_id: { type: string, format: uuid }
+        component: { type: string, enum: [service, agent] }
+        version: { type: string }
+        channel: { type: string, enum: [canary, beta, stable] }
+        artifact_uri: { type: string }
+        artifact_sha256: { type: string }
+        issuer_key_id: { type: string }
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+        issued_by:
+          type: string
+          format: uuid
+          nullable: true
         status:
           type: string
-          enum: [queued]
-        delivery: { $ref: '#/components/schemas/WebhookOutDelivery' }
+          enum: [active, superseded, rolled_back, withdrawn]
+        rollout_fraction: { type: number, minimum: 0.0, maximum: 1.0 }
+        stage_started_at:
+          type: string
+          format: date-time
+          nullable: true
+        previous_release_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    ReleaseChannelEntryCreate:
+      type: object
+      required: [component, version, channel, artifact_uri, artifact_sha256]
+      properties:
+        component: { type: string, enum: [service, agent] }
+        version: { type: string }
+        channel: { type: string, enum: [canary, beta, stable] }
+        artifact_uri: { type: string }
+        artifact_sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: 64-character hex digest of the artifact.
+
+    ReleaseChannelEntryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReleaseChannelEntry' }
+        meta: { $ref: '#/components/schemas/PageMeta' }

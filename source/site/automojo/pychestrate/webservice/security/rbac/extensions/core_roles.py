@@ -224,6 +224,46 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:webhooks.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 8-embeddable-views / 8-plugin-api PR p21b: embed catalog +
+        # signed-URL issuance, and the plugin-api meta surface.
+        PermissionGrant(
+            permission_key="system:embed.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:embed.sign",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:plugin_api.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        # 6-blast-radius-guards / 7-slo-views / 10-release-channels
+        # PR p21c: REST-surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:guards.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:guards.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:slos.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:slos.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:release_channels.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:release_channels.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 
