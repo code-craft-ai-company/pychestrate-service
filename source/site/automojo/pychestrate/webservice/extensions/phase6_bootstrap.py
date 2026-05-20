@@ -91,6 +91,9 @@ from automojo.pychestrate.webservice.orchestration.infra.guards import (
 from automojo.pychestrate.webservice.orchestration.infra.runs import (
     register_builtin_extensions as infra_runs_register,
 )
+from automojo.pychestrate.webservice.orchestration.infra.runs import (
+    service as infra_runs_service,
+)
 from automojo.pychestrate.webservice.orchestration.pipelines.definition import (
     register_builtin_extensions as pipeline_definition_register,
 )
@@ -282,12 +285,25 @@ def _build_test_orchestrator(
         backend=config.results_backend,
     )
 
+    # Publish the SAME JobDispatcher on the infra-runs service's seam
+    # so a triggered provisioning run dispatches a
+    # ``job_kind=provision`` envelope into the identical long-poll
+    # queue test + build runs already land in. There is one queue.
+    infra_runs_service.set_active_job_dispatcher(dispatcher=dispatcher)
+    infra_runs_service.set_active_results_backend(
+        backend=config.results_backend,
+    )
+
     logger.info(
         "phase6.bootstrap.test_orchestrator_ready transport=%s",
         transport.transport_name(),
     )
     logger.info(
         "phase6.bootstrap.build_dispatch_wired transport=%s",
+        transport.transport_name(),
+    )
+    logger.info(
+        "phase6.bootstrap.provision_dispatch_wired transport=%s",
         transport.transport_name(),
     )
 

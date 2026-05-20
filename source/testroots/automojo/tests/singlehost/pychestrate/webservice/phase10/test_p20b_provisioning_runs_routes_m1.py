@@ -152,6 +152,27 @@ def _patch_project_exists(*, project: Optional[Any]) -> Any:
     return patch
 
 
+def _patch_eligible_candidates(*, candidates: Optional[List[Any]] = None) -> Any:
+    """
+        Patch the route's capability-based eligible-pod selection so
+        the trigger handler does not touch a real db_session. By
+        default returns a single eligible candidate so the handler
+        proceeds into ``infra_service.trigger_run``.
+
+        :param candidates: Candidate list to return; ``None`` yields a
+                           single placeholder candidate.
+
+        :returns: The activated module patch.
+    """
+    resolved = candidates if candidates is not None else [object()]
+    patch = create_module_patch(
+        provisioning_runs_routes, "_build_eligible_pod_candidates",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: list(resolved))
+    return patch
+
+
 def _make_run_view(
         *,
         run_id: str = "run-1",
@@ -493,6 +514,7 @@ def test_trigger_returns_422_when_driver_unknown():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cand_patch = _patch_eligible_candidates()
     trigger_patch = create_module_patch(
         provisioning_runs_routes.infra_service, "trigger_run",
     )
@@ -519,6 +541,7 @@ def test_trigger_returns_422_when_driver_unknown():
         )
     finally:
         trigger_patch.deactivate()
+        cand_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 422)
@@ -535,12 +558,15 @@ def test_trigger_returns_202_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cand_patch = _patch_eligible_candidates()
     trigger_patch = create_module_patch(
         provisioning_runs_routes.infra_service, "trigger_run",
     )
     trigger_mock = trigger_patch.activate()
     trigger_mock.configure(
-        side_effect=lambda **kwargs: _make_run_view(run_id="run-new"),
+        side_effect=lambda **kwargs: _make_run_view(
+            run_id="run-new", state=InfraRunState.RUNNING,
+        ),
     )
     try:
         request = _FakeRequest(
@@ -560,13 +586,48 @@ def test_trigger_returns_202_on_happy_path():
         )
     finally:
         trigger_patch.deactivate()
+        cand_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
     body = _decode_body(response)
     testbase.assert_equal(body["run_id"], "run-new")
     testbase.assert_equal(body["action"], "plan")
-    testbase.assert_equal(body["state"], "pending")
+    testbase.assert_equal(body["state"], "running")
+    return
+
+
+def test_trigger_returns_409_when_no_eligible_pod():
+    """
+    **Feature: 6-infra-orchestration PR p20l**
+    **Property: POST provisioning-runs returns 409 when the
+    project has no enrolled / REGISTERED pod to dispatch to.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cand_patch = _patch_eligible_candidates(candidates=[])
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/provisioning-runs",
+            path_params={"project_id": "proj-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={
+                "environment_id": "env-1",
+                "driver_name": "terraform",
+                "action": "plan",
+            },
+        )
+        response = provisioning_runs_routes.handle_trigger_provisioning_run(
+            request,
+        )
+    finally:
+        cand_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 409)
+    body = _decode_body(response)
+    testbase.assert_equal(body["reason"], "no_eligible_pod")
     return
 
 

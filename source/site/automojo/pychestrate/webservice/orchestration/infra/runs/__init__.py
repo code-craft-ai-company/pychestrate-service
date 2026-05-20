@@ -32,6 +32,8 @@ from automojo.pychestrate.webservice.extensions.registry import (
     register_factory_implementation,
 )
 from automojo.pychestrate.webservice.orchestration.infra.runs.errors import (
+    InfraDispatchFailedError,
+    InfraDispatchUnavailableError,
     InfraDriverUnknownError,
     InfraEnvironmentStateError,
     InfraError,
@@ -62,7 +64,10 @@ from automojo.pychestrate.webservice.orchestration.infra.runs.service import (
     apply_run_terminal,
     get_infra_run,
     list_infra_runs_for_environment,
+    list_infra_runs_for_project,
     record_plan_summary,
+    set_active_job_dispatcher,
+    set_active_results_backend,
     trigger_run,
 )
 

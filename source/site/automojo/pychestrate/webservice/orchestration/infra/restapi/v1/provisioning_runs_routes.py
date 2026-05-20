@@ -24,10 +24,12 @@ run row, and a plan summary is recorded on the run itself. There
 is no separate ``ProvisioningPlan`` ORM table, so this PR exposes
 the provisioning-run lifecycle (trigger / read / list) rather than
 a separate plan resource. ``POST /provisioning-runs`` resolves the
-driver, validates inputs + action support, and persists the run in
-``PENDING``. The Layer-5 dispatch handoff is M2 work (see
-``orchestration.infra.runs.service.trigger_run``); until then a
-triggered provisioning run stays in ``PENDING`` / queued state.
+driver, validates inputs + action support, builds + signs a
+``job_kind=provision`` JobEnvelope and dispatches it through the
+wired :class:`JobDispatcher` so the provisioning job queues for an
+enrolled client. The triggered run comes back ``running`` with a
+run-state machine state of ``dispatching``. A project with no
+enrolled / REGISTERED pod yields a 409.
 
 Error responses are RFC 7807 problem documents emitted via
 :mod:`api.problem_json_webworks`.
@@ -50,10 +52,15 @@ from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from automojo.pychestrate.webservice.jobs.dispatch.factories.strategy import (
+    DispatchCandidate,
+)
 from automojo.pychestrate.webservice.orchestration.infra.runs import (
     service as infra_service,
 )
 from automojo.pychestrate.webservice.orchestration.infra.runs.errors import (
+    InfraDispatchFailedError,
+    InfraDispatchUnavailableError,
     InfraDriverUnknownError,
     InfraEnvironmentStateError,
     InfraInputsInvalidError,
@@ -61,6 +68,11 @@ from automojo.pychestrate.webservice.orchestration.infra.runs.errors import (
 )
 from automojo.pychestrate.webservice.orchestration.infra.runs.models import (
     InfraAction,
+)
+from automojo.pychestrate.webservice.pods.models import (
+    PodDefinition,
+    PodRegistration,
+    RegistrationState,
 )
 from automojo.pychestrate.webservice.projects import repository as projects_repo
 from automojo.pychestrate.webservice.security.rbac import rbac_evaluator
@@ -422,7 +434,93 @@ def _infra_run_view_to_dict(view: Any) -> Dict[str, Any]:
         "started_at": _iso_or_none(view.started_at),
         "finished_at": _iso_or_none(view.finished_at),
         "final_state_reason": view.final_state_reason,
+        "run_state": getattr(view, "run_state", None),
+        "dispatch_attempt_id": getattr(view, "dispatch_attempt_id", None),
     }
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Dispatch-candidate selection
+# ---------------------------------------------------------------------------
+#
+# Mirrors the capability-based eligible-pod selection the test + build
+# orchestrators use: every pod enrolled in the project that carries at
+# least one REGISTERED client registration is an eligible target. The
+# infra dispatcher then picks one via the active dispatch strategy.
+
+
+def _candidates_for_pod(
+        *,
+        db_session: Any,
+        pod_id: str
+    ) -> List[DispatchCandidate]:
+    """
+        Build a :class:`DispatchCandidate` list from the REGISTERED
+        client registrations for a single pod.
+
+        :param db_session: Active SQLAlchemy session.
+        :param pod_id: Target pod UUID.
+
+        :returns: List of dispatch candidates (may be empty).
+    """
+    registrations = (
+        db_session.query(PodRegistration)
+        .filter(PodRegistration.pod_id == pod_id)
+        .filter(PodRegistration.state == RegistrationState.REGISTERED)
+        .all()
+    )
+
+    candidates: List[DispatchCandidate] = []
+    for reg in registrations:
+        client_id = reg.client_id
+        if client_id is None:
+            continue
+        candidates.append(
+            DispatchCandidate(
+                client_id=str(client_id),
+                pod_id=str(pod_id),
+                capability_tags=tuple(),
+                inflight_dispatch_count=0,
+                last_dispatched_at_iso="",
+            )
+        )
+    rtnval = candidates
+    return rtnval
+
+
+def _build_eligible_pod_candidates(
+        *,
+        db_session: Any,
+        project_id: str
+    ) -> List[DispatchCandidate]:
+    """
+        Enumerate every pod enrolled in the project carrying at least
+        one REGISTERED client registration and build the combined
+        :class:`DispatchCandidate` list. May be empty -- the caller
+        decides how to surface "no eligible pod".
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+
+        :returns: List of dispatch candidates (possibly empty).
+    """
+    pod_rows = (
+        db_session.query(PodDefinition)
+        .filter(PodDefinition.project_id == project_id)
+        .all()
+    )
+
+    candidates: List[DispatchCandidate] = []
+    for pod_row in pod_rows:
+        pod_id = str(pod_row.pod_id)
+        pod_candidates = _candidates_for_pod(
+            db_session=db_session, pod_id=pod_id,
+        )
+        for candidate in pod_candidates:
+            candidates.append(candidate)
+
+    rtnval = candidates
     return rtnval
 
 
@@ -485,7 +583,7 @@ def handle_trigger_provisioning_run(request: Request) -> Response:
             db_session=db_session,
             permission_key=PROVISIONING_CREATE_PERMISSION_KEY,
         )
-        _require_project_exists(
+        project_row = _require_project_exists(
             request=request,
             db_session=db_session,
             project_id=project_id,
@@ -528,13 +626,41 @@ def handle_trigger_provisioning_run(request: Request) -> Response:
         if principal_user_id is not None:
             actor_id = str(principal_user_id)
 
+        # Capability-based eligible-pod selection -- the same set the
+        # test + build orchestrators narrow by capability match. No
+        # enrolled pod with an active client registration => 409,
+        # exactly as test + build runs answer.
+        candidates = _build_eligible_pod_candidates(
+            db_session=db_session,
+            project_id=project_id,
+        )
+        if len(candidates) == 0:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=(
+                    "No enrolled pod matches the provisioning job's "
+                    "requirements -- enroll a client/pod first."
+                ),
+                extensions={
+                    "project_id": project_id,
+                    "reason": "no_eligible_pod",
+                },
+            )
+
+        project_slug = getattr(project_row, "slug", "") or ""
+
         inputs = infra_service.InfraRunInputs(
             environment_id=environment_id,
             driver_name=driver_name,
             action=action,
             driver_inputs=dict(driver_inputs),
         )
-        aspects = infra_service.InfraTriggerAspects(actor_id=actor_id)
+        aspects = infra_service.InfraTriggerAspects(
+            actor_id=actor_id,
+            candidates=candidates,
+            project_slug=str(project_slug),
+        )
 
         try:
             view = infra_service.trigger_run(
@@ -565,6 +691,22 @@ def handle_trigger_provisioning_run(request: Request) -> Response:
                 status=422,
                 detail=str(xcpt),
                 extensions={"driver_name": driver_name},
+            )
+            view = None  # unreachable
+        except InfraDispatchUnavailableError as xcpt:
+            _abort_problem(
+                request=request,
+                status=503,
+                detail=str(xcpt),
+                extensions={"reason": "dispatch_not_configured"},
+            )
+            view = None  # unreachable
+        except InfraDispatchFailedError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={"reason": "dispatch_failed"},
             )
             view = None  # unreachable
 
@@ -755,11 +897,11 @@ def register_provisioning_runs_routes(*, app: Any, version_prefix: str) -> None:
         base + PROVISIONING_RUNS_PATH_SUFFIX + "/{run_id}", methods=["GET"],
     )(handle_read_provisioning_run)
 
-    _LOGGER.warning(
-        "pychestrate.provisioning.routes.dispatch_not_wired: POST"
-        " /provisioning-runs persists an infra run in PENDING; the"
-        " Layer-5 dispatch handoff is M2 work"
-        " (orchestration.infra.runs.service.trigger_run)."
+    _LOGGER.info(
+        "pychestrate.provisioning.routes.dispatch_wired: POST"
+        " /provisioning-runs builds + signs a job_kind=provision"
+        " JobEnvelope and dispatches it through the wired"
+        " JobDispatcher (orchestration.infra.runs.service.trigger_run)."
     )
     return
 

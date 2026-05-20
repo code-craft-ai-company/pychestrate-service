@@ -9,7 +9,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import List
+import os
+
+from typing import List, Tuple
 
 from automojo import testbase
 
@@ -18,11 +20,35 @@ from automojo.pychestrate.core.defaults import new_uuid
 from automojo.pychestrate.webservice.extensions.registry import (
     reset_registry_for_testing,
 )
+from automojo.pychestrate.webservice.jobs.dispatch import (
+    InMemoryTransport,
+    JobDispatcher,
+    register_builtin_extensions as dispatch_register,
+)
+from automojo.pychestrate.webservice.jobs.dispatch.factories.strategy import (
+    DispatchCandidate,
+)
+from automojo.pychestrate.webservice.jobs.envelope import (
+    EnvelopeSignerBootstrapConfig,
+    install_envelope_signer,
+)
+from automojo.pychestrate.webservice.jobs.envelope import signer as envelope_signer
 from automojo.pychestrate.webservice.messaging.event_bus import (
     EntityEvent,
     reset_for_testing as reset_event_bus,
     subscribe,
 )
+from automojo.pychestrate.webservice.orchestration.infra.runs import (
+    set_active_job_dispatcher,
+    set_active_results_backend,
+)
+
+# Side-effect imports so the Layer-5 model tables attach to the shared
+# Phase-1 metadata before ``create_all`` runs in the fixture.
+from automojo.pychestrate.webservice.jobs.run.state import models as _run_state_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.results import models as _results_models  # noqa: F401
 from automojo.pychestrate.webservice.orchestration.infra.environment import (
     EnvironmentDeclareInputs,
     archive_environment,
@@ -64,9 +90,56 @@ LAYER5_UUID = "00000000-0000-4000-8000-000000050003"
 def _prepare_runtime() -> None:
     reset_registry_for_testing()
     reset_event_bus()
+    envelope_signer.reset_for_testing()
+    set_active_job_dispatcher(dispatcher=None)
+    set_active_results_backend(backend=None)
+    dispatch_register()
     environment_register()
     infra_runs_register()
+    os.environ["PYCHESTRATE_DEV_MODE"] = "1"
+    try:
+        install_envelope_signer(
+            config=EnvelopeSignerBootstrapConfig(
+                source="dev",
+                file_path=None,
+                env_var=None,
+                key_id="test-provision-dispatch-ed25519",
+            ),
+        )
+    finally:
+        del os.environ["PYCHESTRATE_DEV_MODE"]
     return
+
+
+def _one_candidate() -> Tuple[DispatchCandidate, ...]:
+    """
+        A single eligible dispatch candidate.
+
+        :returns: One-element tuple of :class:`DispatchCandidate`.
+    """
+    rtnval = (
+        DispatchCandidate(
+            client_id="11111111-1111-4000-8000-000000050011",
+            pod_id="22222222-2222-4000-8000-000000050012",
+            capability_tags=tuple(),
+            inflight_dispatch_count=0,
+            last_dispatched_at_iso="",
+        ),
+    )
+    return rtnval
+
+
+def _wire_dispatcher() -> JobDispatcher:
+    """
+        Wire an in-memory :class:`JobDispatcher` on the infra-runs
+        service seam and return it.
+
+        :returns: The wired :class:`JobDispatcher`.
+    """
+    dispatcher = JobDispatcher(transport=InMemoryTransport())
+    set_active_job_dispatcher(dispatcher=dispatcher)
+    rtnval = dispatcher
+    return rtnval
 
 
 def _declare_environment(*, session, name: str = "prod-east") -> str:
@@ -108,14 +181,16 @@ def _valid_terraform_inputs(
 # trigger_run
 # -------------------------------------
 
-def test_trigger_run_persists_pending_and_emits():
+def test_trigger_run_dispatches_and_emits():
     """
-    **Feature: 6-infra-orchestration (M1)**
+    **Feature: 6-infra-orchestration (PR p20l)**
     **Property: trigger_run resolves env + driver, validates
-    inputs, persists a PENDING InfraRun + emits TRIGGERED.**
+    inputs, dispatches a job_kind=provision envelope and flips the
+    InfraRun PENDING -> RUNNING while emitting TRIGGERED.**
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
+    _wire_dispatcher()
     received: List[EntityEvent] = []
     subscribe(
         topic=InfraEventTopics.TRIGGERED,
@@ -129,13 +204,16 @@ def test_trigger_run_persists_pending_and_emits():
         aspects=InfraTriggerAspects(
             actor_id=ACTOR_UUID,
             actor_role_set=("infra-operator", "viewer"),
+            candidates=_one_candidate(),
+            project_slug="prod-east",
         ),
     )
-    testbase.assert_equal(view.state, InfraRunState.PENDING)
+    testbase.assert_equal(view.state, InfraRunState.RUNNING)
     testbase.assert_equal(view.driver_name, "terraform")
     testbase.assert_equal(view.action, InfraAction.PLAN)
     testbase.assert_equal(view.actor_role_set, ("infra-operator", "viewer"))
     testbase.assert_equal(len(view.inputs_canonical_sha256), 64)
+    testbase.assert_equal(view.dispatch_attempt_id is not None, True)
     testbase.assert_equal(len(received), 1)
     return
 
@@ -255,6 +333,7 @@ def test_frozen_env_only_allows_plan():
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     freeze_environment(
         db_session=session, environment_id=env_id, reason="frozen",
@@ -266,6 +345,10 @@ def test_frozen_env_only_allows_plan():
         project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(
             environment_id=env_id, action=InfraAction.PLAN,
+        ),
+        aspects=InfraTriggerAspects(
+            candidates=_one_candidate(),
+            project_slug="prod-east",
         ),
     )
     testbase.assert_equal(plan_view.action, InfraAction.PLAN)
@@ -340,11 +423,13 @@ def test_record_plan_summary_stamps_and_emits():
         topic=InfraEventTopics.PLAN_RECORDED,
         subscriber=lambda e: received.append(e),
     )
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     plan = trigger_run(
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_id),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     summary = PlanSummary(
         resources_to_add=2,
@@ -380,6 +465,7 @@ def test_record_plan_summary_on_apply_run_raises():
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     apply_view = trigger_run(
         db_session=session,
@@ -387,6 +473,7 @@ def test_record_plan_summary_on_apply_run_raises():
         inputs=_valid_terraform_inputs(
             environment_id=env_id, action=InfraAction.APPLY,
         ),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     raised = False
     try:
@@ -448,11 +535,13 @@ def test_apply_run_terminal_completed_emits_kind_specific_topic():
         topic=InfraEventTopics.COMPLETED,
         subscriber=lambda e: received_completed.append(e),
     )
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     plan = trigger_run(
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_id),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     completed = apply_run_terminal(
         db_session=session, run_id=plan.run_id,
@@ -481,6 +570,7 @@ def test_apply_run_terminal_rejected_by_guard_emits_kind():
         topic=InfraEventTopics.REJECTED_BY_GUARD,
         subscriber=lambda e: received.append(e),
     )
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     plan = trigger_run(
         db_session=session,
@@ -488,6 +578,7 @@ def test_apply_run_terminal_rejected_by_guard_emits_kind():
         inputs=_valid_terraform_inputs(
             environment_id=env_id, action=InfraAction.APPLY,
         ),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     rejected = apply_run_terminal(
         db_session=session, run_id=plan.run_id,
@@ -517,11 +608,13 @@ def test_apply_run_terminal_idempotent():
         topic=InfraEventTopics.COMPLETED,
         subscriber=lambda e: received.append(e),
     )
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     plan = trigger_run(
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_id),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     apply_run_terminal(
         db_session=session, run_id=plan.run_id,
@@ -543,11 +636,13 @@ def test_apply_run_terminal_non_terminal_state_raises():
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
+    _wire_dispatcher()
     env_id = _declare_environment(session=session)
     plan = trigger_run(
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_id),
+        aspects=InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east"),
     )
     raised = False
     try:
@@ -590,19 +685,24 @@ def test_list_infra_runs_for_environment_scopes():
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
+    _wire_dispatcher()
     env_a = _declare_environment(session=session, name="a")
     env_b = _declare_environment(session=session, name="b")
+    aspects = InfraTriggerAspects(candidates=_one_candidate(), project_slug="prod-east")
     trigger_run(
         db_session=session, project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_a),
+        aspects=aspects,
     )
     trigger_run(
         db_session=session, project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_a),
+        aspects=aspects,
     )
     trigger_run(
         db_session=session, project_id=PROJECT_UUID,
         inputs=_valid_terraform_inputs(environment_id=env_b),
+        aspects=aspects,
     )
     rows_a = list_infra_runs_for_environment(
         db_session=session, environment_id=env_a,
