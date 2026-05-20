@@ -47,6 +47,9 @@ from automojo.pychestrate.webservice.api.problem_json import (
 from automojo.pychestrate.webservice.extensions import ext_router as ext_router_module
 from automojo.pychestrate.webservice.plugin_api import runtime as plugin_api_runtime_module
 from automojo.pychestrate.webservice.plugin_api.restapi.v1 import catalog_routes
+from automojo.pychestrate.webservice.security.rbac import (
+    rbac_evaluator as rbac_evaluator_module,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -54,10 +57,33 @@ from automojo.pychestrate.webservice.plugin_api.restapi.v1 import catalog_routes
 # ---------------------------------------------------------------------------
 
 
+class _FakePrincipal:
+    """
+        Stand-in AuthPrincipal for the RBAC gate.
+    """
+
+    def __init__(self, *, user_id: str = "u-1") -> None:
+        self.user_id: str = user_id
+        return
+
+
+class _FakeDecision:
+    """
+        Stand-in AuthzDecision; ``allowed`` defaults True so the
+        catalog handlers proceed past the ``system:plugin_api.read``
+        gate (the RBAC gate itself is covered by p21b).
+    """
+
+    def __init__(self, *, allowed: bool = True) -> None:
+        self.allowed: bool = allowed
+        return
+
+
 class _FakeRequest:
     """
-        Minimal duck-typed Request. Catalog handlers only touch
-        ``path`` and ``path_params``.
+        Minimal duck-typed Request. Catalog handlers touch ``path``,
+        ``path_params``, plus ``db_session`` / ``auth_principal`` for
+        the ``system:plugin_api.read`` RBAC gate.
     """
 
     def __init__(
@@ -68,6 +94,8 @@ class _FakeRequest:
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
+        self.db_session: Any = object()
+        self.auth_principal: Any = _FakePrincipal()
         return
 
 
@@ -156,10 +184,13 @@ def _make_catalog_jsonable() -> Dict[str, Any]:
 def _patch_catalog(*, jsonable: Dict[str, Any]) -> Tuple[Any, Any]:
     """
         Patch ``plugin_api_runtime.get_active_catalog`` to return a
-        sentinel and ``catalog_builder.catalog_to_jsonable`` (via the
-        catalog_routes module's import) to return the supplied
-        jsonable dict. Returns the two patches so callers can
-        ``deactivate()`` in finally blocks.
+        sentinel, ``catalog_builder.catalog_to_jsonable`` to return
+        the supplied jsonable dict, and ``rbac_evaluator``'s
+        ``check_permission`` (re-exported into ``catalog_routes``) to
+        allow the ``system:plugin_api.read`` gate. Returns the
+        catalog + jsonable patches; the permission patch is tracked
+        in ``_PERMISSION_PATCH`` and torn down by
+        :func:`_deactivate_permission_patch`.
     """
     # Patch get_active_catalog to return any sentinel — the routes
     # module passes its return value verbatim into catalog_to_jsonable
@@ -177,8 +208,32 @@ def _patch_catalog(*, jsonable: Dict[str, Any]) -> Tuple[Any, Any]:
     mock_jsonable = jsonable_patch.activate()
     mock_jsonable.configure(return_value=jsonable)
 
+    global _PERMISSION_PATCH
+    _PERMISSION_PATCH = create_module_patch(
+        rbac_evaluator_module, "check_permission"
+    )
+    mock_permission = _PERMISSION_PATCH.activate()
+    mock_permission.configure(return_value=_FakeDecision(allowed=True))
+
     rtnval = (catalog_patch, jsonable_patch)
     return rtnval
+
+
+_PERMISSION_PATCH: Any = None
+
+
+def _deactivate_permission_patch() -> None:
+    """
+        Tear down the ``check_permission`` patch installed by
+        :func:`_patch_catalog`.
+
+        :returns: None.
+    """
+    global _PERMISSION_PATCH
+    if _PERMISSION_PATCH is not None:
+        _PERMISSION_PATCH.deactivate()
+        _PERMISSION_PATCH = None
+    return
 
 
 # ---------------------------------------------------------------------------
@@ -186,11 +241,12 @@ def _patch_catalog(*, jsonable: Dict[str, Any]) -> Tuple[Any, Any]:
 # ---------------------------------------------------------------------------
 
 
-def test_register_catalog_routes_attaches_three_routes_under_version_prefix():
+def test_register_catalog_routes_attaches_meta_routes_under_version_prefix():
     """
     **Feature: 8-plugin-api T1.5 (webworks routes)**
-    **Property: register_catalog_routes attaches the same three
-    method+path pairs the flask_restx controller exposed.**
+    **Property: register_catalog_routes attaches the three meta
+    method+path pairs the flask_restx controller exposed, plus the
+    p21b ``/api/v1/ext`` extension-endpoint listing.**
     """
     app = _FakeApp()
     catalog_routes.register_catalog_routes(app=app, version_prefix="/api/v1")
@@ -199,6 +255,7 @@ def test_register_catalog_routes_attaches_three_routes_under_version_prefix():
         ("/api/v1/plugin-api/_meta/catalog", ("GET",)),
         ("/api/v1/plugin-api/_meta/catalog/{protocol_name}", ("GET",)),
         ("/api/v1/plugin-api/_meta/mounts", ("GET",)),
+        ("/api/v1/ext", ("GET",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)
@@ -254,6 +311,7 @@ def test_handle_list_catalog_returns_full_catalog_dict():
     finally:
         catalog_patch.deactivate()
         jsonable_patch.deactivate()
+        _deactivate_permission_patch()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -286,6 +344,7 @@ def test_handle_read_catalog_entry_returns_factory_protocol_match():
     finally:
         catalog_patch.deactivate()
         jsonable_patch.deactivate()
+        _deactivate_permission_patch()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -313,6 +372,7 @@ def test_handle_read_catalog_entry_returns_resource_extension_match():
     finally:
         catalog_patch.deactivate()
         jsonable_patch.deactivate()
+        _deactivate_permission_patch()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -340,6 +400,7 @@ def test_handle_read_catalog_entry_returns_404_with_protocol_name_extension():
     finally:
         catalog_patch.deactivate()
         jsonable_patch.deactivate()
+        _deactivate_permission_patch()
 
     testbase.assert_equal(response.status_code, 404)
     testbase.assert_equal(
@@ -379,17 +440,23 @@ def test_handle_list_mounts_returns_serialized_manifest():
     ]
     mount_patch = create_module_patch(catalog_routes, "mount_extension_routes")
     jsonable_patch = create_module_patch(catalog_routes, "manifest_to_jsonable")
+    permission_patch = create_module_patch(
+        rbac_evaluator_module, "check_permission"
+    )
     try:
         mock_mount = mount_patch.activate()
         mock_mount.configure(return_value=object())
         mock_jsonable = jsonable_patch.activate()
         mock_jsonable.configure(return_value=manifest_jsonable)
+        mock_permission = permission_patch.activate()
+        mock_permission.configure(return_value=_FakeDecision(allowed=True))
 
         request = _FakeRequest(path="/api/v1/plugin-api/_meta/mounts")
         response = catalog_routes.handle_list_mounts(request)
     finally:
         jsonable_patch.deactivate()
         mount_patch.deactivate()
+        permission_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -409,11 +476,16 @@ def test_handle_list_mounts_invokes_mount_extension_routes_with_none():
     """
     mount_patch = create_module_patch(catalog_routes, "mount_extension_routes")
     jsonable_patch = create_module_patch(catalog_routes, "manifest_to_jsonable")
+    permission_patch = create_module_patch(
+        rbac_evaluator_module, "check_permission"
+    )
     try:
         mock_mount = mount_patch.activate()
         mock_mount.configure(return_value=object())
         mock_jsonable = jsonable_patch.activate()
         mock_jsonable.configure(return_value=[])
+        mock_permission = permission_patch.activate()
+        mock_permission.configure(return_value=_FakeDecision(allowed=True))
 
         request = _FakeRequest(path="/api/v1/plugin-api/_meta/mounts")
         catalog_routes.handle_list_mounts(request)
@@ -423,6 +495,7 @@ def test_handle_list_mounts_invokes_mount_extension_routes_with_none():
     finally:
         jsonable_patch.deactivate()
         mount_patch.deactivate()
+        permission_patch.deactivate()
     return
 
 
@@ -485,6 +558,7 @@ def test_404_response_round_trips_through_real_json_response():
     finally:
         catalog_patch.deactivate()
         jsonable_patch.deactivate()
+        _deactivate_permission_patch()
 
     is_json_response = isinstance(response, JSONResponse)
     testbase.assert_equal(is_json_response, True)

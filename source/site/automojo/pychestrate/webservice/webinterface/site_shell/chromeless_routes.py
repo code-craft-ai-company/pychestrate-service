@@ -38,6 +38,11 @@ CHROMELESS_ROUTE_PREFIXES: frozenset = frozenset({
     "/setup",
     "/__health",
     "/errors",
+    # 8-embeddable-views PR p21b: the signed-URL embed-serving route
+    # (``GET /embed/{view_key}``) renders a minimal chromeless HTML
+    # document hosting a single Layer 9 WebComponent -- it is never
+    # wrapped in the site shell.
+    "/embed",
 })
 
 
