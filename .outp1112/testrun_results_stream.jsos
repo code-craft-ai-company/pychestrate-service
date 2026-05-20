@@ -1,0 +1,1180 @@
+
+{
+    "name": "<session>",
+    "instance": "(not-set)",
+    "parent": null,
+    "rtype": "JOB"
+}
+{
+    "name": "automojo",
+    "instance": "d10c2ef2-c2bc-49de-80d6-e8490131cfd1",
+    "parent": "(not-set)",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests",
+    "instance": "d3eecc16-dc35-4660-83c8-5a6af34fdb49",
+    "parent": "d10c2ef2-c2bc-49de-80d6-e8490131cfd1",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost",
+    "instance": "36fc2856-5e84-40d0-9a29-d8edd5e09184",
+    "parent": "d3eecc16-dc35-4660-83c8-5a6af34fdb49",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate",
+    "instance": "55280cc1-7548-498c-bb29-995f837632ef",
+    "parent": "36fc2856-5e84-40d0-9a29-d8edd5e09184",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice",
+    "instance": "6b650fde-97bf-42ba-8fb3-49405b9bf35e",
+    "parent": "55280cc1-7548-498c-bb29-995f837632ef",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11",
+    "instance": "7da4b272-b62d-48ed-91c2-15ee87300733",
+    "parent": "6b650fde-97bf-42ba-8fb3-49405b9bf35e",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1",
+    "instance": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "parent": "7da4b272-b62d-48ed-91c2-15ee87300733",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_admin_page_returns_404_after_wizard_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "714adbb0-9d53-42e2-9158-9101147f9c0c",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.289915",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_admin_page_returns_404_after_wizard_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "714adbb0-9d53-42e2-9158-9101147f9c0c",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.289915",
+    "stop": "2026-05-20T02:56:46.320337",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_advertises_html_content_type",
+    "monikers": [],
+    "pivots": {},
+    "instance": "04f732e1-9a2d-467a-9966-869afcdfcc35",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.321412",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_advertises_html_content_type",
+    "monikers": [],
+    "pivots": {},
+    "instance": "04f732e1-9a2d-467a-9966-869afcdfcc35",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.321412",
+    "stop": "2026-05-20T02:56:46.351327",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_html_mentions_login",
+    "monikers": [],
+    "pivots": {},
+    "instance": "30024c65-fbe8-480b-adfa-8a683ba86c7f",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.352319",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_html_mentions_login",
+    "monikers": [],
+    "pivots": {},
+    "instance": "30024c65-fbe8-480b-adfa-8a683ba86c7f",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.352319",
+    "stop": "2026-05-20T02:56:46.374301",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_returns_200",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6db9a944-1a19-4e5e-b2d6-021ca6350d2b",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.375448",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_login_page_returns_200",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6db9a944-1a19-4e5e-b2d6-021ca6350d2b",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.375448",
+    "stop": "2026-05-20T02:56:46.396492",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_root_url_redirects_to_login_not_setup_after_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2e3188e0-6151-44a0-8714-9454e4ea5535",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.397523",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_root_url_redirects_to_login_not_setup_after_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2e3188e0-6151-44a0-8714-9454e4ea5535",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.397523",
+    "stop": "2026-05-20T02:56:46.417484",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_unlock_page_returns_404_after_wizard_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "62a006a6-263a-4728-aa8d-3ff231da070b",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.435186",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15a_post_completion_smoke_m1#test_unlock_page_returns_404_after_wizard_completion",
+    "monikers": [],
+    "pivots": {},
+    "instance": "62a006a6-263a-4728-aa8d-3ff231da070b",
+    "parent": "1ea72c6b-ea7f-4c0c-8437-cc03710266e3",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.435186",
+    "stop": "2026-05-20T02:56:46.457567",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1",
+    "instance": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "parent": "7da4b272-b62d-48ed-91c2-15ee87300733",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_login_page_has_username_password_inputs",
+    "monikers": [],
+    "pivots": {},
+    "instance": "69946555-7e16-4e21-823d-e26549dde24f",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.460381",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_login_page_has_username_password_inputs",
+    "monikers": [],
+    "pivots": {},
+    "instance": "69946555-7e16-4e21-823d-e26549dde24f",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.460381",
+    "stop": "2026-05-20T02:56:46.885350",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_login_page_renders_with_login_in_title",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ff8ce2bc-1e17-4bed-82d8-066a2cbc0961",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:46.887422",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_login_page_renders_with_login_in_title",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ff8ce2bc-1e17-4bed-82d8-066a2cbc0961",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:46.887422",
+    "stop": "2026-05-20T02:56:46.999670",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_root_url_does_not_redirect_to_setup_unlock",
+    "monikers": [],
+    "pivots": {},
+    "instance": "80d75026-03e8-4f40-8e9a-fbdc7bba84c5",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:47.005001",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15b_login_page_browser_m1#test_root_url_does_not_redirect_to_setup_unlock",
+    "monikers": [],
+    "pivots": {},
+    "instance": "80d75026-03e8-4f40-8e9a-fbdc7bba84c5",
+    "parent": "9b2ea336-3d5d-494d-9a06-7d09fcc130fc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:47.005001",
+    "stop": "2026-05-20T02:56:47.088618",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1",
+    "instance": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "parent": "7da4b272-b62d-48ed-91c2-15ee87300733",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_authenticated_session_grants_dashboard_access",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2a871f3d-ee9b-482f-b9f6-edb56be1b81b",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:47.092737",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_authenticated_session_grants_dashboard_access",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2a871f3d-ee9b-482f-b9f6-edb56be1b81b",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:47.092737",
+    "stop": "2026-05-20T02:56:47.223893",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_login_post_with_valid_credentials_redirects_to_safe_target",
+    "monikers": [],
+    "pivots": {},
+    "instance": "d9bbb554-8202-43e9-933e-8c2bdb8b511d",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:47.226136",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_login_post_with_valid_credentials_redirects_to_safe_target",
+    "monikers": [],
+    "pivots": {},
+    "instance": "d9bbb554-8202-43e9-933e-8c2bdb8b511d",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:47.226136",
+    "stop": "2026-05-20T02:56:47.340609",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_login_post_with_wrong_password_does_not_authenticate",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2784aae6-a2a7-4ca3-8b77-63b525609a2a",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:47.342396",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15c_login_flow_httpx_m1#test_login_post_with_wrong_password_does_not_authenticate",
+    "monikers": [],
+    "pivots": {},
+    "instance": "2784aae6-a2a7-4ca3-8b77-63b525609a2a",
+    "parent": "0e57cd34-7079-416a-ad98-7e46d957d4c5",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:47.342396",
+    "stop": "2026-05-20T02:56:47.421733",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15d_login_flow_browser_m1",
+    "instance": "8ba6388e-35cc-4bc2-a671-408ebfb8aedc",
+    "parent": "7da4b272-b62d-48ed-91c2-15ee87300733",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15d_login_flow_browser_m1#test_login_form_submission_lands_on_post_login_page",
+    "monikers": [],
+    "pivots": {},
+    "instance": "a59c1166-0b08-4078-b485-a507b2edb60c",
+    "parent": "8ba6388e-35cc-4bc2-a671-408ebfb8aedc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:47.430446",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15d_login_flow_browser_m1#test_login_form_submission_lands_on_post_login_page",
+    "monikers": [],
+    "pivots": {},
+    "instance": "a59c1166-0b08-4078-b485-a507b2edb60c",
+    "parent": "8ba6388e-35cc-4bc2-a671-408ebfb8aedc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:47.430446",
+    "stop": "2026-05-20T02:56:48.267847",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15d_login_flow_browser_m1#test_login_form_with_wrong_password_stays_on_login_page",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d36f13e-7c49-4541-8dda-02e01dbb50c7",
+    "parent": "8ba6388e-35cc-4bc2-a671-408ebfb8aedc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:48.270582",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase11.test_p15d_login_flow_browser_m1#test_login_form_with_wrong_password_stays_on_login_page",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d36f13e-7c49-4541-8dda-02e01dbb50c7",
+    "parent": "8ba6388e-35cc-4bc2-a671-408ebfb8aedc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:48.270582",
+    "stop": "2026-05-20T02:56:48.985868",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12",
+    "instance": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "parent": "6b650fde-97bf-42ba-8fb3-49405b9bf35e",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders",
+    "instance": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_anonymous_root_path_redirects_to_login",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c8bc7b2c-20b0-4522-847f-331e311fc6fe",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:48.992040",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_anonymous_root_path_redirects_to_login",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c8bc7b2c-20b0-4522-847f-331e311fc6fe",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:48.992040",
+    "stop": "2026-05-20T02:56:49.015273",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_root_path_serves_site_shell_document",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c00f7add-d699-40ec-bdd3-be4697805524",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.017840",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_root_path_serves_site_shell_document",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c00f7add-d699-40ec-bdd3-be4697805524",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.017840",
+    "stop": "2026-05-20T02:56:49.109744",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_shell_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "e8c52b55-10d0-4b6c-b9ac-8be9edb1be49",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.112775",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17d_shell_document_renders#test_shell_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "e8c52b55-10d0-4b6c-b9ac-8be9edb1be49",
+    "parent": "d05b026a-55bb-4993-ba1a-5920beb9c4ec",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.112775",
+    "stop": "2026-05-20T02:56:49.136843",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17e_admin_in_shell",
+    "instance": "a7987726-3460-4147-a27f-b63cdd6b73f9",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17e_admin_in_shell#test_admin_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "fbb627c3-4466-4ce6-b9db-7d02adfeb564",
+    "parent": "a7987726-3460-4147-a27f-b63cdd6b73f9",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.149450",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17e_admin_in_shell#test_admin_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "fbb627c3-4466-4ce6-b9db-7d02adfeb564",
+    "parent": "a7987726-3460-4147-a27f-b63cdd6b73f9",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.149450",
+    "stop": "2026-05-20T02:56:49.172804",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17e_admin_in_shell#test_admin_dashboard_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ef171577-3727-43b1-a635-bc258e5127d9",
+    "parent": "a7987726-3460-4147-a27f-b63cdd6b73f9",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.175727",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17e_admin_in_shell#test_admin_dashboard_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ef171577-3727-43b1-a635-bc258e5127d9",
+    "parent": "a7987726-3460-4147-a27f-b63cdd6b73f9",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T02:56:49.175727",
+    "stop": "2026-05-20T02:56:49.221602",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value did not match expected value:\\nEXPECTED:\\nEXPECTED: 200\\nFOUND: 401'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 142,
+                            "scope": "assert_equal"
+                        },
+                        "call": "assert_equal(found=401, expected=200, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p17e_admin_in_shell.py",
+                            "lineno": 107,
+                            "scope": "test_admin_dashboard_renders_inside_site_shell"
+                        },
+                        "call": "test_admin_dashboard_renders_inside_site_shell()",
+                        "code": [
+                            "086: def test_admin_dashboard_renders_inside_site_shell():",
+                            "087:     \"\"\"",
+                            "088:     **Feature: site-shell + admin-ui**",
+                            "089:     **Property: After a successful admin login, GET /admin/dashboard",
+                            "090:     returns an HTML page that mounts the ``<pyc-site-shell>`` Custom",
+                            "091:     Element AND imports the ``pyc-admin-bundle.js`` script so the",
+                            "092:     admin sidebar group registers in the browser.**",
+                            "093:     \"\"\"",
+                            "094:     login_name, password = _resolve_admin_credentials()",
+                            "095: ",
+                            "096:     with httpx.Client(",
+                            "097:             base_url=BASE_URL,",
+                            "098:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "099:             follow_redirects=True,",
+                            "100:         ) as client:",
+                            "101:         # Mint a session cookie.",
+                            "102:         client.get(\"/login\")",
+                            "103:         login_response = client.post(",
+                            "104:             \"/login\",",
+                            "105:             data={\"username\": login_name, \"password\": password},",
+                            "106:         )",
+                            "107:         testbase.assert_equal(login_response.status_code, 200)",
+                            "108: ",
+                            "109:         # Fetch the admin dashboard with the cookie jar populated.",
+                            "110:         response = client.get(\"/admin/dashboard\")",
+                            "111: ",
+                            "112:     testbase.assert_equal(response.status_code, 200)",
+                            "113:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "114:     testbase.assert_true(\"text/html\" in content_type)",
+                            "115: ",
+                            "116:     body = response.text",
+                            "117:     # Renders inside the shell, not the old standalone admin HTML.",
+                            "118:     testbase.assert_true(\"<pyc-site-shell\" in body)",
+                            "119:     # The admin bundle <script> tag is present so the sidebar",
+                            "120:     # registration runs on this navigation.",
+                            "121:     testbase.assert_true(",
+                            "122:         \"/static/javascript/dist/pyc-admin-bundle.js\" in body",
+                            "123:     )",
+                            "124:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 337,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p17e_admin_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p17e_admin_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 334,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p17e_admin_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p17e_admin_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 269,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 83,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 72,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 62,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 52,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 42,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, browser=<Browser type=<BrowserType name=chromium executable_path=/Users/myron/Library/Caches/ms-playwright/chromium-1217/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing> version=147.0.7727.15>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.outp1112/testrun_sequence.py",
+                            "lineno": 32,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1016dc7a0>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x10336a990>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x100d9c2c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase11', 'automojo.tests.singlehost.pychestrate.webservice.phase12'], excludes=[], output='./.outp1112', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1011ffb00>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x101080f80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1012187d0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1012187d0>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', 'source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase11', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12', '--output=./.outp1112'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1012187d0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17f_shell_m2_smoke",
+    "instance": "8a95ba87-046a-411c-82c9-67a39e848f51",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17f_shell_m2_smoke#test_admin_dashboard_still_renders_inside_shell_with_m2_bundle",
+    "monikers": [],
+    "pivots": {},
+    "instance": "051fd82a-623d-4251-bf74-42bd7e4e5d89",
+    "parent": "8a95ba87-046a-411c-82c9-67a39e848f51",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.228023",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17f_shell_m2_smoke#test_admin_dashboard_still_renders_inside_shell_with_m2_bundle",
+    "monikers": [],
+    "pivots": {},
+    "instance": "051fd82a-623d-4251-bf74-42bd7e4e5d89",
+    "parent": "8a95ba87-046a-411c-82c9-67a39e848f51",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.228023",
+    "stop": "2026-05-20T02:56:49.344109",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17f_shell_m2_smoke#test_shell_bundle_carries_m2_palette_module",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d10160c-9274-40a6-9e06-3ba2cac1b4f5",
+    "parent": "8a95ba87-046a-411c-82c9-67a39e848f51",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.350662",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p17f_shell_m2_smoke#test_shell_bundle_carries_m2_palette_module",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d10160c-9274-40a6-9e06-3ba2cac1b4f5",
+    "parent": "8a95ba87-046a-411c-82c9-67a39e848f51",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.350662",
+    "stop": "2026-05-20T02:56:49.375258",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19m_runs_in_shell",
+    "instance": "6a16e756-52ee-4a67-9160-9671acc4204b",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19m_runs_in_shell#test_runs_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ed1e2376-64fd-4f49-9dd5-644bfb0db600",
+    "parent": "6a16e756-52ee-4a67-9160-9671acc4204b",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.380713",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19m_runs_in_shell#test_runs_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ed1e2376-64fd-4f49-9dd5-644bfb0db600",
+    "parent": "6a16e756-52ee-4a67-9160-9671acc4204b",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.380713",
+    "stop": "2026-05-20T02:56:49.410441",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19m_runs_in_shell#test_runs_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "7955c556-8f55-4c41-8ff8-9b8b199caeea",
+    "parent": "6a16e756-52ee-4a67-9160-9671acc4204b",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.413716",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19m_runs_in_shell#test_runs_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "7955c556-8f55-4c41-8ff8-9b8b199caeea",
+    "parent": "6a16e756-52ee-4a67-9160-9671acc4204b",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.413716",
+    "stop": "2026-05-20T02:56:49.519119",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19n_run_detail_in_shell",
+    "instance": "7c06328a-1478-43e9-bc27-655c610e78dc",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19n_run_detail_in_shell#test_run_detail_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "e3f664a7-34d2-4cf1-b420-049ed21b8184",
+    "parent": "7c06328a-1478-43e9-bc27-655c610e78dc",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.524957",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19n_run_detail_in_shell#test_run_detail_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "e3f664a7-34d2-4cf1-b420-049ed21b8184",
+    "parent": "7c06328a-1478-43e9-bc27-655c610e78dc",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.524957",
+    "stop": "2026-05-20T02:56:49.605503",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19p_test_catalog_in_shell",
+    "instance": "d46d0fff-9c07-4cb7-a792-5efd3066c833",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19p_test_catalog_in_shell#test_test_catalog_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "55e6f0dc-02f6-4edd-8bfe-2eef9d482a85",
+    "parent": "d46d0fff-9c07-4cb7-a792-5efd3066c833",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.611439",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19p_test_catalog_in_shell#test_test_catalog_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "55e6f0dc-02f6-4edd-8bfe-2eef9d482a85",
+    "parent": "d46d0fff-9c07-4cb7-a792-5efd3066c833",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.611439",
+    "stop": "2026-05-20T02:56:49.634594",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19p_test_catalog_in_shell#test_test_catalog_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "3838932c-d372-40d3-a289-e58f3b4fc304",
+    "parent": "d46d0fff-9c07-4cb7-a792-5efd3066c833",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.638501",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p19p_test_catalog_in_shell#test_test_catalog_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "3838932c-d372-40d3-a289-e58f3b4fc304",
+    "parent": "d46d0fff-9c07-4cb7-a792-5efd3066c833",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.638501",
+    "stop": "2026-05-20T02:56:49.747118",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20c_builds_in_shell",
+    "instance": "c6aa6257-d02e-4903-880f-934a32c9004c",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20c_builds_in_shell#test_builds_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ee6f9d08-4d01-4331-984a-f8175ce2ddd4",
+    "parent": "c6aa6257-d02e-4903-880f-934a32c9004c",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.753461",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20c_builds_in_shell#test_builds_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "ee6f9d08-4d01-4331-984a-f8175ce2ddd4",
+    "parent": "c6aa6257-d02e-4903-880f-934a32c9004c",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.753461",
+    "stop": "2026-05-20T02:56:49.777104",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20c_builds_in_shell#test_builds_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "336a9dfd-9228-4566-b206-0e1ab0f68add",
+    "parent": "c6aa6257-d02e-4903-880f-934a32c9004c",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.780421",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20c_builds_in_shell#test_builds_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "336a9dfd-9228-4566-b206-0e1ab0f68add",
+    "parent": "c6aa6257-d02e-4903-880f-934a32c9004c",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.780421",
+    "stop": "2026-05-20T02:56:49.900076",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20d_infra_in_shell",
+    "instance": "236aa142-4650-4713-a2af-75be046bf397",
+    "parent": "59d02ad9-1cf2-4335-adaa-cf26d91eb365",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20d_infra_in_shell#test_infra_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "7c52d121-18f6-4bd1-b6b2-e9cc582f22d8",
+    "parent": "236aa142-4650-4713-a2af-75be046bf397",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.907399",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20d_infra_in_shell#test_infra_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "7c52d121-18f6-4bd1-b6b2-e9cc582f22d8",
+    "parent": "236aa142-4650-4713-a2af-75be046bf397",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.907399",
+    "stop": "2026-05-20T02:56:49.932891",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20d_infra_in_shell#test_provisioning_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "9e72262f-dfc1-437b-98d2-42fb9e62ccfd",
+    "parent": "236aa142-4650-4713-a2af-75be046bf397",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T02:56:49.937613",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p20d_infra_in_shell#test_provisioning_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "9e72262f-dfc1-437b-98d2-42fb9e62ccfd",
+    "parent": "236aa142-4650-4713-a2af-75be046bf397",
+    "rtype": "TEST",
+    "result": "PASSED",
+    "start": "2026-05-20T02:56:49.937613",
+    "stop": "2026-05-20T02:56:50.022150",
+    "detail": {
+        "errors": [],
+        "failures": [],
+        "warnings": []
+    }
+}

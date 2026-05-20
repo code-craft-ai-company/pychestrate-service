@@ -231,6 +231,33 @@ def find_summary(
     return rtnval
 
 
+def list_summaries_for_project(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        limit: int
+    ) -> List[RunResultSummary]:
+    """
+        Return run-result summary rows for a project, newest
+        ``ingested_at`` first, capped at ``limit``.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Project UUID.
+        :param limit: Hard cap on returned rows.
+
+        :returns: List of :class:`RunResultSummary` rows.
+    """
+    rows = (
+        db_session.query(RunResultSummary)
+        .filter(RunResultSummary.project_id == project_id)
+        .order_by(RunResultSummary.ingested_at.desc())
+        .limit(limit)
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
 def list_tasks(
         *,
         db_session: DbSession,

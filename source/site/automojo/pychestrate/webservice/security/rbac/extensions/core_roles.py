@@ -151,6 +151,33 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:project_secrets.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 7-test-metrics / 7-project-dashboards / 7-alerts-budgets
+        # PR p20f: metrics, dashboards, and metric-alert REST
+        # surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:metrics.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:metrics.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:dashboards.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:dashboards.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:metric_alerts.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:metric_alerts.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 
