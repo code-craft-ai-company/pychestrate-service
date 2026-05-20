@@ -187,6 +187,15 @@ def install_default_bundles() -> None:
           DAG-validate action, matrix-expand preview, pipeline
           detail with an inline-SVG stage-DAG visualization),
           loaded only on ``/pipelines`` and ``/pipelines/*`` paths.
+        * ``pyc-pods-bundle`` -- prefixes ``/pods`` and
+          ``/clients`` -- fleet (pods & clients) sidebar
+          registration plus the ``<pyc-pods-list>``,
+          ``<pyc-pod-detail>``, ``<pyc-clients-list>`` and
+          ``<pyc-client-detail>`` views (pod-definitions table with
+          member counts, pod detail with runtime state /
+          registration / lifecycle history, enrolled-clients table
+          with liveness, client detail with capabilities), loaded
+          only on ``/pods``, ``/clients`` and their sub-paths.
 
         :returns: None.
     """
@@ -217,6 +226,10 @@ def install_default_bundles() -> None:
     )
     register_bundle(
         route_prefix="/pipelines", bundle_name="pyc-pipelines-bundle"
+    )
+    register_bundle(route_prefix="/pods", bundle_name="pyc-pods-bundle")
+    register_bundle(
+        route_prefix="/clients", bundle_name="pyc-pods-bundle"
     )
     return
 
