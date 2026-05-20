@@ -67,6 +67,29 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:test_runs.create": (
         "Trigger new test runs via the REST surface"
     ),
+    # Operator-facing read access for the build-orchestration REST
+    # surface (GET /api/v1/projects/{id}/builds and its artifacts).
+    # Introduced by 6-build-orchestration PR p20a.
+    "system:builds.read": (
+        "Read build runs and build artifacts via the REST surface"
+    ),
+    # Operator/CI trigger access for
+    # POST /api/v1/projects/{id}/builds. Introduced by
+    # 6-build-orchestration PR p20a.
+    "system:builds.create": (
+        "Trigger new build runs via the REST surface"
+    ),
+    # Operator-facing read access for the source-integrations REST
+    # surface (GET /api/v1/projects/{id}/source-integrations).
+    # Introduced by 6-source-integrations PR p20a.
+    "system:source_integrations.read": (
+        "Read source-integration (SCM) configs via the REST surface"
+    ),
+    # Operator/CI write access for source-integration registration.
+    # Introduced by 6-source-integrations PR p20a.
+    "system:source_integrations.write": (
+        "Register and update source-integration (SCM) configs via the REST surface"
+    ),
 }
 
 

@@ -113,6 +113,10 @@ tags:
     description: Pod-client → server final-result manifests.
   - name: artifacts
     description: Artifact listings and browsing for a run.
+  - name: builds
+    description: Trigger and read build runs for a project.
+  - name: source_integrations
+    description: Per-project source-integration (SCM) configuration.
   - name: metrics
     description: UI-facing metrics endpoints (planned).
 
@@ -2104,6 +2108,184 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{project_id}/builds:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [builds]
+      summary: List build runs for a project.
+      operationId: builds_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated page of build runs for the project,
+        newest-first. The optional `state` query param filters by
+        build-run lifecycle state.
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of build runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildRunPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [builds]
+      summary: Trigger a new build run on a project.
+      operationId: builds_trigger
+      x-pychestrate-status: planned
+      description: |
+        Resolves the named `runner_kind` (via the
+        `build_runner_kind` factory protocol), validates the
+        runner inputs, computes the reproducibility digest, and
+        persists a build run in `PENDING` state. The Layer-5
+        dispatch handoff is M2 work -- until then a triggered
+        build run remains queued in `PENDING`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BuildRunCreateRequest' }
+      responses:
+        '202':
+          description: Build run accepted (queued; dispatch is M2).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/builds/{build_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: build_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [builds]
+      summary: Read a single build run.
+      operationId: builds_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Build run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/builds/{build_id}/artifacts:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: build_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [builds]
+      summary: List the output artifacts of a build run.
+      operationId: builds_list_artifacts
+      x-pychestrate-status: planned
+      description: |
+        Returns the artifact-manifest entries synthesized for the
+        build run. The page is empty when the build run has not
+        synthesized a manifest yet.
+      responses:
+        '200':
+          description: Page of build artifacts.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BuildArtifactPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/source-integrations:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [source_integrations]
+      summary: List source integrations for a project.
+      operationId: source_integrations_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a `{items, meta}` page. A project owns at most one
+        source integration in the M1 scaffolding, so the page
+        holds zero or one element.
+      responses:
+        '200':
+          description: Page of source integrations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceIntegrationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [source_integrations]
+      summary: Register (or update) a project's source integration.
+      operationId: source_integrations_register
+      x-pychestrate-status: planned
+      description: |
+        Binds the project to an SCM provider + repository. The
+        `provider_name` resolves to a registered `scm_provider`
+        factory implementation. Re-posting overwrites the
+        project's existing config in place.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SourceIntegrationRegisterRequest' }
+      responses:
+        '200':
+          description: Source integration registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceIntegration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/source-integrations/{integration_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: integration_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: |
+          Source-integration identifier. In the M1 scaffolding a
+          project owns a single source integration keyed on the
+          project id, so `integration_id` equals `project_id`.
+    get:
+      tags: [source_integrations]
+      summary: Read a single source integration.
+      operationId: source_integrations_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Source integration.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SourceIntegration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
 components:
 
   securitySchemes:
@@ -3765,3 +3947,217 @@ components:
         errors:
           type: array
           items: { type: string }
+
+    # ----------------------------------------------------------------
+    # builds (6-build-orchestration PR p20a)
+    # ----------------------------------------------------------------
+
+    BuildToolchainSnapshot:
+      type: object
+      description: |
+        One toolchain entry recorded against a build run. Matches
+        `orchestration.build.models.BuildToolchainSnapshot`.
+      required: [toolchain_key, version, fingerprint_sha256]
+      properties:
+        toolchain_key: { type: string }
+        version: { type: string }
+        fingerprint_sha256: { type: string }
+    BuildRun:
+      type: object
+      description: |
+        One build execution. Matches the SQLAlchemy model in
+        `orchestration.build.models.BuildRun` plus its toolchain
+        snapshot rows. The build domain models a build run
+        directly -- there is no separate `BuildPlan` resource in
+        the M1 scaffolding.
+      required:
+        - run_id
+        - project_id
+        - runner_kind
+        - repro_digest_sha256
+        - state
+      properties:
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        runner_kind:
+          type: string
+          description: Stable runner-kind identifier (e.g. `makefile`).
+        repro_digest_sha256: { type: string }
+        state:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+        layer5_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        pipeline_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        pipeline_step_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        final_state_reason: { type: string }
+        inputs:
+          type: object
+          additionalProperties: true
+        annotations:
+          type: object
+          additionalProperties: true
+        toolchain:
+          type: array
+          items: { $ref: '#/components/schemas/BuildToolchainSnapshot' }
+    BuildRunPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BuildRun' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    BuildToolchainEntryInput:
+      type: object
+      required: [key]
+      properties:
+        key: { type: string }
+        version: { type: string }
+        fingerprint_sha256: { type: string }
+    BuildRunCreateRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/builds`. The
+        `runner_kind` must resolve to a registered
+        `build_runner_kind` factory; `runner_inputs` is validated
+        by that runner kind.
+      required: [runner_kind]
+      properties:
+        runner_kind:
+          type: string
+          description: Stable runner-kind identifier (e.g. `makefile`).
+        runner_inputs:
+          type: object
+          additionalProperties: true
+          description: Free-form inputs consumed by the runner kind.
+        input_files:
+          type: object
+          additionalProperties: { type: string }
+          description: '`{path: content_sha256}` material in the repro digest.'
+        env:
+          type: object
+          additionalProperties: { type: string }
+          description: '`{key: value}` material in the repro digest.'
+        toolchain:
+          type: array
+          items: { $ref: '#/components/schemas/BuildToolchainEntryInput' }
+        annotations:
+          type: object
+          additionalProperties: true
+    BuildArtifact:
+      type: object
+      description: |
+        One artifact-manifest entry produced by a build run.
+        Matches `orchestration.build.artifacts.models.BuildArtifactEntryIndex`.
+      required:
+        - manifest_id
+        - artifact_id
+        - artifact_type
+        - sha256
+      properties:
+        manifest_id: { type: string, format: uuid }
+        artifact_id: { type: string }
+        artifact_type: { type: string }
+        artifact_name: { type: string }
+        storage_uri: { type: string }
+        sha256: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+    BuildArtifactPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BuildArtifact' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+        manifest_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            Manifest the entries belong to, or `null` when the
+            build run has not synthesized a manifest yet.
+
+    # ----------------------------------------------------------------
+    # source_integrations (6-source-integrations PR p20a)
+    # ----------------------------------------------------------------
+
+    SourceIntegration:
+      type: object
+      description: |
+        Per-project SCM configuration. Matches the SQLAlchemy
+        model in `orchestration.source.models.ScmProjectConfig`.
+        The `integration_id` equals the `project_id` -- a project
+        owns a single source integration in the M1 scaffolding.
+      required:
+        - integration_id
+        - project_id
+        - provider_name
+        - repo_key
+        - pipeline_file_path
+      properties:
+        integration_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        provider_name:
+          type: string
+          description: Registered `scm_provider` factory name (e.g. `github`).
+        repo_key:
+          type: string
+          description: Provider-specific repo identifier (e.g. `owner/repo`).
+        pipeline_file_path: { type: string }
+        use_polling: { type: boolean }
+        polling_ref_glob: { type: string }
+        last_poll_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    SourceIntegrationPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SourceIntegration' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    SourceIntegrationRegisterRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/source-integrations`.
+      required: [provider_name, repo_key]
+      properties:
+        provider_name:
+          type: string
+          description: Registered `scm_provider` factory name (e.g. `github`).
+        repo_key:
+          type: string
+          description: Provider-specific repo identifier (e.g. `owner/repo`).
+        pipeline_file_path:
+          type: string
+          description: Defaults to `.pychestrate/pipeline.yaml`.
+        use_polling: { type: boolean, default: false }
+        polling_ref_glob: { type: string }
