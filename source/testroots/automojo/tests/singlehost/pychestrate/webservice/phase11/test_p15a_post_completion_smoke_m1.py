@@ -59,15 +59,22 @@ def _get(*, path: str, follow_redirects: bool = False) -> httpx.Response:
     return rtnval
 
 
-def test_root_url_returns_200_after_wizard_completion():
+def test_root_url_redirects_to_login_not_setup_after_completion():
     """
-    **Feature: initial-setup-wizard**
-    **Property: After the wizard has been completed, GET /
-    returns 200 without redirecting. The setup-gate middleware
-    is a no-op forever past completion.**
+    **Feature: initial-setup-wizard + 1-authentication Req 5**
+    **Property: After the wizard has been completed, an
+    unauthenticated GET / 303-redirects to the login page --
+    NOT to a setup-wizard surface. The setup-gate middleware is
+    a no-op forever past completion; the site-shell catch-all
+    then bounces the anonymous request to /login?next=%2F per
+    1-authentication Requirement 5 instead of serving an empty
+    shell.**
     """
     response = _get(path="/", follow_redirects=False)
-    testbase.assert_equal(response.status_code, 200)
+    testbase.assert_equal(response.status_code, 303)
+    location = response.headers.get("location", "")
+    testbase.assert_true(location.endswith("/login?next=%2F"))
+    testbase.assert_true("/setup" not in location)
     return
 
 

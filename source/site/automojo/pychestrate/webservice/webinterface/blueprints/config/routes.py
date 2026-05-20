@@ -1264,6 +1264,12 @@ def register_config_routes(*, app: Any) -> None:
     register_sessions_routes(app=app)
     register_audit_routes(app=app)
 
+    # p19o feature -- client enrollment-token admin page.
+    from automojo.pychestrate.webservice.webinterface.blueprints.config.routes_enrollment import (  # noqa: E402
+        register_enrollment_admin_routes,
+    )
+    register_enrollment_admin_routes(app=app)
+
     return
 
 

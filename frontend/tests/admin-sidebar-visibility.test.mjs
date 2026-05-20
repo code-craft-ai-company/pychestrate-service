@@ -104,6 +104,7 @@ test("admin group visible when caller holds system:ui.admin.view", () => {
         "system:secrets.admin",
         "system:auth.read",
         "system:audit.read",
+        "system:resources.manage",
     ])
     const visible = registry.visible(admin_perms)
     assert.equal(visible.groups.length, 1)
@@ -131,4 +132,7 @@ test("admin entries respect their individual permission gates", () => {
     assert.equal(visible_routes.includes("/admin/users"), false)
     assert.equal(visible_routes.includes("/admin/secrets"), false)
     assert.equal(visible_routes.includes("/admin/audit-logs"), false)
+    assert.equal(
+        visible_routes.includes("/admin/enrollment-tokens"), false
+    )
 })

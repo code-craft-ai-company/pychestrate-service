@@ -87,11 +87,14 @@ def test_login_page_has_username_password_inputs(browser: Browser):
 
 def test_root_url_does_not_redirect_to_setup_unlock(browser: Browser):
     """
-    **Feature: initial-setup-wizard**
+    **Feature: initial-setup-wizard + 1-authentication Req 5**
     **Property: After wizard completion, navigating to / in a
-    real browser stays on / rather than redirecting to
-    /setup/unlock -- mirrors the httpx assertion in p15a but
-    proves the browser-level URL bar is also clean.**
+    real browser as an anonymous user lands on the login page
+    rather than the /setup/unlock wizard surface. The site-shell
+    catch-all 303-redirects the unauthenticated request to
+    /login?next=%2F per 1-authentication Requirement 5; the
+    point of this test is that no setup-wizard surface
+    resurfaces.**
     """
     context = browser.new_context()
     try:
@@ -101,7 +104,7 @@ def test_root_url_does_not_redirect_to_setup_unlock(browser: Browser):
         page.goto(BASE_URL + "/")
         landed_url = page.url
 
-        testbase.assert_true(landed_url.endswith("/"))
+        testbase.assert_true("/login" in landed_url)
         testbase.assert_true("/setup/unlock" not in landed_url)
     finally:
         context.close()

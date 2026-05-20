@@ -21,6 +21,7 @@
  * - `system:secrets.read`      Secrets list entry.
  * - `system:audit.read`        Audit entry.
  * - `system:auth.read`         Sessions entry.
+ * - `system:resources.manage`  Enrollment Tokens entry.
  *
  * Per `9-site-shell` Requirement 2.4: the group's required
  * permission hides the whole group when the caller lacks it. The
@@ -127,6 +128,13 @@ const ADMIN_ENTRIES: readonly SidebarEntryDescriptor[] = [
         label: "Audit Logs",
         route: "/admin/audit-logs",
         requiredPermissions: ["system:audit.read"],
+        group: ADMIN_GROUP_ID,
+    },
+    {
+        entryId: "admin.enrollment-tokens",
+        label: "Enrollment Tokens",
+        route: "/admin/enrollment-tokens",
+        requiredPermissions: ["system:resources.manage"],
         group: ADMIN_GROUP_ID,
     },
 ]
