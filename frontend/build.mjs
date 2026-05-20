@@ -55,6 +55,10 @@ const ENTRY_POINTS = [
         outfile: path.join(DIST_DIR, "pyc-infra-bundle.js"),
     },
     {
+        entry: path.join(HERE, "src", "pyc-metrics-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-metrics-bundle.js"),
+    },
+    {
         entry: path.join(HERE, "src", "pyc-secrets-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-secrets-bundle.js"),
     },
@@ -78,6 +82,10 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-infra-bundle", "infra.css"),
         target: "pyc-infra-bundle.css",
+    },
+    {
+        source: path.join(HERE, "src", "pyc-metrics-bundle", "metrics.css"),
+        target: "pyc-metrics-bundle.css",
     },
     {
         source: path.join(HERE, "src", "pyc-secrets-bundle", "secrets.css"),

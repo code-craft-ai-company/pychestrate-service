@@ -1,0 +1,1923 @@
+// src/pyc-metrics-bundle/test-metrics-view.ts
+var PROJECTS_API_PATH = "/api/v1/projects";
+function build_test_metrics_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/test-metrics";
+  return rtnval;
+}
+function format_rate(rate) {
+  if (typeof rate !== "number" || Number.isFinite(rate) === false) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const clamped = Math.min(1, Math.max(0, rate));
+  const percent = Math.round(clamped * 100);
+  const rtnval = String(percent) + "%";
+  return rtnval;
+}
+function format_duration(seconds) {
+  if (seconds === null || seconds === void 0 || Number.isFinite(seconds) === false) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  if (seconds < 60) {
+    const rtnval2 = seconds.toFixed(1) + "s";
+    return rtnval2;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  const rtnval = String(minutes) + "m " + String(remainder) + "s";
+  return rtnval;
+}
+function compute_bar_fractions(durations) {
+  const rtnval = [];
+  if (Array.isArray(durations) === false || durations.length === 0) {
+    return rtnval;
+  }
+  let max_value = 0;
+  for (const value of durations) {
+    if (typeof value === "number" && value > max_value) {
+      max_value = value;
+    }
+  }
+  if (max_value <= 0) {
+    for (let index = 0; index < durations.length; index = index + 1) {
+      rtnval.push(0);
+    }
+    return rtnval;
+  }
+  for (const value of durations) {
+    const safe = typeof value === "number" && value > 0 ? value : 0;
+    rtnval.push(safe / max_value);
+  }
+  return rtnval;
+}
+var PycTestMetrics = class extends HTMLElement {
+  _state;
+  _projects;
+  _projectsAvailable;
+  _summary;
+  _root;
+  _content_region;
+  constructor() {
+    super();
+    this._state = {
+      projectId: "",
+      loading: false,
+      errored: false
+    };
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._summary = null;
+    this._root = null;
+    this._content_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * project + load state without scraping the DOM.
+   */
+  get viewState() {
+    const rtnval = {
+      projectId: this._state.projectId,
+      loading: this._state.loading,
+      errored: this._state.errored
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * project list fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_projects();
+    return;
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-metrics");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-metrics__heading");
+    heading.textContent = "Test Metrics";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-metrics__controls");
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-metrics__field");
+    project_label.textContent = "Project";
+    const project_select = document.createElement("select");
+    project_select.classList.add("pyc-metrics__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.addEventListener("change", () => {
+      this._state.projectId = project_select.value;
+      void this._refresh();
+    });
+    project_label.appendChild(project_select);
+    controls.appendChild(project_label);
+    const project_input = document.createElement("input");
+    project_input.classList.add("pyc-metrics__input");
+    project_input.setAttribute("type", "text");
+    project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("data-role", "project-input");
+    project_input.hidden = true;
+    project_input.addEventListener("change", () => {
+      this._state.projectId = project_input.value.trim();
+      void this._refresh();
+    });
+    controls.appendChild(project_input);
+    const refresh_button = document.createElement("button");
+    refresh_button.classList.add("pyc-metrics__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const content_region = document.createElement("div");
+    content_region.classList.add("pyc-metrics__content-region");
+    content_region.setAttribute("data-role", "content-region");
+    root.appendChild(content_region);
+    this._content_region = content_region;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the selector.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    let projects = null;
+    try {
+      const response = await fetch(PROJECTS_API_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = extract_projects(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (projects !== null && projects.length > 0) {
+      this._projects = projects;
+      this._projectsAvailable = true;
+      this._state.projectId = projects[0].project_id;
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+    }
+    this._render_project_control();
+    if (this._state.projectId.length > 0) {
+      await this._refresh();
+    } else {
+      this._render_content();
+    }
+    return;
+  }
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-input"]');
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      for (const project of this._projects) {
+        const option = document.createElement("option");
+        option.value = project.project_id;
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectId;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    return;
+  }
+  /**
+   * Re-fetch the test-metrics summary for the current project
+   * and re-render the content region. Exposed so unit tests can
+   * await a render cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.projectId.length === 0) {
+      this._render_content();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._render_content();
+    let summary = null;
+    let errored = false;
+    try {
+      const url = build_test_metrics_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        summary = body;
+      } else {
+        errored = true;
+      }
+    } catch (reason) {
+      errored = true;
+      console.warn(
+        "pychestrate.ui.metrics.test_metrics_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    this._state.loading = false;
+    this._state.errored = errored;
+    this._summary = summary;
+    this._render_content();
+    return;
+  }
+  _render_content() {
+    if (this._content_region === null) {
+      return;
+    }
+    const region = this._content_region;
+    region.replaceChildren();
+    if (this._state.projectId.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Select a project to view test metrics.";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.loading === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Loading test metrics\u2026";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.errored === true || this._summary === null) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.classList.add("pyc-metrics__notice--error");
+      notice.textContent = "Failed to load test metrics for this project.";
+      region.appendChild(notice);
+      return;
+    }
+    region.appendChild(this._build_cards(this._summary.summary));
+    region.appendChild(
+      this._build_duration_trend(this._summary.recent_runs)
+    );
+    region.appendChild(
+      this._build_runs_table(this._summary.recent_runs)
+    );
+    return;
+  }
+  _build_cards(rollup) {
+    const cards = document.createElement("div");
+    cards.classList.add("pyc-metrics__cards");
+    cards.setAttribute("data-role", "rollup-cards");
+    const entries = [
+      {
+        label: "Pass rate",
+        value: format_rate(rollup.pass_rate),
+        tone: "ok"
+      },
+      {
+        label: "Fail rate",
+        value: format_rate(rollup.fail_rate),
+        tone: "error"
+      },
+      {
+        label: "Flake run rate",
+        value: format_rate(rollup.flake_run_rate),
+        tone: "warn"
+      },
+      {
+        label: "Runs",
+        value: String(rollup.run_count),
+        tone: "neutral"
+      },
+      {
+        label: "Tests total",
+        value: String(rollup.tests_total),
+        tone: "neutral"
+      },
+      {
+        label: "Avg duration",
+        value: format_duration(rollup.average_run_duration_seconds),
+        tone: "neutral"
+      }
+    ];
+    for (const entry of entries) {
+      const card = document.createElement("div");
+      card.classList.add("pyc-metrics__card");
+      if (entry.tone !== "neutral") {
+        card.classList.add("pyc-metrics__card--" + entry.tone);
+      }
+      const label = document.createElement("span");
+      label.classList.add("pyc-metrics__card-label");
+      label.textContent = entry.label;
+      const value = document.createElement("span");
+      value.classList.add("pyc-metrics__card-value");
+      value.textContent = entry.value;
+      card.appendChild(label);
+      card.appendChild(value);
+      cards.appendChild(card);
+    }
+    return cards;
+  }
+  _build_duration_trend(runs) {
+    const durations = [];
+    const ordered = runs.slice().reverse();
+    for (const run of ordered) {
+      const value = run.duration_seconds;
+      durations.push(
+        typeof value === "number" && Number.isFinite(value) ? value : 0
+      );
+    }
+    const fractions = compute_bar_fractions(durations);
+    const bars = document.createElement("div");
+    bars.classList.add("pyc-metrics__bars");
+    bars.setAttribute("data-role", "duration-trend");
+    for (let index = 0; index < fractions.length; index = index + 1) {
+      const fraction = fractions[index];
+      const bar = document.createElement("div");
+      bar.classList.add("pyc-metrics__bar");
+      const run = ordered[index];
+      const failed = typeof run.tests_failed === "number" && run.tests_failed > 0;
+      if (failed === true) {
+        bar.classList.add("pyc-metrics__bar--error");
+      }
+      const percent = Math.round(fraction * 100);
+      bar.style.height = String(Math.max(2, percent)) + "%";
+      bar.title = format_duration(durations[index]);
+      bars.appendChild(bar);
+    }
+    return bars;
+  }
+  _build_runs_table(runs) {
+    const table = document.createElement("table");
+    table.classList.add("pyc-metrics__table");
+    table.setAttribute("data-role", "runs-table");
+    const thead = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    const headers = [
+      "Run",
+      "Parser",
+      "Total",
+      "Passed",
+      "Failed",
+      "Duration"
+    ];
+    for (const text of headers) {
+      const th = document.createElement("th");
+      th.textContent = text;
+      head_row.appendChild(th);
+    }
+    thead.appendChild(head_row);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (const run of runs) {
+      const row = document.createElement("tr");
+      const cells = [
+        short_metric_id(run.run_id),
+        run.parser_tag !== null && run.parser_tag !== void 0 ? run.parser_tag : "\u2014",
+        String(
+          typeof run.tests_total === "number" ? run.tests_total : 0
+        ),
+        String(
+          typeof run.tests_passed === "number" ? run.tests_passed : 0
+        ),
+        String(
+          typeof run.tests_failed === "number" ? run.tests_failed : 0
+        ),
+        format_duration(run.duration_seconds)
+      ];
+      for (const text of cells) {
+        const td = document.createElement("td");
+        td.textContent = text;
+        row.appendChild(td);
+      }
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    return table;
+  }
+};
+function short_metric_id(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const dash_index = value.indexOf("-");
+  if (dash_index > 0) {
+    const rtnval2 = value.slice(0, dash_index);
+    return rtnval2;
+  }
+  if (value.length > 12) {
+    const rtnval2 = value.slice(0, 12);
+    return rtnval2;
+  }
+  const rtnval = value;
+  return rtnval;
+}
+function extract_projects(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const project_id = record.project_id;
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      continue;
+    }
+    const display = record.display_name;
+    const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+    rtnval.push({ project_id, display_name });
+  }
+  return rtnval;
+}
+
+// src/pyc-metrics-bundle/timeseries-view.ts
+var SVG_NS = "http://www.w3.org/2000/svg";
+var METRICS_API_PATH = "/api/v1/metrics";
+var CHART_WIDTH = 720;
+var CHART_HEIGHT = 240;
+var CHART_PADDING = 16;
+var TIME_RANGE_PRESETS = [
+  { id: "1h", label: "Last hour", hours: 1 },
+  { id: "24h", label: "Last 24 hours", hours: 24 },
+  { id: "7d", label: "Last 7 days", hours: 168 },
+  { id: "30d", label: "Last 30 days", hours: 720 },
+  { id: "all", label: "All time", hours: 0 }
+];
+function resolve_range_preset(range_id) {
+  for (const preset of TIME_RANGE_PRESETS) {
+    if (preset.id === range_id) {
+      const rtnval2 = preset;
+      return rtnval2;
+    }
+  }
+  const rtnval = TIME_RANGE_PRESETS[0];
+  return rtnval;
+}
+function build_timeseries_url(metric, range_id, now) {
+  const params = new URLSearchParams();
+  params.set("metric", metric);
+  const preset = resolve_range_preset(range_id);
+  if (preset.hours > 0) {
+    const from_millis = now.getTime() - preset.hours * 3600 * 1e3;
+    const from_date = new Date(from_millis);
+    params.set("from", from_date.toISOString());
+    params.set("to", now.toISOString());
+  }
+  const query = params.toString();
+  const rtnval = METRICS_API_PATH + "/timeseries?" + query;
+  return rtnval;
+}
+function build_catalog_url() {
+  const rtnval = METRICS_API_PATH + "/catalog";
+  return rtnval;
+}
+function project_points(points) {
+  const rtnval = [];
+  if (Array.isArray(points) === false || points.length === 0) {
+    return rtnval;
+  }
+  const sorted = points.slice().sort((left, right) => {
+    const left_time = new Date(left.observed_at).getTime();
+    const right_time = new Date(right.observed_at).getTime();
+    const diff = left_time - right_time;
+    return diff;
+  });
+  const plot_width = CHART_WIDTH - 2 * CHART_PADDING;
+  const plot_height = CHART_HEIGHT - 2 * CHART_PADDING;
+  let min_value = sorted[0].value;
+  let max_value = sorted[0].value;
+  for (const point of sorted) {
+    if (point.value < min_value) {
+      min_value = point.value;
+    }
+    if (point.value > max_value) {
+      max_value = point.value;
+    }
+  }
+  const value_span = max_value - min_value;
+  const count = sorted.length;
+  for (let index = 0; index < count; index = index + 1) {
+    const point = sorted[index];
+    let x_fraction = 0.5;
+    if (count > 1) {
+      x_fraction = index / (count - 1);
+    }
+    let y_fraction = 0.5;
+    if (value_span > 0) {
+      y_fraction = (point.value - min_value) / value_span;
+    }
+    const x = CHART_PADDING + x_fraction * plot_width;
+    const y = CHART_PADDING + (1 - y_fraction) * plot_height;
+    rtnval.push({ x, y });
+  }
+  return rtnval;
+}
+function build_line_path(coordinates) {
+  if (Array.isArray(coordinates) === false || coordinates.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const segments = [];
+  for (let index = 0; index < coordinates.length; index = index + 1) {
+    const coord = coordinates[index];
+    const command = index === 0 ? "M" : "L";
+    const x_text = coord.x.toFixed(2);
+    const y_text = coord.y.toFixed(2);
+    segments.push(command + " " + x_text + " " + y_text);
+  }
+  const rtnval = segments.join(" ");
+  return rtnval;
+}
+function build_area_path(coordinates) {
+  if (Array.isArray(coordinates) === false || coordinates.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const floor_y = CHART_HEIGHT - CHART_PADDING;
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  const line = build_line_path(coordinates);
+  const close = " L " + last.x.toFixed(2) + " " + floor_y.toFixed(2) + " L " + first.x.toFixed(2) + " " + floor_y.toFixed(2) + " Z";
+  const rtnval = line + close;
+  return rtnval;
+}
+var PycTimeseriesExplorer = class extends HTMLElement {
+  _state;
+  _catalog;
+  _query;
+  _root;
+  _chart_region;
+  constructor() {
+    super();
+    this._state = {
+      metric: "",
+      rangeId: "24h",
+      loading: false,
+      errored: false
+    };
+    this._catalog = [];
+    this._query = null;
+    this._root = null;
+    this._chart_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * selection + load state without scraping the DOM.
+   */
+  get viewState() {
+    const rtnval = {
+      metric: this._state.metric,
+      rangeId: this._state.rangeId,
+      loading: this._state.loading,
+      errored: this._state.errored
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * catalog fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_catalog();
+    return;
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-metrics");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-metrics__heading");
+    heading.textContent = "Timeseries Explorer";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-metrics__controls");
+    const metric_label = document.createElement("label");
+    metric_label.classList.add("pyc-metrics__field");
+    metric_label.textContent = "Metric";
+    const metric_select = document.createElement("select");
+    metric_select.classList.add("pyc-metrics__select");
+    metric_select.setAttribute("data-role", "metric-select");
+    metric_select.addEventListener("change", () => {
+      this._state.metric = metric_select.value;
+      void this._refresh();
+    });
+    metric_label.appendChild(metric_select);
+    controls.appendChild(metric_label);
+    const range_label = document.createElement("label");
+    range_label.classList.add("pyc-metrics__field");
+    range_label.textContent = "Range";
+    const range_select = document.createElement("select");
+    range_select.classList.add("pyc-metrics__select");
+    range_select.setAttribute("data-role", "range-select");
+    for (const preset of TIME_RANGE_PRESETS) {
+      const option = document.createElement("option");
+      option.value = preset.id;
+      option.textContent = preset.label;
+      range_select.appendChild(option);
+    }
+    range_select.value = this._state.rangeId;
+    range_select.addEventListener("change", () => {
+      this._state.rangeId = range_select.value;
+      void this._refresh();
+    });
+    range_label.appendChild(range_select);
+    controls.appendChild(range_label);
+    const refresh_button = document.createElement("button");
+    refresh_button.classList.add("pyc-metrics__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const chart_region = document.createElement("div");
+    chart_region.classList.add("pyc-metrics__chart-region");
+    chart_region.setAttribute("data-role", "chart-region");
+    root.appendChild(chart_region);
+    this._chart_region = chart_region;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the metric catalog and populate the metric picker.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadCatalog() {
+    await this._load_catalog();
+    return;
+  }
+  async _load_catalog() {
+    let catalog = null;
+    try {
+      const response = await fetch(build_catalog_url(), {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        catalog = extract_catalog(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.catalog_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (catalog !== null && catalog.length > 0) {
+      this._catalog = catalog;
+      this._state.metric = catalog[0].name;
+    } else {
+      this._catalog = [];
+    }
+    this._render_metric_control();
+    if (this._state.metric.length > 0) {
+      await this._refresh();
+    } else {
+      this._render_chart();
+    }
+    return;
+  }
+  _render_metric_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="metric-select"]');
+    if (select instanceof HTMLSelectElement === false) {
+      return;
+    }
+    const select_el = select;
+    select_el.replaceChildren();
+    if (this._catalog.length === 0) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "No metrics registered";
+      select_el.appendChild(option);
+      return;
+    }
+    for (const entry of this._catalog) {
+      const option = document.createElement("option");
+      option.value = entry.name;
+      const suffix = entry.kind.length > 0 ? " (" + entry.kind + ")" : "";
+      option.textContent = entry.name + suffix;
+      select_el.appendChild(option);
+    }
+    select_el.value = this._state.metric;
+    return;
+  }
+  /**
+   * Re-fetch the timeseries for the current metric / range and
+   * re-render the chart. Exposed so unit tests can await a cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.metric.length === 0) {
+      this._render_chart();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._render_chart();
+    let query = null;
+    let errored = false;
+    try {
+      const url = build_timeseries_url(
+        this._state.metric,
+        this._state.rangeId,
+        /* @__PURE__ */ new Date()
+      );
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        query = body;
+      } else {
+        errored = true;
+      }
+    } catch (reason) {
+      errored = true;
+      console.warn(
+        "pychestrate.ui.metrics.timeseries_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    this._state.loading = false;
+    this._state.errored = errored;
+    this._query = query;
+    this._render_chart();
+    return;
+  }
+  _render_chart() {
+    if (this._chart_region === null) {
+      return;
+    }
+    const region = this._chart_region;
+    region.replaceChildren();
+    if (this._state.metric.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "No metric selected.";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.loading === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Loading timeseries\u2026";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.errored === true || this._query === null) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.classList.add("pyc-metrics__notice--error");
+      notice.textContent = "Failed to load the timeseries query.";
+      region.appendChild(notice);
+      return;
+    }
+    const points = this._query.points;
+    if (Array.isArray(points) === false || points.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "No data points in the selected range.";
+      region.appendChild(notice);
+      return;
+    }
+    const svg = build_chart_svg(points);
+    region.appendChild(svg);
+    return;
+  }
+};
+function build_chart_svg(points) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute(
+    "viewBox",
+    "0 0 " + String(CHART_WIDTH) + " " + String(CHART_HEIGHT)
+  );
+  svg.setAttribute("class", "pyc-metrics__chart");
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("data-role", "timeseries-chart");
+  const coordinates = project_points(points);
+  if (coordinates.length === 0) {
+    return svg;
+  }
+  const area = document.createElementNS(SVG_NS, "path");
+  area.setAttribute("class", "pyc-metrics__chart-area");
+  area.setAttribute("d", build_area_path(coordinates));
+  svg.appendChild(area);
+  const line = document.createElementNS(SVG_NS, "path");
+  line.setAttribute("class", "pyc-metrics__chart-line");
+  line.setAttribute("d", build_line_path(coordinates));
+  svg.appendChild(line);
+  return svg;
+}
+function extract_catalog(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const name = record.name;
+    if (typeof name !== "string" || name.length === 0) {
+      continue;
+    }
+    const kind = typeof record.kind === "string" ? record.kind : "";
+    let label_names = [];
+    if (Array.isArray(record.label_names) === true) {
+      label_names = record.label_names.filter(
+        (value) => typeof value === "string"
+      );
+    }
+    const entry = {
+      name,
+      kind,
+      label_names
+    };
+    if (typeof record.help_text === "string") {
+      entry.help_text = record.help_text;
+    }
+    rtnval.push(entry);
+  }
+  return rtnval;
+}
+
+// src/pyc-metrics-bundle/dashboards-view.ts
+var PROJECTS_API_PATH2 = "/api/v1/projects";
+var DASHBOARDS_ROUTE = "/dashboards";
+function build_dashboards_collection_url(project_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/dashboards";
+  return rtnval;
+}
+function build_dashboard_detail_url(project_id, dashboard_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/dashboards/" + encodeURIComponent(dashboard_id);
+  return rtnval;
+}
+function dashboard_id_from_path(path) {
+  if (typeof path !== "string") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  let working = path;
+  const query_index = working.indexOf("?");
+  if (query_index >= 0) {
+    working = working.slice(0, query_index);
+  }
+  if (working.endsWith("/") === true) {
+    working = working.slice(0, working.length - 1);
+  }
+  const prefix = DASHBOARDS_ROUTE + "/";
+  if (working.startsWith(prefix) === false) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const remainder = working.slice(prefix.length);
+  if (remainder.length === 0 || remainder.indexOf("/") >= 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = decodeURIComponent(remainder);
+  return rtnval;
+}
+function create_message_for_status(status) {
+  if (status === 201 || status === 200) {
+    const rtnval2 = "Dashboard created.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "A dashboard with that name already exists.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "The dashboard request was rejected \u2014 check the name.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to create dashboards.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "Unknown project.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to create dashboard (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function tile_metric_name(tile) {
+  if (tile === null || tile === void 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const config = tile.config;
+  if (config === null || config === void 0 || typeof config !== "object") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const metric = config.metric;
+  if (typeof metric !== "string") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = metric;
+  return rtnval;
+}
+var PycDashboardsList = class extends HTMLElement {
+  _state;
+  _projects;
+  _projectsAvailable;
+  _dashboards;
+  _root;
+  _form_region;
+  _table_region;
+  _notice_region;
+  constructor() {
+    super();
+    this._state = {
+      projectId: "",
+      loading: false,
+      errored: false
+    };
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._dashboards = [];
+    this._root = null;
+    this._form_region = null;
+    this._table_region = null;
+    this._notice_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * project + load state without scraping the DOM.
+   */
+  get listState() {
+    const rtnval = {
+      projectId: this._state.projectId,
+      loading: this._state.loading,
+      errored: this._state.errored
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the chrome, kick off the project
+   * fetch.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_projects();
+    return;
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-metrics");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-metrics__heading");
+    heading.textContent = "Dashboards";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-metrics__controls");
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-metrics__field");
+    project_label.textContent = "Project";
+    const project_select = document.createElement("select");
+    project_select.classList.add("pyc-metrics__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.addEventListener("change", () => {
+      this._state.projectId = project_select.value;
+      void this._refresh();
+    });
+    project_label.appendChild(project_select);
+    controls.appendChild(project_label);
+    const project_input = document.createElement("input");
+    project_input.classList.add("pyc-metrics__input");
+    project_input.setAttribute("type", "text");
+    project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("data-role", "project-input");
+    project_input.hidden = true;
+    project_input.addEventListener("change", () => {
+      this._state.projectId = project_input.value.trim();
+      void this._refresh();
+    });
+    controls.appendChild(project_input);
+    const create_button = document.createElement("button");
+    create_button.classList.add("pyc-metrics__button");
+    create_button.setAttribute("type", "button");
+    create_button.setAttribute("data-role", "create-toggle");
+    create_button.textContent = "Create Dashboard";
+    create_button.addEventListener("click", () => {
+      this._toggle_create_form();
+    });
+    controls.appendChild(create_button);
+    root.appendChild(controls);
+    const form_region = document.createElement("div");
+    form_region.classList.add("pyc-metrics__form-region");
+    form_region.setAttribute("data-role", "form-region");
+    form_region.hidden = true;
+    root.appendChild(form_region);
+    this._form_region = form_region;
+    const notice_region = document.createElement("div");
+    notice_region.classList.add("pyc-metrics__notice-region");
+    notice_region.setAttribute("data-role", "notice-region");
+    root.appendChild(notice_region);
+    this._notice_region = notice_region;
+    const table_region = document.createElement("div");
+    table_region.classList.add("pyc-metrics__table-region");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the selector.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    let projects = null;
+    try {
+      const response = await fetch(PROJECTS_API_PATH2, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = extract_projects(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (projects !== null && projects.length > 0) {
+      this._projects = projects;
+      this._projectsAvailable = true;
+      this._state.projectId = projects[0].project_id;
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+    }
+    this._render_project_control();
+    if (this._state.projectId.length > 0) {
+      await this._refresh();
+    } else {
+      this._render_table();
+    }
+    return;
+  }
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-input"]');
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      for (const project of this._projects) {
+        const option = document.createElement("option");
+        option.value = project.project_id;
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectId;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    return;
+  }
+  /**
+   * Re-fetch the dashboards page for the current project and
+   * re-render. Exposed so unit tests can await a render cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.projectId.length === 0) {
+      this._render_table();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._render_table();
+    let dashboards = [];
+    let errored = false;
+    try {
+      const url = build_dashboards_collection_url(
+        this._state.projectId
+      );
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        dashboards = extract_dashboards(body);
+      } else {
+        errored = true;
+      }
+    } catch (reason) {
+      errored = true;
+      console.warn(
+        "pychestrate.ui.metrics.dashboards_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    this._state.loading = false;
+    this._state.errored = errored;
+    this._dashboards = dashboards;
+    this._render_table();
+    return;
+  }
+  _render_table() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    region.replaceChildren();
+    if (this._state.projectId.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Select a project to view dashboards.";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.loading === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Loading dashboards\u2026";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._state.errored === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.classList.add("pyc-metrics__notice--error");
+      notice.textContent = "Failed to load dashboards for this project.";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._dashboards.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "No dashboards yet \u2014 create one above.";
+      region.appendChild(notice);
+      return;
+    }
+    const table = document.createElement("table");
+    table.classList.add("pyc-metrics__table");
+    table.setAttribute("data-role", "dashboards-table");
+    const thead = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    for (const text of ["Name", "Description", "Tiles", "Version"]) {
+      const th = document.createElement("th");
+      th.textContent = text;
+      head_row.appendChild(th);
+    }
+    thead.appendChild(head_row);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (const dashboard of this._dashboards) {
+      const row = document.createElement("tr");
+      const name_cell = document.createElement("td");
+      const link = document.createElement("a");
+      link.classList.add("pyc-metrics__row-link");
+      link.setAttribute(
+        "href",
+        DASHBOARDS_ROUTE + "/" + encodeURIComponent(dashboard.dashboard_id)
+      );
+      link.textContent = dashboard.name;
+      name_cell.appendChild(link);
+      row.appendChild(name_cell);
+      const desc_cell = document.createElement("td");
+      desc_cell.textContent = dashboard.description !== void 0 && dashboard.description.length > 0 ? dashboard.description : "\u2014";
+      row.appendChild(desc_cell);
+      const tiles_cell = document.createElement("td");
+      tiles_cell.textContent = String(dashboard.tiles.length);
+      row.appendChild(tiles_cell);
+      const version_cell = document.createElement("td");
+      version_cell.textContent = String(dashboard.version);
+      row.appendChild(version_cell);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    region.appendChild(table);
+    return;
+  }
+  _toggle_create_form() {
+    if (this._form_region === null) {
+      return;
+    }
+    if (this._form_region.hidden === false) {
+      this._form_region.hidden = true;
+      this._form_region.replaceChildren();
+      return;
+    }
+    this._form_region.hidden = false;
+    this._render_create_form();
+    return;
+  }
+  _render_create_form() {
+    if (this._form_region === null) {
+      return;
+    }
+    const region = this._form_region;
+    region.replaceChildren();
+    const form = document.createElement("form");
+    form.classList.add("pyc-metrics__form");
+    form.setAttribute("data-role", "create-form");
+    const name_label = document.createElement("label");
+    name_label.classList.add("pyc-metrics__field");
+    name_label.textContent = "Name";
+    const name_input = document.createElement("input");
+    name_input.classList.add("pyc-metrics__input");
+    name_input.setAttribute("type", "text");
+    name_input.setAttribute("data-role", "name-input");
+    name_input.required = true;
+    name_label.appendChild(name_input);
+    form.appendChild(name_label);
+    const desc_label = document.createElement("label");
+    desc_label.classList.add("pyc-metrics__field");
+    desc_label.textContent = "Description";
+    const desc_input = document.createElement("input");
+    desc_input.classList.add("pyc-metrics__input");
+    desc_input.setAttribute("type", "text");
+    desc_input.setAttribute("data-role", "description-input");
+    desc_label.appendChild(desc_input);
+    form.appendChild(desc_label);
+    const submit = document.createElement("button");
+    submit.classList.add("pyc-metrics__button");
+    submit.setAttribute("type", "submit");
+    submit.setAttribute("data-role", "create-submit");
+    submit.textContent = "Create";
+    form.appendChild(submit);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_create(
+        name_input.value.trim(),
+        desc_input.value.trim()
+      );
+    });
+    region.appendChild(form);
+    return;
+  }
+  /**
+   * POST a ``DashboardCreateRequest`` for the current project.
+   * Exposed so unit tests can drive the create path directly.
+   *
+   * @param name The dashboard name.
+   * @param description An optional description.
+   *
+   * @returns The create outcome.
+   */
+  async submitCreate(name, description) {
+    const rtnval = await this._submit_create(name, description);
+    return rtnval;
+  }
+  async _submit_create(name, description) {
+    if (this._state.projectId.length === 0 || name.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        dashboardId: "",
+        message: "A project and a dashboard name are required."
+      };
+      this._render_notice(rtnval2.message, true);
+      return rtnval2;
+    }
+    const payload = { name };
+    if (description.length > 0) {
+      payload.description = description;
+    }
+    let status = 0;
+    let dashboard_id = "";
+    let ok = false;
+    try {
+      const url = build_dashboards_collection_url(
+        this._state.projectId
+      );
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+      ok = response.ok;
+      if (response.ok === true) {
+        const body = await response.json();
+        const record = body;
+        if (typeof record.dashboard_id === "string") {
+          dashboard_id = record.dashboard_id;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.dashboard_create_failed",
+        { reason: String(reason) }
+      );
+    }
+    const message = create_message_for_status(status);
+    const rtnval = {
+      ok,
+      status,
+      dashboardId: dashboard_id,
+      message
+    };
+    this._render_notice(message, ok === false);
+    if (ok === true) {
+      this._toggle_create_form();
+      await this._refresh();
+    }
+    return rtnval;
+  }
+  _render_notice(message, is_error) {
+    if (this._notice_region === null) {
+      return;
+    }
+    const notice = document.createElement("div");
+    notice.classList.add("pyc-metrics__notice");
+    if (is_error === true) {
+      notice.classList.add("pyc-metrics__notice--error");
+    }
+    notice.textContent = message;
+    this._notice_region.replaceChildren(notice);
+    return;
+  }
+};
+var PycDashboardDetail = class extends HTMLElement {
+  _projects;
+  _dashboard;
+  _loading;
+  _errored;
+  _root;
+  _tiles_region;
+  constructor() {
+    super();
+    this._projects = [];
+    this._dashboard = null;
+    this._loading = false;
+    this._errored = false;
+    this._root = null;
+    this._tiles_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests.
+   */
+  get loaded() {
+    const rtnval = this._dashboard !== null;
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the chrome, kick off the dashboard
+   * fetch.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_dashboard();
+    return;
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-metrics");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-metrics__heading");
+    heading.setAttribute("data-role", "dashboard-heading");
+    heading.textContent = "Dashboard";
+    root.appendChild(heading);
+    const back = document.createElement("a");
+    back.classList.add("pyc-metrics__row-link");
+    back.setAttribute("href", DASHBOARDS_ROUTE);
+    back.textContent = "\u2190 All dashboards";
+    root.appendChild(back);
+    const tiles_region = document.createElement("div");
+    tiles_region.classList.add("pyc-metrics__tiles-region");
+    tiles_region.setAttribute("data-role", "tiles-region");
+    root.appendChild(tiles_region);
+    this._tiles_region = tiles_region;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Resolve the dashboard project + id, fetch the dashboard, and
+   * render its tiles. Exposed so unit tests can await the cycle.
+   */
+  async loadDashboard() {
+    await this._load_dashboard();
+    return;
+  }
+  async _load_dashboard() {
+    const dashboard_id = dashboard_id_from_path(
+      typeof window !== "undefined" ? window.location.pathname : ""
+    );
+    if (dashboard_id.length === 0) {
+      this._errored = true;
+      this._render_tiles();
+      return;
+    }
+    let project_id = "";
+    try {
+      const response = await fetch(PROJECTS_API_PATH2, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        this._projects = extract_projects(body);
+        if (this._projects.length > 0) {
+          project_id = this._projects[0].project_id;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (project_id.length === 0) {
+      this._errored = true;
+      this._render_tiles();
+      return;
+    }
+    this._loading = true;
+    this._render_tiles();
+    let dashboard = null;
+    let errored = false;
+    try {
+      const url = build_dashboard_detail_url(project_id, dashboard_id);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        dashboard = body;
+      } else {
+        errored = true;
+      }
+    } catch (reason) {
+      errored = true;
+      console.warn(
+        "pychestrate.ui.metrics.dashboard_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    this._loading = false;
+    this._errored = errored;
+    this._dashboard = dashboard;
+    this._render_tiles();
+    return;
+  }
+  _render_tiles() {
+    if (this._tiles_region === null || this._root === null) {
+      return;
+    }
+    const heading = this._root.querySelector(
+      '[data-role="dashboard-heading"]'
+    );
+    if (heading !== null && this._dashboard !== null) {
+      heading.textContent = this._dashboard.name;
+    }
+    const region = this._tiles_region;
+    region.replaceChildren();
+    if (this._loading === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "Loading dashboard\u2026";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._errored === true || this._dashboard === null) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.classList.add("pyc-metrics__notice--error");
+      notice.textContent = "Failed to load this dashboard.";
+      region.appendChild(notice);
+      return;
+    }
+    if (this._dashboard.tiles.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "This dashboard has no tiles.";
+      region.appendChild(notice);
+      return;
+    }
+    const grid = document.createElement("div");
+    grid.classList.add("pyc-metrics__tiles");
+    grid.setAttribute("data-role", "tiles-grid");
+    for (const tile of this._dashboard.tiles) {
+      grid.appendChild(this._build_tile(tile));
+    }
+    region.appendChild(grid);
+    return;
+  }
+  _build_tile(tile) {
+    const card = document.createElement("div");
+    card.classList.add("pyc-metrics__tile");
+    card.setAttribute("data-role", "dashboard-tile");
+    card.setAttribute("data-tile-id", tile.tile_id);
+    const title = document.createElement("div");
+    title.classList.add("pyc-metrics__tile-title");
+    const metric_name = tile_metric_name(tile);
+    title.textContent = metric_name.length > 0 ? metric_name : tile.kind;
+    card.appendChild(title);
+    const body = document.createElement("div");
+    body.classList.add("pyc-metrics__tile-body");
+    body.setAttribute("data-role", "tile-body");
+    const placeholder = document.createElement("div");
+    placeholder.classList.add("pyc-metrics__notice");
+    placeholder.textContent = metric_name.length > 0 ? "Loading metric\u2026" : "No metric configured.";
+    body.appendChild(placeholder);
+    card.appendChild(body);
+    if (metric_name.length > 0) {
+      void this._load_tile_metric(metric_name, body);
+    }
+    return card;
+  }
+  async _load_tile_metric(metric_name, body) {
+    let points = [];
+    let errored = false;
+    try {
+      const url = build_timeseries_url(metric_name, "7d", /* @__PURE__ */ new Date());
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const data = await response.json();
+        const query = data;
+        if (Array.isArray(query.points) === true) {
+          points = query.points;
+        }
+      } else {
+        errored = true;
+      }
+    } catch (reason) {
+      errored = true;
+      console.warn(
+        "pychestrate.ui.metrics.tile_metric_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    body.replaceChildren();
+    if (errored === true) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.classList.add("pyc-metrics__notice--error");
+      notice.textContent = "Failed to load tile metric.";
+      body.appendChild(notice);
+      return;
+    }
+    if (points.length === 0) {
+      const notice = document.createElement("div");
+      notice.classList.add("pyc-metrics__notice");
+      notice.textContent = "No data points.";
+      body.appendChild(notice);
+      return;
+    }
+    body.appendChild(build_chart_svg(points));
+    return;
+  }
+};
+function extract_dashboards(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const dashboard_id = record.dashboard_id;
+    if (typeof dashboard_id !== "string" || dashboard_id.length === 0) {
+      continue;
+    }
+    let tiles = [];
+    if (Array.isArray(record.tiles) === true) {
+      tiles = record.tiles.filter(
+        (value) => value !== null && typeof value === "object"
+      );
+    }
+    const dashboard = {
+      dashboard_id,
+      project_id: typeof record.project_id === "string" ? record.project_id : "",
+      name: typeof record.name === "string" ? record.name : "",
+      tiles,
+      version: typeof record.version === "number" ? record.version : 1
+    };
+    if (typeof record.description === "string") {
+      dashboard.description = record.description;
+    }
+    rtnval.push(dashboard);
+  }
+  return rtnval;
+}
+
+// src/pyc-metrics-bundle/index.ts
+var INSIGHTS_GROUP_ID = "insights";
+var METRICS_READ_PERMISSION = "system:metrics.read";
+var TEST_METRICS_ROUTE = "/test-metrics";
+var TIMESERIES_ROUTE = "/timeseries";
+var DASHBOARDS_ROUTE2 = "/dashboards";
+var TEST_METRICS_TAG = "pyc-test-metrics";
+var TIMESERIES_TAG = "pyc-timeseries-explorer";
+var DASHBOARDS_LIST_TAG = "pyc-dashboards-list";
+var DASHBOARD_DETAIL_TAG = "pyc-dashboard-detail";
+var METRICS_STYLESHEET_HREF = "/static/javascript/dist/pyc-metrics-bundle.css";
+function ensure_metrics_stylesheet() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const selector = 'link[data-pyc-bundle="pyc-metrics-bundle"]';
+  if (document.head.querySelector(selector) !== null) {
+    return;
+  }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = METRICS_STYLESHEET_HREF;
+  link.setAttribute("data-pyc-bundle", "pyc-metrics-bundle");
+  document.head.appendChild(link);
+  return;
+}
+var TEST_METRICS_ENTRY = {
+  entryId: "insights.test-metrics",
+  label: "Test Metrics",
+  route: TEST_METRICS_ROUTE,
+  requiredPermissions: [METRICS_READ_PERMISSION],
+  group: INSIGHTS_GROUP_ID
+};
+var TIMESERIES_ENTRY = {
+  entryId: "insights.timeseries",
+  label: "Timeseries",
+  route: TIMESERIES_ROUTE,
+  requiredPermissions: [METRICS_READ_PERMISSION],
+  group: INSIGHTS_GROUP_ID
+};
+var DASHBOARDS_ENTRY = {
+  entryId: "insights.dashboards",
+  label: "Dashboards",
+  route: DASHBOARDS_ROUTE2,
+  requiredPermissions: [METRICS_READ_PERMISSION],
+  group: INSIGHTS_GROUP_ID
+};
+function register_metrics_sidebar(sidebar) {
+  sidebar.registerGroup({
+    groupId: INSIGHTS_GROUP_ID,
+    label: "Insights",
+    requiredPermissions: [METRICS_READ_PERMISSION]
+  });
+  sidebar.registerEntry(TEST_METRICS_ENTRY);
+  sidebar.registerEntry(TIMESERIES_ENTRY);
+  sidebar.registerEntry(DASHBOARDS_ENTRY);
+  return;
+}
+function define_metrics_elements() {
+  if (typeof customElements === "undefined") {
+    return;
+  }
+  if (customElements.get(TEST_METRICS_TAG) === void 0) {
+    customElements.define(TEST_METRICS_TAG, PycTestMetrics);
+  }
+  if (customElements.get(TIMESERIES_TAG) === void 0) {
+    customElements.define(TIMESERIES_TAG, PycTimeseriesExplorer);
+  }
+  if (customElements.get(DASHBOARDS_LIST_TAG) === void 0) {
+    customElements.define(DASHBOARDS_LIST_TAG, PycDashboardsList);
+  }
+  if (customElements.get(DASHBOARD_DETAIL_TAG) === void 0) {
+    customElements.define(DASHBOARD_DETAIL_TAG, PycDashboardDetail);
+  }
+  return;
+}
+function classify_metrics_route(path) {
+  if (typeof path !== "string") {
+    const rtnval2 = "none";
+    return rtnval2;
+  }
+  let working = path;
+  const query_index = working.indexOf("?");
+  if (query_index >= 0) {
+    working = working.slice(0, query_index);
+  }
+  if (working === TEST_METRICS_ROUTE || working === TEST_METRICS_ROUTE + "/") {
+    const rtnval2 = "test-metrics";
+    return rtnval2;
+  }
+  if (working === TIMESERIES_ROUTE || working === TIMESERIES_ROUTE + "/") {
+    const rtnval2 = "timeseries";
+    return rtnval2;
+  }
+  if (working === DASHBOARDS_ROUTE2 || working === DASHBOARDS_ROUTE2 + "/") {
+    const rtnval2 = "dashboards-list";
+    return rtnval2;
+  }
+  const detail_id = dashboard_id_from_path(working);
+  if (detail_id.length > 0) {
+    const rtnval2 = "dashboard-detail";
+    return rtnval2;
+  }
+  const rtnval = "none";
+  return rtnval;
+}
+function tag_for_metrics_route(route) {
+  if (route === "test-metrics") {
+    const rtnval2 = TEST_METRICS_TAG;
+    return rtnval2;
+  }
+  if (route === "timeseries") {
+    const rtnval2 = TIMESERIES_TAG;
+    return rtnval2;
+  }
+  if (route === "dashboards-list") {
+    const rtnval2 = DASHBOARDS_LIST_TAG;
+    return rtnval2;
+  }
+  if (route === "dashboard-detail") {
+    const rtnval2 = DASHBOARD_DETAIL_TAG;
+    return rtnval2;
+  }
+  const rtnval = "";
+  return rtnval;
+}
+function mount_metrics_view_if_active() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const route = classify_metrics_route(window.location.pathname);
+  if (route === "none") {
+    return;
+  }
+  const target_tag = tag_for_metrics_route(route);
+  if (target_tag.length === 0) {
+    return;
+  }
+  const main = document.querySelector(
+    "pyc-site-shell main.pyc-site-shell__main"
+  );
+  if (main === null) {
+    return;
+  }
+  const existing = main.querySelector(target_tag);
+  if (existing !== null) {
+    return;
+  }
+  define_metrics_elements();
+  ensure_metrics_stylesheet();
+  const view = document.createElement(target_tag);
+  main.replaceChildren(view);
+  return;
+}
+function _register_against(handle) {
+  register_metrics_sidebar(handle.sidebar);
+  mount_metrics_view_if_active();
+  return;
+}
+function _boot() {
+  define_metrics_elements();
+  const target = window;
+  const handle = target.pychestrateShell;
+  if (handle !== void 0 && handle.sidebar !== void 0) {
+    _register_against(handle);
+    return;
+  }
+  queueMicrotask(() => {
+    const retry = target.pychestrateShell;
+    if (retry !== void 0 && retry.sidebar !== void 0) {
+      _register_against(retry);
+      return;
+    }
+    console.warn(
+      "pychestrate.ui.metrics.bundle_no_shell_handle",
+      {
+        reason: "window.pychestrateShell missing after microtask retry"
+      }
+    );
+  });
+  return;
+}
+if (typeof window !== "undefined") {
+  _boot();
+}
+export {
+  DASHBOARDS_ROUTE,
+  PycDashboardDetail,
+  PycDashboardsList,
+  PycTestMetrics,
+  PycTimeseriesExplorer,
+  TIME_RANGE_PRESETS,
+  build_area_path,
+  build_catalog_url,
+  build_chart_svg,
+  build_dashboard_detail_url,
+  build_dashboards_collection_url,
+  build_line_path,
+  build_test_metrics_url,
+  build_timeseries_url,
+  classify_metrics_route,
+  compute_bar_fractions,
+  create_message_for_status,
+  dashboard_id_from_path,
+  define_metrics_elements,
+  ensure_metrics_stylesheet,
+  extract_catalog,
+  extract_dashboards,
+  extract_projects,
+  format_duration,
+  format_rate,
+  mount_metrics_view_if_active,
+  project_points,
+  register_metrics_sidebar,
+  resolve_range_preset,
+  short_metric_id,
+  tag_for_metrics_route,
+  tile_metric_name
+};
+//# sourceMappingURL=pyc-metrics-bundle.js.map

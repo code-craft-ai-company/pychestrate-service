@@ -165,6 +165,15 @@ def install_default_bundles() -> None:
           actions, provisioning detail with plan summary), loaded
           only on ``/environments``, ``/provisioning-runs`` and
           their sub-paths.
+        * ``pyc-metrics-bundle`` -- prefixes ``/test-metrics``,
+          ``/timeseries`` and ``/dashboards`` -- metrics &
+          dashboards sidebar registration plus the
+          ``<pyc-test-metrics>``, ``<pyc-timeseries-explorer>``,
+          ``<pyc-dashboards-list>`` and ``<pyc-dashboard-detail>``
+          views (test-result rollup, timeseries explorer with an
+          inline-SVG chart, dashboards list / detail with metric
+          tiles), loaded only on those prefixes and their
+          sub-paths.
         * ``pyc-secrets-bundle`` -- prefix ``/secrets`` -- secrets
           sidebar registration plus the ``<pyc-secrets>`` view
           (scope-aware Org / Project / User secret-metadata table,
@@ -186,6 +195,15 @@ def install_default_bundles() -> None:
     )
     register_bundle(
         route_prefix="/provisioning-runs", bundle_name="pyc-infra-bundle"
+    )
+    register_bundle(
+        route_prefix="/test-metrics", bundle_name="pyc-metrics-bundle"
+    )
+    register_bundle(
+        route_prefix="/timeseries", bundle_name="pyc-metrics-bundle"
+    )
+    register_bundle(
+        route_prefix="/dashboards", bundle_name="pyc-metrics-bundle"
     )
     register_bundle(
         route_prefix="/secrets", bundle_name="pyc-secrets-bundle"
