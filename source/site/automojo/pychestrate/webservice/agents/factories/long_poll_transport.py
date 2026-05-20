@@ -17,7 +17,7 @@ via HTTP.
 The shape is intentionally simple — a per-client in-memory
 :class:`queue.Queue` keyed by ``client_id``. The dispatcher
 enqueues a :class:`DispatchRecord` via :meth:`transmit`; the
-long-poll REST handler (``GET /api/v1/agents/{client_id}/
+long-poll REST handler (``GET /api/v1/clients/{client_id}/
 dispatches:next``) pops the next record (or times out and answers
 204) via :meth:`await_pending_dispatch`. Persistence is out of
 scope for the alpha — server restart drops in-flight dispatches.
