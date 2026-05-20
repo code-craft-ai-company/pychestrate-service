@@ -174,6 +174,12 @@ def install_default_bundles() -> None:
           inline-SVG chart, dashboards list / detail with metric
           tiles), loaded only on those prefixes and their
           sub-paths.
+        * ``pyc-secrets-bundle`` -- prefix ``/secrets`` -- secrets
+          sidebar registration plus the ``<pyc-secrets>`` view
+          (scope-aware Org / Project / User secret-metadata table,
+          create form, per-secret reveal / rotate / delete
+          actions), loaded only on ``/secrets`` and ``/secrets/*``
+          paths.
 
         :returns: None.
     """
@@ -198,6 +204,9 @@ def install_default_bundles() -> None:
     )
     register_bundle(
         route_prefix="/dashboards", bundle_name="pyc-metrics-bundle"
+    )
+    register_bundle(
+        route_prefix="/secrets", bundle_name="pyc-secrets-bundle"
     )
     return
 

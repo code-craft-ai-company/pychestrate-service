@@ -58,6 +58,10 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-metrics-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-metrics-bundle.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-secrets-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-secrets-bundle.js"),
+    },
 ]
 
 // Bundle stylesheets copied alongside their bundle so the bundle
@@ -82,6 +86,10 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-metrics-bundle", "metrics.css"),
         target: "pyc-metrics-bundle.css",
+    },
+    {
+        source: path.join(HERE, "src", "pyc-secrets-bundle", "secrets.css"),
+        target: "pyc-secrets-bundle.css",
     },
 ]
 
