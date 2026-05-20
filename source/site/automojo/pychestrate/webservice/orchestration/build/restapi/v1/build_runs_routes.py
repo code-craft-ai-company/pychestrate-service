@@ -24,10 +24,14 @@ The build domain models a :class:`BuildRun` directly -- there is
 no ``BuildPlan`` ORM table in the M1 scaffolding, so this PR
 exposes the build-run lifecycle (trigger / read / list) rather
 than a separate plan resource. ``POST /builds`` resolves the
-runner kind, validates inputs, computes the repro digest, and
-persists the run in ``PENDING``. The Layer-5 dispatch handoff is
-M2 work (see ``orchestration.build.service.trigger_run``); until
-then a triggered build run stays in ``PENDING`` / queued state.
+runner kind, validates inputs, computes the repro digest, builds
++ signs a ``job_kind=build`` JobEnvelope, and dispatches it
+through the wired :class:`JobDispatcher` so the build job queues
+for an enrolled client -- the BuildRun comes back ``running``
+with the run-state machine at ``dispatching``. When the project
+has no enrolled pod with an active client registration the
+trigger answers ``409`` (the same "no eligible pod" path test
+runs use).
 
 Error responses are RFC 7807 problem documents emitted via
 :mod:`api.problem_json_webworks`.
@@ -50,13 +54,23 @@ from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from automojo.pychestrate.webservice.jobs.dispatch.factories.strategy import (
+    DispatchCandidate,
+)
 from automojo.pychestrate.webservice.orchestration.build import (
     service as build_service,
 )
 from automojo.pychestrate.webservice.orchestration.build.errors import (
+    BuildDispatchFailedError,
+    BuildDispatchUnavailableError,
     BuildInputsInvalidError,
     BuildRunNotFoundError,
     BuildRunnerKindUnknownError,
+)
+from automojo.pychestrate.webservice.pods.models import (
+    PodDefinition,
+    PodRegistration,
+    RegistrationState,
 )
 from automojo.pychestrate.webservice.orchestration.build.artifacts import (
     repository as artifacts_repo,
@@ -400,6 +414,8 @@ def _build_run_view_to_dict(view: Any) -> Dict[str, Any]:
         "runner_kind": view.runner_kind,
         "repro_digest_sha256": view.repro_digest_sha256,
         "state": _enum_value_or_str(view.state),
+        "run_state": getattr(view, "run_state", None),
+        "dispatch_attempt_id": getattr(view, "dispatch_attempt_id", None),
         "layer5_run_id": view.layer5_run_id,
         "pipeline_run_id": view.pipeline_run_id,
         "pipeline_step_run_id": view.pipeline_step_run_id,
@@ -411,6 +427,90 @@ def _build_run_view_to_dict(view: Any) -> Dict[str, Any]:
         "annotations": dict(view.annotations or {}),
         "toolchain": toolchain,
     }
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Dispatch-candidate selection
+# ---------------------------------------------------------------------------
+#
+# Mirrors the capability-based eligible-pod selection the test
+# orchestrator uses: every pod enrolled in the project that carries at
+# least one REGISTERED client registration is an eligible target. The
+# build dispatcher then picks one via the active dispatch strategy.
+
+
+def _candidates_for_pod(
+        *,
+        db_session: Any,
+        pod_id: str
+    ) -> List[DispatchCandidate]:
+    """
+        Build a :class:`DispatchCandidate` list from the REGISTERED
+        client registrations for a single pod.
+
+        :param db_session: Active SQLAlchemy session.
+        :param pod_id: Target pod UUID.
+
+        :returns: List of dispatch candidates (may be empty).
+    """
+    registrations = (
+        db_session.query(PodRegistration)
+        .filter(PodRegistration.pod_id == pod_id)
+        .filter(PodRegistration.state == RegistrationState.REGISTERED)
+        .all()
+    )
+
+    candidates: List[DispatchCandidate] = []
+    for reg in registrations:
+        client_id = reg.client_id
+        if client_id is None:
+            continue
+        candidates.append(
+            DispatchCandidate(
+                client_id=str(client_id),
+                pod_id=str(pod_id),
+                capability_tags=tuple(),
+                inflight_dispatch_count=0,
+                last_dispatched_at_iso="",
+            )
+        )
+    rtnval = candidates
+    return rtnval
+
+
+def _build_eligible_pod_candidates(
+        *,
+        db_session: Any,
+        project_id: str
+    ) -> List[DispatchCandidate]:
+    """
+        Enumerate every pod enrolled in the project carrying at least
+        one REGISTERED client registration and build the combined
+        :class:`DispatchCandidate` list. May be empty -- the caller
+        decides how to surface "no eligible pod".
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+
+        :returns: List of dispatch candidates (possibly empty).
+    """
+    pod_rows = (
+        db_session.query(PodDefinition)
+        .filter(PodDefinition.project_id == project_id)
+        .all()
+    )
+
+    candidates: List[DispatchCandidate] = []
+    for pod_row in pod_rows:
+        pod_id = str(pod_row.pod_id)
+        pod_candidates = _candidates_for_pod(
+            db_session=db_session, pod_id=pod_id,
+        )
+        for candidate in pod_candidates:
+            candidates.append(candidate)
+
+    rtnval = candidates
     return rtnval
 
 
@@ -561,7 +661,7 @@ def handle_trigger_build(request: Request) -> Response:
             db_session=db_session,
             permission_key=BUILDS_CREATE_PERMISSION_KEY,
         )
-        _require_project_exists(
+        project_row = _require_project_exists(
             request=request,
             db_session=db_session,
             project_id=project_id,
@@ -570,12 +670,40 @@ def handle_trigger_build(request: Request) -> Response:
         body = _decode_json_object_or_abort(request=request)
         inputs = _build_run_inputs(request=request, body=body)
 
+        # Capability-based eligible-pod selection -- the same set the
+        # test orchestrator narrows by capability match. No enrolled
+        # pod with an active client registration => 409, exactly as
+        # test runs answer.
+        candidates = _build_eligible_pod_candidates(
+            db_session=db_session,
+            project_id=project_id,
+        )
+        if len(candidates) == 0:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=(
+                    "No enrolled pod matches the build job's "
+                    "requirements -- enroll a client/pod first."
+                ),
+                extensions={
+                    "project_id": project_id,
+                    "reason": "no_eligible_pod",
+                },
+            )
+
         actor_id: Optional[str] = None
         principal_user_id = getattr(principal, "user_id", None)
         if principal_user_id is not None:
             actor_id = str(principal_user_id)
 
-        aspects = build_service.BuildTriggerAspects(actor_id=actor_id)
+        project_slug = getattr(project_row, "slug", "") or ""
+
+        aspects = build_service.BuildTriggerAspects(
+            actor_id=actor_id,
+            candidates=candidates,
+            project_slug=str(project_slug),
+        )
 
         try:
             view = build_service.trigger_run(
@@ -598,6 +726,22 @@ def handle_trigger_build(request: Request) -> Response:
                 status=422,
                 detail=str(xcpt),
                 extensions={"runner_kind": inputs.runner_kind},
+            )
+            view = None  # unreachable
+        except BuildDispatchUnavailableError as xcpt:
+            _abort_problem(
+                request=request,
+                status=503,
+                detail=str(xcpt),
+                extensions={"reason": "dispatch_not_configured"},
+            )
+            view = None  # unreachable
+        except BuildDispatchFailedError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={"reason": "dispatch_failed"},
             )
             view = None  # unreachable
 
@@ -872,10 +1016,10 @@ def register_build_runs_routes(*, app: Any, version_prefix: str) -> None:
         base + BUILDS_PATH_SUFFIX + "/{build_id}/artifacts", methods=["GET"],
     )(handle_list_build_artifacts)
 
-    _LOGGER.warning(
-        "pychestrate.builds.routes.dispatch_not_wired: POST /builds"
-        " persists a build run in PENDING; the Layer-5 dispatch"
-        " handoff is M2 work (orchestration.build.service.trigger_run)."
+    _LOGGER.info(
+        "pychestrate.builds.routes.dispatch_wired: POST /builds"
+        " dispatches a job_kind=build JobEnvelope through the wired"
+        " JobDispatcher (orchestration.build.service.trigger_run)."
     )
     return
 

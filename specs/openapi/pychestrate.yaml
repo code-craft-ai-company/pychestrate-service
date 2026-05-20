@@ -4103,6 +4103,16 @@ components:
         job_id: { type: string, format: uuid }
         job_name: { type: string }
         job_type: { type: string }
+        job_kind:
+          type: string
+          enum: [test, build, provision]
+          default: test
+          description: |
+            Job-class discriminator. The client branches on this
+            before resolving the kind-specific runner; `params` then
+            carries the kind-specific payload. Optional for backward
+            compatibility -- envelopes that omit it are treated as
+            `test`.
         pipeline:
           nullable: true
           $ref: '#/components/schemas/JobPipelineRef'
@@ -4751,6 +4761,23 @@ components:
         state:
           type: string
           enum: [pending, running, completed, failed, cancelled]
+        run_state:
+          type: string
+          nullable: true
+          description: |
+            Current state of the run-state machine row driving this
+            build's dispatch lifecycle (`pending`, `dispatching`,
+            `dispatched`, ...). `null` when the build was triggered
+            before dispatch wiring landed. After a successful trigger
+            this reads `dispatching`.
+        dispatch_attempt_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            The dispatch-attempt UUID recorded when the build job
+            envelope was handed to the transport. `null` until the
+            build has been dispatched.
         layer5_run_id:
           type: string
           format: uuid
