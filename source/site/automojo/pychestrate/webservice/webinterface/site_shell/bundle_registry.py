@@ -165,6 +165,12 @@ def install_default_bundles() -> None:
           actions, provisioning detail with plan summary), loaded
           only on ``/environments``, ``/provisioning-runs`` and
           their sub-paths.
+        * ``pyc-secrets-bundle`` -- prefix ``/secrets`` -- secrets
+          sidebar registration plus the ``<pyc-secrets>`` view
+          (scope-aware Org / Project / User secret-metadata table,
+          create form, per-secret reveal / rotate / delete
+          actions), loaded only on ``/secrets`` and ``/secrets/*``
+          paths.
 
         :returns: None.
     """
@@ -180,6 +186,9 @@ def install_default_bundles() -> None:
     )
     register_bundle(
         route_prefix="/provisioning-runs", bundle_name="pyc-infra-bundle"
+    )
+    register_bundle(
+        route_prefix="/secrets", bundle_name="pyc-secrets-bundle"
     )
     return
 
