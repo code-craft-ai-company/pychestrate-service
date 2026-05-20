@@ -1,0 +1,1446 @@
+
+{
+    "name": "<session>",
+    "instance": "(not-set)",
+    "parent": null,
+    "rtype": "JOB"
+}
+{
+    "name": "automojo",
+    "instance": "eb992610-ede0-41ad-a879-f5fa32ebb9f1",
+    "parent": "(not-set)",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests",
+    "instance": "873b5bff-cd0c-448c-9fbb-ca4962521f30",
+    "parent": "eb992610-ede0-41ad-a879-f5fa32ebb9f1",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost",
+    "instance": "67128c74-6b3d-4640-8897-1025d684edfb",
+    "parent": "873b5bff-cd0c-448c-9fbb-ca4962521f30",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate",
+    "instance": "dc742b38-d8bb-4f98-aac4-f531bd3c9b32",
+    "parent": "67128c74-6b3d-4640-8897-1025d684edfb",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice",
+    "instance": "e0625263-517d-42a4-8502-dcfe27a408f7",
+    "parent": "dc742b38-d8bb-4f98-aac4-f531bd3c9b32",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12",
+    "instance": "eda569a4-8376-42a2-85ab-cfba1db47634",
+    "parent": "e0625263-517d-42a4-8502-dcfe27a408f7",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell",
+    "instance": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "parent": "eda569a4-8376-42a2-85ab-cfba1db47634",
+    "rtype": "TEST_CONTAINER"
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_blast_radius_guards_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "181e6e6a-d423-450c-8580-a8d23963e1f9",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T10:48:16.284220",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_blast_radius_guards_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "181e6e6a-d423-450c-8580-a8d23963e1f9",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T10:48:16.284220",
+    "stop": "2026-05-20T10:48:16.420002",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value evaluated to False.\\nFOUND: False'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 211,
+                            "scope": "assert_true"
+                        },
+                        "call": "assert_true(found=False, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 166,
+                            "scope": "_assert_shell_route"
+                        },
+                        "call": "_assert_shell_route()",
+                        "code": [
+                            "133: def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:",
+                            "134:     \"\"\"",
+                            "135:         Log in as admin, fetch a shell-served route, and assert it",
+                            "136:         renders inside ``<pyc-site-shell>`` and imports the",
+                            "137:         supplied feature bundle.",
+                            "138: ",
+                            "139:         :param route_path: Shell route to fetch (e.g. ``/webhooks``).",
+                            "140:         :param bundle_name: Feature bundle base name expected in a",
+                            "141:                             ``<script>`` tag.",
+                            "142: ",
+                            "143:         :returns: None.",
+                            "144:     \"\"\"",
+                            "145:     login_name, password = _resolve_admin_credentials()",
+                            "146: ",
+                            "147:     with httpx.Client(",
+                            "148:             base_url=BASE_URL,",
+                            "149:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "150:             follow_redirects=True,",
+                            "151:         ) as client:",
+                            "152:         _login_admin(",
+                            "153:             client=client,",
+                            "154:             login_name=login_name,",
+                            "155:             password=password,",
+                            "156:         )",
+                            "157:         response = client.get(route_path)",
+                            "158: ",
+                            "159:     testbase.assert_equal(response.status_code, 200)",
+                            "160:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "161:     testbase.assert_true(\"text/html\" in content_type)",
+                            "162: ",
+                            "163:     body = response.text",
+                            "164:     testbase.assert_true(\"<pyc-site-shell\" in body)",
+                            "165:     bundle_src = \"/static/javascript/dist/{}.js\".format(bundle_name)",
+                            "166:     testbase.assert_true(bundle_src in body)",
+                            "167:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 203,
+                            "scope": "test_blast_radius_guards_page_renders_inside_site_shell"
+                        },
+                        "call": "test_blast_radius_guards_page_renders_inside_site_shell()",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 107,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 104,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 90,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 80,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 70,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 60,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 50,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 40,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 30,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x1072b4500>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x1052502c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell'], excludes=[], output='./.output-p21e', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1058c3bc0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x1056d8830>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', '.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell', '--output=./.output-p21e'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_ops_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d09ea43-488a-4c97-b646-c6883a4f4856",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T10:48:16.421634",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_ops_bundle_is_served_as_javascript",
+    "monikers": [],
+    "pivots": {},
+    "instance": "6d09ea43-488a-4c97-b646-c6883a4f4856",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T10:48:16.421634",
+    "stop": "2026-05-20T10:48:16.446302",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value did not match expected value:\\nEXPECTED:\\nEXPECTED: 200\\nFOUND: 404'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 142,
+                            "scope": "assert_equal"
+                        },
+                        "call": "assert_equal(found=404, expected=200, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 188,
+                            "scope": "_assert_bundle_served_as_javascript"
+                        },
+                        "call": "_assert_bundle_served_as_javascript()",
+                        "code": [
+                            "170: def _assert_bundle_served_as_javascript(*, bundle_name: str) -> None:",
+                            "171:     \"\"\"",
+                            "172:         Assert a prebuilt feature bundle is reachable over the",
+                            "173:         static-files surface with a JavaScript content type.",
+                            "174: ",
+                            "175:         :param bundle_name: Feature bundle base name.",
+                            "176: ",
+                            "177:         :returns: None.",
+                            "178:     \"\"\"",
+                            "179:     with httpx.Client(",
+                            "180:             base_url=BASE_URL,",
+                            "181:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "182:             follow_redirects=False,",
+                            "183:         ) as client:",
+                            "184:         response = client.get(",
+                            "185:             \"/static/javascript/dist/{}.js\".format(bundle_name)",
+                            "186:         )",
+                            "187: ",
+                            "188:     testbase.assert_equal(response.status_code, 200)",
+                            "189:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "190:     testbase.assert_true(\"javascript\" in content_type)",
+                            "191:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 265,
+                            "scope": "test_ops_bundle_is_served_as_javascript"
+                        },
+                        "call": "test_ops_bundle_is_served_as_javascript()",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 116,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 113,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 90,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 80,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 70,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 60,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 50,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 40,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 30,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x1072b4500>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x1052502c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell'], excludes=[], output='./.output-p21e', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1058c3bc0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x1056d8830>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', '.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell', '--output=./.output-p21e'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_release_channels_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c48bbe34-e2d2-4871-9d56-09280eaa784c",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T10:48:16.447212",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_release_channels_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "c48bbe34-e2d2-4871-9d56-09280eaa784c",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T10:48:16.447212",
+    "stop": "2026-05-20T10:48:16.531966",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value evaluated to False.\\nFOUND: False'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 211,
+                            "scope": "assert_true"
+                        },
+                        "call": "assert_true(found=False, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 166,
+                            "scope": "_assert_shell_route"
+                        },
+                        "call": "_assert_shell_route()",
+                        "code": [
+                            "133: def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:",
+                            "134:     \"\"\"",
+                            "135:         Log in as admin, fetch a shell-served route, and assert it",
+                            "136:         renders inside ``<pyc-site-shell>`` and imports the",
+                            "137:         supplied feature bundle.",
+                            "138: ",
+                            "139:         :param route_path: Shell route to fetch (e.g. ``/webhooks``).",
+                            "140:         :param bundle_name: Feature bundle base name expected in a",
+                            "141:                             ``<script>`` tag.",
+                            "142: ",
+                            "143:         :returns: None.",
+                            "144:     \"\"\"",
+                            "145:     login_name, password = _resolve_admin_credentials()",
+                            "146: ",
+                            "147:     with httpx.Client(",
+                            "148:             base_url=BASE_URL,",
+                            "149:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "150:             follow_redirects=True,",
+                            "151:         ) as client:",
+                            "152:         _login_admin(",
+                            "153:             client=client,",
+                            "154:             login_name=login_name,",
+                            "155:             password=password,",
+                            "156:         )",
+                            "157:         response = client.get(route_path)",
+                            "158: ",
+                            "159:     testbase.assert_equal(response.status_code, 200)",
+                            "160:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "161:     testbase.assert_true(\"text/html\" in content_type)",
+                            "162: ",
+                            "163:     body = response.text",
+                            "164:     testbase.assert_true(\"<pyc-site-shell\" in body)",
+                            "165:     bundle_src = \"/static/javascript/dist/{}.js\".format(bundle_name)",
+                            "166:     testbase.assert_true(bundle_src in body)",
+                            "167:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 249,
+                            "scope": "test_release_channels_page_renders_inside_site_shell"
+                        },
+                        "call": "test_release_channels_page_renders_inside_site_shell()",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 125,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 122,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 90,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 80,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 70,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 60,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 50,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 40,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 30,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x1072b4500>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x1052502c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell'], excludes=[], output='./.output-p21e', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1058c3bc0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x1056d8830>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', '.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell', '--output=./.output-p21e'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_slos_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "b88eb1cc-4d78-459b-9c26-708ff9f0ef38",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T10:48:16.532963",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_slos_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "b88eb1cc-4d78-459b-9c26-708ff9f0ef38",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T10:48:16.532963",
+    "stop": "2026-05-20T10:48:16.621905",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value evaluated to False.\\nFOUND: False'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 211,
+                            "scope": "assert_true"
+                        },
+                        "call": "assert_true(found=False, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 166,
+                            "scope": "_assert_shell_route"
+                        },
+                        "call": "_assert_shell_route()",
+                        "code": [
+                            "133: def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:",
+                            "134:     \"\"\"",
+                            "135:         Log in as admin, fetch a shell-served route, and assert it",
+                            "136:         renders inside ``<pyc-site-shell>`` and imports the",
+                            "137:         supplied feature bundle.",
+                            "138: ",
+                            "139:         :param route_path: Shell route to fetch (e.g. ``/webhooks``).",
+                            "140:         :param bundle_name: Feature bundle base name expected in a",
+                            "141:                             ``<script>`` tag.",
+                            "142: ",
+                            "143:         :returns: None.",
+                            "144:     \"\"\"",
+                            "145:     login_name, password = _resolve_admin_credentials()",
+                            "146: ",
+                            "147:     with httpx.Client(",
+                            "148:             base_url=BASE_URL,",
+                            "149:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "150:             follow_redirects=True,",
+                            "151:         ) as client:",
+                            "152:         _login_admin(",
+                            "153:             client=client,",
+                            "154:             login_name=login_name,",
+                            "155:             password=password,",
+                            "156:         )",
+                            "157:         response = client.get(route_path)",
+                            "158: ",
+                            "159:     testbase.assert_equal(response.status_code, 200)",
+                            "160:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "161:     testbase.assert_true(\"text/html\" in content_type)",
+                            "162: ",
+                            "163:     body = response.text",
+                            "164:     testbase.assert_true(\"<pyc-site-shell\" in body)",
+                            "165:     bundle_src = \"/static/javascript/dist/{}.js\".format(bundle_name)",
+                            "166:     testbase.assert_true(bundle_src in body)",
+                            "167:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 218,
+                            "scope": "test_slos_page_renders_inside_site_shell"
+                        },
+                        "call": "test_slos_page_renders_inside_site_shell()",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 134,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 131,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 90,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 80,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 70,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 60,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 50,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 40,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 30,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x1072b4500>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x1052502c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell'], excludes=[], output='./.output-p21e', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1058c3bc0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x1056d8830>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', '.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell', '--output=./.output-p21e'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_webhooks_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "1dc340f1-6cd9-45cd-ad4c-0df8cf31cb18",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "UNSET",
+    "start": "2026-05-20T10:48:16.623036",
+    "stop": ""
+}
+{
+    "name": "automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell#test_webhooks_page_renders_inside_site_shell",
+    "monikers": [],
+    "pivots": {},
+    "instance": "1dc340f1-6cd9-45cd-ad4c-0df8cf31cb18",
+    "parent": "e86352b5-99a0-476e-9547-5d4436e50d63",
+    "rtype": "TEST",
+    "result": "FAILED",
+    "start": "2026-05-20T10:48:16.623036",
+    "stop": "2026-05-20T10:48:16.703834",
+    "detail": {
+        "errors": [],
+        "failures": [
+            {
+                "extype": "AssertionError",
+                "exargs": [
+                    "'Result verification failed because the found value evaluated to False.\\nFOUND: False'"
+                ],
+                "traces": [
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/verification.py",
+                            "lineno": 211,
+                            "scope": "assert_true"
+                        },
+                        "call": "assert_true(found=False, api=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 166,
+                            "scope": "_assert_shell_route"
+                        },
+                        "call": "_assert_shell_route()",
+                        "code": [
+                            "133: def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:",
+                            "134:     \"\"\"",
+                            "135:         Log in as admin, fetch a shell-served route, and assert it",
+                            "136:         renders inside ``<pyc-site-shell>`` and imports the",
+                            "137:         supplied feature bundle.",
+                            "138: ",
+                            "139:         :param route_path: Shell route to fetch (e.g. ``/webhooks``).",
+                            "140:         :param bundle_name: Feature bundle base name expected in a",
+                            "141:                             ``<script>`` tag.",
+                            "142: ",
+                            "143:         :returns: None.",
+                            "144:     \"\"\"",
+                            "145:     login_name, password = _resolve_admin_credentials()",
+                            "146: ",
+                            "147:     with httpx.Client(",
+                            "148:             base_url=BASE_URL,",
+                            "149:             timeout=REQUEST_TIMEOUT_SECONDS,",
+                            "150:             follow_redirects=True,",
+                            "151:         ) as client:",
+                            "152:         _login_admin(",
+                            "153:             client=client,",
+                            "154:             login_name=login_name,",
+                            "155:             password=password,",
+                            "156:         )",
+                            "157:         response = client.get(route_path)",
+                            "158: ",
+                            "159:     testbase.assert_equal(response.status_code, 200)",
+                            "160:     content_type = response.headers.get(\"content-type\", \"\")",
+                            "161:     testbase.assert_true(\"text/html\" in content_type)",
+                            "162: ",
+                            "163:     body = response.text",
+                            "164:     testbase.assert_true(\"<pyc-site-shell\" in body)",
+                            "165:     bundle_src = \"/static/javascript/dist/{}.js\".format(bundle_name)",
+                            "166:     testbase.assert_true(bundle_src in body)",
+                            "167:     return"
+                        ],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo/tests/singlehost/pychestrate/webservice/phase12/test_p21e_ops_ui_in_shell.py",
+                            "lineno": 233,
+                            "scope": "test_webhooks_page_renders_inside_site_shell"
+                        },
+                        "call": "test_webhooks_page_renders_inside_site_shell()",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 143,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 140,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12_test_p21e_ops_ui_in_shell(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 90,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice_phase12(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 80,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate_webservice"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate_webservice(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 70,
+                            "scope": "scope_automojo_tests_singlehost_pychestrate"
+                        },
+                        "call": "scope_automojo_tests_singlehost_pychestrate(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 60,
+                            "scope": "scope_automojo_tests_singlehost"
+                        },
+                        "call": "scope_automojo_tests_singlehost(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 50,
+                            "scope": "scope_automojo_tests"
+                        },
+                        "call": "scope_automojo_tests(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 40,
+                            "scope": "scope_automojo"
+                        },
+                        "call": "scope_automojo(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.output-p21e/testrun_sequence.py",
+                            "lineno": 30,
+                            "scope": "session"
+                        },
+                        "call": "session(sequencer=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/sequencing/testsequencer.py",
+                            "lineno": 1348,
+                            "scope": "execute_tests"
+                        },
+                        "call": "execute_tests(self=<automojo.testbase.sequencing.testsequencer.TestSequencer object at 0x1056acf80>, runid='(not-set)', recorder=<automojo.testbase.results.recorders.jsonresultrecorder.JsonResultRecorder object at 0x1072b4500>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/testjob.py",
+                            "lineno": 315,
+                            "scope": "execute"
+                        },
+                        "call": "execute(self=<automojo.testbase.testjob.DefaultTestJob object at 0x1052502c0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/testbase/cli/cmdtree/testing/run.py",
+                            "lineno": 289,
+                            "scope": "command_testbase_testing_run"
+                        },
+                        "call": "command_testbase_testing_run(root='.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', includes=['automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell'], excludes=[], output='./.output-p21e', start=None, runid=None, branch=None, build=None, flavor=None, job_id=None, job_initiator=None, job_label=None, job_name=None, job_owner=None, job_seed=None, job_tag=None, console_level=None, logfile_level=None, debugger=None, breakpoints=[], debug_port=None, debug_port_range=None, debug_log_level=None, prerun_diagnostic=False, postrun_diagnostic=False, diagnostic_level=None, include_marker_exp=[], exclude_marker_exp=[], timeout=None)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/command.py",
+                            "lineno": 266,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.command.Command object at 0x1058c3bc0>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.groupingcommand.GroupingCommand object at 0x1056d8830>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/groupingcommand.py",
+                            "lineno": 109,
+                            "scope": "call_command"
+                        },
+                        "call": "call_command(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 100,
+                            "scope": "_command_entry"
+                        },
+                        "call": "_command_entry(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>, prog_name='.venv/bin/testbase', args=['testing', 'run', '--root', '.claude/worktrees/agent-a2071e00091488aa9/source/testroots/automojo', '--includes=automojo.tests.singlehost.pychestrate.webservice.phase12.test_p21e_ops_ui_in_shell', '--output=./.output-p21e'])",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/lib/python3.12/site-packages/automojo/arcli/model/entrycommand.py",
+                            "lineno": 124,
+                            "scope": "__call__"
+                        },
+                        "call": "__call__(self=<automojo.arcli.model.entrycommand.EntryCommand object at 0x1058dc860>)",
+                        "code": [],
+                        "context": null
+                    },
+                    {
+                        "origin": {
+                            "file": "/Users/myron/repos/pychestrate-service/.venv/bin/testbase",
+                            "lineno": 8,
+                            "scope": "<module>"
+                        },
+                        "call": "<module>()",
+                        "code": [],
+                        "context": null
+                    }
+                ]
+            }
+        ],
+        "warnings": []
+    }
+}
