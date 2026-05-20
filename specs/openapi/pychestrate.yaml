@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.12-preview
+  version: 0.0.13-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -118,6 +118,10 @@ tags:
     description: Artifact listings and browsing for a run.
   - name: builds
     description: Trigger and read build runs for a project.
+  - name: pipelines
+    description: >-
+      Pipeline-definition documents (the DAG of build/test/script
+      stages) plus DAG validation and matrix-sharding preview.
   - name: source_integrations
     description: Per-project source-integration (SCM) configuration.
   - name: environments
@@ -2325,6 +2329,161 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # pipelines
+  # =====================================================================
+
+  /projects/{project_id}/pipelines:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [pipelines]
+      summary: List pipeline definitions for a project.
+      operationId: pipelines_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated page of pipeline-definition documents
+        cached for the project, newest-cached first. A pipeline
+        definition is the parsed + DAG-validated + canonicalized
+        document; its `pipeline_id` is the canonical-document
+        SHA-256 digest.
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of pipeline definitions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineDefinitionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [pipelines]
+      summary: Create or upsert a pipeline definition.
+      operationId: pipelines_upsert
+      x-pychestrate-status: planned
+      description: |
+        Parses, DAG-validates (cycle detection + stage-reference
+        checks), canonicalizes, and caches a pipeline-definition
+        document. The definition is content-addressed -- the
+        `pipeline_id` is the canonical-document SHA-256 digest, so
+        a `POST` with identical content is idempotent and no
+        `PATCH` is offered (a content edit is just another upsert).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PipelineDefinitionCreateRequest' }
+      responses:
+        '200':
+          description: Pipeline definition upserted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineDefinition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/pipelines/{pipeline_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: pipeline_id
+        required: true
+        schema: { type: string }
+        description: Canonical-document SHA-256 digest of the definition.
+    get:
+      tags: [pipelines]
+      summary: Read a single pipeline definition.
+      operationId: pipelines_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Pipeline definition.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineDefinition' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [pipelines]
+      summary: Delete a pipeline definition.
+      operationId: pipelines_delete
+      x-pychestrate-status: planned
+      responses:
+        '204': { description: Pipeline definition deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/pipelines:validate:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    post:
+      tags: [pipelines]
+      summary: Validate a pipeline-definition DAG.
+      operationId: pipelines_validate
+      x-pychestrate-status: planned
+      description: |
+        Pure DAG validation of a supplied pipeline-definition
+        document -- parsing, cycle detection, and stage-reference
+        checks. Writes no rows and emits no events. The document
+        is supplied entirely in the request body, so this is a
+        project-scoped action with no `pipeline_id`. A well-formed
+        document returns `200` with the topological stage order; a
+        document with a cycle or unknown stage reference returns
+        `422` with the issue list.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PipelineDefinitionCreateRequest' }
+      responses:
+        '200':
+          description: Pipeline definition is a valid DAG.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DagValidationResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/pipelines:expand-matrix:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    post:
+      tags: [pipelines]
+      summary: Preview a matrix expansion into shards.
+      operationId: pipelines_expand_matrix
+      x-pychestrate-status: planned
+      description: |
+        Pure compute/preview surface: expands a supplied matrix
+        spec into the concrete shard set the named sharding
+        strategy would produce. Writes no rows, emits no events,
+        and triggers nothing. The matrix is supplied entirely in
+        the request body, so this is a project-scoped action with
+        no `pipeline_id`. The default strategy is `cartesian`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MatrixExpandRequest' }
+      responses:
+        '200':
+          description: Expanded shard set preview.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ShardExpansion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # metrics
@@ -4706,6 +4865,195 @@ components:
           description: |
             Manifest the entries belong to, or `null` when the
             build run has not synthesized a manifest yet.
+
+    # ----------------------------------------------------------------
+    # pipelines (6-pipeline-definition + 6-matrix-sharding PR p20k)
+    # ----------------------------------------------------------------
+
+    PipelineStep:
+      type: object
+      description: |
+        One step inside a pipeline stage. Matches `StepSpec` in
+        `orchestration.pipelines.definition.parser`.
+      required: [step_id, kind_name]
+      properties:
+        step_id: { type: string }
+        kind_name:
+          type: string
+          description: Registered `pipeline_step_kind` factory name.
+        uses:
+          type: string
+          nullable: true
+          description: Optional reference for extension step kinds.
+        inputs:
+          type: object
+          additionalProperties: true
+          description: Free-form inputs validated by the step kind.
+
+    PipelineStage:
+      type: object
+      description: |
+        One stage of a pipeline DAG. Matches `StageSpec` in
+        `orchestration.pipelines.definition.parser`.
+      required: [stage_id, steps]
+      properties:
+        stage_id: { type: string }
+        when_clause:
+          type: string
+          enum: [succeeded, failed, always]
+        needs:
+          type: array
+          items: { type: string }
+          description: Stage ids this stage depends on.
+        steps:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineStep' }
+
+    PipelineDefinition:
+      type: object
+      description: |
+        A parsed + DAG-validated + canonicalized pipeline-definition
+        document. Matches the `PipelineDocumentCache` row in
+        `orchestration.pipelines.definition.models`. The pipeline
+        domain has no separate `PipelineDefinition` ORM table; the
+        cached canonical document is the definition resource.
+      required:
+        - pipeline_id
+        - project_id
+        - name
+        - schema_version
+        - stages
+      properties:
+        pipeline_id:
+          type: string
+          description: Canonical-document SHA-256 digest.
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        schema_version: { type: integer }
+        commit_sha: { type: string }
+        filename: { type: string }
+        stages:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineStage' }
+        cached_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PipelineDefinitionPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/PipelineDefinition' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    PipelineDefinitionCreateRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/pipelines` and
+        `:validate`. `document` is the raw pipeline document, sent
+        either as a YAML/JSON string or as a JSON object.
+      required: [commit_sha, filename, document]
+      properties:
+        commit_sha:
+          type: string
+          description: Commit SHA the definition is bound to.
+        filename:
+          type: string
+          description: Document filename; selects the YAML/JSON parser.
+        document:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+          description: The raw pipeline-definition document.
+
+    DagValidationResult:
+      type: object
+      description: |
+        Outcome of a pure pipeline-definition DAG validation.
+      required: [valid, stage_count]
+      properties:
+        valid:
+          type: boolean
+          description: True when parse + DAG checks all pass.
+        stage_count: { type: integer }
+        topological_order:
+          type: array
+          items: { type: string }
+          description: Stage ids in a stable topological order.
+        issues:
+          type: array
+          items: { type: string }
+          description: Validation issues; empty when `valid` is true.
+
+    MatrixDimensionFilter:
+      type: object
+      description: |
+        A fully-specified dimension tuple used in `includes` /
+        `excludes`.
+      additionalProperties: { type: string }
+
+    MatrixSpec:
+      type: object
+      description: |
+        A caller-provided matrix specification. Matches `MatrixSpec`
+        in `orchestration.pipelines.sharding.expansion`.
+      required: [dimensions]
+      properties:
+        dimensions:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          description: Dimension name to its non-empty value list.
+        includes:
+          type: array
+          items: { $ref: '#/components/schemas/MatrixDimensionFilter' }
+        excludes:
+          type: array
+          items: { $ref: '#/components/schemas/MatrixDimensionFilter' }
+
+    MatrixExpandRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/pipelines/{id}:expand-matrix`.
+      required: [matrix]
+      properties:
+        matrix: { $ref: '#/components/schemas/MatrixSpec' }
+        strategy_name:
+          type: string
+          description: Registered sharding strategy. Defaults to `cartesian`.
+
+    ShardExpansionShard:
+      type: object
+      description: One shard of a non-persisted matrix-expansion preview.
+      required: [shard_id, parallel_group, sequence_in_group]
+      properties:
+        shard_id:
+          type: string
+          description: 16-char hex digest of the dimension tuple.
+        parallel_group: { type: string }
+        sequence_in_group: { type: integer }
+        dimension_values:
+          type: object
+          additionalProperties: { type: string }
+
+    ShardExpansion:
+      type: object
+      description: |
+        A non-persisted matrix-expansion preview. Writes no rows
+        and emits no events.
+      required: [strategy_name, shard_count, shards]
+      properties:
+        strategy_name: { type: string }
+        matrix_spec_canonical_sha256: { type: string }
+        shard_count: { type: integer }
+        shards:
+          type: array
+          items: { $ref: '#/components/schemas/ShardExpansionShard' }
 
     # ----------------------------------------------------------------
     # source_integrations (6-source-integrations PR p20a)

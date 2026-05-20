@@ -235,3 +235,94 @@ def find_document_cache(
         .first()
     )
     return rtnval
+
+
+def list_document_cache_for_project(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        limit: int
+    ) -> List[PipelineDocumentCache]:
+    """
+        Return cached pipeline-definition documents for a project,
+        newest-cached first, capped at ``limit`` rows.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param limit: Maximum number of rows to return.
+
+        :returns: List of :class:`PipelineDocumentCache` rows.
+    """
+    rows = (
+        db_session.query(PipelineDocumentCache)
+        .filter(PipelineDocumentCache.project_id == project_id)
+        .order_by(PipelineDocumentCache.cached_at.desc())
+        .limit(limit)
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
+def delete_document_cache(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        commit_sha: str,
+        filename: str
+    ) -> bool:
+    """
+        Delete a cached pipeline-definition document keyed by
+        ``(project_id, commit_sha, filename)``.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param commit_sha: Commit SHA component of the cache key.
+        :param filename: Filename component of the cache key.
+
+        :returns: True when a row was deleted, False on a miss.
+    """
+    row = (
+        db_session.query(PipelineDocumentCache)
+        .filter(PipelineDocumentCache.project_id == project_id)
+        .filter(PipelineDocumentCache.commit_sha == commit_sha)
+        .filter(PipelineDocumentCache.filename == filename)
+        .first()
+    )
+    if row is None:
+        rtnval = False
+        return rtnval
+    db_session.delete(row)
+    db_session.flush()
+    rtnval = True
+    return rtnval
+
+
+def find_document_cache_by_digest(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        pipeline_digest_sha256: str
+    ) -> Optional[PipelineDocumentCache]:
+    """
+        Locate a cached pipeline-definition document for a project
+        by its canonical-document digest. The digest is the stable
+        ``pipeline_id`` exposed over the REST surface.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+        :param pipeline_digest_sha256: Canonical-document SHA-256.
+
+        :returns: Matching row or ``None``.
+    """
+    rtnval = (
+        db_session.query(PipelineDocumentCache)
+        .filter(PipelineDocumentCache.project_id == project_id)
+        .filter(
+            PipelineDocumentCache.pipeline_digest_sha256
+            == pipeline_digest_sha256
+        )
+        .order_by(PipelineDocumentCache.cached_at.desc())
+        .first()
+    )
+    return rtnval

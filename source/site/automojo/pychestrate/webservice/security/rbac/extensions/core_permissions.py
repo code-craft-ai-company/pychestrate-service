@@ -98,6 +98,19 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:builds.create": (
         "Trigger new build runs via the REST surface"
     ),
+    # Operator-facing read access for the pipeline-definition REST
+    # surface (GET /api/v1/projects/{id}/pipelines, DAG validation,
+    # and the matrix-expand preview). Introduced by
+    # 6-pipeline-definition + 6-matrix-sharding PR p20k.
+    "system:pipelines.read": (
+        "Read pipeline definitions, validate DAGs, and preview"
+        " matrix expansion via the REST surface"
+    ),
+    # Operator/CI write access for pipeline-definition upsert and
+    # delete. Introduced by 6-pipeline-definition PR p20k.
+    "system:pipelines.write": (
+        "Create, update, and delete pipeline definitions via the REST surface"
+    ),
     # Operator-facing read access for the source-integrations REST
     # surface (GET /api/v1/projects/{id}/source-integrations).
     # Introduced by 6-source-integrations PR p20a.

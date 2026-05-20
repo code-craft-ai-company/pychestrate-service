@@ -83,6 +83,17 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:builds.create",
             effect=PermissionEffect.ALLOW,
         ),
+        # 6-pipeline-definition + 6-matrix-sharding PR p20k:
+        # pipeline-definition + matrix-sharding REST surface grants
+        # for the admin role.
+        PermissionGrant(
+            permission_key="system:pipelines.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:pipelines.write",
+            effect=PermissionEffect.ALLOW,
+        ),
         PermissionGrant(
             permission_key="system:source_integrations.read",
             effect=PermissionEffect.ALLOW,
