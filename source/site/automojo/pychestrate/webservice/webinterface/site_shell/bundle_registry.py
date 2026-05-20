@@ -156,6 +156,15 @@ def install_default_bundles() -> None:
           ``<pyc-build-detail>`` views (builds table, trigger-build
           action, build detail with artifacts), loaded only on
           ``/builds`` and ``/builds/*`` paths.
+        * ``pyc-infra-bundle`` -- prefixes ``/environments`` and
+          ``/provisioning-runs`` -- infrastructure / provisioning
+          sidebar registration plus the ``<pyc-environments>``,
+          ``<pyc-provisioning-list>`` and
+          ``<pyc-provisioning-detail>`` views (environments table
+          with drift status, provisioning-runs table, trigger
+          actions, provisioning detail with plan summary), loaded
+          only on ``/environments``, ``/provisioning-runs`` and
+          their sub-paths.
 
         :returns: None.
     """
@@ -166,6 +175,12 @@ def install_default_bundles() -> None:
         route_prefix="/test-catalog", bundle_name="pyc-catalog-bundle"
     )
     register_bundle(route_prefix="/builds", bundle_name="pyc-builds-bundle")
+    register_bundle(
+        route_prefix="/environments", bundle_name="pyc-infra-bundle"
+    )
+    register_bundle(
+        route_prefix="/provisioning-runs", bundle_name="pyc-infra-bundle"
+    )
     return
 
 
