@@ -66,6 +66,7 @@ from automojo.pychestrate.webservice.orchestration.build.errors import (
     BuildInputsInvalidError,
     BuildRunNotFoundError,
     BuildRunnerKindUnknownError,
+    BuildSourceIntegrationUnknownError,
 )
 from automojo.pychestrate.webservice.pods.models import (
     PodDefinition,
@@ -426,6 +427,7 @@ def _build_run_view_to_dict(view: Any) -> Dict[str, Any]:
         "inputs": dict(view.inputs or {}),
         "annotations": dict(view.annotations or {}),
         "toolchain": toolchain,
+        "source": getattr(view, "source", None),
     }
     return rtnval
 
@@ -629,6 +631,17 @@ def _build_run_inputs(
             )
         )
 
+    source_integration_id = body.get("source_integration_id", None)
+    if source_integration_id is not None:
+        if not isinstance(source_integration_id, str):
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'source_integration_id' must be a string.",
+            )
+        if len(source_integration_id) == 0:
+            source_integration_id = None
+
     rtnval = build_service.BuildRunInputs(
         runner_kind=runner_kind,
         runner_inputs=dict(runner_inputs),
@@ -636,6 +649,7 @@ def _build_run_inputs(
         toolchain=tuple(toolchain_entries),
         env=dict(env),
         annotations=dict(annotations),
+        source_integration_id=source_integration_id,
     )
     return rtnval
 
@@ -726,6 +740,16 @@ def handle_trigger_build(request: Request) -> Response:
                 status=422,
                 detail=str(xcpt),
                 extensions={"runner_kind": inputs.runner_kind},
+            )
+            view = None  # unreachable
+        except BuildSourceIntegrationUnknownError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={
+                    "source_integration_id": inputs.source_integration_id,
+                },
             )
             view = None  # unreachable
         except BuildDispatchUnavailableError as xcpt:

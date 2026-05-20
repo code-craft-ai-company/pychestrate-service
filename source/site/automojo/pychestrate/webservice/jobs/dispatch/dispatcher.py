@@ -59,6 +59,7 @@ from automojo.pychestrate.webservice.jobs.envelope import (
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
+    JobSourceRef,
     ScopedSecret,
     SignedJobEnvelope,
     build as build_envelope,
@@ -95,6 +96,10 @@ class DispatchRequestInputs:
         :param forwarding: Live progress / summary endpoints.
         :param deadline: Soft + hard deadlines.
         :param pipeline: Optional pipeline reference.
+        :param source: Optional :class:`JobSourceRef` carrying the
+                       structured source-integration reference for a
+                       build job. ``None`` when the job carries no
+                       resolved source integration.
         :param extension_claims: Extension-contributed claims (M1
                                  ignores them).
         :param candidates: Non-empty list of eligible targets. In
@@ -118,6 +123,7 @@ class DispatchRequestInputs:
     extension_claims: Optional[Dict[str, Any]] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
     job_kind: str = DEFAULT_JOB_KIND
+    source: Optional[JobSourceRef] = None
 
 
 @dataclass(frozen=True)
@@ -227,6 +233,7 @@ class JobDispatcher:
             pod_id=chosen.pod_id,
             issuer=inputs.issuer,
             pipeline=inputs.pipeline,
+            source=inputs.source,
             refs=inputs.refs,
             params=dict(inputs.params),
             scoped_secrets=tuple(inputs.scoped_secrets),

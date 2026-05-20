@@ -67,6 +67,44 @@ class JobRefs:
     commit_sha: str
 
 
+# The only source ``kind`` modeled today. The field is an enum so a
+# later PR can add non-git source kinds without a schema-version bump.
+SOURCE_KIND_GIT: str = "git"
+SUPPORTED_SOURCE_KINDS: Tuple[str, ...] = (SOURCE_KIND_GIT,)
+DEFAULT_SOURCE_KIND: str = SOURCE_KIND_GIT
+
+
+@dataclass(frozen=True)
+class JobSourceRef:
+    """
+        Structured source-integration reference carried on a build
+        envelope. Replaces the informal ``runner_inputs.git_url``
+        convention with a first-class block resolved from the
+        project's registered ``source-integration``.
+
+        :param kind: Source-integration kind discriminator. Only
+                     ``"git"`` is modeled today; the field is an
+                     enum so non-git kinds can be added later
+                     without a schema-version bump.
+        :param url: Clone / fetch URL for the source repository.
+        :param ref: Default ref (branch / tag) the build checks out.
+        :param integration_id: UUID of the registered
+                               ``source-integration`` the block was
+                               resolved from. Empty string when the
+                               build carried no integration.
+        :param credentials_ref: Symbolic secret reference (NOT the
+                                credential value) the client agent
+                                resolves to fetch a private
+                                repository. Empty string for a
+                                public repository.
+    """
+    kind: str
+    url: str
+    ref: str
+    integration_id: str
+    credentials_ref: str = ""
+
+
 @dataclass(frozen=True)
 class JobPipelineRef:
     """
@@ -180,6 +218,15 @@ class JobEnvelope:
                          ``"ansible-playbook"``, …).
         :param pipeline: Optional :class:`JobPipelineRef` when the
                          job is part of a pipeline.
+        :param source: Optional :class:`JobSourceRef` carrying the
+                       structured source-integration reference the
+                       build job clones from. ``None`` on envelopes
+                       that carry no resolved source integration
+                       (test / provision jobs, or build jobs that
+                       fall back to the client's
+                       ``runner_inputs.git_url`` convention) -- the
+                       field is optional so pre-source envelopes
+                       still parse.
         :param run_id: Server-assigned run UUID the client MUST echo
                        in progress and result submissions.
         :param client_id: Registered client UUID owning the pod.
@@ -219,6 +266,7 @@ class JobEnvelope:
     deadline: JobDeadline
     extension_claims: Dict[str, Any]
     job_kind: str = DEFAULT_JOB_KIND
+    source: Optional[JobSourceRef] = None
 
 
 REQUIRED_TOP_LEVEL_FIELDS: Tuple[str, ...] = (

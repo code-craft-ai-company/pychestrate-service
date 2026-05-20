@@ -64,6 +64,7 @@ from automojo.pychestrate.webservice.jobs.envelope import (
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
+    JobSourceRef,
 )
 from automojo.pychestrate.webservice.jobs.results import (
     SharedResultsBackend,
@@ -84,6 +85,7 @@ from automojo.pychestrate.webservice.orchestration.build.errors import (
     BuildInputsInvalidError,
     BuildRunNotFoundError,
     BuildRunnerKindUnknownError,
+    BuildSourceIntegrationUnknownError,
 )
 from automojo.pychestrate.webservice.orchestration.build.events import (
     BuildEventTopics,
@@ -101,6 +103,12 @@ from automojo.pychestrate.webservice.orchestration.build.repro_snapshot import (
     ReproSnapshot,
     compute_repro_digest,
 )
+from automojo.pychestrate.webservice.orchestration.source import (
+    service as source_service,
+)
+from automojo.pychestrate.webservice.orchestration.source.errors import (
+    ScmConfigNotFoundError,
+)
 
 
 BUILD_RUNNER_KIND_PROTOCOL: str = "build_runner_kind"
@@ -111,6 +119,9 @@ TERMINAL_STATES: Tuple[BuildRunState, ...] = (
     BuildRunState.CANCELLED,
 )
 BUILD_JOB_TYPE_PREFIX: str = "build-"
+# Reserved annotations key the resolved source reference is mirrored
+# under so the build read / list routes can echo the ``source`` block.
+BUILD_SOURCE_ANNOTATION_KEY: str = "__source_integration__"
 DEFAULT_BUILD_ISSUER: str = "pychestrate.example.com/0.6.0"
 DEFAULT_BUILD_SOFT_DEADLINE_SECONDS: int = 1800
 DEFAULT_BUILD_HARD_DEADLINE_SECONDS: int = 3600
@@ -182,6 +193,17 @@ class BuildRunInputs:
                     digest.
         :param annotations: Free-form metadata persisted on
                             the BuildRun.
+        :param source_integration_id: Optional UUID of a registered
+                                      ``source-integration``. When
+                                      supplied, the build service
+                                      resolves it into the structured
+                                      ``source`` block of the build
+                                      job envelope. ``None`` leaves
+                                      the envelope without a
+                                      ``source`` block -- the client
+                                      falls back to its
+                                      ``runner_inputs.git_url``
+                                      convention.
     """
     runner_kind: str
     runner_inputs: Mapping[str, Any] = field(default_factory=dict)
@@ -189,6 +211,7 @@ class BuildRunInputs:
     toolchain: Tuple[BuildToolchainEntry, ...] = ()
     env: Mapping[str, str] = field(default_factory=dict)
     annotations: Mapping[str, Any] = field(default_factory=dict)
+    source_integration_id: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -263,6 +286,7 @@ class BuildRunView:
     run_state: Optional[str] = None
     dispatch_attempt_id: Optional[str] = None
     envelope_id: Optional[str] = None
+    source: Optional[Dict[str, Any]] = None
 
 
 def trigger_run(
@@ -314,6 +338,15 @@ def trigger_run(
         err_msg = os.linesep.join(err_lines)
         raise BuildInputsInvalidError(err_msg) from None
 
+    # Resolve the registered source-integration -- if one was named --
+    # before any row is persisted so an unknown id fails the trigger
+    # cleanly. ``None`` leaves the envelope without a structured
+    # ``source`` block (client falls back to runner_inputs.git_url).
+    source_ref = _resolve_source_reference(
+        db_session=db_session,
+        source_integration_id=inputs.source_integration_id,
+    )
+
     snapshot = ReproSnapshot(
         input_files=dict(inputs.input_files),
         toolchain=tuple(inputs.toolchain),
@@ -324,6 +357,20 @@ def trigger_run(
     effective = aspects or BuildTriggerAspects()
     now = utc_now()
 
+    # The resolved source reference is persisted on the BuildRun
+    # ``annotations`` under a reserved key so it round-trips through
+    # the read / list routes -- the envelope ``source`` block is the
+    # authoritative copy, this is the durable mirror for diagnostics.
+    persisted_annotations = dict(inputs.annotations)
+    if source_ref is not None:
+        persisted_annotations[BUILD_SOURCE_ANNOTATION_KEY] = {
+            "kind": source_ref.kind,
+            "url": source_ref.url,
+            "ref": source_ref.ref,
+            "integration_id": source_ref.integration_id,
+            "credentials_ref": source_ref.credentials_ref,
+        }
+
     run_row = repository.insert_build_run(
         db_session=db_session,
         project_id=project_id,
@@ -333,7 +380,7 @@ def trigger_run(
         pipeline_run_id=effective.pipeline_run_id,
         pipeline_step_run_id=effective.pipeline_step_run_id,
         inputs=dict(inputs.runner_inputs),
-        annotations=dict(inputs.annotations),
+        annotations=persisted_annotations,
         started_at=now,
     )
     for entry in inputs.toolchain:
@@ -392,6 +439,7 @@ def trigger_run(
         inputs=inputs,
         aspects=effective,
         triggered_at=now,
+        source_ref=source_ref,
     )
 
     # Happy path: the build job envelope is queued for the target
@@ -446,7 +494,8 @@ def _dispatch_build_job(
         digest: str,
         inputs: BuildRunInputs,
         aspects: BuildTriggerAspects,
-        triggered_at: datetime
+        triggered_at: datetime,
+        source_ref: Optional[JobSourceRef] = None
     ):
     """
         Build a signed ``job_kind=build`` JobEnvelope describing the
@@ -471,6 +520,8 @@ def _dispatch_build_job(
         :param inputs: Caller-supplied :class:`BuildRunInputs`.
         :param aspects: Effective :class:`BuildTriggerAspects`.
         :param triggered_at: Trigger timestamp (deadline anchor).
+        :param source_ref: Optional resolved :class:`JobSourceRef`
+                            embedded as the envelope ``source`` block.
 
         :returns: The :class:`DispatchOutcome`.
         :raises: BuildDispatchUnavailableError, BuildDispatchFailedError.
@@ -531,6 +582,14 @@ def _dispatch_build_job(
             instance_id=run_id,
         )
 
+    # When a source integration resolved, its default ref drives the
+    # envelope branch; the caller's runner_inputs.branch still wins
+    # when it was set explicitly so a one-off branch override holds.
+    default_branch = "main"
+    if source_ref is not None:
+        default_branch = source_ref.ref
+    branch = str(inputs.runner_inputs.get("branch", default_branch))
+
     dispatch_inputs = DispatchRequestInputs(
         run_id=run_id,
         project_id=project_id,
@@ -540,12 +599,13 @@ def _dispatch_build_job(
         job_kind=JOB_KIND_BUILD,
         issuer=aspects.issuer,
         refs=JobRefs(
-            branch=str(inputs.runner_inputs.get("branch", "main")),
+            branch=branch,
             build=str(inputs.runner_inputs.get("build", "")),
             flavor=str(inputs.runner_inputs.get("flavor", "")),
             release=str(inputs.runner_inputs.get("release", "")),
             commit_sha=str(inputs.runner_inputs.get("commit_sha", "0" * 40)),
         ),
+        source=source_ref,
         params=build_spec,
         scoped_secrets=tuple(),
         results=JobResultsLocator(
@@ -587,6 +647,54 @@ def _dispatch_build_job(
         err_msg = os.linesep.join(err_lines)
         raise BuildDispatchFailedError(err_msg) from xcpt
 
+    return rtnval
+
+
+def _resolve_source_reference(
+        *,
+        db_session: DbSession,
+        source_integration_id: Optional[str]
+    ) -> Optional[JobSourceRef]:
+    """
+        Resolve a caller-supplied ``source_integration_id`` into the
+        structured :class:`JobSourceRef` the build job envelope
+        carries. Returns ``None`` when no integration was named so
+        the envelope carries no ``source`` block and the client falls
+        back to its ``runner_inputs.git_url`` convention.
+
+        :param db_session: Active SQLAlchemy session.
+        :param source_integration_id: Optional registered
+                                      source-integration UUID.
+
+        :returns: :class:`JobSourceRef` or ``None``.
+        :raises: BuildSourceIntegrationUnknownError when the id
+                 resolves to no registered source integration.
+    """
+    if source_integration_id is None or len(source_integration_id) == 0:
+        rtnval = None
+        return rtnval
+
+    try:
+        view = source_service.resolve_source_reference(
+            db_session=db_session,
+            integration_id=source_integration_id,
+        )
+    except ScmConfigNotFoundError as xcpt:
+        err_lines = ["Build trigger named an unknown source integration."]
+        err_lines.append("SOURCE_INTEGRATION_ID: {}".format(
+            source_integration_id,
+        ))
+        err_lines.append("DETAIL: {}".format(str(xcpt)))
+        err_msg = os.linesep.join(err_lines)
+        raise BuildSourceIntegrationUnknownError(err_msg) from xcpt
+
+    rtnval = JobSourceRef(
+        kind=view.kind,
+        url=view.url,
+        ref=view.ref,
+        integration_id=view.integration_id,
+        credentials_ref=view.credentials_ref,
+    )
     return rtnval
 
 
@@ -839,6 +947,11 @@ def _to_view(
         )
         for t in toolchain_rows
     )
+    all_annotations = dict(row.annotations or {})
+    source_block = all_annotations.pop(BUILD_SOURCE_ANNOTATION_KEY, None)
+    if isinstance(source_block, dict) is False:
+        source_block = None
+
     rtnval = BuildRunView(
         run_id=str(row.run_id),
         project_id=str(row.project_id),
@@ -863,12 +976,13 @@ def _to_view(
         finished_at=row.finished_at,
         final_state_reason=row.final_state_reason,
         inputs=dict(row.inputs or {}),
-        annotations=dict(row.annotations or {}),
+        annotations=all_annotations,
         toolchain=toolchain,
         run_state=run_state,
         dispatch_attempt_id=(
             str(row.layer5_run_id)
             if row.layer5_run_id is not None else None
         ),
+        source=source_block,
     )
     return rtnval

@@ -65,9 +65,12 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
+    JobSourceRef,
     ScopedSecret,
+    SOURCE_KIND_GIT,
     SUPPORTED_JOB_KINDS,
     SUPPORTED_SCHEMA_VERSIONS,
+    SUPPORTED_SOURCE_KINDS,
 )
 from automojo.pychestrate.webservice.jobs.envelope.startup import (
     EnvelopeSignerBootstrapConfig,

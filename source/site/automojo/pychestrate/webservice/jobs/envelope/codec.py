@@ -40,6 +40,7 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
+    JobSourceRef,
     ScopedSecret,
     assert_required_fields_present,
 )
@@ -78,6 +79,10 @@ class DispatchRequest:
         :param deadline: Soft + hard deadlines.
         :param extension_claims: Extension-contributed claims (empty
                                  on M1).
+        :param source: Optional :class:`JobSourceRef` carrying the
+                       structured source-integration reference for a
+                       build job. ``None`` when the job carries no
+                       resolved source integration.
     """
     project_id: str
     job_id: str
@@ -96,6 +101,7 @@ class DispatchRequest:
     deadline: JobDeadline
     extension_claims: Dict[str, Any]
     job_kind: str = DEFAULT_JOB_KIND
+    source: Optional[JobSourceRef] = None
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,7 @@ def build(*, request: DispatchRequest) -> JobEnvelope:
         job_type=request.job_type,
         job_kind=request.job_kind,
         pipeline=request.pipeline,
+        source=request.source,
         run_id=request.run_id,
         client_id=request.client_id,
         pod_id=request.pod_id,
