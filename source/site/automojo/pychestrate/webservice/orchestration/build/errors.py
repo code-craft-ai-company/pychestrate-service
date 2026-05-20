@@ -35,6 +35,14 @@ class BuildInputsInvalidError(BuildError):
     """
 
 
+class BuildSourceIntegrationUnknownError(BuildError):
+    """
+        Raised when ``trigger_run`` is given a
+        ``source_integration_id`` that resolves to no registered
+        source-integration for the project.
+    """
+
+
 class BuildDispatchUnavailableError(BuildError):
     """
         Raised when ``trigger_run`` cannot dispatch the build job

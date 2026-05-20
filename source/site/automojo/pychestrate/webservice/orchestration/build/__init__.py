@@ -36,6 +36,7 @@ from automojo.pychestrate.webservice.orchestration.build.errors import (
     BuildInputsInvalidError,
     BuildRunNotFoundError,
     BuildRunnerKindUnknownError,
+    BuildSourceIntegrationUnknownError,
 )
 from automojo.pychestrate.webservice.orchestration.build.events import (
     BuildEventTopics,

@@ -69,6 +69,13 @@ DEFAULT_PIPELINE_FILE_PATH: str = ".pychestrate/pipeline.yaml"
 WEBHOOK_PAYLOAD_MAX_BYTES: int = 1 * 1024 * 1024
 DELIVERIES_DEFAULT_LIMIT: int = 100
 
+# Default ref a build checks out when the project config does not
+# pin a polling ref glob to a concrete branch.
+DEFAULT_SOURCE_REF: str = "main"
+# Provider host used to expand a ``github`` ``owner/repo`` repo_key
+# into an HTTPS clone URL.
+GITHUB_HTTPS_HOST: str = "https://github.com/"
+
 
 PipelineDocumentFetcher = Callable[[str, str, str], bytes]
 
@@ -150,6 +157,36 @@ class ScmProjectConfigView:
     last_poll_at: Optional[datetime]
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True)
+class SourceReferenceView:
+    """
+        Resolved structured source reference for a build job.
+
+        The build orchestrator resolves a registered
+        ``source-integration`` into this read-model and embeds it as
+        the ``source`` block of the ``job_kind=build`` JobEnvelope.
+
+        :param integration_id: UUID of the registered
+                               source-integration the reference was
+                               resolved from.
+        :param kind: Source-integration kind discriminator. Only
+                     ``"git"`` is modeled today.
+        :param url: Clone / fetch URL for the source repository.
+        :param ref: Default ref (branch / tag) the build checks out.
+        :param credentials_ref: Symbolic secret reference (NOT the
+                                credential value) the client agent
+                                resolves to fetch a private
+                                repository. Empty string for a
+                                public repository -- full credential
+                                vaulting is a documented follow-up.
+    """
+    integration_id: str
+    kind: str
+    url: str
+    ref: str
+    credentials_ref: str = ""
 
 
 @dataclass(frozen=True)
@@ -243,6 +280,60 @@ def get_project_config(
         err_msg = os.linesep.join(err_lines)
         raise ScmConfigNotFoundError(err_msg) from None
     rtnval = _config_to_view(row=row)
+    return rtnval
+
+
+def resolve_source_reference(
+        *,
+        db_session: DbSession,
+        integration_id: str
+    ) -> SourceReferenceView:
+    """
+        Resolve a registered ``source-integration`` into the
+        structured source reference the build orchestrator embeds as
+        the ``source`` block of a ``job_kind=build`` JobEnvelope.
+
+        The source domain models one SCM project config per project
+        and the REST surface presents the ``project_id`` itself as
+        the ``integration_id`` -- so a resolve looks the config up by
+        ``project_id == integration_id``.
+
+        The repo URL is derived from the provider + ``repo_key``: a
+        ``github`` provider's ``owner/repo`` key expands to an HTTPS
+        clone URL. ``credentials_ref`` is left empty -- public-repo
+        sources are in scope for this PR; private-repo credential
+        vaulting is a documented follow-up. The field is reserved on
+        the envelope so the follow-up needs no schema change.
+
+        :param db_session: Active SQLAlchemy session.
+        :param integration_id: UUID of the registered
+                               source-integration to resolve.
+
+        :returns: :class:`SourceReferenceView`.
+        :raises: ScmConfigNotFoundError when no source integration is
+                 registered for ``integration_id``.
+    """
+    row = repository.find_project_config(
+        db_session=db_session, project_id=integration_id,
+    )
+    if row is None:
+        err_lines = ["No source integration registered for id."]
+        err_lines.append("INTEGRATION_ID: {}".format(integration_id))
+        err_msg = os.linesep.join(err_lines)
+        raise ScmConfigNotFoundError(err_msg) from None
+
+    url = _repo_url_for_provider(
+        provider_name=row.provider_name,
+        repo_key=row.repo_key,
+    )
+    ref = _default_ref_for_config(row=row)
+    rtnval = SourceReferenceView(
+        integration_id=str(row.project_id),
+        kind="git",
+        url=url,
+        ref=ref,
+        credentials_ref="",
+    )
     return rtnval
 
 
@@ -513,6 +604,56 @@ def _resolve_provider(*, provider_name: str) -> Type[ScmProviderProtocol]:
     ))
     err_msg = os.linesep.join(err_lines)
     raise ScmProviderNotFoundError(err_msg) from None
+
+
+def _repo_url_for_provider(*, provider_name: str, repo_key: str) -> str:
+    """
+        Expand a provider-specific ``repo_key`` into a clone URL.
+
+        A ``github`` provider stores ``owner/repo`` as its repo_key;
+        that expands to an HTTPS clone URL. A repo_key that is
+        already an absolute URL (``http(s)://`` or ``git@``) is
+        returned verbatim so non-GitHub providers and explicit URLs
+        pass through unchanged.
+
+        :param provider_name: Registered SCM provider name.
+        :param repo_key: Provider-specific repository identifier.
+
+        :returns: Clone / fetch URL string.
+    """
+    if repo_key.startswith("http://") or repo_key.startswith("https://"):
+        rtnval = repo_key
+        return rtnval
+    if repo_key.startswith("git@"):
+        rtnval = repo_key
+        return rtnval
+    if provider_name == "github":
+        trimmed = repo_key.strip("/")
+        rtnval = GITHUB_HTTPS_HOST + trimmed + ".git"
+        return rtnval
+    rtnval = repo_key
+    return rtnval
+
+
+def _default_ref_for_config(*, row: ScmProjectConfig) -> str:
+    """
+        Resolve the default ref a build checks out for a project
+        config. When the config pins a concrete polling ref (no glob
+        metacharacters) that ref is used; otherwise the build falls
+        back to :data:`DEFAULT_SOURCE_REF`.
+
+        :param row: SCM project-config ORM row.
+
+        :returns: Ref string.
+    """
+    glob = row.polling_ref_glob
+    if glob is not None and len(glob) > 0:
+        has_meta = "*" in glob or "?" in glob or "[" in glob
+        if has_meta is False:
+            rtnval = glob
+            return rtnval
+    rtnval = DEFAULT_SOURCE_REF
+    return rtnval
 
 
 def _is_known_event_kind(value: str) -> bool:

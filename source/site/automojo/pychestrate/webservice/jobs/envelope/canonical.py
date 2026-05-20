@@ -52,6 +52,7 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
+    JobSourceRef,
     ScopedSecret,
     SUPPORTED_JOB_KINDS,
     SUPPORTED_SCHEMA_VERSIONS,
@@ -81,6 +82,7 @@ def envelope_to_dict(*, envelope: JobEnvelope) -> Dict[str, Any]:
         "job_type": envelope.job_type,
         "job_kind": envelope.job_kind,
         "pipeline": _pipeline_to_dict(pipeline=envelope.pipeline),
+        "source": _source_to_dict(source=envelope.source),
         "run_id": envelope.run_id,
         "client_id": envelope.client_id,
         "pod_id": envelope.pod_id,
@@ -155,6 +157,15 @@ def dict_to_envelope(*, candidate: Dict[str, Any]) -> JobEnvelope:
     if pipeline_raw is not None:
         pipeline = JobPipelineRef(**pipeline_raw)
 
+    # ``source`` is an optional top-level field. Envelopes minted
+    # before the structured source block was introduced omit it
+    # entirely; those parse back with ``source=None`` so the
+    # client's ``runner_inputs.git_url`` fallback still applies.
+    source_raw = candidate.get("source", None)
+    source = None
+    if source_raw is not None:
+        source = JobSourceRef(**source_raw)
+
     scoped_secrets = tuple(
         ScopedSecret(
             name=item["name"],
@@ -182,6 +193,7 @@ def dict_to_envelope(*, candidate: Dict[str, Any]) -> JobEnvelope:
         job_type=candidate["job_type"],
         job_kind=job_kind,
         pipeline=pipeline,
+        source=source,
         run_id=candidate["run_id"],
         client_id=candidate["client_id"],
         pod_id=candidate["pod_id"],
@@ -265,6 +277,7 @@ def _envelope_to_dict_keys() -> list:
         "job_type",
         "job_kind",
         "pipeline",
+        "source",
         "run_id",
         "client_id",
         "pod_id",
@@ -292,6 +305,23 @@ def _pipeline_to_dict(*, pipeline) -> Any:
     if pipeline is None:
         return None
     rtnval = asdict(pipeline)
+    return rtnval
+
+
+def _source_to_dict(*, source) -> Any:
+    """
+        Convert an optional :class:`JobSourceRef` to its dict form
+        (or ``None``). Broken out so the top-level serializer stays
+        readable and so envelopes without a resolved source
+        integration round-trip with an explicit ``null``.
+
+        :param source: Optional source reference.
+
+        :returns: Dict or ``None``.
+    """
+    if source is None:
+        return None
+    rtnval = asdict(source)
     return rtnval
 
 

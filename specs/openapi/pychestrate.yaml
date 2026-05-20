@@ -4535,6 +4535,18 @@ components:
         pipeline:
           nullable: true
           $ref: '#/components/schemas/JobPipelineRef'
+        source:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobSourceRef'
+          description: |
+            Structured source-integration reference for a build job.
+            `null` on envelopes that carry no resolved source
+            integration (test / provision jobs, or build jobs that
+            fall back to the client's `runner_inputs.git_url`
+            convention). Optional for backward compatibility --
+            envelopes minted before the structured source block was
+            introduced omit it entirely and parse with `source` null.
         run_id: { type: string, format: uuid }
         client_id: { type: string, format: uuid }
         pod_id: { type: string, format: uuid }
@@ -4566,6 +4578,44 @@ components:
       properties:
         pipeline_id: { type: string }
         instance_id: { type: string }
+    JobSourceRef:
+      type: object
+      description: |
+        Structured source-integration reference embedded as the
+        `source` block of a `job_kind=build` JobEnvelope. Resolved
+        by the build service from the project's registered
+        `source-integration`. Matches the `JobSourceRef` dataclass
+        in `jobs/envelope/schema.py`.
+      required: [kind, url, ref, integration_id]
+      properties:
+        kind:
+          type: string
+          enum: [git]
+          description: |
+            Source-integration kind discriminator. Only `git` is
+            modeled today; the field is an enum so non-git kinds can
+            be added without a schema-version bump.
+        url:
+          type: string
+          description: Clone / fetch URL for the source repository.
+        ref:
+          type: string
+          description: Default ref (branch / tag) the build checks out.
+        integration_id:
+          type: string
+          description: |
+            UUID of the registered `source-integration` the block was
+            resolved from.
+        credentials_ref:
+          type: string
+          default: ''
+          description: |
+            Symbolic secret reference (NOT the credential value) the
+            client agent resolves to fetch a private repository. Empty
+            string for a public repository. Public-repo sources are in
+            scope today; private-repo credential vaulting is a
+            documented follow-up -- the field is reserved so the
+            follow-up needs no schema change.
     JobResultsLocator:
       type: object
       required: [backend_key_prefix, backend_driver]
@@ -5235,6 +5285,15 @@ components:
         toolchain:
           type: array
           items: { $ref: '#/components/schemas/BuildToolchainSnapshot' }
+        source:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/JobSourceRef'
+          description: |
+            Structured source reference resolved from the
+            `source_integration_id` supplied at trigger time and
+            embedded in this build's job envelope. `null` when the
+            build was triggered without a `source_integration_id`.
     BuildRunPage:
       type: object
       required: [items, meta]
@@ -5262,6 +5321,17 @@ components:
         runner_kind:
           type: string
           description: Stable runner-kind identifier (e.g. `makefile`).
+        source_integration_id:
+          type: string
+          format: uuid
+          description: |
+            Optional UUID of a registered `source-integration`. When
+            supplied, the build service resolves it into the
+            structured `source` block of the build job envelope
+            (repo URL, default ref, credentials reference). When
+            omitted the envelope carries no `source` block and the
+            client falls back to its `runner_inputs.git_url`
+            convention. An unknown id answers `404`.
         runner_inputs:
           type: object
           additionalProperties: true
