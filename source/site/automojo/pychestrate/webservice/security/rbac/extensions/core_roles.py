@@ -228,6 +228,32 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:plugin_api.read",
             effect=PermissionEffect.ALLOW,
         ),
+        # 6-blast-radius-guards / 7-slo-views / 10-release-channels
+        # PR p21c: REST-surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:guards.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:guards.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:slos.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:slos.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:release_channels.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:release_channels.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

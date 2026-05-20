@@ -152,6 +152,15 @@ from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.provisioning
 from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.drift_routes import (
     register_drift_routes,
 )
+from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.guards_routes import (
+    register_guards_routes,
+)
+from automojo.pychestrate.webservice.metrics.restapi.v1.slos_routes import (
+    register_slos_routes,
+)
+from automojo.pychestrate.webservice.ops.release.restapi.v1.release_channels_routes import (
+    register_release_channels_routes,
+)
 from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
     register_rbac_routes,
 )
@@ -482,6 +491,9 @@ def register_service_extensions() -> None:
     register_environments_routes(app=app, version_prefix="/api/v1")
     register_provisioning_runs_routes(app=app, version_prefix="/api/v1")
     register_drift_routes(app=app, version_prefix="/api/v1")
+    register_guards_routes(app=app, version_prefix="/api/v1")
+    register_slos_routes(app=app, version_prefix="/api/v1")
+    register_release_channels_routes(app=app, version_prefix="/api/v1")
     register_resource_pools_routes(app=app, version_prefix="/api/v1")
     register_resources_api_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
