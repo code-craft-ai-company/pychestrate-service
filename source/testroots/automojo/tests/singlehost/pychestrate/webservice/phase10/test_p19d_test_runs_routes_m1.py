@@ -409,11 +409,43 @@ def test_trigger_returns_422_on_empty_body():
     return
 
 
-def test_trigger_returns_422_when_pod_id_missing():
+def test_trigger_returns_409_when_pod_id_omitted_and_no_eligible_pod():
     """
-    **Feature: 6-test-orchestration PR p19d**
-    **Property: POST test-runs returns 422 listing 'pod_id' when
-    the field is absent.**
+    **Feature: 6-test-orchestration PR p19q**
+    **Property: POST test-runs returns 409 with an actionable
+    no-eligible-pod message when 'pod_id' is omitted and the
+    project has no enrolled pod.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cat_patch = _patch_catalog_find_by_id(row=_FakeCatalogEntry(entry_id="ent-1", project_id="proj-1"))
+    try:
+        session = _FakeSession(pods=[], registrations=[])
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/test-runs",
+            path_params={"project_id": "proj-1"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+            body={"catalog_entry_id": "ent-1"},
+        )
+        response = test_runs_routes.handle_trigger_test_run(request)
+    finally:
+        cat_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 409)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_CONFLICT)
+    testbase.assert_equal(body["reason"], "no_eligible_pod")
+    testbase.assert_equal("enroll a client/pod first" in body["detail"], True)
+    return
+
+
+def test_trigger_returns_422_when_pod_id_is_empty_string():
+    """
+    **Feature: 6-test-orchestration PR p19q**
+    **Property: POST test-runs returns 422 when 'pod_id' is present
+    but an empty string.**
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
@@ -423,7 +455,7 @@ def test_trigger_returns_422_when_pod_id_missing():
             path_params={"project_id": "proj-1"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"catalog_entry_id": "ent-1"},
+            body={"catalog_entry_id": "ent-1", "pod_id": ""},
         )
         response = test_runs_routes.handle_trigger_test_run(request)
     finally:
@@ -431,7 +463,7 @@ def test_trigger_returns_422_when_pod_id_missing():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 422)
     body = _decode_body(response)
-    testbase.assert_equal("pod_id" in body["missing_fields"], True)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_VALIDATION_FAILED)
     return
 
 
@@ -619,6 +651,45 @@ def test_trigger_returns_202_on_happy_path():
     testbase.assert_equal(body["project_id"], "proj-1")
     testbase.assert_equal(body["pod_id"], "pod-1")
     testbase.assert_equal(body["catalog_entry_id"], "ent-1")
+    return
+
+
+def test_trigger_returns_202_when_pod_id_omitted_and_orchestrator_selects():
+    """
+    **Feature: 6-test-orchestration PR p19q**
+    **Property: POST test-runs without 'pod_id' returns 202 when an
+    enrolled pod is available; the orchestrator picks the pod.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cat_patch = _patch_catalog_find_by_id(row=_FakeCatalogEntry(entry_id="ent-1", project_id="proj-1"))
+    saved = test_runs_routes.ACTIVE_TEST_ORCHESTRATOR
+    test_runs_routes.set_active_test_orchestrator(
+        orchestrator=_FakeOrchestrator(outcome=_FakeTriggerOutcome(run_id="run-99")),
+    )
+    try:
+        session = _FakeSession(
+            pods=[_FakePodDefinition(pod_id="pod-1", project_id="proj-1")],
+            registrations=[
+                _FakePodRegistration(pod_id="pod-1", client_id="client-1"),
+            ],
+        )
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/test-runs",
+            path_params={"project_id": "proj-1"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+            body={"catalog_entry_id": "ent-1"},
+        )
+        response = test_runs_routes.handle_trigger_test_run(request)
+    finally:
+        test_runs_routes.set_active_test_orchestrator(orchestrator=saved)
+        cat_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 202)
+    body = _decode_body(response)
+    testbase.assert_equal(body["run_id"], "run-99")
     return
 
 

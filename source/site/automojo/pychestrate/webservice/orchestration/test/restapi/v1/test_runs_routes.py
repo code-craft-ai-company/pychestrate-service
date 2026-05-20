@@ -366,6 +366,41 @@ def _resolve_catalog_entry(
     return rtnval
 
 
+def _candidates_for_pod(*, db_session: Any, pod_id: str) -> List[DispatchCandidate]:
+    """
+        Build a :class:`DispatchCandidate` list from the REGISTERED
+        client registrations for a single pod.
+
+        :param db_session: Active SQLAlchemy session.
+        :param pod_id: Target pod UUID.
+
+        :returns: List of dispatch candidates (may be empty).
+    """
+    registrations = (
+        db_session.query(PodRegistration)
+        .filter(PodRegistration.pod_id == pod_id)
+        .filter(PodRegistration.state == RegistrationState.REGISTERED)
+        .all()
+    )
+
+    candidates: List[DispatchCandidate] = []
+    for reg in registrations:
+        client_id = reg.client_id
+        if client_id is None:
+            continue
+        candidates.append(
+            DispatchCandidate(
+                client_id=str(client_id),
+                pod_id=str(pod_id),
+                capability_tags=tuple(),
+                inflight_dispatch_count=0,
+                last_dispatched_at_iso="",
+            )
+        )
+    rtnval = candidates
+    return rtnval
+
+
 def _build_pod_candidates(
         *,
         request: Request,
@@ -409,27 +444,58 @@ def _build_pod_candidates(
             },
         )
 
-    registrations = (
-        db_session.query(PodRegistration)
-        .filter(PodRegistration.pod_id == pod_id)
-        .filter(PodRegistration.state == RegistrationState.REGISTERED)
+    rtnval = _candidates_for_pod(db_session=db_session, pod_id=pod_id)
+    return rtnval
+
+
+def _build_eligible_pod_candidates(
+        *,
+        request: Request,
+        db_session: Any,
+        project_id: str
+    ) -> List[DispatchCandidate]:
+    """
+        Enumerate every pod enrolled in the project that carries at
+        least one REGISTERED client registration and build the
+        combined :class:`DispatchCandidate` list. The orchestrator
+        then narrows this set down by capability match.
+
+        Aborts 409 with an actionable message when the project has
+        no enrolled pod with an active client registration.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Owning project UUID.
+
+        :returns: Non-empty list of dispatch candidates.
+    """
+    pod_rows = (
+        db_session.query(PodDefinition)
+        .filter(PodDefinition.project_id == project_id)
         .all()
     )
 
     candidates: List[DispatchCandidate] = []
-    for reg in registrations:
-        client_id = reg.client_id
-        if client_id is None:
-            continue
-        candidates.append(
-            DispatchCandidate(
-                client_id=str(client_id),
-                pod_id=str(pod_id),
-                capability_tags=tuple(),
-                inflight_dispatch_count=0,
-                last_dispatched_at_iso="",
-            )
+    for pod_row in pod_rows:
+        pod_id = str(pod_row.pod_id)
+        pod_candidates = _candidates_for_pod(db_session=db_session, pod_id=pod_id)
+        for candidate in pod_candidates:
+            candidates.append(candidate)
+
+    if len(candidates) == 0:
+        _abort_problem(
+            request=request,
+            status=409,
+            detail=(
+                "No enrolled pod matches the job's capability "
+                "requirements -- enroll a client/pod first."
+            ),
+            extensions={
+                "project_id": project_id,
+                "reason": "no_eligible_pod",
+            },
         )
+
     rtnval = candidates
     return rtnval
 
@@ -493,7 +559,7 @@ def _trigger_outcome_to_run_dict(
         *,
         outcome: Any,
         project_id: str,
-        pod_id: str,
+        pod_id: Optional[str],
         catalog_entry: Any,
         triggered_at: datetime
     ) -> Dict[str, Any]:
@@ -529,7 +595,7 @@ def _trigger_outcome_to_run_dict(
     rtnval: Dict[str, Any] = {
         "run_id": str(outcome.run_id),
         "project_id": str(project_id),
-        "pod_id": str(pod_id),
+        "pod_id": str(pod_id) if pod_id is not None else None,
         "client_id": None,
         "job_id": str(catalog_entry.entry_id),
         "job_name": catalog_entry.display_name,
@@ -579,14 +645,20 @@ def handle_trigger_test_run(request: Request) -> Response:
 
         body = _decode_json_object_or_abort(request=request)
 
-        pod_id = body.get("pod_id", None)
-        if not isinstance(pod_id, str) or len(pod_id) == 0:
-            _abort_problem(
-                request=request,
-                status=422,
-                detail="Field 'pod_id' is required.",
-                extensions={"missing_fields": ["pod_id"]},
-            )
+        # ``pod_id`` is optional. When supplied, the run targets that
+        # specific pod. When omitted, the orchestrator selects an
+        # eligible pod by capability match across the project's
+        # enrolled, available pods.
+        pod_id_raw = body.get("pod_id", None)
+        explicit_pod_id: Optional[str] = None
+        if pod_id_raw is not None:
+            if isinstance(pod_id_raw, str) is False or len(pod_id_raw) == 0:
+                _abort_problem(
+                    request=request,
+                    status=422,
+                    detail="Field 'pod_id' must be a non-empty string when supplied.",
+                )
+            explicit_pod_id = pod_id_raw
 
         catalog_entry = _resolve_catalog_entry(
             request=request,
@@ -595,21 +667,28 @@ def handle_trigger_test_run(request: Request) -> Response:
             body=body,
         )
 
-        candidates = _build_pod_candidates(
-            request=request,
-            db_session=db_session,
-            project_id=project_id,
-            pod_id=pod_id,
-        )
-        if len(candidates) == 0:
-            _abort_problem(
+        if explicit_pod_id is not None:
+            candidates = _build_pod_candidates(
                 request=request,
-                status=409,
-                detail="No eligible client registration for the requested pod.",
-                extensions={
-                    "pod_id": pod_id,
-                    "reason": "pod_offline_or_unregistered",
-                },
+                db_session=db_session,
+                project_id=project_id,
+                pod_id=explicit_pod_id,
+            )
+            if len(candidates) == 0:
+                _abort_problem(
+                    request=request,
+                    status=409,
+                    detail="No eligible client registration for the requested pod.",
+                    extensions={
+                        "pod_id": explicit_pod_id,
+                        "reason": "pod_offline_or_unregistered",
+                    },
+                )
+        else:
+            candidates = _build_eligible_pod_candidates(
+                request=request,
+                db_session=db_session,
+                project_id=project_id,
             )
 
         params = body.get("params", {})
@@ -714,10 +793,24 @@ def handle_trigger_test_run(request: Request) -> Response:
             )
             outcome = None  # unreachable
 
+        # Prefer the pod the dispatcher actually picked; fall back to
+        # the explicitly requested pod, or the first candidate's pod
+        # when the orchestrator selected one by capability match.
+        dispatch_outcome = getattr(outcome, "dispatch", None)
+        resolved_pod_id: Optional[str] = None
+        if dispatch_outcome is not None:
+            dispatched_pod = getattr(dispatch_outcome, "pod_id", None)
+            if dispatched_pod is not None:
+                resolved_pod_id = str(dispatched_pod)
+        if resolved_pod_id is None and explicit_pod_id is not None:
+            resolved_pod_id = explicit_pod_id
+        if resolved_pod_id is None and len(candidates) > 0:
+            resolved_pod_id = candidates[0].pod_id
+
         _LOGGER.info(
             "pychestrate.test_runs.trigger project_id=%s pod_id=%s entry_id=%s run_id=%s",
             project_id,
-            pod_id,
+            resolved_pod_id,
             str(catalog_entry.entry_id),
             str(outcome.run_id),
         )
@@ -725,7 +818,7 @@ def handle_trigger_test_run(request: Request) -> Response:
         body_dict = _trigger_outcome_to_run_dict(
             outcome=outcome,
             project_id=project_id,
-            pod_id=pod_id,
+            pod_id=resolved_pod_id,
             catalog_entry=catalog_entry,
             triggered_at=triggered_at,
         )
