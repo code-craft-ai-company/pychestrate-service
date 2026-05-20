@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.8-preview
+  version: 0.0.9-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -117,6 +117,12 @@ tags:
     description: Trigger and read build runs for a project.
   - name: source_integrations
     description: Per-project source-integration (SCM) configuration.
+  - name: environments
+    description: Register and read named target environments for a project.
+  - name: provisioning
+    description: Trigger and read infrastructure provisioning runs.
+  - name: drift
+    description: Read drift status and trigger drift checks on environments.
   - name: metrics
     description: UI-facing metrics endpoints (planned).
 
@@ -2213,6 +2219,230 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /projects/{project_id}/environments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [environments]
+      summary: List target environments for a project.
+      operationId: environments_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated page of environments registered for
+        the project. The optional `kind` and `state` query params
+        filter the page.
+      parameters:
+        - in: query
+          name: kind
+          schema: { type: string }
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [active, frozen, archived, destroyed]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of environments.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EnvironmentPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [environments]
+      summary: Register a new environment on a project.
+      operationId: environments_register
+      x-pychestrate-status: planned
+      description: |
+        Declares a named environment under a registered
+        environment kind (resolved via the `environment_kind`
+        factory protocol). The `attrs` object is validated by the
+        resolved kind. The `(project, kind_name, name)` triple is
+        unique -- a duplicate declare returns `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EnvironmentCreateRequest' }
+      responses:
+        '201':
+          description: Environment registered.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Environment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/environments/{environment_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: environment_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [environments]
+      summary: Read a single environment.
+      operationId: environments_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Environment.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Environment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/provisioning-runs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [provisioning]
+      summary: List provisioning runs for a project.
+      operationId: provisioning_runs_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated page of provisioning runs for the
+        project, newest-first. The optional `state` and
+        `environment_id` query params filter the page.
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [pending, running, completed, failed, cancelled, rejected_by_guard]
+        - in: query
+          name: environment_id
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of provisioning runs.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisioningRunPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [provisioning]
+      summary: Trigger a provisioning run against an environment.
+      operationId: provisioning_runs_trigger
+      x-pychestrate-status: planned
+      description: |
+        Resolves the named `driver_name` (via the
+        `infra_tool_driver` factory protocol), validates the
+        driver inputs and action support against the bound
+        environment, and persists a provisioning run in `PENDING`
+        state. The infra-runs domain models a run directly --
+        the `plan` / `apply` / `destroy` action is encoded on the
+        run row; there is no separate provisioning-plan resource.
+        The Layer-5 dispatch handoff is M2 work -- until then a
+        triggered run remains queued in `PENDING`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProvisioningRunCreateRequest' }
+      responses:
+        '202':
+          description: Provisioning run accepted (queued; dispatch is M2).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisioningRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/provisioning-runs/{run_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [provisioning]
+      summary: Read a single provisioning run.
+      operationId: provisioning_runs_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Provisioning run.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProvisioningRun' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/environments/{environment_id}/drift:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: environment_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [drift]
+      summary: Read the current drift status of an environment.
+      operationId: drift_status_read
+      x-pychestrate-status: planned
+      description: |
+        Returns the latest drift run for the environment as its
+        current drift status. `latest_report` is `null` until a
+        drift run has been recorded for the environment.
+      responses:
+        '200':
+          description: Current drift status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriftStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/environments/{environment_id}/drift:check:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: environment_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [drift]
+      summary: Trigger a drift check on an environment.
+      operationId: drift_check_trigger
+      x-pychestrate-status: planned
+      description: |
+        Triggers a manual drift check, persisting a drift run in
+        `PENDING` state. The run borrows the environment's drift
+        schedule's checker -- an environment with no drift
+        schedule returns `409`. The Layer-5 dispatch handoff is
+        M2 work -- until then a triggered drift run remains queued
+        in `PENDING`.
+      responses:
+        '202':
+          description: Drift check accepted (queued; dispatch is M2).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriftReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
   /projects/{project_id}/source-integrations:
     parameters:
       - $ref: '#/components/parameters/ProjectIdParam'
@@ -4161,3 +4391,309 @@ components:
           description: Defaults to `.pychestrate/pipeline.yaml`.
         use_polling: { type: boolean, default: false }
         polling_ref_glob: { type: string }
+
+    # ----------------------------------------------------------------
+    # environments (6-environment-registry PR p20b)
+    # ----------------------------------------------------------------
+
+    Environment:
+      type: object
+      description: |
+        One target environment. Matches the SQLAlchemy model in
+        `orchestration.infra.environment.models.Environment`.
+      required:
+        - environment_id
+        - project_id
+        - kind_name
+        - name
+        - state
+      properties:
+        environment_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        kind_name:
+          type: string
+          description: Registered `environment_kind` factory name.
+        name: { type: string }
+        state:
+          type: string
+          enum: [active, frozen, archived, destroyed]
+        attrs:
+          type: object
+          additionalProperties: true
+        frozen_by:
+          type: string
+          format: uuid
+          nullable: true
+        frozen_reason:
+          type: string
+          nullable: true
+        frozen_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_applied_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        last_output_digest_sha256: { type: string }
+        last_applied_at:
+          type: string
+          format: date-time
+          nullable: true
+        archived_reason:
+          type: string
+          nullable: true
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+        destroyed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+    EnvironmentPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Environment' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    EnvironmentCreateRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/environments`. The
+        `kind_name` must resolve to a registered
+        `environment_kind` factory; `attrs` is validated by that
+        kind.
+      required: [name, kind_name]
+      properties:
+        name:
+          type: string
+          description: Human-facing environment name, unique per (project, kind).
+        kind_name:
+          type: string
+          description: Registered `environment_kind` factory name.
+        attrs:
+          type: object
+          additionalProperties: true
+          description: Kind-specific environment attributes.
+
+    # ----------------------------------------------------------------
+    # provisioning (6-infra-orchestration PR p20b)
+    # ----------------------------------------------------------------
+
+    ProvisioningResourceOp:
+      type: object
+      description: One per-resource operation on a plan summary.
+      required: [resource_address, op]
+      properties:
+        resource_address: { type: string }
+        op:
+          type: string
+          enum: [add, change, destroy, no_op]
+        module_path: { type: string }
+    ProvisioningPlanSummary:
+      type: object
+      description: |
+        Aggregate plan output recorded on a provisioning run.
+      required:
+        - resources_to_add
+        - resources_to_change
+        - resources_to_destroy
+      properties:
+        resources_to_add: { type: integer }
+        resources_to_change: { type: integer }
+        resources_to_destroy: { type: integer }
+        resource_ops:
+          type: array
+          items: { $ref: '#/components/schemas/ProvisioningResourceOp' }
+    ProvisioningRun:
+      type: object
+      description: |
+        One infrastructure provisioning run. Matches the
+        SQLAlchemy model in
+        `orchestration.infra.runs.models.InfraRun`. The infra-runs
+        domain models a run directly -- the `plan` / `apply` /
+        `destroy` action is encoded on the run row, and a plan
+        summary is recorded on the run itself; there is no
+        separate provisioning-plan resource.
+      required:
+        - run_id
+        - project_id
+        - environment_id
+        - driver_name
+        - action
+        - state
+      properties:
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        environment_id: { type: string, format: uuid }
+        driver_name:
+          type: string
+          description: Registered `infra_tool_driver` factory name.
+        action:
+          type: string
+          enum: [plan, apply, destroy]
+        state:
+          type: string
+          enum: [pending, running, completed, failed, cancelled, rejected_by_guard]
+        layer5_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_role_set:
+          type: array
+          items: { type: string }
+        inputs:
+          type: object
+          additionalProperties: true
+        inputs_canonical_sha256: { type: string }
+        plan_summary:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/ProvisioningPlanSummary'
+        plan_artifact_ref:
+          type: string
+          nullable: true
+        plan_diff_digest_sha256: { type: string }
+        plan_issued_at:
+          type: string
+          format: date-time
+          nullable: true
+        replay_of:
+          type: string
+          format: uuid
+          nullable: true
+        output_digest_sha256: { type: string }
+        failing_guard_rule_id:
+          type: string
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        final_state_reason: { type: string }
+    ProvisioningRunPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ProvisioningRun' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+    ProvisioningRunCreateRequest:
+      type: object
+      description: |
+        Body of `POST /projects/{project_id}/provisioning-runs`.
+        The `driver_name` must resolve to a registered
+        `infra_tool_driver` factory; `driver_inputs` is validated
+        by that driver.
+      required: [environment_id, driver_name, action]
+      properties:
+        environment_id:
+          type: string
+          format: uuid
+          description: Bound target environment.
+        driver_name:
+          type: string
+          description: Registered `infra_tool_driver` factory name.
+        action:
+          type: string
+          enum: [plan, apply, destroy]
+        driver_inputs:
+          type: object
+          additionalProperties: true
+          description: Free-form inputs consumed by the driver.
+
+    # ----------------------------------------------------------------
+    # drift (6-drift-detection PR p20b)
+    # ----------------------------------------------------------------
+
+    DriftReport:
+      type: object
+      description: |
+        One drift run / report. Matches the SQLAlchemy model in
+        `orchestration.infra.drift.models.DriftRun`.
+      required:
+        - run_id
+        - project_id
+        - environment_id
+        - checker_name
+        - state
+        - trigger_kind
+      properties:
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        environment_id: { type: string, format: uuid }
+        checker_name:
+          type: string
+          description: Registered `drift_checker` factory name.
+        state:
+          type: string
+          enum: [pending, running, completed, failed, ingest_failed, skipped]
+        trigger_kind:
+          type: string
+          enum: [schedule, manual]
+        layer5_run_id:
+          type: string
+          format: uuid
+          nullable: true
+        scheduled_for:
+          type: string
+          format: date-time
+          nullable: true
+        ran_at:
+          type: string
+          format: date-time
+          nullable: true
+        drift_count:
+          type: integer
+          nullable: true
+        added:
+          type: integer
+          nullable: true
+        changed:
+          type: integer
+          nullable: true
+        destroyed:
+          type: integer
+          nullable: true
+        diff_digest_sha256: { type: string }
+        report_blob_key:
+          type: string
+          nullable: true
+        final_state_reason: { type: string }
+        report_payload:
+          type: object
+          additionalProperties: true
+          nullable: true
+    DriftStatus:
+      type: object
+      description: |
+        Current drift status of an environment -- the latest
+        drift run, or `null` when none has been recorded.
+      required: [environment_id, has_report]
+      properties:
+        environment_id: { type: string, format: uuid }
+        has_report: { type: boolean }
+        latest_report:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/DriftReport'

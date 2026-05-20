@@ -90,6 +90,41 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:source_integrations.write": (
         "Register and update source-integration (SCM) configs via the REST surface"
     ),
+    # Operator-facing read access for the environment-registry
+    # REST surface (GET /api/v1/projects/{id}/environments).
+    # Introduced by 6-environment-registry PR p20b.
+    "system:environments.read": (
+        "Read target environments via the REST surface"
+    ),
+    # Operator/CI write access for environment registration.
+    # Introduced by 6-environment-registry PR p20b.
+    "system:environments.write": (
+        "Register and update target environments via the REST surface"
+    ),
+    # Operator-facing read access for the provisioning-runs REST
+    # surface (GET /api/v1/projects/{id}/provisioning-runs).
+    # Introduced by 6-infra-orchestration PR p20b.
+    "system:provisioning.read": (
+        "Read provisioning runs via the REST surface"
+    ),
+    # Operator/CI trigger access for
+    # POST /api/v1/projects/{id}/provisioning-runs. Introduced by
+    # 6-infra-orchestration PR p20b.
+    "system:provisioning.create": (
+        "Trigger new provisioning runs via the REST surface"
+    ),
+    # Operator-facing read access for the drift-detection REST
+    # surface (GET .../environments/{id}/drift). Introduced by
+    # 6-drift-detection PR p20b.
+    "system:drift.read": (
+        "Read drift status and drift reports via the REST surface"
+    ),
+    # Operator/CI trigger access for
+    # POST .../environments/{id}/drift:check. Introduced by
+    # 6-drift-detection PR p20b.
+    "system:drift.check": (
+        "Trigger drift checks via the REST surface"
+    ),
 }
 
 

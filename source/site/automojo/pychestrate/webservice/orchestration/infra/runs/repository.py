@@ -84,3 +84,25 @@ def list_runs_for_environment(
     )
     rtnval = list(rows)
     return rtnval
+
+
+def list_runs_for_project(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        environment_id: Optional[str] = None,
+        limit: int = 50
+    ) -> List[InfraRun]:
+    query = (
+        db_session.query(InfraRun)
+        .filter(InfraRun.project_id == project_id)
+    )
+    if environment_id is not None:
+        query = query.filter(InfraRun.environment_id == environment_id)
+    rows = (
+        query.order_by(InfraRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
