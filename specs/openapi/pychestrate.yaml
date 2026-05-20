@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.14-preview
+  version: 0.0.15-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -146,6 +146,19 @@ tags:
     description: >-
       Per-resource reads -- the resource record, current health
       probe state, and the resource usage-history timeline.
+  - name: blast_radius_guards
+    description: >-
+      Blast-radius guards -- per-environment attachments of
+      registry-defined guard rules that cap provisioning blast
+      radius, plus a guard-evaluation preview.
+  - name: slos
+    description: >-
+      SLO definitions and the current burn-rate / error-budget
+      status surfaced per SLO.
+  - name: release_channels
+    description: >-
+      Published release-channel entries -- releases advertised on
+      the canary / beta / stable channels.
 
 security:
   - pychestrate_session: []
@@ -3400,6 +3413,342 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /projects/{project_id}/blast-radius-guards:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    get:
+      tags: [blast_radius_guards]
+      summary: List blast-radius guards for an environment.
+      operationId: blast_radius_guards_list
+      x-pychestrate-status: planned
+      description: >-
+        The guards domain is environment scoped; the
+        `environment_id` query param is required. Returns guard
+        attachments as an `{items, meta}` page.
+      parameters:
+        - in: query
+          name: environment_id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: query
+          name: enabled_only
+          schema: { type: boolean, default: false }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of blast-radius guards.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuardPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [blast_radius_guards]
+      summary: Attach a blast-radius guard onto an environment.
+      operationId: blast_radius_guards_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlastRadiusGuardCreate' }
+      responses:
+        '201':
+          description: Blast-radius guard attached.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/blast-radius-guards:evaluate:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    post:
+      tags: [blast_radius_guards]
+      summary: Evaluate a proposed change against the guards.
+      operationId: blast_radius_guards_evaluate
+      x-pychestrate-status: planned
+      description: >-
+        Previews whether a proposed change would be blocked.
+        Walks every registered guard rule regardless of attachment
+        state and returns the per-rule verdict trace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BlastRadiusGuardEvaluationRequest'
+      responses:
+        '200':
+          description: Guard evaluation trace.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BlastRadiusGuardEvaluation'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/blast-radius-guards/{guard_id}:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+      - in: path
+        name: guard_id
+        required: true
+        schema: { type: string }
+        description: >-
+          Composite guard identifier (`{environment_id}.{rule_id}`).
+    get:
+      tags: [blast_radius_guards]
+      summary: Read a blast-radius guard.
+      operationId: blast_radius_guards_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Blast-radius guard.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [blast_radius_guards]
+      summary: Toggle a blast-radius guard's enabled flag.
+      operationId: blast_radius_guards_patch
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BlastRadiusGuardPatch' }
+      responses:
+        '200':
+          description: Updated blast-radius guard.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+    delete:
+      tags: [blast_radius_guards]
+      summary: Disable a blast-radius guard.
+      operationId: blast_radius_guards_delete
+      x-pychestrate-status: planned
+      description: >-
+        The guards domain has no hard delete -- the attachment
+        row is flipped to a disabled state.
+      responses:
+        '204':
+          description: Blast-radius guard disabled.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/slos:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+    get:
+      tags: [slos]
+      summary: List SLO definitions for a project.
+      operationId: slos_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: kind
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of SLO definitions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SloPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [slos]
+      summary: Create an SLO definition.
+      operationId: slos_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SloCreate' }
+      responses:
+        '201':
+          description: SLO definition created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Slo' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/slos/{slo_id}:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Project identifier.
+      - in: path
+        name: slo_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: SLO identifier.
+    get:
+      tags: [slos]
+      summary: Read an SLO definition with current status.
+      operationId: slos_read
+      x-pychestrate-status: planned
+      description: >-
+        Returns the SLO definition with an embedded `status`
+        block carrying the current achieved ratio, error-budget
+        remaining, and burn-rate state.
+      responses:
+        '200':
+          description: SLO definition with status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SloWithStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [slos]
+      summary: Delete an SLO definition.
+      operationId: slos_delete
+      x-pychestrate-status: planned
+      description: >-
+        Idempotent delete -- the burn-rate-state row cascades via
+        the foreign key.
+      responses:
+        '204':
+          description: SLO definition deleted.
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /release-channels:
+    get:
+      tags: [release_channels]
+      summary: List published release-channel entries.
+      operationId: release_channels_list
+      x-pychestrate-status: planned
+      description: >-
+        A release-channel entry is a published release row. The
+        M1 release domain ships publish + read only; promotion and
+        rollback are M2 milestones.
+      parameters:
+        - in: query
+          name: component
+          schema: { type: string, enum: [service, agent] }
+        - in: query
+          name: channel
+          schema: { type: string, enum: [canary, beta, stable] }
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [active, superseded, rolled_back, withdrawn]
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of release-channel entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [release_channels]
+      summary: Publish a release onto a channel.
+      operationId: release_channels_create
+      x-pychestrate-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReleaseChannelEntryCreate' }
+      responses:
+        '201':
+          description: Release published onto the channel.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /release-channels/{channel_id}:
+    parameters:
+      - in: path
+        name: channel_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Release-channel entry identifier (release UUID).
+    get:
+      tags: [release_channels]
+      summary: Read a release-channel entry.
+      operationId: release_channels_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Release-channel entry.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReleaseChannelEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
 components:
 
@@ -6747,4 +7096,273 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/UsageRecord' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # blast-radius guards (PR p21c)
+    # ----------------------------------------------------------------
+
+    BlastRadiusGuard:
+      type: object
+      description: >-
+        A blast-radius guard -- the attachment of a registry-defined
+        guard rule onto a single environment.
+      required:
+        - guard_id
+        - project_id
+        - environment_id
+        - rule_id
+        - enabled
+      properties:
+        guard_id:
+          type: string
+          description: Composite identifier (`{environment_id}.{rule_id}`).
+        project_id: { type: string, format: uuid }
+        environment_id: { type: string, format: uuid }
+        rule_id:
+          type: string
+          description: Registry-defined guard-rule identifier.
+        enabled: { type: boolean }
+        added_by:
+          type: string
+          format: uuid
+          nullable: true
+        added_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    BlastRadiusGuardCreate:
+      type: object
+      required: [environment_id, rule_id]
+      properties:
+        environment_id: { type: string, format: uuid }
+        rule_id: { type: string }
+        enabled: { type: boolean, default: true }
+
+    BlastRadiusGuardPatch:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
+    BlastRadiusGuardPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/BlastRadiusGuard' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    BlastRadiusGuardEvaluationRequest:
+      type: object
+      required: [environment_id, action]
+      properties:
+        environment_id: { type: string, format: uuid }
+        action:
+          type: string
+          description: The proposed change action being evaluated.
+        requester_id:
+          type: string
+        actor_role_set:
+          type: array
+          items: { type: string }
+
+    BlastRadiusGuardEvaluationEntry:
+      type: object
+      required: [rule_id, verdict, reason]
+      properties:
+        rule_id: { type: string }
+        verdict: { type: string }
+        reason: { type: string }
+
+    BlastRadiusGuardEvaluation:
+      type: object
+      required: [allowed, failing_rule_id, entries]
+      properties:
+        allowed: { type: boolean }
+        failing_rule_id:
+          type: string
+          description: First rule that denied; empty when `allowed`.
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlastRadiusGuardEvaluationEntry'
+
+    # ----------------------------------------------------------------
+    # SLO views (PR p21c)
+    # ----------------------------------------------------------------
+
+    Slo:
+      type: object
+      description: A per-project SLO definition.
+      required:
+        - slo_id
+        - project_id
+        - name
+        - kind
+        - target
+        - window_seconds
+      properties:
+        slo_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        kind: { type: string }
+        target: { type: number, minimum: 0.0, maximum: 1.0 }
+        window_seconds: { type: integer, minimum: 1 }
+        definition_config:
+          type: object
+          additionalProperties: true
+        default_notification_route_key:
+          type: string
+          nullable: true
+        auto_attach_burn_rate_alerts: { type: boolean }
+        version: { type: integer }
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    SloCreate:
+      type: object
+      required: [name, kind, target]
+      properties:
+        name: { type: string }
+        kind: { type: string }
+        target: { type: number, minimum: 0.0, maximum: 1.0 }
+        window_seconds: { type: integer, minimum: 1 }
+        description: { type: string }
+        definition_config:
+          type: object
+          additionalProperties: true
+        default_notification_route_key:
+          type: string
+          nullable: true
+        auto_attach_burn_rate_alerts: { type: boolean, default: false }
+
+    SloStatus:
+      type: object
+      description: The current burn-rate / error-budget status for an SLO.
+      required: [slo_id, target, breaching]
+      properties:
+        slo_id: { type: string, format: uuid }
+        achieved_ratio:
+          type: number
+          nullable: true
+        error_budget_remaining_ratio:
+          type: number
+          nullable: true
+        target: { type: number }
+        window_start:
+          type: string
+          format: date-time
+          nullable: true
+        window_end:
+          type: string
+          format: date-time
+          nullable: true
+        good_count: { type: integer }
+        total_count: { type: integer }
+        breaching: { type: boolean }
+        reason: { type: string }
+
+    SloWithStatus:
+      allOf:
+        - $ref: '#/components/schemas/Slo'
+        - type: object
+          properties:
+            status:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/SloStatus'
+
+    SloPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Slo' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # release channels (PR p21c)
+    # ----------------------------------------------------------------
+
+    ReleaseChannelEntry:
+      type: object
+      description: >-
+        A published release-channel entry -- a release row
+        advertised on a channel.
+      required:
+        - channel_id
+        - release_id
+        - component
+        - version
+        - channel
+        - status
+      properties:
+        channel_id:
+          type: string
+          format: uuid
+          description: Release-channel entry identifier (release UUID).
+        release_id: { type: string, format: uuid }
+        component: { type: string, enum: [service, agent] }
+        version: { type: string }
+        channel: { type: string, enum: [canary, beta, stable] }
+        artifact_uri: { type: string }
+        artifact_sha256: { type: string }
+        issuer_key_id: { type: string }
+        issued_at:
+          type: string
+          format: date-time
+          nullable: true
+        issued_by:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          type: string
+          enum: [active, superseded, rolled_back, withdrawn]
+        rollout_fraction: { type: number, minimum: 0.0, maximum: 1.0 }
+        stage_started_at:
+          type: string
+          format: date-time
+          nullable: true
+        previous_release_id:
+          type: string
+          format: uuid
+          nullable: true
+
+    ReleaseChannelEntryCreate:
+      type: object
+      required: [component, version, channel, artifact_uri, artifact_sha256]
+      properties:
+        component: { type: string, enum: [service, agent] }
+        version: { type: string }
+        channel: { type: string, enum: [canary, beta, stable] }
+        artifact_uri: { type: string }
+        artifact_sha256:
+          type: string
+          minLength: 64
+          maxLength: 64
+          description: 64-character hex digest of the artifact.
+
+    ReleaseChannelEntryPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ReleaseChannelEntry' }
         meta: { $ref: '#/components/schemas/PageMeta' }

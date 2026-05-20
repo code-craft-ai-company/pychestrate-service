@@ -234,6 +234,33 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Create resource pools and manage pool members and "
         "reservations via the REST surface"
     ),
+    # 6-blast-radius-guards PR p21c: blast-radius-guard REST
+    # surface. Guards bind registry rules onto an environment to
+    # cap provisioning blast radius.
+    "system:guards.read": (
+        "Read blast-radius guards and evaluate guard previews via "
+        "the REST surface"
+    ),
+    "system:guards.write": (
+        "Attach, toggle, and disable blast-radius guards via the "
+        "REST surface"
+    ),
+    # 7-slo-views PR p21c: SLO-view REST surface read/write access.
+    "system:slos.read": (
+        "Read SLO definitions and current burn-rate status via the "
+        "REST surface"
+    ),
+    "system:slos.write": (
+        "Create and delete SLO definitions via the REST surface"
+    ),
+    # 10-release-channels PR p21c: release-channel REST surface
+    # read/write access.
+    "system:release_channels.read": (
+        "Read published release-channel entries via the REST surface"
+    ),
+    "system:release_channels.write": (
+        "Publish releases onto a channel via the REST surface"
+    ),
 }
 
 
