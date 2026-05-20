@@ -284,12 +284,40 @@ def _progress_block(*, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
         Build the optional ``progress`` block of a ``RunEvent`` from
         a progress-bearing payload, or ``None`` when the payload
-        carries no counter fields.
+        carries no progress fields.
+
+        The block is ``frame_kind``-aware. A build / provision
+        progress frame (``frame_kind`` of ``build`` / ``provision``)
+        carries phase / status / percent + a free-form ``payload``
+        passthrough; a test summary carries the legacy per-test
+        counter fields. ``frame_kind`` defaults to ``test`` so an
+        unmodified test progress event still serializes the way
+        PR #215 established.
 
         :param payload: Bus / relay event payload.
 
-        :returns: A ``ProgressSummary``-shaped dict, or None.
+        :returns: A generalized progress block dict, or None.
     """
+    frame_kind = payload.get("frame_kind", "test")
+    if isinstance(frame_kind, str) is False or len(frame_kind) == 0:
+        frame_kind = "test"
+
+    if frame_kind in ("build", "provision"):
+        rtnval = {
+            "run_id": payload.get("run_id"),
+            "client_id": payload.get("client_id"),
+            "frame_kind": frame_kind,
+            "format_tag": frame_kind,
+            "frame_index": payload.get("frame_index"),
+            "phase": payload.get("phase"),
+            "status": payload.get("status"),
+            "percent_complete": payload.get("percent_complete"),
+            "notes": payload.get("notes"),
+            "payload": payload.get("payload", {}),
+            "recorded_at": payload.get("received_at", payload.get("recorded_at")),
+        }
+        return rtnval
+
     counter_keys = (
         "tests_total",
         "tests_passed",
@@ -310,6 +338,7 @@ def _progress_block(*, payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     rtnval = {
         "run_id": payload.get("run_id"),
         "client_id": payload.get("client_id"),
+        "frame_kind": "test",
         "format_tag": payload.get("format_tag", "testbase"),
         "tests_total": payload.get("tests_total"),
         "tests_passed": int(payload.get("tests_passed", 0)),
@@ -366,14 +395,37 @@ def _run_event_body(*, event: ProgressEvent) -> Dict[str, Any]:
 
 def _snapshot_event(*, snapshot: ProgressSnapshot) -> ProgressEvent:
     """
-        Build the synthetic initial ``state_changed`` event a
-        late-joining subscriber receives so it is immediately
-        consistent with the run's current progress.
+        Build the synthetic initial event a late-joining
+        subscriber receives so it is immediately consistent with
+        the run's current progress.
+
+        For a test run (or any run with no build / provision frame
+        yet) this is a ``state_changed`` event carrying the run's
+        current state + counters, exactly as PR #215 established.
+        When the run has a generalized build / provision progress
+        frame in its snapshot the synthetic event is a
+        ``progress.frame`` event instead so the subscriber's first
+        frame already shows the latest build / provision progress.
 
         :param snapshot: The relay's current :class:`ProgressSnapshot`.
 
         :returns: A :class:`ProgressEvent` carrying the snapshot.
     """
+    latest_frame = snapshot.latest_progress_frame
+    if latest_frame is not None:
+        frame_payload: Dict[str, Any] = dict(latest_frame)
+        frame_payload.setdefault("run_id", snapshot.run_id)
+        frame_payload.setdefault("project_id", snapshot.project_id)
+        rtnval = ProgressEvent(
+            run_id=snapshot.run_id,
+            project_id=snapshot.project_id,
+            kind="progress.frame",
+            payload=frame_payload,
+            recorded_at=snapshot.latest_event_at,
+            sequence=snapshot.sequence,
+        )
+        return rtnval
+
     payload: Dict[str, Any] = {
         "run_id": snapshot.run_id,
         "project_id": snapshot.project_id,

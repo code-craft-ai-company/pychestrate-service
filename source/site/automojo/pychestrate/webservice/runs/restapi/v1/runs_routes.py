@@ -744,10 +744,125 @@ def handle_dispatch_ack(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+#: ProgressFrame ``frame_kind`` discriminator values. ``test``
+#: keeps the legacy ``summary`` / ``records`` test-shaped body;
+#: ``build`` / ``provision`` carry a generalized ``frame`` object
+#: (or a ``frames`` array). A body with no ``frame_kind`` defaults
+#: to ``test`` so an unmodified testbase client posts unchanged.
+PROGRESS_FRAME_KIND_TEST = "test"
+PROGRESS_FRAME_KIND_BUILD = "build"
+PROGRESS_FRAME_KIND_PROVISION = "provision"
+SUPPORTED_PROGRESS_FRAME_KINDS = (
+    PROGRESS_FRAME_KIND_TEST,
+    PROGRESS_FRAME_KIND_BUILD,
+    PROGRESS_FRAME_KIND_PROVISION,
+)
+
+
+def _handle_build_provision_progress(
+        *,
+        request: Request,
+        db_session: Any,
+        run_id: str,
+        frame_kind: str,
+        payload: Dict[str, Any]
+    ) -> int:
+    """
+        Ingest the ``build`` / ``provision`` generalized progress
+        frames carried by a ``frame_kind != test`` ProgressFrame.
+
+        The body carries either a single ``frame`` object or a
+        ``frames`` array; each frame must carry ``client_id`` and
+        an integer ``frame_index``. Frames route to
+        :func:`progress_service.ingest_frame` which persists them
+        without testbase parsing and emits a ``FRAME_LANDED`` bus
+        event the live hub forwards onto the run's SSE stream.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the path.
+        :param frame_kind: ``"build"`` or ``"provision"``.
+        :param payload: The decoded ProgressFrame body.
+
+        :returns: Count of frames accepted.
+    """
+    frames_payload = payload.get("frames", None)
+    single_frame = payload.get("frame", None)
+    if frames_payload is None and single_frame is None:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail=(
+                "ProgressFrame frame_kind='{}' must include 'frame' or"
+                " 'frames'.".format(frame_kind)
+            ),
+        )
+    if frames_payload is not None and isinstance(frames_payload, list) is False:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="ProgressFrame 'frames' must be an array.",
+        )
+
+    frame_list: List[Any] = []
+    if single_frame is not None:
+        frame_list.append(single_frame)
+    if frames_payload is not None:
+        frame_list.extend(frames_payload)
+
+    frames_accepted = 0
+    for index, frame in enumerate(frame_list):
+        if isinstance(frame, dict) is False:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="ProgressFrame frame #{} must be an object.".format(index),
+            )
+        frame_client_id = frame.get("client_id", "")
+        frame_index = frame.get("frame_index", None)
+        if isinstance(frame_client_id, str) is False or len(frame_client_id) == 0:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="ProgressFrame frame #{} missing 'client_id'.".format(index),
+            )
+        if isinstance(frame_index, int) is False:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="ProgressFrame frame #{} 'frame_index' must be int.".format(index),
+            )
+
+        progress_service.ingest_frame(
+            db_session=db_session,
+            run_id=run_id,
+            authenticated_client_id=frame_client_id,
+            frame_kind=frame_kind,
+            frame_index=frame_index,
+            payload=frame,
+        )
+        frames_accepted += 1
+
+    rtnval = frames_accepted
+    return rtnval
+
+
 def handle_post_progress(request: Request) -> Response:
     """
         ``POST /api/v1/runs/{run_id}/progress`` -- live progress
         frame from the pod client agent.
+
+        The body carries a ``frame_kind`` discriminator:
+
+        * ``test`` (the default when ``frame_kind`` is absent) --
+          the test-shaped body with a ``summary`` roll-up and / or
+          a ``records`` array of per-test records, parsed by the
+          testbase progress parser exactly as PR p19c established.
+        * ``build`` / ``provision`` -- a generalized progress frame
+          (or ``frames`` array) carrying phase / status / log-line
+          excerpts; persisted by the progress ingest service
+          without testbase parsing and streamed onto the run's SSE
+          events route as a ``progress`` RunEvent.
 
         :param request: Incoming webworks request.
 
@@ -761,6 +876,70 @@ def handle_post_progress(request: Request) -> Response:
         _require_run_exists(
             request=request, db_session=db_session, run_id=run_id,
         )
+
+        frame_kind = payload.get("frame_kind", PROGRESS_FRAME_KIND_TEST)
+        if isinstance(frame_kind, str) is False or len(frame_kind) == 0:
+            frame_kind = PROGRESS_FRAME_KIND_TEST
+        if frame_kind not in SUPPORTED_PROGRESS_FRAME_KINDS:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="ProgressFrame 'frame_kind' must be one of: {}.".format(
+                    ", ".join(SUPPORTED_PROGRESS_FRAME_KINDS),
+                ),
+                extensions={"frame_kind": frame_kind},
+            )
+
+        if frame_kind != PROGRESS_FRAME_KIND_TEST:
+            try:
+                frames_accepted = _handle_build_provision_progress(
+                    request=request,
+                    db_session=db_session,
+                    run_id=run_id,
+                    frame_kind=frame_kind,
+                    payload=payload,
+                )
+            except ProgressUnknownRunError as xcpt:
+                _abort_problem(
+                    request=request,
+                    status=404,
+                    detail=str(xcpt),
+                    extensions={"run_id": run_id},
+                )
+                frames_accepted = 0  # unreachable
+            except ProgressClientMismatchError as xcpt:
+                _abort_problem(
+                    request=request,
+                    status=403,
+                    detail=str(xcpt),
+                    extensions={"run_id": run_id},
+                )
+                frames_accepted = 0  # unreachable
+            except ProgressFormatError as xcpt:
+                _abort_problem(
+                    request=request,
+                    status=400,
+                    detail=str(xcpt),
+                    extensions={"run_id": run_id},
+                )
+                frames_accepted = 0  # unreachable
+
+            _LOGGER.info(
+                "pychestrate.runs.progress run_id=%s client_cn=%s"
+                " frame_kind=%s frames=%d",
+                run_id,
+                client_cn,
+                frame_kind,
+                frames_accepted,
+            )
+
+            body = {
+                "run_id": run_id,
+                "frame_kind": frame_kind,
+                "frames_accepted": frames_accepted,
+            }
+            rtnval: Response = JSONResponse(content=body, status_code=202)
+            return rtnval
 
         summary_payload = payload.get("summary", None)
         records_payload = payload.get("records", None)
@@ -878,6 +1057,7 @@ def handle_post_progress(request: Request) -> Response:
 
         body = {
             "run_id": run_id,
+            "frame_kind": PROGRESS_FRAME_KIND_TEST,
             "summaries_accepted": summaries_accepted,
             "records_accepted": records_accepted,
         }
@@ -1158,6 +1338,7 @@ __all__ = [
     "RUNS_READ_PERMISSION_KEY",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
+    "SUPPORTED_PROGRESS_FRAME_KINDS",
     "register_runs_routes",
     "handle_list_runs",
     "handle_read_run",

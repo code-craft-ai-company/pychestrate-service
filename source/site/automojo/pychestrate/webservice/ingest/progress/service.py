@@ -19,7 +19,7 @@ __version__ = "1.0.0"
 
 import os
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
 from sqlalchemy.orm import Session as DbSession
@@ -44,6 +44,9 @@ from automojo.pychestrate.webservice.ingest.progress.factories.parser_protocol i
     ProgressParserProtocol,
 )
 from automojo.pychestrate.webservice.ingest.progress.schema import (
+    SUPPORTED_FRAME_KINDS,
+    FRAME_KIND_TEST,
+    ProgressFrameEnvelope,
     ProgressRecord,
     ProgressSummary,
 )
@@ -205,6 +208,256 @@ def ingest_record(
     )
     db_session.commit()
     rtnval = record
+    return rtnval
+
+
+def ingest_frame(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        authenticated_client_id: str,
+        frame_kind: str,
+        frame_index: int,
+        payload: Mapping[str, Any]
+    ) -> ProgressFrameEnvelope:
+    """
+        Authenticate, parse, persist, and emit one generalized
+        ``build`` / ``provision`` progress frame.
+
+        Build and provision runs are not test-shaped — they have
+        no per-test pass/fail tally — so they do not flow through
+        the testbase parser. The frame is structurally parsed
+        directly here: phase / status / percent_complete are
+        lifted from the payload and the whole payload is kept as a
+        verbatim ``raw_payload`` passthrough. Idempotent on
+        ``(run_id, frame_kind, frame_index)`` — re-posting the
+        same frame is a no-op.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the URL path.
+        :param authenticated_client_id: Client UUID derived from
+                                        the transport's
+                                        authenticated identity.
+        :param frame_kind: ``"build"`` or ``"provision"``.
+        :param frame_index: Monotonically-increasing frame index
+                            inside the run's stream.
+        :param payload: Decoded JSON dict for the frame.
+
+        :returns: The canonical :class:`ProgressFrameEnvelope`.
+        :raises: ProgressUnknownRunError, ProgressClientMismatchError,
+                 ProgressFormatError.
+    """
+    if frame_kind not in SUPPORTED_FRAME_KINDS or frame_kind == FRAME_KIND_TEST:
+        err_lines = ["Cannot ingest progress frame — unsupported frame_kind."]
+        err_lines.append("FRAME_KIND: {}".format(frame_kind))
+        err_lines.append("SUPPORTED: build, provision")
+        err_msg = os.linesep.join(err_lines)
+        raise ProgressFormatError(err_msg) from None
+
+    _assert_run_belongs_to_client(
+        db_session=db_session,
+        run_id=run_id,
+        client_id=authenticated_client_id,
+    )
+
+    frame = _parse_frame(
+        run_id=run_id,
+        client_id=authenticated_client_id,
+        frame_kind=frame_kind,
+        frame_index=frame_index,
+        payload=payload,
+    )
+
+    existing = repositories.find_frame(
+        db_session=db_session,
+        run_id=run_id,
+        frame_kind=frame_kind,
+        frame_index=frame_index,
+    )
+    if existing is not None:
+        rtnval = frame
+        return rtnval
+
+    received_at = utc_now()
+    repositories.insert_frame(
+        db_session=db_session,
+        frame=frame,
+        received_at=received_at,
+    )
+
+    project_id = _project_id_for_run(db_session=db_session, run_id=run_id)
+    event_payload = {
+        "run_id": run_id,
+        "project_id": project_id,
+        "client_id": authenticated_client_id,
+        "frame_kind": frame.frame_kind,
+        "frame_index": frame.frame_index,
+        "phase": frame.phase,
+        "status": frame.status,
+        "percent_complete": frame.percent_complete,
+        "notes": frame.notes,
+        "recorded_at": frame.recorded_at.isoformat(),
+        "received_at": received_at.isoformat(),
+        "payload": dict(frame.payload),
+    }
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=ProgressEventTopics.RECEIVED,
+            payload=event_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=ProgressEventTopics.FRAME_LANDED,
+            payload=event_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = frame
+    return rtnval
+
+
+def get_latest_frame(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> Optional[ProgressFrameEnvelope]:
+    """
+        Return the most recently received generalized
+        build / provision progress frame for ``run_id``, or
+        ``None`` when none has landed.
+    """
+    row = repositories.latest_frame(db_session=db_session, run_id=run_id)
+    if row is None:
+        return None
+    rtnval = _frame_row_to_envelope(row=row)
+    return rtnval
+
+
+def list_frames(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> List[ProgressFrameEnvelope]:
+    """
+        Return every persisted generalized progress frame for
+        ``run_id`` ordered by receive time.
+    """
+    rows = repositories.list_frames(db_session=db_session, run_id=run_id)
+    rtnval: List[ProgressFrameEnvelope] = []
+    for row in rows:
+        rtnval.append(_frame_row_to_envelope(row=row))
+    return rtnval
+
+
+def _frame_row_to_envelope(*, row: Any) -> ProgressFrameEnvelope:
+    """
+        Map a ``RunProgressFrame`` ORM row to a canonical
+        :class:`ProgressFrameEnvelope`.
+    """
+    rtnval = ProgressFrameEnvelope(
+        run_id=str(row.run_id),
+        client_id=str(row.client_id),
+        frame_kind=row.frame_kind,
+        frame_index=row.frame_index,
+        phase=row.phase,
+        status=row.status,
+        percent_complete=row.percent_complete,
+        notes=row.notes,
+        recorded_at=row.recorded_at,
+        payload=dict(row.raw_payload or {}),
+    )
+    return rtnval
+
+
+def _parse_frame(
+        *,
+        run_id: str,
+        client_id: str,
+        frame_kind: str,
+        frame_index: int,
+        payload: Mapping[str, Any]
+    ) -> ProgressFrameEnvelope:
+    """
+        Structurally parse a ``build`` / ``provision`` progress
+        frame payload into a :class:`ProgressFrameEnvelope`.
+
+        :raises: ProgressFormatError when a structural field has
+                 an unusable type.
+    """
+    phase = _string_or_none(value=payload.get("phase", None))
+    status = _string_or_none(value=payload.get("status", None))
+    notes = _string_or_none(value=payload.get("notes", None))
+
+    percent_raw = payload.get("percent_complete", None)
+    percent_complete: Optional[float] = None
+    if percent_raw is not None:
+        try:
+            percent_complete = float(percent_raw)
+        except (TypeError, ValueError):
+            err_lines = ["Cannot ingest progress frame — 'percent_complete' not a number."]
+            err_lines.append("RUN_ID: {}".format(run_id))
+            err_lines.append("VALUE: {}".format(percent_raw))
+            err_msg = os.linesep.join(err_lines)
+            raise ProgressFormatError(err_msg) from None
+
+    recorded_at = _parse_iso(value=payload.get("recorded_at", None))
+    if recorded_at is None:
+        recorded_at = utc_now()
+
+    rtnval = ProgressFrameEnvelope(
+        run_id=run_id,
+        client_id=client_id,
+        frame_kind=frame_kind,
+        frame_index=frame_index,
+        phase=phase,
+        status=status,
+        percent_complete=percent_complete,
+        notes=notes,
+        recorded_at=recorded_at,
+        payload=dict(payload),
+    )
+    return rtnval
+
+
+def _string_or_none(*, value: Any) -> Optional[str]:
+    """
+        Pass through non-empty strings; return ``None`` otherwise.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) is False:
+        return None
+    text = value.strip()
+    if len(text) == 0:
+        return None
+    return text
+
+
+def _parse_iso(*, value: Any) -> Optional[datetime]:
+    """
+        Best-effort ISO-8601 parser; returns ``None`` for empty /
+        unparseable input rather than raising.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) is False:
+        return None
+    text = value.strip()
+    if len(text) == 0:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        rtnval = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if rtnval.tzinfo is None:
+        rtnval = rtnval.replace(tzinfo=timezone.utc)
     return rtnval
 
 

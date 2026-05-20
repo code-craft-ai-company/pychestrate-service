@@ -18,7 +18,7 @@ __version__ = "1.0.0"
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -58,6 +58,76 @@ class ProgressSummary:
     notes: Optional[str]
     recorded_at: datetime
     raw: Mapping[str, Any]
+
+
+#: Frame-kind discriminator values for the generalized progress
+#: frame. Mirrors how the ``job_kind`` discriminator scopes the
+#: JobEnvelope: ``test`` keeps the legacy per-test ``ProgressSummary``
+#: / ``ProgressRecord`` shape; ``build`` / ``provision`` carry a
+#: free-form ``payload`` block instead.
+FRAME_KIND_TEST: str = "test"
+FRAME_KIND_BUILD: str = "build"
+FRAME_KIND_PROVISION: str = "provision"
+
+#: The set of frame kinds the progress receiver accepts.
+SUPPORTED_FRAME_KINDS: Tuple[str, ...] = (
+    FRAME_KIND_TEST,
+    FRAME_KIND_BUILD,
+    FRAME_KIND_PROVISION,
+)
+
+
+@dataclass(frozen=True)
+class ProgressFrameEnvelope:
+    """
+        Generalized progress frame for a ``build`` / ``provision``
+        run.
+
+        Test runs stream per-test progress through the test-shaped
+        :class:`ProgressSummary` / :class:`ProgressRecord` pair
+        (``frame_kind=test``). Build and provision runs have no
+        per-test tally — a build emits log-line excerpts + phase
+        transitions, a provision run emits plan/apply step
+        transitions. Rather than force that into the test schema,
+        a ``build`` / ``provision`` frame carries a free-form
+        ``payload`` mapping the live hub forwards verbatim.
+
+        :param run_id: Run UUID.
+        :param client_id: Client UUID that posted the frame.
+        :param frame_kind: Discriminator — ``"build"`` or
+                           ``"provision"`` (``"test"`` frames take
+                           the :class:`ProgressSummary` /
+                           :class:`ProgressRecord` path instead).
+        :param frame_index: Monotonically-increasing index of the
+                            frame within the run's stream. The
+                            ``(run_id, frame_kind, frame_index)``
+                            triple is unique so a re-posted frame
+                            is a no-op.
+        :param phase: Optional current phase / step name
+                      (``"cloning"`` / ``"building"`` /
+                      ``"packaging"`` for build; ``"plan"`` /
+                      ``"apply"`` for provision).
+        :param status: Optional status of the current phase / step
+                       (``"running"`` / ``"succeeded"`` /
+                       ``"failed"``).
+        :param percent_complete: Optional float in [0.0, 100.0].
+        :param notes: Optional free-form note string.
+        :param recorded_at: UTC timestamp the client minted the
+                            frame.
+        :param payload: Untyped kind-specific passthrough dict —
+                        build log-line excerpts, provision step
+                        detail, etc.
+    """
+    run_id: str
+    client_id: str
+    frame_kind: str
+    frame_index: int
+    phase: Optional[str]
+    status: Optional[str]
+    percent_complete: Optional[float]
+    notes: Optional[str]
+    recorded_at: datetime
+    payload: Mapping[str, Any]
 
 
 @dataclass(frozen=True)
