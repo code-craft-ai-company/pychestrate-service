@@ -28,9 +28,10 @@ import base64
 import os
 
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
@@ -252,6 +253,68 @@ def generate_dev_signing_key(*, key_id: str) -> SigningKeyHandle:
         private_key=private_key,
         public_key=private_key.public_key(),
     )
+    return rtnval
+
+
+#: JWKS-style algorithm label published for every Ed25519 key.
+ED25519_ALGORITHM_NAME: str = "Ed25519"
+
+
+def public_key_to_pem(*, public_key: Ed25519PublicKey) -> str:
+    """
+        Serialize an Ed25519 public key to a SubjectPublicKeyInfo PEM
+        string. Only the public half is serialized — this function
+        never touches private key material.
+
+        :param public_key: The :class:`Ed25519PublicKey` to encode.
+
+        :returns: PEM-encoded public key text (``-----BEGIN PUBLIC
+                  KEY-----`` block, trailing newline included).
+    """
+    pem_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    rtnval = pem_bytes.decode("ascii")
+    return rtnval
+
+
+def active_signing_key_set() -> List[Dict[str, Any]]:
+    """
+        Build the JWKS-style public-key set for distribution to job-
+        envelope-verifying clients. The list carries one entry per
+        registered verify key; the entry matching the active signing
+        key is marked ``"active"`` and every other entry is marked
+        ``"retiring"`` (rotation grace-window keys).
+
+        Only public key material is serialized — the private signing
+        key never leaves this process.
+
+        :returns: List of dicts, each with ``key_id``, ``algorithm``,
+                  ``public_key_pem``, and ``status`` members. Empty
+                  when no signing key is installed.
+    """
+    handle = _ACTIVE_SIGNING_KEY
+    if handle is None:
+        rtnval: List[Dict[str, Any]] = []
+        return rtnval
+
+    active_key_id = handle.key_id
+
+    rtnval = []
+    for key_id in sorted(_VERIFY_KEYS.keys()):
+        public_key = _VERIFY_KEYS[key_id]
+        if key_id == active_key_id:
+            status = "active"
+        else:
+            status = "retiring"
+        entry = {
+            "key_id": key_id,
+            "algorithm": ED25519_ALGORITHM_NAME,
+            "public_key_pem": public_key_to_pem(public_key=public_key),
+            "status": status,
+        }
+        rtnval.append(entry)
     return rtnval
 
 

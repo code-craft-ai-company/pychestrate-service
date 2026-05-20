@@ -64,11 +64,21 @@ mkdir -p "${SECRETS_DIR}"
 KEK_FILE="${SECRETS_DIR}/dev.kek"
 PEPPER_FILE="${SECRETS_DIR}/dev.password-pepper"
 UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
+# Base64-encoded 32-byte Ed25519 seed for the job-envelope signer.
+# The loader (jobs/envelope/signer.py) decodes base64 then builds
+# the Ed25519 private key from the 32-byte seed.
+ENVELOPE_SIGNING_KEY_FILE="${SECRETS_DIR}/dev.envelope-signing-key"
 
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
     chmod 600 "${KEK_FILE}"
     echo "run-staging-gunicorn: generated ${KEK_FILE} (32 random bytes)"
+fi
+
+if [[ ! -s "${ENVELOPE_SIGNING_KEY_FILE}" ]]; then
+    head -c 32 /dev/urandom | base64 > "${ENVELOPE_SIGNING_KEY_FILE}"
+    chmod 600 "${ENVELOPE_SIGNING_KEY_FILE}"
+    echo "run-staging-gunicorn: generated ${ENVELOPE_SIGNING_KEY_FILE} (base64 Ed25519 seed)"
 fi
 
 if [[ ! -s "${PEPPER_FILE}" ]]; then
@@ -118,6 +128,10 @@ export PYCHESTRATE_AUTO_CREATE_SCHEMA="${PYCHESTRATE_AUTO_CREATE_SCHEMA:-false}"
 export PYCHESTRATE_KEK_SOURCE="${PYCHESTRATE_KEK_SOURCE:-file}"
 export PYCHESTRATE_KEK_ID="${PYCHESTRATE_KEK_ID:-staging-kek-1}"
 export PYCHESTRATE_KEK_FILE_PATH="${PYCHESTRATE_KEK_FILE_PATH:-${KEK_FILE}}"
+
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE:-file}"
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID:-staging-envelope-ed25519-1}"
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH:-${ENVELOPE_SIGNING_KEY_FILE}}"
 
 export PYCHESTRATE_PASSWORD_PEPPER_SOURCE="${PYCHESTRATE_PASSWORD_PEPPER_SOURCE:-file}"
 export PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH="${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH:-${PEPPER_FILE}}"

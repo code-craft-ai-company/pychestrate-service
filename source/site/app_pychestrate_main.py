@@ -101,6 +101,12 @@ from automojo.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import
 from automojo.pychestrate.webservice.runs.restapi.v1.runs_routes import (
     register_runs_routes,
 )
+from automojo.pychestrate.webservice.jobs.envelope.restapi.v1.signing_keys_routes import (
+    register_signing_keys_routes,
+)
+from automojo.pychestrate.webservice.jobs.envelope.startup import (
+    install_envelope_signer_from_environment,
+)
 from automojo.pychestrate.webservice.runs.restapi.v1.runs_events_routes import (
     register_runs_events_routes,
 )
@@ -418,6 +424,7 @@ def register_service_extensions() -> None:
     register_pods_routes(app=app, version_prefix="/api/v1")
     register_projects_routes(app=app, version_prefix="/api/v1")
     register_runs_routes(app=app, version_prefix="/api/v1")
+    register_signing_keys_routes(app=app, version_prefix="/api/v1")
     register_runs_events_routes(app=app, version_prefix="/api/v1")
     register_test_catalog_routes(app=app, version_prefix="/api/v1")
     register_test_runs_routes(app=app, version_prefix="/api/v1")
@@ -451,6 +458,12 @@ def register_service_extensions() -> None:
 def pychestrate_website_main():
     runtime_config = load_config_from_environment()
     bootstrap_runtime(config=runtime_config)
+
+    # Install the Ed25519 job-envelope signing key from the deploy
+    # environment. Best-effort: a misconfiguration degrades the
+    # dispatch feature (the signing-key endpoint returns 503) without
+    # taking down login or the rest of the API.
+    install_envelope_signer_from_environment()
 
     # Provision the initial-admin token (idempotent; no-op past
     # completion). Logs the on-disk token path so operators see it
@@ -516,6 +529,11 @@ def build_wsgi_application_for_production():
     """
     runtime_config = load_config_from_environment()
     bootstrap_runtime(config=runtime_config)
+
+    # Install the Ed25519 job-envelope signing key from the deploy
+    # environment. See pychestrate_website_main for the rationale; the
+    # production-WSGI factory mirrors the dev entry point exactly.
+    install_envelope_signer_from_environment()
 
     # Provision the initial-admin token. See pychestrate_website_main
     # for the rationale; the production-WSGI factory mirrors the dev
