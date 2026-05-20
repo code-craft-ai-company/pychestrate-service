@@ -295,6 +295,16 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:release_channels.write": (
         "Publish releases onto a channel via the REST surface"
     ),
+    # 10-backup-dr PR p21d: backup / disaster-recovery REST
+    # surface. Backups snapshot the DB, object-store references,
+    # and secrets metadata into a pluggable storage backend.
+    "system:backups.read": (
+        "Read backup records, status, and manifests via the REST "
+        "surface"
+    ),
+    "system:backups.write": (
+        "Trigger backups and request restores via the REST surface"
+    ),
 }
 
 

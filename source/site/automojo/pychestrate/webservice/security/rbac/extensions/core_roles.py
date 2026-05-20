@@ -264,6 +264,16 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:release_channels.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 10-backup-dr PR p21d: backup / disaster-recovery REST
+        # surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:backups.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:backups.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

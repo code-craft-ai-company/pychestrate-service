@@ -170,6 +170,9 @@ from automojo.pychestrate.webservice.webhooks_in.restapi.v1.webhooks_in_routes i
 from automojo.pychestrate.webservice.webhooks_out.restapi.v1.webhooks_out_routes import (
     register_webhooks_out_routes,
 )
+from automojo.pychestrate.webservice.backup.restapi.v1.backup_routes import (
+    register_backup_routes,
+)
 from automojo.pychestrate.webservice.resources.restapi.v1.resource_pools_routes import (
     register_resource_pools_routes,
 )
@@ -504,6 +507,7 @@ def register_service_extensions() -> None:
     register_resources_api_routes(app=app, version_prefix="/api/v1")
     register_webhooks_in_routes(app=app, version_prefix="/api/v1")
     register_webhooks_out_routes(app=app, version_prefix="/api/v1")
+    register_backup_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",
