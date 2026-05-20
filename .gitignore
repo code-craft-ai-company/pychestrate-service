@@ -150,5 +150,5 @@ dmypy.json
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 .output
-.output_*/
+.output*
 .DS_Store
