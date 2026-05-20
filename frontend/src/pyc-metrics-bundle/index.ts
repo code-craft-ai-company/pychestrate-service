@@ -31,6 +31,7 @@ import {
     PycDashboardDetail,
     dashboard_id_from_path,
 } from "./dashboards-view.js"
+import { PycSlos } from "./slos-view.js"
 
 /**
  * Descriptor passed to ``SidebarRegistry.registerEntry``. Mirrors
@@ -96,6 +97,11 @@ const TIMESERIES_ROUTE: string = "/timeseries"
 const DASHBOARDS_ROUTE: string = "/dashboards"
 
 /**
+ * Route prefix the SLO list view owns.
+ */
+const SLOS_ROUTE: string = "/slos"
+
+/**
  * Custom Element tag name for the test-metrics view.
  */
 const TEST_METRICS_TAG: string = "pyc-test-metrics"
@@ -114,6 +120,16 @@ const DASHBOARDS_LIST_TAG: string = "pyc-dashboards-list"
  * Custom Element tag name for the dashboard detail view.
  */
 const DASHBOARD_DETAIL_TAG: string = "pyc-dashboard-detail"
+
+/**
+ * Custom Element tag name for the SLO list view.
+ */
+const SLOS_TAG: string = "pyc-slos"
+
+/**
+ * Permission key the SLO REST endpoints require.
+ */
+const SLOS_READ_PERMISSION: string = "system:slos.read"
 
 /**
  * Dist URL of the metrics bundle stylesheet (copied by
@@ -178,6 +194,19 @@ const DASHBOARDS_ENTRY: SidebarEntryDescriptor = {
 }
 
 /**
+ * The "SLOs" sidebar entry this bundle contributes. Gated on the
+ * ``system:slos.read`` permission -- the key the SLO REST
+ * endpoints require.
+ */
+const SLOS_ENTRY: SidebarEntryDescriptor = {
+    entryId: "insights.slos",
+    label: "SLOs",
+    route: SLOS_ROUTE,
+    requiredPermissions: [SLOS_READ_PERMISSION],
+    group: INSIGHTS_GROUP_ID,
+}
+
+/**
  * Register the Insights sidebar group and the metrics entries
  * against the shell. Exported so unit tests can drive registration
  * against a stub registry without going through the global window
@@ -196,6 +225,7 @@ export function register_metrics_sidebar(
     sidebar.registerEntry(TEST_METRICS_ENTRY)
     sidebar.registerEntry(TIMESERIES_ENTRY)
     sidebar.registerEntry(DASHBOARDS_ENTRY)
+    sidebar.registerEntry(SLOS_ENTRY)
     return
 }
 
@@ -219,6 +249,9 @@ export function define_metrics_elements(): void {
     }
     if (customElements.get(DASHBOARD_DETAIL_TAG) === undefined) {
         customElements.define(DASHBOARD_DETAIL_TAG, PycDashboardDetail)
+    }
+    if (customElements.get(SLOS_TAG) === undefined) {
+        customElements.define(SLOS_TAG, PycSlos)
     }
     return
 }
@@ -268,6 +301,13 @@ export function classify_metrics_route(path: string): string {
         const rtnval = "dashboards-list"
         return rtnval
     }
+    if (
+        working === SLOS_ROUTE ||
+        working === SLOS_ROUTE + "/"
+    ) {
+        const rtnval = "slos"
+        return rtnval
+    }
     const detail_id = dashboard_id_from_path(working)
     if (detail_id.length > 0) {
         const rtnval = "dashboard-detail"
@@ -300,6 +340,10 @@ export function tag_for_metrics_route(route: string): string {
     }
     if (route === "dashboard-detail") {
         const rtnval = DASHBOARD_DETAIL_TAG
+        return rtnval
+    }
+    if (route === "slos") {
+        const rtnval = SLOS_TAG
         return rtnval
     }
     const rtnval = ""
@@ -437,6 +481,29 @@ export {
     tile_metric_name,
     extract_dashboards,
 } from "./dashboards-view.js"
+export { PycSlos } from "./slos-view.js"
+export type {
+    Slo,
+    SloStatus,
+    SloDetail,
+    SloPage,
+    SloPageMeta,
+    SloProjectOption,
+    SloCreateOutcome,
+    SloStatusOutcome,
+    SlosListState,
+} from "./slos-view.js"
+export {
+    build_slos_collection_url,
+    build_slo_detail_url,
+    format_ratio,
+    format_window,
+    slo_status_tone,
+    slo_status_label,
+    slo_create_message_for_status,
+    parse_definition_config,
+    extract_slo_projects,
+} from "./slos-view.js"
 
 if (typeof window !== "undefined") {
     _boot()

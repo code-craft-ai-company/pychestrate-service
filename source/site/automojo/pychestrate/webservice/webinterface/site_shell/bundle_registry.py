@@ -208,6 +208,21 @@ def install_default_bundles() -> None:
           because the top-level ``/resources`` prefix is claimed by
           the legacy resources blueprint. Loaded only on
           ``/resource-pools`` and its sub-paths.
+        * ``pyc-infra-bundle`` additionally registers under prefix
+          ``/blast-radius-guards`` -- the ``<pyc-guards>`` view
+          (environment-scoped blast-radius-guards table, attach /
+          enable / disable actions, evaluate-preview panel).
+        * ``pyc-metrics-bundle`` additionally registers under
+          prefix ``/slos`` -- the ``<pyc-slos>`` view (per-project
+          SLO table, create form, per-SLO burn-rate status).
+        * ``pyc-ops-bundle`` -- prefixes ``/webhooks`` and
+          ``/release-channels`` -- operations sidebar registration
+          plus the ``<pyc-webhooks>`` view (tabbed inbound /
+          outbound webhook integrations, subscriptions, deliveries,
+          test-event action) and the ``<pyc-release-channels>``
+          view (release-channels table, publish form, per-channel
+          published-release detail). Loaded only on ``/webhooks``,
+          ``/release-channels`` and their sub-paths.
 
         :returns: None.
     """
@@ -246,6 +261,19 @@ def install_default_bundles() -> None:
     register_bundle(
         route_prefix="/resource-pools",
         bundle_name="pyc-resources-bundle",
+    )
+    register_bundle(
+        route_prefix="/blast-radius-guards",
+        bundle_name="pyc-infra-bundle",
+    )
+    register_bundle(
+        route_prefix="/slos", bundle_name="pyc-metrics-bundle"
+    )
+    register_bundle(
+        route_prefix="/webhooks", bundle_name="pyc-ops-bundle"
+    )
+    register_bundle(
+        route_prefix="/release-channels", bundle_name="pyc-ops-bundle"
     )
     return
 
