@@ -97,6 +97,12 @@ from automojo.pychestrate.webservice.extensions import phase3_bootstrap as _phas
 # walks the diff and when ``upgrade head`` reads target_metadata.
 from automojo.pychestrate.webservice.identity.setup import models as _setup_models  # noqa: E402, F401
 
+# 10-backup-dr model. Imported explicitly so ``backup_record`` is
+# on :data:`PychestratePhase1Base.metadata` when alembic
+# autogenerate walks the diff and when ``upgrade head`` reads
+# target_metadata. Added by PR p21d.
+from automojo.pychestrate.webservice.backup import models as _backup_models  # noqa: E402, F401
+
 from automojo.pychestrate.webservice.persistence.schema import (  # noqa: E402
     PychestratePhase1Base,
 )
