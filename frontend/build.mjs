@@ -38,6 +38,19 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-admin-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-admin-bundle.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-runs-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-runs-bundle.js"),
+    },
+]
+
+// Bundle stylesheets copied alongside their bundle so the bundle
+// can reference a stable URL. Each entry is (source, target-name).
+const STYLESHEETS = [
+    {
+        source: path.join(HERE, "src", "pyc-runs-bundle", "runs-list.css"),
+        target: "pyc-runs-bundle.css",
+    },
 ]
 
 async function build_all() {
@@ -71,6 +84,14 @@ async function build_all() {
     const css_target = path.join(DIST_DIR, "pyc-site-shell.css")
     if (fs.existsSync(css_source) === true) {
         fs.copyFileSync(css_source, css_target)
+    }
+
+    // Copy per-bundle stylesheets so each feature bundle can load
+    // its own stylesheet from a stable dist URL.
+    for (const sheet of STYLESHEETS) {
+        if (fs.existsSync(sheet.source) === true) {
+            fs.copyFileSync(sheet.source, path.join(DIST_DIR, sheet.target))
+        }
     }
 
     console.log("Build complete. Output dir: " + DIST_DIR)

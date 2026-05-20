@@ -143,11 +143,15 @@ def install_default_bundles() -> None:
           loaded on every shell-served path.
         * ``pyc-admin-bundle`` -- prefix ``/admin`` -- admin
           sidebar registration, loaded only on ``/admin/*`` paths.
+        * ``pyc-runs-bundle`` -- prefix ``/runs`` -- runs list
+          sidebar registration plus the ``<pyc-runs-list>`` view,
+          loaded only on ``/runs`` and ``/runs/*`` paths.
 
         :returns: None.
     """
     register_bundle(route_prefix="", bundle_name="pyc-site-shell")
     register_bundle(route_prefix="/admin", bundle_name="pyc-admin-bundle")
+    register_bundle(route_prefix="/runs", bundle_name="pyc-runs-bundle")
     return
 
 
