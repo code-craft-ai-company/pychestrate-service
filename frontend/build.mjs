@@ -50,6 +50,10 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-builds-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-builds-bundle.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-infra-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-infra-bundle.js"),
+    },
 ]
 
 // Bundle stylesheets copied alongside their bundle so the bundle
@@ -66,6 +70,10 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-builds-bundle", "builds.css"),
         target: "pyc-builds-bundle.css",
+    },
+    {
+        source: path.join(HERE, "src", "pyc-infra-bundle", "infra.css"),
+        target: "pyc-infra-bundle.css",
     },
 ]
 
