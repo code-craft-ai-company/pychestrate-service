@@ -153,6 +153,31 @@ def _patch_project_exists(*, project: Optional[Any]) -> Any:
     return patch
 
 
+def _patch_eligible_candidates(*, candidates: Optional[List[Any]] = None) -> Any:
+    """
+        Patch the route's eligible-pod selection so the trigger
+        tests do not need a real db session. Defaults to one
+        candidate so the dispatch path is reached.
+    """
+    resolved = candidates
+    if resolved is None:
+        resolved = [
+            build_runs_routes.DispatchCandidate(
+                client_id="client-1",
+                pod_id="pod-1",
+                capability_tags=tuple(),
+                inflight_dispatch_count=0,
+                last_dispatched_at_iso="",
+            )
+        ]
+    patch = create_module_patch(
+        build_runs_routes, "_build_eligible_pod_candidates",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: list(resolved))
+    return patch
+
+
 def _make_build_view(
         *,
         run_id: str = "run-1",
@@ -434,6 +459,7 @@ def test_trigger_returns_422_when_runner_kind_unknown():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cand_patch = _patch_eligible_candidates()
     trigger_patch = create_module_patch(
         build_runs_routes.build_service, "trigger_run",
     )
@@ -454,6 +480,7 @@ def test_trigger_returns_422_when_runner_kind_unknown():
         response = build_runs_routes.handle_trigger_build(request)
     finally:
         trigger_patch.deactivate()
+        cand_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 422)
@@ -470,12 +497,15 @@ def test_trigger_returns_202_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cand_patch = _patch_eligible_candidates()
     trigger_patch = create_module_patch(
         build_runs_routes.build_service, "trigger_run",
     )
     trigger_mock = trigger_patch.activate()
     trigger_mock.configure(
-        side_effect=lambda **kwargs: _make_build_view(run_id="run-new"),
+        side_effect=lambda **kwargs: _make_build_view(
+            run_id="run-new", state=BuildRunState.RUNNING,
+        ),
     )
     try:
         request = _FakeRequest(
@@ -491,13 +521,14 @@ def test_trigger_returns_202_on_happy_path():
         response = build_runs_routes.handle_trigger_build(request)
     finally:
         trigger_patch.deactivate()
+        cand_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
     body = _decode_body(response)
     testbase.assert_equal(body["run_id"], "run-new")
     testbase.assert_equal(body["runner_kind"], "makefile")
-    testbase.assert_equal(body["state"], "pending")
+    testbase.assert_equal(body["state"], "running")
     return
 
 

@@ -54,7 +54,11 @@ from automojo.pychestrate.webservice.jobs.envelope.repository import (
     persist_signed_envelope,
 )
 from automojo.pychestrate.webservice.jobs.envelope.schema import (
+    DEFAULT_JOB_KIND,
     ENVELOPE_SCHEMA_VERSION,
+    JOB_KIND_BUILD,
+    JOB_KIND_PROVISION,
+    JOB_KIND_TEST,
     JobDeadline,
     JobEnvelope,
     JobForwardingInfo,
@@ -62,6 +66,7 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
     JobRefs,
     JobResultsLocator,
     ScopedSecret,
+    SUPPORTED_JOB_KINDS,
     SUPPORTED_SCHEMA_VERSIONS,
 )
 from automojo.pychestrate.webservice.jobs.envelope.startup import (

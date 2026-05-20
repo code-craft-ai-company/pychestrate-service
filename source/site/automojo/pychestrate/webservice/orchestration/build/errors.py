@@ -33,3 +33,22 @@ class BuildInputsInvalidError(BuildError):
         Raised when caller-supplied :class:`BuildRunInputs`
         violates an M1 invariant.
     """
+
+
+class BuildDispatchUnavailableError(BuildError):
+    """
+        Raised when ``trigger_run`` cannot dispatch the build job
+        because the orchestration runtime has no
+        :class:`JobDispatcher` wired -- the build service was used
+        before :func:`set_active_job_dispatcher` ran.
+    """
+
+
+class BuildDispatchFailedError(BuildError):
+    """
+        Raised when the build job envelope was built but the
+        underlying :meth:`JobDispatcher.dispatch` call failed (no
+        eligible candidate, transport failure, ...). The BuildRun is
+        left in ``FAILED`` with a ``final_state_reason`` describing
+        the dispatch failure.
+    """

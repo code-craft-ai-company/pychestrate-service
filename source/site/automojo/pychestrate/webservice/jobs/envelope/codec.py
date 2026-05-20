@@ -32,6 +32,7 @@ from automojo.pychestrate.webservice.jobs.envelope.errors import (
     EnvelopeSerializationError,
 )
 from automojo.pychestrate.webservice.jobs.envelope.schema import (
+    DEFAULT_JOB_KIND,
     ENVELOPE_SCHEMA_VERSION,
     JobDeadline,
     JobEnvelope,
@@ -60,6 +61,10 @@ class DispatchRequest:
         :param job_id: Job-catalog UUID.
         :param job_name: Human-readable job identifier.
         :param job_type: Job-type string.
+        :param job_kind: Job-class discriminator
+                         (``"test"`` / ``"build"`` / ``"provision"``).
+                         Defaults to ``"test"`` so existing test-run
+                         dispatch callsites need no change.
         :param run_id: Server-assigned run UUID.
         :param client_id: Registered client UUID.
         :param pod_id: Target pod UUID.
@@ -90,6 +95,7 @@ class DispatchRequest:
     forwarding: JobForwardingInfo
     deadline: JobDeadline
     extension_claims: Dict[str, Any]
+    job_kind: str = DEFAULT_JOB_KIND
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,7 @@ def build(*, request: DispatchRequest) -> JobEnvelope:
         job_id=request.job_id,
         job_name=request.job_name,
         job_type=request.job_type,
+        job_kind=request.job_kind,
         pipeline=request.pipeline,
         run_id=request.run_id,
         client_id=request.client_id,

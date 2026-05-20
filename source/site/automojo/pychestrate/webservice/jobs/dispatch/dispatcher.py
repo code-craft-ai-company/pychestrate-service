@@ -52,6 +52,7 @@ from automojo.pychestrate.webservice.jobs.dispatch.transport_adapter import (
     ClientTransportProtocol,
 )
 from automojo.pychestrate.webservice.jobs.envelope import (
+    DEFAULT_JOB_KIND,
     DispatchRequest as EnvelopeDispatchRequest,
     JobDeadline,
     JobForwardingInfo,
@@ -81,6 +82,10 @@ class DispatchRequestInputs:
         :param job_id: Job-catalog UUID.
         :param job_name: Human-readable job identifier.
         :param job_type: Job-type string.
+        :param job_kind: Job-class discriminator
+                         (``"test"`` / ``"build"`` / ``"provision"``).
+                         Defaults to ``"test"`` so existing test-run
+                         dispatch callsites need no change.
         :param issuer: Service DNS-name + release string.
         :param refs: Build / branch / commit references.
         :param params: JSON-serializable parameter map.
@@ -112,6 +117,7 @@ class DispatchRequestInputs:
     pipeline: Optional[JobPipelineRef] = None
     extension_claims: Optional[Dict[str, Any]] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
+    job_kind: str = DEFAULT_JOB_KIND
 
 
 @dataclass(frozen=True)
@@ -215,6 +221,7 @@ class JobDispatcher:
             job_id=inputs.job_id,
             job_name=inputs.job_name,
             job_type=inputs.job_type,
+            job_kind=inputs.job_kind,
             run_id=inputs.run_id,
             client_id=chosen.client_id,
             pod_id=chosen.pod_id,
