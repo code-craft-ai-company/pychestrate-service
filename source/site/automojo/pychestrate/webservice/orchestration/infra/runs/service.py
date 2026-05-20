@@ -466,6 +466,28 @@ def list_infra_runs_for_environment(
     return rtnval
 
 
+def list_infra_runs_for_project(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        environment_id: Optional[str] = None,
+        limit: int = LIST_INFRA_RUNS_DEFAULT_LIMIT
+    ) -> List[InfraRunView]:
+    """
+        Recent infra runs for a project, newest-first. The
+        optional ``environment_id`` narrows the listing to a
+        single bound environment.
+    """
+    rows = repository.list_runs_for_project(
+        db_session=db_session,
+        project_id=project_id,
+        environment_id=environment_id,
+        limit=limit,
+    )
+    rtnval = [_to_view(row=r) for r in rows]
+    return rtnval
+
+
 def _resolve_driver(*, driver_name: str) -> Type[InfraToolDriverProtocol]:
     candidates = list_factory_implementations(
         factory_protocol_name=INFRA_TOOL_DRIVER_PROTOCOL,

@@ -91,6 +91,34 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:source_integrations.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 6-environment-registry + 6-infra-orchestration +
+        # 6-drift-detection PR p20b: environments, provisioning
+        # runs, and drift-detection REST surface grants for the
+        # admin role.
+        PermissionGrant(
+            permission_key="system:environments.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:environments.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:provisioning.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:provisioning.create",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:drift.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:drift.check",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 
