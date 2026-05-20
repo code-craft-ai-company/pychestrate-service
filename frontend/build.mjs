@@ -63,6 +63,10 @@ const ENTRY_POINTS = [
         outfile: path.join(DIST_DIR, "pyc-secrets-bundle.js"),
     },
     {
+        entry: path.join(HERE, "src", "pyc-pipelines-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-pipelines-bundle.js"),
+    },
+    {
         entry: path.join(HERE, "src", "pyc-pods-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-pods-bundle.js"),
     },
@@ -94,6 +98,10 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-secrets-bundle", "secrets.css"),
         target: "pyc-secrets-bundle.css",
+    },
+    {
+        source: path.join(HERE, "src", "pyc-pipelines-bundle", "pipelines.css"),
+        target: "pyc-pipelines-bundle.css",
     },
     {
         source: path.join(HERE, "src", "pyc-pods-bundle", "pods.css"),
