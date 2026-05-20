@@ -22,6 +22,7 @@
  */
 
 import { PycRunsList } from "./runs-list-view.js"
+import { PycRunDetail, run_id_from_path } from "./run-detail-view.js"
 
 /**
  * Descriptor passed to ``SidebarRegistry.registerEntry``. Mirrors
@@ -82,6 +83,11 @@ const RUNS_ROUTE: string = "/runs"
 const RUNS_LIST_TAG: string = "pyc-runs-list"
 
 /**
+ * Custom Element tag name for the run detail view.
+ */
+const RUN_DETAIL_TAG: string = "pyc-run-detail"
+
+/**
  * Dist URL of the runs bundle stylesheet (copied by ``build.mjs``).
  */
 const RUNS_STYLESHEET_HREF: string =
@@ -139,8 +145,9 @@ export function register_runs_sidebar(sidebar: SidebarRegistryApi): void {
 }
 
 /**
- * Define the ``<pyc-runs-list>`` Custom Element when running in a
- * browser context. Idempotent -- a second call is a no-op.
+ * Define the ``<pyc-runs-list>`` and ``<pyc-run-detail>`` Custom
+ * Elements when running in a browser context. Idempotent -- a
+ * second call is a no-op for an already-defined tag.
  */
 export function define_runs_list_element(): void {
     if (typeof customElements === "undefined") {
@@ -149,37 +156,75 @@ export function define_runs_list_element(): void {
     if (customElements.get(RUNS_LIST_TAG) === undefined) {
         customElements.define(RUNS_LIST_TAG, PycRunsList)
     }
+    if (customElements.get(RUN_DETAIL_TAG) === undefined) {
+        customElements.define(RUN_DETAIL_TAG, PycRunDetail)
+    }
     return
 }
 
 /**
- * Mount the ``<pyc-runs-list>`` element into the shell's ``<main>``
- * region when the current path is ``/runs``. The shell leaves
- * ``<main>`` empty whenever at least one sidebar entry is visible,
- * so this bundle owns the main-region content for its own route.
+ * Classify a shell-served path against the routes this bundle
+ * owns. ``/runs`` (exact) maps to the list view; ``/runs/{id}``
+ * maps to the detail view. Any other path is unowned.
  *
- * A no-op when the path is not ``/runs`` or the main region is not
- * yet in the document.
+ * @param path A request path (typically ``window.location.pathname``).
+ *
+ * @returns ``"list"`` | ``"detail"`` | ``"none"``.
+ */
+export function classify_runs_route(path: string): string {
+    if (typeof path !== "string") {
+        const rtnval = "none"
+        return rtnval
+    }
+    let working = path
+    const query_index = working.indexOf("?")
+    if (query_index >= 0) {
+        working = working.slice(0, query_index)
+    }
+    if (working === RUNS_ROUTE || working === RUNS_ROUTE + "/") {
+        const rtnval = "list"
+        return rtnval
+    }
+    const detail_id = run_id_from_path(working)
+    if (detail_id.length > 0) {
+        const rtnval = "detail"
+        return rtnval
+    }
+    const rtnval = "none"
+    return rtnval
+}
+
+/**
+ * Mount the route-appropriate runs view into the shell's
+ * ``<main>`` region. ``/runs`` (exact) mounts ``<pyc-runs-list>``;
+ * ``/runs/{run_id}`` mounts ``<pyc-run-detail>``. The shell leaves
+ * ``<main>`` empty whenever at least one sidebar entry is visible,
+ * so this bundle owns the main-region content for its own routes.
+ *
+ * A no-op when the path is not a runs route or the main region is
+ * not yet in the document. Idempotent -- when the correct view is
+ * already mounted nothing is replaced.
  */
 export function mount_runs_view_if_active(): void {
     if (typeof document === "undefined") {
         return
     }
-    const path = window.location.pathname
-    if (path !== RUNS_ROUTE) {
+    const route = classify_runs_route(window.location.pathname)
+    if (route === "none") {
         return
     }
     const main = document.querySelector("pyc-site-shell main.pyc-site-shell__main")
     if (main === null) {
         return
     }
-    const existing = main.querySelector(RUNS_LIST_TAG)
+    const target_tag = route === "detail" ? RUN_DETAIL_TAG : RUNS_LIST_TAG
+    const existing = main.querySelector(target_tag)
     if (existing !== null) {
         return
     }
     define_runs_list_element()
     ensure_runs_stylesheet()
-    const view = document.createElement(RUNS_LIST_TAG)
+    const view = document.createElement(target_tag)
     main.replaceChildren(view)
     return
 }
@@ -237,6 +282,23 @@ export type {
     PageMeta,
     RunsListState,
 } from "./runs-list-view.js"
+export {
+    PycRunDetail,
+    run_id_from_path,
+    is_valid_run_id,
+    is_terminal_state,
+    progress_percent,
+    manifest_artifacts,
+    artifact_url,
+} from "./run-detail-view.js"
+export type {
+    RunEvent,
+    ProgressSummary,
+    ResultManifest,
+    ManifestArtifact,
+    RunDetailState,
+    StreamStatus,
+} from "./run-detail-view.js"
 
 if (typeof window !== "undefined") {
     _boot()

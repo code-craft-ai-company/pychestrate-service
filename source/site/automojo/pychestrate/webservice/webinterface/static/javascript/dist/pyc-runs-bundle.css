@@ -178,3 +178,266 @@ pyc-runs-list {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-runs-fg-muted);
 }
+
+/*
+ * Styles for the <pyc-run-detail> run detail view. Reuses the
+ * same --pyc-runs-* token aliases the list view defines so a
+ * theme override restyles both for free.
+ */
+
+pyc-run-detail {
+    --pyc-runs-fg: var(--pyc-color-on-surface, hsl(210, 22%, 16%));
+    --pyc-runs-fg-muted: var(--pyc-color-on-surface-muted, hsl(213, 8%, 47%));
+    --pyc-runs-surface: var(--pyc-color-surface, hsl(0, 0%, 100%));
+    --pyc-runs-border: var(--pyc-color-border, hsl(220, 60%, 88%));
+    --pyc-runs-divider: var(--pyc-color-divider, hsla(0, 0%, 0%, 0.08));
+    --pyc-runs-accent-on-surface:
+        var(--pyc-color-accent-on-surface, hsl(220, 75%, 40%));
+    --pyc-runs-ok-surface:
+        var(--pyc-color-success-surface, hsla(145, 63%, 42%, 0.16));
+    --pyc-runs-ok-fg:
+        var(--pyc-color-on-success-surface, hsl(145, 63%, 24%));
+    --pyc-runs-warn-surface:
+        var(--pyc-color-warning-surface, hsla(38, 100%, 67%, 0.2));
+    --pyc-runs-warn-fg:
+        var(--pyc-color-on-warning-surface, hsl(32, 75%, 21%));
+    --pyc-runs-error-surface:
+        var(--pyc-color-error-surface, hsla(0, 72%, 51%, 0.14));
+    --pyc-runs-error-fg:
+        var(--pyc-color-on-error-surface, hsl(0, 72%, 34%));
+    --pyc-runs-neutral-surface:
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.06));
+    --pyc-runs-accent: var(--pyc-color-accent, hsl(215, 100%, 61%));
+
+    display: block;
+    color: var(--pyc-runs-fg);
+    font-size: var(--pyc-font-size-body, 1rem);
+}
+
+.pyc-run-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.pyc-run-detail__heading {
+    margin: 0;
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+    font-weight: 600;
+}
+
+.pyc-run-detail__back-link {
+    align-self: flex-start;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-runs-accent-on-surface);
+    text-decoration: none;
+}
+
+.pyc-run-detail__back-link:hover {
+    text-decoration: underline;
+}
+
+.pyc-run-detail__banner {
+    margin: 0;
+    padding: 0.5rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    border-radius: 0.375rem;
+    background-color: var(--pyc-runs-neutral-surface);
+    color: var(--pyc-runs-fg);
+}
+
+.pyc-run-detail__banner[data-tone="warn"] {
+    background-color: var(--pyc-runs-warn-surface);
+    color: var(--pyc-runs-warn-fg);
+}
+
+.pyc-run-detail__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.pyc-run-detail__status {
+    margin: 0;
+    padding: 2rem 0;
+    text-align: center;
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__status--error {
+    color: var(--pyc-runs-error-fg);
+}
+
+.pyc-run-detail__summary,
+.pyc-run-detail__progress,
+.pyc-run-detail__artifacts {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pyc-run-detail__id-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pyc-run-detail__run-id {
+    font-family: var(--pyc-font-family-mono, monospace);
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+}
+
+.pyc-run-detail__badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    border-radius: 1rem;
+    background-color: var(--pyc-runs-neutral-surface);
+    color: var(--pyc-runs-fg);
+}
+
+.pyc-run-detail__badge[data-tone="ok"] {
+    background-color: var(--pyc-runs-ok-surface);
+    color: var(--pyc-runs-ok-fg);
+}
+
+.pyc-run-detail__badge[data-tone="warn"] {
+    background-color: var(--pyc-runs-warn-surface);
+    color: var(--pyc-runs-warn-fg);
+}
+
+.pyc-run-detail__badge[data-tone="error"] {
+    background-color: var(--pyc-runs-error-surface);
+    color: var(--pyc-runs-error-fg);
+}
+
+.pyc-run-detail__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+}
+
+.pyc-run-detail__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
+
+.pyc-run-detail__field dt {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__field dd {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    word-break: break-word;
+}
+
+.pyc-run-detail__section-heading {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-weight: 600;
+}
+
+.pyc-run-detail__counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.pyc-run-detail__count {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 4rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    background-color: var(--pyc-runs-neutral-surface);
+}
+
+.pyc-run-detail__count strong {
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+}
+
+.pyc-run-detail__count span {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__count[data-tone="ok"] {
+    background-color: var(--pyc-runs-ok-surface);
+}
+
+.pyc-run-detail__count[data-tone="warn"] {
+    background-color: var(--pyc-runs-warn-surface);
+}
+
+.pyc-run-detail__count[data-tone="error"] {
+    background-color: var(--pyc-runs-error-surface);
+}
+
+.pyc-run-detail__bar {
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: var(--pyc-runs-neutral-surface);
+    overflow: hidden;
+}
+
+.pyc-run-detail__bar-fill {
+    height: 100%;
+    background-color: var(--pyc-runs-accent);
+}
+
+.pyc-run-detail__progress-notes {
+    margin: 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__rollup {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__artifact-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pyc-run-detail__artifact {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding: 0.5rem 0.75rem;
+    border: 0.0625rem solid var(--pyc-runs-divider);
+    border-radius: 0.375rem;
+}
+
+.pyc-run-detail__artifact-link {
+    color: var(--pyc-runs-accent-on-surface);
+    text-decoration: none;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-run-detail__artifact-link:hover {
+    text-decoration: underline;
+}
+
+.pyc-run-detail__artifact-path {
+    font-family: var(--pyc-font-family-mono, monospace);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-run-detail__artifact-empty {
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-runs-fg-muted);
+}
