@@ -57,6 +57,9 @@ from automojo.pychestrate.webservice.notifications.restapi.v1.channels_routes im
 from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
+from automojo.pychestrate.webservice.embed.restapi.v1.embed_routes import (
+    register_embed_routes,
+)
 from automojo.pychestrate.webservice.pods.restapi.v1.pods_routes import (
     register_pods_routes,
 )
@@ -445,6 +448,7 @@ def register_service_extensions() -> None:
     register_flags_routes(app=app, version_prefix="/api/v1")
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
+    register_embed_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_me_routes(app=app, version_prefix="/api/v1")

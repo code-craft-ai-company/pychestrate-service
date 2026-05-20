@@ -234,6 +234,26 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Create resource pools and manage pool members and "
         "reservations via the REST surface"
     ),
+    # Operator-facing read access for the embeddable-views catalog
+    # (GET /api/v1/embed/views). Introduced by 8-embeddable-views
+    # PR p21b. The /embed/{view_key} serving route itself is
+    # token-authed (signed URL), not RBAC-gated.
+    "system:embed.read": (
+        "Read the embeddable-views catalog via the REST surface"
+    ),
+    # Operator-facing access to mint signed embed URLs
+    # (POST /api/v1/embed/views/{view_key}:sign). Introduced by
+    # 8-embeddable-views PR p21b.
+    "system:embed.sign": (
+        "Mint signed embed URLs via the REST surface"
+    ),
+    # Operator-facing read access for the plugin-api meta surface
+    # (GET /api/v1/plugin-api/_meta/* and GET /api/v1/ext).
+    # Introduced by 8-plugin-api PR p21b.
+    "system:plugin_api.read": (
+        "Read the plugin-api published-surface catalog and mounted"
+        " extension endpoints via the REST surface"
+    ),
 }
 
 

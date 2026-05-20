@@ -214,6 +214,20 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:resource_pools.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 8-embeddable-views / 8-plugin-api PR p21b: embed catalog +
+        # signed-URL issuance, and the plugin-api meta surface.
+        PermissionGrant(
+            permission_key="system:embed.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:embed.sign",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:plugin_api.read",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

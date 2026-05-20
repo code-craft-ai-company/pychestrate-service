@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.14-preview
+  version: 0.0.15-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -102,6 +102,11 @@ tags:
     description: Pod definitions, registrations, topology, and templates.
   - name: plugin_api
     description: Plugin-API catalog metadata for installed extensions.
+  - name: embed
+    description: >-
+      Embeddable-views catalog and signed-URL issuance. The signed
+      embed-serving route (`GET /embed/{view_key}`) is token-authed
+      and outside the `/api/v1` surface.
   - name: runs
     description: Run-state reads (`GET /runs/...`).
   - name: test_runs
@@ -1775,6 +1780,98 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/PluginApiMount' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /ext:
+    get:
+      tags: [plugin_api]
+      summary: List extension-contributed REST endpoints.
+      description: >-
+        Operator-facing listing of the extension REST endpoints the
+        host discovered at startup, each mounted under the
+        `/api/v1/ext/<extension_name>/...` namespace. The dynamic
+        binding of each manifest row to a live route is a scoped
+        follow-up; `dynamic_mount` reports `deferred` until that
+        lands. RBAC-gated on `system:plugin_api.read`.
+      operationId: plugin_api_list_ext
+      responses:
+        '200':
+          description: Discovered extension endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, dynamic_mount]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/PluginApiMount' }
+                  total: { type: integer }
+                  dynamic_mount:
+                    type: string
+                    enum: [deferred, active]
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  # =====================================================================
+  # embed
+  # =====================================================================
+
+  /embed/views:
+    get:
+      tags: [embed]
+      summary: List the embeddable-views catalog.
+      description: >-
+        Returns the fixed catalog of embeddable view kinds. RBAC-gated
+        on `system:embed.read`.
+      operationId: embed_list_views
+      responses:
+        '200':
+          description: Embeddable-views catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/EmbedViewKind' }
+                  total: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /embed/views/{view_key}:sign:
+    parameters:
+      - in: path
+        name: view_key
+        required: true
+        schema: { type: string }
+    post:
+      tags: [embed]
+      summary: Mint a signed embed URL for a view kind.
+      description: >-
+        Mints an HMAC-SHA-256 signed embed URL with a TTL. RBAC-gated
+        on `system:embed.sign`. The returned URL embeds every field
+        the `GET /embed/{view_key}` serving route needs to verify the
+        signature; that serving route is token-authed, not
+        session-authed.
+      operationId: embed_sign_view
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmbedSignRequest' }
+      responses:
+        '200':
+          description: Signed embed URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmbedSignedUrl' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # PLANNED — runs / test_runs / test_catalog / progress / dispatch /
@@ -4478,6 +4575,75 @@ components:
         capabilities:
           type: array
           items: { type: string }
+
+    # ----------------------------------------------------------------
+    # embed (8-embeddable-views)
+    # ----------------------------------------------------------------
+
+    EmbedViewKind:
+      type: object
+      description: One row in the fixed embeddable-views catalog.
+      required: [view_kind, component_tag, declared_read_scope, supports_anonymous]
+      properties:
+        view_kind:
+          type: string
+          description: Stable identifier in URLs and audit records.
+        component_tag:
+          type: string
+          description: Layer 9 WebComponent tag the embed renderer hosts.
+        declared_read_scope:
+          type: array
+          items: { type: string }
+          description: Permission keys the embed's inline token is scoped to.
+        supports_anonymous:
+          type: boolean
+          description: True iff the kind tolerates anonymous (kiosk) access.
+    EmbedSignRequest:
+      type: object
+      description: >-
+        Optional issuance inputs. Absent fields default: `resource_id`
+        to the view key, `audience` to the calling principal's email,
+        `ttl_seconds` to 3600 (capped at 86400).
+      properties:
+        resource_id: { type: string }
+        audience: { type: string }
+        ttl_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+    EmbedSignedUrl:
+      type: object
+      description: A minted signed embed URL plus ready-to-paste snippets.
+      required:
+        - url
+        - key_id
+        - expires_unix
+        - expires_at
+        - ttl_seconds
+        - view_kind
+        - resource_id
+        - audience
+        - iframe_snippet
+        - webcomponent_snippet
+      properties:
+        url:
+          type: string
+          description: The fully-rendered signed `/embed/...` URL.
+        key_id: { type: string }
+        expires_unix: { type: integer }
+        expires_at:
+          type: string
+          format: date-time
+        ttl_seconds: { type: integer }
+        view_kind: { type: string }
+        resource_id: { type: string }
+        audience: { type: string }
+        iframe_snippet:
+          type: string
+          description: Ready-to-paste `<iframe>` snippet.
+        webcomponent_snippet:
+          type: string
+          description: Ready-to-paste WebComponent snippet.
 
     # ----------------------------------------------------------------
     # JobEnvelope (planned — surfaced as a referenced schema, not a top-
