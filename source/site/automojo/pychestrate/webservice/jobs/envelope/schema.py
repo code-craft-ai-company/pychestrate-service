@@ -33,6 +33,21 @@ from typing import Any, Dict, Optional, Tuple
 ENVELOPE_SCHEMA_VERSION: str = "2026-04-24"
 SUPPORTED_SCHEMA_VERSIONS: Tuple[str, ...] = (ENVELOPE_SCHEMA_VERSION,)
 
+# Discriminator values for the ``job_kind`` field. One envelope type
+# carries every orchestration job class; the client's runner-resolution
+# branches on ``job_kind`` first, then ``job_type``. ``test`` is the
+# back-compat default so envelopes minted before the discriminator was
+# introduced (or by callers that never set it) still parse cleanly.
+JOB_KIND_TEST: str = "test"
+JOB_KIND_BUILD: str = "build"
+JOB_KIND_PROVISION: str = "provision"
+SUPPORTED_JOB_KINDS: Tuple[str, ...] = (
+    JOB_KIND_TEST,
+    JOB_KIND_BUILD,
+    JOB_KIND_PROVISION,
+)
+DEFAULT_JOB_KIND: str = JOB_KIND_TEST
+
 
 @dataclass(frozen=True)
 class JobRefs:
@@ -152,6 +167,14 @@ class JobEnvelope:
         :param project_id: Owning project UUID.
         :param job_id: Job-catalog UUID.
         :param job_name: Human-readable job identifier.
+        :param job_kind: Job-class discriminator
+                         (``"test"`` / ``"build"`` / ``"provision"``).
+                         The client branches on this before resolving
+                         the kind-specific runner; ``params`` then
+                         carries the kind-specific payload. Defaults to
+                         ``"test"`` for backward compatibility with
+                         envelopes minted before the discriminator was
+                         introduced.
         :param job_type: Job-type string consumed by the client's
                          runner resolution (``"testbase-singlehost"``,
                          ``"ansible-playbook"``, …).
@@ -195,6 +218,7 @@ class JobEnvelope:
     forwarding: JobForwardingInfo
     deadline: JobDeadline
     extension_claims: Dict[str, Any]
+    job_kind: str = DEFAULT_JOB_KIND
 
 
 REQUIRED_TOP_LEVEL_FIELDS: Tuple[str, ...] = (

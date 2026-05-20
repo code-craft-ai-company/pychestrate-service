@@ -45,6 +45,7 @@ from automojo.pychestrate.webservice.jobs.envelope.errors import (
     EnvelopeSchemaVersionError,
 )
 from automojo.pychestrate.webservice.jobs.envelope.schema import (
+    DEFAULT_JOB_KIND,
     JobDeadline,
     JobEnvelope,
     JobForwardingInfo,
@@ -52,6 +53,7 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
     JobRefs,
     JobResultsLocator,
     ScopedSecret,
+    SUPPORTED_JOB_KINDS,
     SUPPORTED_SCHEMA_VERSIONS,
     assert_required_fields_present,
 )
@@ -77,6 +79,7 @@ def envelope_to_dict(*, envelope: JobEnvelope) -> Dict[str, Any]:
         "job_id": envelope.job_id,
         "job_name": envelope.job_name,
         "job_type": envelope.job_type,
+        "job_kind": envelope.job_kind,
         "pipeline": _pipeline_to_dict(pipeline=envelope.pipeline),
         "run_id": envelope.run_id,
         "client_id": envelope.client_id,
@@ -130,6 +133,19 @@ def dict_to_envelope(*, candidate: Dict[str, Any]) -> JobEnvelope:
         err_msg = os.linesep.join(err_lines)
         raise EnvelopeSerializationError(err_msg) from None
 
+    # ``job_kind`` is an optional top-level field. Envelopes minted
+    # before the discriminator was introduced omit it entirely; those
+    # parse back as ``test`` so the existing test-run loop is unaffected.
+    job_kind = candidate.get("job_kind", DEFAULT_JOB_KIND)
+    if job_kind is None:
+        job_kind = DEFAULT_JOB_KIND
+    if job_kind not in SUPPORTED_JOB_KINDS:
+        err_lines = ["JobEnvelope job_kind is not a recognized job class."]
+        err_lines.append("JOB_KIND: {}".format(job_kind))
+        err_lines.append("SUPPORTED: {}".format(list(SUPPORTED_JOB_KINDS)))
+        err_msg = os.linesep.join(err_lines)
+        raise EnvelopeSerializationError(err_msg) from None
+
     refs = JobRefs(**candidate["refs"])
     results = JobResultsLocator(**candidate["results"])
     forwarding = JobForwardingInfo(**candidate["forwarding"])
@@ -164,6 +180,7 @@ def dict_to_envelope(*, candidate: Dict[str, Any]) -> JobEnvelope:
         job_id=candidate["job_id"],
         job_name=candidate["job_name"],
         job_type=candidate["job_type"],
+        job_kind=job_kind,
         pipeline=pipeline,
         run_id=candidate["run_id"],
         client_id=candidate["client_id"],
@@ -246,6 +263,7 @@ def _envelope_to_dict_keys() -> list:
         "job_id",
         "job_name",
         "job_type",
+        "job_kind",
         "pipeline",
         "run_id",
         "client_id",

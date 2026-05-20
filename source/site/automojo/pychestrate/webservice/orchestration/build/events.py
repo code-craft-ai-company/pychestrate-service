@@ -16,6 +16,7 @@ class BuildEventTopics:
         reproducibility-mismatch / cache-allocated topics.
     """
     TRIGGERED = "entity.build.run_triggered"
+    DISPATCHED = "entity.build.run_dispatched"
     STATE_CHANGED = "entity.build.run_state_changed"
     COMPLETED = "entity.build.run_completed"
     FAILED = "entity.build.run_failed"

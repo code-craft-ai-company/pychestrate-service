@@ -73,6 +73,9 @@ from automojo.pychestrate.webservice.runs.restapi.v1 import (
 from automojo.pychestrate.webservice.orchestration.build import (
     register_builtin_extensions as build_orch_register,
 )
+from automojo.pychestrate.webservice.orchestration.build import (
+    service as build_service,
+)
 from automojo.pychestrate.webservice.orchestration.build.artifacts import (
     register_builtin_extensions as build_artifacts_register,
 )
@@ -270,8 +273,21 @@ def _build_test_orchestrator(
 
     test_runs_routes.set_active_test_orchestrator(orchestrator=orchestrator)
 
+    # Publish the SAME JobDispatcher on the build service's seam so a
+    # triggered build dispatches a ``job_kind=build`` envelope into the
+    # identical long-poll queue test runs already land in. The build
+    # service shares the dispatcher's transport -- there is one queue.
+    build_service.set_active_job_dispatcher(dispatcher=dispatcher)
+    build_service.set_active_results_backend(
+        backend=config.results_backend,
+    )
+
     logger.info(
         "phase6.bootstrap.test_orchestrator_ready transport=%s",
+        transport.transport_name(),
+    )
+    logger.info(
+        "phase6.bootstrap.build_dispatch_wired transport=%s",
         transport.transport_name(),
     )
 
