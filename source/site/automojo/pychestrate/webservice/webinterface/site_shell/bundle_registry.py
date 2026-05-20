@@ -278,6 +278,9 @@ def install_default_bundles() -> None:
         route_prefix="/slos", bundle_name="pyc-metrics-bundle"
     )
     register_bundle(
+        route_prefix="/metric-alerts", bundle_name="pyc-metrics-bundle"
+    )
+    register_bundle(
         route_prefix="/webhooks", bundle_name="pyc-ops-bundle"
     )
     register_bundle(

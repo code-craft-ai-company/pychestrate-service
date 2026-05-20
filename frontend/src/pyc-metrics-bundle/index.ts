@@ -32,6 +32,11 @@ import {
     dashboard_id_from_path,
 } from "./dashboards-view.js"
 import { PycSlos } from "./slos-view.js"
+import { PycAlertRules, ALERT_RULES_ROUTE } from "./alert-rules-view.js"
+import {
+    PycDashboardEditor,
+    dashboard_id_from_edit_path,
+} from "./dashboard-editor-view.js"
 
 /**
  * Descriptor passed to ``SidebarRegistry.registerEntry``. Mirrors
@@ -132,6 +137,21 @@ const SLOS_TAG: string = "pyc-slos"
 const SLOS_READ_PERMISSION: string = "system:slos.read"
 
 /**
+ * Custom Element tag name for the metric-alert-rules editor view.
+ */
+const ALERT_RULES_TAG: string = "pyc-alert-rules"
+
+/**
+ * Permission key the metric-alerts REST endpoints require.
+ */
+const ALERT_RULES_READ_PERMISSION: string = "system:metric_alerts.read"
+
+/**
+ * Custom Element tag name for the dashboard-layout editor view.
+ */
+const DASHBOARD_EDITOR_TAG: string = "pyc-dashboard-editor"
+
+/**
  * Dist URL of the metrics bundle stylesheet (copied by
  * ``build.mjs``).
  */
@@ -207,6 +227,19 @@ const SLOS_ENTRY: SidebarEntryDescriptor = {
 }
 
 /**
+ * The "Alert Rules" sidebar entry this bundle contributes. Gated
+ * on the ``system:metric_alerts.read`` permission -- the key the
+ * metric-alerts REST endpoints require.
+ */
+const ALERT_RULES_ENTRY: SidebarEntryDescriptor = {
+    entryId: "insights.metric-alerts",
+    label: "Alert Rules",
+    route: ALERT_RULES_ROUTE,
+    requiredPermissions: [ALERT_RULES_READ_PERMISSION],
+    group: INSIGHTS_GROUP_ID,
+}
+
+/**
  * Register the Insights sidebar group and the metrics entries
  * against the shell. Exported so unit tests can drive registration
  * against a stub registry without going through the global window
@@ -226,6 +259,7 @@ export function register_metrics_sidebar(
     sidebar.registerEntry(TIMESERIES_ENTRY)
     sidebar.registerEntry(DASHBOARDS_ENTRY)
     sidebar.registerEntry(SLOS_ENTRY)
+    sidebar.registerEntry(ALERT_RULES_ENTRY)
     return
 }
 
@@ -252,6 +286,12 @@ export function define_metrics_elements(): void {
     }
     if (customElements.get(SLOS_TAG) === undefined) {
         customElements.define(SLOS_TAG, PycSlos)
+    }
+    if (customElements.get(ALERT_RULES_TAG) === undefined) {
+        customElements.define(ALERT_RULES_TAG, PycAlertRules)
+    }
+    if (customElements.get(DASHBOARD_EDITOR_TAG) === undefined) {
+        customElements.define(DASHBOARD_EDITOR_TAG, PycDashboardEditor)
     }
     return
 }
@@ -308,6 +348,18 @@ export function classify_metrics_route(path: string): string {
         const rtnval = "slos"
         return rtnval
     }
+    if (
+        working === ALERT_RULES_ROUTE ||
+        working === ALERT_RULES_ROUTE + "/"
+    ) {
+        const rtnval = "metric-alerts"
+        return rtnval
+    }
+    const editor_id = dashboard_id_from_edit_path(working)
+    if (editor_id.length > 0) {
+        const rtnval = "dashboard-editor"
+        return rtnval
+    }
     const detail_id = dashboard_id_from_path(working)
     if (detail_id.length > 0) {
         const rtnval = "dashboard-detail"
@@ -344,6 +396,14 @@ export function tag_for_metrics_route(route: string): string {
     }
     if (route === "slos") {
         const rtnval = SLOS_TAG
+        return rtnval
+    }
+    if (route === "metric-alerts") {
+        const rtnval = ALERT_RULES_TAG
+        return rtnval
+    }
+    if (route === "dashboard-editor") {
+        const rtnval = DASHBOARD_EDITOR_TAG
         return rtnval
     }
     const rtnval = ""
@@ -504,6 +564,49 @@ export {
     parse_definition_config,
     extract_slo_projects,
 } from "./slos-view.js"
+export { PycAlertRules } from "./alert-rules-view.js"
+export type {
+    ComparisonOption,
+    AlertRule,
+    AlertRulePage,
+    AlertRulePageMeta,
+    ThresholdConfig,
+    AlertRulesListState,
+    AlertRuleCreateOutcome,
+} from "./alert-rules-view.js"
+export {
+    ALERT_RULES_ROUTE,
+    ALERT_RULE_KIND,
+    COMPARISON_OPTIONS,
+    SEVERITY_OPTIONS,
+    build_alert_rules_collection_url,
+    alert_create_message_for_status,
+    comparison_label,
+    describe_alert_condition,
+    format_alert_window,
+    parse_notification_targets,
+    extract_alert_rules,
+} from "./alert-rules-view.js"
+export { PycDashboardEditor } from "./dashboard-editor-view.js"
+export type {
+    TileKindOption,
+    DashboardSaveOutcome,
+} from "./dashboard-editor-view.js"
+export {
+    TILE_KIND_OPTIONS,
+    dashboard_id_from_edit_path,
+    is_dashboard_edit_path,
+    generate_tile_id,
+    build_tile,
+    add_tile,
+    remove_tile,
+    move_tile_up,
+    move_tile_down,
+    reindex_tiles,
+    editor_tile_metric,
+    build_save_payload,
+    save_message_for_status,
+} from "./dashboard-editor-view.js"
 
 if (typeof window !== "undefined") {
     _boot()
