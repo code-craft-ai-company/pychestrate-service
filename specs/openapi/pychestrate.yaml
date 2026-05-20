@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.13-preview
+  version: 0.0.14-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -138,6 +138,14 @@ tags:
     description: Project metric dashboards (named tile collections).
   - name: metric_alerts
     description: Per-project metric-alert rules.
+  - name: resource_pools
+    description: >-
+      Capability-tagged resource pools, pool membership, and pool
+      reservations (checkout / release of eligible pool members).
+  - name: resources
+    description: >-
+      Per-resource reads -- the resource record, current health
+      probe state, and the resource usage-history timeline.
 
 security:
   - pychestrate_session: []
@@ -2993,6 +3001,319 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  # ------------------------------------------------------------------
+  # 4-resources PR p20p: resource-management REST surface
+  # ------------------------------------------------------------------
+
+  /resource-pools:
+    get:
+      tags: [resource_pools]
+      summary: List resource pools for a project.
+      operationId: resource_pools_list
+      x-pychestrate-status: planned
+      description: |
+        Returns a paginated `{items, meta}` page of resource pools.
+        The pool-listing service is project-scoped, so the
+        `project_id` query parameter is required.
+      parameters:
+        - in: query
+          name: project_id
+          required: true
+          schema: { type: string, format: uuid }
+          description: Owning project identifier.
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: per_page
+          schema: { type: integer, minimum: 1, maximum: 500, default: 50 }
+      responses:
+        '200':
+          description: Page of resource pools.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourcePoolPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [resource_pools]
+      summary: Create a resource pool.
+      operationId: resource_pools_create
+      x-pychestrate-status: planned
+      description: |
+        Creates a capability-tagged pool. The `(project_id, name)`
+        pair is unique -- a duplicate name returns `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourcePoolCreateRequest' }
+      responses:
+        '201':
+          description: Resource pool created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourcePool' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /resource-pools/{pool_id}:
+    parameters:
+      - in: path
+        name: pool_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource-pool identifier.
+    get:
+      tags: [resource_pools]
+      summary: Read a resource pool.
+      operationId: resource_pools_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Resource pool.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourcePool' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [resource_pools]
+      summary: Delete a resource pool.
+      operationId: resource_pools_delete
+      x-pychestrate-status: planned
+      description: |
+        Hard-deletes the pool. Pool-membership rows cascade through
+        the `resources_resource_pool_member` foreign key.
+      responses:
+        '204': { description: Resource pool deleted. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resource-pools/{pool_id}/resources:
+    parameters:
+      - in: path
+        name: pool_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource-pool identifier.
+    get:
+      tags: [resource_pools]
+      summary: List the resource members of a pool.
+      operationId: resource_pools_list_members
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Page of pool members.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourcePoolMemberPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [resource_pools]
+      summary: Add a resource to a pool.
+      operationId: resource_pools_add_member
+      x-pychestrate-status: planned
+      description: |
+        Idempotent -- adding an already-attached resource returns
+        the existing membership row.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourcePoolMemberAddRequest' }
+      responses:
+        '201':
+          description: Resource added to the pool.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourcePoolMember' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /resource-pools/{pool_id}/resources/{resource_id}:
+    parameters:
+      - in: path
+        name: pool_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource-pool identifier.
+      - in: path
+        name: resource_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource identifier.
+    delete:
+      tags: [resource_pools]
+      summary: Remove a resource from a pool.
+      operationId: resource_pools_remove_member
+      x-pychestrate-status: planned
+      description: Idempotent on a missing membership.
+      responses:
+        '204': { description: Resource removed from the pool. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /resource-pools/{pool_id}/reservations:
+    parameters:
+      - in: path
+        name: pool_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource-pool identifier.
+    get:
+      tags: [resource_pools]
+      summary: List reservations across a pool's member resources.
+      operationId: resource_pools_list_reservations
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Page of reservations.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReservationPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [resource_pools]
+      summary: Reserve (checkout) an eligible pool member.
+      operationId: resource_pools_create_reservation
+      x-pychestrate-status: planned
+      description: |
+        Opens a reservation against an eligible pool member. The
+        FIFO `pick_candidate` allocation strategy chooses the
+        member unless the body supplies an explicit `resource_id`
+        target or a `preferred_member` hint. The chosen resource
+        is reserved through the conflict evaluator -- a vetoed
+        reserve returns `409`. A pool with no eligible (AVAILABLE)
+        member also returns `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PoolReservationRequest' }
+      responses:
+        '201':
+          description: Reservation granted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reservation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /resource-pools/{pool_id}/reservations/{reservation_id}:
+    parameters:
+      - in: path
+        name: pool_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource-pool identifier.
+      - in: path
+        name: reservation_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Reservation identifier.
+    delete:
+      tags: [resource_pools]
+      summary: Release a reservation.
+      operationId: resource_pools_release_reservation
+      x-pychestrate-status: planned
+      description: Idempotent on already-released reservations.
+      responses:
+        '204': { description: Reservation released. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resources/{resource_id}:
+    parameters:
+      - in: path
+        name: resource_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource identifier.
+    get:
+      tags: [resources]
+      summary: Read a resource.
+      operationId: resources_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Resource.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resource' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resources/{resource_id}/health:
+    parameters:
+      - in: path
+        name: resource_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource identifier.
+    get:
+      tags: [resources]
+      summary: Read the current health record for a resource.
+      operationId: resources_read_health
+      x-pychestrate-status: planned
+      description: |
+        Health records are seeded on `entity.resource.registered`
+        -- a resource that has never been seeded returns `404`.
+      responses:
+        '200':
+          description: Resource health record.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResourceHealth' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /resources/{resource_id}/usage-history:
+    parameters:
+      - in: path
+        name: resource_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource identifier.
+    get:
+      tags: [resources]
+      summary: List the usage-history timeline for a resource.
+      operationId: resources_list_usage_history
+      x-pychestrate-status: planned
+      description: |
+        Returns the usage timeline newest-first as a `{items, meta}`
+        page.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 1000, default: 200 }
+      responses:
+        '200':
+          description: Page of usage records.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsageRecordPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
 components:
 
   securitySchemes:
@@ -5718,4 +6039,285 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/MetricAlertRule' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    # ----------------------------------------------------------------
+    # 4-resources PR p20p: resource-management schemas
+    # ----------------------------------------------------------------
+
+    ResourcePool:
+      type: object
+      description: |
+        A capability-tagged grouping of resources. Matches the
+        SQLAlchemy model in `resources.pools.models.ResourcePool`.
+      required:
+        - pool_id
+        - project_id
+        - name
+        - capability_tags
+        - member_count
+      properties:
+        pool_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        capability_tags:
+          type: array
+          items: { type: string }
+        member_count:
+          type: integer
+          minimum: 0
+          description: Count of resource members attached to the pool.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ResourcePoolPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ResourcePool' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    ResourcePoolCreateRequest:
+      type: object
+      required: [project_id, name]
+      properties:
+        project_id: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        capability_tags:
+          type: array
+          items: { type: string }
+
+    ResourcePoolMember:
+      type: object
+      description: |
+        Resource-to-pool membership row. Matches
+        `resources.pools.models.ResourcePoolMember`.
+      required:
+        - membership_id
+        - pool_id
+        - resource_id
+      properties:
+        membership_id: { type: string, format: uuid }
+        pool_id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        added_at: { type: string, format: date-time }
+
+    ResourcePoolMemberPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ResourcePoolMember' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    ResourcePoolMemberAddRequest:
+      type: object
+      required: [resource_id]
+      properties:
+        resource_id: { type: string, format: uuid }
+
+    Resource:
+      type: object
+      description: |
+        An authoritative resource record. Matches the SQLAlchemy
+        model in `resources.inventory.models.Resource`.
+      required:
+        - resource_id
+        - project_id
+        - kind
+        - state
+      properties:
+        resource_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        kind:
+          type: string
+          description: Stable resource-kind identifier (e.g. `device`).
+        display_name: { type: string }
+        description: { type: string }
+        identity_hash:
+          type: string
+          description: Per-kind canonical identity hash.
+        state:
+          type: string
+          enum: [available, leased, quarantined, maintenance, retired]
+        tags:
+          type: array
+          items: { type: string }
+        attributes:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ResourceHealth:
+      type: object
+      description: |
+        The current health-probe record for a resource. Matches
+        `resources.health.models.ResourceHealth`.
+      required:
+        - health_id
+        - resource_id
+        - project_id
+        - probe_name
+        - last_outcome
+      properties:
+        health_id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        probe_name: { type: string }
+        probe_period_seconds: { type: integer, minimum: 1 }
+        last_outcome:
+          type: string
+          enum: [pass, fail, unknown]
+        last_probe_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_pass_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_fail_at:
+          type: string
+          format: date-time
+          nullable: true
+        next_probe_at: { type: string, format: date-time }
+        pass_count: { type: integer, minimum: 0 }
+        fail_count: { type: integer, minimum: 0 }
+        consecutive_failures: { type: integer, minimum: 0 }
+        last_error:
+          type: string
+          nullable: true
+        last_payload:
+          type: object
+          additionalProperties: true
+
+    Reservation:
+      type: object
+      description: |
+        A resource reservation (checkout). Matches the SQLAlchemy
+        model in `resources.checkout.models.Reservation`. The
+        resources domain models reservations rather than free-form
+        "allocations".
+      required:
+        - reservation_id
+        - project_id
+        - resource_id
+        - mode
+        - state
+      properties:
+        reservation_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        requested_by:
+          type: string
+          format: uuid
+          nullable: true
+        mode:
+          type: string
+          enum: [exclusive, shared]
+        state:
+          type: string
+          enum: [pending, granted, released, rejected, forced_released]
+        note: { type: string }
+        requested_at: { type: string, format: date-time }
+        granted_at:
+          type: string
+          format: date-time
+          nullable: true
+        released_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+          nullable: true
+
+    ReservationPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Reservation' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    PoolReservationRequest:
+      type: object
+      required: [project_id]
+      properties:
+        project_id: { type: string, format: uuid }
+        mode:
+          type: string
+          enum: [exclusive, shared]
+          default: exclusive
+        requested_by:
+          type: string
+          format: uuid
+          nullable: true
+        note: { type: string }
+        resource_id:
+          type: string
+          format: uuid
+          description: |
+            Explicit target resource. When omitted the FIFO
+            allocation strategy picks an eligible pool member.
+        preferred_member:
+          type: string
+          format: uuid
+          description: |
+            Pool-member hint -- returned ahead of FIFO order when
+            it is an eligible (AVAILABLE) member.
+
+    UsageRecord:
+      type: object
+      description: |
+        One append-only resource usage-timeline event. Matches
+        `resources.usage_history.models.ResourceTimelineEvent`.
+      required:
+        - event_id
+        - source_event_id
+        - resource_id
+        - project_id
+        - event_type
+        - at_ts
+      properties:
+        event_id: { type: string, format: uuid }
+        source_event_id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        event_type:
+          type: string
+          description: |
+            Timeline-event type mirroring the originating bus topic
+            (e.g. `resource.registered`, `reservation.granted`,
+            `lease.attached`, `health.probed`).
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        pod_event_group_id:
+          type: string
+          format: uuid
+          nullable: true
+        at_ts: { type: string, format: date-time }
+        payload:
+          type: object
+          additionalProperties: true
+        annotations:
+          type: object
+          additionalProperties: true
+
+    UsageRecordPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/UsageRecord' }
         meta: { $ref: '#/components/schemas/PageMeta' }
