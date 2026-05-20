@@ -42,6 +42,10 @@ const ENTRY_POINTS = [
         entry: path.join(HERE, "src", "pyc-runs-bundle", "index.ts"),
         outfile: path.join(DIST_DIR, "pyc-runs-bundle.js"),
     },
+    {
+        entry: path.join(HERE, "src", "pyc-catalog-bundle", "index.ts"),
+        outfile: path.join(DIST_DIR, "pyc-catalog-bundle.js"),
+    },
 ]
 
 // Bundle stylesheets copied alongside their bundle so the bundle
@@ -50,6 +54,10 @@ const STYLESHEETS = [
     {
         source: path.join(HERE, "src", "pyc-runs-bundle", "runs-list.css"),
         target: "pyc-runs-bundle.css",
+    },
+    {
+        source: path.join(HERE, "src", "pyc-catalog-bundle", "catalog.css"),
+        target: "pyc-catalog-bundle.css",
     },
 ]
 
