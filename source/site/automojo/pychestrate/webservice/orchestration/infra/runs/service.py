@@ -2,12 +2,15 @@
 .. module:: orchestration.infra.runs.service
     :synopsis: Infra-orchestration facade — trigger / plan / mirror / read.
 
-M1 ships:
+Ships:
 
 * :func:`trigger_run` — resolve env + driver, validate inputs
-  + action support, persist a PENDING InfraRun, emit
-  TRIGGERED. The actual Layer-5 dispatch handoff and the
-  guard integration land in M2.
+  + action support, persist a PENDING InfraRun, then build +
+  sign a ``job_kind=provision`` JobEnvelope and dispatch it
+  through the wired :class:`JobDispatcher` so the provisioning
+  job queues for an enrolled client. Drives the run-state
+  machine through ``PENDING → DISPATCHING``. Emits
+  ``entity.infra.run_triggered`` then ``run_dispatched``.
 * :func:`record_plan_summary` — store the per-plan summary +
   artifact ref + diff digest on the run row, emit
   PLAN_RECORDED.
@@ -16,12 +19,21 @@ M1 ships:
   COMPLETED / FAILED / CANCELLED / REJECTED_BY_GUARD topic.
 * :func:`get_infra_run` /
   :func:`list_infra_runs_for_environment`.
+* :func:`set_active_job_dispatcher` /
+  :func:`set_active_results_backend` — module seams the Phase-6
+  bootstrap publishes so the infra-runs service dispatches
+  through the SAME long-poll queue test + build runs already
+  use.
 
 The bound environment must be ACTIVE or FROZEN at trigger time;
 DESTROY against a non-active env is allowed for cleanup, but
-APPLY against a frozen env is rejected here without the M2
-guard integration. ARCHIVED / DESTROYED envs reject every
-trigger.
+APPLY against a frozen env is rejected here. ARCHIVED /
+DESTROYED envs reject every trigger.
+
+The client-side provision executor is a separate
+``pychestrate-client`` PR; until it lands a dispatched provision
+envelope sits in the client's long-poll queue unconsumed -- the
+server side (this module) is complete.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -33,11 +45,12 @@ __version__ = "1.0.0"
 import enum
 import hashlib
 import json
+import logging
 import os
 
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Tuple, Type
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -45,6 +58,34 @@ from automojo.pychestrate.core.defaults import new_uuid, utc_now
 
 from automojo.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
+)
+from automojo.pychestrate.webservice.jobs.dispatch import (
+    DispatchRequestInputs,
+    JobDispatcher,
+)
+from automojo.pychestrate.webservice.jobs.dispatch.errors import (
+    DispatchError,
+)
+from automojo.pychestrate.webservice.jobs.dispatch.factories.strategy import (
+    DispatchCandidate,
+)
+from automojo.pychestrate.webservice.jobs.envelope import (
+    JOB_KIND_PROVISION,
+    JobDeadline,
+    JobForwardingInfo,
+    JobPipelineRef,
+    JobRefs,
+    JobResultsLocator,
+)
+from automojo.pychestrate.webservice.jobs.results import (
+    SharedResultsBackend,
+)
+from automojo.pychestrate.webservice.jobs.run.state import (
+    RunEvent,
+    RunNotFoundError as RunStateNotFoundError,
+    create_run as create_run_state,
+    get_snapshot as get_run_state_snapshot,
+    transition as transition_run_state,
 )
 from automojo.pychestrate.webservice.messaging.event_bus import EntityEvent
 from automojo.pychestrate.webservice.messaging.outbox import enqueue_event
@@ -56,6 +97,8 @@ from automojo.pychestrate.webservice.orchestration.infra.environment.models impo
 )
 from automojo.pychestrate.webservice.orchestration.infra.runs import repository
 from automojo.pychestrate.webservice.orchestration.infra.runs.errors import (
+    InfraDispatchFailedError,
+    InfraDispatchUnavailableError,
     InfraDriverUnknownError,
     InfraEnvironmentStateError,
     InfraInputsInvalidError,
@@ -82,6 +125,60 @@ TERMINAL_RUN_STATES: Tuple[InfraRunState, ...] = (
     InfraRunState.CANCELLED,
     InfraRunState.REJECTED_BY_GUARD,
 )
+PROVISION_JOB_TYPE_PREFIX: str = "provision-"
+DEFAULT_PROVISION_ISSUER: str = "pychestrate.example.com/0.6.0"
+DEFAULT_PROVISION_SOFT_DEADLINE_SECONDS: int = 1800
+DEFAULT_PROVISION_HARD_DEADLINE_SECONDS: int = 3600
+
+_LOGGER = logging.getLogger("pychestrate.infra.runs.service")
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap-published seams
+# ---------------------------------------------------------------------------
+#
+# The Phase-6 bootstrap constructs a single :class:`JobDispatcher` (over the
+# production :class:`LongPollTransport`) and publishes it here so provisioning
+# dispatches land in the SAME long-poll queue enrolled clients already poll
+# for test + build runs.
+
+ACTIVE_JOB_DISPATCHER: Optional[JobDispatcher] = None
+ACTIVE_RESULTS_BACKEND: Optional[SharedResultsBackend] = None
+
+
+def set_active_job_dispatcher(*, dispatcher: Optional[JobDispatcher]) -> None:
+    """
+        Publish the process-wide :class:`JobDispatcher` the
+        infra-runs service dispatches provision job envelopes
+        through.
+
+        :param dispatcher: The dispatcher constructed by the Phase-6
+                           bootstrap, or ``None`` to clear the seam.
+
+        :returns: None.
+    """
+    global ACTIVE_JOB_DISPATCHER
+    ACTIVE_JOB_DISPATCHER = dispatcher
+    return
+
+
+def set_active_results_backend(
+        *,
+        backend: Optional[SharedResultsBackend]
+    ) -> None:
+    """
+        Publish the shared results backend the infra-runs service
+        allocates provision result-tree prefixes against.
+
+        :param backend: Shared results backend, or ``None`` to clear
+                        the seam (a ``local-test`` backend is then
+                        constructed on demand).
+
+        :returns: None.
+    """
+    global ACTIVE_RESULTS_BACKEND
+    ACTIVE_RESULTS_BACKEND = backend
+    return
 
 
 class ResourceOpKind(str, enum.Enum):
@@ -138,10 +235,35 @@ class InfraRunInputs:
 class InfraTriggerAspects:
     """
         Caller-tunable knobs.
+
+        :param actor_id: Optional actor UUID persisted on the row.
+        :param actor_role_set: Caller role set persisted on the row.
+        :param replay_of: Optional run id this run replays.
+        :param candidates: Eligible dispatch candidates the
+                           dispatcher picks the target client/pod
+                           from. The REST route builds these from
+                           the project's enrolled, REGISTERED pods
+                           (the same capability-based selection the
+                           test + build orchestrators use). An empty
+                           tuple means "no eligible pod" and yields a
+                           :class:`InfraDispatchFailedError`.
+        :param project_slug: Project slug, sanitized into the
+                             results-backend prefix.
+        :param issuer: Service DNS-name + release string stamped on
+                       the provision job envelope.
+        :param soft_deadline_seconds: Provision soft deadline
+                                      relative to trigger time.
+        :param hard_deadline_seconds: Provision hard deadline
+                                      relative to trigger time.
     """
     actor_id: Optional[str] = None
     actor_role_set: Tuple[str, ...] = ()
     replay_of: Optional[str] = None
+    candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
+    project_slug: str = ""
+    issuer: str = DEFAULT_PROVISION_ISSUER
+    soft_deadline_seconds: int = DEFAULT_PROVISION_SOFT_DEADLINE_SECONDS
+    hard_deadline_seconds: int = DEFAULT_PROVISION_HARD_DEADLINE_SECONDS
 
 
 @dataclass(frozen=True)
@@ -170,6 +292,8 @@ class InfraRunView:
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     final_state_reason: str
+    run_state: Optional[str] = None
+    dispatch_attempt_id: Optional[str] = None
 
 
 def trigger_run(
@@ -180,8 +304,18 @@ def trigger_run(
         aspects: Optional[InfraTriggerAspects] = None
     ) -> InfraRunView:
     """
-        Resolve env + driver, validate inputs, persist a
-        PENDING InfraRun + emit TRIGGERED.
+        Resolve env + driver, validate inputs, persist a PENDING
+        InfraRun, then build + sign a ``job_kind=provision``
+        JobEnvelope and dispatch it through the wired
+        :class:`JobDispatcher` so the provisioning job queues for an
+        enrolled client.
+
+        On a successful dispatch the run-state machine drives the
+        run through ``PENDING → DISPATCHING`` and the
+        :class:`InfraRun` row flips to ``RUNNING`` -- i.e. the same
+        "dispatched to a client over the wire" state test + build
+        runs reach. Emits :data:`InfraEventTopics.TRIGGERED` then
+        :data:`InfraEventTopics.DISPATCHED`.
 
         :raises: InfraEnvironmentStateError when the bound
                  env is in a state that forbids the action.
@@ -189,6 +323,11 @@ def trigger_run(
                  has no registered factory.
         :raises: InfraInputsInvalidError when the driver
                  rejects the inputs.
+        :raises: InfraDispatchUnavailableError when no
+                 :class:`JobDispatcher` is wired.
+        :raises: InfraDispatchFailedError when the dispatcher
+                 rejects the job (no eligible pod, transport
+                 failure, ...).
     """
     env = env_repository.find_by_id(
         db_session=db_session, environment_id=inputs.environment_id,
@@ -272,12 +411,15 @@ def trigger_run(
         replay_of=effective.replay_of,
         started_at=now,
     )
+    run_id = str(row.run_id)
+    job_type = PROVISION_JOB_TYPE_PREFIX + inputs.driver_name
+
     enqueue_event(
         db_session=db_session,
         event=EntityEvent(
             topic=InfraEventTopics.TRIGGERED,
             payload={
-                "run_id": str(row.run_id),
+                "run_id": run_id,
                 "project_id": project_id,
                 "environment_id": inputs.environment_id,
                 "driver_name": inputs.driver_name,
@@ -289,10 +431,280 @@ def trigger_run(
         ),
     )
     db_session.commit()
-    rtnval = get_infra_run(
-        db_session=db_session, run_id=str(row.run_id),
+
+    # Run-state machine: create the run + advance to DISPATCHING
+    # before the dispatcher's own commit so the audit trail reflects
+    # the trigger phase distinctly -- exactly as the test + build
+    # orchestrators do.
+    create_run_state(
+        db_session=db_session,
+        run_id=run_id,
+        project_id=project_id,
+        job_type=job_type,
     )
+    transition_run_state(
+        db_session=db_session,
+        run_id=run_id,
+        event=RunEvent.DISPATCH_STARTED,
+        actor="system:infra-orchestrator",
+        reason="driver_name={} action={}".format(
+            inputs.driver_name, inputs.action.value,
+        ),
+    )
+
+    dispatch_outcome = _dispatch_provision_job(
+        db_session=db_session,
+        run_id=run_id,
+        project_id=project_id,
+        job_type=job_type,
+        digest=digest,
+        inputs=inputs,
+        aspects=effective,
+        triggered_at=now,
+    )
+
+    # Happy path: the provision job envelope is queued for the target
+    # client. The InfraRun row flips PENDING -> RUNNING (dispatched +
+    # executing on a client); the run-state machine row stays at
+    # DISPATCHING -- the dispatch-receipt path advances it onward,
+    # exactly as it does for test + build runs. ``layer5_run_id``
+    # records the dispatch attempt id.
+    row.state = InfraRunState.RUNNING
+    row.layer5_run_id = dispatch_outcome.attempt_id
+    db_session.flush()
+
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=InfraEventTopics.DISPATCHED,
+            payload={
+                "run_id": run_id,
+                "project_id": project_id,
+                "environment_id": inputs.environment_id,
+                "driver_name": inputs.driver_name,
+                "action": inputs.action.value,
+                "dispatch_attempt_id": dispatch_outcome.attempt_id,
+                "envelope_id": dispatch_outcome.envelope_id,
+                "client_id": dispatch_outcome.client_id,
+                "pod_id": dispatch_outcome.pod_id,
+                "transport": dispatch_outcome.transport_name,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+
+    _LOGGER.info(
+        "pychestrate.infra.runs.dispatched run_id=%s envelope_id=%s"
+        " client_id=%s pod_id=%s transport=%s",
+        run_id,
+        dispatch_outcome.envelope_id,
+        dispatch_outcome.client_id,
+        dispatch_outcome.pod_id,
+        dispatch_outcome.transport_name,
+    )
+
+    rtnval = get_infra_run(db_session=db_session, run_id=run_id)
     return rtnval
+
+
+def _dispatch_provision_job(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        project_id: str,
+        job_type: str,
+        digest: str,
+        inputs: "InfraRunInputs",
+        aspects: "InfraTriggerAspects",
+        triggered_at: datetime
+    ) -> Any:
+    """
+        Build a signed ``job_kind=provision`` JobEnvelope describing
+        the provisioning job and dispatch it through the wired
+        :class:`JobDispatcher`.
+
+        The provision job envelope's ``params`` section carries the
+        provisioning-spec payload: the target environment, the
+        provisioning action, the infra driver/tool, and the driver
+        inputs. A future ``pychestrate-client`` provision executor
+        consumes this payload.
+
+        On dispatch failure the run-state machine is driven to
+        ``DISPATCH_FAILED`` and the InfraRun row to ``FAILED`` so the
+        failure is durably recorded before the error surfaces.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: InfraRun UUID (also the run-state run id).
+        :param project_id: Owning project UUID.
+        :param job_type: ``provision-<driver_name>`` job-type string.
+        :param digest: Canonical-inputs digest stamped into the spec.
+        :param inputs: Caller-supplied :class:`InfraRunInputs`.
+        :param aspects: Effective :class:`InfraTriggerAspects`.
+        :param triggered_at: Trigger timestamp (deadline anchor).
+
+        :returns: The :class:`DispatchOutcome`.
+        :raises: InfraDispatchUnavailableError,
+                 InfraDispatchFailedError.
+    """
+    dispatcher = ACTIVE_JOB_DISPATCHER
+    if dispatcher is None:
+        _fail_infra_run(
+            db_session=db_session,
+            run_id=run_id,
+            reason="job dispatcher not wired",
+        )
+        err_lines = ["Provision dispatch failed -- no JobDispatcher is wired."]
+        err_lines.append("RUN_ID: {}".format(run_id))
+        err_lines.append(
+            "HINT: bootstrap_phase6_runtime publishes the dispatcher"
+            " via set_active_job_dispatcher().")
+        err_msg = os.linesep.join(err_lines)
+        raise InfraDispatchUnavailableError(err_msg) from None
+
+    backend = ACTIVE_RESULTS_BACKEND
+    if backend is None:
+        backend = SharedResultsBackend(backend_driver="local-test")
+    allocation = backend.allocate(
+        db_session=db_session,
+        run_id=run_id,
+        project_id=project_id,
+        project_slug=aspects.project_slug,
+        job_type=job_type,
+    )
+
+    provision_spec: Dict[str, Any] = {
+        "environment_id": inputs.environment_id,
+        "action": inputs.action.value,
+        "driver_name": inputs.driver_name,
+        "driver_inputs": dict(inputs.driver_inputs),
+        "inputs_canonical_sha256": digest,
+    }
+
+    soft_deadline = triggered_at + timedelta(
+        seconds=aspects.soft_deadline_seconds,
+    )
+    hard_deadline = triggered_at + timedelta(
+        seconds=aspects.hard_deadline_seconds,
+    )
+
+    pipeline_ref: Optional[JobPipelineRef] = None
+
+    dispatch_inputs = DispatchRequestInputs(
+        run_id=run_id,
+        project_id=project_id,
+        job_id=run_id,
+        job_name="provision:{}:{}".format(
+            inputs.driver_name, inputs.action.value,
+        ),
+        job_type=job_type,
+        job_kind=JOB_KIND_PROVISION,
+        issuer=aspects.issuer,
+        refs=JobRefs(
+            branch="main",
+            build="",
+            flavor="",
+            release="",
+            commit_sha="0" * 40,
+        ),
+        params=provision_spec,
+        scoped_secrets=tuple(),
+        results=JobResultsLocator(
+            backend_key_prefix=allocation.backend_key_prefix,
+            backend_driver=allocation.backend_driver,
+        ),
+        forwarding=JobForwardingInfo(
+            progress_url=(
+                "https://pychestrate.example.com/api/v1/runs/{}/progress"
+            ).format(run_id),
+            summary_url=(
+                "https://pychestrate.example.com/api/v1/runs/{}/summary"
+            ).format(run_id),
+            auth_method="bearer",
+        ),
+        deadline=JobDeadline(
+            soft_deadline_at=soft_deadline,
+            hard_deadline_at=hard_deadline,
+        ),
+        pipeline=pipeline_ref,
+        extension_claims={},
+        candidates=tuple(aspects.candidates),
+    )
+
+    try:
+        rtnval = dispatcher.dispatch(
+            db_session=db_session,
+            inputs=dispatch_inputs,
+        )
+    except DispatchError as xcpt:
+        _fail_infra_run(
+            db_session=db_session,
+            run_id=run_id,
+            reason="dispatch failed: {}".format(str(xcpt)),
+        )
+        err_lines = ["Provision dispatch failed."]
+        err_lines.append("RUN_ID: {}".format(run_id))
+        err_lines.append("REASON: {}".format(str(xcpt)))
+        err_msg = os.linesep.join(err_lines)
+        raise InfraDispatchFailedError(err_msg) from xcpt
+
+    return rtnval
+
+
+def _fail_infra_run(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        reason: str
+    ) -> None:
+    """
+        Durably record a dispatch failure: drive the run-state
+        machine to ``DISPATCH_FAILED`` and flip the InfraRun row to
+        ``FAILED`` with ``final_state_reason``. Best-effort -- a
+        secondary failure here is swallowed so the original dispatch
+        error is what the caller sees.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: InfraRun UUID.
+        :param reason: Human-readable failure reason.
+
+        :returns: None.
+    """
+    try:
+        transition_run_state(
+            db_session=db_session,
+            run_id=run_id,
+            event=RunEvent.DISPATCH_ABORTED,
+            actor="system:infra-orchestrator",
+            reason=reason,
+        )
+    except Exception:
+        _LOGGER.warning(
+            "pychestrate.infra.runs.dispatch_fail.run_state_transition_skipped"
+            " run_id=%s", run_id,
+        )
+
+    row = repository.find_run_by_id(db_session=db_session, run_id=run_id)
+    if row is not None and row.state not in TERMINAL_RUN_STATES:
+        row.state = InfraRunState.FAILED
+        row.finished_at = utc_now()
+        row.final_state_reason = reason
+        db_session.flush()
+        enqueue_event(
+            db_session=db_session,
+            event=EntityEvent(
+                topic=InfraEventTopics.FAILED,
+                payload={
+                    "run_id": run_id,
+                    "project_id": str(row.project_id),
+                    "state": InfraRunState.FAILED.value,
+                    "reason": reason,
+                },
+                source_event_id=new_uuid(),
+            ),
+        )
+    db_session.commit()
+    return
 
 
 def record_plan_summary(
@@ -446,7 +858,8 @@ def get_infra_run(
     row = repository.find_run_by_id(db_session=db_session, run_id=run_id)
     if row is None:
         _raise_not_found(run_id=run_id)
-    rtnval = _to_view(row=row)
+    run_state = _resolve_run_state(db_session=db_session, run_id=run_id)
+    rtnval = _to_view(row=row, run_state=run_state)
     return rtnval
 
 
@@ -462,7 +875,12 @@ def list_infra_runs_for_environment(
     rows = repository.list_runs_for_environment(
         db_session=db_session, environment_id=environment_id, limit=limit,
     )
-    rtnval = [_to_view(row=r) for r in rows]
+    rtnval: List[InfraRunView] = []
+    for r in rows:
+        run_state = _resolve_run_state(
+            db_session=db_session, run_id=str(r.run_id),
+        )
+        rtnval.append(_to_view(row=r, run_state=run_state))
     return rtnval
 
 
@@ -484,7 +902,12 @@ def list_infra_runs_for_project(
         environment_id=environment_id,
         limit=limit,
     )
-    rtnval = [_to_view(row=r) for r in rows]
+    rtnval: List[InfraRunView] = []
+    for r in rows:
+        run_state = _resolve_run_state(
+            db_session=db_session, run_id=str(r.run_id),
+        )
+        rtnval.append(_to_view(row=r, run_state=run_state))
     return rtnval
 
 
@@ -502,6 +925,32 @@ def _resolve_driver(*, driver_name: str) -> Type[InfraToolDriverProtocol]:
     ))
     err_msg = os.linesep.join(err_lines)
     raise InfraDriverUnknownError(err_msg) from None
+
+
+def _resolve_run_state(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> Optional[str]:
+    """
+        Best-effort read of the run-state-machine state for an infra
+        run. Returns ``None`` when no run-state row exists yet (the
+        run was triggered before dispatch wiring landed).
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: InfraRun UUID.
+
+        :returns: Run-state value string or ``None``.
+    """
+    try:
+        snapshot = get_run_state_snapshot(
+            db_session=db_session, run_id=run_id,
+        )
+    except RunStateNotFoundError:
+        rtnval = None
+        return rtnval
+    rtnval = snapshot.state.value
+    return rtnval
 
 
 def _raise_not_found(*, run_id: str) -> None:
@@ -547,7 +996,11 @@ def _summary_from_json(*, payload: Dict[str, Any]) -> PlanSummary:
     return rtnval
 
 
-def _to_view(*, row: InfraRun) -> InfraRunView:
+def _to_view(
+        *,
+        row: InfraRun,
+        run_state: Optional[str] = None
+    ) -> InfraRunView:
     plan_summary: Optional[PlanSummary] = None
     if row.plan_summary is not None:
         plan_summary = _summary_from_json(payload=dict(row.plan_summary))
@@ -579,5 +1032,10 @@ def _to_view(*, row: InfraRun) -> InfraRunView:
         started_at=row.started_at,
         finished_at=row.finished_at,
         final_state_reason=row.final_state_reason,
+        run_state=run_state,
+        dispatch_attempt_id=(
+            str(row.layer5_run_id)
+            if row.layer5_run_id is not None else None
+        ),
     )
     return rtnval

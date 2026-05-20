@@ -5341,6 +5341,20 @@ components:
           format: date-time
           nullable: true
         final_state_reason: { type: string }
+        run_state:
+          type: string
+          nullable: true
+          description: |
+            Run-state-machine state for the dispatched provisioning
+            job (e.g. `dispatching`). `null` when the run was
+            triggered before dispatch wiring landed.
+        dispatch_attempt_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: |
+            UUID of the `dispatch_attempt` row recorded when the
+            `job_kind=provision` envelope was dispatched.
     ProvisioningRunPage:
       type: object
       required: [items, meta]

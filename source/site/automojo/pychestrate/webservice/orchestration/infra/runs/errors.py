@@ -40,3 +40,22 @@ class InfraEnvironmentStateError(InfraError):
         forbids the requested action (e.g. apply against an
         archived environment).
     """
+
+
+class InfraDispatchUnavailableError(InfraError):
+    """
+        Raised when ``trigger_run`` cannot dispatch the provisioning
+        job because the orchestration runtime has no
+        :class:`JobDispatcher` wired -- the infra-runs service was
+        used before :func:`set_active_job_dispatcher` ran.
+    """
+
+
+class InfraDispatchFailedError(InfraError):
+    """
+        Raised when the provisioning job envelope was built but the
+        underlying :meth:`JobDispatcher.dispatch` call failed (no
+        eligible candidate, transport failure, ...). The InfraRun is
+        left in ``FAILED`` with a ``final_state_reason`` describing
+        the dispatch failure.
+    """

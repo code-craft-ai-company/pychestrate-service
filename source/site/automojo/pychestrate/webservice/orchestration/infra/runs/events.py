@@ -14,6 +14,7 @@ class InfraEventTopics:
         Infra-orchestration bus topics.
     """
     TRIGGERED = "entity.infra.run_triggered"
+    DISPATCHED = "entity.infra.run_dispatched"
     PLAN_RECORDED = "entity.infra.run_plan_recorded"
     STATE_CHANGED = "entity.infra.run_state_changed"
     COMPLETED = "entity.infra.run_completed"
