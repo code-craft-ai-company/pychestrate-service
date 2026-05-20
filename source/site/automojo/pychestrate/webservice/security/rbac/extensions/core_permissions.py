@@ -234,7 +234,6 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Create resource pools and manage pool members and "
         "reservations via the REST surface"
     ),
-<<<<<<< HEAD
     # Operator-facing read access for the embeddable-views catalog
     # (GET /api/v1/embed/views). Introduced by 8-embeddable-views
     # PR p21b. The /embed/{view_key} serving route itself is
@@ -254,7 +253,7 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:plugin_api.read": (
         "Read the plugin-api published-surface catalog and mounted"
         " extension endpoints via the REST surface"
-=======
+    ),
     # 6-blast-radius-guards PR p21c: blast-radius-guard REST
     # surface. Guards bind registry rules onto an environment to
     # cap provisioning blast radius.
@@ -281,7 +280,6 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     ),
     "system:release_channels.write": (
         "Publish releases onto a channel via the REST surface"
->>>>>>> main
     ),
 }
 
