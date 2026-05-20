@@ -59,3 +59,52 @@ class SecretCreatedAuditEvents(AuditEventTypeExtension):
     description: str = "A secret was created."
 
 
+class SecretUpdatedAuditEvents(AuditEventTypeExtension):
+    """
+        Canonical audit kind for ``entity.secret.rotated`` updates.
+
+        Introduced by PR p20g for the scope-aware ``PUT`` (rotate /
+        update value) REST operation.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.secret.updated"
+    source_topic: str = "entity.secret.rotated"
+    payload_schema: dict = {
+        "type": "object",
+        "required": ["secret_ref", "backend_name", "version_id"],
+        "properties": {
+            "secret_ref": {"type": "string"},
+            "backend_name": {"type": "string"},
+            "version_id": {"type": "string"},
+            "principal_id": {"type": ["string", "null"]},
+            "updated_at": {"type": "string"},
+        },
+    }
+    description: str = "A secret value was updated / rotated."
+
+
+class SecretDeletedAuditEvents(AuditEventTypeExtension):
+    """
+        Canonical audit kind for ``entity.secret.force_expired`` deletes.
+
+        Introduced by PR p20g for the scope-aware ``DELETE`` REST
+        operation.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.secret.deleted"
+    source_topic: str = "entity.secret.force_expired"
+    payload_schema: dict = {
+        "type": "object",
+        "required": ["secret_ref"],
+        "properties": {
+            "secret_ref": {"type": "string"},
+            "backend_name": {"type": ["string", "null"]},
+            "principal_id": {"type": ["string", "null"]},
+            "deleted_at": {"type": "string"},
+        },
+    }
+    description: str = "A secret was deleted."
+
+

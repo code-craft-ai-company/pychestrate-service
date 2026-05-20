@@ -51,6 +51,21 @@ class SecretOutboxStatus(enum.Enum):
     COMPLETED = "COMPLETED"
 
 
+class SecretScopeKind(enum.Enum):
+    """
+        Discriminator for the ownership scope of a secret.
+
+        - ``ORG`` — service-wide secret (the historical global default).
+        - ``PROJECT`` — secret bound to a single project; ``scope_ref``
+          carries the ``project_id``.
+        - ``USER`` — personal secret; ``scope_ref`` carries the
+          ``user_id``.
+    """
+    ORG = "ORG"
+    PROJECT = "PROJECT"
+    USER = "USER"
+
+
 class SecretRecord(PychestratePhase1Base, SerializableModel):
     """
         Metadata per secret_ref.
@@ -67,8 +82,23 @@ class SecretRecord(PychestratePhase1Base, SerializableModel):
     backend_name = Column(String(128), nullable=False)
     owner_user_id = Column(UUIDType(binary=False), nullable=True)
     owner_project_id = Column(UUIDType(binary=False), nullable=True)
+    # Scope discriminator added by PR p20g (org/project/user-scoped
+    # secrets). ``scope_kind`` defaults to ORG so every pre-p20g row
+    # behaves as a service-wide secret. ``scope_ref`` carries the
+    # project_id (PROJECT scope) or user_id (USER scope); it is NULL
+    # for ORG-scoped secrets.
+    scope_kind = Column(
+        Enum(SecretScopeKind, name="secret_scope_kind"),
+        nullable=False,
+        default=SecretScopeKind.ORG,
+    )
+    scope_ref = Column(String(64), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+    __table_args__ = (
+        Index("ix_phase1_secrets_scope", "scope_kind", "scope_ref"),
+    )
 
 
 class SecretVersion(PychestratePhase1Base, SerializableModel):

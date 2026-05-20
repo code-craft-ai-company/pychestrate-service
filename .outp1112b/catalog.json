@@ -1,0 +1,15 @@
+{
+    "files": [
+        "catalog.json",
+        "import_errors.jsos",
+        "startup-configuration.json",
+        "testrun.log",
+        "testrun_results_stream.jsos",
+        "testrun_sequence.py",
+        "testrun_summary.json",
+        "testsummary.html"
+    ],
+    "folders": [
+        "tc-by-products"
+    ]
+}

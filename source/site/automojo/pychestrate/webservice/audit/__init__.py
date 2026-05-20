@@ -30,6 +30,8 @@ from automojo.pychestrate.webservice.audit.extensions.role_events import RoleBin
 from automojo.pychestrate.webservice.audit.extensions.secret_events import (
     SecretAccessedAuditEvents,
     SecretCreatedAuditEvents,
+    SecretDeletedAuditEvents,
+    SecretUpdatedAuditEvents,
 )
 from automojo.pychestrate.webservice.audit.extensions.user_events import UserLifecycleAuditEvents
 from automojo.pychestrate.webservice.audit.extensions.variable_events import (
@@ -58,6 +60,12 @@ def register_builtin_extensions() -> None:
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=SecretCreatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=SecretUpdatedAuditEvents
+    )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=SecretDeletedAuditEvents
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=ProjectCreatedAuditEvents

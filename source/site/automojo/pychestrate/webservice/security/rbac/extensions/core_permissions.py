@@ -26,6 +26,25 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:rbac.read": "Read RBAC roles, permissions, and bindings",
     "system:secrets.admin": "Administer secrets, ACLs, and rotation",
     "system:secrets.read": "Read secret metadata (never plaintext over REST)",
+    # Org-scoped secret write access for the full-CRUD REST surface
+    # (POST / PUT / DELETE /api/v1/secrets at ORG scope). Introduced
+    # by 1-secrets-vault PR p20g. ``system:secrets.admin`` is a
+    # superset and also satisfies every scoped check.
+    "system:secrets.write": (
+        "Create, rotate, and delete org-scoped secrets via the REST surface"
+    ),
+    # Project-scoped secret read access. A caller also needs
+    # membership on the secret's project; this permission gates the
+    # value-read of PROJECT-scoped secrets. Introduced by PR p20g.
+    "system:project_secrets.read": (
+        "Read project-scoped secret values for projects the caller belongs to"
+    ),
+    # Project-scoped secret write access (create / rotate / delete of
+    # PROJECT-scoped secrets). Membership on the project is also
+    # required. Introduced by PR p20g.
+    "system:project_secrets.write": (
+        "Create, rotate, and delete project-scoped secrets for member projects"
+    ),
     "system:audit.read": "Read the audit record stream",
     "system:flags.admin": "Administer feature-flag lifecycle",
     "system:directory.sync": "Trigger a user_directory_source sync cycle",
