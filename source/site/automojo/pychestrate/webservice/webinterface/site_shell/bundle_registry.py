@@ -180,6 +180,13 @@ def install_default_bundles() -> None:
           create form, per-secret reveal / rotate / delete
           actions), loaded only on ``/secrets`` and ``/secrets/*``
           paths.
+        * ``pyc-pipelines-bundle`` -- prefix ``/pipelines`` --
+          pipelines sidebar registration plus the
+          ``<pyc-pipelines-list>`` and ``<pyc-pipeline-detail>``
+          views (pipeline-definition table, create / upsert form,
+          DAG-validate action, matrix-expand preview, pipeline
+          detail with an inline-SVG stage-DAG visualization),
+          loaded only on ``/pipelines`` and ``/pipelines/*`` paths.
 
         :returns: None.
     """
@@ -207,6 +214,9 @@ def install_default_bundles() -> None:
     )
     register_bundle(
         route_prefix="/secrets", bundle_name="pyc-secrets-bundle"
+    )
+    register_bundle(
+        route_prefix="/pipelines", bundle_name="pyc-pipelines-bundle"
     )
     return
 
