@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.5-preview
+  version: 0.0.6-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -1819,6 +1819,41 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
 
+  /envelope-signing-keys:
+    get:
+      tags: [dispatch]
+      summary: List the Ed25519 public keys used to sign job envelopes.
+      operationId: envelope_signing_keys_list
+      x-pychestrate-status: planned
+      description: |
+        A JWKS-style public-key distribution endpoint. The pod-client
+        agent calls this to obtain the Ed25519 public key(s) it must
+        verify signed job envelopes against — without the operator
+        installing the key out-of-band.
+
+        Auth: a signing *public* key is not a secret, so the endpoint
+        accepts **any authenticated principal** — a cookie session, an
+        API key, OR a verified mTLS client certificate. A
+        freshly-enrolled pod client already holds its mTLS identity, so
+        the mTLS path covers the client's use case. Anonymous requests
+        get a 401. The endpoint returns 503 when no signing key has
+        been provisioned.
+
+        The response carries one or more keys to support rotation: at
+        most one key is `active` and any others are `retiring`
+        (grace-window verify keys). The same key set is also bundled in
+        the `POST /enrollment-tokens/redeem` response so the happy path
+        needs zero extra calls.
+      responses:
+        '200':
+          description: The active envelope-signing public-key set.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SigningKeySet' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
   /runs/{run_id}/artifacts:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'
@@ -2722,6 +2757,49 @@ components:
         client_certificate_pem: { type: string }
         ca_chain_pem: { type: string }
         not_after: { type: string, format: date-time }
+        envelope_signing_keys:
+          description: |
+            The JWKS-style Ed25519 public-key set the service signs job
+            envelopes with, bundled here so a freshly-enrolled client
+            can verify signed envelopes without an extra call to
+            `GET /envelope-signing-keys`. Empty when no signing key is
+            provisioned; the client should refresh via the dedicated
+            endpoint in that case.
+          type: array
+          items: { $ref: '#/components/schemas/SigningKey' }
+
+    SigningKey:
+      type: object
+      description: |
+        A single Ed25519 public key in the envelope-signing key set.
+        Only the public half is ever serialized — the private signing
+        key never leaves the service process.
+      required: [key_id, algorithm, public_key_pem, status]
+      properties:
+        key_id:
+          type: string
+          description: JWKS-style identifier referenced by each signed envelope.
+        algorithm:
+          type: string
+          enum: [Ed25519]
+        public_key_pem:
+          type: string
+          description: PEM-encoded SubjectPublicKeyInfo public key.
+        status:
+          type: string
+          description: |
+            `active` — the key currently signing envelopes.
+            `retiring` — a previous-generation key kept verifiable
+            through the rotation grace window.
+          enum: [active, retiring]
+
+    SigningKeySet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/SigningKey' }
 
     AgentRollout:
       type: object

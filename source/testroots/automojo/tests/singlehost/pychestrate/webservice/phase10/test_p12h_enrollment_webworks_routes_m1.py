@@ -56,6 +56,7 @@ from automojo.pychestrate.webservice.clients.exceptions import (
 from automojo.pychestrate.webservice.clients.restapi.v1 import (
     enrollment_routes,
 )
+from automojo.pychestrate.webservice.jobs.envelope import signer
 
 
 # ---------------------------------------------------------------------------
@@ -852,6 +853,74 @@ def test_handle_redeem_returns_503_on_ca_unavailable():
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 503)
+    return
+
+
+def test_handle_redeem_bundles_envelope_signing_keys_when_signer_installed():
+    """
+    **Feature: p19k expose-envelope-signing-key**
+    **Property: When the envelope signer is installed, a successful
+    redeem bundles the JWKS-style ``envelope_signing_keys`` set so
+    the freshly-enrolled client can verify signed envelopes without
+    an extra call.**
+    """
+    signer.reset_for_testing()
+    handle = signer.generate_dev_signing_key(key_id="p19k-redeem-key")
+    signer.set_active_signing_key(handle=handle)
+
+    result = _FakeRedemptionResult(client_id="c-1", bearer_token="bearer-x")
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=lambda **kwargs: result,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={"secret": "sek-secret", "pod_name": "pod-x"},
+        )
+        response = enrollment_routes.handle_redeem_enrollment_token(request)
+    finally:
+        patch.deactivate()
+        signer.reset_for_testing()
+
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    keys = body["envelope_signing_keys"]
+    testbase.assert_equal(len(keys), 1)
+    testbase.assert_equal(keys[0]["key_id"], "p19k-redeem-key")
+    testbase.assert_equal(keys[0]["algorithm"], "Ed25519")
+    testbase.assert_equal(keys[0]["status"], "active")
+    pem_ok = keys[0]["public_key_pem"].startswith("-----BEGIN PUBLIC KEY-----")
+    testbase.assert_equal(pem_ok, True)
+    return
+
+
+def test_handle_redeem_emits_empty_signing_keys_when_signer_absent():
+    """
+    **Feature: p19k expose-envelope-signing-key**
+    **Property: With no signing key provisioned the redeem response
+    still succeeds and carries an empty ``envelope_signing_keys``
+    list -- the client refreshes via GET /envelope-signing-keys.**
+    """
+    signer.reset_for_testing()
+
+    result = _FakeRedemptionResult(client_id="c-1")
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=lambda **kwargs: result,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={"secret": "sek-secret", "pod_name": "pod-x"},
+        )
+        response = enrollment_routes.handle_redeem_enrollment_token(request)
+    finally:
+        patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(body["envelope_signing_keys"], [])
     return
 
 

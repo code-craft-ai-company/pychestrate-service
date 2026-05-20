@@ -68,6 +68,7 @@ from automojo.pychestrate.webservice.clients.enums import (
     RevocationReason,
     TokenStatus,
 )
+from automojo.pychestrate.webservice.jobs.envelope import signer
 from automojo.pychestrate.webservice.clients.exceptions import (
     CertificateAuthorityUnavailableError,
     ClientAlreadyExistsError,
@@ -480,6 +481,14 @@ def handle_redeem_enrollment_token(request: Request) -> Response:
                 request=request, status=503, detail=str(xcpt)
             )
 
+        # Bundle the envelope-signing public key set so a freshly-
+        # enrolled client can verify signed job envelopes on the
+        # happy path with zero extra calls. The signer holds only the
+        # public half here; the private key never leaves the process.
+        # When no signing key is provisioned the list is empty -- the
+        # client can refresh later via GET /envelope-signing-keys.
+        envelope_signing_keys = signer.active_signing_key_set()
+
         body = {
             "client_id": result.client_id,
             "project_id": result.project_id,
@@ -489,6 +498,7 @@ def handle_redeem_enrollment_token(request: Request) -> Response:
             "cert_serial": result.cert_serial or "",
             "cert_pem": _encode_pem_field(result.cert_pem),
             "cert_chain_pem": _encode_pem_field(result.cert_chain_pem),
+            "envelope_signing_keys": envelope_signing_keys,
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:

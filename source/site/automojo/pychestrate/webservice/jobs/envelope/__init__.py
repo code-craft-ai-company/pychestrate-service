@@ -66,5 +66,7 @@ from automojo.pychestrate.webservice.jobs.envelope.schema import (
 )
 from automojo.pychestrate.webservice.jobs.envelope.startup import (
     EnvelopeSignerBootstrapConfig,
+    build_bootstrap_config_from_environment,
     install_envelope_signer,
+    install_envelope_signer_from_environment,
 )
