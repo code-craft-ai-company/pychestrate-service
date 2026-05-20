@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.10-preview
+  version: 0.0.11-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -124,7 +124,13 @@ tags:
   - name: drift
     description: Read drift status and trigger drift checks on environments.
   - name: metrics
-    description: UI-facing metrics endpoints (planned).
+    description: >-
+      Metric catalog, timeseries queries, and test-result rollups
+      for testbase / testplus runs.
+  - name: dashboards
+    description: Project metric dashboards (named tile collections).
+  - name: metric_alerts
+    description: Per-project metric-alert rules.
 
 security:
   - pychestrate_session: []
@@ -2244,6 +2250,206 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # metrics
+  # =====================================================================
+
+  /metrics/catalog:
+    get:
+      tags: [metrics]
+      summary: List the registered metric catalog.
+      operationId: metrics_catalog_list
+      x-pychestrate-status: planned
+      description: |
+        Returns the registered metric definitions -- name, kind,
+        and declared label dimensions -- so a UI knows what is
+        queryable through the timeseries endpoint.
+      responses:
+        '200':
+          description: Page of metric catalog entries.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricCatalogPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /metrics/timeseries:
+    get:
+      tags: [metrics]
+      summary: Query a metric timeseries.
+      operationId: metrics_timeseries_query
+      x-pychestrate-status: planned
+      description: |
+        Returns timestamped data points for the named metric,
+        newest-first, optionally bounded by the `from` / `to`
+        observation window. This is the data behind metric charts.
+      parameters:
+        - in: query
+          name: metric
+          required: true
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 5000 }
+      responses:
+        '200':
+          description: Timeseries query result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeseriesQuery' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/test-metrics:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [metrics]
+      summary: Read test-result metrics for a project.
+      operationId: metrics_test_read
+      x-pychestrate-status: planned
+      description: |
+        Returns a read-time roll-up of testbase / testplus test
+        results for the project: aggregate pass / fail / flake
+        rates, run counts, and duration trends, plus a recent
+        per-run breakdown. The roll-up is computed on read from
+        the persisted result-ingest summary rows.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 2000 }
+      responses:
+        '200':
+          description: Test-result metrics summary.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TestMetricsSummary' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/dashboards:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [dashboards]
+      summary: List dashboards for a project.
+      operationId: dashboards_list
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Page of dashboards.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [dashboards]
+      summary: Create a dashboard.
+      operationId: dashboards_create
+      x-pychestrate-status: planned
+      description: |
+        Creates a named dashboard with an optional set of
+        metric-tile definitions. The dashboard name is UNIQUE
+        per project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DashboardCreateRequest' }
+      responses:
+        '201':
+          description: Dashboard created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /projects/{project_id}/dashboards/{dashboard_id}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - in: path
+        name: dashboard_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [dashboards]
+      summary: Read a single dashboard.
+      operationId: dashboards_read
+      x-pychestrate-status: planned
+      responses:
+        '200':
+          description: Dashboard.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /projects/{project_id}/metric-alerts:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+    get:
+      tags: [metric_alerts]
+      summary: List metric-alert rules for a project.
+      operationId: metric_alerts_list
+      x-pychestrate-status: planned
+      parameters:
+        - in: query
+          name: enabled_only
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Page of metric-alert rules.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricAlertRulePage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [metric_alerts]
+      summary: Create a metric-alert rule.
+      operationId: metric_alerts_create
+      x-pychestrate-status: planned
+      description: |
+        Creates a metric-alert rule. The rule kind is resolved
+        via the `alert_rule_kind` factory protocol and its config
+        is validated against the kind. The rule name is UNIQUE
+        per project.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MetricAlertRuleCreateRequest'
+      responses:
+        '201':
+          description: Metric-alert rule created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MetricAlertRule' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /projects/{project_id}/environments:
     parameters:
@@ -4731,3 +4937,245 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/DriftReport'
+
+    # ----------------------------------------------------------------
+    # metrics / dashboards / metric_alerts (7-* PR p20f)
+    # ----------------------------------------------------------------
+
+    MetricCatalogEntry:
+      type: object
+      description: One registered metric definition.
+      required: [name, kind, label_names]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [counter, gauge, histogram]
+        label_names:
+          type: array
+          items: { type: string }
+        help_text: { type: string }
+        cardinality_max: { type: integer, minimum: 0 }
+
+    MetricCatalogPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MetricCatalogEntry' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    TimeseriesPoint:
+      type: object
+      description: One timestamped metric data point.
+      required: [observed_at, value]
+      properties:
+        observed_at: { type: string, format: date-time }
+        value: { type: number }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+        label_signature: { type: string }
+
+    TimeseriesQuery:
+      type: object
+      description: Result of a metric timeseries query.
+      required: [metric, points, meta]
+      properties:
+        metric: { type: string }
+        kind:
+          type: string
+          enum: [counter, gauge, histogram]
+        from:
+          type: string
+          format: date-time
+          nullable: true
+        to:
+          type: string
+          format: date-time
+          nullable: true
+        points:
+          type: array
+          items: { $ref: '#/components/schemas/TimeseriesPoint' }
+        meta:
+          type: object
+          properties:
+            point_count: { type: integer, minimum: 0 }
+            limit: { type: integer, minimum: 1 }
+
+    TestMetricsRollup:
+      type: object
+      description: Aggregate test-result rollup over recent runs.
+      required: [run_count, tests_total]
+      properties:
+        run_count: { type: integer, minimum: 0 }
+        tests_total: { type: integer, minimum: 0 }
+        tests_passed: { type: integer, minimum: 0 }
+        tests_failed: { type: integer, minimum: 0 }
+        tests_skipped: { type: integer, minimum: 0 }
+        tests_errored: { type: integer, minimum: 0 }
+        pass_rate: { type: number, minimum: 0, maximum: 1 }
+        fail_rate: { type: number, minimum: 0, maximum: 1 }
+        runs_with_failures: { type: integer, minimum: 0 }
+        flake_run_rate: { type: number, minimum: 0, maximum: 1 }
+        average_run_duration_seconds: { type: number, minimum: 0 }
+
+    TestMetricsRunEntry:
+      type: object
+      description: Per-run test-result breakdown entry.
+      required: [run_id]
+      properties:
+        run_id: { type: string, format: uuid }
+        parser_tag: { type: string }
+        tests_total: { type: integer, minimum: 0 }
+        tests_passed: { type: integer, minimum: 0 }
+        tests_failed: { type: integer, minimum: 0 }
+        tests_skipped: { type: integer, minimum: 0 }
+        tests_errored: { type: integer, minimum: 0 }
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        ingested_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_seconds:
+          type: number
+          nullable: true
+
+    TestMetricsSummary:
+      type: object
+      description: |
+        Test-result metrics for a project -- an aggregate rollup
+        plus a recent per-run breakdown. Computed on read from the
+        result-ingest summary rows.
+      required: [project_id, summary, recent_runs]
+      properties:
+        project_id: { type: string, format: uuid }
+        summary: { $ref: '#/components/schemas/TestMetricsRollup' }
+        recent_runs:
+          type: array
+          items: { $ref: '#/components/schemas/TestMetricsRunEntry' }
+        meta:
+          type: object
+          properties:
+            run_limit: { type: integer, minimum: 1 }
+            run_count: { type: integer, minimum: 0 }
+            source: { type: string }
+            aggregation: { type: string }
+
+    DashboardTile:
+      type: object
+      description: One placed metric tile within a dashboard grid.
+      required: [tile_id, kind, x, y, w, h]
+      properties:
+        tile_id: { type: string }
+        kind: { type: string }
+        x: { type: integer, minimum: 0 }
+        y: { type: integer, minimum: 0 }
+        w: { type: integer, minimum: 1 }
+        h: { type: integer, minimum: 1 }
+        config:
+          type: object
+          additionalProperties: true
+
+    Dashboard:
+      type: object
+      description: A named per-project collection of metric tiles.
+      required: [dashboard_id, project_id, name, tiles, version]
+      properties:
+        dashboard_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        owner_principal_id:
+          type: string
+          format: uuid
+          nullable: true
+        grid_columns_max: { type: integer, minimum: 1 }
+        tiles:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardTile' }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    DashboardCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        grid_columns_max: { type: integer, minimum: 1 }
+        tiles:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardTile' }
+
+    DashboardPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Dashboard' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
+
+    MetricAlertRule:
+      type: object
+      description: A per-project metric-alert rule.
+      required: [rule_id, project_id, name, kind, severity, enabled]
+      properties:
+        rule_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string }
+        kind: { type: string }
+        config:
+          type: object
+          additionalProperties: true
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        enabled: { type: boolean }
+        notification_targets:
+          type: array
+          items: { type: string }
+        created_by:
+          type: string
+          format: uuid
+          nullable: true
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    MetricAlertRuleCreateRequest:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string, minLength: 1 }
+        kind: { type: string, minLength: 1 }
+        description: { type: string }
+        config:
+          type: object
+          additionalProperties: true
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        enabled: { type: boolean }
+        notification_targets:
+          type: array
+          items: { type: string }
+
+    MetricAlertRulePage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MetricAlertRule' }
+        meta: { $ref: '#/components/schemas/PageMeta' }

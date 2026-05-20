@@ -98,6 +98,15 @@ from automojo.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
 from automojo.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
 )
+from automojo.pychestrate.webservice.metrics.restapi.v1.metrics_routes import (
+    register_metrics_routes,
+)
+from automojo.pychestrate.webservice.metrics.restapi.v1.dashboards_routes import (
+    register_dashboards_routes,
+)
+from automojo.pychestrate.webservice.metrics.restapi.v1.metric_alerts_routes import (
+    register_metric_alerts_routes,
+)
 from automojo.pychestrate.webservice.runs.restapi.v1.runs_routes import (
     register_runs_routes,
 )
@@ -428,6 +437,9 @@ def register_service_extensions() -> None:
     register_auth_routes(app=app, version_prefix="/api/v1")
     register_me_routes(app=app, version_prefix="/api/v1")
     register_ui_metrics_routes(app=app, version_prefix="/api/v1")
+    register_metrics_routes(app=app, version_prefix="/api/v1")
+    register_dashboards_routes(app=app, version_prefix="/api/v1")
+    register_metric_alerts_routes(app=app, version_prefix="/api/v1")
     register_templates_routes(app=app, version_prefix="/api/v1")
     register_secrets_routes(app=app, version_prefix="/api/v1")
     register_agents_routes(app=app, version_prefix="/api/v1")
