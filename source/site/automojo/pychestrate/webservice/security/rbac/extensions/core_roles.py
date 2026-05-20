@@ -197,6 +197,23 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:metric_alerts.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # 4-resources PR p20p: granular resource-management REST keys.
+        PermissionGrant(
+            permission_key="system:resources.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:resources.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:resource_pools.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:resource_pools.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

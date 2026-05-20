@@ -216,6 +216,24 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:metric_alerts.write": (
         "Create and manage metric-alert rules via the REST surface"
     ),
+    # 4-resources PR p20p: resource-management REST surface. The
+    # broad ``system:resources.manage`` admin grant predates this
+    # split -- these read/write keys gate the granular REST routes.
+    "system:resources.read": (
+        "Read resources, resource health, and usage history via the "
+        "REST surface"
+    ),
+    "system:resources.write": (
+        "Register and mutate resources via the REST surface"
+    ),
+    "system:resource_pools.read": (
+        "Read resource pools, pool members, and reservations via the "
+        "REST surface"
+    ),
+    "system:resource_pools.write": (
+        "Create resource pools and manage pool members and "
+        "reservations via the REST surface"
+    ),
 }
 
 
