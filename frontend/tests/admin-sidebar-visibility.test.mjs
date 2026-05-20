@@ -105,6 +105,7 @@ test("admin group visible when caller holds system:ui.admin.view", () => {
         "system:auth.read",
         "system:audit.read",
         "system:resources.manage",
+        "system:plugin_api.read",
     ])
     const visible = registry.visible(admin_perms)
     assert.equal(visible.groups.length, 1)

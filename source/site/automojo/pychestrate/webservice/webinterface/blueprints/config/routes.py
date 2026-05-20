@@ -139,9 +139,25 @@ _AUTH_ROUTE_TABLE = (
 
 
 # Authenticated dashboard pages under the ``/admin`` prefix.
+#
+# The ``config.admin_overview`` / ``config.feature_flags`` /
+# ``config.extension_registry`` / ``config.system_health`` entries
+# are shell-native Web Component views (PR p21f / audit items
+# 9-admin-ui + E-extension-registry-ui). Their server handler is
+# the shared :func:`handle_dashboard` flow -- it performs the auth
+# check and renders the shell document -- and ``pyc-admin-bundle``
+# replaces the shell ``<main>`` content with the route-appropriate
+# Custom Element client-side. The bare ``/admin`` path (the
+# ``config.dashboard_root`` entry) also mounts the shell-native
+# ``<pyc-admin-overview>`` view: the WC overview wins for ``/admin``
+# because the bundle replaces ``<main>`` for every route it owns.
 _ADMIN_ROUTE_TABLE = (
     ("config.dashboard_root", "/", ("GET",)),
     ("config.dashboard", "/dashboard", ("GET",)),
+    ("config.admin_overview", "/overview", ("GET",)),
+    ("config.feature_flags", "/feature-flags", ("GET",)),
+    ("config.extension_registry", "/extensions", ("GET",)),
+    ("config.system_health", "/system-health", ("GET",)),
 )
 
 
@@ -1176,6 +1192,10 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Any] = {
     "config.logout": handle_logout,
     "config.dashboard_root": handle_dashboard,
     "config.dashboard": handle_dashboard,
+    "config.admin_overview": handle_dashboard,
+    "config.feature_flags": handle_dashboard,
+    "config.extension_registry": handle_dashboard,
+    "config.system_health": handle_dashboard,
 }
 
 

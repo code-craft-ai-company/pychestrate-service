@@ -142,7 +142,15 @@ def install_default_bundles() -> None:
         * ``pyc-site-shell`` -- prefix ``""`` -- shell itself,
           loaded on every shell-served path.
         * ``pyc-admin-bundle`` -- prefix ``/admin`` -- admin
-          sidebar registration, loaded only on ``/admin/*`` paths.
+          sidebar registration plus the shell-native admin Web
+          Component views: ``<pyc-admin-overview>`` (the ``/admin``
+          landing page composing system-health, feature-flags and
+          an extension-registry summary), ``<pyc-feature-flags>``
+          (``/admin/feature-flags``), ``<pyc-extension-registry>``
+          (``/admin/extensions``) and ``<pyc-system-health>``
+          (``/admin/system-health``). The legacy Vue admin pages
+          (users / roles / secrets / audit / enrollment) keep
+          working shell-wrapped. Loaded only on ``/admin/*`` paths.
         * ``pyc-runs-bundle`` -- prefix ``/runs`` -- runs list
           sidebar registration plus the ``<pyc-runs-list>`` view,
           loaded only on ``/runs`` and ``/runs/*`` paths.
