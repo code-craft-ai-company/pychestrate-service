@@ -125,6 +125,10 @@ const STYLESHEETS = [
         source: path.join(HERE, "src", "pyc-ops-bundle", "ops.css"),
         target: "pyc-ops-bundle.css",
     },
+    {
+        source: path.join(HERE, "src", "pyc-admin-bundle", "admin.css"),
+        target: "pyc-admin-bundle.css",
+    },
 ]
 
 async function build_all() {

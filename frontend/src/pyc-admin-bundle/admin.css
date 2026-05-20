@@ -1,0 +1,289 @@
+/*
+ * Styles for the shell-native admin views --
+ * <pyc-admin-overview>, <pyc-feature-flags>,
+ * <pyc-extension-registry> and <pyc-system-health>.
+ *
+ * All colors / shadows flow through --pyc-* design tokens with the
+ * same hsl() fallbacks the site shell's styles.css uses, so a
+ * theme that overrides the tokens restyles the admin UI for free.
+ * No hardcoded colors, no absolute sizes (rem only).
+ */
+
+pyc-admin-overview,
+pyc-feature-flags,
+pyc-extension-registry,
+pyc-system-health {
+    --pyc-admin-fg: var(--pyc-color-on-surface, hsl(210, 22%, 16%));
+    --pyc-admin-fg-muted:
+        var(--pyc-color-on-surface-muted, hsl(213, 8%, 47%));
+    --pyc-admin-surface: var(--pyc-color-surface, hsl(0, 0%, 100%));
+    --pyc-admin-surface-hover:
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.04));
+    --pyc-admin-border: var(--pyc-color-border, hsl(220, 60%, 88%));
+    --pyc-admin-divider: var(--pyc-color-divider, hsla(0, 0%, 0%, 0.08));
+    --pyc-admin-accent: var(--pyc-color-accent, hsl(215, 100%, 61%));
+    --pyc-admin-accent-on-surface:
+        var(--pyc-color-accent-on-surface, hsl(220, 75%, 40%));
+    --pyc-admin-ok-surface:
+        var(--pyc-color-success-surface, hsla(145, 63%, 42%, 0.16));
+    --pyc-admin-ok-fg:
+        var(--pyc-color-on-success-surface, hsl(145, 63%, 24%));
+    --pyc-admin-warn-surface:
+        var(--pyc-color-warning-surface, hsla(38, 92%, 50%, 0.18));
+    --pyc-admin-warn-fg:
+        var(--pyc-color-on-warning-surface, hsl(32, 81%, 29%));
+    --pyc-admin-error-surface:
+        var(--pyc-color-error-surface, hsla(0, 72%, 51%, 0.14));
+    --pyc-admin-error-fg:
+        var(--pyc-color-on-error-surface, hsl(0, 72%, 34%));
+    --pyc-admin-neutral-surface:
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.06));
+
+    display: block;
+    color: var(--pyc-admin-fg);
+    font-size: var(--pyc-font-size-body, 1rem);
+}
+
+.pyc-admin {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.pyc-admin__heading {
+    margin: 0;
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+    font-weight: 600;
+}
+
+.pyc-admin__subheading {
+    margin: 1rem 0 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-weight: 600;
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__lede {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pyc-admin__button {
+    padding: 0.375rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-admin-accent-on-surface);
+    background-color: var(--pyc-admin-surface);
+    border: 0.0625rem solid var(--pyc-admin-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-admin__button:hover {
+    background-color: var(--pyc-admin-surface-hover);
+}
+
+.pyc-admin__button:disabled {
+    color: var(--pyc-admin-fg-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pyc-admin__link {
+    color: var(--pyc-admin-accent-on-surface);
+    text-decoration: none;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin__link:hover {
+    text-decoration: underline;
+}
+
+/* notices -- empty / loading / error states */
+.pyc-admin__notice {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    background-color: var(--pyc-admin-surface-hover);
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__notice--error {
+    background-color: var(--pyc-admin-error-surface);
+    color: var(--pyc-admin-error-fg);
+}
+
+/* dashboard tile grid */
+.pyc-admin__tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+}
+
+.pyc-admin__tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 1rem;
+    border: 0.0625rem solid var(--pyc-admin-border);
+    border-radius: 0.5rem;
+    background-color: var(--pyc-admin-surface);
+}
+
+.pyc-admin__tile-title {
+    margin: 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__tile-value {
+    margin: 0;
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+    font-weight: 600;
+}
+
+.pyc-admin__tile-detail {
+    margin: 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-admin-fg-muted);
+}
+
+/* tables */
+.pyc-admin__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin__table th,
+.pyc-admin__table td {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    border-bottom: 0.0625rem solid var(--pyc-admin-divider);
+    vertical-align: top;
+}
+
+.pyc-admin__table th {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-admin-fg-muted);
+    font-weight: 600;
+}
+
+/* badges */
+.pyc-admin__badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.75rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    background-color: var(--pyc-admin-neutral-surface);
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__badge[data-tone="ok"] {
+    background-color: var(--pyc-admin-ok-surface);
+    color: var(--pyc-admin-ok-fg);
+}
+
+.pyc-admin__badge[data-tone="warn"] {
+    background-color: var(--pyc-admin-warn-surface);
+    color: var(--pyc-admin-warn-fg);
+}
+
+.pyc-admin__badge[data-tone="error"] {
+    background-color: var(--pyc-admin-error-surface);
+    color: var(--pyc-admin-error-fg);
+}
+
+/* toggle control */
+.pyc-admin__toggle {
+    padding: 0.25rem 0.625rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    border-radius: 0.375rem;
+    border: 0.0625rem solid var(--pyc-admin-border);
+    background-color: var(--pyc-admin-surface);
+    color: var(--pyc-admin-accent-on-surface);
+    cursor: pointer;
+}
+
+.pyc-admin__toggle:hover {
+    background-color: var(--pyc-admin-surface-hover);
+}
+
+.pyc-admin__toggle:disabled {
+    color: var(--pyc-admin-fg-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* subsystem / detail list */
+.pyc-admin__detail-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.375rem 1rem;
+    margin: 0;
+}
+
+.pyc-admin__detail-term {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-admin-fg-muted);
+    font-weight: 600;
+}
+
+.pyc-admin__detail-value {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    word-break: break-word;
+}
+
+/* subsystem cards */
+.pyc-admin__cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pyc-admin__card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    padding: 0.875rem 1rem;
+    border: 0.0625rem solid var(--pyc-admin-border);
+    border-radius: 0.5rem;
+    background-color: var(--pyc-admin-surface);
+}
+
+.pyc-admin__card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.pyc-admin__card-title {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-weight: 600;
+}
+
+.pyc-admin__card-detail {
+    margin: 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-admin-fg-muted);
+}
+
+.pyc-admin__mono {
+    font-family: var(--pyc-font-family-mono, ui-monospace, monospace);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    word-break: break-all;
+}
