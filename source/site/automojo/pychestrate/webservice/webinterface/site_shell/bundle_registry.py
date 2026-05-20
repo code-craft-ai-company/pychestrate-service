@@ -146,12 +146,20 @@ def install_default_bundles() -> None:
         * ``pyc-runs-bundle`` -- prefix ``/runs`` -- runs list
           sidebar registration plus the ``<pyc-runs-list>`` view,
           loaded only on ``/runs`` and ``/runs/*`` paths.
+        * ``pyc-catalog-bundle`` -- prefix ``/test-catalog`` --
+          test-catalog sidebar registration plus the
+          ``<pyc-test-catalog>`` view (catalog table, import action,
+          per-entry trigger-run action), loaded only on
+          ``/test-catalog`` and ``/test-catalog/*`` paths.
 
         :returns: None.
     """
     register_bundle(route_prefix="", bundle_name="pyc-site-shell")
     register_bundle(route_prefix="/admin", bundle_name="pyc-admin-bundle")
     register_bundle(route_prefix="/runs", bundle_name="pyc-runs-bundle")
+    register_bundle(
+        route_prefix="/test-catalog", bundle_name="pyc-catalog-bundle"
+    )
     return
 
 

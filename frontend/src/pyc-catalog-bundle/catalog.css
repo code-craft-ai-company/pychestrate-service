@@ -1,0 +1,248 @@
+/*
+ * Styles for the <pyc-test-catalog> test-catalog view.
+ *
+ * All colors / shadows flow through --pyc-* design tokens with
+ * the same hsl() fallbacks the site shell's styles.css uses, so a
+ * theme that overrides the tokens restyles the catalog for free.
+ * No hardcoded colors, no absolute sizes (rem only).
+ */
+
+pyc-test-catalog {
+    --pyc-catalog-fg: var(--pyc-color-on-surface, hsl(210, 22%, 16%));
+    --pyc-catalog-fg-muted:
+        var(--pyc-color-on-surface-muted, hsl(213, 8%, 47%));
+    --pyc-catalog-surface: var(--pyc-color-surface, hsl(0, 0%, 100%));
+    --pyc-catalog-surface-hover:
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.04));
+    --pyc-catalog-border: var(--pyc-color-border, hsl(220, 60%, 88%));
+    --pyc-catalog-divider: var(--pyc-color-divider, hsla(0, 0%, 0%, 0.08));
+    --pyc-catalog-accent: var(--pyc-color-accent, hsl(215, 100%, 61%));
+    --pyc-catalog-accent-on-surface:
+        var(--pyc-color-accent-on-surface, hsl(220, 75%, 40%));
+    --pyc-catalog-ok-surface:
+        var(--pyc-color-success-surface, hsla(145, 63%, 42%, 0.16));
+    --pyc-catalog-ok-fg:
+        var(--pyc-color-on-success-surface, hsl(145, 63%, 24%));
+    --pyc-catalog-error-surface:
+        var(--pyc-color-error-surface, hsla(0, 72%, 51%, 0.14));
+    --pyc-catalog-error-fg:
+        var(--pyc-color-on-error-surface, hsl(0, 72%, 34%));
+    --pyc-catalog-neutral-surface:
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.06));
+
+    display: block;
+    color: var(--pyc-catalog-fg);
+    font-size: var(--pyc-font-size-body, 1rem);
+}
+
+.pyc-catalog {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.pyc-catalog__heading {
+    margin: 0;
+    font-size: var(--pyc-font-size-brand, 1.125rem);
+    font-weight: 600;
+}
+
+.pyc-catalog__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.pyc-catalog__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__select,
+.pyc-catalog__input {
+    padding: 0.375rem 0.5rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-catalog-fg);
+    background-color: var(--pyc-catalog-surface);
+    border: 0.0625rem solid var(--pyc-catalog-border);
+    border-radius: 0.375rem;
+}
+
+.pyc-catalog__checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__button {
+    padding: 0.375rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-catalog-accent-on-surface);
+    background-color: var(--pyc-catalog-surface);
+    border: 0.0625rem solid var(--pyc-catalog-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-catalog__button:hover {
+    background-color: var(--pyc-catalog-surface-hover);
+}
+
+.pyc-catalog__button:disabled {
+    color: var(--pyc-catalog-fg-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pyc-catalog__import-region {
+    border: 0.0625rem solid var(--pyc-catalog-border);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    background-color: var(--pyc-catalog-neutral-surface);
+}
+
+.pyc-catalog__import-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.pyc-catalog__import-status {
+    margin: 0;
+    flex-basis: 100%;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__table-region {
+    overflow-x: auto;
+}
+
+.pyc-catalog__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-catalog__table th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-fg-muted);
+    border-bottom: 0.0625rem solid var(--pyc-catalog-border);
+}
+
+.pyc-catalog__table td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 0.0625rem solid var(--pyc-catalog-divider);
+}
+
+.pyc-catalog__row:hover {
+    background-color: var(--pyc-catalog-surface-hover);
+}
+
+.pyc-catalog__row--retired {
+    opacity: 0.55;
+}
+
+.pyc-catalog__entry-key {
+    font-family: var(--pyc-font-family-mono, monospace);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__trigger {
+    padding: 0.25rem 0.75rem;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-surface);
+    background-color: var(--pyc-catalog-accent);
+    border: 0.0625rem solid var(--pyc-catalog-accent);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-catalog__trigger:hover {
+    opacity: 0.9;
+}
+
+.pyc-catalog__trigger:disabled {
+    background-color: var(--pyc-catalog-neutral-surface);
+    color: var(--pyc-catalog-fg-muted);
+    border-color: var(--pyc-catalog-border);
+    cursor: not-allowed;
+}
+
+.pyc-catalog__status {
+    margin: 0;
+    padding: 2rem 0;
+    text-align: center;
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__status--error {
+    color: var(--pyc-catalog-error-fg);
+}
+
+.pyc-catalog__pager {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.pyc-catalog__page-indicator {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__toast-region {
+    min-height: 0;
+}
+
+.pyc-catalog__toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    border-radius: 0.375rem;
+    background-color: var(--pyc-catalog-neutral-surface);
+    color: var(--pyc-catalog-fg);
+}
+
+.pyc-catalog__toast[data-tone="ok"] {
+    background-color: var(--pyc-catalog-ok-surface);
+    color: var(--pyc-catalog-ok-fg);
+}
+
+.pyc-catalog__toast[data-tone="error"] {
+    background-color: var(--pyc-catalog-error-surface);
+    color: var(--pyc-catalog-error-fg);
+}
+
+.pyc-catalog__toast-message {
+    flex: 1 1 auto;
+}
+
+.pyc-catalog__toast-link {
+    color: inherit;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.pyc-catalog__toast-dismiss {
+    padding: 0 0.375rem;
+    font-size: var(--pyc-font-size-body, 1rem);
+    line-height: 1;
+    color: inherit;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+}
