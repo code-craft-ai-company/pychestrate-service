@@ -141,6 +141,37 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:projects.members.manage": (
         "Manage project member bindings via the REST surface"
     ),
+    # 7-test-metrics / 7-metrics-ingest PR p20f: metric-query REST
+    # surface (GET /api/v1/metrics/catalog, /metrics/timeseries,
+    # and .../projects/{id}/test-metrics).
+    "system:metrics.read": (
+        "Read metric catalog, timeseries, and test-result rollups"
+    ),
+    # Reserved for the metric-write REST surface (metrics ingest
+    # over HTTP). Introduced by 7-metrics-ingest PR p20f.
+    "system:metrics.write": (
+        "Write metric samples via the REST surface"
+    ),
+    # 7-project-dashboards PR p20f: project-dashboard REST surface
+    # read access (GET .../projects/{id}/dashboards).
+    "system:dashboards.read": (
+        "Read project dashboards via the REST surface"
+    ),
+    # 7-project-dashboards PR p20f: project-dashboard REST surface
+    # write access (POST .../projects/{id}/dashboards).
+    "system:dashboards.write": (
+        "Create and update project dashboards via the REST surface"
+    ),
+    # 7-alerts-budgets PR p20f: metric-alert REST surface read
+    # access (GET .../projects/{id}/metric-alerts).
+    "system:metric_alerts.read": (
+        "Read metric-alert rules via the REST surface"
+    ),
+    # 7-alerts-budgets PR p20f: metric-alert REST surface write
+    # access (POST .../projects/{id}/metric-alerts).
+    "system:metric_alerts.write": (
+        "Create and manage metric-alert rules via the REST surface"
+    ),
 }
 
 
