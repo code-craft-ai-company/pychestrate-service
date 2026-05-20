@@ -119,6 +119,21 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:drift.check",
             effect=PermissionEffect.ALLOW,
         ),
+        # 2-projects PR p20e: project-management REST surface grants
+        # (project CRUD + member-binding management) for the admin
+        # role.
+        PermissionGrant(
+            permission_key="system:projects.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:projects.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:projects.members.manage",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 
