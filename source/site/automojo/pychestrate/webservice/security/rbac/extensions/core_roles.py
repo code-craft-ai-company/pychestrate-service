@@ -72,6 +72,25 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:test_runs.create",
             effect=PermissionEffect.ALLOW,
         ),
+        # 6-build-orchestration + 6-source-integrations PR p20a:
+        # build-runs, build-artifacts, and source-integrations REST
+        # surface grants for the admin role.
+        PermissionGrant(
+            permission_key="system:builds.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:builds.create",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:source_integrations.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:source_integrations.write",
+            effect=PermissionEffect.ALLOW,
+        ),
     )
 
 

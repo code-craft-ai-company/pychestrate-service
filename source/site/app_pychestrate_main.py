@@ -119,6 +119,12 @@ from automojo.pychestrate.webservice.orchestration.test.restapi.v1.test_catalog_
 from automojo.pychestrate.webservice.orchestration.test.restapi.v1.test_runs_routes import (
     register_test_runs_routes,
 )
+from automojo.pychestrate.webservice.orchestration.build.restapi.v1.build_runs_routes import (
+    register_build_runs_routes,
+)
+from automojo.pychestrate.webservice.orchestration.source.restapi.v1.source_integrations_routes import (
+    register_source_integrations_routes,
+)
 from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
     register_rbac_routes,
 )
@@ -432,6 +438,8 @@ def register_service_extensions() -> None:
     register_runs_events_routes(app=app, version_prefix="/api/v1")
     register_test_catalog_routes(app=app, version_prefix="/api/v1")
     register_test_runs_routes(app=app, version_prefix="/api/v1")
+    register_build_runs_routes(app=app, version_prefix="/api/v1")
+    register_source_integrations_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",
