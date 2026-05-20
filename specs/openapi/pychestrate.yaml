@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.4-preview
+  version: 0.0.5-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -1295,30 +1295,30 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
 
   # ---------------------------------------------------------------------
-  # Agent pull surface — PR p19g
+  # Client pull surface — PR p19g (renamed to /clients/ in p19h)
   # ---------------------------------------------------------------------
 
-  /agents/{client_id}/dispatches:next:
+  /clients/{client_id}/dispatches:next:
     parameters:
       - $ref: '#/components/parameters/ClientIdParam'
     get:
-      tags: [dispatch]
+      tags: [clients]
       summary: Long-poll for the next signed dispatch envelope.
-      operationId: agents_dispatches_next
+      operationId: clients_dispatches_next
       x-pychestrate-status: planned
       description: |
-        Long-polling pull endpoint the pod-client agent calls to
-        fetch the next signed envelope queued for it by the server
+        Long-polling pull endpoint the pod-client calls to fetch
+        the next signed envelope queued for it by the server
         dispatcher.
 
         The server blocks the request for up to `timeout_seconds`
         (default 30, hard cap 60). On a queued dispatch the server
         returns 200 with a `PendingDispatch` body and the record
-        is dequeued — the agent MUST then POST
+        is dequeued — the client MUST then POST
         `/runs/{run_id}/dispatch-ack` before the embedded
         `ack_deadline_at`, otherwise the dispatch reconciler will
         roll the attempt back. On a timeout the server returns 204
-        and the agent immediately re-polls.
+        and the client immediately re-polls.
 
         The cert common-name nginx forwards must match the path
         `client_id` — a mismatch returns 403.
@@ -1335,7 +1335,7 @@ paths:
             default: 30
       responses:
         '200':
-          description: Dispatch dequeued for this agent.
+          description: Dispatch dequeued for this client.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PendingDispatch' }
@@ -1346,18 +1346,18 @@ paths:
         '422': { $ref: '#/components/responses/Unprocessable' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
-  /agents/{client_id}/heartbeat:
+  /clients/{client_id}/heartbeat:
     parameters:
       - $ref: '#/components/parameters/ClientIdParam'
     get:
-      tags: [agents]
-      summary: Pod-client agent liveness ping.
-      operationId: agents_heartbeat
+      tags: [clients]
+      summary: Pod-client liveness ping.
+      operationId: clients_heartbeat
       x-pychestrate-status: planned
       description: |
-        Lightweight ping the pod-client agent calls between
-        long-poll cycles to keep its registry row `last_seen`
-        current. Returns 204 unconditionally on a successful mTLS
+        Lightweight ping the pod-client calls between long-poll
+        cycles to keep its registry row `last_seen` current.
+        Returns 204 unconditionally on a successful mTLS
         handshake; rows missing from the registry are logged
         server-side and still answered 204.
       security:
@@ -3021,7 +3021,7 @@ components:
     PendingDispatch:
       type: object
       description: |
-        Server response to `GET /api/v1/agents/{client_id}/dispatches:next`
+        Server response to `GET /api/v1/clients/{client_id}/dispatches:next`
         when a queued dispatch is available. Carries the signed
         `JobEnvelope` plus its detached Ed25519 signature and the
         ack-deadline the agent must beat. The signature is hex-encoded;
