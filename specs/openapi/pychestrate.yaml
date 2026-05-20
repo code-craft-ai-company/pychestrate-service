@@ -3834,14 +3834,24 @@ components:
         Body of `POST /projects/{project_id}/test-runs`. Either
         `catalog_entry_id` or `(importer_tag, entry_key)` MUST be
         provided so the server can resolve the catalog row.
-      required: [pod_id]
+
+        `pod_id` is optional. When supplied, the run targets that
+        specific pod. When omitted, the orchestrator selects an
+        eligible pod by matching the catalog entry's capability
+        requirements against the enrolled, available pods in the
+        project.
       properties:
         catalog_entry_id:
           type: string
           format: uuid
         importer_tag: { type: string }
         entry_key: { type: string }
-        pod_id: { type: string, format: uuid }
+        pod_id:
+          type: string
+          format: uuid
+          description: |
+            Optional target pod. When omitted, the orchestrator
+            picks an eligible pod by capability match.
         params:
           type: object
           additionalProperties: true
