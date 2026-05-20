@@ -209,11 +209,12 @@ def _patch_service_attr(*, name: str, value: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_projects_routes_attaches_ten_routes():
+def test_register_projects_routes_attaches_eleven_routes():
     """
     **Feature: 2-projects T1.1 (webworks routes)**
-    **Property: register_projects_routes attaches the same ten
-    method+path pairs the flask_restx controller exposed.**
+    **Property: register_projects_routes attaches the project
+    lifecycle + members method+path pairs plus the GET /projects
+    list endpoint added by PR p20e.**
     """
     app = _FakeApp()
     projects_routes.register_projects_routes(
@@ -221,6 +222,7 @@ def test_register_projects_routes_attaches_ten_routes():
     )
 
     expected_pairs = (
+        ("/api/v1/projects", ("GET",)),
         ("/api/v1/projects", ("POST",)),
         ("/api/v1/projects/{slug}", ("GET",)),
         ("/api/v1/projects/{slug}", ("PATCH",)),
@@ -252,6 +254,12 @@ def test_503_sweep_on_every_projects_handler():
     missing session.**
     """
     handlers: List[Callable[[], Any]] = [
+        lambda: projects_routes.handle_list_projects(
+            _FakeRequest(
+                path="/api/v1/projects",
+                db_session=None,
+            )
+        ),
         lambda: projects_routes.handle_create_project(
             _FakeRequest(
                 path="/api/v1/projects",
