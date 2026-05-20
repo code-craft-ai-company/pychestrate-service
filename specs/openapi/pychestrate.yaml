@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.9-preview
+  version: 0.0.10-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -927,6 +927,32 @@ paths:
   # =====================================================================
 
   /projects:
+    get:
+      tags: [projects]
+      summary: List projects.
+      operationId: projects_list
+      description: |
+        Returns a paginated page of projects the caller can see.
+        Populates project-selector UIs (the enumeration gap
+        surfaced by PR #220). The optional `state` query param
+        filters by project lifecycle state.
+      parameters:
+        - in: query
+          name: state
+          schema:
+            type: string
+            enum: [ACTIVE, ARCHIVED]
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PerPageParam'
+      responses:
+        '200':
+          description: Page of projects.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProjectPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [projects]
       summary: Create a project.
@@ -3168,6 +3194,14 @@ components:
       properties:
         user_id: { type: string, format: uuid }
         role_name: { type: string }
+    ProjectPage:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Project' }
+        meta: { $ref: '#/components/schemas/PageMeta' }
 
     # ----------------------------------------------------------------
     # clients / enrollment / agents

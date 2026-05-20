@@ -125,6 +125,22 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:drift.check": (
         "Trigger drift checks via the REST surface"
     ),
+    # Operator-facing read access for the project-management REST
+    # surface (GET /api/v1/projects and GET .../projects/{id}).
+    # Introduced by 2-projects PR p20e.
+    "system:projects.read": (
+        "Read projects and project listings via the REST surface"
+    ),
+    # Operator/CI write access for project creation, patching, and
+    # lifecycle transitions. Introduced by 2-projects PR p20e.
+    "system:projects.write": (
+        "Create, update, and delete projects via the REST surface"
+    ),
+    # Operator-facing manage access for project member bindings
+    # (add / list / remove). Introduced by 2-projects PR p20e.
+    "system:projects.members.manage": (
+        "Manage project member bindings via the REST surface"
+    ),
 }
 
 

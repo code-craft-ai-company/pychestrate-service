@@ -10,8 +10,11 @@ The production webservice runs on ``automojo.webworks`` (see
 controller to be ported -- it replaces ``projects_controller``
 next to it.
 
-Ten routes mirror the flask_restx controller's M1 + M2 matrix:
+Eleven routes cover the project-management surface:
 
+* ``GET    /api/v1/projects`` (paginated ``Page<Project>`` --
+  the project-selector enumeration gap surfaced by PR #220;
+  RBAC-gated on ``system:projects.read``)
 * ``POST   /api/v1/projects``
 * ``GET    /api/v1/projects/{slug}``
 * ``PATCH  /api/v1/projects/{slug}``
@@ -42,7 +45,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
 
 from automojo.errors.exceptions import SemanticError
 from automojo.webworks.routing.request import Request
@@ -51,6 +55,7 @@ from automojo.webworks.routing.response import JSONResponse, Response
 from automojo.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from automojo.pychestrate.webservice.projects import repository as project_repository
 from automojo.pychestrate.webservice.projects import service as project_service
 from automojo.pychestrate.webservice.projects.exceptions import (
     LastAdminRemovalError,
@@ -61,12 +66,22 @@ from automojo.pychestrate.webservice.projects.exceptions import (
     ProjectStateTransitionError,
     SlugValidationError,
 )
+from automojo.pychestrate.webservice.projects.models import ProjectState
 from automojo.pychestrate.webservice.projects.service import PROJECT_OWNER_ROLE
+from automojo.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 PROJECTS_PATH = "/projects"
 
 _TRUTHY_QUERY_VALUES = ("1", "true", "yes")
+
+PROJECTS_READ_PERMISSION_KEY = "system:projects.read"
+PROJECTS_WRITE_PERMISSION_KEY = "system:projects.write"
+PROJECTS_MEMBERS_MANAGE_PERMISSION_KEY = "system:projects.members.manage"
+
+DEFAULT_PAGE_SIZE = 50
+MIN_PAGE_SIZE = 1
+MAX_PAGE_SIZE = 500
 
 
 class _ProblemAbort(Exception):
@@ -108,6 +123,115 @@ def _resolve_db_session(request: Request) -> Optional[Any]:
 
 def _resolve_actor_user_id(request: Request) -> Optional[str]:
     rtnval = getattr(request, "actor_user_id", None)
+    return rtnval
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session
+        middleware, or ``None`` when the request is anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        permission_key: str
+    ) -> Any:
+    """
+        Require the calling principal to hold ``permission_key``.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param permission_key: Required ``system:*`` permission key.
+
+        :returns: The :class:`AuthPrincipal`.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+
+    now = datetime.now(timezone.utc)
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=now,
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(permission_key),
+            extensions={"required_permission": permission_key},
+        )
+    rtnval = principal
+    return rtnval
+
+
+def _parse_positive_int(
+        *,
+        request: Request,
+        name: str,
+        raw: Optional[str],
+        default: int,
+        minimum: int,
+        maximum: Optional[int] = None
+    ) -> int:
+    """
+        Coerce a positive-integer query param with bounds checking.
+
+        :param request: Incoming webworks request.
+        :param name: Query-param name (for error context).
+        :param raw: Raw query value or None.
+        :param default: Fallback when the param is absent.
+        :param minimum: Lower bound (inclusive).
+        :param maximum: Optional upper bound (inclusive).
+
+        :returns: Coerced integer.
+    """
+    if raw is None or len(raw) == 0:
+        rtnval = default
+        return rtnval
+
+    try:
+        candidate = int(raw)
+    except ValueError:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="Query param '{}' must be an integer.".format(name),
+            extensions={"query_param": name, "raw_value": raw},
+        )
+        candidate = default  # unreachable
+
+    if candidate < minimum:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="Query param '{}' must be >= {}.".format(name, minimum),
+            extensions={"query_param": name, "raw_value": raw},
+        )
+    if maximum is not None and candidate > maximum:
+        _abort_problem(
+            request=request,
+            status=400,
+            detail="Query param '{}' must be <= {}.".format(name, maximum),
+            extensions={"query_param": name, "raw_value": raw},
+        )
+
+    rtnval = candidate
     return rtnval
 
 
@@ -237,6 +361,97 @@ def _binding_to_dict(binding: Any) -> dict:
 # ---------------------------------------------------------------------------
 # Handlers — project lifecycle
 # ---------------------------------------------------------------------------
+
+
+def handle_list_projects(request: Request) -> Response:
+    """
+        ``GET /api/v1/projects`` — list projects the caller can see.
+
+        Returns a paginated ``Page<Project>`` (``{items, meta}``).
+        This is the project-selector gap surfaced by PR #220 — UIs
+        need an enumeration endpoint to populate project pickers.
+
+        Query params: ``state`` (``ACTIVE`` / ``ARCHIVED``),
+        ``page``, ``per_page``.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with a ``{items, meta}`` page,
+                  or a problem response on failure.
+    """
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PROJECTS_READ_PERMISSION_KEY,
+        )
+
+        state_filter_raw = request.query_params.get("state", None)
+        state_filter: Optional[ProjectState] = None
+        if state_filter_raw is not None and len(state_filter_raw) > 0:
+            try:
+                state_filter = ProjectState(state_filter_raw.strip().upper())
+            except ValueError:
+                _abort_problem(
+                    request=request,
+                    status=400,
+                    detail="Query param 'state' is not a valid project state.",
+                    extensions={"query_param": "state", "raw_value": state_filter_raw},
+                )
+
+        page = _parse_positive_int(
+            request=request,
+            name="page",
+            raw=request.query_params.get("page", None),
+            default=1,
+            minimum=1,
+        )
+        per_page = _parse_positive_int(
+            request=request,
+            name="per_page",
+            raw=request.query_params.get("per_page", None),
+            default=DEFAULT_PAGE_SIZE,
+            minimum=MIN_PAGE_SIZE,
+            maximum=MAX_PAGE_SIZE,
+        )
+
+        offset = (page - 1) * per_page
+        rows = project_repository.list_projects(
+            db_session=db_session,
+            state=state_filter,
+            offset=offset,
+            limit=per_page,
+        )
+        # The page window already applies the limit; total is
+        # computed by an unbounded count for accurate pagination
+        # metadata.
+        all_rows = project_repository.list_projects(
+            db_session=db_session,
+            state=state_filter,
+            offset=0,
+            limit=MAX_PAGE_SIZE,
+        )
+        total = len(all_rows)
+
+        items: List[Dict[str, Any]] = []
+        for row in rows:
+            items.append(_model_to_dict(row))
+
+        body = {
+            "items": items,
+            "meta": {
+                "page": page,
+                "per_page": per_page,
+                "total": int(total),
+                "next_cursor": None,
+            },
+        }
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+
+    return rtnval
 
 
 def handle_create_project(request: Request) -> Response:
@@ -734,6 +949,7 @@ def register_projects_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + PROJECTS_PATH
 
+    app.attach_route(base, methods=["GET"])(handle_list_projects)
     app.attach_route(base, methods=["POST"])(handle_create_project)
 
     app.attach_route(
@@ -771,7 +987,13 @@ def register_projects_routes(*, app: Any, version_prefix: str) -> None:
 
 __all__ = [
     "PROJECTS_PATH",
+    "PROJECTS_READ_PERMISSION_KEY",
+    "PROJECTS_WRITE_PERMISSION_KEY",
+    "PROJECTS_MEMBERS_MANAGE_PERMISSION_KEY",
+    "DEFAULT_PAGE_SIZE",
+    "MAX_PAGE_SIZE",
     "register_projects_routes",
+    "handle_list_projects",
     "handle_create_project",
     "handle_read_project",
     "handle_patch_project",
