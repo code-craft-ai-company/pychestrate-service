@@ -32,6 +32,7 @@ import {
     PycProvisioningDetail,
     run_id_from_path,
 } from "./provisioning-detail-view.js"
+import { PycGuards } from "./guards-view.js"
 
 /**
  * Descriptor passed to ``SidebarRegistry.registerEntry``. Mirrors
@@ -90,6 +91,11 @@ const ENVIRONMENTS_READ_PERMISSION: string = "system:environments.read"
 const PROVISIONING_READ_PERMISSION: string = "system:provisioning.read"
 
 /**
+ * Permission key the blast-radius-guard REST endpoints require.
+ */
+const GUARDS_READ_PERMISSION: string = "system:guards.read"
+
+/**
  * Route prefix the environments list view owns.
  */
 const ENVIRONMENTS_ROUTE: string = "/environments"
@@ -98,6 +104,11 @@ const ENVIRONMENTS_ROUTE: string = "/environments"
  * Route prefix the provisioning list / detail views own.
  */
 const PROVISIONING_ROUTE: string = "/provisioning-runs"
+
+/**
+ * Route prefix the blast-radius-guards list view owns.
+ */
+const GUARDS_ROUTE: string = "/blast-radius-guards"
 
 /**
  * Custom Element tag name for the environments list view.
@@ -113,6 +124,11 @@ const PROVISIONING_LIST_TAG: string = "pyc-provisioning-list"
  * Custom Element tag name for the provisioning detail view.
  */
 const PROVISIONING_DETAIL_TAG: string = "pyc-provisioning-detail"
+
+/**
+ * Custom Element tag name for the blast-radius-guards list view.
+ */
+const GUARDS_TAG: string = "pyc-guards"
 
 /**
  * Dist URL of the infra bundle stylesheet (copied by
@@ -166,6 +182,19 @@ const PROVISIONING_ENTRY: SidebarEntryDescriptor = {
 }
 
 /**
+ * The "Blast-Radius Guards" sidebar entry this bundle contributes.
+ * Gated on ``system:guards.read`` -- the key the guard REST
+ * endpoints require.
+ */
+const GUARDS_ENTRY: SidebarEntryDescriptor = {
+    entryId: "orchestration.guards",
+    label: "Blast-Radius Guards",
+    route: GUARDS_ROUTE,
+    requiredPermissions: [GUARDS_READ_PERMISSION],
+    group: ORCHESTRATION_GROUP_ID,
+}
+
+/**
  * Register the orchestration sidebar group and the infra entries
  * against the shell. Exported so unit tests can drive registration
  * against a stub registry without going through the global window
@@ -181,6 +210,7 @@ export function register_infra_sidebar(sidebar: SidebarRegistryApi): void {
     })
     sidebar.registerEntry(ENVIRONMENTS_ENTRY)
     sidebar.registerEntry(PROVISIONING_ENTRY)
+    sidebar.registerEntry(GUARDS_ENTRY)
     return
 }
 
@@ -201,6 +231,9 @@ export function define_infra_elements(): void {
     }
     if (customElements.get(PROVISIONING_DETAIL_TAG) === undefined) {
         customElements.define(PROVISIONING_DETAIL_TAG, PycProvisioningDetail)
+    }
+    if (customElements.get(GUARDS_TAG) === undefined) {
+        customElements.define(GUARDS_TAG, PycGuards)
     }
     return
 }
@@ -241,6 +274,13 @@ export function classify_infra_route(path: string): string {
         const rtnval = "provisioning-list"
         return rtnval
     }
+    if (
+        working === GUARDS_ROUTE ||
+        working === GUARDS_ROUTE + "/"
+    ) {
+        const rtnval = "guards"
+        return rtnval
+    }
     const detail_id = run_id_from_path(working)
     if (detail_id.length > 0) {
         const rtnval = "provisioning-detail"
@@ -268,6 +308,10 @@ export function tag_for_infra_route(route: string): string {
     }
     if (route === "provisioning-detail") {
         const rtnval = PROVISIONING_DETAIL_TAG
+        return rtnval
+    }
+    if (route === "guards") {
+        const rtnval = GUARDS_TAG
         return rtnval
     }
     const rtnval = ""
@@ -412,6 +456,31 @@ export {
     is_valid_run_id,
     build_provisioning_detail_url,
 } from "./provisioning-detail-view.js"
+export { PycGuards } from "./guards-view.js"
+export type {
+    Guard,
+    GuardPage,
+    GuardPageMeta,
+    GuardTraceEntry,
+    GuardEvaluation,
+    GuardProjectOption,
+    GuardAttachOutcome,
+    GuardToggleOutcome,
+    GuardEvaluateOutcome,
+    GuardsListState,
+} from "./guards-view.js"
+export {
+    build_guards_collection_url,
+    build_guard_item_url,
+    build_guards_evaluate_url,
+    format_guard_timestamp,
+    guard_enabled_tone,
+    verdict_tone,
+    attach_message_for_status,
+    toggle_message_for_status,
+    parse_actor_roles,
+    extract_guard_projects,
+} from "./guards-view.js"
 
 if (typeof window !== "undefined") {
     _boot()

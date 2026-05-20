@@ -1,0 +1,41 @@
+{
+    "version": "2",
+    "title": "Test Job",
+    "runid": "(not-set)",
+    "build": {
+        "release": "(not-set)",
+        "branch": "(not-set)",
+        "build": "(not-set)",
+        "flavor": "(not-set)",
+        "url": "(not-set)"
+    },
+    "pipeline": {
+        "id": "(not-set)",
+        "name": "(not-set)",
+        "instance": "(not-set)"
+    },
+    "job": {
+        "id": "8ff6b0fa-3999-429b-b708-98f199f02bbd",
+        "initiator": "(not-set)",
+        "label": "(not-set)",
+        "name": "(not-set)",
+        "owner": "(not-set)",
+        "type": "TestRun",
+        "venue": "(not-set)",
+        "seed": "a576af44-0b9e-4c2c-9a82-c08ae962b0da",
+        "tag": "(not-set)"
+    },
+    "start": "2026-05-20T10:51:17.654608",
+    "stop": "2026-05-20 10:51:23.775145",
+    "result": "FAILED",
+    "apod": "(not-set)",
+    "totals": null,
+    "running": {},
+    "detail": {
+        "errors": 0,
+        "failed": 5,
+        "skipped": 0,
+        "passed": 42,
+        "total": 47
+    }
+}

@@ -10,7 +10,8 @@
 
 pyc-environments,
 pyc-provisioning-list,
-pyc-provisioning-detail {
+pyc-provisioning-detail,
+pyc-guards {
     --pyc-infra-fg: var(--pyc-color-on-surface, hsl(210, 22%, 16%));
     --pyc-infra-fg-muted:
         var(--pyc-color-on-surface-muted, hsl(213, 8%, 47%));
