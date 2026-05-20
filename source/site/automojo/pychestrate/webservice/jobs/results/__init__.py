@@ -34,6 +34,9 @@ from automojo.pychestrate.webservice.jobs.results.backend import (
 )
 from automojo.pychestrate.webservice.jobs.results.errors import (
     AllocationNotFoundError,
+    ArtifactPathInvalidError,
+    PresignSignatureInvalidError,
+    TooManyArtifactPathsError,
 )
 from automojo.pychestrate.webservice.jobs.results.models import (
     SharedResultsAllocation,
@@ -41,4 +44,7 @@ from automojo.pychestrate.webservice.jobs.results.models import (
 from automojo.pychestrate.webservice.jobs.results.path_builder import (
     build_canonical_prefix,
     canonicalize_component,
+)
+from automojo.pychestrate.webservice.jobs.results.presign import (
+    ArtifactUploadTarget,
 )

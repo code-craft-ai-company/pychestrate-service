@@ -66,6 +66,7 @@ from automojo.pychestrate.webservice.orchestration.test.restapi.v1 import (
     test_runs_routes,
 )
 from automojo.pychestrate.webservice.runs.restapi.v1 import (
+    artifacts_routes,
     runs_events_routes,
 )
 
@@ -202,6 +203,32 @@ def register_phase6_builtin_extensions() -> None:
     infra_runs_register()
     drift_detection_register()
     blast_radius_guards_register()
+    _publish_result_presign_seams()
+    return
+
+
+def _publish_result_presign_seams() -> None:
+    """
+        Publish the :class:`SharedResultsBackend` and the HMAC
+        signing secret on the presigned-result-upload route's
+        module-level seams (PR p19l).
+
+        Runs in both the register-only and the live bootstrap
+        paths so ``POST /api/v1/runs/{run_id}/artifacts:presign``
+        and ``PUT .../_local-upload`` are wired the moment their
+        routes attach. The signing secret comes from
+        ``PYCHESTRATE_RESULT_PRESIGN_SECRET`` or -- when unset -- a
+        per-process random secret.
+
+        :returns: None.
+    """
+    backend = SharedResultsBackend(backend_driver="local-test")
+    artifacts_routes.set_shared_results_backend(backend=backend)
+
+    secret = artifacts_routes.resolve_presign_signing_secret_from_environment()
+    artifacts_routes.set_presign_signing_secret(secret=secret)
+
+    logger.info("phase6.bootstrap.result_presign_seams_published")
     return
 
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pychestrate Service API
-  version: 0.0.6-preview
+  version: 0.0.7-preview
   description: |
     Authoritative REST contract for the **Pychestrate** continuous integration
     and orchestration service.
@@ -1897,6 +1897,117 @@ paths:
               schema: { $ref: '#/components/schemas/ArtifactEntry' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /runs/{run_id}/artifacts:presign:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    post:
+      tags: [results]
+      summary: Mint presigned PUT URLs for a run's result-tree upload.
+      operationId: artifacts_presign_upload
+      x-pychestrate-status: planned
+      description: |
+        Posted by the pod client agent over mTLS to obtain
+        short-lived presigned PUT URLs for the relative artifact
+        paths it discovered while walking its testbase result tree.
+
+        The agent PUTs each artifact's bytes directly to the
+        returned `put_url`, then calls
+        `POST /runs/{run_id}/results/complete`. Object-store
+        credentials never leave the server -- the credentialed
+        transfer is encoded entirely in the presigned URL.
+
+        On the dev / alpha deploy there is no S3-compatible object
+        store, so the server mints **local-filesystem fallback**
+        URLs that point back at
+        `PUT /runs/{run_id}/artifacts/_local-upload`. The URL
+        carries an HMAC signature over `run_id` + path + expiry, so
+        the fallback needs no object-store credential while staying
+        tamper-proof. The agent's code path is identical either way.
+
+        Auth: the verified mTLS client common-name must match the
+        `client_id` that owns the run's current dispatch receipt --
+        only the client running the job may upload its results. A
+        run that has already reached a terminal state no longer
+        accepts uploads (409).
+      security:
+        - pychestrate_mtls: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtifactPresignRequest' }
+      responses:
+        '200':
+          description: Presigned upload targets minted, one per requested path.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactPresignResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /runs/{run_id}/artifacts/_local-upload:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+      - in: query
+        name: path
+        required: true
+        description: Canonicalized relative artifact path the bytes are stored under.
+        schema: { type: string }
+      - in: query
+        name: expires
+        required: true
+        description: Expiry of the presigned URL as a Unix epoch second.
+        schema: { type: integer }
+      - in: query
+        name: signature
+        required: true
+        description: HMAC-SHA256 signature over run_id + path + expiry.
+        schema: { type: string }
+    put:
+      tags: [results]
+      summary: Upload sink for the local-filesystem presign fallback.
+      operationId: artifacts_local_upload
+      x-pychestrate-status: planned
+      description: |
+        The upload sink the `:presign` operation's local-filesystem
+        fallback URLs point at. Used only when the deploy has no
+        S3-compatible object store.
+
+        The request body is the raw artifact bytes. The handler
+        re-verifies the `signature` query parameter against the
+        server-held HMAC secret before writing the bytes under the
+        run's allocated `backend_key_prefix`. A forged or expired
+        signature is rejected with 403; the signature -- not a
+        permission check -- is this endpoint's auth contract, so no
+        object-store credential is involved.
+      security:
+        - pychestrate_mtls: []
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Artifact bytes written to the result tree.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ArtifactLocalUploadResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
   /projects/{project_id}/test-runs:
     parameters:
       - $ref: '#/components/parameters/ProjectIdParam'
@@ -2123,6 +2234,11 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     Unprocessable:
       description: Request was well-formed but semantically invalid.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    PayloadTooLarge:
+      description: Request body exceeds the server-side size cap.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -3444,6 +3560,87 @@ components:
           type: array
           items: { $ref: '#/components/schemas/ArtifactEntry' }
         meta: { $ref: '#/components/schemas/PageMeta' }
+
+    ArtifactPresignRequest:
+      type: object
+      description: |
+        Body of `POST /runs/{run_id}/artifacts:presign`. Carries the
+        relative artifact paths the agent discovered while walking
+        its result tree and wants presigned upload URLs for.
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          description: |
+            Relative artifact paths (relative to the run's result
+            root). Must be non-empty; the server caps the count and
+            the summed path length and rejects an over-cap batch
+            with 422.
+          minItems: 1
+          maxItems: 512
+          items:
+            type: string
+            description: A single slash-delimited relative path.
+            maxLength: 1024
+
+    ArtifactUploadTarget:
+      type: object
+      description: |
+        One minted presigned upload target. The agent PUTs the
+        artifact's bytes to `put_url`, sending `headers` verbatim.
+      required: [path, put_url, expires_at, headers]
+      properties:
+        path:
+          type: string
+          description: The relative artifact path this target covers.
+        put_url:
+          type: string
+          description: |
+            URL the agent PUTs the artifact bytes to. For the
+            local-filesystem fallback this is a path-absolute URL on
+            this service carrying the upload signature in its query
+            string; for an S3-backed deploy it is an absolute
+            object-store URL.
+        expires_at:
+          type: string
+          format: date-time
+          description: UTC timestamp after which the URL is rejected.
+        headers:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Headers the agent must send verbatim on the PUT. Empty
+            for the local-filesystem fallback (the signature travels
+            in the URL query string).
+
+    ArtifactPresignResponse:
+      type: object
+      description: |
+        Body of a successful `POST /runs/{run_id}/artifacts:presign`.
+        Carries one upload target per requested path, in request
+        order.
+      required: [run_id, uploads]
+      properties:
+        run_id: { type: string, format: uuid }
+        uploads:
+          type: array
+          items: { $ref: '#/components/schemas/ArtifactUploadTarget' }
+
+    ArtifactLocalUploadResult:
+      type: object
+      description: |
+        Body of a successful
+        `PUT /runs/{run_id}/artifacts/_local-upload`.
+      required: [run_id, path, bytes_written, stored_at]
+      properties:
+        run_id: { type: string, format: uuid }
+        path:
+          type: string
+          description: The relative artifact path the bytes were stored under.
+        bytes_written: { type: integer, minimum: 0 }
+        stored_at:
+          type: string
+          description: Server-side absolute path the bytes landed at.
 
     # ----------------------------------------------------------------
     # test_runs

@@ -31,3 +31,28 @@ class PathComponentInvalidError(SharedResultsError):
         cannot be sanitized into a safe filesystem segment (empty
         after sanitization, or excessively long).
     """
+
+
+class ArtifactPathInvalidError(SharedResultsError):
+    """
+        Raised by :func:`presign.canonicalize_relative_path` when a
+        client-supplied relative artifact path is empty, absolute,
+        carries a ``..`` traversal segment, or is otherwise unsafe
+        to map onto the run's result-tree prefix.
+    """
+
+
+class TooManyArtifactPathsError(SharedResultsError):
+    """
+        Raised by :func:`presign.validate_artifact_path_batch` when
+        a single ``:presign`` request asks for more paths -- or a
+        greater summed path length -- than the configured caps.
+    """
+
+
+class PresignSignatureInvalidError(SharedResultsError):
+    """
+        Raised by :func:`presign.verify_upload_signature` when a
+        presented local-fs upload signature is missing, malformed,
+        does not match the server-held secret, or has expired.
+    """

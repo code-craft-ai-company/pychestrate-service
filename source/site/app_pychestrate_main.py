@@ -110,6 +110,9 @@ from automojo.pychestrate.webservice.jobs.envelope.startup import (
 from automojo.pychestrate.webservice.runs.restapi.v1.runs_events_routes import (
     register_runs_events_routes,
 )
+from automojo.pychestrate.webservice.runs.restapi.v1.artifacts_routes import (
+    register_artifacts_routes,
+)
 from automojo.pychestrate.webservice.orchestration.test.restapi.v1.test_catalog_routes import (
     register_test_catalog_routes,
 )
@@ -424,6 +427,7 @@ def register_service_extensions() -> None:
     register_pods_routes(app=app, version_prefix="/api/v1")
     register_projects_routes(app=app, version_prefix="/api/v1")
     register_runs_routes(app=app, version_prefix="/api/v1")
+    register_artifacts_routes(app=app, version_prefix="/api/v1")
     register_signing_keys_routes(app=app, version_prefix="/api/v1")
     register_runs_events_routes(app=app, version_prefix="/api/v1")
     register_test_catalog_routes(app=app, version_prefix="/api/v1")
