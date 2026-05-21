@@ -387,6 +387,109 @@ def test_empty_string_cookie_does_not_invoke_resolver():
 
 
 # ---------------------------------------------------------------------------
+# Fallback cookie resolution -- UI-session cookie for /api/v1/me/*
+# ---------------------------------------------------------------------------
+
+
+def test_ui_cookie_fallback_resolves_principal_when_primary_cookie_absent():
+    """
+    **Feature: webworks session middleware**
+    **Property: When the primary REST cookie is absent but a
+    configured fallback cookie carries a session id the
+    value_to_session_id resolver can extract, the middleware
+    resolves the principal through the same resolve_actor
+    pipeline. This is the path /api/v1/me/permissions uses for a
+    site-shell request that holds only the pychestrate_ui_session
+    cookie -- the blind spot that let the admin-lockout bug
+    ship.**
+    """
+    session = _FakeSession()
+    principal = _FakePrincipal(user_id="user-99")
+    open_session = _build_open_session(sessions_to_return=[session])
+    resolve_actor = _build_resolve_actor(
+        by_session_id={"rest-sess-99": principal}
+    )
+
+    def _ui_value_to_session_id(raw_cookie_value: str) -> Optional[str]:
+        # Stand-in for default_ui_cookie_value_to_session_id: the
+        # UI cookie carries the REST session id under a payload
+        # field; here the raw value IS the embedded id.
+        rtnval = raw_cookie_value
+        return rtnval
+
+    middleware = PychestrateSessionMiddleware(
+        open_session=open_session,
+        resolve_actor=resolve_actor,
+        cookie_name="pychestrate_session",
+        path_prefixes=("/api/v1/",),
+        fallback_cookie_resolvers=[
+            ("pychestrate_ui_session", _ui_value_to_session_id),
+        ],
+        clock=_fixed_clock,
+    )
+    request = _FakeRequest(
+        path="/api/v1/me/permissions",
+        cookies={"pychestrate_ui_session": "rest-sess-99"},
+    )
+
+    seen_actor_user_id: List[Optional[str]] = []
+    seen_principal: List[Any] = []
+
+    def call_next(req: _FakeRequest) -> _FakeResponse:
+        seen_actor_user_id.append(req.actor_user_id)
+        seen_principal.append(req.auth_principal)
+        return _FakeResponse(status_code=200)
+
+    middleware(request, call_next)
+
+    testbase.assert_equal(seen_actor_user_id[0], "user-99")
+    testbase.assert_equal(seen_principal[0] is principal, True)
+    return
+
+
+def test_malformed_ui_cookie_fallback_yields_anonymous_request():
+    """
+    **Feature: webworks session middleware**
+    **Property: A fallback cookie whose value_to_session_id
+    resolver raises does not break the request -- the middleware
+    swallows the failure and treats the request as anonymous so a
+    tampered UI cookie cannot 500 /api/v1/me/*.**
+    """
+    session = _FakeSession()
+    open_session = _build_open_session(sessions_to_return=[session])
+    resolve_actor = _build_resolve_actor(by_session_id={})
+
+    def _raising_value_to_session_id(raw_cookie_value: str) -> Optional[str]:
+        raise ValueError("tampered cookie")
+
+    middleware = PychestrateSessionMiddleware(
+        open_session=open_session,
+        resolve_actor=resolve_actor,
+        cookie_name="pychestrate_session",
+        path_prefixes=("/api/v1/",),
+        fallback_cookie_resolvers=[
+            ("pychestrate_ui_session", _raising_value_to_session_id),
+        ],
+        clock=_fixed_clock,
+    )
+    request = _FakeRequest(
+        path="/api/v1/me/permissions",
+        cookies={"pychestrate_ui_session": "garbage"},
+    )
+
+    seen_actor_user_id: List[Optional[str]] = []
+
+    def call_next(req: _FakeRequest) -> _FakeResponse:
+        seen_actor_user_id.append(req.actor_user_id)
+        return _FakeResponse(status_code=200)
+
+    middleware(request, call_next)
+
+    testbase.assert_equal(seen_actor_user_id[0], None)
+    return
+
+
+# ---------------------------------------------------------------------------
 # Cleanup -- success path
 # ---------------------------------------------------------------------------
 

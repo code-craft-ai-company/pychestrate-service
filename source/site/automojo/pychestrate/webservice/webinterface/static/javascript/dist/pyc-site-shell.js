@@ -1068,10 +1068,38 @@ var SidebarRegistry = class {
   _groups;
   _entries;
   _entry_routes;
+  _change_listeners;
   constructor() {
     this._groups = /* @__PURE__ */ new Map();
     this._entries = [];
     this._entry_routes = /* @__PURE__ */ new Set();
+    this._change_listeners = [];
+  }
+  /**
+   * Subscribe to registry mutations. The shell wires its
+   * sidebar re-render through here so feature bundles that
+   * register their groups / entries AFTER the shell's initial
+   * boot render (a load-order race -- the shell bundle and the
+   * feature bundle are independent ``<script type="module">``
+   * tags) still surface in the sidebar instead of leaving the
+   * shell stuck on the zero-permissions empty state.
+   */
+  onChange(listener) {
+    this._change_listeners.push(listener);
+    return;
+  }
+  _notify_change() {
+    for (const listener of this._change_listeners) {
+      try {
+        listener();
+      } catch (reason) {
+        console.warn(
+          "pychestrate.ui.shell.sidebar_change_listener_failed",
+          { reason: String(reason) }
+        );
+      }
+    }
+    return;
   }
   /**
    * Register a sidebar group. Duplicate `groupId` registrations
@@ -1100,6 +1128,7 @@ var SidebarRegistry = class {
     }
     const normalized = _normalize_group(group);
     this._groups.set(normalized.groupId, normalized);
+    this._notify_change();
     return;
   }
   /**
@@ -1137,6 +1166,7 @@ var SidebarRegistry = class {
     const normalized = _normalize_entry(entry);
     this._entries.push(normalized);
     this._entry_routes.add(normalized.route);
+    this._notify_change();
     return;
   }
   /**
@@ -1957,6 +1987,9 @@ var PycSiteShell = class extends HTMLElement {
       element: this
     };
     global_target.pychestrateShell = handle;
+    this._sidebar_registry.onChange(() => {
+      this._render_sidebar_and_empty_state();
+    });
     return;
   }
   async _boot() {

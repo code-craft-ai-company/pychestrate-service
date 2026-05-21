@@ -377,6 +377,20 @@ export class PycSiteShell extends HTMLElement {
             element: this,
         }
         global_target.pychestrateShell = handle
+        // Feature bundles (admin, ops, resources, ...) register
+        // their sidebar groups + entries against this handle from
+        // their own ``<script type="module">`` body, which can run
+        // either before or after the shell's initial boot render.
+        // When it runs after, the initial render already happened
+        // against an empty registry and nothing else re-renders
+        // (no navigation, no permission diff) -- the shell would
+        // stay stuck on the zero-permissions empty state even
+        // though the user holds every permission. Re-render on
+        // every registry mutation so late-registering bundles
+        // surface in the sidebar.
+        this._sidebar_registry.onChange(() => {
+            this._render_sidebar_and_empty_state()
+        })
         return
     }
 

@@ -416,12 +416,19 @@ export function mount_admin_view_if_active(): void {
 /**
  * Bundle-load entry point. Looks up ``window.pychestrateShell``
  * (published by the shell bundle on connect) and registers the
- * admin sidebar, then mounts the route-appropriate view. When the
- * shell handle is not yet on the window -- which happens when the
- * admin bundle's <script> tag is parsed before the shell bundle
- * finishes connecting -- it queues a single microtask retry; the
- * shell publishes the handle synchronously during
- * ``connectedCallback``, so a microtask suffices.
+ * admin sidebar, then mounts the route-appropriate view.
+ *
+ * The admin bundle and the shell bundle are independent
+ * ``<script type="module">`` tags with no guaranteed relative
+ * execution order. When the admin bundle runs first the shell
+ * handle is not yet on ``window``; a single microtask retry is
+ * NOT sufficient (the shell may not have connected by then), and
+ * failing to register leaves the shell stuck on the
+ * zero-permissions empty state. The boot path therefore registers
+ * eagerly when the handle is already present, and otherwise binds
+ * a one-shot ``pyc-site-shell-ready`` listener -- the shell emits
+ * that event after ``connectedCallback`` -- so registration is
+ * guaranteed regardless of load order.
  */
 function _register_against(handle: PycSiteShellRegistryHandle): void {
     register_admin_sidebar(handle.sidebar)
@@ -445,20 +452,43 @@ function _boot(): void {
         return
     }
 
-    queueMicrotask(() => {
-        const retry = target.pychestrateShell
-        if (retry !== undefined && retry.sidebar !== undefined) {
-            _register_against(retry)
-            return
+    let registered = false
+    const try_register = (): boolean => {
+        if (registered === true) {
+            return true
         }
-        console.warn(
-            "pychestrate.ui.admin.bundle_no_shell_handle",
-            {
-                reason:
-                    "window.pychestrateShell missing after microtask retry",
-            },
-        )
+        const current = target.pychestrateShell
+        if (current !== undefined && current.sidebar !== undefined) {
+            registered = true
+            _register_against(current)
+            return true
+        }
+        return false
+    }
+
+    // Fast path -- the shell handle frequently lands within a
+    // microtask of the admin bundle's body running.
+    queueMicrotask(() => {
+        try_register()
     })
+
+    // Reliable path -- the shell emits ``pyc-site-shell-ready``
+    // once ``connectedCallback`` has published the handle. This
+    // fires whether the shell connected before or after the admin
+    // bundle's <script> body, closing the load-order race. Guard
+    // ``addEventListener`` so a non-browser host (the node-based
+    // bundle tests stub ``window`` as a bare object) degrades to
+    // the microtask path instead of throwing at import time.
+    if (typeof window.addEventListener === "function") {
+        const on_shell_ready = (): void => {
+            if (try_register() === true) {
+                window.removeEventListener(
+                    "pyc-site-shell-ready", on_shell_ready,
+                )
+            }
+        }
+        window.addEventListener("pyc-site-shell-ready", on_shell_ready)
+    }
     return
 }
 
