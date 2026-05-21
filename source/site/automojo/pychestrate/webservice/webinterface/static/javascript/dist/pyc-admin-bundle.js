@@ -1715,19 +1715,33 @@ function _boot() {
     _register_against(handle);
     return;
   }
-  queueMicrotask(() => {
-    const retry = target.pychestrateShell;
-    if (retry !== void 0 && retry.sidebar !== void 0) {
-      _register_against(retry);
-      return;
+  let registered = false;
+  const try_register = () => {
+    if (registered === true) {
+      return true;
     }
-    console.warn(
-      "pychestrate.ui.admin.bundle_no_shell_handle",
-      {
-        reason: "window.pychestrateShell missing after microtask retry"
-      }
-    );
+    const current = target.pychestrateShell;
+    if (current !== void 0 && current.sidebar !== void 0) {
+      registered = true;
+      _register_against(current);
+      return true;
+    }
+    return false;
+  };
+  queueMicrotask(() => {
+    try_register();
   });
+  if (typeof window.addEventListener === "function") {
+    const on_shell_ready = () => {
+      if (try_register() === true) {
+        window.removeEventListener(
+          "pyc-site-shell-ready",
+          on_shell_ready
+        );
+      }
+    };
+    window.addEventListener("pyc-site-shell-ready", on_shell_ready);
+  }
   return;
 }
 var ADMIN_SIDEBAR_ENTRIES = ADMIN_ENTRIES;

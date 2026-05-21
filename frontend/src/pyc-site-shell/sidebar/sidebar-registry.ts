@@ -54,11 +54,41 @@ export class SidebarRegistry {
     private readonly _groups: Map<string, SidebarGroup>
     private readonly _entries: SidebarEntry[]
     private readonly _entry_routes: Set<string>
+    private readonly _change_listeners: Array<() => void>
 
     public constructor() {
         this._groups = new Map<string, SidebarGroup>()
         this._entries = []
         this._entry_routes = new Set<string>()
+        this._change_listeners = []
+    }
+
+    /**
+     * Subscribe to registry mutations. The shell wires its
+     * sidebar re-render through here so feature bundles that
+     * register their groups / entries AFTER the shell's initial
+     * boot render (a load-order race -- the shell bundle and the
+     * feature bundle are independent ``<script type="module">``
+     * tags) still surface in the sidebar instead of leaving the
+     * shell stuck on the zero-permissions empty state.
+     */
+    public onChange(listener: () => void): void {
+        this._change_listeners.push(listener)
+        return
+    }
+
+    private _notify_change(): void {
+        for (const listener of this._change_listeners) {
+            try {
+                listener()
+            } catch (reason: unknown) {
+                console.warn(
+                    "pychestrate.ui.shell.sidebar_change_listener_failed",
+                    { reason: String(reason) },
+                )
+            }
+        }
+        return
     }
 
     /**
@@ -88,6 +118,7 @@ export class SidebarRegistry {
         }
         const normalized = _normalize_group(group)
         this._groups.set(normalized.groupId, normalized)
+        this._notify_change()
         return
     }
 
@@ -126,6 +157,7 @@ export class SidebarRegistry {
         const normalized = _normalize_entry(entry)
         this._entries.push(normalized)
         this._entry_routes.add(normalized.route)
+        this._notify_change()
         return
     }
 

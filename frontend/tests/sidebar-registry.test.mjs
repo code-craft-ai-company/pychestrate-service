@@ -149,3 +149,60 @@ test("PermissionSet.diff returns sorted added/removed", () => {
     assert.deepEqual(diff.added, ["c", "d"])
     assert.deepEqual(diff.removed, ["a"])
 })
+
+// Regression (p22a): a feature bundle that registers its sidebar
+// groups / entries AFTER the shell's initial render must trigger
+// a re-render -- otherwise the shell stays stuck on the
+// zero-permissions empty state even though the user holds every
+// permission. The registry's onChange notification is the seam
+// the shell uses to re-render on late registration.
+test("registry onChange fires on registerGroup", () => {
+    const registry = new SidebarRegistry()
+    let calls = 0
+    registry.onChange(() => {
+        calls = calls + 1
+    })
+    registry.registerGroup({
+        groupId: "admin",
+        label: "Admin",
+        requiredPermissions: [],
+    })
+    assert.equal(calls, 1)
+})
+
+test("registry onChange fires on registerEntry", () => {
+    const registry = new SidebarRegistry()
+    let calls = 0
+    registry.onChange(() => {
+        calls = calls + 1
+    })
+    registry.registerEntry({
+        entryId: "a",
+        label: "A",
+        route: "/a",
+        requiredPermissions: [],
+    })
+    assert.equal(calls, 1)
+})
+
+test("registry onChange does not fire on a dropped duplicate", () => {
+    const registry = new SidebarRegistry()
+    registry.registerEntry({
+        entryId: "a",
+        label: "A",
+        route: "/dup",
+        requiredPermissions: [],
+    })
+    let calls = 0
+    registry.onChange(() => {
+        calls = calls + 1
+    })
+    // Duplicate route -- dropped, no mutation, no notification.
+    registry.registerEntry({
+        entryId: "a2",
+        label: "A2",
+        route: "/dup",
+        requiredPermissions: [],
+    })
+    assert.equal(calls, 0)
+})
