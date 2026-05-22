@@ -1260,7 +1260,10 @@ function _normalize_entry(entry) {
 
 // src/pyc-site-shell/sidebar/sidebar-keyboard.ts
 var TYPE_TO_JUMP_RESET_MS = 1e3;
+var NAVITEM_SELECTOR = ".pyc-site-shell__sidebar-navitem";
 var ENTRY_SELECTOR = ".pyc-site-shell__sidebar-entry";
+var POPUP_CLASS = "pyc-site-shell__sidebar-popup";
+var GROUP_BUTTON_CLASS = "pyc-site-shell__sidebar-group-btn";
 function attach_sidebar_keyboard(container) {
   const state = {
     buffer: "",
@@ -1276,7 +1279,72 @@ function attach_sidebar_keyboard(container) {
   return detach;
 }
 function _on_keydown(event, container, state) {
-  const entries = _collect_entries(container);
+  const open_popup = _enclosing_open_popup(event.target);
+  if (open_popup !== null) {
+    _handle_popup_keydown(event, open_popup, state);
+    return;
+  }
+  _handle_toplevel_keydown(event, container, state);
+  return;
+}
+function _handle_toplevel_keydown(event, container, state) {
+  const navitems = _collect(container, NAVITEM_SELECTOR);
+  if (navitems.length === 0) {
+    return;
+  }
+  const active_index = _resolve_active_index(navitems, event.target);
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    const next_index = (active_index + 1) % navitems.length;
+    _move_focus(navitems, next_index);
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    const next_index = active_index <= 0 ? navitems.length - 1 : active_index - 1;
+    _move_focus(navitems, next_index);
+    return;
+  }
+  if (event.key === "Enter") {
+    if (active_index >= 0 && active_index < navitems.length) {
+      event.preventDefault();
+      const item = navitems[active_index];
+      item.click();
+      if (_is_group_button(item) === true) {
+        _focus_first_popup_entry(item);
+      }
+    }
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    if (active_index >= 0 && active_index < navitems.length) {
+      const item = navitems[active_index];
+      if (_is_group_button(item) === true) {
+        if (item.getAttribute("aria-expanded") !== "true") {
+          item.click();
+        }
+        _focus_first_popup_entry(item);
+      }
+    }
+    return;
+  }
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    return;
+  }
+  if (_is_type_to_jump_key(event) === true) {
+    const match_index = _type_to_jump(navitems, event, state);
+    if (match_index >= 0) {
+      event.preventDefault();
+      _move_focus(navitems, match_index);
+    }
+    return;
+  }
+  return;
+}
+function _handle_popup_keydown(event, popup, state) {
+  const entries = _collect(popup, ENTRY_SELECTOR);
   if (entries.length === 0) {
     return;
   }
@@ -1284,13 +1352,13 @@ function _on_keydown(event, container, state) {
   if (event.key === "ArrowDown") {
     event.preventDefault();
     const next_index = (active_index + 1) % entries.length;
-    _move_focus(entries, next_index);
+    entries[next_index].focus();
     return;
   }
   if (event.key === "ArrowUp") {
     event.preventDefault();
     const next_index = active_index <= 0 ? entries.length - 1 : active_index - 1;
-    _move_focus(entries, next_index);
+    entries[next_index].focus();
     return;
   }
   if (event.key === "Enter") {
@@ -1300,23 +1368,63 @@ function _on_keydown(event, container, state) {
     }
     return;
   }
-  if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    const button = popup.previousElementSibling;
+    if (button instanceof HTMLElement) {
+      if (button.getAttribute("aria-expanded") === "true") {
+        button.click();
+      }
+      button.focus();
+    }
+    return;
+  }
+  if (event.key === "ArrowRight") {
     event.preventDefault();
     return;
   }
   if (_is_type_to_jump_key(event) === true) {
-    const now_ms = Date.now();
-    if (now_ms - state.last_keystroke_at_ms > TYPE_TO_JUMP_RESET_MS) {
-      state.buffer = "";
-    }
-    state.buffer = state.buffer + event.key.toLowerCase();
-    state.last_keystroke_at_ms = now_ms;
-    const match_index = _find_prefix_match(entries, state.buffer);
+    const match_index = _type_to_jump(entries, event, state);
     if (match_index >= 0) {
       event.preventDefault();
-      _move_focus(entries, match_index);
+      entries[match_index].focus();
     }
     return;
+  }
+  return;
+}
+function _enclosing_open_popup(target) {
+  if (target instanceof HTMLElement === false) {
+    return null;
+  }
+  let current = target;
+  while (current !== null) {
+    if (current.classList.contains(POPUP_CLASS) === true) {
+      if (current.hidden === true) {
+        return null;
+      }
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+function _is_group_button(element) {
+  const rtnval = element.classList.contains(GROUP_BUTTON_CLASS);
+  return rtnval;
+}
+function _focus_first_popup_entry(button) {
+  const popup = button.nextElementSibling;
+  if (popup instanceof HTMLElement === false) {
+    return;
+  }
+  const popup_element = popup;
+  if (popup_element.hidden === true) {
+    return;
+  }
+  const entries = _collect(popup_element, ENTRY_SELECTOR);
+  if (entries.length > 0) {
+    entries[0].focus();
   }
   return;
 }
@@ -1336,46 +1444,56 @@ function _is_type_to_jump_key(event) {
   }
   return true;
 }
-function _collect_entries(container) {
-  const node_list = container.querySelectorAll(ENTRY_SELECTOR);
+function _type_to_jump(items, event, state) {
+  const now_ms = Date.now();
+  if (now_ms - state.last_keystroke_at_ms > TYPE_TO_JUMP_RESET_MS) {
+    state.buffer = "";
+  }
+  state.buffer = state.buffer + event.key.toLowerCase();
+  state.last_keystroke_at_ms = now_ms;
+  const match_index = _find_prefix_match(items, state.buffer);
+  return match_index;
+}
+function _collect(root, selector) {
+  const node_list = root.querySelectorAll(selector);
   const rtnval = [];
   for (let index = 0; index < node_list.length; index = index + 1) {
     rtnval.push(node_list[index]);
   }
   return rtnval;
 }
-function _resolve_active_index(entries, target) {
+function _resolve_active_index(items, target) {
   if (target instanceof HTMLElement) {
-    const direct_index = entries.indexOf(target);
+    const direct_index = items.indexOf(target);
     if (direct_index >= 0) {
       return direct_index;
     }
   }
-  for (let index = 0; index < entries.length; index = index + 1) {
-    if (entries[index].getAttribute("tabindex") === "0") {
+  for (let index = 0; index < items.length; index = index + 1) {
+    if (items[index].getAttribute("tabindex") === "0") {
       return index;
     }
   }
   return -1;
 }
-function _move_focus(entries, next_index) {
-  for (let index = 0; index < entries.length; index = index + 1) {
-    const entry = entries[index];
+function _move_focus(items, next_index) {
+  for (let index = 0; index < items.length; index = index + 1) {
+    const item = items[index];
     if (index === next_index) {
-      entry.setAttribute("tabindex", "0");
-      entry.focus();
+      item.setAttribute("tabindex", "0");
+      item.focus();
     } else {
-      entry.setAttribute("tabindex", "-1");
+      item.setAttribute("tabindex", "-1");
     }
   }
   return;
 }
-function _find_prefix_match(entries, prefix) {
+function _find_prefix_match(items, prefix) {
   if (prefix.length === 0) {
     return -1;
   }
-  for (let index = 0; index < entries.length; index = index + 1) {
-    const label = (entries[index].textContent || "").trim().toLowerCase();
+  for (let index = 0; index < items.length; index = index + 1) {
+    const label = (items[index].textContent || "").trim().toLowerCase();
     if (label.startsWith(prefix) === true) {
       return index;
     }
@@ -1383,13 +1501,18 @@ function _find_prefix_match(entries, prefix) {
   return -1;
 }
 function initialize_sidebar_roving_tabindex(container) {
-  const entries = _collect_entries(container);
-  if (entries.length === 0) {
+  const navitems = _collect(container, NAVITEM_SELECTOR);
+  if (navitems.length === 0) {
     return;
   }
   let anchor_index = -1;
-  for (let index = 0; index < entries.length; index = index + 1) {
-    if (entries[index].getAttribute("aria-current") === "page") {
+  for (let index = 0; index < navitems.length; index = index + 1) {
+    const item = navitems[index];
+    const is_active_link = item.getAttribute("aria-current") === "page";
+    const is_active_group = item.classList.contains(
+      "pyc-site-shell__sidebar-group-btn--active"
+    );
+    if (is_active_link === true || is_active_group === true) {
       anchor_index = index;
       break;
     }
@@ -1397,28 +1520,33 @@ function initialize_sidebar_roving_tabindex(container) {
   if (anchor_index < 0) {
     anchor_index = 0;
   }
-  for (let index = 0; index < entries.length; index = index + 1) {
-    const entry = entries[index];
+  for (let index = 0; index < navitems.length; index = index + 1) {
+    const item = navitems[index];
     if (index === anchor_index) {
-      entry.setAttribute("tabindex", "0");
+      item.setAttribute("tabindex", "0");
     } else {
-      entry.setAttribute("tabindex", "-1");
+      item.setAttribute("tabindex", "-1");
     }
   }
   return;
 }
 
 // src/pyc-site-shell/sidebar/sidebar-renderer.ts
+var POPUP_GAP_PX = 4;
 var SidebarRenderer = class {
   _container;
   _on_navigate;
   _on_entry_clicked;
   _detach_keyboard;
+  _detach_dismiss;
+  _open_button;
   constructor(container, on_navigate, on_entry_clicked = null) {
     this._container = container;
     this._on_navigate = on_navigate;
     this._on_entry_clicked = on_entry_clicked;
     this._detach_keyboard = null;
+    this._detach_dismiss = null;
+    this._open_button = null;
   }
   /**
    * Render the supplied visible sidebar into the container.
@@ -1434,6 +1562,11 @@ var SidebarRenderer = class {
       this._detach_keyboard();
       this._detach_keyboard = null;
     }
+    if (this._detach_dismiss !== null) {
+      this._detach_dismiss();
+      this._detach_dismiss = null;
+    }
+    this._open_button = null;
     this._container.replaceChildren();
     const nav = document.createElement("nav");
     nav.setAttribute("role", "navigation");
@@ -1445,29 +1578,177 @@ var SidebarRenderer = class {
         entry.route,
         active_path
       );
+      entry_element.classList.add("pyc-site-shell__sidebar-navitem");
       nav.appendChild(entry_element);
     }
     for (const bucket of visible_sidebar.groups) {
-      const group_section = document.createElement("section");
-      group_section.classList.add("pyc-site-shell__sidebar-group");
-      const heading = document.createElement("h2");
-      heading.classList.add("pyc-site-shell__sidebar-group-label");
-      heading.textContent = bucket.group.label;
-      group_section.appendChild(heading);
-      for (const entry of bucket.entries) {
-        const entry_element = this._build_entry_element(
-          entry.label,
-          entry.route,
-          active_path
-        );
-        group_section.appendChild(entry_element);
-      }
-      nav.appendChild(group_section);
+      const group_element = this._build_group_element(
+        bucket.group,
+        bucket.entries,
+        active_path
+      );
+      nav.appendChild(group_element);
     }
     this._container.appendChild(nav);
     initialize_sidebar_roving_tabindex(this._container);
     this._detach_keyboard = attach_sidebar_keyboard(this._container);
+    this._detach_dismiss = this._attach_dismiss();
     return;
+  }
+  /**
+   * Helper — build the major-item element for one group: a
+   * `<div>` wrapper holding the group button plus the flyout
+   * popup that carries the group's sub-item entries.
+   */
+  _build_group_element(group, entries, active_path) {
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("pyc-site-shell__sidebar-group");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = group.label;
+    button.classList.add(
+      "pyc-site-shell__sidebar-group-btn",
+      "pyc-site-shell__sidebar-navitem"
+    );
+    button.setAttribute("aria-haspopup", "true");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("tabindex", "-1");
+    const popup = document.createElement("div");
+    popup.classList.add("pyc-site-shell__sidebar-popup");
+    popup.setAttribute("role", "menu");
+    popup.setAttribute("aria-label", group.label);
+    popup.hidden = true;
+    const popup_heading = document.createElement("h2");
+    popup_heading.classList.add("pyc-site-shell__sidebar-popup-label");
+    popup_heading.textContent = group.label;
+    popup.appendChild(popup_heading);
+    let has_active_entry = false;
+    for (const entry of entries) {
+      const entry_element = this._build_entry_element(
+        entry.label,
+        entry.route,
+        active_path
+      );
+      if (entry.route === active_path) {
+        has_active_entry = true;
+      }
+      popup.appendChild(entry_element);
+    }
+    if (has_active_entry === true) {
+      button.classList.add("pyc-site-shell__sidebar-group-btn--active");
+    }
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      this._toggle_popup(button, popup);
+    });
+    wrapper.appendChild(button);
+    wrapper.appendChild(popup);
+    return wrapper;
+  }
+  /**
+   * Open the supplied popup (closing any other open popup) or
+   * close it when it is already open.
+   */
+  _toggle_popup(button, popup) {
+    const is_open = button.getAttribute("aria-expanded") === "true";
+    if (is_open === true) {
+      this._close_popup();
+      return;
+    }
+    this._close_popup();
+    button.setAttribute("aria-expanded", "true");
+    popup.hidden = false;
+    this._position_popup(button, popup);
+    this._open_button = button;
+    return;
+  }
+  /**
+   * Close the currently-open popup, if any. The popup element is
+   * always the next sibling of its button.
+   */
+  _close_popup() {
+    if (this._open_button === null) {
+      return;
+    }
+    const button = this._open_button;
+    button.setAttribute("aria-expanded", "false");
+    const popup = button.nextElementSibling;
+    if (popup instanceof HTMLElement) {
+      popup.hidden = true;
+    }
+    this._open_button = null;
+    return;
+  }
+  /**
+   * Position a popup as a fixed-position flyout to the right of
+   * its button. Fixed positioning keeps the popup clear of the
+   * sidebar's `overflow` clip. When the popup would run off the
+   * bottom of the viewport its top is nudged upward to fit.
+   */
+  _position_popup(button, popup) {
+    const button_rect = button.getBoundingClientRect();
+    popup.style.left = (button_rect.right + POPUP_GAP_PX).toString() + "px";
+    popup.style.top = button_rect.top.toString() + "px";
+    const popup_rect = popup.getBoundingClientRect();
+    const bottom_overflow = popup_rect.bottom - window.innerHeight;
+    if (bottom_overflow > 0) {
+      let adjusted_top = button_rect.top - bottom_overflow - POPUP_GAP_PX;
+      if (adjusted_top < POPUP_GAP_PX) {
+        adjusted_top = POPUP_GAP_PX;
+      }
+      popup.style.top = adjusted_top.toString() + "px";
+    }
+    return;
+  }
+  /**
+   * Attach the document-level listeners that dismiss an open
+   * popup: outside-click, Escape, and viewport reflow (resize /
+   * sidebar scroll). Returns a detach callback the renderer
+   * invokes before the next render.
+   */
+  _attach_dismiss() {
+    const on_document_click = (event) => {
+      if (this._open_button === null) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Node) {
+        const button = this._open_button;
+        const popup = button.nextElementSibling;
+        if (button.contains(target) === true) {
+          return;
+        }
+        if (popup instanceof HTMLElement && popup.contains(target) === true) {
+          return;
+        }
+      }
+      this._close_popup();
+    };
+    const on_document_keydown = (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (this._open_button === null) {
+        return;
+      }
+      const button = this._open_button;
+      this._close_popup();
+      button.focus();
+    };
+    const on_reflow = () => {
+      this._close_popup();
+    };
+    document.addEventListener("click", on_document_click);
+    document.addEventListener("keydown", on_document_keydown);
+    window.addEventListener("resize", on_reflow);
+    this._container.addEventListener("scroll", on_reflow, true);
+    const detach = () => {
+      document.removeEventListener("click", on_document_click);
+      document.removeEventListener("keydown", on_document_keydown);
+      window.removeEventListener("resize", on_reflow);
+      this._container.removeEventListener("scroll", on_reflow, true);
+    };
+    return detach;
   }
   /**
    * Helper — build one `<a>` element representing a sidebar
@@ -1495,6 +1776,7 @@ var SidebarRenderer = class {
         return;
       }
       event.preventDefault();
+      this._close_popup();
       if (this._on_entry_clicked !== null) {
         this._on_entry_clicked(route, label);
       }
