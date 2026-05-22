@@ -2028,7 +2028,6 @@ function mount_ops_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_ops_sidebar(handle.sidebar);
   mount_ops_view_if_active();
   return;
 }

@@ -949,7 +949,6 @@ function mount_catalog_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_catalog_sidebar(handle.sidebar);
   mount_catalog_view_if_active();
   return;
 }

@@ -877,7 +877,6 @@ function mount_secrets_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_secrets_sidebar(handle.sidebar);
   mount_secrets_view_if_active();
   return;
 }

@@ -6,7 +6,7 @@
 .. moduleauthor:: Automation Mojo LLC
 
 Self-introspection endpoints for the currently-authenticated
-principal. Ships one route in PR1 of the unified-login refactor:
+principal:
 
 * ``GET /api/v1/me/permissions`` -- list the permission keys the
   current session holds. The site shell (9-site-shell) calls
@@ -15,6 +15,13 @@ principal. Ships one route in PR1 of the unified-login refactor:
   signal -- the security boundary remains the per-action
   permission check enforced by each owning feature's
   server-side route guard.
+* ``GET /api/v1/me/navigation`` -- the permission-filtered
+  central navigation manifest. The site shell renders its full
+  sidebar from this on every route so the sidebar is complete
+  even on the bare ``/`` route (which loads no feature bundle).
+  See :mod:`webinterface.site_shell.nav_manifest`. Like
+  ``me/permissions`` this is a UX signal, not a security
+  boundary.
 
 Returns HTTP 401 with an RFC 7807 problem document when the
 request carries no authenticated session.
@@ -38,6 +45,9 @@ from automojo.pychestrate.webservice.api.problem_json_webworks import (
 from automojo.pychestrate.webservice.security.rbac import rbac_evaluator
 from automojo.pychestrate.webservice.security.rbac.catalog import (
     load_catalog_from_registry,
+)
+from automojo.pychestrate.webservice.webinterface.site_shell.nav_manifest import (
+    build_navigation_manifest,
 )
 
 
@@ -89,6 +99,54 @@ def _build_unauthorized_response(*, request: Request) -> Response:
     return rtnval
 
 
+def _evaluate_held_system_permissions(
+        *,
+        db_session: Any,
+        principal: Any
+    ) -> List[str]:
+    """
+        Evaluate which system-scoped permission keys the supplied
+        principal effectively holds.
+
+        Walks the system-scoped half of the in-tree permission
+        catalog and runs :func:`rbac_evaluator.check_permission`
+        for each key. A single permission evaluation failure is
+        treated as not-held and does not abort the walk.
+
+        :param db_session: Request-scoped db session.
+        :param principal: The authenticated ``AuthPrincipal``.
+
+        :returns: Sorted list of held system-scoped permission
+                  keys.
+    """
+    catalog = load_catalog_from_registry()
+    now = datetime.now(timezone.utc)
+
+    held_keys: List[str] = []
+    for permission_key in sorted(catalog.permissions.keys()):
+        descriptor = catalog.permissions[permission_key]
+        if descriptor.namespace != "system":
+            continue
+
+        try:
+            decision = rbac_evaluator.check_permission(
+                db_session=db_session,
+                principal=principal,
+                permission_key=permission_key,
+                now=now,
+            )
+        except Exception:
+            # A single permission evaluation failure must not
+            # blow up the whole introspection call. Treat as
+            # not-held and continue.
+            continue
+
+        if decision.allowed is True:
+            held_keys.append(permission_key)
+
+    return held_keys
+
+
 def handle_list_my_permissions(request: Request) -> Response:
     """
         ``GET /api/v1/me/permissions`` -- return the system-scoped
@@ -131,37 +189,82 @@ def handle_list_my_permissions(request: Request) -> Response:
         )
         return rtnval
 
-    catalog = load_catalog_from_registry()
-    now = datetime.now(timezone.utc)
-
-    held_keys: List[str] = []
-    for permission_key in sorted(catalog.permissions.keys()):
-        # Only walk the system-scoped half of the catalog --
-        # ``project:<id>:<action>`` keys live in
-        # ``ProjectPermissionExtension`` and would require a
-        # project_id to evaluate, which this self-introspection
-        # endpoint does not carry.
-        descriptor = catalog.permissions[permission_key]
-        if descriptor.namespace != "system":
-            continue
-
-        try:
-            decision = rbac_evaluator.check_permission(
-                db_session=db_session,
-                principal=principal,
-                permission_key=permission_key,
-                now=now,
-            )
-        except Exception:
-            # A single permission evaluation failure must not
-            # blow up the whole introspection call. Treat as
-            # not-held and continue.
-            continue
-
-        if decision.allowed is True:
-            held_keys.append(permission_key)
+    # Only the system-scoped half of the catalog is enumerated --
+    # ``project:<id>:<action>`` keys live in
+    # ``ProjectPermissionExtension`` and would require a
+    # project_id to evaluate, which this self-introspection
+    # endpoint does not carry.
+    held_keys = _evaluate_held_system_permissions(
+        db_session=db_session,
+        principal=principal,
+    )
 
     body = {"permissions": held_keys}
+    rtnval = JSONResponse(content=body, status_code=200)
+    return rtnval
+
+
+def handle_get_my_navigation(request: Request) -> Response:
+    """
+        ``GET /api/v1/me/navigation`` -- return the central
+        navigation manifest permission-filtered against the
+        current session.
+
+        Response shape::
+
+            {"groups": [
+                {"group_id": "orchestration",
+                 "label": "Orchestration",
+                 "icon": null,
+                 "required_permissions": [],
+                 "entries": [
+                     {"entry_id": "orchestration.runs",
+                      "label": "Runs",
+                      "route": "/runs",
+                      "icon": null,
+                      "required_permissions": ["system:runs.read"]},
+                     ...]},
+                ...]}
+
+        The site shell renders its full sidebar from this manifest
+        on every route, so the sidebar is complete even on the
+        bare ``/`` route where no feature bundle is loaded. The
+        manifest is the authoritative source of truth for sidebar
+        navigation (see
+        :mod:`webinterface.site_shell.nav_manifest`). This is a UX
+        signal -- the security boundary remains the per-action
+        permission check enforced by each owning feature's
+        server-side route guard.
+
+        Unauthenticated requests return HTTP 401 with an RFC 7807
+        problem document.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the filtered manifest
+                  on success; 401 problem response on
+                  unauthenticated requests.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        rtnval = _build_unauthorized_response(request=request)
+        return rtnval
+
+    db_session = _resolve_db_session(request=request)
+    if db_session is None:
+        rtnval = problem_response_for_http_status(
+            status=503,
+            detail="Request-scoped db_session not configured",
+            instance=request.path,
+        )
+        return rtnval
+
+    held_keys = _evaluate_held_system_permissions(
+        db_session=db_session,
+        principal=principal,
+    )
+
+    body = build_navigation_manifest(held_permissions=held_keys)
     rtnval = JSONResponse(content=body, status_code=200)
     return rtnval
 
@@ -182,6 +285,9 @@ def register_me_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(base + "/permissions", methods=["GET"])(
         handle_list_my_permissions
     )
+    app.attach_route(base + "/navigation", methods=["GET"])(
+        handle_get_my_navigation
+    )
     return
 
 
@@ -189,4 +295,5 @@ __all__ = [
     "ME_PATH",
     "register_me_routes",
     "handle_list_my_permissions",
+    "handle_get_my_navigation",
 ]

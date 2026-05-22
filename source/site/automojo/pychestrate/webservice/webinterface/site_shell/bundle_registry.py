@@ -15,8 +15,17 @@ Python deploy ships them as static files). This module records the
 request, not every bundle in the tree.
 
 M1 registers a single entry: ``"" -> "pyc-site-shell"`` -- the
-shell itself loads for every shell-served path. PR4 will register
+shell itself loads for every shell-served path. PR4 registered
 the admin / project / run-detail bundles per route prefix.
+
+Note (p22b): feature bundles are still loaded per route prefix
+because they own their route-scoped Web Component *views*. They
+no longer own the *sidebar navigation* -- that moved to the
+central navigation manifest
+(:mod:`webinterface.site_shell.nav_manifest`), which the shell
+fetches on boot via ``GET /api/v1/me/navigation`` so the sidebar
+is complete on every route (including the bare ``/`` route,
+which loads no feature bundle at all).
 """
 
 __author__ = "Automation Mojo LLC"

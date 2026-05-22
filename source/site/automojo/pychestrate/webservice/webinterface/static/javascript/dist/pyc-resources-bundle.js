@@ -1822,7 +1822,6 @@ function mount_resources_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_resources_sidebar(handle.sidebar);
   mount_resources_view_if_active();
   return;
 }

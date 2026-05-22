@@ -233,6 +233,30 @@ paths:
                 $ref: '#/components/schemas/MePermissions'
         '401': { $ref: '#/components/responses/Unauthorized' }
 
+  /me/navigation:
+    get:
+      tags: [me]
+      summary: Central, permission-filtered navigation manifest.
+      operationId: me_get_navigation
+      description: |
+        Returns the central site-shell navigation manifest, filtered
+        server-side against the calling actor's effective permissions.
+        The site shell renders its full sidebar from this manifest on
+        every route, so the sidebar is complete even on the bare `/`
+        route where no feature bundle is loaded. The manifest is the
+        authoritative source of truth for sidebar navigation. Like
+        `/me/permissions` this is a UX signal -- the security boundary
+        remains the per-action permission check enforced by each
+        owning feature's server-side route guard.
+      responses:
+        '200':
+          description: Permission-filtered navigation manifest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeNavigation'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
   # =====================================================================
   # users
   # =====================================================================
@@ -4459,6 +4483,47 @@ components:
         role_bindings:
           type: array
           items: { $ref: '#/components/schemas/RbacRoleBinding' }
+
+    MeNavigation:
+      type: object
+      required: [groups]
+      description: |
+        Permission-filtered navigation manifest. Only groups and
+        entries the calling actor may see are present.
+      properties:
+        groups:
+          type: array
+          items: { $ref: '#/components/schemas/NavManifestGroup' }
+
+    NavManifestGroup:
+      type: object
+      required: [group_id, label, entries]
+      properties:
+        group_id: { type: string }
+        label: { type: string }
+        icon:
+          type: string
+          nullable: true
+        required_permissions:
+          type: array
+          items: { type: string }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/NavManifestEntry' }
+
+    NavManifestEntry:
+      type: object
+      required: [entry_id, label, route]
+      properties:
+        entry_id: { type: string }
+        label: { type: string }
+        route: { type: string }
+        icon:
+          type: string
+          nullable: true
+        required_permissions:
+          type: array
+          items: { type: string }
 
     # ----------------------------------------------------------------
     # users / rbac

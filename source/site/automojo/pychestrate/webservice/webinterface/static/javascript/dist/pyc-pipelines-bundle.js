@@ -1830,7 +1830,6 @@ function mount_pipelines_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_pipelines_sidebar(handle.sidebar);
   mount_pipelines_view_if_active();
   return;
 }

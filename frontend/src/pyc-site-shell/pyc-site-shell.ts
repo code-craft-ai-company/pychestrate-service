@@ -13,12 +13,18 @@ import { ShellRouter } from "./routing/shell-router.js"
 import { SidebarRegistry } from "./sidebar/sidebar-registry.js"
 import { SidebarRenderer } from "./sidebar/sidebar-renderer.js"
 import {
+    DEFAULT_NAVIGATION_ENDPOINT,
+    apply_nav_manifest,
+    fetch_nav_manifest,
+} from "./sidebar/nav-manifest.js"
+import {
     MetricsBeacon,
     SHELL_METRICS,
 } from "./observability/metrics-beacon.js"
 
 const ATTR_INITIAL_ROUTE: string = "initial-route"
 const ATTR_PERMISSIONS_ENDPOINT: string = "permissions-endpoint"
+const ATTR_NAVIGATION_ENDPOINT: string = "navigation-endpoint"
 const ATTR_PALETTE_TIMEOUT_MS: string = "palette-timeout-ms"
 const ATTR_BRAND_LABEL: string = "brand-label"
 
@@ -54,10 +60,13 @@ export class PycSiteShell extends HTMLElement {
     private _metrics_lifecycle_detach: (() => void) | null
     private _boot_started_perf_now: number
     private _palette_open_keydown_perf_now: number | null
+    private readonly _navigation_endpoint: string
+    private _nav_manifest_loaded: boolean
 
     public static readonly observedAttributes: readonly string[] = [
         ATTR_INITIAL_ROUTE,
         ATTR_PERMISSIONS_ENDPOINT,
+        ATTR_NAVIGATION_ENDPOINT,
         ATTR_PALETTE_TIMEOUT_MS,
         "aria-label",
         ATTR_BRAND_LABEL,
@@ -73,6 +82,12 @@ export class PycSiteShell extends HTMLElement {
                 ? endpoint
                 : DEFAULT_PERMISSIONS_ENDPOINT
         this._permission_cache = new PermissionCache(resolved_endpoint)
+        const nav_endpoint = this.getAttribute(ATTR_NAVIGATION_ENDPOINT)
+        this._navigation_endpoint =
+            nav_endpoint !== null && nav_endpoint.length > 0
+                ? nav_endpoint
+                : DEFAULT_NAVIGATION_ENDPOINT
+        this._nav_manifest_loaded = false
         this._router = null
         this._sidebar_renderer = null
         this._main_region = null
@@ -394,8 +409,39 @@ export class PycSiteShell extends HTMLElement {
         return
     }
 
+    /**
+     * Fetch the central navigation manifest and seed the sidebar
+     * registry from it. The manifest is the authoritative source
+     * of truth for sidebar navigation -- it carries every group /
+     * entry the calling session may see, independent of which
+     * feature bundle happens to be loaded for the current route.
+     *
+     * Seeding the manifest is what makes the sidebar complete on
+     * the bare ``/`` route (which loads no feature bundle at
+     * all). Idempotent -- a second call is a no-op once the
+     * manifest has been applied. A fetch failure is non-fatal:
+     * the shell keeps whatever the registry already holds (the
+     * legacy per-bundle ``registerEntry`` calls still run for the
+     * current route's bundle) and the degraded path surfaces via
+     * the permissions cache.
+     */
+    private async _load_nav_manifest(): Promise<void> {
+        if (this._nav_manifest_loaded === true) {
+            return
+        }
+        const result = await fetch_nav_manifest(this._navigation_endpoint)
+        if (result.ok === true && result.manifest !== null) {
+            apply_nav_manifest(this._sidebar_registry, result.manifest)
+            this._nav_manifest_loaded = true
+        }
+        return
+    }
+
     private async _boot(): Promise<void> {
-        await this._permission_cache.refresh(true)
+        await Promise.all([
+            this._permission_cache.refresh(true),
+            this._load_nav_manifest(),
+        ])
         this._render_sidebar_and_empty_state()
         this._ready = true
         const ready_perf_now =

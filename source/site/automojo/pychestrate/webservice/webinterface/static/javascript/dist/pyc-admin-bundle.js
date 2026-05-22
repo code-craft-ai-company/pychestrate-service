@@ -1700,7 +1700,6 @@ function mount_admin_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_admin_sidebar(handle.sidebar);
   if (handle.palette !== void 0 && handle.palette !== null) {
     register_admin_palette_provider(handle.palette);
   }
