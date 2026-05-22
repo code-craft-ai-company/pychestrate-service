@@ -1,38 +1,47 @@
 # Pychestrate Frontend
 
-TypeScript build chain for the Pychestrate web components, starting
-with `<pyc-site-shell>` (the unified site shell from
+Plain JavaScript web components for the Pychestrate web interface,
+starting with `<pyc-site-shell>` (the unified site shell from
 `specs/9-site-shell`).
+
+There is **no build step**. The components are authored as plain
+ES modules and served directly to the browser. This directory
+holds only the test harness; the component source lives in the
+served static tree (see Layout).
 
 ## Layout
 
+Component source — plain `.js` ES modules, served as-is:
+
+```
+source/site/automojo/pychestrate/webservice/webinterface/static/javascript/
+  pyc-site-shell/
+    index.js
+    pyc-site-shell.js
+    pyc-site-shell.css
+    permissions/
+    sidebar/
+    routing/
+    chrome/
+  pyc-admin-bundle/
+  pyc-runs-bundle/
+  ... (one directory per feature bundle)
+```
+
+Each bundle's entry module is `<bundle>/index.js`; the shell
+document emits one `<script type="module" src=".../<bundle>/index.js">`
+per bundle. The browser resolves the rest of the module graph
+natively via relative imports.
+
+Test harness — this directory:
+
 ```
 frontend/
-  package.json         npm scripts: build, typecheck, test, clean
-  tsconfig.json        ES2022, strict mode
-  build.mjs            esbuild driver — bundles each entry to ESM
-  src/
-    pyc-site-shell/    M1: site shell skeleton
-      index.ts
-      pyc-site-shell.ts
-      styles.css
-      permissions/
-      sidebar/
-      routing/
-      chrome/
+  package.json         npm scripts: test, bench, a11y
   tests/               node --test runnable unit tests
+  bench/               microbenchmarks
+  a11y/                axe accessibility audit
 ```
-
-Built artifacts go under:
-
-```
-source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/
-```
-
-That `dist/` directory **is committed to git**. The Python deploy
-does not run Node — it ships the prebuilt bundles as static files.
-That keeps the production / staging deploy story unchanged (Python +
-pip only).
 
 ## Install
 
@@ -41,28 +50,9 @@ cd frontend
 npm install
 ```
 
-Requires Node 20+ (developed against Node 22). `pnpm` works equally
-well if you prefer it; the scripts call `node` and `tsc` only, no
-package-manager-specific features.
-
-## Build
-
-```bash
-npm run build
-```
-
-Emits a single ES module per entry plus a sibling `.css` and source
-map under the dist directory above. Re-run the build any time you
-edit a `.ts` or `.css` source file.
-
-## Type-check
-
-```bash
-npm run typecheck
-```
-
-Runs `tsc --noEmit`. CI does not currently run this (defer to the
-GH Actions billing thaw); please run locally before pushing.
+Requires Node 20+ (developed against Node 22). Only the test
+harness needs Node — the components themselves run in the browser
+with no tooling.
 
 ## Test
 
@@ -71,13 +61,13 @@ npm run test
 ```
 
 Uses Node's built-in `node --test` runner. No Jest / Mocha; the
-runtime is the test runner.
+runtime is the test runner. Tests import the component modules
+directly from the served static tree.
 
 ## Policy
 
-- The committed `dist/` artifacts are the deploy contract. If you
-  change a `.ts` file, also commit the rebuilt `dist/`.
-- No bundler config DSL beyond `build.mjs` — one entry per
-  feature, ESM output, source maps on.
-- TypeScript strict mode is on. Public exports carry explicit
-  types. Use TSDoc on public APIs.
+- No build step. Edit the `.js` modules in the static tree and
+  the change is live — refresh the browser.
+- Components are plain ES modules: relative imports, `.js`
+  extensions, native `customElements.define`. No bundler, no
+  transpiler, no source maps.

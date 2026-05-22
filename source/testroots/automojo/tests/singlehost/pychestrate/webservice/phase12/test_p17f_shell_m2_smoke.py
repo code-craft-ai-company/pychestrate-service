@@ -13,7 +13,7 @@ Asserts:
 * ``GET /admin/dashboard`` renders inside the unified shell
   (same contract as ``test_p17e_admin_in_shell``).
 * The shell bundle served at
-  ``/static/javascript/dist/pyc-site-shell.js`` contains the M2
+  ``/static/javascript/pyc-site-shell/index.js`` contains the M2
   module markers -- the palette dialog class name and the
   degraded-banner class name. The bundle is unminified per the
   build script, so a substring grep is the minimal sanity check
@@ -49,7 +49,7 @@ ENV_ADMIN_LOGIN: str = "PYCHESTRATE_TEST_ADMIN_LOGIN"
 ENV_ADMIN_PASSWORD: str = "PYCHESTRATE_TEST_ADMIN_PASSWORD"
 
 
-SHELL_BUNDLE_PATH: str = "/static/javascript/dist/pyc-site-shell.js"
+SHELL_BUNDLE_PATH: str = "/static/javascript/pyc-site-shell/index.js"
 
 
 def _resolve_admin_credentials() -> Tuple[str, str]:

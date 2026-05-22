@@ -16,7 +16,7 @@ after a successful admin login. Asserts:
   tag -- i.e. the page renders inside the shell, NOT as the
   legacy standalone admin HTML.
 * The body imports the prebuilt admin bundle at
-  ``/static/javascript/dist/pyc-admin-bundle.js`` so the admin
+  ``/static/javascript/pyc-admin-bundle/index.js`` so the admin
   sidebar group registers when the shell mounts in the browser.
 * The admin bundle itself is served as JavaScript by the static
   file surface.
@@ -119,7 +119,7 @@ def test_admin_dashboard_renders_inside_site_shell():
     # The admin bundle <script> tag is present so the sidebar
     # registration runs on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-admin-bundle.js" in body
+        "/static/javascript/pyc-admin-bundle/index.js" in body
     )
     return
 
@@ -128,7 +128,7 @@ def test_admin_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + admin-ui**
     **Property: The prebuilt admin bundle at
-    ``/static/javascript/dist/pyc-admin-bundle.js`` is reachable
+    ``/static/javascript/pyc-admin-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -139,7 +139,7 @@ def test_admin_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-admin-bundle.js"
+            "/static/javascript/pyc-admin-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

@@ -163,7 +163,7 @@ def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:
 
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
-    bundle_src = "/static/javascript/dist/{}.js".format(bundle_name)
+    bundle_src = "/static/javascript/{}/index.js".format(bundle_name)
     testbase.assert_true(bundle_src in body)
     return
 

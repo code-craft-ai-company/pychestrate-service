@@ -32,8 +32,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-site-shell.js",
+    "pyc-site-shell",
+    "index.js",
 )
 const CSS_PATH = path.resolve(
     HERE,
@@ -47,7 +47,7 @@ const CSS_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
+    "pyc-site-shell",
     "pyc-site-shell.css",
 )
 

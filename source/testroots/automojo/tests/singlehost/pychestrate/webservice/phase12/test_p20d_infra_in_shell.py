@@ -15,7 +15,7 @@ deploy after a successful admin login. Asserts:
 * The body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * The body imports the prebuilt infra bundle at
-  ``/static/javascript/dist/pyc-infra-bundle.js`` so the
+  ``/static/javascript/pyc-infra-bundle/index.js`` so the
   ``<pyc-provisioning-list>`` view mounts when the shell connects.
 * The infra bundle itself is served as JavaScript by the static
   file surface.
@@ -167,7 +167,7 @@ def test_provisioning_page_renders_inside_site_shell():
     # The infra bundle <script> tag is present so the view mounts
     # and the sidebar registration runs on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-infra-bundle.js" in body
+        "/static/javascript/pyc-infra-bundle/index.js" in body
     )
     return
 
@@ -176,7 +176,7 @@ def test_infra_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + infra-ui**
     **Property: The prebuilt infra bundle at
-    ``/static/javascript/dist/pyc-infra-bundle.js`` is reachable
+    ``/static/javascript/pyc-infra-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -187,7 +187,7 @@ def test_infra_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-infra-bundle.js"
+            "/static/javascript/pyc-infra-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

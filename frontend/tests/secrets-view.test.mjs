@@ -8,10 +8,8 @@
  * invariant. Driven against a jsdom document and a stubbed
  * ``fetch``.
  *
- * Imports the built ESM bundle from the dist directory. The
- * bundle is committed to git so the test runs without re-running
- * the build first; rerun ``npm run build`` after editing a .ts
- * source.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -33,8 +31,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-secrets-bundle.js",
+    "pyc-secrets-bundle",
+    "index.js",
 )
 
 const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {

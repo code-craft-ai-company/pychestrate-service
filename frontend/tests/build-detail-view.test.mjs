@@ -8,9 +8,8 @@
  * a stubbed ``fetch`` -- poll cycles are advanced explicitly via
  * the ``pollOnce`` test hook rather than waiting on a real timer.
  *
- * Imports the built ESM bundle from the dist directory. The bundle
- * is committed to git so the test runs without re-running the
- * build first; rerun ``npm run build`` after editing a .ts source.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -32,8 +31,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-builds-bundle.js",
+    "pyc-builds-bundle",
+    "index.js",
 )
 
 const BUILD_ID = "11111111-2222-3333-4444-555555555555"

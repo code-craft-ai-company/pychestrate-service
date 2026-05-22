@@ -16,7 +16,7 @@ after a successful admin login. Asserts:
 * The body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * The body imports the prebuilt runs bundle at
-  ``/static/javascript/dist/pyc-runs-bundle.js`` so the
+  ``/static/javascript/pyc-runs-bundle/index.js`` so the
   ``<pyc-run-detail>`` view mounts when the shell connects.
 
 No runs exist on the alpha, so the test asserts the shell + bundle
@@ -172,6 +172,6 @@ def test_run_detail_page_renders_inside_site_shell():
     # The runs bundle <script> tag is present so the detail view
     # mounts on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-runs-bundle.js" in body
+        "/static/javascript/pyc-runs-bundle/index.js" in body
     )
     return

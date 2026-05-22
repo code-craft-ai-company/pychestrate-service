@@ -162,7 +162,7 @@ def _assert_shell_route(*, route_path: str, bundle_name: str) -> None:
 
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
-    bundle_src = "/static/javascript/dist/{}.js".format(bundle_name)
+    bundle_src = "/static/javascript/{}/index.js".format(bundle_name)
     testbase.assert_true(bundle_src in body)
     return
 
@@ -182,7 +182,7 @@ def _assert_bundle_served_as_javascript(*, bundle_name: str) -> None:
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/{}.js".format(bundle_name)
+            "/static/javascript/{}/index.js".format(bundle_name)
         )
 
     testbase.assert_equal(response.status_code, 200)
@@ -257,7 +257,7 @@ def test_ops_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + ops-ui-fill**
     **Property: The prebuilt ops bundle at
-    ``/static/javascript/dist/pyc-ops-bundle.js`` is reachable over
+    ``/static/javascript/pyc-ops-bundle/index.js`` is reachable over
     the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**

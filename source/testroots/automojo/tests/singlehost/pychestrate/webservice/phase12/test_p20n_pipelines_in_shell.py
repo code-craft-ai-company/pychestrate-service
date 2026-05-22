@@ -14,7 +14,7 @@ successful admin login. Asserts:
 * The body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * The body imports the prebuilt pipelines bundle at
-  ``/static/javascript/dist/pyc-pipelines-bundle.js`` so the
+  ``/static/javascript/pyc-pipelines-bundle/index.js`` so the
   ``<pyc-pipelines-list>`` view mounts when the shell connects.
 * The pipelines bundle itself is served as JavaScript by the
   static file surface.
@@ -164,7 +164,7 @@ def test_pipelines_page_renders_inside_site_shell():
     # The pipelines bundle <script> tag is present so the view
     # mounts and the sidebar registration runs on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-pipelines-bundle.js" in body
+        "/static/javascript/pyc-pipelines-bundle/index.js" in body
     )
     return
 
@@ -173,7 +173,7 @@ def test_pipelines_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + pipelines-ui**
     **Property: The prebuilt pipelines bundle at
-    ``/static/javascript/dist/pyc-pipelines-bundle.js`` is reachable
+    ``/static/javascript/pyc-pipelines-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -184,7 +184,7 @@ def test_pipelines_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-pipelines-bundle.js"
+            "/static/javascript/pyc-pipelines-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

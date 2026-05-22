@@ -2,8 +2,8 @@
  * NFR-2 invariant test (T3.7): the shell never writes to
  * ``localStorage`` / ``sessionStorage`` / ``IndexedDB``.
  *
- * Scans the source tree under ``src/pyc-site-shell/`` for any
- * reference to these APIs and fails the suite if one appears
+ * Scans the shell component module tree for any reference to
+ * these APIs and fails the suite if one appears
  * outside an inline source-code comment. The scan is a static
  * string match -- intentionally coarse but extremely cheap to
  * keep in CI.
@@ -16,7 +16,20 @@ import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const SHELL_SRC_DIR = path.resolve(HERE, "..", "src", "pyc-site-shell")
+const SHELL_SRC_DIR = path.resolve(
+    HERE,
+    "..",
+    "..",
+    "source",
+    "site",
+    "automojo",
+    "pychestrate",
+    "webservice",
+    "webinterface",
+    "static",
+    "javascript",
+    "pyc-site-shell",
+)
 
 const FORBIDDEN_TOKENS = ["localStorage", "sessionStorage", "indexedDB"]
 
@@ -29,7 +42,7 @@ function collect_source_files(dir) {
             for (const child of collect_source_files(full)) {
                 out.push(child)
             }
-        } else if (entry.isFile() && /\.(ts|css)$/.test(entry.name)) {
+        } else if (entry.isFile() && /\.(js|css)$/.test(entry.name)) {
             out.push(full)
         }
     }

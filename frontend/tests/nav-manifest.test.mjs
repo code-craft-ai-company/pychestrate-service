@@ -8,8 +8,8 @@
  * route, including the bare `/` route which loads no feature
  * bundle).
  *
- * Imports the built ESM bundle from the dist directory; rerun
- * `npm run build` after editing a .ts source.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -30,8 +30,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-site-shell.js",
+    "pyc-site-shell",
+    "index.js",
 )
 
 globalThis.customElements = {
