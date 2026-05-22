@@ -1,27 +1,43 @@
 /**
  * Keyboard interaction layer for the sidebar.
  *
- * Implements Requirement 6.1 / 6.2 of the 9-site-shell spec:
+ * The sidebar shows only major items at rest: ungrouped entry
+ * links and group buttons. A group's sub-item entries live in a
+ * flyout popup that the group button opens. The keyboard layer
+ * therefore operates at two levels.
  *
- * - ``ArrowDown`` / ``ArrowUp`` cycle through visible entries.
- * - ``Enter`` activates the focused entry.
- * - ``ArrowRight`` / ``ArrowLeft`` are reserved for group
- *   expand/collapse; current sidebar is non-collapsible (PR3
- *   renders groups always-open) so they are no-ops with a TODO.
- * - Type-to-jump: alphanumeric keystrokes within a 1 second
- *   window prefix-match entry labels (case-insensitive) and move
- *   focus to the first match. After 1 second of no keystrokes
- *   the buffer resets.
+ * Top level (focus on a major item):
  *
- * Focus management: the active entry holds ``tabindex="0"``; all
- * other entries hold ``tabindex="-1"`` so Tab cycles through the
- * sidebar as a single stop. ``aria-current="page"`` continues to
- * mark the active route entry and is owned by the renderer.
+ * - ``ArrowDown`` / ``ArrowUp`` cycle through the major items.
+ * - ``Enter`` activates a link, or toggles a group's popup.
+ * - ``ArrowRight`` opens the focused group's popup and moves
+ *   focus to its first sub-item.
+ * - ``ArrowLeft`` is a no-op at the top level.
+ * - Type-to-jump prefix-matches major-item labels.
+ *
+ * Popup level (focus inside an open popup):
+ *
+ * - ``ArrowDown`` / ``ArrowUp`` cycle through the sub-items.
+ * - ``Enter`` activates the focused sub-item.
+ * - ``ArrowLeft`` closes the popup and returns focus to the
+ *   group button. (``Escape`` does the same; it is handled by
+ *   the renderer's document-level listener.)
+ * - Type-to-jump prefix-matches sub-item labels.
+ *
+ * Focus management at the top level uses a roving tabindex: the
+ * active major item holds ``tabindex="0"``; all others hold
+ * ``tabindex="-1"`` so Tab treats the sidebar as a single stop.
  */
 
 const TYPE_TO_JUMP_RESET_MS: number = 1000
 
+const NAVITEM_SELECTOR: string = ".pyc-site-shell__sidebar-navitem"
+
 const ENTRY_SELECTOR: string = ".pyc-site-shell__sidebar-entry"
+
+const POPUP_CLASS: string = "pyc-site-shell__sidebar-popup"
+
+const GROUP_BUTTON_CLASS: string = "pyc-site-shell__sidebar-group-btn"
 
 /**
  * Attach keyboard handling to a sidebar container. Returns a
@@ -56,7 +72,96 @@ function _on_keydown(
     container: HTMLElement,
     state: KeyboardState,
 ): void {
-    const entries = _collect_entries(container)
+    const open_popup = _enclosing_open_popup(event.target)
+    if (open_popup !== null) {
+        _handle_popup_keydown(event, open_popup, state)
+        return
+    }
+    _handle_toplevel_keydown(event, container, state)
+    return
+}
+
+/**
+ * Handle a keystroke when focus rests on a top-level major item
+ * (an ungrouped entry link or a group button).
+ */
+function _handle_toplevel_keydown(
+    event: KeyboardEvent,
+    container: HTMLElement,
+    state: KeyboardState,
+): void {
+    const navitems = _collect(container, NAVITEM_SELECTOR)
+    if (navitems.length === 0) {
+        return
+    }
+    const active_index = _resolve_active_index(navitems, event.target)
+
+    if (event.key === "ArrowDown") {
+        event.preventDefault()
+        const next_index = (active_index + 1) % navitems.length
+        _move_focus(navitems, next_index)
+        return
+    }
+    if (event.key === "ArrowUp") {
+        event.preventDefault()
+        const next_index = active_index <= 0
+            ? navitems.length - 1
+            : active_index - 1
+        _move_focus(navitems, next_index)
+        return
+    }
+    if (event.key === "Enter") {
+        if (active_index >= 0 && active_index < navitems.length) {
+            event.preventDefault()
+            const item = navitems[active_index]
+            item.click()
+            if (_is_group_button(item) === true) {
+                _focus_first_popup_entry(item)
+            }
+        }
+        return
+    }
+    if (event.key === "ArrowRight") {
+        event.preventDefault()
+        if (active_index >= 0 && active_index < navitems.length) {
+            const item = navitems[active_index]
+            if (_is_group_button(item) === true) {
+                if (item.getAttribute("aria-expanded") !== "true") {
+                    item.click()
+                }
+                _focus_first_popup_entry(item)
+            }
+        }
+        return
+    }
+    if (event.key === "ArrowLeft") {
+        // No-op at the top level — there is nothing to collapse
+        // into. Prevented so the keystroke does not scroll.
+        event.preventDefault()
+        return
+    }
+
+    if (_is_type_to_jump_key(event) === true) {
+        const match_index = _type_to_jump(navitems, event, state)
+        if (match_index >= 0) {
+            event.preventDefault()
+            _move_focus(navitems, match_index)
+        }
+        return
+    }
+    return
+}
+
+/**
+ * Handle a keystroke when focus rests on a sub-item inside an
+ * open group popup.
+ */
+function _handle_popup_keydown(
+    event: KeyboardEvent,
+    popup: HTMLElement,
+    state: KeyboardState,
+): void {
+    const entries = _collect(popup, ENTRY_SELECTOR)
     if (entries.length === 0) {
         return
     }
@@ -65,7 +170,7 @@ function _on_keydown(
     if (event.key === "ArrowDown") {
         event.preventDefault()
         const next_index = (active_index + 1) % entries.length
-        _move_focus(entries, next_index)
+        entries[next_index].focus()
         return
     }
     if (event.key === "ArrowUp") {
@@ -73,7 +178,7 @@ function _on_keydown(
         const next_index = active_index <= 0
             ? entries.length - 1
             : active_index - 1
-        _move_focus(entries, next_index)
+        entries[next_index].focus()
         return
     }
     if (event.key === "Enter") {
@@ -83,33 +188,89 @@ function _on_keydown(
         }
         return
     }
-    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
-        // TODO: wire collapse/expand once sidebar groups become
-        // collapsible. Until then this is intentionally a no-op
-        // so the keystroke does not also scroll the page.
+    if (event.key === "ArrowLeft") {
+        event.preventDefault()
+        const button = popup.previousElementSibling
+        if (button instanceof HTMLElement) {
+            if (button.getAttribute("aria-expanded") === "true") {
+                button.click()
+            }
+            button.focus()
+        }
+        return
+    }
+    if (event.key === "ArrowRight") {
+        // No-op — sub-items have no further level to descend into.
         event.preventDefault()
         return
     }
 
     if (_is_type_to_jump_key(event) === true) {
-        const now_ms = Date.now()
-        if (now_ms - state.last_keystroke_at_ms > TYPE_TO_JUMP_RESET_MS) {
-            state.buffer = ""
-        }
-        state.buffer = state.buffer + event.key.toLowerCase()
-        state.last_keystroke_at_ms = now_ms
-        const match_index = _find_prefix_match(entries, state.buffer)
+        const match_index = _type_to_jump(entries, event, state)
         if (match_index >= 0) {
             event.preventDefault()
-            _move_focus(entries, match_index)
+            entries[match_index].focus()
         }
         return
     }
     return
 }
 
+/**
+ * Walk up from an event target to the enclosing popup element.
+ * Returns the popup only when it is currently open (not hidden);
+ * otherwise returns null.
+ */
+function _enclosing_open_popup(
+    target: EventTarget | null,
+): HTMLElement | null {
+    if (target instanceof HTMLElement === false) {
+        return null
+    }
+    let current: HTMLElement | null = target as HTMLElement
+    while (current !== null) {
+        if (current.classList.contains(POPUP_CLASS) === true) {
+            if (current.hidden === true) {
+                return null
+            }
+            return current
+        }
+        current = current.parentElement
+    }
+    return null
+}
+
+function _is_group_button(element: HTMLElement): boolean {
+    const rtnval = element.classList.contains(GROUP_BUTTON_CLASS)
+    return rtnval
+}
+
+/**
+ * Move focus to the first sub-item of a group button's popup,
+ * when that popup is open.
+ */
+function _focus_first_popup_entry(button: HTMLElement): void {
+    const popup = button.nextElementSibling
+    if (popup instanceof HTMLElement === false) {
+        return
+    }
+    const popup_element = popup as HTMLElement
+    if (popup_element.hidden === true) {
+        return
+    }
+    const entries = _collect(popup_element, ENTRY_SELECTOR)
+    if (entries.length > 0) {
+        entries[0].focus()
+    }
+    return
+}
+
 function _is_type_to_jump_key(event: KeyboardEvent): boolean {
-    if (event.ctrlKey === true || event.metaKey === true || event.altKey === true) {
+    if (
+        event.ctrlKey === true ||
+        event.metaKey === true ||
+        event.altKey === true
+    ) {
         return false
     }
     if (typeof event.key !== "string") {
@@ -126,8 +287,30 @@ function _is_type_to_jump_key(event: KeyboardEvent): boolean {
     return true
 }
 
-function _collect_entries(container: HTMLElement): HTMLElement[] {
-    const node_list = container.querySelectorAll<HTMLElement>(ENTRY_SELECTOR)
+/**
+ * Apply one type-to-jump keystroke against the supplied items and
+ * return the index of the first prefix match (or -1).
+ */
+function _type_to_jump(
+    items: HTMLElement[],
+    event: KeyboardEvent,
+    state: KeyboardState,
+): number {
+    const now_ms = Date.now()
+    if (now_ms - state.last_keystroke_at_ms > TYPE_TO_JUMP_RESET_MS) {
+        state.buffer = ""
+    }
+    state.buffer = state.buffer + event.key.toLowerCase()
+    state.last_keystroke_at_ms = now_ms
+    const match_index = _find_prefix_match(items, state.buffer)
+    return match_index
+}
+
+function _collect(
+    root: HTMLElement,
+    selector: string,
+): HTMLElement[] {
+    const node_list = root.querySelectorAll<HTMLElement>(selector)
     const rtnval: HTMLElement[] = []
     for (let index = 0; index < node_list.length; index = index + 1) {
         rtnval.push(node_list[index])
@@ -136,42 +319,42 @@ function _collect_entries(container: HTMLElement): HTMLElement[] {
 }
 
 function _resolve_active_index(
-    entries: HTMLElement[],
+    items: HTMLElement[],
     target: EventTarget | null,
 ): number {
     if (target instanceof HTMLElement) {
-        const direct_index = entries.indexOf(target)
+        const direct_index = items.indexOf(target)
         if (direct_index >= 0) {
             return direct_index
         }
     }
-    for (let index = 0; index < entries.length; index = index + 1) {
-        if (entries[index].getAttribute("tabindex") === "0") {
+    for (let index = 0; index < items.length; index = index + 1) {
+        if (items[index].getAttribute("tabindex") === "0") {
             return index
         }
     }
     return -1
 }
 
-function _move_focus(entries: HTMLElement[], next_index: number): void {
-    for (let index = 0; index < entries.length; index = index + 1) {
-        const entry = entries[index]
+function _move_focus(items: HTMLElement[], next_index: number): void {
+    for (let index = 0; index < items.length; index = index + 1) {
+        const item = items[index]
         if (index === next_index) {
-            entry.setAttribute("tabindex", "0")
-            entry.focus()
+            item.setAttribute("tabindex", "0")
+            item.focus()
         } else {
-            entry.setAttribute("tabindex", "-1")
+            item.setAttribute("tabindex", "-1")
         }
     }
     return
 }
 
-function _find_prefix_match(entries: HTMLElement[], prefix: string): number {
+function _find_prefix_match(items: HTMLElement[], prefix: string): number {
     if (prefix.length === 0) {
         return -1
     }
-    for (let index = 0; index < entries.length; index = index + 1) {
-        const label = (entries[index].textContent || "").trim().toLowerCase()
+    for (let index = 0; index < items.length; index = index + 1) {
+        const label = (items[index].textContent || "").trim().toLowerCase()
         if (label.startsWith(prefix) === true) {
             return index
         }
@@ -180,24 +363,31 @@ function _find_prefix_match(entries: HTMLElement[], prefix: string): number {
 }
 
 /**
- * Initialize tabindex roving for a freshly-rendered sidebar.
- * The active route's entry (the one with ``aria-current="page"``)
- * receives ``tabindex="0"``; all others get ``tabindex="-1"``. If
- * no entry is the active route the first entry holds tabindex 0
- * so the sidebar still has a keyboard entry point.
+ * Initialize tabindex roving for a freshly-rendered sidebar. The
+ * major item matching the active route receives ``tabindex="0"``;
+ * all others get ``tabindex="-1"``. The active item is either an
+ * ungrouped link carrying ``aria-current="page"`` or a group
+ * button carrying the ``--active`` marker. When nothing is
+ * active the first major item holds tabindex 0 so the sidebar
+ * still has a keyboard entry point.
  *
  * @param container Sidebar ``<aside>`` element.
  */
 export function initialize_sidebar_roving_tabindex(
     container: HTMLElement,
 ): void {
-    const entries = _collect_entries(container)
-    if (entries.length === 0) {
+    const navitems = _collect(container, NAVITEM_SELECTOR)
+    if (navitems.length === 0) {
         return
     }
     let anchor_index = -1
-    for (let index = 0; index < entries.length; index = index + 1) {
-        if (entries[index].getAttribute("aria-current") === "page") {
+    for (let index = 0; index < navitems.length; index = index + 1) {
+        const item = navitems[index]
+        const is_active_link = item.getAttribute("aria-current") === "page"
+        const is_active_group = item.classList.contains(
+            "pyc-site-shell__sidebar-group-btn--active",
+        )
+        if (is_active_link === true || is_active_group === true) {
             anchor_index = index
             break
         }
@@ -205,12 +395,12 @@ export function initialize_sidebar_roving_tabindex(
     if (anchor_index < 0) {
         anchor_index = 0
     }
-    for (let index = 0; index < entries.length; index = index + 1) {
-        const entry = entries[index]
+    for (let index = 0; index < navitems.length; index = index + 1) {
+        const item = navitems[index]
         if (index === anchor_index) {
-            entry.setAttribute("tabindex", "0")
+            item.setAttribute("tabindex", "0")
         } else {
-            entry.setAttribute("tabindex", "-1")
+            item.setAttribute("tabindex", "-1")
         }
     }
     return
