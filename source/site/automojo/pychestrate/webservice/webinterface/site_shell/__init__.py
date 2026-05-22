@@ -21,6 +21,12 @@ This package owns:
   names so the shell document can ``<script src=...>`` only the
   bundles relevant to the current request.
 
+* :mod:`nav_manifest` -- the central, authoritative navigation
+  manifest. Declares every sidebar group / entry once,
+  decoupled from which feature bundle is loaded; the
+  ``GET /api/v1/me/navigation`` endpoint permission-filters it
+  so the shell renders a complete sidebar on every route.
+
 * :mod:`catchall_route` -- attaches the catch-all webworks handler
   that serves the shell document for every non-chromeless GET.
 """

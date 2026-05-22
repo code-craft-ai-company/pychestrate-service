@@ -3869,7 +3869,6 @@ function mount_infra_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_infra_sidebar(handle.sidebar);
   mount_infra_view_if_active();
   return;
 }

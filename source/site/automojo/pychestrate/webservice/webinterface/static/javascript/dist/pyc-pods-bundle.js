@@ -2106,7 +2106,6 @@ function mount_pods_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_pods_sidebar(handle.sidebar);
   mount_pods_view_if_active();
   return;
 }

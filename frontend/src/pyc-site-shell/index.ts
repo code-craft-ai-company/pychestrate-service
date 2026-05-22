@@ -18,6 +18,17 @@ export type {
     SidebarEntry,
     VisibleSidebar,
 } from "./sidebar/sidebar-registry.js"
+export {
+    DEFAULT_NAVIGATION_ENDPOINT,
+    apply_nav_manifest,
+    fetch_nav_manifest,
+} from "./sidebar/nav-manifest.js"
+export type {
+    NavManifest,
+    NavManifestGroup,
+    NavManifestEntry,
+    NavManifestFetchResult,
+} from "./sidebar/nav-manifest.js"
 export { PaletteRegistry } from "./palette/palette-registry.js"
 export type {
     PaletteProvider,

@@ -4420,7 +4420,6 @@ function mount_metrics_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_metrics_sidebar(handle.sidebar);
   mount_metrics_view_if_active();
   return;
 }

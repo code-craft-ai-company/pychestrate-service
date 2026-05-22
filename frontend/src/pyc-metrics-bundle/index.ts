@@ -454,7 +454,12 @@ export function mount_metrics_view_if_active(): void {
  * connecting -- it queues a single microtask retry.
  */
 function _register_against(handle: PycSiteShellRegistryHandle): void {
-    register_metrics_sidebar(handle.sidebar)
+    // Sidebar nav entries are owned by the central navigation
+    // manifest the shell fetches on boot (GET /api/v1/me/navigation)
+    // -- see p22b. The shell no longer depends on per-bundle
+    // sidebar registration, so this bundle only mounts its
+    // route-scoped view. register_metrics_sidebar is kept exported
+    // for back-compat / unit tests but is intentionally not called.
     mount_metrics_view_if_active()
     return
 }

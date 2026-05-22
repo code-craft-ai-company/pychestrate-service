@@ -1160,7 +1160,6 @@ function mount_runs_view_if_active() {
   return;
 }
 function _register_against(handle) {
-  register_runs_sidebar(handle.sidebar);
   mount_runs_view_if_active();
   return;
 }

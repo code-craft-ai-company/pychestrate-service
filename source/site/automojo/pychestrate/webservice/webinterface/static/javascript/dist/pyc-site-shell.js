@@ -1504,6 +1504,95 @@ var SidebarRenderer = class {
   }
 };
 
+// src/pyc-site-shell/sidebar/nav-manifest.ts
+var DEFAULT_NAVIGATION_ENDPOINT = "/api/v1/me/navigation";
+async function fetch_nav_manifest(endpoint = DEFAULT_NAVIGATION_ENDPOINT) {
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === false) {
+      const rtnval2 = {
+        ok: false,
+        manifest: null
+      };
+      return rtnval2;
+    }
+    const payload = await response.json();
+    const manifest = _coerce_manifest(payload);
+    if (manifest === null) {
+      const rtnval2 = {
+        ok: false,
+        manifest: null
+      };
+      return rtnval2;
+    }
+    const rtnval = {
+      ok: true,
+      manifest
+    };
+    return rtnval;
+  } catch (reason) {
+    console.warn(
+      "pychestrate.ui.shell.nav_manifest_fetch_failed",
+      { endpoint, reason: String(reason) }
+    );
+    const rtnval = {
+      ok: false,
+      manifest: null
+    };
+    return rtnval;
+  }
+}
+function apply_nav_manifest(registry, manifest) {
+  if (manifest === null || Array.isArray(manifest.groups) === false) {
+    return;
+  }
+  for (const group of manifest.groups) {
+    if (group === null || typeof group.group_id !== "string" || group.group_id.length === 0) {
+      continue;
+    }
+    registry.registerGroup({
+      groupId: group.group_id,
+      label: typeof group.label === "string" ? group.label : group.group_id,
+      icon: group.icon !== void 0 ? group.icon : null,
+      requiredPermissions: []
+    });
+    if (Array.isArray(group.entries) === false) {
+      continue;
+    }
+    for (const entry of group.entries) {
+      if (entry === null || typeof entry.route !== "string" || entry.route.length === 0) {
+        continue;
+      }
+      registry.registerEntry({
+        entryId: typeof entry.entry_id === "string" ? entry.entry_id : entry.route,
+        label: typeof entry.label === "string" ? entry.label : entry.route,
+        route: entry.route,
+        icon: entry.icon !== void 0 ? entry.icon : null,
+        requiredPermissions: [],
+        group: group.group_id
+      });
+    }
+  }
+  return;
+}
+function _coerce_manifest(payload) {
+  if (payload === null || typeof payload !== "object") {
+    return null;
+  }
+  const candidate = payload;
+  if (Array.isArray(candidate.groups) === false) {
+    return null;
+  }
+  const rtnval = {
+    groups: candidate.groups
+  };
+  return rtnval;
+}
+
 // src/pyc-site-shell/observability/metrics-beacon.ts
 var DEFAULT_METRICS_ENDPOINT = "/api/v1/_metrics/ui";
 var DEFAULT_BUFFER_CAPACITY = 100;
@@ -1702,6 +1791,7 @@ var SHELL_METRICS = {
 // src/pyc-site-shell/pyc-site-shell.ts
 var ATTR_INITIAL_ROUTE = "initial-route";
 var ATTR_PERMISSIONS_ENDPOINT = "permissions-endpoint";
+var ATTR_NAVIGATION_ENDPOINT = "navigation-endpoint";
 var ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 var ATTR_BRAND_LABEL = "brand-label";
 var PycSiteShell = class extends HTMLElement {
@@ -1722,9 +1812,12 @@ var PycSiteShell = class extends HTMLElement {
   _metrics_lifecycle_detach;
   _boot_started_perf_now;
   _palette_open_keydown_perf_now;
+  _navigation_endpoint;
+  _nav_manifest_loaded;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
+    ATTR_NAVIGATION_ENDPOINT,
     ATTR_PALETTE_TIMEOUT_MS,
     "aria-label",
     ATTR_BRAND_LABEL
@@ -1736,6 +1829,9 @@ var PycSiteShell = class extends HTMLElement {
     const endpoint = this.getAttribute(ATTR_PERMISSIONS_ENDPOINT);
     const resolved_endpoint = endpoint !== null && endpoint.length > 0 ? endpoint : DEFAULT_PERMISSIONS_ENDPOINT;
     this._permission_cache = new PermissionCache(resolved_endpoint);
+    const nav_endpoint = this.getAttribute(ATTR_NAVIGATION_ENDPOINT);
+    this._navigation_endpoint = nav_endpoint !== null && nav_endpoint.length > 0 ? nav_endpoint : DEFAULT_NAVIGATION_ENDPOINT;
+    this._nav_manifest_loaded = false;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
@@ -1992,8 +2088,38 @@ var PycSiteShell = class extends HTMLElement {
     });
     return;
   }
+  /**
+   * Fetch the central navigation manifest and seed the sidebar
+   * registry from it. The manifest is the authoritative source
+   * of truth for sidebar navigation -- it carries every group /
+   * entry the calling session may see, independent of which
+   * feature bundle happens to be loaded for the current route.
+   *
+   * Seeding the manifest is what makes the sidebar complete on
+   * the bare ``/`` route (which loads no feature bundle at
+   * all). Idempotent -- a second call is a no-op once the
+   * manifest has been applied. A fetch failure is non-fatal:
+   * the shell keeps whatever the registry already holds (the
+   * legacy per-bundle ``registerEntry`` calls still run for the
+   * current route's bundle) and the degraded path surfaces via
+   * the permissions cache.
+   */
+  async _load_nav_manifest() {
+    if (this._nav_manifest_loaded === true) {
+      return;
+    }
+    const result = await fetch_nav_manifest(this._navigation_endpoint);
+    if (result.ok === true && result.manifest !== null) {
+      apply_nav_manifest(this._sidebar_registry, result.manifest);
+      this._nav_manifest_loaded = true;
+    }
+    return;
+  }
   async _boot() {
-    await this._permission_cache.refresh(true);
+    await Promise.all([
+      this._permission_cache.refresh(true),
+      this._load_nav_manifest()
+    ]);
     this._render_sidebar_and_empty_state();
     this._ready = true;
     const ready_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
@@ -2092,6 +2218,7 @@ if (typeof customElements !== "undefined") {
 }
 export {
   DEFAULT_METRICS_ENDPOINT,
+  DEFAULT_NAVIGATION_ENDPOINT,
   MetricsBeacon,
   PaletteDialog,
   PaletteRegistry,
@@ -2100,7 +2227,9 @@ export {
   PycSiteShell,
   SHELL_METRICS,
   SidebarRegistry,
+  apply_nav_manifest,
   attach_sidebar_keyboard,
+  fetch_nav_manifest,
   initialize_sidebar_roving_tabindex
 };
 //# sourceMappingURL=pyc-site-shell.js.map
