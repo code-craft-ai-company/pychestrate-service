@@ -164,21 +164,22 @@ test("pagination advances the page and disables prev on page one", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const prev = element.querySelector('[data-role="prev-page"]')
-    const next = element.querySelector('[data-role="next-page"]')
-    assert.equal(prev.hasAttribute("disabled"), true)
-    assert.equal(next.hasAttribute("disabled"), false)
+    const pager = element.querySelector('mj-pagination[data-role="pager"]')
+    assert.equal(pager.getAttribute("page"), "1")
+    assert.equal(pager.getAttribute("total-items"), "5")
 
     // Server echoes page 2 on the next fetch.
     _install_fetch_with(calls, {
         items: [_make_run({})],
         meta: { page: 2, per_page: 1, total: 5 },
     })
-    next.dispatchEvent(new dom.window.Event("click"))
+    pager.dispatchEvent(new dom.window.CustomEvent("mj-pagination-change", {
+        detail: { page: 2, pageSize: 1 },
+    }))
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     assert.equal(element.listState.page, 2)
-    assert.equal(prev.hasAttribute("disabled"), false)
+    assert.equal(pager.getAttribute("page"), "2")
     element.remove()
 })
 
