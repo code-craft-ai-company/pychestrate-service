@@ -439,27 +439,27 @@ class PycWebhooks extends HTMLElement {
       );
       return;
     }
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-ops__table");
-    const columns = ["Provider", "Hook", "Receiver path", "State"];
-    table.appendChild(this._table_head(columns));
-    const tbody = document.createElement("tbody");
-    for (const integration of this._integrations) {
-      const row = document.createElement("tr");
-      this._append_text_cell(row, integration.provider);
-      this._append_text_cell(row, integration.hook_name);
-      this._append_text_cell(row, integration.receiver_path ?? "\u2014");
-      const state_cell = document.createElement("td");
-      state_cell.appendChild(
-        this._badge(
+    table.columns = [
+      { key: "provider", label: "Provider" },
+      { key: "hook_name", label: "Hook" },
+      {
+        key: "receiver_path",
+        label: "Receiver path",
+        render: (integration) => integration.receiver_path ?? "\u2014"
+      },
+      {
+        key: "enabled",
+        label: "State",
+        render: (integration) => self._badge(
           integration.enabled === true ? "enabled" : "disabled",
           integration.enabled === true ? "ok" : "neutral"
         )
-      );
-      row.appendChild(state_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+      }
+    ];
+    table.rows = this._integrations;
     el.replaceChildren(table);
     return;
   }
@@ -478,23 +478,19 @@ class PycWebhooks extends HTMLElement {
       el.replaceChildren(this._notice("No recent inbound deliveries"));
       return;
     }
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-ops__table");
-    const columns = ["Provider", "Hook", "Delivery id", "First seen"];
-    table.appendChild(this._table_head(columns));
-    const tbody = document.createElement("tbody");
-    for (const delivery of this._inDeliveries) {
-      const row = document.createElement("tr");
-      this._append_text_cell(row, delivery.provider);
-      this._append_text_cell(row, delivery.hook_name);
-      this._append_text_cell(row, delivery.delivery_id);
-      this._append_text_cell(
-        row,
-        format_webhook_timestamp(delivery.first_seen_at)
-      );
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.columns = [
+      { key: "provider", label: "Provider" },
+      { key: "hook_name", label: "Hook" },
+      { key: "delivery_id", label: "Delivery id" },
+      {
+        key: "first_seen_at",
+        label: "First seen",
+        render: (delivery) => format_webhook_timestamp(delivery.first_seen_at)
+      }
+    ];
+    table.rows = this._inDeliveries;
     el.replaceChildren(table);
     return;
   }
@@ -748,61 +744,63 @@ class PycWebhooks extends HTMLElement {
       );
       return;
     }
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-ops__table");
-    const columns = ["Name", "URL", "Topics", "State", "Actions"];
-    table.appendChild(this._table_head(columns));
-    const tbody = document.createElement("tbody");
-    for (const subscription of this._subscriptions) {
-      tbody.appendChild(this._build_subscription_row(subscription));
-    }
-    table.appendChild(tbody);
+    table.rowAttrs = (subscription) => ({
+      "data-subscription-id": subscription.subscription_id
+    });
+    table.columns = [
+      { key: "name", label: "Name" },
+      { key: "url", label: "URL" },
+      {
+        key: "topic_filters",
+        label: "Topics",
+        render: (subscription) => subscription.topic_filters.join(", ") || "all"
+      },
+      {
+        key: "enabled",
+        label: "State",
+        render: (subscription) => self._badge(
+          subscription.enabled === true ? "enabled" : "disabled",
+          subscription.enabled === true ? "ok" : "neutral"
+        )
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (subscription) => {
+          const fragment = document.createDocumentFragment();
+          const test_button = document.createElement("mj-button");
+          test_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
+          test_button.setAttribute("type", "button");
+          test_button.setAttribute("data-role", "test-event");
+          test_button.textContent = "Send Test Event";
+          test_button.addEventListener("click", () => {
+            test_button.toggleAttribute("disabled", true);
+            void self._on_test(subscription, test_button);
+          });
+          fragment.appendChild(test_button);
+          const history_button = document.createElement("mj-button");
+          history_button.classList.add(
+            "pyc-ops__button",
+            "pyc-ops__row-action"
+          );
+          history_button.setAttribute("type", "button");
+          history_button.setAttribute("data-role", "delivery-history");
+          history_button.textContent = "Delivery History";
+          history_button.addEventListener("click", () => {
+            history_button.toggleAttribute("disabled", true);
+            void self._on_history(subscription, history_button);
+          });
+          fragment.appendChild(history_button);
+          return fragment;
+        }
+      }
+    ];
+    table.rows = this._subscriptions;
     el.replaceChildren(table);
     return;
-  }
-  _build_subscription_row(subscription) {
-    const row = document.createElement("tr");
-    row.setAttribute("data-subscription-id", subscription.subscription_id);
-    this._append_text_cell(row, subscription.name);
-    this._append_text_cell(row, subscription.url);
-    this._append_text_cell(
-      row,
-      subscription.topic_filters.join(", ") || "all"
-    );
-    const state_cell = document.createElement("td");
-    state_cell.appendChild(
-      this._badge(
-        subscription.enabled === true ? "enabled" : "disabled",
-        subscription.enabled === true ? "ok" : "neutral"
-      )
-    );
-    row.appendChild(state_cell);
-    const actions_cell = document.createElement("td");
-    const test_button = document.createElement("mj-button");
-    test_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
-    test_button.setAttribute("type", "button");
-    test_button.setAttribute("data-role", "test-event");
-    test_button.textContent = "Send Test Event";
-    test_button.addEventListener("click", () => {
-      test_button.toggleAttribute("disabled", true);
-      void this._on_test(subscription, test_button);
-    });
-    actions_cell.appendChild(test_button);
-    const history_button = document.createElement("mj-button");
-    history_button.classList.add(
-      "pyc-ops__button",
-      "pyc-ops__row-action"
-    );
-    history_button.setAttribute("type", "button");
-    history_button.setAttribute("data-role", "delivery-history");
-    history_button.textContent = "Delivery History";
-    history_button.addEventListener("click", () => {
-      history_button.toggleAttribute("disabled", true);
-      void this._on_history(subscription, history_button);
-    });
-    actions_cell.appendChild(history_button);
-    row.appendChild(actions_cell);
-    return row;
   }
   async _on_test(subscription, button) {
     const outcome = await this._do_test(subscription.subscription_id);
@@ -920,31 +918,31 @@ class PycWebhooks extends HTMLElement {
       );
       return;
     }
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-ops__table");
-    const columns = ["Topic", "Outcome", "HTTP", "Attempted"];
-    table.appendChild(this._table_head(columns));
-    const tbody = document.createElement("tbody");
-    for (const delivery of deliveries) {
-      const row = document.createElement("tr");
-      this._append_text_cell(row, delivery.topic);
-      const outcome_cell = document.createElement("td");
-      outcome_cell.appendChild(
-        this._badge(
+    table.columns = [
+      { key: "topic", label: "Topic" },
+      {
+        key: "outcome",
+        label: "Outcome",
+        render: (delivery) => self._badge(
           delivery.outcome,
           delivery_outcome_tone(delivery.outcome)
         )
-      );
-      row.appendChild(outcome_cell);
-      const http_value = delivery.response_status === null || delivery.response_status === void 0 ? "\u2014" : String(delivery.response_status);
-      this._append_text_cell(row, http_value);
-      this._append_text_cell(
-        row,
-        format_webhook_timestamp(delivery.attempted_at)
-      );
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+      },
+      {
+        key: "response_status",
+        label: "HTTP",
+        render: (delivery) => delivery.response_status === null || delivery.response_status === void 0 ? "\u2014" : String(delivery.response_status)
+      },
+      {
+        key: "attempted_at",
+        label: "Attempted",
+        render: (delivery) => format_webhook_timestamp(delivery.attempted_at)
+      }
+    ];
+    table.rows = deliveries;
     el.replaceChildren(heading, table);
     return;
   }

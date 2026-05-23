@@ -256,27 +256,7 @@ class PycReleaseChannels extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("table");
-    table.classList.add("pyc-ops__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Component",
-      "Channel",
-      "Version",
-      "Status",
-      "Rollout",
-      "Issued",
-      "Actions"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
+    const self = this;
     const ordered = this._entries.slice();
     ordered.sort(
       (left, right) => {
@@ -291,53 +271,66 @@ class PycReleaseChannels extends HTMLElement {
         return 0;
       }
     );
-    const tbody = document.createElement("tbody");
-    for (const entry of ordered) {
-      tbody.appendChild(this._build_row(entry));
-    }
-    table.appendChild(tbody);
+    const table = document.createElement("mj-table");
+    table.classList.add("pyc-ops__table");
+    table.rowAttrs = (entry) => ({ "data-channel-id": entry.channel_id });
+    table.columns = [
+      { key: "component", label: "Component" },
+      {
+        key: "channel",
+        label: "Channel",
+        render: (entry) => {
+          const channel_badge = document.createElement("mj-chip");
+          channel_badge.classList.add("pyc-ops__badge");
+          channel_badge.setAttribute("data-tone", "neutral");
+          channel_badge.textContent = entry.channel;
+          return channel_badge;
+        }
+      },
+      { key: "version", label: "Version" },
+      {
+        key: "status",
+        label: "Status",
+        render: (entry) => {
+          const status_badge = document.createElement("mj-chip");
+          status_badge.classList.add("pyc-ops__badge");
+          status_badge.setAttribute(
+            "data-tone",
+            release_status_tone(entry.status)
+          );
+          status_badge.textContent = entry.status;
+          return status_badge;
+        }
+      },
+      {
+        key: "rollout_fraction",
+        label: "Rollout",
+        render: (entry) => format_rollout(entry.rollout_fraction)
+      },
+      {
+        key: "issued_at",
+        label: "Issued",
+        render: (entry) => format_release_timestamp(entry.issued_at)
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (entry) => {
+          const show_button = document.createElement("mj-button");
+          show_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
+          show_button.setAttribute("type", "button");
+          show_button.setAttribute("data-role", "show-release");
+          show_button.textContent = "Show Published Release";
+          show_button.addEventListener("click", () => {
+            show_button.toggleAttribute("disabled", true);
+            void self._on_show_release(entry, show_button);
+          });
+          return show_button;
+        }
+      }
+    ];
+    table.rows = ordered;
     return table;
-  }
-  _build_row(entry) {
-    const row = document.createElement("tr");
-    row.setAttribute("data-channel-id", entry.channel_id);
-    this._append_text_cell(row, entry.component);
-    const channel_cell = document.createElement("td");
-    const channel_badge = document.createElement("mj-chip");
-    channel_badge.classList.add("pyc-ops__badge");
-    channel_badge.setAttribute("data-tone", "neutral");
-    channel_badge.textContent = entry.channel;
-    channel_cell.appendChild(channel_badge);
-    row.appendChild(channel_cell);
-    this._append_text_cell(row, entry.version);
-    const status_cell = document.createElement("td");
-    const status_badge = document.createElement("mj-chip");
-    status_badge.classList.add("pyc-ops__badge");
-    status_badge.setAttribute(
-      "data-tone",
-      release_status_tone(entry.status)
-    );
-    status_badge.textContent = entry.status;
-    status_cell.appendChild(status_badge);
-    row.appendChild(status_cell);
-    this._append_text_cell(row, format_rollout(entry.rollout_fraction));
-    this._append_text_cell(
-      row,
-      format_release_timestamp(entry.issued_at)
-    );
-    const actions_cell = document.createElement("td");
-    const show_button = document.createElement("mj-button");
-    show_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
-    show_button.setAttribute("type", "button");
-    show_button.setAttribute("data-role", "show-release");
-    show_button.textContent = "Show Published Release";
-    show_button.addEventListener("click", () => {
-      show_button.toggleAttribute("disabled", true);
-      void this._on_show_release(entry, show_button);
-    });
-    actions_cell.appendChild(show_button);
-    row.appendChild(actions_cell);
-    return row;
   }
   async _on_show_release(entry, button) {
     const detail = await this.loadReleaseChannel(entry.channel_id);
