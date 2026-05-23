@@ -318,14 +318,21 @@ class PycRunsList extends HTMLElement {
    * Build the runs ``<table>`` from the current ``_runs`` list.
    */
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-runs-list__table");
+    // Sorting is client-side over the current page. project_id /
+    // run_id / state sort by their string values; the timestamp
+    // columns sort by the raw ISO strings, which collate as
+    // chronological order.
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-runs-list__row";
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
         key: "run_id",
         label: "Run",
+        width: "10rem",
         render: (run) => {
           const link = document.createElement("a");
           link.classList.add("pyc-runs-list__run-link");
@@ -334,10 +341,11 @@ class PycRunsList extends HTMLElement {
           return link;
         },
       },
-      { key: "project_id", label: "Project" },
+      { key: "project_id", label: "Project", width: "16rem" },
       {
         key: "state",
         label: "State",
+        width: "10rem",
         render: (run) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-runs-list__badge");
@@ -349,16 +357,19 @@ class PycRunsList extends HTMLElement {
       {
         key: "created_at",
         label: "Created",
+        width: "12rem",
         render: (run) => format_timestamp(run.created_at),
       },
       {
         key: "started_at",
         label: "Started",
+        width: "12rem",
         render: (run) => format_timestamp(run.started_at),
       },
       {
         key: "completed_at",
         label: "Completed",
+        width: "12rem",
         render: (run) => format_timestamp(run.completed_at),
       },
     ];

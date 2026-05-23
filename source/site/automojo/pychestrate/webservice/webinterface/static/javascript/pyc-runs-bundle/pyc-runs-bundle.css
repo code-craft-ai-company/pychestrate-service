@@ -101,12 +101,16 @@ pyc-runs-list {
 }
 
 .pyc-runs-list__table {
+    /* mj-data-table virtualizes rows with absolute positioning,
+     * so the host needs a height for the body scroller. */
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-runs-list__table::part(th) {
+.pyc-runs-list__table::part(header-cell) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -114,12 +118,12 @@ pyc-runs-list {
     border-bottom: 0.0625rem solid var(--pyc-runs-border);
 }
 
-.pyc-runs-list__table::part(td) {
+.pyc-runs-list__table::part(cell) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-runs-divider);
 }
 
-.pyc-runs-list__table::part(tr):hover {
+.pyc-runs-list__table::part(row):hover {
     background-color: var(--pyc-runs-surface-hover);
 }
 
