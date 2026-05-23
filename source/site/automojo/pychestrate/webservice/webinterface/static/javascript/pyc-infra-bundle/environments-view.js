@@ -616,8 +616,10 @@ class PycEnvironments extends HTMLElement {
    */
   _build_table() {
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-infra__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-infra__row";
     table.rowAttrs = (environment) => ({
       "data-environment-id": environment.environment_id
@@ -626,6 +628,7 @@ class PycEnvironments extends HTMLElement {
       {
         key: "name",
         label: "Environment",
+        width: "16rem",
         render: (environment) => {
           const name = document.createElement("span");
           name.classList.add("pyc-infra__env-name");
@@ -634,10 +637,11 @@ class PycEnvironments extends HTMLElement {
           return name;
         }
       },
-      { key: "kind_name", label: "Kind" },
+      { key: "kind_name", label: "Kind", width: "10rem" },
       {
         key: "state",
         label: "State",
+        width: "8rem",
         render: (environment) => {
           const state_badge = document.createElement("mj-chip");
           state_badge.classList.add("pyc-infra__badge");
@@ -652,6 +656,8 @@ class PycEnvironments extends HTMLElement {
       {
         key: "drift",
         label: "Drift",
+        width: "10rem",
+        sortable: false,
         render: (environment) => {
           const drift_badge = document.createElement("span");
           drift_badge.classList.add("pyc-infra__badge", "pyc-infra__drift");
@@ -665,11 +671,14 @@ class PycEnvironments extends HTMLElement {
       {
         key: "last_applied_at",
         label: "Last applied",
+        width: "12rem",
         render: (environment) => format_timestamp(environment.last_applied_at)
       },
       {
         key: "actions",
         label: "Actions",
+        width: "9rem",
+        sortable: false,
         render: (environment) => {
           const check_button = document.createElement("mj-button");
           check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
@@ -718,11 +727,11 @@ class PycEnvironments extends HTMLElement {
     if (this._table_region === null) {
       return;
     }
-    const table = this._table_region.querySelector("mj-table.pyc-infra__table");
+    const table = this._table_region.querySelector("mj-data-table.pyc-infra__table");
     if (table === null || table.shadowRoot === null) {
       return;
     }
-    const selector = 'tr[data-environment-id="' + environment_id + '"] [data-role="drift-indicator"]';
+    const selector = '.row[data-environment-id="' + environment_id + '"] [data-role="drift-indicator"]';
     const badge = table.shadowRoot.querySelector(selector);
     if (badge === null) {
       return;

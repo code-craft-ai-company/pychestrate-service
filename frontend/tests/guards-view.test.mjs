@@ -174,8 +174,8 @@ test("PycGuards fetches and renders the guards table", async () => {
     await view.loadProjects()
 
     assert.equal(view.listState.total, 2)
-    const table = view.querySelector("mj-table.pyc-infra__table")
-    const rows = table.shadowRoot.querySelectorAll("tbody tr")
+    const table = view.querySelector("mj-data-table.pyc-infra__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-infra__row")
     assert.equal(rows.length, 2)
     document.body.removeChild(view)
 })

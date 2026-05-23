@@ -492,16 +492,19 @@ class PycGuards extends HTMLElement {
       }
       return 0;
     });
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-infra__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-infra__row";
     table.rowAttrs = (guard) => ({ "data-guard-id": guard.guard_id });
     table.columns = [
-      { key: "environment_id", label: "Environment" },
-      { key: "rule_id", label: "Rule" },
+      { key: "environment_id", label: "Environment", width: "16rem" },
+      { key: "rule_id", label: "Rule", width: "16rem" },
       {
         key: "enabled",
         label: "State",
+        width: "8rem",
         render: (guard) => {
           const state_badge = document.createElement("mj-chip");
           state_badge.classList.add("pyc-infra__badge");
@@ -517,11 +520,14 @@ class PycGuards extends HTMLElement {
       {
         key: "added_at",
         label: "Added",
+        width: "12rem",
         render: (guard) => format_guard_timestamp(guard.added_at)
       },
       {
         key: "actions",
         label: "Actions",
+        width: "8rem",
+        sortable: false,
         render: (guard) => {
           const toggle_button = document.createElement("mj-button");
           toggle_button.classList.add(
@@ -1024,14 +1030,17 @@ class PycGuards extends HTMLElement {
     if (evaluation.entries.length === 0) {
       return;
     }
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-infra__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.setAttribute("data-role", "evaluate-trace");
     table.columns = [
-      { key: "rule_id", label: "Rule" },
+      { key: "rule_id", label: "Rule", width: "16rem" },
       {
         key: "verdict",
         label: "Verdict",
+        width: "10rem",
         render: (entry) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-infra__badge");
@@ -1043,6 +1052,7 @@ class PycGuards extends HTMLElement {
       {
         key: "reason",
         label: "Reason",
+        width: "20rem",
         render: (entry) => entry.reason ?? "\u2014"
       }
     ];

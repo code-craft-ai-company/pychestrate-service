@@ -217,8 +217,8 @@ test("provisioning list fetches projects then runs and renders rows", async () =
     document.body.appendChild(el)
     await el.loadProjects()
 
-    const table = el.querySelector("mj-table.pyc-infra__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-infra__row")
+    const table = el.querySelector("mj-data-table.pyc-infra__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-infra__row")
     assert.equal(rows.length, 2)
     assert.equal(el.listState.total, 2)
     const links = table.shadowRoot.querySelectorAll(".pyc-infra__run-link")

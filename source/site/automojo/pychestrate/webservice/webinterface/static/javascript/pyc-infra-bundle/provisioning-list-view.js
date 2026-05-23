@@ -572,14 +572,17 @@ class PycProvisioningList extends HTMLElement {
    * ``_runs`` list.
    */
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-infra__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-infra__row";
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
         key: "run_id",
         label: "Run",
+        width: "10rem",
         render: (run) => {
           const link = document.createElement("a");
           link.classList.add("pyc-infra__run-link");
@@ -592,11 +595,12 @@ class PycProvisioningList extends HTMLElement {
           return link;
         }
       },
-      { key: "action", label: "Action" },
-      { key: "driver_name", label: "Driver" },
+      { key: "action", label: "Action", width: "8rem" },
+      { key: "driver_name", label: "Driver", width: "12rem" },
       {
         key: "state",
         label: "State",
+        width: "10rem",
         render: (run) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-infra__badge");
@@ -608,11 +612,13 @@ class PycProvisioningList extends HTMLElement {
       {
         key: "started_at",
         label: "Started",
+        width: "12rem",
         render: (run) => format_timestamp(run.started_at)
       },
       {
         key: "finished_at",
         label: "Finished",
+        width: "12rem",
         render: (run) => format_timestamp(run.finished_at)
       }
     ];

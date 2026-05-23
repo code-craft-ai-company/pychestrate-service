@@ -327,14 +327,17 @@ class PycPodsList extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-pods-list__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-pods-list__row";
     table.rowAttrs = (pod) => ({ "data-pod-id": pod.pod_id });
     table.columns = [
       {
         key: "pod_id",
         label: "Pod",
+        width: "12rem",
         render: (pod) => {
           const link = document.createElement("a");
           link.classList.add("pyc-pods-list__pod-link");
@@ -348,21 +351,26 @@ class PycPodsList extends HTMLElement {
       {
         key: "pod_name",
         label: "Name",
+        width: "16rem",
         render: (pod) => pod.pod_name !== null && pod.pod_name.length > 0 ? pod.pod_name : "\u2014"
       },
       {
         key: "current_version",
         label: "Version",
+        width: "8rem",
         render: (pod) => "v" + String(pod.current_version)
       },
       {
         key: "members",
         label: "Members",
+        width: "8rem",
+        sortable: false,
         render: (pod) => String(member_count(pod.spec))
       },
       {
         key: "created_at",
         label: "Created",
+        width: "14rem",
         render: (pod) => format_timestamp(pod.created_at)
       }
     ];

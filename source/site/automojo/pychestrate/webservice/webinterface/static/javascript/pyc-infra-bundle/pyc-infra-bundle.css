@@ -210,12 +210,16 @@ pyc-guards {
 }
 
 .pyc-infra__table {
+    /* mj-data-table virtualizes rows with absolute positioning,
+     * so the host needs a height for the body scroller. */
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-infra__table::part(th) {
+.pyc-infra__table::part(header-cell) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -223,12 +227,12 @@ pyc-guards {
     border-bottom: 0.0625rem solid var(--pyc-infra-border);
 }
 
-.pyc-infra__table::part(td) {
+.pyc-infra__table::part(cell) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-infra-divider);
 }
 
-.pyc-infra__table::part(tr):hover {
+.pyc-infra__table::part(row):hover {
     background-color: var(--pyc-infra-surface-hover);
 }
 
