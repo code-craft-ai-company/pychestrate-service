@@ -168,6 +168,8 @@ async function setup_jsdom_with_mj(options) {
     globalThis.HTMLInputElement = window.HTMLInputElement
     globalThis.HTMLSelectElement = window.HTMLSelectElement
     globalThis.HTMLTextAreaElement = window.HTMLTextAreaElement
+    globalThis.Event = window.Event
+    globalThis.CustomEvent = window.CustomEvent
     globalThis.CSSStyleSheet = _ConstructableStyleSheet
 
     /*
