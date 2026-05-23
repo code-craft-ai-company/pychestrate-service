@@ -159,25 +159,41 @@ pyc-system-health {
     color: var(--pyc-admin-fg-muted);
 }
 
-/* tables */
+/* tables -- mj-data-table virtualizes rows with absolute
+ * positioning, so the host needs an explicit block layout +
+ * height for the body scroller. Top-level list views get the
+ * full 60vh, embedded drill-downs / quick-views (inside narrow
+ * sub-cards) get a smaller min-height. */
 .pyc-admin__table {
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-admin__table::part(th),
-.pyc-admin__table::part(td) {
+.pyc-admin__table--embedded {
+    min-height: 12rem;
+    height: auto;
+}
+
+.pyc-admin__table::part(header-cell),
+.pyc-admin__table::part(cell) {
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 0.0625rem solid var(--pyc-admin-divider);
     vertical-align: top;
 }
 
-.pyc-admin__table::part(th) {
+.pyc-admin__table::part(header-cell) {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-admin-fg-muted);
     font-weight: 600;
+}
+
+.pyc-admin__table::part(row):hover {
+    background-color: var(--pyc-admin-surface-hover,
+        var(--pyc-color-surface-hover, hsla(0, 0%, 0%, 0.04)));
 }
 
 /* badges */

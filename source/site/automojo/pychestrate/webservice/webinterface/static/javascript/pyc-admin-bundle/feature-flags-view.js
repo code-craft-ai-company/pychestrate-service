@@ -219,24 +219,30 @@ class PycFeatureFlags extends HTMLElement {
       }
     );
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-admin__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-admin__row";
     table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
     table.columns = [
-      { key: "flag_key", label: "Flag Key" },
+      { key: "flag_key", label: "Flag Key", width: "20rem" },
       {
         key: "flag_kind",
         label: "Kind",
+        width: "10rem",
         render: (entry) => entry.flag_kind ?? "\u2014"
       },
       {
         key: "current_version",
         label: "Version",
+        width: "8rem",
         render: (entry) => String(entry.current_version)
       },
       {
         key: "state",
         label: "State",
+        width: "10rem",
         render: (entry) => {
           const state_badge = document.createElement("mj-chip");
           state_badge.classList.add("pyc-admin__badge");
@@ -248,6 +254,8 @@ class PycFeatureFlags extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "10rem",
+        sortable: false,
         render: (entry) => self._build_toggle(entry)
       }
     ];
