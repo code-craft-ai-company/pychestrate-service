@@ -6,8 +6,8 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``secrets_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``secrets`` controller.
 
 Full CRUD, scope-aware (org / project / user) — PR p20g:
 

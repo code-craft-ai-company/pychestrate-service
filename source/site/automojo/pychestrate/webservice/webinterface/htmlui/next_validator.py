@@ -53,11 +53,10 @@ _CONTROL_CHARS: tuple = tuple(chr(i) for i in range(0x20)) + ("\x7f",)
 class NextValidator:
     """
         Stateless validator for the post-login ``next`` query
-        parameter. The flask-era code inlined the same checks
-        across two handlers; consolidating them in a class keeps
-        the contract self-documenting (every accept / reject
-        condition lives in one place) and lets future provider-
-        specific login flows reuse the same primitive.
+        parameter. Consolidating the accept / reject conditions in
+        a class keeps the contract self-documenting (every check
+        lives in one place) and lets future provider-specific
+        login flows reuse the same primitive.
 
         Usage:
 

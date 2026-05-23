@@ -9,8 +9,8 @@ Every error response Pychestrate's REST surface emits SHALL be a
 "problem detail" document per RFC 7807, served with the
 ``application/problem+json`` content type. This module produces those
 documents in a framework-agnostic shape: a frozen dataclass and a
-builder returning a ``(body, content_type, status_code)`` triple that
-flask-restx, ASGI, or stdlib HTTP layers can dispatch.
+builder returning a ``(body, content_type, status_code)`` triple
+that webworks, ASGI, or stdlib HTTP layers can dispatch.
 
 The standard members per RFC 7807 §3.1 are:
 

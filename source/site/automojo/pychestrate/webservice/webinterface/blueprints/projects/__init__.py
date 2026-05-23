@@ -20,9 +20,8 @@ project core + members) plus its per-feature siblings:
 * :mod:`webinterface.blueprints.projects.routes_watches`
 
 This ``__init__`` is intentionally side-effect free -- importing
-the package does not construct a flask :class:`Blueprint`
-(the runtime no longer hosts flask). Callers wire the routes
-via :func:`register_projects_routes`:
+the package does not construct any blueprint object. Callers
+wire the routes via :func:`register_projects_routes`:
 
 ::
 

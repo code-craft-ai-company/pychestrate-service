@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The three calendar routes ported from the legacy flask
-``projects_blueprint``. All read-only -- release-event lifecycle
+The three calendar routes served under the projects blueprint.
+All read-only -- release-event lifecycle
 runs through the build pipeline + REST API, not the consumer UI.
 
 * ``GET /projects/{project_id}/calendar``

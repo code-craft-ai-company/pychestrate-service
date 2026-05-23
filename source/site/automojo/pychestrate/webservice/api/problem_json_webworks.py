@@ -24,14 +24,14 @@ This module bridges the two worlds for the webworks REST surface:
 
 Note on raise-vs-return
 -----------------------
-The flask glue exposes ``abort_with_problem`` because flask's
-``abort(response)`` flow returns the supplied response verbatim.
-The webworks dispatcher does NOT carry custom bodies through
-:class:`HTTPException`: when a handler raises an HTTPException the
-dispatcher rebuilds the body itself in its content-negotiated
-shape (e.g., ``{"detail": ..., "status_code": ...}`` for the JSON
-mode), discarding any body the exception carried. Therefore this
-module provides only return-shaped helpers. Callers should::
+The legacy framework's ``abort(response)`` flow returned the
+supplied response verbatim. The webworks dispatcher does NOT carry
+custom bodies through :class:`HTTPException`: when a handler
+raises an HTTPException the dispatcher rebuilds the body itself in
+its content-negotiated shape (e.g.,
+``{"detail": ..., "status_code": ...}`` for the JSON mode),
+discarding any body the exception carried. Therefore this module
+provides only return-shaped helpers. Callers should::
 
     return problem_response_for_http_status(status=404, detail=...)
 
@@ -172,10 +172,9 @@ def problem_response_for_http_status(
         code, routing the status to the documented ``type`` URI and
         ``title`` via :func:`problem_for_http_status`.
 
-        Equivalent to flask's ``abort_with_problem`` in shape but
-        returns the response instead of aborting — webworks handlers
-        return responses (the dispatcher does not carry custom
-        bodies through :class:`HTTPException`).
+        Returns the response rather than aborting — webworks
+        handlers return responses (the dispatcher does not carry
+        custom bodies through :class:`HTTPException`).
 
         :param status: HTTP status code (1xx-5xx).
         :param detail: Occurrence-specific explanation.

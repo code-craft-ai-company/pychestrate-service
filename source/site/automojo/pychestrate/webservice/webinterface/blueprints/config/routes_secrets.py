@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The four secret-management routes ported from the legacy flask
-``config_blueprint``:
+The secret-management routes served under the config blueprint:
 
 * ``GET  /config/secrets``                                  -- list +
                                                                scope filter.

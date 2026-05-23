@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The eight build routes ported from the legacy flask
-``projects_blueprint``:
+The eight build routes served under the projects blueprint:
 
 * ``GET  /projects/{project_id}/builds``                          -- build
                                                                      list

@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``clients_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``clients`` controller.
 
-Four routes mirror the flask_restx controller's M1 matrix:
+Four routes:
 
 * ``GET  /api/v1/clients``
   — list with optional ``project_id`` / ``status`` /
@@ -168,9 +168,8 @@ def _parse_client_status_or_abort(
     """
         Coerce a ``status`` query string to a :class:`ClientStatus`.
         Empty / None returns None (no filter). Unknown raises
-        400 problem+json with the raw value as
-        ``requested_status`` (matches the flask controller's
-        extension key).
+        400 problem+json with the raw value carried as the
+        ``requested_status`` extension key.
 
         :param request: Incoming webworks request.
         :param raw: Raw query value or None.
@@ -222,7 +221,6 @@ def _parse_revocation_reason(*, raw: str) -> RevocationReason:
         Coerce a ``reason`` body string to
         :class:`RevocationReason`. Raises :class:`SemanticError`
         rather than aborting so the caller chooses how to map it.
-        Mirrors the flask controller's two-step flow.
 
         :param raw: Raw value.
 

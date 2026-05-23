@@ -6,9 +6,8 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This is the **last** flask_restx
-controller to be ported -- it replaces ``projects_controller``
-next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``projects`` controller.
 
 Eleven routes cover the project-management surface:
 

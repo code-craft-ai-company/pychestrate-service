@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The four role-management routes ported from the flask
-``config_blueprint``:
+The role-management routes served under the config blueprint:
 
 * ``GET  /config/roles``                   -- list roles.
 * ``GET  /config/roles/create``            -- new-role form.
@@ -20,12 +19,11 @@ System roles (``role.is_system == True``) cannot be modified --
 the edit handler short-circuits with an error flash and the list
 template hides the Edit button.
 
-The legacy flask handlers worked directly with the
-:class:`SystemRole` and :class:`Permission` ORM classes. This
-port keeps that shape but routes the lookups + commits through
-small builder helpers so unit tests can patch them at the module
-level without importing the source ORM (which transitively pulls
-sqlalchemy + werkzeug).
+Handlers work with the :class:`SystemRole` and
+:class:`Permission` ORM classes via small builder helpers so
+unit tests can patch them at the module level without importing
+the source ORM (which transitively pulls sqlalchemy and the
+password-hashing chain).
 """
 
 __author__ = "Automation Mojo LLC"

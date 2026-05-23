@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The eight watch routes ported from the legacy flask
-``projects_blueprint``:
+The eight watch routes served under the projects blueprint:
 
 * ``GET  /projects/{project_id}/watches``                       -- list.
 * ``GET  /projects/{project_id}/watches/create``                -- form
@@ -40,10 +39,7 @@ The create / edit form's actual posted fields
 translated into the manager's dataclass shape
 (``trigger_source`` / ``source_id`` / ``conditions`` /
 ``actions``) by :func:`_build_watch_create_request` and
-:func:`_build_watch_update_request`. The legacy flask
-handler constructed those dataclasses with kwargs that
-never matched the manager's signature; that bitrot was
-preserved through the F5 port and is fixed here.
+:func:`_build_watch_update_request`.
 """
 
 __author__ = "Automation Mojo LLC"

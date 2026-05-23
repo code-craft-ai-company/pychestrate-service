@@ -11,7 +11,7 @@ returns a :class:`MountManifest` listing every concrete route the M2
 HTTP layer must mount under ``/api/v1/ext/<ext-name>/<suffix>``.
 
 The discovery + validation surface is framework-agnostic on purpose:
-it builds a manifest that any future Flask / ASGI / stdlib mount
+it builds a manifest that any webworks / ASGI / stdlib mount
 target can consume without changing extension authoring. Two
 collision rules are enforced at startup:
 

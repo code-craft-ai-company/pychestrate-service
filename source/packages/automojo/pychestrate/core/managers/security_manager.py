@@ -7,15 +7,16 @@
 
 This module provides the SecurityManager class which handles:
 - Password strength validation (Requirements 3.1, 3.2)
-- Password hashing using werkzeug (Requirement 3.3)
+- Password hashing using pbkdf2-sha256 (Requirement 3.3)
 - Password history enforcement (Requirement 3.4)
 - Authentication flow with session creation (Requirements 2.1, 2.2)
 - Session management and invalidation
 
-The implementation leverages existing functionality from the automojo.webservice.xflask module:
+The implementation leverages existing functionality from the
+legacy compatibility module ``automojo.webservice.xflask``:
 - RouteSecurityManager for route-based access control
 - get_csrf_token() and validate_csrf_token() for CSRF protection
-- check_password_hash() and generate_password_hash() from werkzeug
+- pbkdf2-sha256 password hash generation and verification
 """
 
 __author__ = "Automation Mojo LLC"
@@ -37,23 +38,16 @@ from sqlalchemy.orm import Session as DbSession
 # (``_check_password_history`` and ``authenticate``).  Uses
 # ``automojo.webworks.security.passwords.verify_password`` -- a
 # stdlib pbkdf2-sha256 implementation that ships a wire format
-# identical to ``werkzeug.security.generate_password_hash``'s
 # ``pbkdf2:sha256:<iterations>$<salt>$<hexhash>``.  Any
-# legacy ``password_history.password_hash`` row that was
-# originally minted by werkzeug verifies cleanly through
-# ``verify_password`` without re-hashing.
+# legacy ``password_history.password_hash`` row carrying that
+# wire format verifies cleanly through ``verify_password``
+# without re-hashing.
 #
-# This replaces the ``werkzeug.security.check_password_hash``
-# import path that lived here through PR #172.  werkzeug is no
-# longer installed (was a transitive of the removed
-# pychestrate-core dep); this swap closes the only remaining
-# would-be-runtime ImportError on the legacy auth surface.
-# Downstream of the strategic auth-stack split (PR #164 /
-# p13aa), the consumer-UI auth + RBAC flows route through
+# The consumer-UI auth + RBAC flows route through
 # ``ConsumerUISecurityAdapter`` and never reach
 # ``SecurityManager.authenticate`` / ``_check_password_history``;
-# this swap is defensive (in case any test path or future
-# consumer hits them) rather than a hot path.
+# this path is defensive (in case any future consumer hits
+# them) rather than a hot path.
 from automojo.webworks.security.passwords import verify_password as _verify_password_pbkdf2
 
 from automojo.pychestrate.core.defaults import utc_now
@@ -258,11 +252,9 @@ def is_password_strong(password: str) -> bool:
 
 
 # NOTE: module-level ``hash_password`` / ``verify_password``
-# helpers have been removed. They had zero consumers in the
-# codebase (the modern stack uses ``local_flow.hash_password``
-# and the ``password_hasher`` factory protocol instead) and
-# their werkzeug calls were the only path that forced werkzeug
-# into the install tree at module load time.
+# helpers have been removed. They have zero consumers in the
+# codebase; the modern stack uses ``local_flow.hash_password``
+# and the ``password_hasher`` factory protocol instead.
 
 
 # =============================================================================
@@ -280,8 +272,9 @@ class SecurityManager:
     - Authentication with session creation (Requirements 2.1, 2.2)
     - Session management and invalidation
     
-    The implementation leverages existing functionality from automojo.webservice.xflask:
-    - werkzeug's generate_password_hash() and check_password_hash()
+    The implementation leverages existing functionality from
+    the legacy compatibility module ``automojo.webservice.xflask``:
+    - pbkdf2-sha256 password hash generation and verification
     - CSRF token functions from basesecurity module
     """
     
@@ -388,11 +381,11 @@ class SecurityManager:
             .all()
         )
         
-        # ``_verify_password_pbkdf2`` (webworks stdlib pbkdf2,
-        # werkzeug-wire-compatible) reads stored hashes minted by
-        # the legacy werkzeug-based code path. Note the arg
-        # order: ``verify_password(plaintext, stored)`` -- inverse
-        # of werkzeug's ``check_password_hash(stored, plaintext)``.
+        # ``_verify_password_pbkdf2`` (webworks stdlib pbkdf2)
+        # reads stored hashes minted by the legacy code path.
+        # Note the arg order:
+        # ``verify_password(plaintext, stored)`` -- inverse of
+        # the legacy ``check_password_hash(stored, plaintext)``.
         for entry in history_entries:
             if _verify_password_pbkdf2(password, entry.password_hash):
                 return True
@@ -538,10 +531,10 @@ class SecurityManager:
                 )
             raise AuthenticationError("Invalid credentials")
         
-        # Verify password via webworks stdlib pbkdf2 (werkzeug-
-        # wire-compatible).  Note the arg order:
+        # Verify password via webworks stdlib pbkdf2.
+        # Note the arg order:
         # ``verify_password(plaintext, stored)`` -- inverse of
-        # werkzeug's ``check_password_hash(stored, plaintext)``.
+        # the legacy ``check_password_hash(stored, plaintext)``.
         if not _verify_password_pbkdf2(request.password, latest_password.password_hash):
             # Log authentication failure
             if self._audit_logger:

@@ -6,8 +6,8 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``templates_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``templates`` controller.
 
 Two routes:
 

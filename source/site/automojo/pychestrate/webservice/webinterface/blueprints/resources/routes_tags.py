@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The single tag-list route ported from the legacy flask
-``resources_blueprint``:
+The single tag-list route served under the resources blueprint:
 
 * ``GET /resources/tags`` -- list every tag known to the
                              ResourceManager.

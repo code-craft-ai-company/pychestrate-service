@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The seven repository routes ported from the legacy flask
-``projects_blueprint``:
+The seven repository routes served under the projects blueprint:
 
 * ``GET  /projects/{project_id}/repositories``                          -- list.
 * ``GET  /projects/{project_id}/repositories/create``                   -- form.

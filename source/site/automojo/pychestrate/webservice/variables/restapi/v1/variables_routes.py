@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``variables_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``variables`` controller.
 
-Five routes mirror the flask_restx controller's matrix:
+Five routes:
 
 * ``PUT    /api/v1/variables/{scope}/{scope_id}/{name}``
   — set / replace a variable binding.
@@ -272,9 +272,8 @@ def _binding_to_dict(binding: Any) -> dict:
 def _trace_to_list(*, entries: List[dict]) -> List[dict]:
     """
         Render the service's trace-entries list as JSON-friendly
-        rows. Mirrors the flask controller's shape exactly:
-        ``{scope, scope_id, present, value_type, set_by_user_id,
-        set_at}`` per entry.
+        rows with shape ``{scope, scope_id, present, value_type,
+        set_by_user_id, set_at}`` per entry.
 
         :param entries: Trace entries from
                         ``variable_service.build_trace``.

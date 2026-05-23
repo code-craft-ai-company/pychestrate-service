@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``retention_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``retention`` controller.
 
-Four routes mirror the flask_restx controller's matrix:
+Four routes:
 
 * ``POST /api/v1/retention/policies``
   — create a new retention policy.
@@ -234,8 +234,8 @@ def _parse_state_or_abort(
 def _parse_selector(*, payload: Optional[dict]) -> SelectorClause:
     """
         Build a :class:`SelectorClause` from a payload subobject.
-        ``None`` collapses to an all-defaults selector to match the
-        flask controller's behavior on missing body field.
+        ``None`` collapses to an all-defaults selector when the
+        body field is missing.
 
         :param payload: Selector subobject from the request body.
 

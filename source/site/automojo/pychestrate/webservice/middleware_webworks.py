@@ -6,19 +6,18 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask Phase-1 middleware at :mod:`webservice.middleware`
-attaches a SQLAlchemy session and an :class:`AuthPrincipal` to
-``flask.g`` via two hooks (``before_request`` for setup,
-``teardown_request`` for cleanup). The production webservice now
-runs on ``automojo.webworks``; this module is the equivalent for
-the webworks pipeline.
+This module provides per-request session and actor-resolution
+middleware for the ``automojo.webworks`` pipeline. It attaches a
+SQLAlchemy session and an :class:`AuthPrincipal` to the
+:class:`Request` object before invoking the downstream handler
+and tears them down afterward.
 
 WebWorks middleware is a single callable shaped as
 ``(request, call_next) -> response`` — no separate before/after
 hooks. The pre-handler work and the cleanup are combined into one
 ``__call__`` that wraps ``call_next(request)`` in try / except /
-finally. There is no ``flask.g`` analog; webworks routes read the
-session and actor off the :class:`Request` object as attributes.
+finally. Webworks routes read the session and actor off the
+:class:`Request` object as attributes.
 The handlers in :mod:`identity.flags.restapi.v1.flags_routes`
 already follow that convention via
 :func:`flags_routes._resolve_db_session` /
@@ -50,9 +49,8 @@ For every request whose path starts with one of ``path_prefixes``:
   cannot be inspected after the middleware returns and accidentally
   see a closed session.
 
-Requests outside ``path_prefixes`` pass through unchanged. This
-matches the flask middleware's ``PHASE1_URL_PREFIXES`` gating —
-the / hello-world and any future non-API routes stay unaffected.
+Requests outside ``path_prefixes`` pass through unchanged — the
+``/`` hello-world and any future non-API routes stay unaffected.
 
 Test seams
 ----------

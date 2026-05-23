@@ -7,12 +7,12 @@
 
 The production webservice runs on ``automojo.webworks`` (see
 :mod:`app_pychestrate_main`); the ``flags_controller`` module
-sitting next to this one is flask_restx scaffold that pre-dates
+sitting next to this one is legacy scaffold that pre-dates
 the webworks migration and is not loaded in production. This
 module is the webworks-native REST surface for the flag
 lifecycle.
 
-Eight routes mirror the flask_restx controller's matrix:
+Eight routes:
 
 * ``GET    /api/v1/flags``                          — list flags
 * ``POST   /api/v1/flags``                          — create flag
@@ -38,9 +38,8 @@ boundary and returns ``exc.response``.
 
 Request-scoped values
 ---------------------
-The flask controller reads ``flask.g.db_session`` and
-``flask.g.actor_user_id``. WebWorks has no built-in ``g``-style
-container; the equivalent is delivered by
+Handlers read the per-request SQLAlchemy session and actor id
+from attributes attached to the :class:`Request` object by
 :mod:`webservice.middleware_webworks` —
 :class:`PychestrateSessionMiddleware` opens a session per request
 and attaches it as ``request.db_session``, plus resolves the
@@ -49,10 +48,9 @@ session cookie to an :class:`AuthPrincipal` and writes
 attributes via :func:`_resolve_db_session` /
 :func:`_resolve_actor_user_id` (module-level so tests can patch
 them). When the session attribute is missing — i.e., the
-middleware was not installed — the handler returns the same 503
-problem document the flask controller used (``"Request-scoped
-db_session not configured"``) rather than producing an opaque
-traceback.
+middleware was not installed — the handler returns a 503
+problem document with the ``"Request-scoped db_session not
+configured"`` detail rather than producing an opaque traceback.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -122,8 +120,8 @@ def _abort_problem(
         :param status: HTTP status code.
         :param detail: Occurrence-specific explanation.
         :param flag_key: Optional flag key to attach as an extension
-                         member when present (matches the flask
-                         controller's per-flag error context).
+                         member when present, supplying per-flag
+                         error context.
 
         :returns: Never returns; raises :class:`_ProblemAbort`.
         :raises: :class:`_ProblemAbort` always.
@@ -175,9 +173,7 @@ def _resolve_actor_user_id(request: Request) -> Optional[str]:
 def _require_session(request: Request) -> Any:
     """
         Resolve the request-scoped db session or abort with a 503
-        problem document. Mirrors the flask controller's
-        ``_get_session_or_abort`` semantics so the wire response on
-        misconfigured deployments is identical across frameworks.
+        problem document on misconfigured deployments.
 
         :param request: Incoming webworks request.
 

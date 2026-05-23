@@ -20,7 +20,7 @@ The manager owns the database side of the first-run wizard.
   user id that finished setup, and deletes the token file. It
   refuses re-entry; setup completion is one-way.
 
-The manager does not touch flask / webworks request state. It is a
+The manager does not touch webworks request state. It is a
 plain object exercised in unit tests against an in-memory SQLite
 session.
 """

@@ -22,10 +22,8 @@ each expose a top-level ``register_*_routes`` registrar that
         register_projects_routes,
     )
 
-The legacy flask ``register_web_blueprints`` shim was deleted
-in PR F5 once ``/projects`` was the last blueprint to leave
-flask. This package now imports without pulling flask into the
-webworks process at all.
+This package imports without pulling any legacy framework into
+the webworks process.
 """
 
 __author__ = "Automation Mojo LLC"

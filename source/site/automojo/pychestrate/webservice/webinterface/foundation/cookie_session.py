@@ -6,10 +6,10 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask web UI relied on flask's built-in cookie session
-(:data:`flask.session`) to carry the user_id, session token,
-CSRF token, and one-time flash messages between requests. This
-module provides the equivalent for webworks routes:
+The consumer web UI uses an HMAC-signed cookie to carry the
+user_id, session token, CSRF token, and one-time flash messages
+between requests. This module owns that cookie format for the
+webworks routes:
 
 * :func:`sign_session_payload` -- serialize a dict to a
   base64url-encoded ``payload.signature`` cookie value, signed
@@ -20,8 +20,7 @@ module provides the equivalent for webworks routes:
   ``None`` on tamper / missing signature / invalid base64 /
   malformed shape.
 
-The cookie is **signed but not encrypted** -- the same shape
-flask's default session cookie uses. CSRF tokens, flash
+The cookie is **signed but not encrypted**. CSRF tokens, flash
 messages, and the resolved user_id all sit safely in the clear
 because the threat model is "no tampering" not "no readable
 contents". Anything sensitive (passwords, raw secrets) does NOT

@@ -5,16 +5,14 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprints used the ``@login_required`` and
-``@validate_csrf`` decorators to gate handlers. Webworks routes
-are plain functions registered via ``app.attach_route(...)``;
-this module supplies the equivalents as composable guards
-returning a redirect / problem response when the gate fails:
+Webworks routes are plain functions registered via
+``app.attach_route(...)`` rather than decorated handlers. This
+module supplies login and CSRF gating as composable guards that
+return a redirect / problem response when the gate fails:
 
 * :func:`is_authenticated` -- pure predicate over a session
-  dict. The flask ``login_required`` decorator effectively
-  checked ``'user_id' in session`` and ``'session_token' in
-  session``; this mirrors that exactly.
+  dict. Checks that both ``'user_id'`` and ``'session_token'``
+  are present.
 
 * :func:`require_login_or_redirect` -- handler-side guard. Reads
   the session, returns ``None`` when authenticated, returns a
@@ -25,8 +23,7 @@ returning a redirect / problem response when the gate fails:
 * :func:`enforce_csrf_or_redirect` -- read the form-encoded
   body, pull the CSRF token, verify against the session's
   expected token. Returns ``None`` on success, returns a
-  redirect to the referrer / fallback on failure (matching the
-  flask ``@validate_csrf`` decorator's behavior).
+  redirect to the referrer / fallback on failure.
 
 The guards do **not** close over the session-cookie write-back
 -- that's the handler's responsibility because some success
@@ -57,8 +54,7 @@ SESSION_TOKEN_KEY: str = "session_token"
 def is_authenticated(*, session: Dict[str, Any]) -> bool:
     """
         Return True when the session dict carries both a
-        ``user_id`` and a ``session_token`` -- the same pair the
-        flask ``login_required`` decorator required.
+        ``user_id`` and a ``session_token``.
 
         :param session: Session dict (from
                         :func:`cookie_session.read_session_from_request`).
@@ -124,9 +120,8 @@ def enforce_csrf_or_redirect(
         Validate the form-submitted CSRF token against the
         session's expected token. Returns ``None`` on a valid
         token (the handler proceeds); returns a redirect response
-        to ``fallback_url`` on failure (matches the flask
-        ``@validate_csrf`` decorator's behavior of bouncing to
-        the referrer on bad token).
+        to ``fallback_url`` on failure (callers typically pass
+        the referrer so the user lands back on the form).
 
         :param form: Decoded form dict (from
                      ``request.form()``). ``None`` is treated as
