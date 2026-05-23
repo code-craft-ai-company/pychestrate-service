@@ -147,7 +147,7 @@ pyc-resource-detail {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-resources__table th {
+.pyc-resources__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -155,12 +155,12 @@ pyc-resource-detail {
     border-bottom: 0.0625rem solid var(--pyc-res-border);
 }
 
-.pyc-resources__table td {
+.pyc-resources__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-res-divider);
 }
 
-.pyc-resources__row:hover {
+.pyc-resources__table::part(tr):hover {
     background-color: var(--pyc-res-surface-hover);
 }
 
@@ -232,11 +232,6 @@ pyc-resource-detail {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-resources__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-res-fg-muted);
 }
 
 /* ---- detail views ---- */

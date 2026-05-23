@@ -197,14 +197,14 @@ pyc-slos {
     font-size: var(--pyc-font-size-body, 1rem);
 }
 
-.pyc-metrics__table th,
-.pyc-metrics__table td {
+.pyc-metrics__table::part(th),
+.pyc-metrics__table::part(td) {
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid var(--pyc-metrics-divider);
 }
 
-.pyc-metrics__table th {
+.pyc-metrics__table::part(th) {
     font-size: var(--pyc-font-size-caption, 0.8125rem);
     color: var(--pyc-metrics-fg-muted);
     font-weight: 600;

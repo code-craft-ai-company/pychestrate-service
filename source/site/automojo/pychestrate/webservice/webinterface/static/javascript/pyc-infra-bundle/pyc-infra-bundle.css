@@ -215,7 +215,7 @@ pyc-guards {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-infra__table th {
+.pyc-infra__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -223,12 +223,12 @@ pyc-guards {
     border-bottom: 0.0625rem solid var(--pyc-infra-border);
 }
 
-.pyc-infra__table td {
+.pyc-infra__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-infra-divider);
 }
 
-.pyc-infra__row:hover {
+.pyc-infra__table::part(tr):hover {
     background-color: var(--pyc-infra-surface-hover);
 }
 
@@ -291,11 +291,6 @@ pyc-guards {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-infra__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-infra-fg-muted);
 }
 
 /* ---- provisioning detail ---- */

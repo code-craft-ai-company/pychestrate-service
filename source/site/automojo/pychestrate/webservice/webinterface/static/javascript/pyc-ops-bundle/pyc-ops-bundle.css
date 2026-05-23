@@ -204,14 +204,14 @@ pyc-release-channels {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-ops__table th,
-.pyc-ops__table td {
+.pyc-ops__table::part(th),
+.pyc-ops__table::part(td) {
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 0.0625rem solid var(--pyc-ops-divider);
 }
 
-.pyc-ops__table th {
+.pyc-ops__table::part(th) {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-ops-fg-muted);
     font-weight: 600;

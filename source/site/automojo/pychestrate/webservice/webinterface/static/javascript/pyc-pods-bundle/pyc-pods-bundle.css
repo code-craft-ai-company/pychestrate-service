@@ -133,8 +133,8 @@ pyc-client-detail {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-pods-list__table th,
-.pyc-clients-list__table th {
+.pyc-pods-list__table::part(th),
+.pyc-clients-list__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -142,14 +142,14 @@ pyc-client-detail {
     border-bottom: 0.0625rem solid var(--pyc-fleet-border);
 }
 
-.pyc-pods-list__table td,
-.pyc-clients-list__table td {
+.pyc-pods-list__table::part(td),
+.pyc-clients-list__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-fleet-divider);
 }
 
-.pyc-pods-list__row:hover,
-.pyc-clients-list__row:hover {
+.pyc-pods-list__table::part(tr):hover,
+.pyc-clients-list__table::part(tr):hover {
     background-color: var(--pyc-fleet-surface-hover);
 }
 
@@ -239,12 +239,6 @@ pyc-client-detail {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-pods-list__page-indicator,
-.pyc-clients-list__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-fleet-fg-muted);
 }
 
 /* ---- detail views ---- */

@@ -479,13 +479,16 @@ class PycTestCatalog extends HTMLElement {
     const self = this;
     const table = document.createElement("mj-table");
     table.classList.add("pyc-catalog__table");
-    table.rowClass = (entry) => {
+    // The row's retired-state surfaces as a data-attribute on the
+    // shadow <tr> so external CSS can target it via
+    // mj-table::part(tr)[data-retired].
+    table.rowClass = "pyc-catalog__row";
+    table.rowAttrs = (entry) => {
+      const attrs = { "data-entry-key": entry.entry_key };
       if (entry.retired === true) {
-        const rtnval2 = ["pyc-catalog__row", "pyc-catalog__row--retired"];
-        return rtnval2;
+        attrs["data-retired"] = "";
       }
-      const rtnval = "pyc-catalog__row";
-      return rtnval;
+      return attrs;
     };
     table.columns = [
       {

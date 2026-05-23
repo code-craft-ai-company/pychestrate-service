@@ -166,15 +166,15 @@ pyc-system-health {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-admin__table th,
-.pyc-admin__table td {
+.pyc-admin__table::part(th),
+.pyc-admin__table::part(td) {
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 0.0625rem solid var(--pyc-admin-divider);
     vertical-align: top;
 }
 
-.pyc-admin__table th {
+.pyc-admin__table::part(th) {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     color: var(--pyc-admin-fg-muted);
     font-weight: 600;
