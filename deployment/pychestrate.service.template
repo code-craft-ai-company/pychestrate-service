@@ -22,6 +22,13 @@ Documentation=https://github.com/automationmojo/pychestrate-service
 After=network-online.target
 Wants=network-online.target
 
+# Restart back-off lives in [Unit] -- systemd silently ignores
+# StartLimitIntervalSec when it's placed under [Service] (it
+# warns in the journal but never enforces the limit). With it
+# here, 5 crashes inside 30 seconds halt the restart loop.
+StartLimitBurst=5
+StartLimitIntervalSec=30
+
 [Service]
 Type=simple
 User=@USER@
@@ -69,12 +76,11 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 
-# Restart on crash with a small backoff; on repeated crashes
-# (5 within 30s) systemd will give up rather than thrash.
+# Restart on crash with a small backoff; the StartLimitBurst /
+# StartLimitIntervalSec ceiling that halts repeated crashes
+# lives in [Unit] above (systemd requires it there).
 Restart=on-failure
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=30
 
 # Tee the service's stdout/stderr to a log file under the
 # user's home directory so ``tail -f ~/.pychestrate/server.log``
