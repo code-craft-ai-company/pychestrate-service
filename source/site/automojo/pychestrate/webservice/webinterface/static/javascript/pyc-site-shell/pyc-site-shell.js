@@ -170,6 +170,10 @@ class PycSiteShell extends HTMLElement {
     // matching slot name.
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
+    // <mj-app-shell> collapses the nav track to width 0 unless the
+    // host carries nav-open. Without this attribute the sidebar
+    // groups render into a 0-width column and disappear visually.
+    layout.setAttribute("nav-open", "");
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
@@ -394,7 +398,21 @@ class PycSiteShell extends HTMLElement {
     const visible_entry_count = this._sidebar_registry.visibleEntryCount(
       perms
     );
-    if (visible_entry_count === 0 && this._main_region !== null) {
+    // Permissions must have been fetched at least once before we
+    // can claim "no access". Without this gate, the first render
+    // (triggered by registry onChange while the initial perm
+    // fetch is still in flight) plants the empty state even for
+    // an admin and the subsequent perms-loaded render never
+    // removes it.
+    const perms_loaded = this._permission_cache !== null
+      && this._permission_cache._last_success_at_ms !== null;
+    if (this._main_region === null) {
+      return;
+    }
+    const existing_empty_state = this._main_region.querySelector(
+      ".pyc-site-shell__empty-state"
+    );
+    if (visible_entry_count === 0 && perms_loaded === true) {
       const preserved = [];
       for (const child of Array.from(this._main_region.children)) {
         if (child.classList.contains(
@@ -410,6 +428,11 @@ class PycSiteShell extends HTMLElement {
         "pyc-site-shell-empty-state-rendered",
         {}
       );
+    } else if (existing_empty_state !== null) {
+      // The user gained access (or perms finally loaded) after a
+      // prior empty-state render; remove the stale panel so the
+      // router can paint real route content.
+      existing_empty_state.remove();
     }
     return;
   }
