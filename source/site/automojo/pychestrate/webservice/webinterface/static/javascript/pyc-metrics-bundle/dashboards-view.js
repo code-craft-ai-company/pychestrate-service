@@ -1,5 +1,5 @@
 import {
-  build_chart_svg,
+  build_chart_element,
   build_timeseries_url
 } from "./timeseries-view.js";
 import {
@@ -765,7 +765,7 @@ class PycDashboardDetail extends HTMLElement {
       body.appendChild(notice);
       return;
     }
-    body.appendChild(build_chart_svg(points));
+    body.appendChild(build_chart_element(points, metric_name));
     return;
   }
 }

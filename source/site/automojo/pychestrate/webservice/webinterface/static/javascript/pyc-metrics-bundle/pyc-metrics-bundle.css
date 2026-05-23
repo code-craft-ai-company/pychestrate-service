@@ -173,7 +173,9 @@ pyc-slos {
     background: var(--pyc-metrics-error-fg);
 }
 
-/* timeseries inline-SVG chart */
+/* timeseries chart -- styling reaches inside <mj-chart>'s shadow
+ * via ::part(area) for the data path and ::part(plot) for the
+ * background plot region. */
 .pyc-metrics__chart {
     width: 100%;
     height: 14rem;
@@ -182,15 +184,10 @@ pyc-slos {
     background: var(--pyc-metrics-surface);
 }
 
-.pyc-metrics__chart-line {
-    fill: none;
+.pyc-metrics__chart::part(area) {
+    fill: var(--pyc-metrics-ok-surface);
     stroke: var(--pyc-metrics-accent);
     stroke-width: 2;
-}
-
-.pyc-metrics__chart-area {
-    fill: var(--pyc-metrics-ok-surface);
-    stroke: none;
 }
 
 /* tables */

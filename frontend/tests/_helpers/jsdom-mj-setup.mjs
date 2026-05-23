@@ -158,6 +158,18 @@ async function setup_jsdom_with_mj(options) {
     _install_adopted_sheets_shim(window)
     _install_internals_shim(window)
 
+    // mj-chart's render loop calls window.requestAnimationFrame.
+    // jsdom doesn't ship it. A queueMicrotask fallback fires the
+    // callback fast enough that tests can `await` the next tick
+    // and see the rendered SVG without dragging in a real raf.
+    if (typeof window.requestAnimationFrame !== "function") {
+        window.requestAnimationFrame = (callback) => {
+            queueMicrotask(() => callback(Date.now()))
+            return 0
+        }
+        window.cancelAnimationFrame = () => {}
+    }
+
     window.CSSStyleSheet = _ConstructableStyleSheet
 
     globalThis.window = window

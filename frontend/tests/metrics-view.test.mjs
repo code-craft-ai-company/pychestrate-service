@@ -56,9 +56,6 @@ const {
     build_catalog_url,
     build_timeseries_url,
     resolve_range_preset,
-    project_points,
-    build_line_path,
-    build_area_path,
     extract_catalog,
     build_dashboards_collection_url,
     build_dashboard_detail_url,
@@ -166,61 +163,6 @@ test("build_timeseries_url omits window for the all-time preset", () => {
     const url = build_timeseries_url("http_requests", "all", now)
     assert.ok(url.includes("metric=http_requests"))
     assert.ok(url.includes("from=") === false)
-})
-
-test("project_points maps values into the inverted SVG plot area", () => {
-    const points = [
-        { observed_at: "2026-05-20T10:00:00Z", value: 0 },
-        { observed_at: "2026-05-20T11:00:00Z", value: 10 },
-        { observed_at: "2026-05-20T12:00:00Z", value: 5 },
-    ]
-    const coords = project_points(points)
-    assert.equal(coords.length, 3)
-    // oldest-first along x.
-    assert.ok(coords[0].x < coords[1].x)
-    assert.ok(coords[1].x < coords[2].x)
-    // larger value -> smaller y (higher on the chart).
-    assert.ok(coords[1].y < coords[0].y)
-    assert.ok(coords[2].y > coords[1].y)
-})
-
-test("project_points sorts unordered input oldest-first", () => {
-    const points = [
-        { observed_at: "2026-05-20T12:00:00Z", value: 3 },
-        { observed_at: "2026-05-20T10:00:00Z", value: 1 },
-    ]
-    const coords = project_points(points)
-    assert.ok(coords[0].x < coords[1].x)
-})
-
-test("project_points handles empty + single point", () => {
-    assert.deepEqual(project_points([]), [])
-    const single = project_points([
-        { observed_at: "2026-05-20T10:00:00Z", value: 7 },
-    ])
-    assert.equal(single.length, 1)
-})
-
-test("build_line_path emits a move then line commands", () => {
-    const coords = [
-        { x: 0, y: 0 },
-        { x: 10, y: 20 },
-    ]
-    const d = build_line_path(coords)
-    assert.ok(d.startsWith("M 0.00 0.00"))
-    assert.ok(d.includes("L 10.00 20.00"))
-    assert.equal(build_line_path([]), "")
-})
-
-test("build_area_path closes the line down to the chart floor", () => {
-    const coords = [
-        { x: 16, y: 50 },
-        { x: 700, y: 30 },
-    ]
-    const d = build_area_path(coords)
-    assert.ok(d.startsWith("M 16.00 50.00"))
-    assert.ok(d.trim().endsWith("Z"))
-    assert.equal(build_area_path([]), "")
 })
 
 test("extract_catalog tolerates array and {items} envelopes", () => {
@@ -449,12 +391,11 @@ test("pyc-timeseries-explorer fetches catalog then renders SVG", async () => {
 
     const chart = element.querySelector('[data-role="timeseries-chart"]')
     assert.ok(chart !== null)
+    // mj-chart renders the area path inside its shadow root with
+    // part="area"; the renderer's stroked outline doubles as the
+    // line so there is no separate part="line" element.
     assert.equal(
-        chart.querySelectorAll(".pyc-metrics__chart-line").length,
-        1,
-    )
-    assert.equal(
-        chart.querySelectorAll(".pyc-metrics__chart-area").length,
+        chart.shadowRoot.querySelectorAll('[part="area"]').length,
         1,
     )
     assert.equal(element.viewState.metric, "http_requests")
