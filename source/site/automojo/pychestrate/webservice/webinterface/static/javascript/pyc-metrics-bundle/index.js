@@ -262,10 +262,7 @@ import {
   resolve_range_preset,
   build_timeseries_url,
   build_catalog_url,
-  project_points,
-  build_line_path,
-  build_area_path,
-  build_chart_svg,
+  build_chart_element,
   extract_catalog
 } from "./timeseries-view.js";
 import { PycDashboardsList as PycDashboardsList2, PycDashboardDetail as PycDashboardDetail2 } from "./dashboards-view.js";
@@ -341,12 +338,10 @@ export {
   add_tile,
   alert_create_message_for_status,
   build_alert_rules_collection_url,
-  build_area_path,
   build_catalog_url,
-  build_chart_svg,
+  build_chart_element,
   build_dashboard_detail_url,
   build_dashboards_collection_url,
-  build_line_path,
   build_save_payload,
   build_slo_detail_url,
   build_slos_collection_url,
@@ -380,7 +375,6 @@ export {
   move_tile_up,
   parse_definition_config,
   parse_notification_targets,
-  project_points,
   register_metrics_sidebar,
   reindex_tiles,
   remove_tile,

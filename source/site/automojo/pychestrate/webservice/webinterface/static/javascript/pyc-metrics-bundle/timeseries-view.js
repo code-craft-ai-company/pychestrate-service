@@ -1,8 +1,4 @@
-const SVG_NS = "http://www.w3.org/2000/svg";
 const METRICS_API_PATH = "/api/v1/metrics";
-const CHART_WIDTH = 720;
-const CHART_HEIGHT = 240;
-const CHART_PADDING = 16;
 const TIME_RANGE_PRESETS = [
   { id: "1h", label: "Last hour", hours: 1 },
   { id: "24h", label: "Last 24 hours", hours: 24 },
@@ -36,76 +32,6 @@ function build_timeseries_url(metric, range_id, now) {
 }
 function build_catalog_url() {
   const rtnval = METRICS_API_PATH + "/catalog";
-  return rtnval;
-}
-function project_points(points) {
-  const rtnval = [];
-  if (Array.isArray(points) === false || points.length === 0) {
-    return rtnval;
-  }
-  const sorted = points.slice().sort((left, right) => {
-    const left_time = new Date(left.observed_at).getTime();
-    const right_time = new Date(right.observed_at).getTime();
-    const diff = left_time - right_time;
-    return diff;
-  });
-  const plot_width = CHART_WIDTH - 2 * CHART_PADDING;
-  const plot_height = CHART_HEIGHT - 2 * CHART_PADDING;
-  let min_value = sorted[0].value;
-  let max_value = sorted[0].value;
-  for (const point of sorted) {
-    if (point.value < min_value) {
-      min_value = point.value;
-    }
-    if (point.value > max_value) {
-      max_value = point.value;
-    }
-  }
-  const value_span = max_value - min_value;
-  const count = sorted.length;
-  for (let index = 0; index < count; index = index + 1) {
-    const point = sorted[index];
-    let x_fraction = 0.5;
-    if (count > 1) {
-      x_fraction = index / (count - 1);
-    }
-    let y_fraction = 0.5;
-    if (value_span > 0) {
-      y_fraction = (point.value - min_value) / value_span;
-    }
-    const x = CHART_PADDING + x_fraction * plot_width;
-    const y = CHART_PADDING + (1 - y_fraction) * plot_height;
-    rtnval.push({ x, y });
-  }
-  return rtnval;
-}
-function build_line_path(coordinates) {
-  if (Array.isArray(coordinates) === false || coordinates.length === 0) {
-    const rtnval2 = "";
-    return rtnval2;
-  }
-  const segments = [];
-  for (let index = 0; index < coordinates.length; index = index + 1) {
-    const coord = coordinates[index];
-    const command = index === 0 ? "M" : "L";
-    const x_text = coord.x.toFixed(2);
-    const y_text = coord.y.toFixed(2);
-    segments.push(command + " " + x_text + " " + y_text);
-  }
-  const rtnval = segments.join(" ");
-  return rtnval;
-}
-function build_area_path(coordinates) {
-  if (Array.isArray(coordinates) === false || coordinates.length === 0) {
-    const rtnval2 = "";
-    return rtnval2;
-  }
-  const floor_y = CHART_HEIGHT - CHART_PADDING;
-  const first = coordinates[0];
-  const last = coordinates[coordinates.length - 1];
-  const line = build_line_path(coordinates);
-  const close = " L " + last.x.toFixed(2) + " " + floor_y.toFixed(2) + " L " + first.x.toFixed(2) + " " + floor_y.toFixed(2) + " Z";
-  const rtnval = line + close;
   return rtnval;
 }
 class PycTimeseriesExplorer extends HTMLElement {
@@ -359,33 +285,44 @@ class PycTimeseriesExplorer extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const svg = build_chart_svg(points);
-    region.appendChild(svg);
+    const chart = build_chart_element(points, this._state.metric);
+    region.appendChild(chart);
     return;
   }
 }
-function build_chart_svg(points) {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute(
-    "viewBox",
-    "0 0 " + String(CHART_WIDTH) + " " + String(CHART_HEIGHT)
-  );
-  svg.setAttribute("class", "pyc-metrics__chart");
-  svg.setAttribute("preserveAspectRatio", "none");
-  svg.setAttribute("data-role", "timeseries-chart");
-  const coordinates = project_points(points);
-  if (coordinates.length === 0) {
-    return svg;
+/*
+ * Build an <mj-chart> populated with the timeseries data.
+ * The area renderer draws a filled area with a stroked outline,
+ * collapsing what used to be the area + line pair into one path.
+ * External theming reaches the path via mj-chart::part(area).
+ */
+function build_chart_element(points, metric_name) {
+  const chart = document.createElement("mj-chart");
+  chart.classList.add("pyc-metrics__chart");
+  chart.setAttribute("data-role", "timeseries-chart");
+  chart.setAttribute("type", "area");
+  const sorted = points.slice().sort((left, right) => {
+    const left_time = new Date(left.observed_at).getTime();
+    const right_time = new Date(right.observed_at).getTime();
+    const rtnval = left_time - right_time;
+    return rtnval;
+  });
+  const series_points = [];
+  for (const point of sorted) {
+    series_points.push({ x: point.observed_at, y: point.value });
   }
-  const area = document.createElementNS(SVG_NS, "path");
-  area.setAttribute("class", "pyc-metrics__chart-area");
-  area.setAttribute("d", build_area_path(coordinates));
-  svg.appendChild(area);
-  const line = document.createElementNS(SVG_NS, "path");
-  line.setAttribute("class", "pyc-metrics__chart-line");
-  line.setAttribute("d", build_line_path(coordinates));
-  svg.appendChild(line);
-  return svg;
+  const series_name = metric_name !== null && metric_name.length > 0
+    ? metric_name
+    : "value";
+  chart.data = {
+    series: [
+      {
+        name: series_name,
+        points: series_points,
+      },
+    ],
+  };
+  return chart;
 }
 function extract_catalog(body) {
   let raw = [];
@@ -429,12 +366,9 @@ function extract_catalog(body) {
 export {
   PycTimeseriesExplorer,
   TIME_RANGE_PRESETS,
-  build_area_path,
   build_catalog_url,
-  build_chart_svg,
-  build_line_path,
+  build_chart_element,
   build_timeseries_url,
   extract_catalog,
-  project_points,
   resolve_range_preset
 };
