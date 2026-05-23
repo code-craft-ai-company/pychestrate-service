@@ -161,7 +161,7 @@ class PycTimeseriesExplorer extends HTMLElement {
     const metric_label = document.createElement("label");
     metric_label.classList.add("pyc-metrics__field");
     metric_label.textContent = "Metric";
-    const metric_select = document.createElement("select");
+    const metric_select = document.createElement("mj-select");
     metric_select.classList.add("pyc-metrics__select");
     metric_select.setAttribute("data-role", "metric-select");
     metric_select.addEventListener("change", () => {
@@ -173,12 +173,12 @@ class PycTimeseriesExplorer extends HTMLElement {
     const range_label = document.createElement("label");
     range_label.classList.add("pyc-metrics__field");
     range_label.textContent = "Range";
-    const range_select = document.createElement("select");
+    const range_select = document.createElement("mj-select");
     range_select.classList.add("pyc-metrics__select");
     range_select.setAttribute("data-role", "range-select");
     for (const preset of TIME_RANGE_PRESETS) {
-      const option = document.createElement("option");
-      option.value = preset.id;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", preset.id);
       option.textContent = preset.label;
       range_select.appendChild(option);
     }
@@ -253,21 +253,21 @@ class PycTimeseriesExplorer extends HTMLElement {
       return;
     }
     const select = this._root.querySelector('[data-role="metric-select"]');
-    if (select instanceof HTMLSelectElement === false) {
+    if (select instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
     select_el.replaceChildren();
     if (this._catalog.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", "");
       option.textContent = "No metrics registered";
       select_el.appendChild(option);
       return;
     }
     for (const entry of this._catalog) {
-      const option = document.createElement("option");
-      option.value = entry.name;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", entry.name);
       const suffix = entry.kind.length > 0 ? " (" + entry.kind + ")" : "";
       option.textContent = entry.name + suffix;
       select_el.appendChild(option);

@@ -183,7 +183,7 @@ class PycProvisioningList extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-infra__field");
     project_label.textContent = "Project";
-    const project_select = document.createElement("select");
+    const project_select = document.createElement("mj-select");
     project_select.classList.add("pyc-infra__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -208,16 +208,16 @@ class PycProvisioningList extends HTMLElement {
     const state_label = document.createElement("label");
     state_label.classList.add("pyc-infra__field");
     state_label.textContent = "State";
-    const state_select = document.createElement("select");
+    const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
-    const any_option = document.createElement("option");
-    any_option.value = "";
+    const any_option = document.createElement("mj-option");
+    any_option.setAttribute("value", "");
     any_option.textContent = "All states";
     state_select.appendChild(any_option);
     for (const run_state of PROVISIONING_STATES) {
-      const option = document.createElement("option");
-      option.value = run_state;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", run_state);
       option.textContent = run_state;
       state_select.appendChild(option);
     }
@@ -385,7 +385,7 @@ class PycProvisioningList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -395,8 +395,8 @@ class PycProvisioningList extends HTMLElement {
       input_el.hidden = true;
       select_el.replaceChildren();
       for (const project of this._projects) {
-        const option = document.createElement("option");
-        option.value = project.project_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
         option.textContent = project.display_name;
         select_el.appendChild(option);
       }
@@ -695,18 +695,18 @@ class PycProvisioningList extends HTMLElement {
     const environment_label = document.createElement("label");
     environment_label.classList.add("pyc-infra__field");
     environment_label.textContent = "Environment";
-    const environment_select = document.createElement("select");
+    const environment_select = document.createElement("mj-select");
     environment_select.classList.add("pyc-infra__select");
     environment_select.setAttribute("data-role", "trigger-environment");
     if (this._environments.length === 0) {
-      const none_option = document.createElement("option");
-      none_option.value = "";
+      const none_option = document.createElement("mj-option");
+      none_option.setAttribute("value", "");
       none_option.textContent = "No environment registered";
       environment_select.appendChild(none_option);
     } else {
       for (const environment of this._environments) {
-        const option = document.createElement("option");
-        option.value = environment.environment_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", environment.environment_id);
         option.textContent = environment.name + " \xB7 " + environment.kind_name;
         environment_select.appendChild(option);
       }
@@ -727,12 +727,12 @@ class PycProvisioningList extends HTMLElement {
     const action_label = document.createElement("label");
     action_label.classList.add("pyc-infra__field");
     action_label.textContent = "Action";
-    const action_select = document.createElement("select");
+    const action_select = document.createElement("mj-select");
     action_select.classList.add("pyc-infra__select");
     action_select.setAttribute("data-role", "trigger-action");
     for (const action of PROVISIONING_ACTIONS) {
-      const option = document.createElement("option");
-      option.value = action;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", action);
       option.textContent = action;
       action_select.appendChild(option);
     }

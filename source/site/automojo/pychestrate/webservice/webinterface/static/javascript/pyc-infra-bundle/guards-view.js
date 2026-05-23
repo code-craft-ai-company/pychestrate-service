@@ -204,7 +204,7 @@ class PycGuards extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-infra__field");
     project_label.textContent = "Project";
-    const project_select = document.createElement("select");
+    const project_select = document.createElement("mj-select");
     project_select.classList.add("pyc-infra__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -344,7 +344,7 @@ class PycGuards extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -354,8 +354,8 @@ class PycGuards extends HTMLElement {
       input_el.hidden = true;
       select_el.replaceChildren();
       for (const project of this._projects) {
-        const option = document.createElement("option");
-        option.value = project.project_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
         option.textContent = project.display_name;
         select_el.appendChild(option);
       }

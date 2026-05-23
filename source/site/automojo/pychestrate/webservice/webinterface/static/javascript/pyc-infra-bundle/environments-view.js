@@ -275,7 +275,7 @@ class PycEnvironments extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-infra__field");
     project_label.textContent = "Project";
-    const project_select = document.createElement("select");
+    const project_select = document.createElement("mj-select");
     project_select.classList.add("pyc-infra__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -300,16 +300,16 @@ class PycEnvironments extends HTMLElement {
     const state_label = document.createElement("label");
     state_label.classList.add("pyc-infra__field");
     state_label.textContent = "State";
-    const state_select = document.createElement("select");
+    const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-infra__select");
     state_select.setAttribute("data-role", "state-filter");
-    const any_option = document.createElement("option");
-    any_option.value = "";
+    const any_option = document.createElement("mj-option");
+    any_option.setAttribute("value", "");
     any_option.textContent = "All states";
     state_select.appendChild(any_option);
     for (const environment_state of ENVIRONMENT_STATES) {
-      const option = document.createElement("option");
-      option.value = environment_state;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", environment_state);
       option.textContent = environment_state;
       state_select.appendChild(option);
     }
@@ -477,7 +477,7 @@ class PycEnvironments extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -487,8 +487,8 @@ class PycEnvironments extends HTMLElement {
       input_el.hidden = true;
       select_el.replaceChildren();
       for (const project of this._projects) {
-        const option = document.createElement("option");
-        option.value = project.project_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
         option.textContent = project.display_name;
         select_el.appendChild(option);
       }

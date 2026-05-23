@@ -204,16 +204,16 @@ class PycClientsList extends HTMLElement {
     const status_label = document.createElement("label");
     status_label.classList.add("pyc-clients-list__filter");
     status_label.textContent = "Status";
-    const status_select = document.createElement("select");
+    const status_select = document.createElement("mj-select");
     status_select.classList.add("pyc-clients-list__select");
     status_select.setAttribute("data-role", "status-filter");
-    const any_status = document.createElement("option");
-    any_status.value = "";
+    const any_status = document.createElement("mj-option");
+    any_status.setAttribute("value", "");
     any_status.textContent = "All statuses";
     status_select.appendChild(any_status);
     for (const status of CLIENT_STATUSES) {
-      const option = document.createElement("option");
-      option.value = status;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", status);
       option.textContent = status;
       status_select.appendChild(option);
     }
@@ -227,16 +227,16 @@ class PycClientsList extends HTMLElement {
     const liveness_label = document.createElement("label");
     liveness_label.classList.add("pyc-clients-list__filter");
     liveness_label.textContent = "Liveness";
-    const liveness_select = document.createElement("select");
+    const liveness_select = document.createElement("mj-select");
     liveness_select.classList.add("pyc-clients-list__select");
     liveness_select.setAttribute("data-role", "liveness-filter");
-    const any_liveness = document.createElement("option");
-    any_liveness.value = "";
+    const any_liveness = document.createElement("mj-option");
+    any_liveness.setAttribute("value", "");
     any_liveness.textContent = "All liveness";
     liveness_select.appendChild(any_liveness);
     for (const liveness of LIVENESS_STATES) {
-      const option = document.createElement("option");
-      option.value = liveness;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", liveness);
       option.textContent = liveness;
       liveness_select.appendChild(option);
     }
