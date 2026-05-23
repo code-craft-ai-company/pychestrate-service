@@ -108,6 +108,25 @@ pyc-site-shell {
 }
 
 /*
+ * Suppress the flash of unstyled server content. The Flask
+ * response inlines the route's page fragment inside
+ * ``<pyc-site-shell>``; until the custom element's JS registers
+ * and rewrites the DOM, the browser renders the bare fragment.
+ * ``:not(:defined)`` keeps the wrapper laid out (so the viewport
+ * doesn't jump) but hides the unstyled content until the shell
+ * mounts and the upgrade callback removes the visibility lock.
+ */
+pyc-site-shell:not(:defined) {
+    visibility: hidden;
+}
+
+pyc-site-shell:not(:defined)::before {
+    content: "";
+    display: block;
+    min-height: calc(100vh - 10px);
+}
+
+/*
  * <mj-app-shell> sets ``height: 100%`` in its shadow CSS, which
  * only resolves against an ancestor with a determinate height.
  * The shell's parent (pyc-site-shell) declares min-height: 100vh
