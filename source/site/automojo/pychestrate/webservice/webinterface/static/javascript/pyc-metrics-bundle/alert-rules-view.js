@@ -226,7 +226,7 @@ class PycAlertRules extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-metrics__field");
     project_label.textContent = "Project";
-    const project_select = document.createElement("select");
+    const project_select = document.createElement("mj-select");
     project_select.classList.add("pyc-metrics__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -362,7 +362,7 @@ class PycAlertRules extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -372,8 +372,8 @@ class PycAlertRules extends HTMLElement {
       input_el.hidden = true;
       select_el.replaceChildren();
       for (const project of this._projects) {
-        const option = document.createElement("option");
-        option.value = project.project_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
         option.textContent = project.display_name;
         select_el.appendChild(option);
       }
@@ -585,18 +585,18 @@ class PycAlertRules extends HTMLElement {
     const metric_label = document.createElement("label");
     metric_label.classList.add("pyc-metrics__field");
     metric_label.textContent = "Metric";
-    const metric_select = document.createElement("select");
+    const metric_select = document.createElement("mj-select");
     metric_select.classList.add("pyc-metrics__select");
     metric_select.setAttribute("data-role", "create-metric");
     if (this._catalog.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", "");
       option.textContent = "No metrics in catalog";
       metric_select.appendChild(option);
     } else {
       for (const entry of this._catalog) {
-        const option = document.createElement("option");
-        option.value = entry.name;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", entry.name);
         option.textContent = entry.name;
         metric_select.appendChild(option);
       }
@@ -606,12 +606,12 @@ class PycAlertRules extends HTMLElement {
     const comparison_label_el = document.createElement("label");
     comparison_label_el.classList.add("pyc-metrics__field");
     comparison_label_el.textContent = "Comparison";
-    const comparison_select = document.createElement("select");
+    const comparison_select = document.createElement("mj-select");
     comparison_select.classList.add("pyc-metrics__select");
     comparison_select.setAttribute("data-role", "create-comparison");
     for (const option of COMPARISON_OPTIONS) {
-      const opt = document.createElement("option");
-      opt.value = option.value;
+      const opt = document.createElement("mj-option");
+      opt.setAttribute("value", option.value);
       opt.textContent = option.label;
       comparison_select.appendChild(opt);
     }
@@ -632,12 +632,12 @@ class PycAlertRules extends HTMLElement {
     const severity_label = document.createElement("label");
     severity_label.classList.add("pyc-metrics__field");
     severity_label.textContent = "Severity";
-    const severity_select = document.createElement("select");
+    const severity_select = document.createElement("mj-select");
     severity_select.classList.add("pyc-metrics__select");
     severity_select.setAttribute("data-role", "create-severity");
     for (const severity of SEVERITY_OPTIONS) {
-      const opt = document.createElement("option");
-      opt.value = severity;
+      const opt = document.createElement("mj-option");
+      opt.setAttribute("value", severity);
       opt.textContent = severity;
       severity_select.appendChild(opt);
     }

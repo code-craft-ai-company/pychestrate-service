@@ -146,16 +146,16 @@ class PycRunsList extends HTMLElement {
     const state_label = document.createElement("label");
     state_label.classList.add("pyc-runs-list__filter");
     state_label.textContent = "State";
-    const state_select = document.createElement("select");
+    const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-runs-list__select");
     state_select.setAttribute("data-role", "state-filter");
-    const any_option = document.createElement("option");
-    any_option.value = "";
+    const any_option = document.createElement("mj-option");
+    any_option.setAttribute("value", "");
     any_option.textContent = "All states";
     state_select.appendChild(any_option);
     for (const run_state of RUN_STATES) {
-      const option = document.createElement("option");
-      option.value = run_state;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", run_state);
       option.textContent = run_state;
       state_select.appendChild(option);
     }

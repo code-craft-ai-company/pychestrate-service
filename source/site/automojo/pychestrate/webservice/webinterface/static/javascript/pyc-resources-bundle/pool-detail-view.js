@@ -590,15 +590,16 @@ class PycPoolDetail extends HTMLElement {
     const mode_label = document.createElement("label");
     mode_label.classList.add("pyc-resources__filter");
     mode_label.textContent = "Mode";
-    const mode_select = document.createElement("select");
+    const mode_select = document.createElement("mj-select");
     mode_select.classList.add("pyc-resources__select");
     mode_select.setAttribute("data-role", "reserve-mode");
     for (const mode of ["exclusive", "shared"]) {
-      const option = document.createElement("option");
-      option.value = mode;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", mode);
       option.textContent = mode;
       mode_select.appendChild(option);
     }
+    mode_select.setAttribute("value", "exclusive");
     mode_label.appendChild(mode_select);
     form.appendChild(mode_label);
     const note_label = document.createElement("label");
