@@ -1,0 +1,75 @@
+{% extends "projects/base.html" %}
+
+{% block title %}{{ template.name }} - Release Templates - {{ project.name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="{{ url_for('projects.project_list') }}">Projects</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
+    <span>/</span>
+    <a href="{{ url_for('projects.release_template_list', project_id=project.id) }}">Release Templates</a>
+    <span>/</span>
+    <span>{{ template.name }}</span>
+</div>
+
+<div class="page-header">
+    <h2>{{ template.name }}</h2>
+    {% if template.description %}<p>{{ template.description }}</p>{% endif %}
+</div>
+
+<div style="display: flex; gap: 10px; margin-bottom: 20px;">
+    {% if can_manage %}
+    <a href="{{ url_for('projects.release_template_edit', project_id=project.id, template_id=template.id) }}" class="btn btn-secondary">
+        <span class="material-icons">edit</span> Edit
+    </a>
+    {% endif %}
+    {% if can_delete %}
+    <form method="post" action="{{ url_for('projects.release_template_delete', project_id=project.id, template_id=template.id) }}" style="margin: 0;"
+          onsubmit="return confirm('Delete this release template? This cannot be undone.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">
+            <span class="material-icons">delete</span> Delete
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">Defaults</div>
+    <table class="data-table">
+        <tbody>
+            <tr><th style="width: 220px;">Default Channel</th><td>{{ template.default_channel or '—' }}</td></tr>
+            <tr><th>Version Pattern</th><td><code>{{ template.version_pattern or '—' }}</code></td></tr>
+            <tr>
+                <th>Default Repository IDs</th>
+                <td>
+                    {% if template.default_repo_ids|length > 0 %}
+                        {{ template.default_repo_ids|join(', ') }}
+                    {% else %}—{% endif %}
+                </td>
+            </tr>
+            <tr><th>Created</th><td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') if template.created_at else '' }}</td></tr>
+            <tr><th>Updated</th><td>{{ template.updated_at.strftime('%Y-%m-%d %H:%M') if template.updated_at else '' }}</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
+    <div class="card-header">Default Pipeline</div>
+    {% if default_pipeline_json %}
+    <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow: auto;">{{ default_pipeline_json }}</pre>
+    {% else %}
+    <p style="color: #6c757d;">No default pipeline configured.</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">Default Schedule</div>
+    {% if default_schedule_json %}
+    <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow: auto;">{{ default_schedule_json }}</pre>
+    {% else %}
+    <p style="color: #6c757d;">No default schedule configured.</p>
+    {% endif %}
+</div>
+{% endblock %}

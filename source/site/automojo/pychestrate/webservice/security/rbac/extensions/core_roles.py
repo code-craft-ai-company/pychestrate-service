@@ -264,6 +264,15 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:release_channels.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # Project-scoped release templates feature.
+        PermissionGrant(
+            permission_key="system:release_templates.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:release_templates.write",
+            effect=PermissionEffect.ALLOW,
+        ),
         # 10-backup-dr PR p21d: backup / disaster-recovery REST
         # surface grants for the admin role.
         PermissionGrant(

@@ -1527,6 +1527,7 @@ class Project(PychestrateModelBase, SerializableModel):
     release_pipelines = relationship('ProjectReleasePipeline', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
     releases = relationship('ProjectRelease', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
     release_channels = relationship('ProjectReleaseChannel', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
+    release_templates = relationship('ProjectReleaseTemplate', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
     watches = relationship('ProjectWatch', back_populates='project', cascade='all, delete-orphan', lazy='selectin')
 
 
@@ -2710,3 +2711,46 @@ class ProjectWatchTriggerLog(PychestrateModelBase, SerializableModel):
                            doc="Error message if any action failed")
 
     watch = relationship('ProjectWatch', back_populates='trigger_logs', lazy='selectin')
+
+
+class ProjectReleaseTemplate(PychestrateModelBase, SerializableModel):
+    """
+        A data model for storing project-scoped release templates.
+
+        A release template captures the default values that should be
+        used when creating a new release within a project. Templates
+        are project-scoped — the same template name may exist across
+        different projects.
+    """
+
+    __tablename__ = 'project_release_templates'
+
+    __table_args__ = (
+        UniqueConstraint('proj_id', 'rtmpl_name', name='uq_project_release_template_name'),
+        Index('ix_project_release_templates_project', 'proj_id'),
+    )
+
+    id = Column('rtmpl_id', BigInteger, primary_key=True, autoincrement=True)
+    project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id', ondelete='CASCADE'),
+                        nullable=False, index=True,
+                        doc="Reference to the owning project")
+    name = Column('rtmpl_name', VARCHAR(128), nullable=False,
+                  doc="Template name; unique within a project")
+    description = Column('rtmpl_description', Text, nullable=True,
+                         doc="Human-readable description of the template")
+    default_channel = Column('rtmpl_default_channel', VARCHAR(128), nullable=True,
+                             doc="Default release channel applied when creating from this template")
+    version_pattern = Column('rtmpl_version_pattern', VARCHAR(128), nullable=True,
+                             doc="Default version pattern (regex or semver pattern)")
+    default_repo_ids = Column('rtmpl_default_repo_ids', JSON, default=list, nullable=False,
+                              doc="JSON-encoded list of default repository IDs")
+    default_pipeline = Column('rtmpl_default_pipeline', JSON, nullable=True,
+                              doc="JSON-encoded default pipeline blob")
+    default_schedule = Column('rtmpl_default_schedule', JSON, nullable=True,
+                              doc="JSON-encoded default schedule blob")
+    created_at = Column('rtmpl_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+                        doc="Timestamp when the template was created")
+    updated_at = Column('rtmpl_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+                        nullable=False, doc="Timestamp when the template was last updated")
+
+    project = relationship('Project', back_populates='release_templates', lazy='selectin')

@@ -295,6 +295,16 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:release_channels.write": (
         "Publish releases onto a channel via the REST surface"
     ),
+    # Project-scoped release-templates feature: read/write
+    # permissions guarding the REST and webworks UI surfaces for
+    # release-template CRUD.
+    "system:release_templates.read": (
+        "Read project-scoped release templates via the REST surface"
+    ),
+    "system:release_templates.write": (
+        "Create, update, and delete project-scoped release templates"
+        " via the REST surface"
+    ),
     # 10-backup-dr PR p21d: backup / disaster-recovery REST
     # surface. Backups snapshot the DB, object-store references,
     # and secrets metadata into a pluggable storage backend.

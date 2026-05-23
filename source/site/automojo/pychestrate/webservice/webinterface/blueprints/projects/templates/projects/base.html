@@ -380,6 +380,9 @@
             <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" class="{% if 'schedule' in request_endpoint %}active{% endif %}">
                 <span class="material-icons">schedule</span> Schedules
             </a></li>
+            <li><a href="{{ url_for('projects.release_template_list', project_id=project.id) }}" class="{% if 'release_template' in request_endpoint %}active{% endif %}">
+                <span class="material-icons">layers</span> Release Templates
+            </a></li>
             
             <li class="sidebar-section">Planning</li>
             <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="{% if 'calendar' in request_endpoint %}active{% endif %}">
