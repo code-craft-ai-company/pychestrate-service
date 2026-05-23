@@ -196,19 +196,25 @@ automated checks:
 Testing Your Bundle Inside the Shell
 ====================================
 
-Bundle smoke tests live in
-``frontend/tests/<bundle>-*.test.mjs``. The conventional pattern:
+Bundle tests are Playwright-driven and run against a real
+deployed instance -- there is no Node-based unit-test harness.
+The browser tests live in
+``source/testroots/automojo/tests/singlehost/pychestrate/``
+``webservice/phase11/test_p23a_mj_components_browser_m1.py``
+(and any sibling ``test_p*_browser_*.py`` files for view-
+specific coverage). The conventional pattern:
 
-1. Stub ``customElements`` / ``HTMLElement`` / ``window`` so the
-   shell bundle imports under Node.
-2. Import the compiled shell bundle from ``static/javascript/dist/``.
-3. Drive ``SidebarRegistry`` / ``PaletteRegistry`` directly with
-   your bundle's contributions and assert ``visible()`` /
-   ``visibleProviders()`` against representative permission sets.
+1. Sign in via the shared ``_sign_in`` helper.
+2. Navigate to your bundle's route.
+3. Assert that the view's custom elements upgraded and that
+   the key user-facing affordances (rows, links, form fields,
+   pagination, ...) are present.
 
-For an end-to-end Playwright smoke test, see
-``workspaces/phase11`` and the ``testbase`` agent layout in
-``AGENTS.md``.
+Pure-helper assertions (URL builders, paging math, formatters)
+that the retired Node harness covered now ride on integration
+coverage -- if a helper breaks, its consumer view's browser
+test surfaces the regression. See ``AGENTS.md`` for the
+broader testbase + Playwright pattern.
 
 Migration Guide: Vue Templates to Custom Elements Inside the Shell
 ==================================================================
