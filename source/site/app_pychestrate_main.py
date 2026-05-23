@@ -517,6 +517,21 @@ def register_service_extensions() -> None:
         url_prefix="/static",
         static_root=SITE_DIRECTORIES.DIR_STATIC,
     )
+    # automojo-webworks ships the mj-* component library + chart
+    # renderers + design tokens as static assets under its site-
+    # packages ``static/`` directory. Mount that directory at
+    # ``/mj`` so the shell document can pull in
+    # ``/mj/styles/tokens.css`` and ``/mj/javascript/index.js``
+    # to register every <mj-*> custom element.
+    import automojo.webworks as _ww_pkg
+    webworks_static_dir = os.path.join(
+        os.path.dirname(_ww_pkg.__file__), "static"
+    )
+    register_static_routes(
+        app=app,
+        url_prefix="/mj",
+        static_root=webworks_static_dir,
+    )
     install_web_ui_templating()
     # Setup wizard routes register BEFORE the rest of the consumer
     # UI so the gate-redirect target ``/setup/unlock`` is bound on
