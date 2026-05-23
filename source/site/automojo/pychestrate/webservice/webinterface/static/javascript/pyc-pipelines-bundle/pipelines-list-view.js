@@ -599,55 +599,54 @@ class PycPipelinesList extends HTMLElement {
     return;
   }
   /**
-   * Build the pipelines ``<table>`` from the current
+   * Build the pipelines ``<mj-table>`` from the current
    * ``_pipelines`` list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-pipelines__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = ["Pipeline", "Name", "Digest", "Stages", "Cached"];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const pipeline of this._pipelines) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-pipelines__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-pipelines__pipeline-link");
-      link.setAttribute("href", "/pipelines/" + pipeline.pipeline_id);
-      link.textContent = short_id(pipeline.pipeline_id);
-      link.title = pipeline.pipeline_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const name_cell = document.createElement("td");
-      name_cell.textContent = pipeline.name;
-      row.appendChild(name_cell);
-      const digest_cell = document.createElement("td");
-      const digest = document.createElement("span");
-      digest.classList.add("pyc-pipelines__digest");
-      digest.textContent = short_id(pipeline.pipeline_id);
-      digest.title = pipeline.pipeline_id;
-      digest_cell.appendChild(digest);
-      row.appendChild(digest_cell);
-      const stages_cell = document.createElement("td");
-      const stage_count = Array.isArray(pipeline.stages) ? pipeline.stages.length : 0;
-      stages_cell.textContent = String(stage_count);
-      row.appendChild(stages_cell);
-      const cached_cell = document.createElement("td");
-      cached_cell.textContent = format_timestamp(pipeline.cached_at);
-      row.appendChild(cached_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rowClass = "pyc-pipelines__row";
+    table.columns = [
+      {
+        key: "pipeline_id",
+        label: "Pipeline",
+        render: (pipeline) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-pipelines__pipeline-link");
+          link.setAttribute("href", "/pipelines/" + pipeline.pipeline_id);
+          link.textContent = short_id(pipeline.pipeline_id);
+          link.title = pipeline.pipeline_id;
+          return link;
+        }
+      },
+      { key: "name", label: "Name" },
+      {
+        key: "digest",
+        label: "Digest",
+        render: (pipeline) => {
+          const digest = document.createElement("span");
+          digest.classList.add("pyc-pipelines__digest");
+          digest.textContent = short_id(pipeline.pipeline_id);
+          digest.title = pipeline.pipeline_id;
+          return digest;
+        }
+      },
+      {
+        key: "stages",
+        label: "Stages",
+        render: (pipeline) => {
+          const stage_count = Array.isArray(pipeline.stages) ? pipeline.stages.length : 0;
+          const rtnval = String(stage_count);
+          return rtnval;
+        }
+      },
+      {
+        key: "cached_at",
+        label: "Cached",
+        render: (pipeline) => format_timestamp(pipeline.cached_at)
+      }
+    ];
+    table.rows = this._pipelines;
     return table;
   }
   /**

@@ -16,6 +16,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -34,18 +35,9 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/pipelines" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/pipelines",
+})
 globalThis.HTMLFormElement = dom.window.HTMLFormElement
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
@@ -278,7 +270,8 @@ test("list view fetches a pipelines page after a project is chosen", async () =>
     assert.equal(state.errored, false)
     const list_call = calls.find((c) => c.url.includes("/pipelines?"))
     assert.ok(list_call !== undefined)
-    const rows = view.querySelectorAll(".pyc-pipelines__row")
+    const table = view.querySelector("mj-table.pyc-pipelines__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-pipelines__row")
     assert.equal(rows.length, 1)
     view.remove()
 })
