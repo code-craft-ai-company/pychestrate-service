@@ -14,6 +14,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -32,16 +33,11 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-// jsdom supplies customElements / HTMLElement / document so the
-// runs bundle imports cleanly and the Custom Element can mount.
-const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
+// jsdom + mj-* registration so the mj-table inside the runs list
+// actually instantiates and renders rows into its shadow DOM.
+const { dom } = await setup_jsdom_with_mj({
     url: "https://example.test/runs",
 })
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
 const {
@@ -90,10 +86,11 @@ test("PycRunsList fetches the first page on connect and renders rows", async () 
     assert.equal(calls[0].url.startsWith("/api/v1/runs?"), true)
     assert.equal(calls[0].options.credentials, "same-origin")
 
-    const rows = element.querySelectorAll(".pyc-runs-list__row")
+    const table = element.querySelector("mj-table.pyc-runs-list__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-runs-list__row")
     assert.equal(rows.length, 2)
 
-    const first_link = element.querySelector(".pyc-runs-list__run-link")
+    const first_link = table.shadowRoot.querySelector(".pyc-runs-list__run-link")
     assert.equal(
         first_link.getAttribute("href"),
         "/runs/11111111-2222-3333-4444-555555555555",
