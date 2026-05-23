@@ -17,6 +17,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -35,15 +36,9 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM("<!doctype html><html><head></head><body></body></html>", {
+const { dom } = await setup_jsdom_with_mj({
     url: "https://example.test/secrets",
 })
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
 globalThis.CSS = dom.window.CSS
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
@@ -133,7 +128,8 @@ test("PycSecrets fetches ORG metadata on connect and renders rows", async () => 
     assert.equal(calls[0].url.includes("scope_kind=ORG"), true)
     assert.equal(calls[0].options.credentials, "same-origin")
 
-    const rows = element.querySelectorAll(".pyc-secrets__row")
+    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-secrets__row")
     assert.equal(rows.length, 2)
     element.remove()
 })
@@ -151,7 +147,8 @@ test("the metadata list never requests secret values", async () => {
         assert.equal(call.url.includes("/secrets/value/"), false)
     }
     // The masked placeholder is rendered, not a value.
-    const masked = element.querySelector('[data-role="masked-value"]')
+    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const masked = table.shadowRoot.querySelector('[data-role="masked-value"]')
     assert.notEqual(masked, null)
     element.remove()
 })
@@ -225,21 +222,22 @@ test("reveal fetches the value, collapse clears it", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const reveal = element.querySelector('[data-role="reveal-action"]')
+    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    let revealed = element.querySelector('[data-role="revealed-value"]')
+    let revealed = table.shadowRoot.querySelector('[data-role="revealed-value"]')
     assert.notEqual(revealed, null)
     assert.equal(revealed.textContent, "plaintext-value")
     assert.equal(element.revealedCount, 1)
 
     // Collapse -- the value is dropped from transient state.
-    const reveal2 = element.querySelector('[data-role="reveal-action"]')
+    const reveal2 = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal2.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    revealed = element.querySelector('[data-role="revealed-value"]')
+    revealed = table.shadowRoot.querySelector('[data-role="revealed-value"]')
     assert.equal(revealed, null)
     assert.equal(element.revealedCount, 0)
     element.remove()
@@ -262,7 +260,8 @@ test("navigation away (disconnect) clears every revealed value", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const reveal = element.querySelector('[data-role="reveal-action"]')
+    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
     assert.equal(element.revealedCount, 1)
@@ -281,11 +280,12 @@ test("a 403 on reveal renders the no-access message, not a crash", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const reveal = element.querySelector('[data-role="reveal-action"]')
+    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
 
-    const error = element.querySelector('[data-role="reveal-error"]')
+    const error = table.shadowRoot.querySelector('[data-role="reveal-error"]')
     assert.notEqual(error, null)
     assert.equal(error.textContent.includes("don't have access"), true)
     assert.equal(element.revealedCount, 0)

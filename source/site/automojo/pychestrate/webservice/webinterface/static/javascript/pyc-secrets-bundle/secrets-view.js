@@ -73,6 +73,7 @@ class PycSecrets extends HTMLElement {
   _secrets;
   _root;
   _table_region;
+  _table;
   /**
    * Per-secret transient reveal state, keyed by secret_ref. The
    * plaintext value lives ONLY here -- never persisted, never
@@ -94,6 +95,7 @@ class PycSecrets extends HTMLElement {
     this._secrets = [];
     this._root = null;
     this._table_region = null;
+    this._table = null;
     this._revealed = /* @__PURE__ */ new Map();
     this._reveal_errors = /* @__PURE__ */ new Map();
   }
@@ -447,6 +449,7 @@ class PycSecrets extends HTMLElement {
     }
     const region = this._table_region;
     if (this._state.loading === true) {
+      this._table = null;
       const loading = document.createElement("p");
       loading.classList.add("pyc-secrets__status");
       loading.setAttribute("data-role", "loading-state");
@@ -455,6 +458,7 @@ class PycSecrets extends HTMLElement {
       return;
     }
     if (this._state.errored === true) {
+      this._table = null;
       const error = document.createElement("p");
       error.classList.add("pyc-secrets__status", "pyc-secrets__status--error");
       if (forbidden === true) {
@@ -468,6 +472,7 @@ class PycSecrets extends HTMLElement {
       return;
     }
     if (this._secrets.length === 0) {
+      this._table = null;
       const empty = document.createElement("p");
       empty.classList.add("pyc-secrets__status");
       empty.setAttribute("data-role", "empty-state");
@@ -480,114 +485,120 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Build the secrets metadata ``<table>``. The table renders
+   * Build the secrets metadata ``<mj-table>``. The table renders
    * METADATA only -- name, scope, timestamps -- and NEVER the
-   * value column.
+   * value column on initial load. The Value column re-renders from
+   * the transient ``_revealed`` / ``_reveal_errors`` maps when a
+   * row's reveal state changes (see ``_refresh_row``).
    */
   _build_table() {
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-secrets__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = ["Name", "Scope", "Created", "Updated", "Value", "Actions"];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const secret of this._secrets) {
-      tbody.appendChild(this._build_row(secret));
-    }
-    table.appendChild(tbody);
+    table.rowClass = "pyc-secrets__row";
+    table.rowAttrs = (secret) => ({ "data-secret-ref": secret.secret_ref });
+    table.columns = [
+      {
+        key: "secret_ref",
+        label: "Name",
+        render: (secret) => {
+          const name_code = document.createElement("code");
+          name_code.classList.add("pyc-secrets__ref");
+          name_code.textContent = secret.secret_ref;
+          return name_code;
+        }
+      },
+      {
+        key: "scope",
+        label: "Scope",
+        render: (secret) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-secrets__badge");
+          badge.setAttribute("data-scope-kind", secret.scope_kind);
+          let scope_text = secret.scope_kind;
+          if (secret.scope_ref !== null && secret.scope_ref !== void 0 && secret.scope_ref.length > 0) {
+            scope_text = secret.scope_kind + " \xB7 " + secret.scope_ref;
+          }
+          badge.textContent = scope_text;
+          return badge;
+        }
+      },
+      {
+        key: "created_at",
+        label: "Created",
+        render: (secret) => format_timestamp(secret.created_at)
+      },
+      {
+        key: "updated_at",
+        label: "Updated",
+        render: (secret) => format_timestamp(secret.updated_at)
+      },
+      {
+        key: "value",
+        label: "Value",
+        cellClass: "pyc-secrets__value-cell",
+        cellAttrs: () => ({ "data-role": "value-cell" }),
+        render: (secret) => self._build_value_node(secret)
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        cellClass: "pyc-secrets__actions",
+        render: (secret) => {
+          const fragment = document.createDocumentFragment();
+          const reveal_button = document.createElement("mj-button");
+          reveal_button.classList.add("pyc-secrets__button");
+          reveal_button.setAttribute("type", "button");
+          reveal_button.setAttribute("data-role", "reveal-action");
+          const is_revealed = self._revealed.has(secret.secret_ref);
+          reveal_button.textContent = is_revealed === true ? "Hide value" : "Reveal value";
+          reveal_button.addEventListener("click", () => {
+            void self._toggle_reveal(secret);
+          });
+          fragment.appendChild(reveal_button);
+          const rotate_button = document.createElement("mj-button");
+          rotate_button.classList.add("pyc-secrets__button");
+          rotate_button.setAttribute("type", "button");
+          rotate_button.setAttribute("data-role", "rotate-action");
+          rotate_button.textContent = "Rotate";
+          rotate_button.addEventListener("click", () => {
+            void self._rotate_secret(secret);
+          });
+          fragment.appendChild(rotate_button);
+          const delete_button = document.createElement("mj-button");
+          delete_button.classList.add("pyc-secrets__button", "pyc-secrets__button--danger");
+          delete_button.setAttribute("type", "button");
+          delete_button.setAttribute("data-role", "delete-action");
+          delete_button.textContent = "Delete";
+          delete_button.addEventListener("click", () => {
+            void self._delete_secret(secret);
+          });
+          fragment.appendChild(delete_button);
+          return fragment;
+        }
+      }
+    ];
+    table.rows = this._secrets;
+    this._table = table;
     return table;
   }
   /**
-   * Build one table row for a secret's metadata plus its
-   * reveal / rotate / delete controls.
+   * Build the per-secret value-cell node -- the masked placeholder
+   * by default, the transient plaintext when revealed, or the
+   * reveal error when the value read was denied.
+   *
+   * @param secret The secret whose value cell is being built.
+   *
+   * @returns The value-cell content node.
    */
-  _build_row(secret) {
-    const row = document.createElement("tr");
-    row.classList.add("pyc-secrets__row");
-    row.setAttribute("data-secret-ref", secret.secret_ref);
-    const name_cell = document.createElement("td");
-    const name_code = document.createElement("code");
-    name_code.classList.add("pyc-secrets__ref");
-    name_code.textContent = secret.secret_ref;
-    name_cell.appendChild(name_code);
-    row.appendChild(name_cell);
-    const scope_cell = document.createElement("td");
-    const badge = document.createElement("mj-chip");
-    badge.classList.add("pyc-secrets__badge");
-    badge.setAttribute("data-scope-kind", secret.scope_kind);
-    let scope_text = secret.scope_kind;
-    if (secret.scope_ref !== null && secret.scope_ref !== void 0 && secret.scope_ref.length > 0) {
-      scope_text = secret.scope_kind + " \xB7 " + secret.scope_ref;
-    }
-    badge.textContent = scope_text;
-    scope_cell.appendChild(badge);
-    row.appendChild(scope_cell);
-    const created_cell = document.createElement("td");
-    created_cell.textContent = format_timestamp(secret.created_at);
-    row.appendChild(created_cell);
-    const updated_cell = document.createElement("td");
-    updated_cell.textContent = format_timestamp(secret.updated_at);
-    row.appendChild(updated_cell);
-    const value_cell = document.createElement("td");
-    value_cell.classList.add("pyc-secrets__value-cell");
-    value_cell.setAttribute("data-role", "value-cell");
-    this._render_value_cell(value_cell, secret);
-    row.appendChild(value_cell);
-    const actions_cell = document.createElement("td");
-    actions_cell.classList.add("pyc-secrets__actions");
-    const reveal_button = document.createElement("mj-button");
-    reveal_button.classList.add("pyc-secrets__button");
-    reveal_button.setAttribute("type", "button");
-    reveal_button.setAttribute("data-role", "reveal-action");
-    const is_revealed = this._revealed.has(secret.secret_ref);
-    reveal_button.textContent = is_revealed === true ? "Hide value" : "Reveal value";
-    reveal_button.addEventListener("click", () => {
-      void this._toggle_reveal(secret);
-    });
-    actions_cell.appendChild(reveal_button);
-    const rotate_button = document.createElement("mj-button");
-    rotate_button.classList.add("pyc-secrets__button");
-    rotate_button.setAttribute("type", "button");
-    rotate_button.setAttribute("data-role", "rotate-action");
-    rotate_button.textContent = "Rotate";
-    rotate_button.addEventListener("click", () => {
-      void this._rotate_secret(secret);
-    });
-    actions_cell.appendChild(rotate_button);
-    const delete_button = document.createElement("mj-button");
-    delete_button.classList.add("pyc-secrets__button", "pyc-secrets__button--danger");
-    delete_button.setAttribute("type", "button");
-    delete_button.setAttribute("data-role", "delete-action");
-    delete_button.textContent = "Delete";
-    delete_button.addEventListener("click", () => {
-      void this._delete_secret(secret);
-    });
-    actions_cell.appendChild(delete_button);
-    row.appendChild(actions_cell);
-    return row;
-  }
-  /**
-   * Render the value cell -- masked placeholder by default, the
-   * transient plaintext when revealed, or the reveal error when
-   * the value read was denied.
-   */
-  _render_value_cell(cell, secret) {
+  _build_value_node(secret) {
     const error = this._reveal_errors.get(secret.secret_ref);
     if (error !== void 0) {
       const message = document.createElement("span");
       message.classList.add("pyc-secrets__value-error");
       message.setAttribute("data-role", "reveal-error");
       message.textContent = error;
-      cell.replaceChildren(message);
-      return;
+      return message;
     }
     const value = this._revealed.get(secret.secret_ref);
     if (value !== void 0) {
@@ -595,15 +606,13 @@ class PycSecrets extends HTMLElement {
       revealed.classList.add("pyc-secrets__value-revealed");
       revealed.setAttribute("data-role", "revealed-value");
       revealed.textContent = value;
-      cell.replaceChildren(revealed);
-      return;
+      return revealed;
     }
     const masked = document.createElement("span");
     masked.classList.add("pyc-secrets__value-masked");
     masked.setAttribute("data-role", "masked-value");
     masked.textContent = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-    cell.replaceChildren(masked);
-    return;
+    return masked;
   }
   /**
    * Toggle a secret's value reveal. On reveal, fetch the value
@@ -752,40 +761,19 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Re-render a single secret's row in place -- used after a
-   * reveal toggle so the rest of the table is untouched.
+   * Trigger a re-render of the table after a reveal toggle so the
+   * row's Value + Actions cells pick up the new ``_revealed`` /
+   * ``_reveal_errors`` state. The render callbacks read from those
+   * maps so a single ``rows = …`` re-assignment is enough.
    *
-   * @param secret_ref The secret_ref of the row to refresh.
+   * @param secret_ref The secret_ref of the row that changed
+   *                    (unused -- the whole table re-renders).
    */
   _refresh_row(secret_ref) {
-    if (this._table_region === null) {
+    if (this._table === null) {
       return;
     }
-    const candidates = this._table_region.querySelectorAll(
-      "[data-secret-ref]"
-    );
-    let existing = null;
-    for (const candidate of Array.from(candidates)) {
-      if (candidate.getAttribute("data-secret-ref") === secret_ref) {
-        existing = candidate;
-        break;
-      }
-    }
-    if (existing === null) {
-      return;
-    }
-    let secret = null;
-    for (const candidate of this._secrets) {
-      if (candidate.secret_ref === secret_ref) {
-        secret = candidate;
-        break;
-      }
-    }
-    if (secret === null) {
-      return;
-    }
-    const replacement = this._build_row(secret);
-    existing.replaceWith(replacement);
+    this._table.rows = this._secrets;
     return;
   }
 }
