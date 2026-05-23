@@ -444,82 +444,70 @@ class PycSlos extends HTMLElement {
    * Build the SLOs ``<table>`` from the current list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-metrics__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "SLO",
-      "Kind",
-      "Target",
-      "Window",
-      "Burn-rate",
-      "Actions"
+    table.setAttribute("data-role", "slos-table");
+    table.rowClass = "pyc-metrics__row";
+    table.rowAttrs = (slo) => ({ "data-slo-id": slo.slo_id });
+    table.columns = [
+      {
+        key: "name",
+        label: "SLO",
+        render: (slo) => {
+          const name = document.createElement("span");
+          name.textContent = slo.name;
+          name.title = slo.slo_id;
+          return name;
+        }
+      },
+      {
+        key: "kind",
+        label: "Kind",
+        render: (slo) => slo.kind
+      },
+      {
+        key: "target",
+        label: "Target",
+        render: (slo) => format_ratio(slo.target)
+      },
+      {
+        key: "window",
+        label: "Window",
+        render: (slo) => format_window(slo.window_seconds)
+      },
+      {
+        key: "burn",
+        label: "Burn-rate",
+        render: (slo) => {
+          const burn_badge = document.createElement("mj-chip");
+          burn_badge.classList.add("pyc-metrics__badge");
+          burn_badge.setAttribute("data-role", "burn-indicator");
+          const status = self._status.get(slo.slo_id) ?? null;
+          burn_badge.setAttribute("data-tone", slo_status_tone(status));
+          burn_badge.textContent = slo_status_label(status);
+          return burn_badge;
+        }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (slo) => {
+          const status_button = document.createElement("mj-button");
+          status_button.classList.add("pyc-metrics__button");
+          status_button.setAttribute("type", "button");
+          status_button.setAttribute("data-role", "load-status");
+          status_button.textContent = "Burn-rate Status";
+          status_button.addEventListener("click", () => {
+            status_button.toggleAttribute("disabled", true);
+            void self._on_load_status(slo, status_button);
+          });
+          return status_button;
+        }
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const slo of this._slos) {
-      tbody.appendChild(this._build_row(slo));
-    }
-    table.appendChild(tbody);
+    table.rows = this._slos;
     return table;
-  }
-  /**
-   * Build one SLO table row, including the burn-rate indicator
-   * cell and the per-row "Burn-rate Status" action.
-   *
-   * @param slo The SLO to render.
-   *
-   * @returns A populated ``<tr>``.
-   */
-  _build_row(slo) {
-    const row = document.createElement("tr");
-    row.classList.add("pyc-metrics__row");
-    row.setAttribute("data-slo-id", slo.slo_id);
-    const name_cell = document.createElement("td");
-    const name = document.createElement("span");
-    name.textContent = slo.name;
-    name.title = slo.slo_id;
-    name_cell.appendChild(name);
-    row.appendChild(name_cell);
-    const kind_cell = document.createElement("td");
-    kind_cell.textContent = slo.kind;
-    row.appendChild(kind_cell);
-    const target_cell = document.createElement("td");
-    target_cell.textContent = format_ratio(slo.target);
-    row.appendChild(target_cell);
-    const window_cell = document.createElement("td");
-    window_cell.textContent = format_window(slo.window_seconds);
-    row.appendChild(window_cell);
-    const burn_cell = document.createElement("td");
-    const burn_badge = document.createElement("mj-chip");
-    burn_badge.classList.add("pyc-metrics__badge");
-    burn_badge.setAttribute("data-role", "burn-indicator");
-    const status = this._status.get(slo.slo_id) ?? null;
-    burn_badge.setAttribute("data-tone", slo_status_tone(status));
-    burn_badge.textContent = slo_status_label(status);
-    burn_cell.appendChild(burn_badge);
-    row.appendChild(burn_cell);
-    const actions_cell = document.createElement("td");
-    const status_button = document.createElement("mj-button");
-    status_button.classList.add("pyc-metrics__button");
-    status_button.setAttribute("type", "button");
-    status_button.setAttribute("data-role", "load-status");
-    status_button.textContent = "Burn-rate Status";
-    status_button.addEventListener("click", () => {
-      status_button.toggleAttribute("disabled", true);
-      void this._on_load_status(slo, status_button);
-    });
-    actions_cell.appendChild(status_button);
-    row.appendChild(actions_cell);
-    return row;
   }
   /**
    * Run the "Burn-rate Status" action for one SLO -- read the
@@ -624,8 +612,15 @@ class PycSlos extends HTMLElement {
     if (this._table_region === null) {
       return;
     }
+    const table = this._table_region.querySelector(
+      '[data-role="slos-table"]'
+    );
+    if (table === null) {
+      return;
+    }
+    const root = table.shadowRoot !== null && table.shadowRoot !== void 0 ? table.shadowRoot : table;
     const selector = 'tr[data-slo-id="' + slo_id + '"] [data-role="burn-indicator"]';
-    const badge = this._table_region.querySelector(selector);
+    const badge = root.querySelector(selector);
     if (badge instanceof HTMLElement === false) {
       return;
     }

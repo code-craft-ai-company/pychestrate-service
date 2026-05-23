@@ -378,51 +378,50 @@ class PycTestMetrics extends HTMLElement {
     return bars;
   }
   _build_runs_table(runs) {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "runs-table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const headers = [
-      "Run",
-      "Parser",
-      "Total",
-      "Passed",
-      "Failed",
-      "Duration"
-    ];
-    for (const text of headers) {
-      const th = document.createElement("th");
-      th.textContent = text;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const run of runs) {
-      const row = document.createElement("tr");
-      const cells = [
-        short_metric_id(run.run_id),
-        run.parser_tag !== null && run.parser_tag !== void 0 ? run.parser_tag : "\u2014",
-        String(
-          typeof run.tests_total === "number" ? run.tests_total : 0
-        ),
-        String(
-          typeof run.tests_passed === "number" ? run.tests_passed : 0
-        ),
-        String(
-          typeof run.tests_failed === "number" ? run.tests_failed : 0
-        ),
-        format_duration(run.duration_seconds)
-      ];
-      for (const text of cells) {
-        const td = document.createElement("td");
-        td.textContent = text;
-        row.appendChild(td);
+    table.rowClass = "pyc-metrics__row";
+    table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
+    table.columns = [
+      {
+        key: "run_id",
+        label: "Run",
+        render: (run) => short_metric_id(run.run_id)
+      },
+      {
+        key: "parser_tag",
+        label: "Parser",
+        render: (run) =>
+          run.parser_tag !== null && run.parser_tag !== void 0
+            ? run.parser_tag
+            : "\u2014"
+      },
+      {
+        key: "tests_total",
+        label: "Total",
+        render: (run) =>
+          String(typeof run.tests_total === "number" ? run.tests_total : 0)
+      },
+      {
+        key: "tests_passed",
+        label: "Passed",
+        render: (run) =>
+          String(typeof run.tests_passed === "number" ? run.tests_passed : 0)
+      },
+      {
+        key: "tests_failed",
+        label: "Failed",
+        render: (run) =>
+          String(typeof run.tests_failed === "number" ? run.tests_failed : 0)
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        render: (run) => format_duration(run.duration_seconds)
       }
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    ];
+    table.rows = runs;
     return table;
   }
 }
