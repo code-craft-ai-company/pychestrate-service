@@ -235,7 +235,7 @@ class PycAlertRules extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-metrics__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -362,7 +362,7 @@ class PycAlertRules extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -694,7 +694,7 @@ class PycAlertRules extends HTMLElement {
     const label = document.createElement("label");
     label.classList.add("pyc-metrics__field");
     label.textContent = label_text;
-    const input = document.createElement("input");
+    const input = document.createElement("mj-text-field");
     input.classList.add("pyc-metrics__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", role);

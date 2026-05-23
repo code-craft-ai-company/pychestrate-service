@@ -149,7 +149,7 @@ class PycTestCatalog extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-catalog__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -356,7 +356,7 @@ class PycTestCatalog extends HTMLElement {
         select.hidden = true;
       }
     }
-    if (input instanceof HTMLInputElement) {
+    if (input instanceof HTMLElement) {
       input.hidden = this._projectsAvailable === true;
     }
     return;
@@ -592,7 +592,7 @@ class PycTestCatalog extends HTMLElement {
     const tag_label = document.createElement("label");
     tag_label.classList.add("pyc-catalog__field");
     tag_label.textContent = "Importer tag";
-    const tag_input = document.createElement("input");
+    const tag_input = document.createElement("mj-text-field");
     tag_input.classList.add("pyc-catalog__input");
     tag_input.setAttribute("type", "text");
     tag_input.setAttribute("data-role", "import-tag");
@@ -603,7 +603,7 @@ class PycTestCatalog extends HTMLElement {
     const root_label = document.createElement("label");
     root_label.classList.add("pyc-catalog__field");
     root_label.textContent = "Testbase project root";
-    const root_input = document.createElement("input");
+    const root_input = document.createElement("mj-text-field");
     root_input.classList.add("pyc-catalog__input");
     root_input.setAttribute("type", "text");
     root_input.setAttribute("data-role", "import-root");
@@ -613,7 +613,7 @@ class PycTestCatalog extends HTMLElement {
     const ref_label = document.createElement("label");
     ref_label.classList.add("pyc-catalog__field");
     ref_label.textContent = "Reference (optional)";
-    const ref_input = document.createElement("input");
+    const ref_input = document.createElement("mj-text-field");
     ref_input.classList.add("pyc-catalog__input");
     ref_input.setAttribute("type", "text");
     ref_input.setAttribute("data-role", "import-ref");

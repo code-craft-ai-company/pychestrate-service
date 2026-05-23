@@ -171,7 +171,7 @@ class PycPipelinesList extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-pipelines__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -258,7 +258,7 @@ class PycPipelinesList extends HTMLElement {
     const commit_label = document.createElement("label");
     commit_label.classList.add("pyc-pipelines__field");
     commit_label.textContent = "Commit SHA";
-    const commit_input = document.createElement("input");
+    const commit_input = document.createElement("mj-text-field");
     commit_input.classList.add("pyc-pipelines__input");
     commit_input.setAttribute("type", "text");
     commit_input.setAttribute("placeholder", "0000000000000000000000000000000000000000");
@@ -269,7 +269,7 @@ class PycPipelinesList extends HTMLElement {
     const filename_label = document.createElement("label");
     filename_label.classList.add("pyc-pipelines__field");
     filename_label.textContent = "Filename";
-    const filename_input = document.createElement("input");
+    const filename_input = document.createElement("mj-text-field");
     filename_input.classList.add("pyc-pipelines__input");
     filename_input.setAttribute("type", "text");
     filename_input.setAttribute("placeholder", "pipeline.yaml");
@@ -281,7 +281,7 @@ class PycPipelinesList extends HTMLElement {
     const document_label = document.createElement("label");
     document_label.classList.add("pyc-pipelines__field", "pyc-pipelines__field--wide");
     document_label.textContent = "Pipeline document (YAML / JSON)";
-    const document_area = document.createElement("textarea");
+    const document_area = document.createElement("mj-textarea");
     document_area.classList.add("pyc-pipelines__textarea");
     document_area.setAttribute("data-role", "upsert-document");
     document_area.setAttribute(
@@ -339,7 +339,7 @@ class PycPipelinesList extends HTMLElement {
     const matrix_label = document.createElement("label");
     matrix_label.classList.add("pyc-pipelines__field", "pyc-pipelines__field--wide");
     matrix_label.textContent = "Matrix spec (JSON)";
-    const matrix_area = document.createElement("textarea");
+    const matrix_area = document.createElement("mj-textarea");
     matrix_area.classList.add("pyc-pipelines__textarea");
     matrix_area.setAttribute("data-role", "matrix-spec");
     matrix_area.setAttribute(
@@ -352,7 +352,7 @@ class PycPipelinesList extends HTMLElement {
     const strategy_label = document.createElement("label");
     strategy_label.classList.add("pyc-pipelines__field");
     strategy_label.textContent = "Strategy";
-    const strategy_input = document.createElement("input");
+    const strategy_input = document.createElement("mj-text-field");
     strategy_input.classList.add("pyc-pipelines__input");
     strategy_input.setAttribute("type", "text");
     strategy_input.setAttribute("placeholder", "cartesian");
@@ -462,7 +462,7 @@ class PycPipelinesList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;

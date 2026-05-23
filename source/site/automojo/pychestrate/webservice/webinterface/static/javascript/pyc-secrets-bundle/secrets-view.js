@@ -206,7 +206,7 @@ class PycSecrets extends HTMLElement {
     const label = document.createElement("label");
     label.classList.add("pyc-secrets__field");
     label.textContent = "Scope reference";
-    const input = document.createElement("input");
+    const input = document.createElement("mj-text-field");
     input.classList.add("pyc-secrets__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", "scope-ref-input");
@@ -229,7 +229,7 @@ class PycSecrets extends HTMLElement {
     const name_label = document.createElement("label");
     name_label.classList.add("pyc-secrets__field");
     name_label.textContent = "Name";
-    const name_input = document.createElement("input");
+    const name_input = document.createElement("mj-text-field");
     name_input.classList.add("pyc-secrets__input");
     name_input.setAttribute("type", "text");
     name_input.setAttribute("data-role", "create-name");
@@ -240,7 +240,7 @@ class PycSecrets extends HTMLElement {
     const value_label = document.createElement("label");
     value_label.classList.add("pyc-secrets__field");
     value_label.textContent = "Value";
-    const value_input = document.createElement("input");
+    const value_input = document.createElement("mj-password-field");
     value_input.classList.add("pyc-secrets__input");
     value_input.setAttribute("type", "password");
     value_input.setAttribute("data-role", "create-value");
@@ -289,7 +289,7 @@ class PycSecrets extends HTMLElement {
         }
       }
       const input = this._root.querySelector('[data-role="scope-ref-input"]');
-      if (input instanceof HTMLInputElement) {
+      if (input instanceof HTMLElement) {
         input.value = "";
       }
     }

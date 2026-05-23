@@ -208,7 +208,7 @@ class PycSlos extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-metrics__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -310,7 +310,7 @@ class PycSlos extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -689,7 +689,7 @@ class PycSlos extends HTMLElement {
     const config_label = document.createElement("label");
     config_label.classList.add("pyc-metrics__field");
     config_label.textContent = "Definition config (JSON)";
-    const config_area = document.createElement("textarea");
+    const config_area = document.createElement("mj-textarea");
     config_area.classList.add("pyc-metrics__input");
     config_area.setAttribute("data-role", "create-config");
     config_area.setAttribute("placeholder", '{"metric": "http_2xx"}');
@@ -736,7 +736,7 @@ class PycSlos extends HTMLElement {
     const label = document.createElement("label");
     label.classList.add("pyc-metrics__field");
     label.textContent = label_text;
-    const input = document.createElement("input");
+    const input = document.createElement("mj-text-field");
     input.classList.add("pyc-metrics__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", role);

@@ -421,7 +421,7 @@ class PycPoolDetail extends HTMLElement {
     const id_label = document.createElement("label");
     id_label.classList.add("pyc-resources__filter");
     id_label.textContent = "Resource id";
-    const id_input = document.createElement("input");
+    const id_input = document.createElement("mj-text-field");
     id_input.classList.add("pyc-resources__input");
     id_input.setAttribute("type", "text");
     id_input.setAttribute("placeholder", "resource uuid");
@@ -604,7 +604,7 @@ class PycPoolDetail extends HTMLElement {
     const note_label = document.createElement("label");
     note_label.classList.add("pyc-resources__filter");
     note_label.textContent = "Note";
-    const note_input = document.createElement("input");
+    const note_input = document.createElement("mj-text-field");
     note_input.classList.add("pyc-resources__input");
     note_input.setAttribute("type", "text");
     note_input.setAttribute("placeholder", "optional");

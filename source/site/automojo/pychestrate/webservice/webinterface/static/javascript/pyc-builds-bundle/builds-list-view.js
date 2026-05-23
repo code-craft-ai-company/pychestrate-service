@@ -203,7 +203,7 @@ class PycBuildsList extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-builds__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -395,7 +395,7 @@ class PycBuildsList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -748,7 +748,7 @@ class PycBuildsList extends HTMLElement {
     const runner_label = document.createElement("label");
     runner_label.classList.add("pyc-builds__field");
     runner_label.textContent = "Runner kind";
-    const runner_input = document.createElement("input");
+    const runner_input = document.createElement("mj-text-field");
     runner_input.classList.add("pyc-builds__input");
     runner_input.setAttribute("type", "text");
     runner_input.setAttribute("placeholder", "makefile");
@@ -759,7 +759,7 @@ class PycBuildsList extends HTMLElement {
     const inputs_label = document.createElement("label");
     inputs_label.classList.add("pyc-builds__field", "pyc-builds__field--wide");
     inputs_label.textContent = "Runner inputs (JSON)";
-    const inputs_area = document.createElement("textarea");
+    const inputs_area = document.createElement("mj-textarea");
     inputs_area.classList.add("pyc-builds__textarea");
     inputs_area.setAttribute("data-role", "trigger-runner-inputs");
     inputs_area.setAttribute("placeholder", '{"target": "all"}');

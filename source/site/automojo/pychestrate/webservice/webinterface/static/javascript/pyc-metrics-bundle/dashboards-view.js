@@ -150,7 +150,7 @@ class PycDashboardsList extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-metrics__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -239,7 +239,7 @@ class PycDashboardsList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -407,7 +407,7 @@ class PycDashboardsList extends HTMLElement {
     const name_label = document.createElement("label");
     name_label.classList.add("pyc-metrics__field");
     name_label.textContent = "Name";
-    const name_input = document.createElement("input");
+    const name_input = document.createElement("mj-text-field");
     name_input.classList.add("pyc-metrics__input");
     name_input.setAttribute("type", "text");
     name_input.setAttribute("data-role", "name-input");
@@ -417,7 +417,7 @@ class PycDashboardsList extends HTMLElement {
     const desc_label = document.createElement("label");
     desc_label.classList.add("pyc-metrics__field");
     desc_label.textContent = "Description";
-    const desc_input = document.createElement("input");
+    const desc_input = document.createElement("mj-text-field");
     desc_input.classList.add("pyc-metrics__input");
     desc_input.setAttribute("type", "text");
     desc_input.setAttribute("data-role", "description-input");
