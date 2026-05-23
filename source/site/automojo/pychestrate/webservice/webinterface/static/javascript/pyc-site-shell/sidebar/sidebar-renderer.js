@@ -295,8 +295,9 @@ class SidebarRenderer {
         return;
       }
       // The pychestrate site is server-rendered: every sidebar
-      // route is a distinct Flask page. Let the <a href> do a
-      // real browser navigation; fire telemetry first.
+      // route returns its own HTML document from webworks. Let
+      // the <a href> do a real browser navigation; fire telemetry
+      // first.
       if (this._on_entry_clicked !== null) {
         this._on_entry_clicked(route, label);
       }

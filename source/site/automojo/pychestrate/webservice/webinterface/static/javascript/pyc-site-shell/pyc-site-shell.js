@@ -162,7 +162,7 @@ class PycSiteShell extends HTMLElement {
   _render_skeleton() {
     const initial_route_attr = this.getAttribute(ATTR_INITIAL_ROUTE);
     const initial_path = initial_route_attr !== null && initial_route_attr.length > 0 ? initial_route_attr : window.location.pathname;
-    // Capture any server-rendered content the Flask shell document
+    // Capture any server-rendered content the site shell document
     // inlined inside <pyc-site-shell> (see
     // ``site_shell/templates/site_shell/shell_document.html``).
     // Without this, ``replaceChildren()`` below wipes the route's
