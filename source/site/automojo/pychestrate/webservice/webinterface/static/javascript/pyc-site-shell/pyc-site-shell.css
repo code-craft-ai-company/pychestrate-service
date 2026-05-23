@@ -79,12 +79,26 @@
 }
 
 pyc-site-shell {
-    display: block;
+    display: flex;
+    flex-direction: column;
     min-height: 100vh;
     background-color: var(--pyc-site-shell-bg);
     color: var(--pyc-site-shell-fg);
     font-family: var(--pyc-site-shell-font-family);
     font-size: var(--pyc-site-shell-font-size-body);
+}
+
+/*
+ * <mj-app-shell> sets ``height: 100%`` in its shadow CSS, which
+ * only resolves against an ancestor with a determinate height.
+ * The shell's parent (pyc-site-shell) declares min-height: 100vh
+ * but no fixed height, so the grid collapses to intrinsic content
+ * height. Make the layout a flex child that fills the shell so
+ * the grid takes the full viewport.
+ */
+.pyc-site-shell__layout {
+    flex: 1 1 auto;
+    min-height: 0;
 }
 
 /*
