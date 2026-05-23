@@ -308,7 +308,7 @@ test("pyc-test-metrics renders the rollup cards + runs table", async () => {
     const trend = element.querySelector('[data-role="duration-trend"]')
     assert.equal(trend.querySelectorAll(".pyc-metrics__bar").length, 2)
     const table = element.querySelector('[data-role="runs-table"]')
-    assert.equal(table.shadowRoot.querySelectorAll("tbody tr").length, 2)
+    assert.equal(table.shadowRoot.querySelectorAll(".row.pyc-metrics__row").length, 2)
     assert.equal(element.viewState.errored, false)
     element.remove()
 })

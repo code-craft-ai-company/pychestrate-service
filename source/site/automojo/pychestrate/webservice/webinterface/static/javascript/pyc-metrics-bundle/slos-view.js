@@ -445,15 +445,18 @@ class PycSlos extends HTMLElement {
    */
   _build_table() {
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "slos-table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-metrics__row";
     table.rowAttrs = (slo) => ({ "data-slo-id": slo.slo_id });
     table.columns = [
       {
         key: "name",
         label: "SLO",
+        width: "16rem",
         render: (slo) => {
           const name = document.createElement("span");
           name.textContent = slo.name;
@@ -464,21 +467,25 @@ class PycSlos extends HTMLElement {
       {
         key: "kind",
         label: "Kind",
+        width: "10rem",
         render: (slo) => slo.kind
       },
       {
         key: "target",
         label: "Target",
+        width: "8rem",
         render: (slo) => format_ratio(slo.target)
       },
       {
         key: "window",
         label: "Window",
+        width: "8rem",
         render: (slo) => format_window(slo.window_seconds)
       },
       {
         key: "burn",
         label: "Burn-rate",
+        width: "12rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
           burn_badge.classList.add("pyc-metrics__badge");
@@ -492,6 +499,8 @@ class PycSlos extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "12rem",
+        sortable: false,
         render: (slo) => {
           const status_button = document.createElement("mj-button");
           status_button.classList.add("pyc-metrics__button");
@@ -619,7 +628,7 @@ class PycSlos extends HTMLElement {
       return;
     }
     const root = table.shadowRoot !== null && table.shadowRoot !== void 0 ? table.shadowRoot : table;
-    const selector = 'tr[data-slo-id="' + slo_id + '"] [data-role="burn-indicator"]';
+    const selector = '.row[data-slo-id="' + slo_id + '"] [data-role="burn-indicator"]';
     const badge = root.querySelector(selector);
     if (badge instanceof HTMLElement === false) {
       return;

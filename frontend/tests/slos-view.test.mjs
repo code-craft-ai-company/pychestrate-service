@@ -203,7 +203,7 @@ test("PycSlos fetches and renders the SLO table on project select", async () => 
     assert.equal(view.listState.total, 1)
     const table = view.querySelector('[data-role="slos-table"]')
     assert.ok(table !== null)
-    const rows = table.shadowRoot.querySelectorAll("tbody tr")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-metrics__row")
     assert.equal(rows.length, 1)
     document.body.removeChild(view)
 })

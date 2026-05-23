@@ -476,15 +476,18 @@ class PycAlertRules extends HTMLElement {
   }
   _build_table() {
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "alert-rules-table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-metrics__row";
     table.rowAttrs = (rule) => ({ "data-rule-id": rule.rule_id });
     table.columns = [
       {
         key: "name",
         label: "Rule",
+        width: "16rem",
         render: (rule) => {
           const name = document.createElement("span");
           name.textContent = rule.name;
@@ -495,11 +498,14 @@ class PycAlertRules extends HTMLElement {
       {
         key: "condition",
         label: "Condition",
+        width: "18rem",
+        sortable: false,
         render: (rule) => describe_alert_condition(rule)
       },
       {
         key: "window",
         label: "Window",
+        width: "8rem",
         render: (rule) => {
           const window_value = rule.config.window_seconds;
           const rtnval = typeof window_value === "number"
@@ -511,6 +517,7 @@ class PycAlertRules extends HTMLElement {
       {
         key: "severity",
         label: "Severity",
+        width: "10rem",
         render: (rule) => {
           const severity_badge = document.createElement("mj-chip");
           severity_badge.classList.add("pyc-metrics__badge");
@@ -526,6 +533,8 @@ class PycAlertRules extends HTMLElement {
       {
         key: "targets",
         label: "Targets",
+        width: "16rem",
+        sortable: false,
         render: (rule) =>
           rule.notification_targets.length > 0
             ? rule.notification_targets.join(", ")
@@ -534,6 +543,7 @@ class PycAlertRules extends HTMLElement {
       {
         key: "enabled",
         label: "Enabled",
+        width: "8rem",
         render: (rule) => {
           const enabled_badge = document.createElement("mj-chip");
           enabled_badge.classList.add("pyc-metrics__badge");
