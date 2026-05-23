@@ -18,6 +18,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -38,18 +39,9 @@ const BUNDLE_PATH = path.resolve(
 
 const DASHBOARD_ID = "dddddddd-1111-2222-3333-444444444444"
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/dashboards/" + DASHBOARD_ID + "/edit" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLFormElement = dom.window.HTMLFormElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/dashboards/" + DASHBOARD_ID + "/edit",
+})
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
 const {
