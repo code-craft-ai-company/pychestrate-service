@@ -475,74 +475,81 @@ class PycAlertRules extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "alert-rules-table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Rule",
-      "Condition",
-      "Window",
-      "Severity",
-      "Targets",
-      "Enabled"
+    table.rowClass = "pyc-metrics__row";
+    table.rowAttrs = (rule) => ({ "data-rule-id": rule.rule_id });
+    table.columns = [
+      {
+        key: "name",
+        label: "Rule",
+        render: (rule) => {
+          const name = document.createElement("span");
+          name.textContent = rule.name;
+          name.title = rule.rule_id;
+          return name;
+        }
+      },
+      {
+        key: "condition",
+        label: "Condition",
+        render: (rule) => describe_alert_condition(rule)
+      },
+      {
+        key: "window",
+        label: "Window",
+        render: (rule) => {
+          const window_value = rule.config.window_seconds;
+          const rtnval = typeof window_value === "number"
+            ? format_alert_window(window_value)
+            : "\u2014";
+          return rtnval;
+        }
+      },
+      {
+        key: "severity",
+        label: "Severity",
+        render: (rule) => {
+          const severity_badge = document.createElement("mj-chip");
+          severity_badge.classList.add("pyc-metrics__badge");
+          severity_badge.setAttribute("data-role", "severity-badge");
+          severity_badge.setAttribute(
+            "data-tone",
+            self._severity_tone(rule.severity)
+          );
+          severity_badge.textContent = rule.severity;
+          return severity_badge;
+        }
+      },
+      {
+        key: "targets",
+        label: "Targets",
+        render: (rule) =>
+          rule.notification_targets.length > 0
+            ? rule.notification_targets.join(", ")
+            : "\u2014"
+      },
+      {
+        key: "enabled",
+        label: "Enabled",
+        render: (rule) => {
+          const enabled_badge = document.createElement("mj-chip");
+          enabled_badge.classList.add("pyc-metrics__badge");
+          enabled_badge.setAttribute("data-role", "enabled-badge");
+          enabled_badge.setAttribute(
+            "data-tone",
+            rule.enabled === true ? "ok" : "neutral"
+          );
+          enabled_badge.textContent =
+            rule.enabled === true ? "Enabled" : "Disabled";
+          return enabled_badge;
+        }
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const rule of this._rules) {
-      tbody.appendChild(this._build_row(rule));
-    }
-    table.appendChild(tbody);
+    table.rows = this._rules;
     return table;
-  }
-  _build_row(rule) {
-    const row = document.createElement("tr");
-    row.classList.add("pyc-metrics__row");
-    row.setAttribute("data-rule-id", rule.rule_id);
-    const name_cell = document.createElement("td");
-    const name = document.createElement("span");
-    name.textContent = rule.name;
-    name.title = rule.rule_id;
-    name_cell.appendChild(name);
-    row.appendChild(name_cell);
-    const condition_cell = document.createElement("td");
-    condition_cell.textContent = describe_alert_condition(rule);
-    row.appendChild(condition_cell);
-    const window_cell = document.createElement("td");
-    const window_value = rule.config.window_seconds;
-    window_cell.textContent = typeof window_value === "number" ? format_alert_window(window_value) : "\u2014";
-    row.appendChild(window_cell);
-    const severity_cell = document.createElement("td");
-    const severity_badge = document.createElement("mj-chip");
-    severity_badge.classList.add("pyc-metrics__badge");
-    severity_badge.setAttribute("data-role", "severity-badge");
-    severity_badge.setAttribute("data-tone", this._severity_tone(rule.severity));
-    severity_badge.textContent = rule.severity;
-    severity_cell.appendChild(severity_badge);
-    row.appendChild(severity_cell);
-    const targets_cell = document.createElement("td");
-    targets_cell.textContent = rule.notification_targets.length > 0 ? rule.notification_targets.join(", ") : "\u2014";
-    row.appendChild(targets_cell);
-    const enabled_cell = document.createElement("td");
-    const enabled_badge = document.createElement("mj-chip");
-    enabled_badge.classList.add("pyc-metrics__badge");
-    enabled_badge.setAttribute("data-role", "enabled-badge");
-    enabled_badge.setAttribute(
-      "data-tone",
-      rule.enabled === true ? "ok" : "neutral"
-    );
-    enabled_badge.textContent = rule.enabled === true ? "Enabled" : "Disabled";
-    enabled_cell.appendChild(enabled_badge);
-    row.appendChild(enabled_cell);
-    return row;
   }
   _severity_tone(severity) {
     if (severity === "critical") {
