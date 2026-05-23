@@ -1,0 +1,932 @@
+const PROJECTS_API_PATH = "/api/v1/projects";
+function build_slos_collection_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/slos";
+  return rtnval;
+}
+function build_slo_detail_url(project_id, slo_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/slos/" + encodeURIComponent(slo_id);
+  return rtnval;
+}
+function format_ratio(value) {
+  if (value === null || value === void 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  if (typeof value !== "number" || Number.isNaN(value) === true) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const percent = value * 100;
+  const rtnval = percent.toFixed(1) + "%";
+  return rtnval;
+}
+function format_window(seconds) {
+  if (typeof seconds !== "number" || seconds <= 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const day = 86400;
+  const hour = 3600;
+  const minute = 60;
+  if (seconds % day === 0) {
+    const rtnval2 = String(seconds / day) + "d";
+    return rtnval2;
+  }
+  if (seconds % hour === 0) {
+    const rtnval2 = String(seconds / hour) + "h";
+    return rtnval2;
+  }
+  if (seconds % minute === 0) {
+    const rtnval2 = String(seconds / minute) + "m";
+    return rtnval2;
+  }
+  const rtnval = String(seconds) + "s";
+  return rtnval;
+}
+function slo_status_tone(status) {
+  if (status === null) {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
+  if (status.breaching === true) {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  const remaining = status.error_budget_remaining_ratio;
+  if (typeof remaining === "number" && remaining < 0.25) {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  const rtnval = "ok";
+  return rtnval;
+}
+function slo_status_label(status) {
+  if (status === null) {
+    const rtnval2 = "Not evaluated";
+    return rtnval2;
+  }
+  if (status.breaching === true) {
+    const rtnval2 = "Breaching";
+    return rtnval2;
+  }
+  const rtnval = format_ratio(status.achieved_ratio) + " achieved";
+  return rtnval;
+}
+function slo_create_message_for_status(status) {
+  if (status === 201 || status === 200) {
+    const rtnval2 = "SLO created.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "An SLO with that name already exists.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "The SLO definition was rejected \u2014 check the fields.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "Unknown project.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to create SLOs.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to create SLO (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function parse_definition_config(raw) {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    const rtnval2 = {};
+    return rtnval2;
+  }
+  const parsed = JSON.parse(raw);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed) === true) {
+    throw new SyntaxError("SLO definition_config must be a JSON object");
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+function extract_slo_projects(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const project_id = record.project_id;
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      continue;
+    }
+    const display = record.display_name;
+    const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+    rtnval.push({ project_id, display_name });
+  }
+  return rtnval;
+}
+class PycSlos extends HTMLElement {
+  _state;
+  _slos;
+  _status;
+  _projects;
+  _projectsAvailable;
+  _root;
+  _table_region;
+  _create_region;
+  _toast_region;
+  constructor() {
+    super();
+    this._state = {
+      projectId: "",
+      loading: false,
+      errored: false,
+      total: 0
+    };
+    this._slos = [];
+    this._status = /* @__PURE__ */ new Map();
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._root = null;
+    this._table_region = null;
+    this._create_region = null;
+    this._toast_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * project + list state without scraping the DOM.
+   */
+  get listState() {
+    const rtnval = {
+      projectId: this._state.projectId,
+      loading: this._state.loading,
+      errored: this._state.errored,
+      total: this._state.total
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * project list fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_projects();
+    return;
+  }
+  /**
+   * Build the persistent chrome -- heading, project selector,
+   * create action, table region, toast region.
+   */
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-metrics");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-metrics__heading");
+    heading.textContent = "Service-Level Objectives";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-metrics__controls");
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-metrics__field");
+    project_label.textContent = "Project";
+    const project_select = document.createElement("select");
+    project_select.classList.add("pyc-metrics__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.addEventListener("change", () => {
+      this._state.projectId = project_select.value;
+      void this._refresh();
+    });
+    project_label.appendChild(project_select);
+    controls.appendChild(project_label);
+    const project_input = document.createElement("input");
+    project_input.classList.add("pyc-metrics__input");
+    project_input.setAttribute("type", "text");
+    project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("data-role", "project-input");
+    project_input.hidden = true;
+    project_input.addEventListener("change", () => {
+      this._state.projectId = project_input.value.trim();
+      void this._refresh();
+    });
+    controls.appendChild(project_input);
+    const create_button = document.createElement("button");
+    create_button.classList.add("pyc-metrics__button");
+    create_button.setAttribute("type", "button");
+    create_button.setAttribute("data-role", "create-toggle");
+    create_button.textContent = "Create SLO";
+    create_button.addEventListener("click", () => {
+      this._toggle_create_form();
+    });
+    controls.appendChild(create_button);
+    const refresh_button = document.createElement("button");
+    refresh_button.classList.add("pyc-metrics__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const create_region = document.createElement("div");
+    create_region.classList.add("pyc-metrics__form-region");
+    create_region.setAttribute("data-role", "create-region");
+    create_region.hidden = true;
+    root.appendChild(create_region);
+    this._create_region = create_region;
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-metrics__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
+    const table_region = document.createElement("div");
+    table_region.classList.add("pyc-metrics__table-region");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the selector.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    let projects = null;
+    try {
+      const response = await fetch(PROJECTS_API_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = extract_slo_projects(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.slo_projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (projects !== null && projects.length > 0) {
+      this._projects = projects;
+      this._projectsAvailable = true;
+      this._state.projectId = projects[0].project_id;
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+    }
+    this._render_project_control();
+    if (this._state.projectId.length > 0) {
+      await this._refresh();
+    } else {
+      this._render_table_region();
+    }
+    return;
+  }
+  /**
+   * Render the project-select control or, when no projects
+   * collection is available, swap to the manual text input.
+   */
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-input"]');
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      for (const project of this._projects) {
+        const option = document.createElement("option");
+        option.value = project.project_id;
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectId;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    return;
+  }
+  /**
+   * Fetch the SLO list for the active project and re-render the
+   * table. Exposed so unit tests can await a fetch cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.projectId.length === 0) {
+      this._slos = [];
+      this._render_table_region();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._status = /* @__PURE__ */ new Map();
+    this._render_table_region();
+    const url = build_slos_collection_url(this._state.projectId);
+    let page = null;
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error(
+          "slos fetch failed: HTTP " + String(response.status)
+        );
+      }
+      const body = await response.json();
+      page = body;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.slos_fetch_failed",
+        { reason: String(reason) }
+      );
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    if (page === null || Array.isArray(page.items) === false) {
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    this._slos = page.items;
+    const meta = page.meta;
+    if (meta !== void 0 && meta !== null) {
+      if (typeof meta.total === "number") {
+        this._state.total = meta.total;
+      }
+    }
+    this._state.loading = false;
+    this._state.errored = false;
+    this._render_table_region();
+    return;
+  }
+  /**
+   * Re-render the table region from the current state + SLOs.
+   */
+  _render_table_region() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    if (this._state.projectId.length === 0) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "no-project-state");
+      notice.textContent = "Select a project to view its SLOs.";
+      region.replaceChildren(notice);
+      return;
+    }
+    if (this._state.loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-metrics__notice");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading SLOs\u2026";
+      region.replaceChildren(loading);
+      return;
+    }
+    if (this._state.errored === true) {
+      const error = document.createElement("p");
+      error.classList.add(
+        "pyc-metrics__notice",
+        "pyc-metrics__notice--error"
+      );
+      error.setAttribute("data-role", "error-state");
+      error.textContent = "Failed to load SLOs. Try refreshing.";
+      region.replaceChildren(error);
+      return;
+    }
+    if (this._slos.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-metrics__notice");
+      empty.setAttribute("data-role", "empty-state");
+      empty.textContent = "No SLOs defined for this project yet";
+      region.replaceChildren(empty);
+      return;
+    }
+    const table = this._build_table();
+    region.replaceChildren(table);
+    return;
+  }
+  /**
+   * Build the SLOs ``<table>`` from the current list.
+   */
+  _build_table() {
+    const table = document.createElement("table");
+    table.classList.add("pyc-metrics__table");
+    const thead = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    const columns = [
+      "SLO",
+      "Kind",
+      "Target",
+      "Window",
+      "Burn-rate",
+      "Actions"
+    ];
+    for (const column of columns) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = column;
+      head_row.appendChild(th);
+    }
+    thead.appendChild(head_row);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (const slo of this._slos) {
+      tbody.appendChild(this._build_row(slo));
+    }
+    table.appendChild(tbody);
+    return table;
+  }
+  /**
+   * Build one SLO table row, including the burn-rate indicator
+   * cell and the per-row "Burn-rate Status" action.
+   *
+   * @param slo The SLO to render.
+   *
+   * @returns A populated ``<tr>``.
+   */
+  _build_row(slo) {
+    const row = document.createElement("tr");
+    row.classList.add("pyc-metrics__row");
+    row.setAttribute("data-slo-id", slo.slo_id);
+    const name_cell = document.createElement("td");
+    const name = document.createElement("span");
+    name.textContent = slo.name;
+    name.title = slo.slo_id;
+    name_cell.appendChild(name);
+    row.appendChild(name_cell);
+    const kind_cell = document.createElement("td");
+    kind_cell.textContent = slo.kind;
+    row.appendChild(kind_cell);
+    const target_cell = document.createElement("td");
+    target_cell.textContent = format_ratio(slo.target);
+    row.appendChild(target_cell);
+    const window_cell = document.createElement("td");
+    window_cell.textContent = format_window(slo.window_seconds);
+    row.appendChild(window_cell);
+    const burn_cell = document.createElement("td");
+    const burn_badge = document.createElement("span");
+    burn_badge.classList.add("pyc-metrics__badge");
+    burn_badge.setAttribute("data-role", "burn-indicator");
+    const status = this._status.get(slo.slo_id) ?? null;
+    burn_badge.setAttribute("data-tone", slo_status_tone(status));
+    burn_badge.textContent = slo_status_label(status);
+    burn_cell.appendChild(burn_badge);
+    row.appendChild(burn_cell);
+    const actions_cell = document.createElement("td");
+    const status_button = document.createElement("button");
+    status_button.classList.add("pyc-metrics__button");
+    status_button.setAttribute("type", "button");
+    status_button.setAttribute("data-role", "load-status");
+    status_button.textContent = "Burn-rate Status";
+    status_button.addEventListener("click", () => {
+      status_button.disabled = true;
+      void this._on_load_status(slo, status_button);
+    });
+    actions_cell.appendChild(status_button);
+    row.appendChild(actions_cell);
+    return row;
+  }
+  /**
+   * Run the "Burn-rate Status" action for one SLO -- read the
+   * status block and update the indicator, surfacing a toast.
+   *
+   * @param slo The SLO to evaluate.
+   * @param button The row action button, re-enabled on completion.
+   */
+  async _on_load_status(slo, button) {
+    const outcome = await this._do_load_status(slo.slo_id);
+    if (outcome.ok === true && outcome.sloStatus !== null) {
+      this._status.set(slo.slo_id, outcome.sloStatus);
+      this._render_burn_cell(slo.slo_id);
+    }
+    button.disabled = false;
+    this._show_toast(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    return;
+  }
+  /**
+   * Read one SLO's burn-rate status. Exposed so unit tests can
+   * drive a status read without a row button.
+   *
+   * @param slo_id The SLO to read.
+   *
+   * @returns The status outcome.
+   */
+  async loadStatus(slo_id) {
+    const rtnval = await this._do_load_status(slo_id);
+    return rtnval;
+  }
+  async _do_load_status(slo_id) {
+    if (this._state.projectId.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        sloStatus: null,
+        message: "Select a project before reading SLO status."
+      };
+      return rtnval2;
+    }
+    let status = 0;
+    let slo_status = null;
+    try {
+      const url = build_slo_detail_url(
+        this._state.projectId,
+        slo_id
+      );
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        const detail = body;
+        if (detail !== null && detail.status !== void 0 && detail.status !== null) {
+          slo_status = detail.status;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.slo_status_fetch_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        sloStatus: null,
+        message: "Failed to reach the SLO service."
+      };
+      return rtnval2;
+    }
+    if (status === 200) {
+      const message = slo_status !== null ? "Burn-rate status updated." : "This SLO has no burn-rate status yet.";
+      const rtnval2 = {
+        ok: true,
+        status,
+        sloStatus: slo_status,
+        message
+      };
+      return rtnval2;
+    }
+    const rtnval = {
+      ok: false,
+      status,
+      sloStatus: null,
+      message: "Failed to read SLO status (HTTP " + String(status) + ")."
+    };
+    return rtnval;
+  }
+  /**
+   * Refresh one SLO's burn-rate indicator cell from the cached
+   * status.
+   *
+   * @param slo_id The SLO whose row to update.
+   */
+  _render_burn_cell(slo_id) {
+    if (this._table_region === null) {
+      return;
+    }
+    const selector = 'tr[data-slo-id="' + slo_id + '"] [data-role="burn-indicator"]';
+    const badge = this._table_region.querySelector(selector);
+    if (badge instanceof HTMLElement === false) {
+      return;
+    }
+    const el = badge;
+    const status = this._status.get(slo_id) ?? null;
+    el.setAttribute("data-tone", slo_status_tone(status));
+    el.textContent = slo_status_label(status);
+    return;
+  }
+  /**
+   * Toggle the inline create-SLO form's visibility, rendering it
+   * on first reveal.
+   */
+  _toggle_create_form() {
+    if (this._create_region === null) {
+      return;
+    }
+    const region = this._create_region;
+    if (region.hidden === true) {
+      this._render_create_form();
+      region.hidden = false;
+    } else {
+      region.hidden = true;
+    }
+    return;
+  }
+  /**
+   * Render the create-SLO form into the create region.
+   */
+  _render_create_form() {
+    if (this._create_region === null) {
+      return;
+    }
+    const form = document.createElement("form");
+    form.classList.add("pyc-metrics__form");
+    form.setAttribute("data-role", "create-form");
+    const name_input = this._build_text_field(
+      form,
+      "Name",
+      "create-name",
+      "checkout availability"
+    );
+    const kind_input = this._build_text_field(
+      form,
+      "Kind",
+      "create-kind",
+      "availability"
+    );
+    const target_input = this._build_text_field(
+      form,
+      "Target ratio (0..1)",
+      "create-target",
+      "0.995"
+    );
+    const window_input = this._build_text_field(
+      form,
+      "Window (seconds)",
+      "create-window",
+      "604800"
+    );
+    const config_label = document.createElement("label");
+    config_label.classList.add("pyc-metrics__field");
+    config_label.textContent = "Definition config (JSON)";
+    const config_area = document.createElement("textarea");
+    config_area.classList.add("pyc-metrics__input");
+    config_area.setAttribute("data-role", "create-config");
+    config_area.setAttribute("placeholder", '{"metric": "http_2xx"}');
+    config_area.rows = 3;
+    config_label.appendChild(config_area);
+    form.appendChild(config_label);
+    const submit_button = document.createElement("button");
+    submit_button.classList.add("pyc-metrics__button");
+    submit_button.setAttribute("type", "submit");
+    submit_button.setAttribute("data-role", "create-submit");
+    submit_button.textContent = "Create SLO";
+    form.appendChild(submit_button);
+    const status = document.createElement("p");
+    status.classList.add("pyc-metrics__form-status");
+    status.setAttribute("data-role", "create-status");
+    form.appendChild(status);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_create(
+        form,
+        name_input,
+        kind_input,
+        target_input,
+        window_input,
+        config_area,
+        submit_button
+      );
+    });
+    this._create_region.replaceChildren(form);
+    return;
+  }
+  /**
+   * Build a labelled text input, append it to the supplied form,
+   * and return the input element.
+   *
+   * @param form The form to append the field to.
+   * @param label_text The visible field label.
+   * @param role The ``data-role`` value for test selection.
+   * @param placeholder The input placeholder text.
+   *
+   * @returns The created input element.
+   */
+  _build_text_field(form, label_text, role, placeholder) {
+    const label = document.createElement("label");
+    label.classList.add("pyc-metrics__field");
+    label.textContent = label_text;
+    const input = document.createElement("input");
+    input.classList.add("pyc-metrics__input");
+    input.setAttribute("type", "text");
+    input.setAttribute("data-role", role);
+    input.setAttribute("placeholder", placeholder);
+    label.appendChild(input);
+    form.appendChild(label);
+    return input;
+  }
+  async _submit_create(form, name_input, kind_input, target_input, window_input, config_area, submit_button) {
+    const status = form.querySelector('[data-role="create-status"]');
+    const name = name_input.value.trim();
+    const kind = kind_input.value.trim();
+    if (name.length === 0 || kind.length === 0) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "SLO name and kind are required.";
+      }
+      return;
+    }
+    const target = Number(target_input.value.trim());
+    if (Number.isNaN(target) === true) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Target ratio must be a number.";
+      }
+      return;
+    }
+    const window_seconds = Number(window_input.value.trim());
+    if (Number.isNaN(window_seconds) === true || window_seconds <= 0) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Window seconds must be a positive number.";
+      }
+      return;
+    }
+    let definition_config = {};
+    try {
+      definition_config = parse_definition_config(config_area.value);
+    } catch (reason) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Definition config must be valid JSON.";
+      }
+      console.warn(
+        "pychestrate.ui.metrics.slo_config_invalid",
+        { reason: String(reason) }
+      );
+      return;
+    }
+    submit_button.disabled = true;
+    if (status instanceof HTMLElement) {
+      status.textContent = "Creating SLO\u2026";
+    }
+    const outcome = await this._do_create(
+      name,
+      kind,
+      target,
+      window_seconds,
+      definition_config
+    );
+    submit_button.disabled = false;
+    if (status instanceof HTMLElement) {
+      status.textContent = "";
+    }
+    this._show_toast(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    if (outcome.ok === true) {
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * POST an ``SloCreateRequest``. Exposed so unit tests can
+   * invoke a create without a real form-submit event.
+   *
+   * @param name Human-facing SLO name.
+   * @param kind SLO kind (e.g. ``availability``).
+   * @param target Target ratio in the 0..1 range.
+   * @param window_seconds Rolling evaluation window length.
+   * @param definition_config Kind-specific configuration object.
+   *
+   * @returns The create outcome.
+   */
+  async createSlo(name, kind, target, window_seconds, definition_config) {
+    const rtnval = await this._do_create(
+      name,
+      kind,
+      target,
+      window_seconds,
+      definition_config
+    );
+    return rtnval;
+  }
+  async _do_create(name, kind, target, window_seconds, definition_config) {
+    if (this._state.projectId.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        sloId: "",
+        message: "Select a project before creating an SLO."
+      };
+      return rtnval2;
+    }
+    const payload = {
+      name,
+      kind,
+      target,
+      window_seconds,
+      definition_config
+    };
+    let status = 0;
+    let slo_id = "";
+    try {
+      const url = build_slos_collection_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        const slo = body;
+        if (slo !== null && typeof slo.slo_id === "string") {
+          slo_id = slo.slo_id;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.metrics.slo_create_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        sloId: "",
+        message: "Failed to reach the SLO service."
+      };
+      return rtnval2;
+    }
+    const ok = status === 201 || status === 200;
+    const rtnval = {
+      ok,
+      status,
+      sloId: slo_id,
+      message: slo_create_message_for_status(status)
+    };
+    return rtnval;
+  }
+  /**
+   * Render a dismissible toast in the toast region.
+   *
+   * @param message The toast message text.
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
+   */
+  _show_toast(message, tone) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-metrics__toast");
+    toast.setAttribute("data-role", "toast");
+    toast.setAttribute("data-tone", tone);
+    const text = document.createElement("span");
+    text.textContent = message;
+    toast.appendChild(text);
+    const dismiss = document.createElement("button");
+    dismiss.classList.add("pyc-metrics__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "\xD7";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    this._toast_region.replaceChildren(toast);
+    return;
+  }
+}
+export {
+  PycSlos,
+  build_slo_detail_url,
+  build_slos_collection_url,
+  extract_slo_projects,
+  format_ratio,
+  format_window,
+  parse_definition_config,
+  slo_create_message_for_status,
+  slo_status_label,
+  slo_status_tone
+};

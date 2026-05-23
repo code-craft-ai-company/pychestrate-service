@@ -7,8 +7,8 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The bundles themselves live under
-``webinterface/static/javascript/dist/<name>.js`` (committed; the
-Python deploy ships them as static files). This module records the
+``webinterface/static/javascript/<name>/index.js`` (plain ES
+modules served directly -- no build step). This module records the
 ``route_prefix -> bundle_name`` mapping so
 ``shell_document.render_shell_document`` can emit only the
 ``<script type="module" src=...>`` tags relevant to the current
@@ -78,7 +78,7 @@ def register_bundle(
         :param bundle_name: Bundle base name (e.g.
                             ``"pyc-site-shell"``;
                             ``"pyc-admin-ui"``). Maps to
-                            ``/static/javascript/dist/<name>.js``.
+                            ``/static/javascript/<name>/index.js``.
 
         :returns: None.
     """

@@ -14,7 +14,7 @@ successful admin login. Asserts:
 * The body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * The body imports the prebuilt runs bundle at
-  ``/static/javascript/dist/pyc-runs-bundle.js`` so the
+  ``/static/javascript/pyc-runs-bundle/index.js`` so the
   ``<pyc-runs-list>`` view mounts when the shell connects.
 * The runs bundle itself is served as JavaScript by the static
   file surface.
@@ -164,7 +164,7 @@ def test_runs_page_renders_inside_site_shell():
     # The runs bundle <script> tag is present so the view mounts
     # and the sidebar registration runs on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-runs-bundle.js" in body
+        "/static/javascript/pyc-runs-bundle/index.js" in body
     )
     return
 
@@ -173,7 +173,7 @@ def test_runs_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + runs-list-ui**
     **Property: The prebuilt runs bundle at
-    ``/static/javascript/dist/pyc-runs-bundle.js`` is reachable
+    ``/static/javascript/pyc-runs-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -184,7 +184,7 @@ def test_runs_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-runs-bundle.js"
+            "/static/javascript/pyc-runs-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

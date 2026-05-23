@@ -24,7 +24,7 @@ import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
-const DIST_ROOT = path.resolve(
+const JS_ROOT = path.resolve(
     HERE,
     "..",
     "..",
@@ -36,10 +36,9 @@ const DIST_ROOT = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
 )
-const SHELL_BUNDLE_PATH = path.resolve(DIST_ROOT, "pyc-site-shell.js")
-const ADMIN_BUNDLE_PATH = path.resolve(DIST_ROOT, "pyc-admin-bundle.js")
+const SHELL_BUNDLE_PATH = path.resolve(JS_ROOT, "pyc-site-shell", "index.js")
+const ADMIN_BUNDLE_PATH = path.resolve(JS_ROOT, "pyc-admin-bundle", "index.js")
 
 // Browser globals the bundles touch at import time.
 globalThis.customElements = {

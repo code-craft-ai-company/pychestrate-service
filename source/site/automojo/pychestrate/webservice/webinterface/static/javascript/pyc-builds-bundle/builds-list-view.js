@@ -1,0 +1,949 @@
+const BUILD_STATES = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "cancelled"
+];
+const TERMINAL_BUILD_STATES = [
+  "completed",
+  "failed",
+  "cancelled"
+];
+const DEFAULT_PER_PAGE = 25;
+const PROJECTS_API_PATH = "/api/v1/projects";
+function build_builds_query_url(state) {
+  const params = new URLSearchParams();
+  if (state.stateFilter.length > 0) {
+    params.set("state", state.stateFilter);
+  }
+  params.set("page", String(state.page));
+  params.set("per_page", String(state.perPage));
+  const query = params.toString();
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(state.projectId) + "/builds?" + query;
+  return rtnval;
+}
+function build_builds_collection_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/builds";
+  return rtnval;
+}
+function build_source_integrations_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/source-integrations";
+  return rtnval;
+}
+function short_id(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const dash_index = value.indexOf("-");
+  if (dash_index > 0) {
+    const rtnval2 = value.slice(0, dash_index);
+    return rtnval2;
+  }
+  if (value.length > 12) {
+    const rtnval2 = value.slice(0, 12);
+    return rtnval2;
+  }
+  const rtnval = value;
+  return rtnval;
+}
+function format_timestamp(value) {
+  if (value === null || value === void 0 || value.length === 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = value;
+    return rtnval2;
+  }
+  const rtnval = parsed.toLocaleString();
+  return rtnval;
+}
+function build_state_tone(build_state) {
+  if (build_state === "completed") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (build_state === "failed") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  if (build_state === "cancelled") {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  const rtnval = "neutral";
+  return rtnval;
+}
+function is_terminal_build_state(build_state) {
+  const rtnval = TERMINAL_BUILD_STATES.indexOf(build_state) >= 0;
+  return rtnval;
+}
+function has_next_page(state) {
+  const consumed = state.page * state.perPage;
+  const rtnval = consumed < state.total;
+  return rtnval;
+}
+function has_previous_page(state) {
+  const rtnval = state.page > 1;
+  return rtnval;
+}
+function trigger_message_for_status(status) {
+  if (status === 202 || status === 200 || status === 201) {
+    const rtnval2 = "Build triggered.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "Runner inputs were rejected \u2014 check the runner kind.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "Unknown project or runner kind.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to trigger builds.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to trigger build (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function parse_runner_inputs(raw) {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    const rtnval2 = {};
+    return rtnval2;
+  }
+  const parsed = JSON.parse(raw);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed) === true) {
+    throw new SyntaxError("runner inputs must be a JSON object");
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+class PycBuildsList extends HTMLElement {
+  _state;
+  _builds;
+  _projects;
+  _projectsAvailable;
+  _integrations;
+  _root;
+  _table_region;
+  _trigger_region;
+  _toast_region;
+  constructor() {
+    super();
+    this._state = {
+      projectId: "",
+      stateFilter: "",
+      page: 1,
+      perPage: DEFAULT_PER_PAGE,
+      total: 0,
+      loading: false,
+      errored: false
+    };
+    this._builds = [];
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._integrations = [];
+    this._root = null;
+    this._table_region = null;
+    this._trigger_region = null;
+    this._toast_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * project + pagination state without scraping the DOM.
+   */
+  get listState() {
+    const rtnval = {
+      projectId: this._state.projectId,
+      stateFilter: this._state.stateFilter,
+      page: this._state.page,
+      perPage: this._state.perPage,
+      total: this._state.total,
+      loading: this._state.loading,
+      errored: this._state.errored
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * project list fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_projects();
+    return;
+  }
+  /**
+   * Build the persistent chrome -- heading, project selector,
+   * state filter, trigger action, table region, pager, toast.
+   */
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-builds");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-builds__heading");
+    heading.textContent = "Builds";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-builds__controls");
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-builds__field");
+    project_label.textContent = "Project";
+    const project_select = document.createElement("select");
+    project_select.classList.add("pyc-builds__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.addEventListener("change", () => {
+      this._state.projectId = project_select.value;
+      this._state.page = 1;
+      void this._on_project_changed();
+    });
+    project_label.appendChild(project_select);
+    controls.appendChild(project_label);
+    const project_input = document.createElement("input");
+    project_input.classList.add("pyc-builds__input");
+    project_input.setAttribute("type", "text");
+    project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("data-role", "project-input");
+    project_input.hidden = true;
+    project_input.addEventListener("change", () => {
+      this._state.projectId = project_input.value.trim();
+      this._state.page = 1;
+      void this._on_project_changed();
+    });
+    controls.appendChild(project_input);
+    const state_label = document.createElement("label");
+    state_label.classList.add("pyc-builds__field");
+    state_label.textContent = "State";
+    const state_select = document.createElement("select");
+    state_select.classList.add("pyc-builds__select");
+    state_select.setAttribute("data-role", "state-filter");
+    const any_option = document.createElement("option");
+    any_option.value = "";
+    any_option.textContent = "All states";
+    state_select.appendChild(any_option);
+    for (const build_state of BUILD_STATES) {
+      const option = document.createElement("option");
+      option.value = build_state;
+      option.textContent = build_state;
+      state_select.appendChild(option);
+    }
+    state_select.addEventListener("change", () => {
+      this._state.stateFilter = state_select.value;
+      this._state.page = 1;
+      void this._refresh();
+    });
+    state_label.appendChild(state_select);
+    controls.appendChild(state_label);
+    const trigger_button = document.createElement("button");
+    trigger_button.classList.add("pyc-builds__button");
+    trigger_button.setAttribute("type", "button");
+    trigger_button.setAttribute("data-role", "trigger-toggle");
+    trigger_button.textContent = "Trigger Build";
+    trigger_button.addEventListener("click", () => {
+      this._toggle_trigger_form();
+    });
+    controls.appendChild(trigger_button);
+    const refresh_button = document.createElement("button");
+    refresh_button.classList.add("pyc-builds__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const trigger_region = document.createElement("div");
+    trigger_region.classList.add("pyc-builds__trigger-region");
+    trigger_region.setAttribute("data-role", "trigger-region");
+    trigger_region.hidden = true;
+    root.appendChild(trigger_region);
+    this._trigger_region = trigger_region;
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-builds__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
+    const table_region = document.createElement("div");
+    table_region.classList.add("pyc-builds__table-region");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    const pager = document.createElement("div");
+    pager.classList.add("pyc-builds__pager");
+    const prev_button = document.createElement("button");
+    prev_button.classList.add("pyc-builds__button");
+    prev_button.setAttribute("type", "button");
+    prev_button.setAttribute("data-role", "prev-page");
+    prev_button.textContent = "Previous";
+    prev_button.addEventListener("click", () => {
+      if (has_previous_page(this._state) === true) {
+        this._state.page = this._state.page - 1;
+        void this._refresh();
+      }
+    });
+    pager.appendChild(prev_button);
+    const page_indicator = document.createElement("span");
+    page_indicator.classList.add("pyc-builds__page-indicator");
+    page_indicator.setAttribute("data-role", "page-indicator");
+    pager.appendChild(page_indicator);
+    const next_button = document.createElement("button");
+    next_button.classList.add("pyc-builds__button");
+    next_button.setAttribute("type", "button");
+    next_button.setAttribute("data-role", "next-page");
+    next_button.textContent = "Next";
+    next_button.addEventListener("click", () => {
+      if (has_next_page(this._state) === true) {
+        this._state.page = this._state.page + 1;
+        void this._refresh();
+      }
+    });
+    pager.appendChild(next_button);
+    root.appendChild(pager);
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the selector.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    let projects = null;
+    try {
+      const response = await fetch(PROJECTS_API_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = this._extract_projects(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (projects !== null && projects.length > 0) {
+      this._projects = projects;
+      this._projectsAvailable = true;
+      this._state.projectId = projects[0].project_id;
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+    }
+    this._render_project_control();
+    if (this._state.projectId.length > 0) {
+      await this._on_project_changed();
+    } else {
+      this._render_table_region();
+    }
+    return;
+  }
+  /**
+   * Normalise a projects-list response body into ``ProjectOption``
+   * records. Accepts both a bare array and a ``{items}`` page
+   * envelope so the view tolerates either shape.
+   *
+   * @param body Parsed JSON response body.
+   *
+   * @returns A list of project options (possibly empty).
+   */
+  _extract_projects(body) {
+    let raw = [];
+    if (Array.isArray(body) === true) {
+      raw = body;
+    } else if (body !== null && typeof body === "object") {
+      const items = body.items;
+      if (Array.isArray(items) === true) {
+        raw = items;
+      }
+    }
+    const rtnval = [];
+    for (const item of raw) {
+      if (item === null || typeof item !== "object") {
+        continue;
+      }
+      const record = item;
+      const project_id = record.project_id;
+      if (typeof project_id !== "string" || project_id.length === 0) {
+        continue;
+      }
+      const display = record.display_name;
+      const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+      rtnval.push({ project_id, display_name });
+    }
+    return rtnval;
+  }
+  /**
+   * Render the project-select control or, when no projects
+   * collection is available, swap to the manual text input.
+   */
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-input"]');
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      for (const project of this._projects) {
+        const option = document.createElement("option");
+        option.value = project.project_id;
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectId;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    return;
+  }
+  /**
+   * React to a project change -- reload the source integrations
+   * (so the trigger form's selector is fresh) and the builds
+   * page.
+   */
+  async _on_project_changed() {
+    await this._load_integrations();
+    await this._refresh();
+    return;
+  }
+  /**
+   * Fetch the active project's source integrations. A failed
+   * fetch leaves the integrations list empty -- the trigger form
+   * degrades to a manual integration-id-free flow.
+   */
+  async _load_integrations() {
+    this._integrations = [];
+    if (this._state.projectId.length === 0) {
+      return;
+    }
+    try {
+      const url = build_source_integrations_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        this._integrations = this._extract_integrations(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.integrations_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    return;
+  }
+  /**
+   * Normalise a source-integrations page body into option
+   * records.
+   *
+   * @param body Parsed JSON response body.
+   *
+   * @returns A list of source integration options.
+   */
+  _extract_integrations(body) {
+    let raw = [];
+    if (body !== null && typeof body === "object") {
+      const items = body.items;
+      if (Array.isArray(items) === true) {
+        raw = items;
+      }
+    }
+    const rtnval = [];
+    for (const item of raw) {
+      if (item === null || typeof item !== "object") {
+        continue;
+      }
+      const record = item;
+      const integration_id = record.integration_id;
+      const project_id = record.project_id;
+      const provider_name = record.provider_name;
+      const repo_key = record.repo_key;
+      if (typeof integration_id !== "string" || typeof project_id !== "string" || typeof provider_name !== "string" || typeof repo_key !== "string") {
+        continue;
+      }
+      rtnval.push({
+        integration_id,
+        project_id,
+        provider_name,
+        repo_key
+      });
+    }
+    return rtnval;
+  }
+  /**
+   * Fetch the current page of builds and re-render the table.
+   * Exposed so unit tests can await a fetch cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.projectId.length === 0) {
+      this._builds = [];
+      this._render_table_region();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._render_table_region();
+    const url = build_builds_query_url(this._state);
+    let page = null;
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error("builds fetch failed: HTTP " + String(response.status));
+      }
+      const body = await response.json();
+      page = body;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.list_fetch_failed",
+        { reason: String(reason) }
+      );
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    if (page === null || Array.isArray(page.items) === false) {
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    this._builds = page.items;
+    const meta = page.meta;
+    if (meta !== void 0 && meta !== null) {
+      if (typeof meta.total === "number") {
+        this._state.total = meta.total;
+      }
+      if (typeof meta.page === "number") {
+        this._state.page = meta.page;
+      }
+      if (typeof meta.per_page === "number") {
+        this._state.perPage = meta.per_page;
+      }
+    }
+    this._state.loading = false;
+    this._state.errored = false;
+    this._render_table_region();
+    return;
+  }
+  /**
+   * Re-render the table region from the current state + builds.
+   */
+  _render_table_region() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    if (this._state.projectId.length === 0) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-builds__status");
+      notice.setAttribute("data-role", "no-project-state");
+      notice.textContent = "Select a project to view its builds.";
+      region.replaceChildren(notice);
+      this._render_pager();
+      return;
+    }
+    if (this._state.loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-builds__status");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading builds\u2026";
+      region.replaceChildren(loading);
+      this._render_pager();
+      return;
+    }
+    if (this._state.errored === true) {
+      const error = document.createElement("p");
+      error.classList.add("pyc-builds__status", "pyc-builds__status--error");
+      error.setAttribute("data-role", "error-state");
+      error.textContent = "Failed to load builds. Try refreshing.";
+      region.replaceChildren(error);
+      this._render_pager();
+      return;
+    }
+    if (this._builds.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-builds__status");
+      empty.setAttribute("data-role", "empty-state");
+      empty.textContent = "No builds yet";
+      region.replaceChildren(empty);
+      this._render_pager();
+      return;
+    }
+    const table = this._build_table();
+    region.replaceChildren(table);
+    this._render_pager();
+    return;
+  }
+  /**
+   * Build the builds ``<table>`` from the current ``_builds``
+   * list.
+   */
+  _build_table() {
+    const table = document.createElement("table");
+    table.classList.add("pyc-builds__table");
+    const thead = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    const columns = [
+      "Build",
+      "Runner kind",
+      "State",
+      "Repro digest",
+      "Started",
+      "Finished"
+    ];
+    for (const column of columns) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = column;
+      head_row.appendChild(th);
+    }
+    thead.appendChild(head_row);
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    for (const build of this._builds) {
+      const row = document.createElement("tr");
+      row.classList.add("pyc-builds__row");
+      const id_cell = document.createElement("td");
+      const link = document.createElement("a");
+      link.classList.add("pyc-builds__build-link");
+      link.setAttribute("href", "/builds/" + build.run_id);
+      link.textContent = short_id(build.run_id);
+      link.title = build.run_id;
+      id_cell.appendChild(link);
+      row.appendChild(id_cell);
+      const runner_cell = document.createElement("td");
+      runner_cell.textContent = build.runner_kind;
+      row.appendChild(runner_cell);
+      const state_cell = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.classList.add("pyc-builds__badge");
+      badge.setAttribute("data-tone", build_state_tone(build.state));
+      badge.textContent = build.state;
+      state_cell.appendChild(badge);
+      row.appendChild(state_cell);
+      const digest_cell = document.createElement("td");
+      const digest = document.createElement("span");
+      digest.classList.add("pyc-builds__digest");
+      digest.textContent = short_id(build.repro_digest_sha256);
+      digest.title = build.repro_digest_sha256;
+      digest_cell.appendChild(digest);
+      row.appendChild(digest_cell);
+      const started_cell = document.createElement("td");
+      started_cell.textContent = format_timestamp(build.started_at);
+      row.appendChild(started_cell);
+      const finished_cell = document.createElement("td");
+      finished_cell.textContent = format_timestamp(build.finished_at);
+      row.appendChild(finished_cell);
+      tbody.appendChild(row);
+    }
+    table.appendChild(tbody);
+    return table;
+  }
+  /**
+   * Update the pager controls -- enabled state + the page
+   * indicator label -- from the current state.
+   */
+  _render_pager() {
+    if (this._root === null) {
+      return;
+    }
+    const prev = this._root.querySelector('[data-role="prev-page"]');
+    const next = this._root.querySelector('[data-role="next-page"]');
+    const indicator = this._root.querySelector('[data-role="page-indicator"]');
+    if (prev instanceof HTMLButtonElement) {
+      prev.disabled = has_previous_page(this._state) === false;
+    }
+    if (next instanceof HTMLButtonElement) {
+      next.disabled = has_next_page(this._state) === false;
+    }
+    if (indicator instanceof HTMLElement) {
+      const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
+      indicator.textContent = label;
+    }
+    return;
+  }
+  /**
+   * Toggle the inline trigger-build form's visibility, rendering
+   * it on first reveal.
+   */
+  _toggle_trigger_form() {
+    if (this._trigger_region === null) {
+      return;
+    }
+    const region = this._trigger_region;
+    if (region.hidden === true) {
+      this._render_trigger_form();
+      region.hidden = false;
+    } else {
+      region.hidden = true;
+    }
+    return;
+  }
+  /**
+   * Render the trigger-build form into the trigger region -- a
+   * source-integration selector, a runner-kind input, a runner-
+   * inputs JSON textarea, and a submit button.
+   */
+  _render_trigger_form() {
+    if (this._trigger_region === null) {
+      return;
+    }
+    const form = document.createElement("form");
+    form.classList.add("pyc-builds__trigger-form");
+    form.setAttribute("data-role", "trigger-form");
+    const integration_label = document.createElement("label");
+    integration_label.classList.add("pyc-builds__field");
+    integration_label.textContent = "Source integration";
+    const integration_select = document.createElement("select");
+    integration_select.classList.add("pyc-builds__select");
+    integration_select.setAttribute("data-role", "trigger-integration");
+    if (this._integrations.length === 0) {
+      const none_option = document.createElement("option");
+      none_option.value = "";
+      none_option.textContent = "No source integration registered";
+      integration_select.appendChild(none_option);
+    } else {
+      for (const integration of this._integrations) {
+        const option = document.createElement("option");
+        option.value = integration.integration_id;
+        option.textContent = integration.provider_name + " \xB7 " + integration.repo_key;
+        integration_select.appendChild(option);
+      }
+    }
+    integration_label.appendChild(integration_select);
+    form.appendChild(integration_label);
+    const runner_label = document.createElement("label");
+    runner_label.classList.add("pyc-builds__field");
+    runner_label.textContent = "Runner kind";
+    const runner_input = document.createElement("input");
+    runner_input.classList.add("pyc-builds__input");
+    runner_input.setAttribute("type", "text");
+    runner_input.setAttribute("placeholder", "makefile");
+    runner_input.setAttribute("data-role", "trigger-runner-kind");
+    runner_input.required = true;
+    runner_label.appendChild(runner_input);
+    form.appendChild(runner_label);
+    const inputs_label = document.createElement("label");
+    inputs_label.classList.add("pyc-builds__field", "pyc-builds__field--wide");
+    inputs_label.textContent = "Runner inputs (JSON)";
+    const inputs_area = document.createElement("textarea");
+    inputs_area.classList.add("pyc-builds__textarea");
+    inputs_area.setAttribute("data-role", "trigger-runner-inputs");
+    inputs_area.setAttribute("placeholder", '{"target": "all"}');
+    inputs_area.rows = 3;
+    inputs_label.appendChild(inputs_area);
+    form.appendChild(inputs_label);
+    const submit_button = document.createElement("button");
+    submit_button.classList.add("pyc-builds__trigger");
+    submit_button.setAttribute("type", "submit");
+    submit_button.setAttribute("data-role", "trigger-submit");
+    submit_button.textContent = "Trigger Build";
+    form.appendChild(submit_button);
+    const status = document.createElement("p");
+    status.classList.add("pyc-builds__trigger-status");
+    status.setAttribute("data-role", "trigger-status");
+    form.appendChild(status);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_trigger(form, runner_input, inputs_area, submit_button);
+    });
+    this._trigger_region.replaceChildren(form);
+    return;
+  }
+  /**
+   * Submit the trigger-build form -- POST a
+   * ``BuildRunCreateRequest`` and surface the outcome. Exposed so
+   * unit tests can invoke a trigger without a real form-submit
+   * event.
+   *
+   * @param runner_kind The runner-kind identifier.
+   * @param runner_inputs Free-form runner inputs object.
+   *
+   * @returns The trigger outcome.
+   */
+  async triggerBuild(runner_kind, runner_inputs) {
+    const rtnval = await this._do_trigger(runner_kind, runner_inputs);
+    return rtnval;
+  }
+  async _submit_trigger(form, runner_input, inputs_area, submit_button) {
+    const status = form.querySelector('[data-role="trigger-status"]');
+    const runner_kind = runner_input.value.trim();
+    if (runner_kind.length === 0) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Runner kind is required.";
+      }
+      return;
+    }
+    let runner_inputs = {};
+    try {
+      runner_inputs = parse_runner_inputs(inputs_area.value);
+    } catch (reason) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Runner inputs must be valid JSON.";
+      }
+      console.warn(
+        "pychestrate.ui.builds.trigger_inputs_invalid",
+        { reason: String(reason) }
+      );
+      return;
+    }
+    submit_button.disabled = true;
+    if (status instanceof HTMLElement) {
+      status.textContent = "Triggering build\u2026";
+    }
+    const outcome = await this._do_trigger(runner_kind, runner_inputs);
+    submit_button.disabled = false;
+    if (status instanceof HTMLElement) {
+      status.textContent = "";
+    }
+    this._show_trigger_toast(outcome);
+    if (outcome.ok === true) {
+      await this._refresh();
+    }
+    return;
+  }
+  async _do_trigger(runner_kind, runner_inputs) {
+    if (this._state.projectId.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        buildId: "",
+        message: "Select a project before triggering a build."
+      };
+      return rtnval2;
+    }
+    const payload = {
+      runner_kind,
+      runner_inputs
+    };
+    let status = 0;
+    let build_id = "";
+    try {
+      const url = build_builds_collection_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        const run = body;
+        if (run !== null && typeof run.run_id === "string") {
+          build_id = run.run_id;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.trigger_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        buildId: "",
+        message: "Failed to reach the build service."
+      };
+      return rtnval2;
+    }
+    const ok = status === 202 || status === 200 || status === 201;
+    const rtnval = {
+      ok,
+      status,
+      buildId: build_id,
+      message: trigger_message_for_status(status)
+    };
+    return rtnval;
+  }
+  /**
+   * Render a dismissible toast for a trigger outcome -- on
+   * success the toast links to the new build's detail page.
+   *
+   * @param outcome The trigger-build outcome.
+   */
+  _show_trigger_toast(outcome) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-builds__toast");
+    toast.setAttribute("data-role", "trigger-toast");
+    toast.setAttribute("data-tone", outcome.ok === true ? "ok" : "error");
+    const message = document.createElement("span");
+    message.classList.add("pyc-builds__toast-message");
+    message.textContent = outcome.message;
+    toast.appendChild(message);
+    if (outcome.ok === true && outcome.buildId.length > 0) {
+      const link = document.createElement("a");
+      link.classList.add("pyc-builds__toast-link");
+      link.setAttribute("href", "/builds/" + outcome.buildId);
+      link.setAttribute("data-role", "trigger-toast-link");
+      link.textContent = "View build";
+      toast.appendChild(link);
+    }
+    const dismiss = document.createElement("button");
+    dismiss.classList.add("pyc-builds__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "\xD7";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    this._toast_region.replaceChildren(toast);
+    return;
+  }
+}
+export {
+  BUILD_STATES,
+  PycBuildsList,
+  TERMINAL_BUILD_STATES,
+  build_builds_collection_url,
+  build_builds_query_url,
+  build_source_integrations_url,
+  build_state_tone,
+  format_timestamp,
+  has_next_page,
+  has_previous_page,
+  is_terminal_build_state,
+  parse_runner_inputs,
+  short_id,
+  trigger_message_for_status
+};

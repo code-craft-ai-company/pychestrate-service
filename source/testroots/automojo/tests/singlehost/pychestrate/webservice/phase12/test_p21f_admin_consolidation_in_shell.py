@@ -127,7 +127,7 @@ def test_admin_overview_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-admin-bundle.js" in body
+        "/static/javascript/pyc-admin-bundle/index.js" in body
     )
     return
 
@@ -152,7 +152,7 @@ def test_admin_extensions_route_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-admin-bundle.js" in body
+        "/static/javascript/pyc-admin-bundle/index.js" in body
     )
     return
 

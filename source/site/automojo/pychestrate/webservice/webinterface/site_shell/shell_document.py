@@ -11,9 +11,9 @@ The shell document is intentionally tiny. It carries:
 
 * The ``<pyc-site-shell>`` Custom Element with its observed
   attributes initialized from the request.
-* One ``<script type="module" src=".../dist/<name>.js">`` per
+* One ``<script type="module" src=".../<name>/index.js">`` per
   bundle returned by :func:`bundles_for`.
-* The compiled stylesheet (one ``<link>`` tag).
+* The shell stylesheet (one ``<link>`` tag).
 
 The Custom Element itself owns header, sidebar, main, and empty-
 state rendering. Server-side this module is pure plumbing -- pick

@@ -19,7 +19,7 @@ blueprint. Asserts:
 * Each body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * Each body imports the prebuilt resources bundle at
-  ``/static/javascript/dist/pyc-resources-bundle.js`` so the
+  ``/static/javascript/pyc-resources-bundle/index.js`` so the
   ``<pyc-resource-pools>`` / ``<pyc-resource-detail>`` views mount
   when the shell connects.
 * The resources bundle itself is served as JavaScript by the
@@ -163,7 +163,7 @@ def test_resource_pools_page_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-resources-bundle.js" in body
+        "/static/javascript/pyc-resources-bundle/index.js" in body
     )
     return
 
@@ -202,7 +202,7 @@ def test_resource_detail_page_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-resources-bundle.js" in body
+        "/static/javascript/pyc-resources-bundle/index.js" in body
     )
     return
 
@@ -211,7 +211,7 @@ def test_resources_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + resources-ui**
     **Property: The prebuilt resources bundle at
-    ``/static/javascript/dist/pyc-resources-bundle.js`` is reachable
+    ``/static/javascript/pyc-resources-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -222,7 +222,7 @@ def test_resources_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-resources-bundle.js"
+            "/static/javascript/pyc-resources-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

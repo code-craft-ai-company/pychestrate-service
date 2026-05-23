@@ -1,0 +1,369 @@
+const FLAGS_PATH = "/api/v1/flags";
+const FLAG_STATE_ENABLED = "enabled";
+const FLAG_STATE_DISABLED = "disabled";
+const FLAG_STATE_RETIRED = "retired";
+function build_flag_url(flag_key) {
+  const rtnval = FLAGS_PATH + "/" + encodeURIComponent(flag_key);
+  return rtnval;
+}
+function flag_state_tone(state) {
+  if (typeof state !== "string") {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
+  const lowered = state.toLowerCase();
+  if (lowered === FLAG_STATE_ENABLED) {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (lowered === FLAG_STATE_DISABLED) {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
+  if (lowered === FLAG_STATE_RETIRED) {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  const rtnval = "warn";
+  return rtnval;
+}
+function next_flag_state(state) {
+  if (typeof state === "string" && state.toLowerCase() === FLAG_STATE_ENABLED) {
+    const rtnval2 = FLAG_STATE_DISABLED;
+    return rtnval2;
+  }
+  const rtnval = FLAG_STATE_ENABLED;
+  return rtnval;
+}
+function toggle_message_for_status(status) {
+  if (status === 200) {
+    const rtnval2 = "Flag state updated.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "The flag was modified concurrently \u2014 refresh.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "The flag-state update was rejected.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to manage flags.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to update flag (HTTP " + String(status) + ").";
+  return rtnval;
+}
+class PycFeatureFlags extends HTMLElement {
+  _entries;
+  _loading;
+  _errored;
+  _table_region;
+  _status_region;
+  constructor() {
+    super();
+    this._entries = [];
+    this._loading = false;
+    this._errored = false;
+    this._table_region = null;
+    this._status_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to read the loading
+   * flag without scraping the DOM.
+   */
+  get loading() {
+    const rtnval = this._loading;
+    return rtnval;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to read the errored
+   * flag without scraping the DOM.
+   */
+  get errored() {
+    const rtnval = this._errored;
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * flags fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._refresh();
+    return;
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-admin");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-admin__heading");
+    heading.textContent = "Feature Flags";
+    root.appendChild(heading);
+    const lede = document.createElement("p");
+    lede.classList.add("pyc-admin__lede");
+    lede.textContent = "Toggle a flag's state. Retired flags are read-only.";
+    root.appendChild(lede);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-admin__controls");
+    const refresh_button = document.createElement("button");
+    refresh_button.classList.add("pyc-admin__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const status_region = document.createElement("div");
+    status_region.setAttribute("data-role", "status-region");
+    root.appendChild(status_region);
+    this._status_region = status_region;
+    const table_region = document.createElement("div");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the flags list and re-render. Exposed so unit tests
+   * can await a fetch cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    this._loading = true;
+    this._errored = false;
+    this._render_table();
+    let entries = null;
+    try {
+      const response = await fetch(FLAGS_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error(
+          "flags fetch failed: HTTP " + String(response.status)
+        );
+      }
+      const body = await response.json();
+      if (Array.isArray(body) === true) {
+        entries = body;
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.admin.flags_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (entries === null) {
+      this._loading = false;
+      this._errored = true;
+      this._render_table();
+      return;
+    }
+    this._entries = entries;
+    this._loading = false;
+    this._errored = false;
+    this._render_table();
+    return;
+  }
+  _render_table() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    if (this._loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-admin__notice");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading feature flags\u2026";
+      region.replaceChildren(loading);
+      return;
+    }
+    if (this._errored === true) {
+      const error = document.createElement("p");
+      error.classList.add(
+        "pyc-admin__notice",
+        "pyc-admin__notice--error"
+      );
+      error.setAttribute("data-role", "error-state");
+      error.textContent = "Failed to load feature flags. Try refreshing.";
+      region.replaceChildren(error);
+      return;
+    }
+    if (this._entries.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-admin__notice");
+      empty.setAttribute("data-role", "empty-state");
+      empty.textContent = "No feature flags registered.";
+      region.replaceChildren(empty);
+      return;
+    }
+    const table = document.createElement("table");
+    table.classList.add("pyc-admin__table");
+    const thead = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    const columns = [
+      "Flag Key",
+      "Kind",
+      "Version",
+      "State",
+      "Actions"
+    ];
+    for (const column of columns) {
+      const th = document.createElement("th");
+      th.scope = "col";
+      th.textContent = column;
+      head_row.appendChild(th);
+    }
+    thead.appendChild(head_row);
+    table.appendChild(thead);
+    const ordered = this._entries.slice();
+    ordered.sort(
+      (left, right) => {
+        if (left.flag_key < right.flag_key) {
+          return -1;
+        }
+        if (left.flag_key > right.flag_key) {
+          return 1;
+        }
+        return 0;
+      }
+    );
+    const tbody = document.createElement("tbody");
+    for (const entry of ordered) {
+      tbody.appendChild(this._build_row(entry));
+    }
+    table.appendChild(tbody);
+    region.replaceChildren(table);
+    return;
+  }
+  _build_row(entry) {
+    const row = document.createElement("tr");
+    row.setAttribute("data-flag-key", entry.flag_key);
+    const key_cell = document.createElement("td");
+    key_cell.textContent = entry.flag_key;
+    row.appendChild(key_cell);
+    const kind_cell = document.createElement("td");
+    kind_cell.textContent = entry.flag_kind ?? "\u2014";
+    row.appendChild(kind_cell);
+    const version_cell = document.createElement("td");
+    version_cell.textContent = String(entry.current_version);
+    row.appendChild(version_cell);
+    const state_cell = document.createElement("td");
+    const state_badge = document.createElement("span");
+    state_badge.classList.add("pyc-admin__badge");
+    state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
+    state_badge.textContent = entry.state ?? "\u2014";
+    state_cell.appendChild(state_badge);
+    row.appendChild(state_cell);
+    const actions_cell = document.createElement("td");
+    const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
+    const toggle = document.createElement("button");
+    toggle.classList.add("pyc-admin__toggle");
+    toggle.setAttribute("type", "button");
+    toggle.setAttribute("data-role", "toggle");
+    const target = next_flag_state(entry.state);
+    toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    if (is_retired === true) {
+      toggle.disabled = true;
+    }
+    toggle.addEventListener("click", () => {
+      toggle.disabled = true;
+      void this._on_toggle(entry, toggle);
+    });
+    actions_cell.appendChild(toggle);
+    row.appendChild(actions_cell);
+    return row;
+  }
+  async _on_toggle(entry, toggle) {
+    const target = next_flag_state(entry.state);
+    const outcome = await this.toggleFlag(entry.flag_key, target);
+    toggle.disabled = false;
+    this._show_status(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    if (outcome.ok === true) {
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * PATCH a flag's state. Exposed so unit tests can invoke a
+   * toggle without a real click event.
+   *
+   * @param flag_key The flag to update.
+   * @param target_state The desired flag-state value.
+   *
+   * @returns The toggle outcome.
+   */
+  async toggleFlag(flag_key, target_state) {
+    const payload = { state: target_state };
+    let status = 0;
+    try {
+      const response = await fetch(build_flag_url(flag_key), {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.admin.flag_toggle_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        flagKey: flag_key,
+        message: "Failed to reach the feature-flags service."
+      };
+      return rtnval2;
+    }
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      flagKey: flag_key,
+      message: toggle_message_for_status(status)
+    };
+    return rtnval;
+  }
+  _show_status(message, tone) {
+    if (this._status_region === null) {
+      return;
+    }
+    const notice = document.createElement("p");
+    notice.classList.add("pyc-admin__notice");
+    if (tone === "error") {
+      notice.classList.add("pyc-admin__notice--error");
+    }
+    notice.setAttribute("data-role", "toggle-status");
+    notice.textContent = message;
+    this._status_region.replaceChildren(notice);
+    return;
+  }
+}
+export {
+  FLAGS_PATH,
+  FLAG_STATE_DISABLED,
+  FLAG_STATE_ENABLED,
+  FLAG_STATE_RETIRED,
+  PycFeatureFlags,
+  build_flag_url,
+  flag_state_tone,
+  next_flag_state,
+  toggle_message_for_status
+};

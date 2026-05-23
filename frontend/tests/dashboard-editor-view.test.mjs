@@ -9,9 +9,8 @@
  * create-replace save -- driven against a jsdom document and a
  * stubbed ``fetch``.
  *
- * Imports the built ESM bundle from the dist directory. The bundle
- * is committed to git so the test runs without re-running the
- * build first; rerun ``npm run build`` after editing a .ts source.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -33,8 +32,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-metrics-bundle.js",
+    "pyc-metrics-bundle",
+    "index.js",
 )
 
 const DASHBOARD_ID = "dddddddd-1111-2222-3333-444444444444"

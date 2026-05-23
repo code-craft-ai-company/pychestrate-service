@@ -12,7 +12,7 @@ Logs in against the deploy, hits ``GET /``, and asserts that:
 * The response body contains the ``<pyc-site-shell>`` Custom
   Element open tag.
 * The response body references the prebuilt shell bundle at
-  ``/static/javascript/dist/pyc-site-shell.js``.
+  ``/static/javascript/pyc-site-shell/index.js``.
 
 That's enough to confirm PR3's mount path works end-to-end (the
 catch-all handler runs, the Jinja template renders, the static
@@ -88,7 +88,7 @@ def test_root_path_serves_site_shell_document():
     **Property: After a successful login, GET / on a deployed
     pychestrate instance returns an HTML document that mounts
     the ``<pyc-site-shell>`` Custom Element and imports the
-    prebuilt ``/static/javascript/dist/pyc-site-shell.js``
+    prebuilt ``/static/javascript/pyc-site-shell/index.js``
     bundle. An anonymous GET / would 303-redirect to /login
     per 1-authentication Requirement 5.**
     """
@@ -115,7 +115,7 @@ def test_root_path_serves_site_shell_document():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-site-shell.js" in body
+        "/static/javascript/pyc-site-shell/index.js" in body
     )
     return
 
@@ -144,7 +144,7 @@ def test_shell_bundle_is_served_as_javascript():
     """
     **Feature: site-shell**
     **Property: The prebuilt shell bundle at
-    ``/static/javascript/dist/pyc-site-shell.js`` is reachable
+    ``/static/javascript/pyc-site-shell/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type.**
     """
@@ -153,7 +153,7 @@ def test_shell_bundle_is_served_as_javascript():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
-        response = client.get("/static/javascript/dist/pyc-site-shell.js")
+        response = client.get("/static/javascript/pyc-site-shell/index.js")
 
     testbase.assert_equal(response.status_code, 200)
     content_type = response.headers.get("content-type", "")

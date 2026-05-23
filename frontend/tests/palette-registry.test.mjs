@@ -2,8 +2,8 @@
  * Unit tests for the PaletteRegistry: provider registration,
  * permission gating, and failure isolation (M2 / PR5).
  *
- * Imports the built ESM bundle from the dist directory, matching
- * the policy used by sidebar-registry.test.mjs.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -24,8 +24,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-site-shell.js",
+    "pyc-site-shell",
+    "index.js",
 )
 
 globalThis.customElements = {

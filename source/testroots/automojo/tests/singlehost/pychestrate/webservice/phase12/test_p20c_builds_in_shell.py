@@ -14,7 +14,7 @@ successful admin login. Asserts:
 * The body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * The body imports the prebuilt builds bundle at
-  ``/static/javascript/dist/pyc-builds-bundle.js`` so the
+  ``/static/javascript/pyc-builds-bundle/index.js`` so the
   ``<pyc-builds-list>`` view mounts when the shell connects.
 * The builds bundle itself is served as JavaScript by the static
   file surface.
@@ -164,7 +164,7 @@ def test_builds_page_renders_inside_site_shell():
     # The builds bundle <script> tag is present so the view mounts
     # and the sidebar registration runs on this navigation.
     testbase.assert_true(
-        "/static/javascript/dist/pyc-builds-bundle.js" in body
+        "/static/javascript/pyc-builds-bundle/index.js" in body
     )
     return
 
@@ -173,7 +173,7 @@ def test_builds_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + build-ui**
     **Property: The prebuilt builds bundle at
-    ``/static/javascript/dist/pyc-builds-bundle.js`` is reachable
+    ``/static/javascript/pyc-builds-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -184,7 +184,7 @@ def test_builds_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-builds-bundle.js"
+            "/static/javascript/pyc-builds-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)

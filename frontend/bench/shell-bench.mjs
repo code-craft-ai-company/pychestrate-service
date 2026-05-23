@@ -35,8 +35,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-site-shell.js",
+    "pyc-site-shell",
+    "index.js",
 )
 
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {

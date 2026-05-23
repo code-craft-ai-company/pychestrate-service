@@ -2,10 +2,8 @@
  * Unit tests for SidebarRegistry.visible() — permission-intersection
  * logic and route-collision handling.
  *
- * Imports the built ESM bundle from the dist directory. The bundle
- * is committed to git so this test runs without re-running the
- * build first; CI/dev should rerun `npm run build` before testing
- * if they edited a .ts source.
+ * Imports the component module directly from the served
+ * static tree -- no build step.
  */
 
 import { test } from "node:test"
@@ -26,8 +24,8 @@ const BUNDLE_PATH = path.resolve(
     "webinterface",
     "static",
     "javascript",
-    "dist",
-    "pyc-site-shell.js",
+    "pyc-site-shell",
+    "index.js",
 )
 
 // The bundle defines a Custom Element on import; stub the bits the

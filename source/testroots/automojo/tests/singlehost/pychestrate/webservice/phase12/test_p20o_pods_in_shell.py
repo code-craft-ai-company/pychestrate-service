@@ -15,7 +15,7 @@ the deploy after a successful admin login. Asserts:
 * Each body contains the ``<pyc-site-shell>`` Custom Element open
   tag -- i.e. the page renders inside the shell.
 * Each body imports the prebuilt pods bundle at
-  ``/static/javascript/dist/pyc-pods-bundle.js`` so the
+  ``/static/javascript/pyc-pods-bundle/index.js`` so the
   ``<pyc-pods-list>`` / ``<pyc-clients-list>`` views mount when the
   shell connects.
 * The pods bundle itself is served as JavaScript by the static
@@ -159,7 +159,7 @@ def test_pods_page_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-pods-bundle.js" in body
+        "/static/javascript/pyc-pods-bundle/index.js" in body
     )
     return
 
@@ -193,7 +193,7 @@ def test_clients_page_renders_inside_site_shell():
     body = response.text
     testbase.assert_true("<pyc-site-shell" in body)
     testbase.assert_true(
-        "/static/javascript/dist/pyc-pods-bundle.js" in body
+        "/static/javascript/pyc-pods-bundle/index.js" in body
     )
     return
 
@@ -202,7 +202,7 @@ def test_pods_bundle_is_served_as_javascript():
     """
     **Feature: site-shell + pods-ui**
     **Property: The prebuilt pods bundle at
-    ``/static/javascript/dist/pyc-pods-bundle.js`` is reachable
+    ``/static/javascript/pyc-pods-bundle/index.js`` is reachable
     over the static-files surface and is served with a
     JavaScript-flavored Content-Type. No login required -- the
     bundle is a static asset.**
@@ -213,7 +213,7 @@ def test_pods_bundle_is_served_as_javascript():
             follow_redirects=False,
         ) as client:
         response = client.get(
-            "/static/javascript/dist/pyc-pods-bundle.js"
+            "/static/javascript/pyc-pods-bundle/index.js"
         )
 
     testbase.assert_equal(response.status_code, 200)
