@@ -207,7 +207,7 @@ pyc-build-detail {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-builds__table th {
+.pyc-builds__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -215,12 +215,12 @@ pyc-build-detail {
     border-bottom: 0.0625rem solid var(--pyc-builds-border);
 }
 
-.pyc-builds__table td {
+.pyc-builds__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-builds-divider);
 }
 
-.pyc-builds__row:hover {
+.pyc-builds__table::part(tr):hover {
     background-color: var(--pyc-builds-surface-hover);
 }
 
@@ -285,11 +285,6 @@ pyc-build-detail {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-builds__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-builds-fg-muted);
 }
 
 /* ---- build detail ---- */

@@ -132,7 +132,7 @@ pyc-test-catalog {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-catalog__table th {
+.pyc-catalog__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -140,16 +140,16 @@ pyc-test-catalog {
     border-bottom: 0.0625rem solid var(--pyc-catalog-border);
 }
 
-.pyc-catalog__table td {
+.pyc-catalog__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-catalog-divider);
 }
 
-.pyc-catalog__row:hover {
+.pyc-catalog__table::part(tr):hover {
     background-color: var(--pyc-catalog-surface-hover);
 }
 
-.pyc-catalog__row--retired {
+.pyc-catalog__table::part(tr)[data-retired] {
     opacity: 0.55;
 }
 
@@ -195,11 +195,6 @@ pyc-test-catalog {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-catalog__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-catalog-fg-muted);
 }
 
 .pyc-catalog__toast-region {

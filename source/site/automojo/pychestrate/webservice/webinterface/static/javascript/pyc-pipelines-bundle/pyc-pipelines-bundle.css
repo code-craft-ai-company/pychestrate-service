@@ -218,7 +218,7 @@ pyc-pipeline-detail {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-pipelines__table th {
+.pyc-pipelines__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -226,12 +226,12 @@ pyc-pipeline-detail {
     border-bottom: 0.0625rem solid var(--pyc-pipelines-border);
 }
 
-.pyc-pipelines__table td {
+.pyc-pipelines__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-pipelines-divider);
 }
 
-.pyc-pipelines__row:hover {
+.pyc-pipelines__table::part(tr):hover {
     background-color: var(--pyc-pipelines-surface-hover);
 }
 
@@ -268,11 +268,6 @@ pyc-pipeline-detail {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-pipelines__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-pipelines-fg-muted);
 }
 
 /* ---- pipeline detail ---- */

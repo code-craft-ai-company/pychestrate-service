@@ -127,6 +127,7 @@ function has_previous_page(state) {
   return rtnval;
 }
 class PycClientsList extends HTMLElement {
+  _pager;
   _state;
   _clients;
   _root;
@@ -146,6 +147,7 @@ class PycClientsList extends HTMLElement {
     this._clients = [];
     this._root = null;
     this._table_region = null;
+    this._pager = null;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the
@@ -262,36 +264,27 @@ class PycClientsList extends HTMLElement {
     table_region.setAttribute("data-role", "table-region");
     root.appendChild(table_region);
     this._table_region = table_region;
-    const pager = document.createElement("div");
+    const pager = document.createElement("mj-pagination");
+
     pager.classList.add("pyc-clients-list__pager");
-    const prev_button = document.createElement("mj-button");
-    prev_button.classList.add("pyc-clients-list__button");
-    prev_button.setAttribute("type", "button");
-    prev_button.setAttribute("data-role", "prev-page");
-    prev_button.textContent = "Previous";
-    prev_button.addEventListener("click", () => {
-      if (has_previous_page(this._state) === true) {
-        this._state.page = this._state.page - 1;
-        this._render_table_region();
-      }
+
+    pager.setAttribute("data-role", "pager");
+
+    pager.setAttribute("page", String(this._state.page));
+
+    pager.setAttribute("page-size", String(this._state.perPage));
+
+    pager.setAttribute("total-items", String(this._state.total));
+
+    pager.addEventListener("mj-pagination-change", (event) => {
+
+      this._state.page = event.detail.page;
+
+      void this._refresh();
+
     });
-    pager.appendChild(prev_button);
-    const page_indicator = document.createElement("span");
-    page_indicator.classList.add("pyc-clients-list__page-indicator");
-    page_indicator.setAttribute("data-role", "page-indicator");
-    pager.appendChild(page_indicator);
-    const next_button = document.createElement("mj-button");
-    next_button.classList.add("pyc-clients-list__button");
-    next_button.setAttribute("type", "button");
-    next_button.setAttribute("data-role", "next-page");
-    next_button.textContent = "Next";
-    next_button.addEventListener("click", () => {
-      if (has_next_page(this._state) === true) {
-        this._state.page = this._state.page + 1;
-        this._render_table_region();
-      }
-    });
-    pager.appendChild(next_button);
+
+    this._pager = pager;
     root.appendChild(pager);
     this._root = root;
     this.replaceChildren(root);
@@ -483,23 +476,21 @@ class PycClientsList extends HTMLElement {
     return table;
   }
   _render_pager() {
-    if (this._root === null) {
+
+    if (this._pager === null || this._pager === undefined) {
+
       return;
+
     }
-    const prev = this._root.querySelector('[data-role="prev-page"]');
-    const next = this._root.querySelector('[data-role="next-page"]');
-    const indicator = this._root.querySelector('[data-role="page-indicator"]');
-    if (prev instanceof HTMLElement) {
-      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
-    }
-    if (next instanceof HTMLElement) {
-      next.toggleAttribute("disabled", has_next_page(this._state) === false);
-    }
-    if (indicator instanceof HTMLElement) {
-      const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
-      indicator.textContent = label;
-    }
+
+    this._pager.setAttribute("page", String(this._state.page));
+
+    this._pager.setAttribute("page-size", String(this._state.perPage));
+
+    this._pager.setAttribute("total-items", String(this._state.total));
+
     return;
+
   }
 }
 export {

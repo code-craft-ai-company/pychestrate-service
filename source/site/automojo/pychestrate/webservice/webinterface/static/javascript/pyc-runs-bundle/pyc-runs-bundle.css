@@ -106,7 +106,7 @@ pyc-runs-list {
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-runs-list__table th {
+.pyc-runs-list__table::part(th) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -114,12 +114,12 @@ pyc-runs-list {
     border-bottom: 0.0625rem solid var(--pyc-runs-border);
 }
 
-.pyc-runs-list__table td {
+.pyc-runs-list__table::part(td) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-runs-divider);
 }
 
-.pyc-runs-list__row:hover {
+.pyc-runs-list__table::part(tr):hover {
     background-color: var(--pyc-runs-surface-hover);
 }
 
@@ -172,11 +172,6 @@ pyc-runs-list {
     display: flex;
     align-items: center;
     gap: 1rem;
-}
-
-.pyc-runs-list__page-indicator {
-    font-size: var(--pyc-font-size-meta, 0.75rem);
-    color: var(--pyc-runs-fg-muted);
 }
 
 /*
