@@ -84,6 +84,7 @@ class NavGroup:
 # Group identifiers -- mirror the ``groupId`` values the feature
 # bundles historically registered so existing CSS / tests keep
 # matching.
+GROUP_PROJECTS: str = "projects"
 GROUP_ORCHESTRATION: str = "orchestration"
 GROUP_INSIGHTS: str = "insights"
 GROUP_FLEET: str = "fleet"
@@ -97,6 +98,11 @@ GROUP_ADMIN: str = "admin"
 # means the group is never hidden on the group check alone -- entry
 # checks still apply).
 NAV_GROUPS: List[NavGroup] = [
+    NavGroup(
+        group_id=GROUP_PROJECTS,
+        label="Projects",
+        required_permissions=["system:projects.read"],
+    ),
     NavGroup(
         group_id=GROUP_ORCHESTRATION,
         label="Orchestration",
@@ -135,6 +141,14 @@ NAV_GROUPS: List[NavGroup] = [
 # permission keys are the same ``system:<feature>.read`` keys the
 # bundles used (verified against the in-tree permission catalog).
 NAV_ENTRIES: List[NavEntry] = [
+    # ---- Projects ------------------------------------------------
+    NavEntry(
+        entry_id="projects.dashboard",
+        label="Projects",
+        route="/projects",
+        group_id=GROUP_PROJECTS,
+        required_permissions=["system:projects.read"],
+    ),
     # ---- Orchestration -------------------------------------------
     NavEntry(
         entry_id="orchestration.runs",
