@@ -493,14 +493,19 @@ class PycSecrets extends HTMLElement {
    */
   _build_table() {
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-secrets__table");
+    // Sorting is client-side over the current page; the timestamp
+    // columns sort by their raw ISO strings (chronological order).
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-secrets__row";
     table.rowAttrs = (secret) => ({ "data-secret-ref": secret.secret_ref });
     table.columns = [
       {
         key: "secret_ref",
         label: "Name",
+        width: "20rem",
         render: (secret) => {
           const name_code = document.createElement("code");
           name_code.classList.add("pyc-secrets__ref");
@@ -511,6 +516,7 @@ class PycSecrets extends HTMLElement {
       {
         key: "scope",
         label: "Scope",
+        width: "12rem",
         render: (secret) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-secrets__badge");
@@ -526,16 +532,20 @@ class PycSecrets extends HTMLElement {
       {
         key: "created_at",
         label: "Created",
+        width: "12rem",
         render: (secret) => format_timestamp(secret.created_at)
       },
       {
         key: "updated_at",
         label: "Updated",
+        width: "12rem",
         render: (secret) => format_timestamp(secret.updated_at)
       },
       {
         key: "value",
         label: "Value",
+        width: "16rem",
+        sortable: false,
         cellClass: "pyc-secrets__value-cell",
         cellAttrs: () => ({ "data-role": "value-cell" }),
         render: (secret) => self._build_value_node(secret)
@@ -543,6 +553,8 @@ class PycSecrets extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "18rem",
+        sortable: false,
         cellClass: "pyc-secrets__actions",
         render: (secret) => {
           const fragment = document.createDocumentFragment();

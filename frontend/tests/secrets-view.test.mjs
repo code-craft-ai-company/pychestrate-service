@@ -128,8 +128,8 @@ test("PycSecrets fetches ORG metadata on connect and renders rows", async () => 
     assert.equal(calls[0].url.includes("scope_kind=ORG"), true)
     assert.equal(calls[0].options.credentials, "same-origin")
 
-    const table = element.querySelector("mj-table.pyc-secrets__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-secrets__row")
+    const table = element.querySelector("mj-data-table.pyc-secrets__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-secrets__row")
     assert.equal(rows.length, 2)
     element.remove()
 })
@@ -147,7 +147,7 @@ test("the metadata list never requests secret values", async () => {
         assert.equal(call.url.includes("/secrets/value/"), false)
     }
     // The masked placeholder is rendered, not a value.
-    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const table = element.querySelector("mj-data-table.pyc-secrets__table")
     const masked = table.shadowRoot.querySelector('[data-role="masked-value"]')
     assert.notEqual(masked, null)
     element.remove()
@@ -222,7 +222,7 @@ test("reveal fetches the value, collapse clears it", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const table = element.querySelector("mj-data-table.pyc-secrets__table")
     const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -260,7 +260,7 @@ test("navigation away (disconnect) clears every revealed value", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const table = element.querySelector("mj-data-table.pyc-secrets__table")
     const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -280,7 +280,7 @@ test("a 403 on reveal renders the no-access message, not a crash", async () => {
     document.body.appendChild(element)
     await element.refresh()
 
-    const table = element.querySelector("mj-table.pyc-secrets__table")
+    const table = element.querySelector("mj-data-table.pyc-secrets__table")
     const reveal = table.shadowRoot.querySelector('[data-role="reveal-action"]')
     reveal.dispatchEvent(new dom.window.Event("click"))
     await new Promise((resolve) => setTimeout(resolve, 0))
