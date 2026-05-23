@@ -1,7 +1,7 @@
 const TYPE_TO_JUMP_RESET_MS = 1e3;
 const NAVITEM_SELECTOR = ".pyc-site-shell__sidebar-navitem";
 const ENTRY_SELECTOR = ".pyc-site-shell__sidebar-entry";
-const POPUP_CLASS = "pyc-site-shell__sidebar-popup";
+const POPUP_CLASS = "pyc-site-shell__sidebar-panel";
 const GROUP_BUTTON_CLASS = "pyc-site-shell__sidebar-group-btn";
 function attach_sidebar_keyboard(container) {
   const state = {
