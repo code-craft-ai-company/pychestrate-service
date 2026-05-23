@@ -521,7 +521,7 @@ class PycAlertRules extends HTMLElement {
     window_cell.textContent = typeof window_value === "number" ? format_alert_window(window_value) : "\u2014";
     row.appendChild(window_cell);
     const severity_cell = document.createElement("td");
-    const severity_badge = document.createElement("span");
+    const severity_badge = document.createElement("mj-chip");
     severity_badge.classList.add("pyc-metrics__badge");
     severity_badge.setAttribute("data-role", "severity-badge");
     severity_badge.setAttribute("data-tone", this._severity_tone(rule.severity));
@@ -532,7 +532,7 @@ class PycAlertRules extends HTMLElement {
     targets_cell.textContent = rule.notification_targets.length > 0 ? rule.notification_targets.join(", ") : "\u2014";
     row.appendChild(targets_cell);
     const enabled_cell = document.createElement("td");
-    const enabled_badge = document.createElement("span");
+    const enabled_badge = document.createElement("mj-chip");
     enabled_badge.classList.add("pyc-metrics__badge");
     enabled_badge.setAttribute("data-role", "enabled-badge");
     enabled_badge.setAttribute(

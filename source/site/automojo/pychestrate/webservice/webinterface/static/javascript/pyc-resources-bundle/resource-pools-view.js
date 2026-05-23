@@ -505,7 +505,7 @@ class PycResourcePools extends HTMLElement {
         tags_cell.textContent = "\u2014";
       } else {
         for (const tag of tags) {
-          const chip = document.createElement("span");
+          const chip = document.createElement("mj-chip");
           chip.classList.add("pyc-resources__tag");
           chip.textContent = tag;
           tags_cell.appendChild(chip);

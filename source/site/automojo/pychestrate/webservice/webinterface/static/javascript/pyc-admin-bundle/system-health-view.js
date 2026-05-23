@@ -167,7 +167,7 @@ class PycSystemHealth extends HTMLElement {
     const summary_title = document.createElement("p");
     summary_title.classList.add("pyc-admin__card-title");
     summary_title.textContent = "Overall Status";
-    const summary_badge = document.createElement("span");
+    const summary_badge = document.createElement("mj-chip");
     summary_badge.classList.add("pyc-admin__badge");
     summary_badge.setAttribute(
       "data-tone",
@@ -205,7 +205,7 @@ class PycSystemHealth extends HTMLElement {
     const title = document.createElement("p");
     title.classList.add("pyc-admin__card-title");
     title.textContent = subsystem.label;
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-admin__badge");
     badge.setAttribute(
       "data-tone",
@@ -240,7 +240,7 @@ class PycSystemHealth extends HTMLElement {
         name_cell.textContent = backend.name;
         row.appendChild(name_cell);
         const status_cell = document.createElement("td");
-        const status_badge = document.createElement("span");
+        const status_badge = document.createElement("mj-chip");
         status_badge.classList.add("pyc-admin__badge");
         status_badge.setAttribute(
           "data-tone",

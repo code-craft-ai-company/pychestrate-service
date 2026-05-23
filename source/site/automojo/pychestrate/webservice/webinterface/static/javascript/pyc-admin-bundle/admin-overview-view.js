@@ -243,7 +243,7 @@ class PycAdminOverview extends HTMLElement {
     }
     const value = document.createElement("p");
     value.classList.add("pyc-admin__tile-value");
-    const value_badge = document.createElement("span");
+    const value_badge = document.createElement("mj-chip");
     value_badge.classList.add("pyc-admin__badge");
     value_badge.setAttribute(
       "data-tone",
@@ -256,7 +256,7 @@ class PycAdminOverview extends HTMLElement {
     for (const subsystem of this._health.subsystems) {
       const sub = document.createElement("p");
       sub.classList.add("pyc-admin__tile-detail");
-      const sub_badge = document.createElement("span");
+      const sub_badge = document.createElement("mj-chip");
       sub_badge.classList.add("pyc-admin__badge");
       sub_badge.setAttribute(
         "data-tone",
@@ -398,7 +398,7 @@ class PycAdminOverview extends HTMLElement {
     key_cell.textContent = entry.flag_key;
     row.appendChild(key_cell);
     const state_cell = document.createElement("td");
-    const state_badge = document.createElement("span");
+    const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-admin__badge");
     state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
     state_badge.textContent = entry.state ?? "\u2014";

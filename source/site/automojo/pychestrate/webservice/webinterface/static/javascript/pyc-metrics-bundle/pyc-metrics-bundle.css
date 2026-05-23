@@ -271,7 +271,7 @@ pyc-slos {
 }
 
 /* SLO view -- burn-rate badge, toast, inline form region */
-.pyc-metrics__badge {
+.pyc-metrics__badge::part(chip) {
     display: inline-block;
     padding: 0.125rem 0.5rem;
     border-radius: 0.75rem;
@@ -281,17 +281,17 @@ pyc-slos {
     color: var(--pyc-metrics-fg-muted);
 }
 
-.pyc-metrics__badge[data-tone="ok"] {
+.pyc-metrics__badge[data-tone="ok"]::part(chip) {
     background: var(--pyc-metrics-ok-surface);
     color: var(--pyc-metrics-ok-fg);
 }
 
-.pyc-metrics__badge[data-tone="warn"] {
+.pyc-metrics__badge[data-tone="warn"]::part(chip) {
     background: var(--pyc-metrics-warn-surface);
     color: var(--pyc-metrics-warn-fg);
 }
 
-.pyc-metrics__badge[data-tone="error"] {
+.pyc-metrics__badge[data-tone="error"]::part(chip) {
     background: var(--pyc-metrics-error-surface);
     color: var(--pyc-metrics-error-fg);
 }

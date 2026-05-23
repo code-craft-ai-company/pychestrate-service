@@ -258,7 +258,7 @@ class PycExtensionRegistry extends HTMLElement {
     }
     row.appendChild(capabilities_cell);
     const health_cell = document.createElement("td");
-    const health_badge = document.createElement("span");
+    const health_badge = document.createElement("mj-chip");
     health_badge.classList.add("pyc-admin__badge");
     health_badge.setAttribute(
       "data-tone",

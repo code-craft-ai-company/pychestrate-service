@@ -536,7 +536,7 @@ class PycGuards extends HTMLElement {
     rule_cell.textContent = guard.rule_id;
     row.appendChild(rule_cell);
     const state_cell = document.createElement("td");
-    const state_badge = document.createElement("span");
+    const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-infra__badge");
     state_badge.setAttribute("data-role", "enabled-indicator");
     state_badge.setAttribute(
@@ -1036,7 +1036,7 @@ class PycGuards extends HTMLElement {
     const verdict = document.createElement("p");
     verdict.classList.add("pyc-infra__status");
     verdict.setAttribute("data-role", "evaluate-verdict");
-    const verdict_badge = document.createElement("span");
+    const verdict_badge = document.createElement("mj-chip");
     verdict_badge.classList.add("pyc-infra__badge");
     verdict_badge.setAttribute(
       "data-tone",
@@ -1068,7 +1068,7 @@ class PycGuards extends HTMLElement {
       rule_cell.textContent = entry.rule_id;
       row.appendChild(rule_cell);
       const verdict_cell = document.createElement("td");
-      const badge = document.createElement("span");
+      const badge = document.createElement("mj-chip");
       badge.classList.add("pyc-infra__badge");
       badge.setAttribute("data-tone", verdict_tone(entry.verdict));
       badge.textContent = entry.verdict;

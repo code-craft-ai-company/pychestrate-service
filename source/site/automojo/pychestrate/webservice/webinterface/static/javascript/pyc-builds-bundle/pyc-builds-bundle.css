@@ -241,7 +241,7 @@ pyc-build-detail {
 }
 
 .pyc-builds__badge,
-.pyc-build-detail__badge {
+.pyc-build-detail__badge::part(chip) {
     display: inline-block;
     padding: 0.125rem 0.5rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -251,19 +251,19 @@ pyc-build-detail {
 }
 
 .pyc-builds__badge[data-tone="ok"],
-.pyc-build-detail__badge[data-tone="ok"] {
+.pyc-build-detail__badge[data-tone="ok"]::part(chip) {
     background-color: var(--pyc-builds-ok-surface);
     color: var(--pyc-builds-ok-fg);
 }
 
 .pyc-builds__badge[data-tone="warn"],
-.pyc-build-detail__badge[data-tone="warn"] {
+.pyc-build-detail__badge[data-tone="warn"]::part(chip) {
     background-color: var(--pyc-builds-warn-surface);
     color: var(--pyc-builds-warn-fg);
 }
 
 .pyc-builds__badge[data-tone="error"],
-.pyc-build-detail__badge[data-tone="error"] {
+.pyc-build-detail__badge[data-tone="error"]::part(chip) {
     background-color: var(--pyc-builds-error-surface);
     color: var(--pyc-builds-error-fg);
 }

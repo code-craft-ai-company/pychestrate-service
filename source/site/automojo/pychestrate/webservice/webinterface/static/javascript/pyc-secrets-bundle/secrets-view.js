@@ -520,7 +520,7 @@ class PycSecrets extends HTMLElement {
     name_cell.appendChild(name_code);
     row.appendChild(name_cell);
     const scope_cell = document.createElement("td");
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-secrets__badge");
     badge.setAttribute("data-scope-kind", secret.scope_kind);
     let scope_text = secret.scope_kind;

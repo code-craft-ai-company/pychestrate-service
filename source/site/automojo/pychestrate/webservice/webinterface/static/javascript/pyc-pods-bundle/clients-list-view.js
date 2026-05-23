@@ -438,14 +438,14 @@ class PycClientsList extends HTMLElement {
       pod_cell.textContent = client.pod_name !== null && client.pod_name.length > 0 ? client.pod_name : "\u2014";
       row.appendChild(pod_cell);
       const status_cell = document.createElement("td");
-      const status_badge = document.createElement("span");
+      const status_badge = document.createElement("mj-chip");
       status_badge.classList.add("pyc-clients-list__badge");
       status_badge.setAttribute("data-tone", status_tone(client.status));
       status_badge.textContent = client.status;
       status_cell.appendChild(status_badge);
       row.appendChild(status_cell);
       const liveness_cell = document.createElement("td");
-      const liveness_badge = document.createElement("span");
+      const liveness_badge = document.createElement("mj-chip");
       liveness_badge.classList.add("pyc-clients-list__badge");
       liveness_badge.setAttribute(
         "data-tone",
@@ -466,7 +466,7 @@ class PycClientsList extends HTMLElement {
         caps_cell.textContent = "\u2014";
       } else {
         for (const tag of tags) {
-          const chip = document.createElement("span");
+          const chip = document.createElement("mj-chip");
           chip.classList.add("pyc-clients-list__tag");
           chip.textContent = tag;
           caps_cell.appendChild(chip);

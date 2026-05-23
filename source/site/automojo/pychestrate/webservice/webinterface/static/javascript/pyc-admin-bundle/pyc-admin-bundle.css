@@ -181,7 +181,7 @@ pyc-system-health {
 }
 
 /* badges */
-.pyc-admin__badge {
+.pyc-admin__badge::part(chip) {
     display: inline-block;
     padding: 0.125rem 0.5rem;
     border-radius: 0.75rem;
@@ -190,17 +190,17 @@ pyc-system-health {
     color: var(--pyc-admin-fg-muted);
 }
 
-.pyc-admin__badge[data-tone="ok"] {
+.pyc-admin__badge[data-tone="ok"]::part(chip) {
     background-color: var(--pyc-admin-ok-surface);
     color: var(--pyc-admin-ok-fg);
 }
 
-.pyc-admin__badge[data-tone="warn"] {
+.pyc-admin__badge[data-tone="warn"]::part(chip) {
     background-color: var(--pyc-admin-warn-surface);
     color: var(--pyc-admin-warn-fg);
 }
 
-.pyc-admin__badge[data-tone="error"] {
+.pyc-admin__badge[data-tone="error"]::part(chip) {
     background-color: var(--pyc-admin-error-surface);
     color: var(--pyc-admin-error-fg);
 }
