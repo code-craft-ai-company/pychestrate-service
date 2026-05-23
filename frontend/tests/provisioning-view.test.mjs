@@ -15,6 +15,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -36,18 +37,9 @@ const BUNDLE_PATH = path.resolve(
 const RUN_ID = "11111111-2222-3333-4444-555555555555"
 const PROJECT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/provisioning-runs" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/provisioning-runs",
+})
 globalThis.HTMLFormElement = dom.window.HTMLFormElement
 globalThis.HTMLTableElement = dom.window.HTMLTableElement
 
@@ -225,10 +217,11 @@ test("provisioning list fetches projects then runs and renders rows", async () =
     document.body.appendChild(el)
     await el.loadProjects()
 
-    const rows = el.querySelectorAll(".pyc-infra__row")
+    const table = el.querySelector("mj-table.pyc-infra__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-infra__row")
     assert.equal(rows.length, 2)
     assert.equal(el.listState.total, 2)
-    const links = el.querySelectorAll(".pyc-infra__run-link")
+    const links = table.shadowRoot.querySelectorAll(".pyc-infra__run-link")
     assert.ok(
         links[0].getAttribute("href").startsWith("/provisioning-runs/"),
     )

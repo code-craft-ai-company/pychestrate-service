@@ -481,25 +481,7 @@ class PycGuards extends HTMLElement {
    * by environment so guards are grouped per environment.
    */
   _build_table() {
-    const table = document.createElement("table");
-    table.classList.add("pyc-infra__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Environment",
-      "Rule",
-      "State",
-      "Added",
-      "Actions"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
+    const self = this;
     const ordered = this._guards.slice();
     ordered.sort((left, right) => {
       if (left.environment_id < right.environment_id) {
@@ -510,61 +492,55 @@ class PycGuards extends HTMLElement {
       }
       return 0;
     });
-    const tbody = document.createElement("tbody");
-    for (const guard of ordered) {
-      tbody.appendChild(this._build_row(guard));
-    }
-    table.appendChild(tbody);
+    const table = document.createElement("mj-table");
+    table.classList.add("pyc-infra__table");
+    table.rowClass = "pyc-infra__row";
+    table.rowAttrs = (guard) => ({ "data-guard-id": guard.guard_id });
+    table.columns = [
+      { key: "environment_id", label: "Environment" },
+      { key: "rule_id", label: "Rule" },
+      {
+        key: "enabled",
+        label: "State",
+        render: (guard) => {
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-infra__badge");
+          state_badge.setAttribute("data-role", "enabled-indicator");
+          state_badge.setAttribute(
+            "data-tone",
+            guard_enabled_tone(guard.enabled)
+          );
+          state_badge.textContent = guard.enabled === true ? "enabled" : "disabled";
+          return state_badge;
+        }
+      },
+      {
+        key: "added_at",
+        label: "Added",
+        render: (guard) => format_guard_timestamp(guard.added_at)
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (guard) => {
+          const toggle_button = document.createElement("mj-button");
+          toggle_button.classList.add(
+            "pyc-infra__button",
+            "pyc-infra__row-action"
+          );
+          toggle_button.setAttribute("type", "button");
+          toggle_button.setAttribute("data-role", "toggle-guard");
+          toggle_button.textContent = guard.enabled === true ? "Disable" : "Enable";
+          toggle_button.addEventListener("click", () => {
+            toggle_button.toggleAttribute("disabled", true);
+            void self._on_toggle(guard, toggle_button);
+          });
+          return toggle_button;
+        }
+      }
+    ];
+    table.rows = ordered;
     return table;
-  }
-  /**
-   * Build one guard table row, including the enabled badge and
-   * the per-row enable/disable toggle.
-   *
-   * @param guard The guard to render.
-   *
-   * @returns A populated ``<tr>``.
-   */
-  _build_row(guard) {
-    const row = document.createElement("tr");
-    row.classList.add("pyc-infra__row");
-    row.setAttribute("data-guard-id", guard.guard_id);
-    const env_cell = document.createElement("td");
-    env_cell.textContent = guard.environment_id;
-    row.appendChild(env_cell);
-    const rule_cell = document.createElement("td");
-    rule_cell.textContent = guard.rule_id;
-    row.appendChild(rule_cell);
-    const state_cell = document.createElement("td");
-    const state_badge = document.createElement("mj-chip");
-    state_badge.classList.add("pyc-infra__badge");
-    state_badge.setAttribute("data-role", "enabled-indicator");
-    state_badge.setAttribute(
-      "data-tone",
-      guard_enabled_tone(guard.enabled)
-    );
-    state_badge.textContent = guard.enabled === true ? "enabled" : "disabled";
-    state_cell.appendChild(state_badge);
-    row.appendChild(state_cell);
-    const added_cell = document.createElement("td");
-    added_cell.textContent = format_guard_timestamp(guard.added_at);
-    row.appendChild(added_cell);
-    const actions_cell = document.createElement("td");
-    const toggle_button = document.createElement("mj-button");
-    toggle_button.classList.add(
-      "pyc-infra__button",
-      "pyc-infra__row-action"
-    );
-    toggle_button.setAttribute("type", "button");
-    toggle_button.setAttribute("data-role", "toggle-guard");
-    toggle_button.textContent = guard.enabled === true ? "Disable" : "Enable";
-    toggle_button.addEventListener("click", () => {
-      toggle_button.toggleAttribute("disabled", true);
-      void this._on_toggle(guard, toggle_button);
-    });
-    actions_cell.appendChild(toggle_button);
-    row.appendChild(actions_cell);
-    return row;
   }
   /**
    * Run the enable/disable toggle for one guard -- PATCH the
@@ -1048,38 +1024,29 @@ class PycGuards extends HTMLElement {
     if (evaluation.entries.length === 0) {
       return;
     }
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-infra__table");
     table.setAttribute("data-role", "evaluate-trace");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const column of ["Rule", "Verdict", "Reason"]) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const entry of evaluation.entries) {
-      const row = document.createElement("tr");
-      const rule_cell = document.createElement("td");
-      rule_cell.textContent = entry.rule_id;
-      row.appendChild(rule_cell);
-      const verdict_cell = document.createElement("td");
-      const badge = document.createElement("mj-chip");
-      badge.classList.add("pyc-infra__badge");
-      badge.setAttribute("data-tone", verdict_tone(entry.verdict));
-      badge.textContent = entry.verdict;
-      verdict_cell.appendChild(badge);
-      row.appendChild(verdict_cell);
-      const reason_cell = document.createElement("td");
-      reason_cell.textContent = entry.reason ?? "\u2014";
-      row.appendChild(reason_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.columns = [
+      { key: "rule_id", label: "Rule" },
+      {
+        key: "verdict",
+        label: "Verdict",
+        render: (entry) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-infra__badge");
+          badge.setAttribute("data-tone", verdict_tone(entry.verdict));
+          badge.textContent = entry.verdict;
+          return badge;
+        }
+      },
+      {
+        key: "reason",
+        label: "Reason",
+        render: (entry) => entry.reason ?? "\u2014"
+      }
+    ];
+    table.rows = evaluation.entries;
     output.appendChild(table);
     return;
   }
