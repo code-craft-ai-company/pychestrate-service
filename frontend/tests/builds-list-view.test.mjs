@@ -15,6 +15,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -33,18 +34,11 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/builds" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement
+// jsdom + mj-* registration so the mj-table inside the builds list
+// actually instantiates and renders rows into its shadow DOM.
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/builds",
+})
 globalThis.HTMLFormElement = dom.window.HTMLFormElement
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
@@ -199,11 +193,12 @@ test("builds list fetches projects then builds and renders rows", async () => {
     document.body.appendChild(el)
     await el.loadProjects()
 
-    const rows = el.querySelectorAll(".pyc-builds__row")
+    const table = el.querySelector("mj-table.pyc-builds__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-builds__row")
     assert.equal(rows.length, 2)
     assert.equal(el.listState.total, 2)
     assert.equal(el.listState.projectId, PROJECT_ID)
-    const links = el.querySelectorAll(".pyc-builds__build-link")
+    const links = table.shadowRoot.querySelectorAll(".pyc-builds__build-link")
     assert.ok(links[0].getAttribute("href").startsWith("/builds/"))
     el.remove()
 })

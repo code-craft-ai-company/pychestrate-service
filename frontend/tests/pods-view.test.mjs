@@ -15,6 +15,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -33,17 +34,11 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/pods" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
+// jsdom + mj-* registration so the mj-table inside the pods + clients
+// lists actually instantiates and renders rows into its shadow DOM.
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/pods",
+})
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
 const {
@@ -339,7 +334,8 @@ test("pods list fetches definitions for a project and paginates", async () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
     assert.equal(el.listState.total, 30)
     assert.equal(el.listState.errored, false)
-    const rows = el.querySelectorAll(".pyc-pods-list__row")
+    const table = el.querySelector("mj-table.pyc-pods-list__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-pods-list__row")
     assert.equal(rows.length, 25)
     el.remove()
 })
@@ -478,9 +474,10 @@ test("clients list fetches and renders rows with capability tags", async () => {
     await el.refresh()
     assert.equal(el.listState.total, 2)
     assert.equal(el.listState.errored, false)
-    const rows = el.querySelectorAll(".pyc-clients-list__row")
+    const table = el.querySelector("mj-table.pyc-clients-list__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-clients-list__row")
     assert.equal(rows.length, 2)
-    const tags = el.querySelectorAll(".pyc-clients-list__tag")
+    const tags = table.shadowRoot.querySelectorAll(".pyc-clients-list__tag")
     assert.ok(tags.length > 0)
     el.remove()
 })
