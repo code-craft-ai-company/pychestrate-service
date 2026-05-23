@@ -359,14 +359,19 @@ class PycAdminOverview extends HTMLElement {
     const children = [];
     const self = this;
     const shown = this._flags.slice(0, QUICK_FLAG_LIMIT);
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-admin__table");
+    table.classList.add("pyc-admin__table--embedded");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-admin__row";
     table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
     table.columns = [
-      { key: "flag_key", label: "Flag Key" },
+      { key: "flag_key", label: "Flag Key", width: "16rem" },
       {
         key: "state",
         label: "State",
+        width: "8rem",
         render: (entry) => {
           const state_badge = document.createElement("mj-chip");
           state_badge.classList.add("pyc-admin__badge");
@@ -378,6 +383,8 @@ class PycAdminOverview extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "8rem",
+        sortable: false,
         render: (entry) => self._build_flag_toggle(entry)
       }
     ];

@@ -142,12 +142,16 @@ pyc-resource-detail {
 }
 
 .pyc-resources__table {
+    /* mj-data-table virtualizes rows with absolute positioning,
+     * so the host needs a height for the body scroller. */
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-resources__table::part(th) {
+.pyc-resources__table::part(header-cell) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -155,12 +159,12 @@ pyc-resource-detail {
     border-bottom: 0.0625rem solid var(--pyc-res-border);
 }
 
-.pyc-resources__table::part(td) {
+.pyc-resources__table::part(cell) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-res-divider);
 }
 
-.pyc-resources__table::part(tr):hover {
+.pyc-resources__table::part(row):hover {
     background-color: var(--pyc-res-surface-hover);
 }
 

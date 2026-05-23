@@ -271,14 +271,17 @@ class PycReleaseChannels extends HTMLElement {
         return 0;
       }
     );
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowAttrs = (entry) => ({ "data-channel-id": entry.channel_id });
     table.columns = [
-      { key: "component", label: "Component" },
+      { key: "component", label: "Component", width: "12rem" },
       {
         key: "channel",
         label: "Channel",
+        width: "8rem",
         render: (entry) => {
           const channel_badge = document.createElement("mj-chip");
           channel_badge.classList.add("pyc-ops__badge");
@@ -287,10 +290,11 @@ class PycReleaseChannels extends HTMLElement {
           return channel_badge;
         }
       },
-      { key: "version", label: "Version" },
+      { key: "version", label: "Version", width: "8rem" },
       {
         key: "status",
         label: "Status",
+        width: "10rem",
         render: (entry) => {
           const status_badge = document.createElement("mj-chip");
           status_badge.classList.add("pyc-ops__badge");
@@ -305,16 +309,20 @@ class PycReleaseChannels extends HTMLElement {
       {
         key: "rollout_fraction",
         label: "Rollout",
+        width: "8rem",
         render: (entry) => format_rollout(entry.rollout_fraction)
       },
       {
         key: "issued_at",
         label: "Issued",
+        width: "12rem",
         render: (entry) => format_release_timestamp(entry.issued_at)
       },
       {
         key: "actions",
         label: "Actions",
+        width: "14rem",
+        sortable: false,
         render: (entry) => {
           const show_button = document.createElement("mj-button");
           show_button.classList.add("pyc-ops__button", "pyc-ops__row-action");

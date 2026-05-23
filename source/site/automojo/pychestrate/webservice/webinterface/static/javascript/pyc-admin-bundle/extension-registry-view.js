@@ -211,24 +211,31 @@ class PycExtensionRegistry extends HTMLElement {
       return;
     }
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-admin__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-admin__row";
     table.rowAttrs = (extension) => ({ "data-ext-name": extension.extName });
     table.columns = [
       {
         key: "precedence",
         label: "Precedence",
+        width: "8rem",
         render: (extension) => String(extension.precedence)
       },
-      { key: "extName", label: "Extension" },
+      { key: "extName", label: "Extension", width: "16rem" },
       {
         key: "routeCount",
         label: "Routes",
+        width: "8rem",
         render: (extension) => String(extension.routeCount)
       },
       {
         key: "capabilities",
         label: "Capabilities",
+        width: "16rem",
+        sortable: false,
         render: (extension) => {
           if (extension.capabilities.length === 0) {
             return "\u2014";
@@ -239,6 +246,7 @@ class PycExtensionRegistry extends HTMLElement {
       {
         key: "health",
         label: "Health",
+        width: "10rem",
         render: (_extension) => {
           const health_badge = document.createElement("mj-chip");
           health_badge.classList.add("pyc-admin__badge");
@@ -253,6 +261,8 @@ class PycExtensionRegistry extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "10rem",
+        sortable: false,
         render: (extension) => {
           const detail_button = document.createElement("mj-button");
           detail_button.classList.add("pyc-admin__toggle");
@@ -281,14 +291,19 @@ class PycExtensionRegistry extends HTMLElement {
     const mount_note = document.createElement("p");
     mount_note.classList.add("pyc-admin__lede");
     mount_note.textContent = "Dynamic-mount state: " + (this._mountState.length > 0 ? this._mountState : "unknown");
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-admin__table");
+    table.classList.add("pyc-admin__table--embedded");
     table.setAttribute("data-role", "route-detail");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-admin__row";
     table.columns = [
-      { key: "method", label: "Method" },
+      { key: "method", label: "Method", width: "8rem" },
       {
         key: "full_path",
         label: "Path",
+        width: "20rem",
         render: (route) => {
           const path_cell = document.createElement("span");
           path_cell.classList.add("pyc-admin__mono");
@@ -299,11 +314,14 @@ class PycExtensionRegistry extends HTMLElement {
       {
         key: "required_permissions",
         label: "Permissions",
+        width: "16rem",
+        sortable: false,
         render: (route) => route.required_permissions.length > 0 ? route.required_permissions.join(", ") : "\u2014"
       },
       {
         key: "handler_class",
         label: "Handler",
+        width: "20rem",
         render: (route) => {
           const handler_cell = document.createElement("span");
           handler_cell.classList.add("pyc-admin__mono");

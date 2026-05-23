@@ -462,13 +462,16 @@ class PycResourcePools extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-resources__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-resources__row";
     table.columns = [
       {
         key: "pool_id",
         label: "Pool",
+        width: "12rem",
         render: (pool) => {
           const link = document.createElement("a");
           link.classList.add("pyc-resources__link");
@@ -482,6 +485,7 @@ class PycResourcePools extends HTMLElement {
       {
         key: "name",
         label: "Name",
+        width: "16rem",
         render: (pool) => {
           const rtnval = pool.name !== null && pool.name.length > 0 ? pool.name : "\u2014";
           return rtnval;
@@ -490,6 +494,8 @@ class PycResourcePools extends HTMLElement {
       {
         key: "capability_tags",
         label: "Capabilities",
+        width: "18rem",
+        sortable: false,
         render: (pool) => {
           const tags = Array.isArray(pool.capability_tags) === true ? pool.capability_tags : [];
           if (tags.length === 0) {
@@ -509,6 +515,7 @@ class PycResourcePools extends HTMLElement {
       {
         key: "member_count",
         label: "Members",
+        width: "8rem",
         render: (pool) => String(pool.member_count)
       }
     ];

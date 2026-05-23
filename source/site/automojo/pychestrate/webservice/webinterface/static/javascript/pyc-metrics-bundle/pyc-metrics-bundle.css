@@ -190,24 +190,32 @@ pyc-slos {
     stroke-width: 2;
 }
 
-/* tables */
+/* tables -- mj-data-table virtualizes rows with absolute
+ * positioning, so the host needs an explicit block layout +
+ * height for the body scroller. */
 .pyc-metrics__table {
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-body, 1rem);
 }
 
-.pyc-metrics__table::part(th),
-.pyc-metrics__table::part(td) {
+.pyc-metrics__table::part(header-cell),
+.pyc-metrics__table::part(cell) {
     padding: 0.5rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid var(--pyc-metrics-divider);
 }
 
-.pyc-metrics__table::part(th) {
+.pyc-metrics__table::part(header-cell) {
     font-size: var(--pyc-font-size-caption, 0.8125rem);
     color: var(--pyc-metrics-fg-muted);
     font-weight: 600;
+}
+
+.pyc-metrics__table::part(row):hover {
+    background-color: var(--pyc-metrics-surface-hover);
 }
 
 .pyc-metrics__row-link {

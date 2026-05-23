@@ -334,9 +334,12 @@ test("pods list fetches definitions for a project and paginates", async () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
     assert.equal(el.listState.total, 30)
     assert.equal(el.listState.errored, false)
-    const table = el.querySelector("mj-table.pyc-pods-list__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-pods-list__row")
-    assert.equal(rows.length, 25)
+    const table = el.querySelector("mj-data-table.pyc-pods-list__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-pods-list__row")
+    // mj-data-table virtualizes rows over the body scroller -- the
+    // page is 25 rows but only the visible window is in the DOM.
+    assert.ok(rows.length > 0)
+    assert.ok(rows.length <= 25)
     el.remove()
 })
 
@@ -474,8 +477,8 @@ test("clients list fetches and renders rows with capability tags", async () => {
     await el.refresh()
     assert.equal(el.listState.total, 2)
     assert.equal(el.listState.errored, false)
-    const table = el.querySelector("mj-table.pyc-clients-list__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-clients-list__row")
+    const table = el.querySelector("mj-data-table.pyc-clients-list__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-clients-list__row")
     assert.equal(rows.length, 2)
     const tags = table.shadowRoot.querySelectorAll(".pyc-clients-list__tag")
     assert.ok(tags.length > 0)

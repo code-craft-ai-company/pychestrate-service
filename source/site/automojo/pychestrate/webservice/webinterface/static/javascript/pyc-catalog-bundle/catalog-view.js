@@ -477,11 +477,14 @@ class PycTestCatalog extends HTMLElement {
    */
   _build_table() {
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-catalog__table");
-    // The row's retired-state surfaces as a data-attribute on the
-    // shadow <tr> so external CSS can target it via
-    // mj-table::part(tr)[data-retired].
+    // Sorting is client-side over the current page. The row's
+    // retired-state surfaces as a data-attribute on the shadow
+    // row so external CSS can target it via
+    // mj-data-table::part(row)[data-retired].
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-catalog__row";
     table.rowAttrs = (entry) => {
       const attrs = { "data-entry-key": entry.entry_key };
@@ -494,6 +497,7 @@ class PycTestCatalog extends HTMLElement {
       {
         key: "entry_key",
         label: "Entry",
+        width: "20rem",
         render: (entry) => {
           const key_code = document.createElement("code");
           key_code.classList.add("pyc-catalog__entry-key");
@@ -501,21 +505,26 @@ class PycTestCatalog extends HTMLElement {
           return key_code;
         }
       },
-      { key: "display_name", label: "Name" },
+      { key: "display_name", label: "Name", width: "14rem" },
       {
         key: "capabilities",
         label: "Capabilities",
+        width: "12rem",
+        sortable: false,
         render: (entry) => selection_summary(entry)
       },
-      { key: "importer_tag", label: "Importer" },
+      { key: "importer_tag", label: "Importer", width: "12rem" },
       {
         key: "created_at",
         label: "Created",
+        width: "12rem",
         render: (entry) => format_timestamp(entry.created_at)
       },
       {
         key: "action",
         label: "Action",
+        width: "10rem",
+        sortable: false,
         render: (entry) => {
           const trigger_button = document.createElement("mj-button");
           trigger_button.classList.add("pyc-catalog__trigger");

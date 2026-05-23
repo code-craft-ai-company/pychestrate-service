@@ -86,8 +86,8 @@ test("PycRunsList fetches the first page on connect and renders rows", async () 
     assert.equal(calls[0].url.startsWith("/api/v1/runs?"), true)
     assert.equal(calls[0].options.credentials, "same-origin")
 
-    const table = element.querySelector("mj-table.pyc-runs-list__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-runs-list__row")
+    const table = element.querySelector("mj-data-table.pyc-runs-list__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-runs-list__row")
     assert.equal(rows.length, 2)
 
     const first_link = table.shadowRoot.querySelector(".pyc-runs-list__run-link")

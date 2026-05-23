@@ -378,20 +378,24 @@ class PycTestMetrics extends HTMLElement {
     return bars;
   }
   _build_runs_table(runs) {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "runs-table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-metrics__row";
     table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
     table.columns = [
       {
         key: "run_id",
         label: "Run",
+        width: "10rem",
         render: (run) => short_metric_id(run.run_id)
       },
       {
         key: "parser_tag",
         label: "Parser",
+        width: "10rem",
         render: (run) =>
           run.parser_tag !== null && run.parser_tag !== void 0
             ? run.parser_tag
@@ -400,24 +404,28 @@ class PycTestMetrics extends HTMLElement {
       {
         key: "tests_total",
         label: "Total",
+        width: "8rem",
         render: (run) =>
           String(typeof run.tests_total === "number" ? run.tests_total : 0)
       },
       {
         key: "tests_passed",
         label: "Passed",
+        width: "8rem",
         render: (run) =>
           String(typeof run.tests_passed === "number" ? run.tests_passed : 0)
       },
       {
         key: "tests_failed",
         label: "Failed",
+        width: "8rem",
         render: (run) =>
           String(typeof run.tests_failed === "number" ? run.tests_failed : 0)
       },
       {
         key: "duration",
         label: "Duration",
+        width: "10rem",
         render: (run) => format_duration(run.duration_seconds)
       }
     ];

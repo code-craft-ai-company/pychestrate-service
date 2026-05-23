@@ -394,14 +394,17 @@ class PycClientsList extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-clients-list__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-clients-list__row";
     table.rowAttrs = (client) => ({ "data-client-id": client.client_id });
     table.columns = [
       {
         key: "client_id",
         label: "Client",
+        width: "12rem",
         render: (client) => {
           const link = document.createElement("a");
           link.classList.add("pyc-clients-list__client-link");
@@ -414,11 +417,13 @@ class PycClientsList extends HTMLElement {
       {
         key: "pod_name",
         label: "Pod",
+        width: "12rem",
         render: (client) => client.pod_name !== null && client.pod_name.length > 0 ? client.pod_name : "\u2014"
       },
       {
         key: "status",
         label: "Status",
+        width: "8rem",
         render: (client) => {
           const status_badge = document.createElement("mj-chip");
           status_badge.classList.add("pyc-clients-list__badge");
@@ -430,6 +435,7 @@ class PycClientsList extends HTMLElement {
       {
         key: "liveness_state",
         label: "Liveness",
+        width: "9rem",
         render: (client) => {
           const liveness_badge = document.createElement("mj-chip");
           liveness_badge.classList.add("pyc-clients-list__badge");
@@ -444,16 +450,20 @@ class PycClientsList extends HTMLElement {
       {
         key: "last_seen",
         label: "Last heartbeat",
+        width: "14rem",
         render: (client) => format_timestamp(client.last_seen)
       },
       {
         key: "last_agent_version",
         label: "Agent version",
+        width: "10rem",
         render: (client) => client.last_agent_version !== null && client.last_agent_version !== void 0 && client.last_agent_version.length > 0 ? client.last_agent_version : "\u2014"
       },
       {
         key: "capabilities",
         label: "Capabilities",
+        width: "16rem",
+        sortable: false,
         render: (client) => {
           const tags = capability_tags(client.attributes);
           if (tags.length === 0) {

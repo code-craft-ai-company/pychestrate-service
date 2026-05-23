@@ -35,7 +35,7 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-// jsdom + mj-* registration so the mj-table instances inside the
+// jsdom + mj-* registration so the mj-data-table instances inside the
 // admin views actually mount and render rows into their shadow DOMs.
 const { dom } = await setup_jsdom_with_mj({
     url: "https://example.test/admin",
@@ -316,8 +316,8 @@ test("PycFeatureFlags lists flags ordered by key", async () => {
     document.body.appendChild(el)
     await el.refresh()
     assert.equal(el.errored, false)
-    const table = el.querySelector("mj-table.pyc-admin__table")
-    const rows = table.shadowRoot.querySelectorAll("tbody tr")
+    const table = el.querySelector("mj-data-table.pyc-admin__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-admin__row")
     assert.equal(rows.length, 3)
     assert.equal(rows[0].getAttribute("data-flag-key"), "alpha.dark-mode")
     el.remove()
@@ -331,7 +331,7 @@ test("PycFeatureFlags disables the toggle for retired flags", async () => {
     const el = new PycFeatureFlags()
     document.body.appendChild(el)
     await el.refresh()
-    const table = el.querySelector("mj-table.pyc-admin__table")
+    const table = el.querySelector("mj-data-table.pyc-admin__table")
     const retired = table.shadowRoot.querySelector('[data-flag-key="gone.legacy"]')
     const toggle = retired.querySelector('[data-role="toggle"]')
     assert.equal(toggle.hasAttribute("disabled"), true)
@@ -372,8 +372,8 @@ test("PycExtensionRegistry rows per extension", async () => {
     document.body.appendChild(el)
     await el.refresh()
     assert.equal(el.errored, false)
-    const table = el.querySelector("mj-table.pyc-admin__table")
-    const rows = table.shadowRoot.querySelectorAll("tbody tr")
+    const table = el.querySelector("mj-data-table.pyc-admin__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-admin__row")
     assert.equal(rows.length, 2)
     assert.equal(rows[0].getAttribute("data-ext-name"), "alpha-ext")
     el.remove()
@@ -387,7 +387,7 @@ test("PycExtensionRegistry shows per-extension routes on demand", async () => {
     const el = new PycExtensionRegistry()
     document.body.appendChild(el)
     await el.refresh()
-    const table = el.querySelector("mj-table.pyc-admin__table")
+    const table = el.querySelector("mj-data-table.pyc-admin__table")
     const button = table.shadowRoot.querySelector('[data-role="show-routes"]')
     button.dispatchEvent(new dom.window.Event("click"))
     const detail = el.querySelector('[data-role="route-detail"]')
@@ -430,8 +430,8 @@ test("PycAdminOverview composes the three sections", async () => {
     assert.equal(health.textContent, "degraded")
     const count = el.querySelector('[data-role="extension-count"]')
     assert.equal(count.textContent, "2")
-    const flag_table = el.querySelector('[data-role="flags-region"] mj-table.pyc-admin__table')
-    const flag_rows = flag_table.shadowRoot.querySelectorAll("tbody tr")
+    const flag_table = el.querySelector('[data-role="flags-region"] mj-data-table.pyc-admin__table')
+    const flag_rows = flag_table.shadowRoot.querySelectorAll(".row.pyc-admin__row")
     assert.equal(flag_rows.length, 3)
     const ext_link = el.querySelector('[data-role="extension-link"]')
     assert.equal(ext_link.getAttribute("href"), "/admin/extensions")

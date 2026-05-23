@@ -342,9 +342,11 @@ class PycDashboardsList extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "dashboards-table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-metrics__row";
     table.rowAttrs = (dashboard) => ({
       "data-dashboard-id": dashboard.dashboard_id
@@ -353,6 +355,7 @@ class PycDashboardsList extends HTMLElement {
       {
         key: "name",
         label: "Name",
+        width: "16rem",
         render: (dashboard) => {
           const link = document.createElement("a");
           link.classList.add("pyc-metrics__row-link");
@@ -367,6 +370,8 @@ class PycDashboardsList extends HTMLElement {
       {
         key: "description",
         label: "Description",
+        width: "24rem",
+        sortable: false,
         render: (dashboard) =>
           dashboard.description !== void 0 && dashboard.description.length > 0
             ? dashboard.description
@@ -375,11 +380,13 @@ class PycDashboardsList extends HTMLElement {
       {
         key: "tiles",
         label: "Tiles",
+        width: "8rem",
         render: (dashboard) => String(dashboard.tiles.length)
       },
       {
         key: "version",
         label: "Version",
+        width: "8rem",
         render: (dashboard) => String(dashboard.version)
       }
     ];

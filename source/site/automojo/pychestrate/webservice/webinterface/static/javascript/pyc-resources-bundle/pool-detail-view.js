@@ -371,13 +371,16 @@ class PycPoolDetail extends HTMLElement {
       section.appendChild(empty);
       return section;
     }
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-resources__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-resources__row";
     table.columns = [
       {
         key: "resource_id",
         label: "Resource",
+        width: "16rem",
         render: (member) => {
           const link = document.createElement("a");
           link.classList.add("pyc-resources__link");
@@ -393,6 +396,7 @@ class PycPoolDetail extends HTMLElement {
       {
         key: "added_at",
         label: "Added",
+        width: "14rem",
         render: (member) => format_timestamp(member.added_at)
       }
     ];

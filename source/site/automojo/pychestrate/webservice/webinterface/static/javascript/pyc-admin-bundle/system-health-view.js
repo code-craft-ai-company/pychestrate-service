@@ -221,13 +221,18 @@ class PycSystemHealth extends HTMLElement {
     card.appendChild(detail);
     const backends = subsystem.backends;
     if (backends !== void 0 && backends.length > 0) {
-      const table = document.createElement("mj-table");
+      const table = document.createElement("mj-data-table");
       table.classList.add("pyc-admin__table");
+      table.classList.add("pyc-admin__table--embedded");
+      table.setAttribute("sortable", "");
+      table.setAttribute("resizable", "");
+      table.rowClass = "pyc-admin__row";
       table.columns = [
-        { key: "name", label: "Backend" },
+        { key: "name", label: "Backend", width: "12rem" },
         {
           key: "status",
           label: "Status",
+          width: "8rem",
           render: (backend) => {
             const status_badge = document.createElement("mj-chip");
             status_badge.classList.add("pyc-admin__badge");
@@ -242,6 +247,8 @@ class PycSystemHealth extends HTMLElement {
         {
           key: "reason",
           label: "Reason",
+          width: "16rem",
+          sortable: false,
           render: (backend) => backend.reason.length > 0 ? backend.reason : "\u2014"
         }
       ];
