@@ -440,19 +440,24 @@ class PycWebhooks extends HTMLElement {
       return;
     }
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.columns = [
-      { key: "provider", label: "Provider" },
-      { key: "hook_name", label: "Hook" },
+      { key: "provider", label: "Provider", width: "10rem" },
+      { key: "hook_name", label: "Hook", width: "10rem" },
       {
         key: "receiver_path",
         label: "Receiver path",
+        width: "20rem",
+        sortable: false,
         render: (integration) => integration.receiver_path ?? "\u2014"
       },
       {
         key: "enabled",
         label: "State",
+        width: "8rem",
         render: (integration) => self._badge(
           integration.enabled === true ? "enabled" : "disabled",
           integration.enabled === true ? "ok" : "neutral"
@@ -478,15 +483,18 @@ class PycWebhooks extends HTMLElement {
       el.replaceChildren(this._notice("No recent inbound deliveries"));
       return;
     }
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.columns = [
-      { key: "provider", label: "Provider" },
-      { key: "hook_name", label: "Hook" },
-      { key: "delivery_id", label: "Delivery id" },
+      { key: "provider", label: "Provider", width: "10rem" },
+      { key: "hook_name", label: "Hook", width: "10rem" },
+      { key: "delivery_id", label: "Delivery id", width: "16rem", sortable: false },
       {
         key: "first_seen_at",
         label: "First seen",
+        width: "14rem",
         render: (delivery) => format_webhook_timestamp(delivery.first_seen_at)
       }
     ];
@@ -745,22 +753,27 @@ class PycWebhooks extends HTMLElement {
       return;
     }
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowAttrs = (subscription) => ({
       "data-subscription-id": subscription.subscription_id
     });
     table.columns = [
-      { key: "name", label: "Name" },
-      { key: "url", label: "URL" },
+      { key: "name", label: "Name", width: "12rem" },
+      { key: "url", label: "URL", width: "20rem", sortable: false },
       {
         key: "topic_filters",
         label: "Topics",
+        width: "16rem",
+        sortable: false,
         render: (subscription) => subscription.topic_filters.join(", ") || "all"
       },
       {
         key: "enabled",
         label: "State",
+        width: "8rem",
         render: (subscription) => self._badge(
           subscription.enabled === true ? "enabled" : "disabled",
           subscription.enabled === true ? "ok" : "neutral"
@@ -769,6 +782,8 @@ class PycWebhooks extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
+        width: "18rem",
+        sortable: false,
         render: (subscription) => {
           const fragment = document.createDocumentFragment();
           const test_button = document.createElement("mj-button");
@@ -919,13 +934,16 @@ class PycWebhooks extends HTMLElement {
       return;
     }
     const self = this;
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.columns = [
-      { key: "topic", label: "Topic" },
+      { key: "topic", label: "Topic", width: "16rem" },
       {
         key: "outcome",
         label: "Outcome",
+        width: "10rem",
         render: (delivery) => self._badge(
           delivery.outcome,
           delivery_outcome_tone(delivery.outcome)
@@ -934,11 +952,13 @@ class PycWebhooks extends HTMLElement {
       {
         key: "response_status",
         label: "HTTP",
+        width: "8rem",
         render: (delivery) => delivery.response_status === null || delivery.response_status === void 0 ? "\u2014" : String(delivery.response_status)
       },
       {
         key: "attempted_at",
         label: "Attempted",
+        width: "14rem",
         render: (delivery) => format_webhook_timestamp(delivery.attempted_at)
       }
     ];
