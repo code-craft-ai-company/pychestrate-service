@@ -389,7 +389,7 @@ class PycBuildDetail extends HTMLElement {
     id_value.textContent = short_id(build.run_id);
     id_value.title = build.run_id;
     id_row.appendChild(id_value);
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-build-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", build_state_tone(build.state));

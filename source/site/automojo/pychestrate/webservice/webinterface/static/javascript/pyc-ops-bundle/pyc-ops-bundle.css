@@ -218,7 +218,7 @@ pyc-release-channels {
 }
 
 /* badges */
-.pyc-ops__badge {
+.pyc-ops__badge::part(chip) {
     display: inline-block;
     padding: 0.125rem 0.5rem;
     border-radius: 0.75rem;
@@ -227,17 +227,17 @@ pyc-release-channels {
     color: var(--pyc-ops-fg-muted);
 }
 
-.pyc-ops__badge[data-tone="ok"] {
+.pyc-ops__badge[data-tone="ok"]::part(chip) {
     background-color: var(--pyc-ops-ok-surface);
     color: var(--pyc-ops-ok-fg);
 }
 
-.pyc-ops__badge[data-tone="warn"] {
+.pyc-ops__badge[data-tone="warn"]::part(chip) {
     background-color: var(--pyc-ops-warn-surface);
     color: var(--pyc-ops-warn-fg);
 }
 
-.pyc-ops__badge[data-tone="error"] {
+.pyc-ops__badge[data-tone="error"]::part(chip) {
     background-color: var(--pyc-ops-error-surface);
     color: var(--pyc-ops-error-fg);
 }

@@ -673,7 +673,7 @@ class PycEnvironments extends HTMLElement {
     kind_cell.textContent = environment.kind_name;
     row.appendChild(kind_cell);
     const state_cell = document.createElement("td");
-    const state_badge = document.createElement("span");
+    const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-infra__badge");
     state_badge.setAttribute(
       "data-tone",

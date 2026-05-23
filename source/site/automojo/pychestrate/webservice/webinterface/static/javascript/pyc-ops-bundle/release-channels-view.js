@@ -303,7 +303,7 @@ class PycReleaseChannels extends HTMLElement {
     row.setAttribute("data-channel-id", entry.channel_id);
     this._append_text_cell(row, entry.component);
     const channel_cell = document.createElement("td");
-    const channel_badge = document.createElement("span");
+    const channel_badge = document.createElement("mj-chip");
     channel_badge.classList.add("pyc-ops__badge");
     channel_badge.setAttribute("data-tone", "neutral");
     channel_badge.textContent = entry.channel;
@@ -311,7 +311,7 @@ class PycReleaseChannels extends HTMLElement {
     row.appendChild(channel_cell);
     this._append_text_cell(row, entry.version);
     const status_cell = document.createElement("td");
-    const status_badge = document.createElement("span");
+    const status_badge = document.createElement("mj-chip");
     status_badge.classList.add("pyc-ops__badge");
     status_badge.setAttribute(
       "data-tone",

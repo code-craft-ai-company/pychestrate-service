@@ -363,7 +363,7 @@ class PycRunsList extends HTMLElement {
       project_cell.textContent = run.project_id;
       row.appendChild(project_cell);
       const state_cell = document.createElement("td");
-      const badge = document.createElement("span");
+      const badge = document.createElement("mj-chip");
       badge.classList.add("pyc-runs-list__badge");
       badge.setAttribute("data-tone", state_badge_tone(run.state));
       badge.textContent = run.state;

@@ -648,7 +648,7 @@ class PycBuildsList extends HTMLElement {
       runner_cell.textContent = build.runner_kind;
       row.appendChild(runner_cell);
       const state_cell = document.createElement("td");
-      const badge = document.createElement("span");
+      const badge = document.createElement("mj-chip");
       badge.classList.add("pyc-builds__badge");
       badge.setAttribute("data-tone", build_state_tone(build.state));
       badge.textContent = build.state;

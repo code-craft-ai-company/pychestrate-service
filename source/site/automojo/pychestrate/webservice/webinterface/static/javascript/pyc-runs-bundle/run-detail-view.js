@@ -420,7 +420,7 @@ class PycRunDetail extends HTMLElement {
     id_value.textContent = short_run_id(run.run_id);
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-run-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", state_badge_tone(run.state));

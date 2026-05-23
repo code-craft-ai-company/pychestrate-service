@@ -258,7 +258,7 @@ class PycFeatureFlags extends HTMLElement {
     version_cell.textContent = String(entry.current_version);
     row.appendChild(version_cell);
     const state_cell = document.createElement("td");
-    const state_badge = document.createElement("span");
+    const state_badge = document.createElement("mj-chip");
     state_badge.classList.add("pyc-admin__badge");
     state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
     state_badge.textContent = entry.state ?? "\u2014";

@@ -427,7 +427,7 @@ class PycPodDetail extends HTMLElement {
     id_value.title = definition.pod_id;
     id_row.appendChild(id_value);
     const state_value = this._state_row !== null ? this._state_row.state : "DEFINED";
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-pod-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", pod_state_tone(state_value));

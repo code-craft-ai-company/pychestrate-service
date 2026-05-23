@@ -344,7 +344,7 @@ class PycPoolDetail extends HTMLElement {
       const tag_list = document.createElement("div");
       tag_list.classList.add("pyc-resources__tag-list");
       for (const tag of tags) {
-        const chip = document.createElement("span");
+        const chip = document.createElement("mj-chip");
         chip.classList.add("pyc-resources__tag");
         chip.textContent = tag;
         tag_list.appendChild(chip);

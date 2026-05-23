@@ -214,13 +214,13 @@ class PycClientDetail extends HTMLElement {
     id_value.textContent = short_id(client.client_id);
     id_value.title = client.client_id;
     id_row.appendChild(id_value);
-    const status_badge = document.createElement("span");
+    const status_badge = document.createElement("mj-chip");
     status_badge.classList.add("pyc-client-detail__badge");
     status_badge.setAttribute("data-role", "status-badge");
     status_badge.setAttribute("data-tone", status_tone(client.status));
     status_badge.textContent = client.status;
     id_row.appendChild(status_badge);
-    const liveness_badge = document.createElement("span");
+    const liveness_badge = document.createElement("mj-chip");
     liveness_badge.classList.add("pyc-client-detail__badge");
     liveness_badge.setAttribute("data-role", "liveness-badge");
     liveness_badge.setAttribute(
@@ -330,7 +330,7 @@ class PycClientDetail extends HTMLElement {
     const tag_list = document.createElement("div");
     tag_list.classList.add("pyc-client-detail__tag-list");
     for (const tag of tags) {
-      const chip = document.createElement("span");
+      const chip = document.createElement("mj-chip");
       chip.classList.add("pyc-client-detail__tag");
       chip.textContent = tag;
       tag_list.appendChild(chip);

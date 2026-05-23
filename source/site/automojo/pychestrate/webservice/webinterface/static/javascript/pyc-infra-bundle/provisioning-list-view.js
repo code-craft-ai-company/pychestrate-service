@@ -621,7 +621,7 @@ class PycProvisioningList extends HTMLElement {
       driver_cell.textContent = run.driver_name;
       row.appendChild(driver_cell);
       const state_cell = document.createElement("td");
-      const badge = document.createElement("span");
+      const badge = document.createElement("mj-chip");
       badge.classList.add("pyc-infra__badge");
       badge.setAttribute("data-tone", provisioning_state_tone(run.state));
       badge.textContent = run.state;

@@ -358,7 +358,7 @@ class PycProvisioningDetail extends HTMLElement {
     id_value.textContent = short_id(run.run_id);
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-provisioning-detail__badge");
     badge.setAttribute("data-role", "state-badge");
     badge.setAttribute("data-tone", provisioning_state_tone(run.state));

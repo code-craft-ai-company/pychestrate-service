@@ -170,7 +170,7 @@ pyc-client-detail {
 .pyc-pods-list__badge,
 .pyc-pod-detail__badge,
 .pyc-clients-list__badge,
-.pyc-client-detail__badge {
+.pyc-client-detail__badge::part(chip) {
     display: inline-block;
     padding: 0.125rem 0.5rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -182,7 +182,7 @@ pyc-client-detail {
 .pyc-pods-list__badge[data-tone="ok"],
 .pyc-pod-detail__badge[data-tone="ok"],
 .pyc-clients-list__badge[data-tone="ok"],
-.pyc-client-detail__badge[data-tone="ok"] {
+.pyc-client-detail__badge[data-tone="ok"]::part(chip) {
     background-color: var(--pyc-fleet-ok-surface);
     color: var(--pyc-fleet-ok-fg);
 }
@@ -190,7 +190,7 @@ pyc-client-detail {
 .pyc-pods-list__badge[data-tone="warn"],
 .pyc-pod-detail__badge[data-tone="warn"],
 .pyc-clients-list__badge[data-tone="warn"],
-.pyc-client-detail__badge[data-tone="warn"] {
+.pyc-client-detail__badge[data-tone="warn"]::part(chip) {
     background-color: var(--pyc-fleet-warn-surface);
     color: var(--pyc-fleet-warn-fg);
 }
@@ -198,7 +198,7 @@ pyc-client-detail {
 .pyc-pods-list__badge[data-tone="error"],
 .pyc-pod-detail__badge[data-tone="error"],
 .pyc-clients-list__badge[data-tone="error"],
-.pyc-client-detail__badge[data-tone="error"] {
+.pyc-client-detail__badge[data-tone="error"]::part(chip) {
     background-color: var(--pyc-fleet-error-surface);
     color: var(--pyc-fleet-error-fg);
 }

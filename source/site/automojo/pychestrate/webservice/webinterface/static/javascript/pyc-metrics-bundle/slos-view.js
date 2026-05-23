@@ -499,7 +499,7 @@ class PycSlos extends HTMLElement {
     window_cell.textContent = format_window(slo.window_seconds);
     row.appendChild(window_cell);
     const burn_cell = document.createElement("td");
-    const burn_badge = document.createElement("span");
+    const burn_badge = document.createElement("mj-chip");
     burn_badge.classList.add("pyc-metrics__badge");
     burn_badge.setAttribute("data-role", "burn-indicator");
     const status = this._status.get(slo.slo_id) ?? null;

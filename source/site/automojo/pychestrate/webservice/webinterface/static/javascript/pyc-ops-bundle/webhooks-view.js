@@ -1165,7 +1165,7 @@ class PycWebhooks extends HTMLElement {
    * @returns The created badge span.
    */
   _badge(text, tone) {
-    const badge = document.createElement("span");
+    const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-ops__badge");
     badge.setAttribute("data-tone", tone);
     badge.textContent = text;
