@@ -371,39 +371,32 @@ class PycPoolDetail extends HTMLElement {
       section.appendChild(empty);
       return section;
     }
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-resources__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const column of ["Resource", "Added"]) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const member of this._members) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-resources__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-resources__link");
-      link.setAttribute(
-        "href",
-        "/resource-pools/resources/" + member.resource_id
-      );
-      link.textContent = short_id(member.resource_id);
-      link.title = member.resource_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const added_cell = document.createElement("td");
-      added_cell.textContent = format_timestamp(member.added_at);
-      row.appendChild(added_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rowClass = "pyc-resources__row";
+    table.columns = [
+      {
+        key: "resource_id",
+        label: "Resource",
+        render: (member) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-resources__link");
+          link.setAttribute(
+            "href",
+            "/resource-pools/resources/" + member.resource_id
+          );
+          link.textContent = short_id(member.resource_id);
+          link.title = member.resource_id;
+          return link;
+        }
+      },
+      {
+        key: "added_at",
+        label: "Added",
+        render: (member) => format_timestamp(member.added_at)
+      }
+    ];
+    table.rows = this._members;
     section.appendChild(table);
     return section;
   }

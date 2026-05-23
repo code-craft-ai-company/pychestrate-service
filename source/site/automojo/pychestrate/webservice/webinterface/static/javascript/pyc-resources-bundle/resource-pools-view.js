@@ -470,54 +470,57 @@ class PycResourcePools extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-resources__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = ["Pool", "Name", "Capabilities", "Members"];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const pool of this._pools) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-resources__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-resources__link");
-      const href = "/resource-pools/" + pool.pool_id + "?project_id=" + encodeURIComponent(pool.project_id);
-      link.setAttribute("href", href);
-      link.textContent = short_id(pool.pool_id);
-      link.title = pool.pool_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const name_cell = document.createElement("td");
-      name_cell.textContent = pool.name !== null && pool.name.length > 0 ? pool.name : "\u2014";
-      row.appendChild(name_cell);
-      const tags_cell = document.createElement("td");
-      const tags = Array.isArray(pool.capability_tags) === true ? pool.capability_tags : [];
-      if (tags.length === 0) {
-        tags_cell.textContent = "\u2014";
-      } else {
-        for (const tag of tags) {
-          const chip = document.createElement("mj-chip");
-          chip.classList.add("pyc-resources__tag");
-          chip.textContent = tag;
-          tags_cell.appendChild(chip);
+    table.rowClass = "pyc-resources__row";
+    table.columns = [
+      {
+        key: "pool_id",
+        label: "Pool",
+        render: (pool) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-resources__link");
+          const href = "/resource-pools/" + pool.pool_id + "?project_id=" + encodeURIComponent(pool.project_id);
+          link.setAttribute("href", href);
+          link.textContent = short_id(pool.pool_id);
+          link.title = pool.pool_id;
+          return link;
         }
+      },
+      {
+        key: "name",
+        label: "Name",
+        render: (pool) => {
+          const rtnval = pool.name !== null && pool.name.length > 0 ? pool.name : "\u2014";
+          return rtnval;
+        }
+      },
+      {
+        key: "capability_tags",
+        label: "Capabilities",
+        render: (pool) => {
+          const tags = Array.isArray(pool.capability_tags) === true ? pool.capability_tags : [];
+          if (tags.length === 0) {
+            const rtnval2 = "\u2014";
+            return rtnval2;
+          }
+          const fragment = document.createDocumentFragment();
+          for (const tag of tags) {
+            const chip = document.createElement("mj-chip");
+            chip.classList.add("pyc-resources__tag");
+            chip.textContent = tag;
+            fragment.appendChild(chip);
+          }
+          return fragment;
+        }
+      },
+      {
+        key: "member_count",
+        label: "Members",
+        render: (pool) => String(pool.member_count)
       }
-      row.appendChild(tags_cell);
-      const members_cell = document.createElement("td");
-      members_cell.textContent = String(pool.member_count);
-      row.appendChild(members_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    ];
+    table.rows = this._pools;
     return table;
   }
   _render_pager() {
