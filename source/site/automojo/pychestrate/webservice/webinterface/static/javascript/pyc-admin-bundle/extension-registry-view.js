@@ -109,7 +109,7 @@ class PycExtensionRegistry extends HTMLElement {
     root.appendChild(lede);
     const controls = document.createElement("div");
     controls.classList.add("pyc-admin__controls");
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-admin__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -268,7 +268,7 @@ class PycExtensionRegistry extends HTMLElement {
     health_cell.appendChild(health_badge);
     row.appendChild(health_cell);
     const actions_cell = document.createElement("td");
-    const detail_button = document.createElement("button");
+    const detail_button = document.createElement("mj-button");
     detail_button.classList.add("pyc-admin__toggle");
     detail_button.setAttribute("type", "button");
     detail_button.setAttribute("data-role", "show-routes");

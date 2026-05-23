@@ -238,7 +238,7 @@ class PycBuildsList extends HTMLElement {
     });
     state_label.appendChild(state_select);
     controls.appendChild(state_label);
-    const trigger_button = document.createElement("button");
+    const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-builds__button");
     trigger_button.setAttribute("type", "button");
     trigger_button.setAttribute("data-role", "trigger-toggle");
@@ -247,7 +247,7 @@ class PycBuildsList extends HTMLElement {
       this._toggle_trigger_form();
     });
     controls.appendChild(trigger_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-builds__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -275,7 +275,7 @@ class PycBuildsList extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-builds__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-builds__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -291,7 +291,7 @@ class PycBuildsList extends HTMLElement {
     page_indicator.classList.add("pyc-builds__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-builds__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -683,11 +683,11 @@ class PycBuildsList extends HTMLElement {
     const prev = this._root.querySelector('[data-role="prev-page"]');
     const next = this._root.querySelector('[data-role="next-page"]');
     const indicator = this._root.querySelector('[data-role="page-indicator"]');
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
@@ -766,7 +766,7 @@ class PycBuildsList extends HTMLElement {
     inputs_area.rows = 3;
     inputs_label.appendChild(inputs_area);
     form.appendChild(inputs_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-builds__trigger");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "trigger-submit");
@@ -820,12 +820,12 @@ class PycBuildsList extends HTMLElement {
       );
       return;
     }
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Triggering build\u2026";
     }
     const outcome = await this._do_trigger(runner_kind, runner_inputs);
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -918,7 +918,7 @@ class PycBuildsList extends HTMLElement {
       link.textContent = "View build";
       toast.appendChild(link);
     }
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-builds__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

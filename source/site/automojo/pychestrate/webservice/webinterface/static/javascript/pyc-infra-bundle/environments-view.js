@@ -320,7 +320,7 @@ class PycEnvironments extends HTMLElement {
     });
     state_label.appendChild(state_select);
     controls.appendChild(state_label);
-    const register_button = document.createElement("button");
+    const register_button = document.createElement("mj-button");
     register_button.classList.add("pyc-infra__button");
     register_button.setAttribute("type", "button");
     register_button.setAttribute("data-role", "register-toggle");
@@ -329,7 +329,7 @@ class PycEnvironments extends HTMLElement {
       this._toggle_register_form();
     });
     controls.appendChild(register_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-infra__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -357,7 +357,7 @@ class PycEnvironments extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-infra__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-infra__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -373,7 +373,7 @@ class PycEnvironments extends HTMLElement {
     page_indicator.classList.add("pyc-infra__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-infra__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -695,13 +695,13 @@ class PycEnvironments extends HTMLElement {
     applied_cell.textContent = format_timestamp(environment.last_applied_at);
     row.appendChild(applied_cell);
     const actions_cell = document.createElement("td");
-    const check_button = document.createElement("button");
+    const check_button = document.createElement("mj-button");
     check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
     check_button.setAttribute("type", "button");
     check_button.setAttribute("data-role", "check-drift");
     check_button.textContent = "Check Drift";
     check_button.addEventListener("click", () => {
-      check_button.disabled = true;
+      check_button.toggleAttribute("disabled", true);
       void this._on_check_drift(environment, check_button);
     });
     actions_cell.appendChild(check_button);
@@ -721,11 +721,11 @@ class PycEnvironments extends HTMLElement {
     const indicator = this._root.querySelector(
       '[data-role="page-indicator"]'
     );
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
@@ -769,7 +769,7 @@ class PycEnvironments extends HTMLElement {
     if (outcome.ok === true) {
       await this._load_drift_status(environment.environment_id);
     }
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
@@ -945,7 +945,7 @@ class PycEnvironments extends HTMLElement {
     attrs_area.rows = 3;
     attrs_label.appendChild(attrs_area);
     form.appendChild(attrs_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "register-submit");
@@ -991,12 +991,12 @@ class PycEnvironments extends HTMLElement {
       );
       return;
     }
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Registering environment\u2026";
     }
     const outcome = await this._do_register(name, kind_name, attrs);
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -1101,7 +1101,7 @@ class PycEnvironments extends HTMLElement {
     text.classList.add("pyc-infra__toast-message");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-infra__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

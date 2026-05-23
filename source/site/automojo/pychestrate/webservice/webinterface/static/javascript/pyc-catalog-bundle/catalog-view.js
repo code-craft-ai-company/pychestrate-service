@@ -176,7 +176,7 @@ class PycTestCatalog extends HTMLElement {
     retired_text.textContent = "Include retired";
     retired_label.appendChild(retired_text);
     controls.appendChild(retired_label);
-    const import_button = document.createElement("button");
+    const import_button = document.createElement("mj-button");
     import_button.classList.add("pyc-catalog__button");
     import_button.setAttribute("type", "button");
     import_button.setAttribute("data-role", "import-toggle");
@@ -185,7 +185,7 @@ class PycTestCatalog extends HTMLElement {
       this._toggle_import_form();
     });
     controls.appendChild(import_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-catalog__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -208,7 +208,7 @@ class PycTestCatalog extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-catalog__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-catalog__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -224,7 +224,7 @@ class PycTestCatalog extends HTMLElement {
     page_indicator.classList.add("pyc-catalog__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-catalog__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -530,13 +530,13 @@ class PycTestCatalog extends HTMLElement {
       created_cell.textContent = format_timestamp(entry.created_at);
       row.appendChild(created_cell);
       const action_cell = document.createElement("td");
-      const trigger_button = document.createElement("button");
+      const trigger_button = document.createElement("mj-button");
       trigger_button.classList.add("pyc-catalog__trigger");
       trigger_button.setAttribute("type", "button");
       trigger_button.setAttribute("data-role", "trigger-run");
       trigger_button.setAttribute("data-entry-id", entry.entry_id);
       trigger_button.textContent = "Trigger Run";
-      trigger_button.disabled = entry.retired === true;
+      trigger_button.toggleAttribute("disabled", entry.retired === true);
       trigger_button.addEventListener("click", () => {
         void this._trigger_run(entry, trigger_button);
       });
@@ -558,11 +558,11 @@ class PycTestCatalog extends HTMLElement {
     const prev = this._root.querySelector('[data-role="prev-page"]');
     const next = this._root.querySelector('[data-role="next-page"]');
     const indicator = this._root.querySelector('[data-role="page-indicator"]');
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
@@ -620,7 +620,7 @@ class PycTestCatalog extends HTMLElement {
     ref_input.setAttribute("placeholder", "main");
     ref_label.appendChild(ref_input);
     form.appendChild(ref_label);
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-catalog__button");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "import-submit");
@@ -679,7 +679,7 @@ class PycTestCatalog extends HTMLElement {
       return;
     }
     if (submit_button !== null) {
-      submit_button.disabled = true;
+      submit_button.toggleAttribute("disabled", true);
     }
     if (status_node !== null) {
       status_node.textContent = "Import running\u2026";
@@ -711,7 +711,7 @@ class PycTestCatalog extends HTMLElement {
           status_node.textContent = "Import failed (HTTP " + String(response.status) + ").";
         }
         if (submit_button !== null) {
-          submit_button.disabled = false;
+          submit_button.toggleAttribute("disabled", false);
         }
         return;
       }
@@ -730,12 +730,12 @@ class PycTestCatalog extends HTMLElement {
         status_node.textContent = "Import failed \u2014 network error.";
       }
       if (submit_button !== null) {
-        submit_button.disabled = false;
+        submit_button.toggleAttribute("disabled", false);
       }
       return;
     }
     if (submit_button !== null) {
-      submit_button.disabled = false;
+      submit_button.toggleAttribute("disabled", false);
     }
     await this._refresh();
     return;
@@ -763,7 +763,7 @@ class PycTestCatalog extends HTMLElement {
   }
   async _trigger_run(entry, trigger_button) {
     if (trigger_button !== null) {
-      trigger_button.disabled = true;
+      trigger_button.toggleAttribute("disabled", true);
     }
     const payload = {
       catalog_entry_id: entry.entry_id
@@ -795,7 +795,7 @@ class PycTestCatalog extends HTMLElement {
         { reason: String(reason) }
       );
       if (trigger_button !== null) {
-        trigger_button.disabled = entry.retired === true;
+        trigger_button.toggleAttribute("disabled", entry.retired === true);
       }
       const failure = {
         ok: false,
@@ -807,7 +807,7 @@ class PycTestCatalog extends HTMLElement {
       return failure;
     }
     if (trigger_button !== null) {
-      trigger_button.disabled = entry.retired === true;
+      trigger_button.toggleAttribute("disabled", entry.retired === true);
     }
     const ok = status >= 200 && status < 300;
     const outcome = {
@@ -846,7 +846,7 @@ class PycTestCatalog extends HTMLElement {
       link.textContent = "View run";
       toast.appendChild(link);
     }
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-catalog__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss notice");

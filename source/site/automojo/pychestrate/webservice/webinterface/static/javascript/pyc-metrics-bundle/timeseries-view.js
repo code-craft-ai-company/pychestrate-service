@@ -189,7 +189,7 @@ class PycTimeseriesExplorer extends HTMLElement {
     });
     range_label.appendChild(range_select);
     controls.appendChild(range_label);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-metrics__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");

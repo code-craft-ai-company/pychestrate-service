@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <!-- automojo-webworks mj-* component library: design tokens,
+         base stylesheet, and the barrel module that registers every
+         <mj-*> custom element. Loaded BEFORE the pyc-* bundles so
+         the components are available when the bundles run. -->
+    <link rel="stylesheet" href="/mj/styles/tokens.css">
+    <link rel="stylesheet" href="/mj/styles/base.css">
+    <script type="module" src="/mj/javascript/index.js"></script>
     <link rel="stylesheet" href="/static/javascript/pyc-site-shell/pyc-site-shell.css">
     {%- for bundle_name in bundle_names %}
     <script type="module" src="/static/javascript/{{ bundle_name }}/index.js"></script>

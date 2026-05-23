@@ -169,8 +169,8 @@ test("pagination advances the page and disables prev on page one", async () => {
 
     const prev = element.querySelector('[data-role="prev-page"]')
     const next = element.querySelector('[data-role="next-page"]')
-    assert.equal(prev.disabled, true)
-    assert.equal(next.disabled, false)
+    assert.equal(prev.hasAttribute("disabled"), true)
+    assert.equal(next.hasAttribute("disabled"), false)
 
     // Server echoes page 2 on the next fetch.
     _install_fetch_with(calls, {
@@ -181,7 +181,7 @@ test("pagination advances the page and disables prev on page one", async () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     assert.equal(element.listState.page, 2)
-    assert.equal(prev.disabled, false)
+    assert.equal(prev.hasAttribute("disabled"), false)
     element.remove()
 })
 

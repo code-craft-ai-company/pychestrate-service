@@ -175,7 +175,7 @@ class PycSecrets extends HTMLElement {
       USER: "User"
     };
     for (const kind of SECRET_SCOPE_KINDS) {
-      const tab = document.createElement("button");
+      const tab = document.createElement("mj-button");
       tab.classList.add("pyc-secrets__tab");
       tab.setAttribute("type", "button");
       tab.setAttribute("role", "tab");
@@ -248,7 +248,7 @@ class PycSecrets extends HTMLElement {
     value_input.required = true;
     value_label.appendChild(value_input);
     form.appendChild(value_label);
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-secrets__button", "pyc-secrets__button--primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "create-submit");
@@ -543,7 +543,7 @@ class PycSecrets extends HTMLElement {
     row.appendChild(value_cell);
     const actions_cell = document.createElement("td");
     actions_cell.classList.add("pyc-secrets__actions");
-    const reveal_button = document.createElement("button");
+    const reveal_button = document.createElement("mj-button");
     reveal_button.classList.add("pyc-secrets__button");
     reveal_button.setAttribute("type", "button");
     reveal_button.setAttribute("data-role", "reveal-action");
@@ -553,7 +553,7 @@ class PycSecrets extends HTMLElement {
       void this._toggle_reveal(secret);
     });
     actions_cell.appendChild(reveal_button);
-    const rotate_button = document.createElement("button");
+    const rotate_button = document.createElement("mj-button");
     rotate_button.classList.add("pyc-secrets__button");
     rotate_button.setAttribute("type", "button");
     rotate_button.setAttribute("data-role", "rotate-action");
@@ -562,7 +562,7 @@ class PycSecrets extends HTMLElement {
       void this._rotate_secret(secret);
     });
     actions_cell.appendChild(rotate_button);
-    const delete_button = document.createElement("button");
+    const delete_button = document.createElement("mj-button");
     delete_button.classList.add("pyc-secrets__button", "pyc-secrets__button--danger");
     delete_button.setAttribute("type", "button");
     delete_button.setAttribute("data-role", "delete-action");

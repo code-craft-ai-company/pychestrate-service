@@ -183,7 +183,7 @@ class PycPipelinesList extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-pipelines__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -202,7 +202,7 @@ class PycPipelinesList extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-pipelines__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-pipelines__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -218,7 +218,7 @@ class PycPipelinesList extends HTMLElement {
     page_indicator.classList.add("pyc-pipelines__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-pipelines__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -293,7 +293,7 @@ class PycPipelinesList extends HTMLElement {
     form.appendChild(document_label);
     const actions = document.createElement("div");
     actions.classList.add("pyc-pipelines__form-actions");
-    const validate_button = document.createElement("button");
+    const validate_button = document.createElement("mj-button");
     validate_button.classList.add("pyc-pipelines__button");
     validate_button.setAttribute("type", "button");
     validate_button.setAttribute("data-role", "validate-submit");
@@ -302,7 +302,7 @@ class PycPipelinesList extends HTMLElement {
       void this._submit_validate(commit_input, filename_input, document_area);
     });
     actions.appendChild(validate_button);
-    const save_button = document.createElement("button");
+    const save_button = document.createElement("mj-button");
     save_button.classList.add("pyc-pipelines__primary");
     save_button.setAttribute("type", "submit");
     save_button.setAttribute("data-role", "save-submit");
@@ -359,7 +359,7 @@ class PycPipelinesList extends HTMLElement {
     strategy_input.setAttribute("data-role", "matrix-strategy");
     strategy_label.appendChild(strategy_input);
     panel.appendChild(strategy_label);
-    const expand_button = document.createElement("button");
+    const expand_button = document.createElement("mj-button");
     expand_button.classList.add("pyc-pipelines__button");
     expand_button.setAttribute("type", "button");
     expand_button.setAttribute("data-role", "matrix-expand");
@@ -661,11 +661,11 @@ class PycPipelinesList extends HTMLElement {
     const prev = this._root.querySelector('[data-role="prev-page"]');
     const next = this._root.querySelector('[data-role="next-page"]');
     const indicator = this._root.querySelector('[data-role="page-indicator"]');
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";

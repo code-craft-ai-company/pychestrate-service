@@ -228,7 +228,7 @@ class PycProvisioningList extends HTMLElement {
     });
     state_label.appendChild(state_select);
     controls.appendChild(state_label);
-    const trigger_button = document.createElement("button");
+    const trigger_button = document.createElement("mj-button");
     trigger_button.classList.add("pyc-infra__button");
     trigger_button.setAttribute("type", "button");
     trigger_button.setAttribute("data-role", "trigger-toggle");
@@ -237,7 +237,7 @@ class PycProvisioningList extends HTMLElement {
       this._toggle_trigger_form();
     });
     controls.appendChild(trigger_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-infra__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -265,7 +265,7 @@ class PycProvisioningList extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-infra__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-infra__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -281,7 +281,7 @@ class PycProvisioningList extends HTMLElement {
     page_indicator.classList.add("pyc-infra__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-infra__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -651,11 +651,11 @@ class PycProvisioningList extends HTMLElement {
     const indicator = this._root.querySelector(
       '[data-role="page-indicator"]'
     );
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";
@@ -751,7 +751,7 @@ class PycProvisioningList extends HTMLElement {
     inputs_area.rows = 3;
     inputs_label.appendChild(inputs_area);
     form.appendChild(inputs_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "trigger-submit");
@@ -805,7 +805,7 @@ class PycProvisioningList extends HTMLElement {
       );
       return;
     }
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Triggering provisioning run\u2026";
     }
@@ -815,7 +815,7 @@ class PycProvisioningList extends HTMLElement {
       action,
       driver_inputs
     );
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -938,7 +938,7 @@ class PycProvisioningList extends HTMLElement {
       link.textContent = "View run";
       toast.appendChild(link);
     }
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-infra__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

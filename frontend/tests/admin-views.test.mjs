@@ -340,7 +340,7 @@ test("PycFeatureFlags disables the toggle for retired flags", async () => {
     await el.refresh()
     const retired = el.querySelector('[data-flag-key="gone.legacy"]')
     const toggle = retired.querySelector('[data-role="toggle"]')
-    assert.equal(toggle.disabled, true)
+    assert.equal(toggle.hasAttribute("disabled"), true)
     el.remove()
 })
 
