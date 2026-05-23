@@ -17,6 +17,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -35,17 +36,9 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/test-metrics" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/test-metrics",
+})
 globalThis.HTMLFormElement = dom.window.HTMLFormElement
 globalThis.SVGElement = dom.window.SVGElement
 
@@ -373,7 +366,7 @@ test("pyc-test-metrics renders the rollup cards + runs table", async () => {
     const trend = element.querySelector('[data-role="duration-trend"]')
     assert.equal(trend.querySelectorAll(".pyc-metrics__bar").length, 2)
     const table = element.querySelector('[data-role="runs-table"]')
-    assert.equal(table.querySelectorAll("tbody tr").length, 2)
+    assert.equal(table.shadowRoot.querySelectorAll("tbody tr").length, 2)
     assert.equal(element.viewState.errored, false)
     element.remove()
 })
@@ -547,7 +540,7 @@ test("pyc-dashboards-list lists dashboards with detail links", async () => {
 
     const table = element.querySelector('[data-role="dashboards-table"]')
     assert.ok(table !== null)
-    const link = table.querySelector(".pyc-metrics__row-link")
+    const link = table.shadowRoot.querySelector(".pyc-metrics__row-link")
     assert.equal(link.getAttribute("href"), "/dashboards/" + DASHBOARD_ID)
     assert.ok(link.textContent.includes("Ops board"))
     element.remove()

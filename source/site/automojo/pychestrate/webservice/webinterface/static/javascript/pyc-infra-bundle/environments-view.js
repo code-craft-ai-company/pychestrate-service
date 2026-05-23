@@ -620,93 +620,80 @@ class PycEnvironments extends HTMLElement {
     return;
   }
   /**
-   * Build the environments ``<table>`` from the current list.
+   * Build the environments ``<mj-table>`` from the current list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-infra__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Environment",
-      "Kind",
-      "State",
-      "Drift",
-      "Last applied",
-      "Actions"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const environment of this._environments) {
-      tbody.appendChild(this._build_row(environment));
-    }
-    table.appendChild(tbody);
-    return table;
-  }
-  /**
-   * Build one environment table row, including the drift
-   * indicator cell and the per-row "Check Drift" action.
-   *
-   * @param environment The environment to render.
-   *
-   * @returns A populated ``<tr>``.
-   */
-  _build_row(environment) {
-    const row = document.createElement("tr");
-    row.classList.add("pyc-infra__row");
-    row.setAttribute("data-environment-id", environment.environment_id);
-    const name_cell = document.createElement("td");
-    const name = document.createElement("span");
-    name.classList.add("pyc-infra__env-name");
-    name.textContent = environment.name;
-    name.title = environment.environment_id;
-    name_cell.appendChild(name);
-    row.appendChild(name_cell);
-    const kind_cell = document.createElement("td");
-    kind_cell.textContent = environment.kind_name;
-    row.appendChild(kind_cell);
-    const state_cell = document.createElement("td");
-    const state_badge = document.createElement("mj-chip");
-    state_badge.classList.add("pyc-infra__badge");
-    state_badge.setAttribute(
-      "data-tone",
-      environment_state_tone(environment.state)
-    );
-    state_badge.textContent = environment.state;
-    state_cell.appendChild(state_badge);
-    row.appendChild(state_cell);
-    const drift_cell = document.createElement("td");
-    const drift_badge = document.createElement("span");
-    drift_badge.classList.add("pyc-infra__badge", "pyc-infra__drift");
-    drift_badge.setAttribute("data-role", "drift-indicator");
-    const status = this._drift.get(environment.environment_id) ?? null;
-    drift_badge.setAttribute("data-tone", drift_status_tone(status));
-    drift_badge.textContent = drift_status_label(status);
-    drift_cell.appendChild(drift_badge);
-    row.appendChild(drift_cell);
-    const applied_cell = document.createElement("td");
-    applied_cell.textContent = format_timestamp(environment.last_applied_at);
-    row.appendChild(applied_cell);
-    const actions_cell = document.createElement("td");
-    const check_button = document.createElement("mj-button");
-    check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
-    check_button.setAttribute("type", "button");
-    check_button.setAttribute("data-role", "check-drift");
-    check_button.textContent = "Check Drift";
-    check_button.addEventListener("click", () => {
-      check_button.toggleAttribute("disabled", true);
-      void this._on_check_drift(environment, check_button);
+    table.rowClass = "pyc-infra__row";
+    table.rowAttrs = (environment) => ({
+      "data-environment-id": environment.environment_id
     });
-    actions_cell.appendChild(check_button);
-    row.appendChild(actions_cell);
-    return row;
+    table.columns = [
+      {
+        key: "name",
+        label: "Environment",
+        render: (environment) => {
+          const name = document.createElement("span");
+          name.classList.add("pyc-infra__env-name");
+          name.textContent = environment.name;
+          name.title = environment.environment_id;
+          return name;
+        }
+      },
+      { key: "kind_name", label: "Kind" },
+      {
+        key: "state",
+        label: "State",
+        render: (environment) => {
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-infra__badge");
+          state_badge.setAttribute(
+            "data-tone",
+            environment_state_tone(environment.state)
+          );
+          state_badge.textContent = environment.state;
+          return state_badge;
+        }
+      },
+      {
+        key: "drift",
+        label: "Drift",
+        render: (environment) => {
+          const drift_badge = document.createElement("span");
+          drift_badge.classList.add("pyc-infra__badge", "pyc-infra__drift");
+          drift_badge.setAttribute("data-role", "drift-indicator");
+          const status = self._drift.get(environment.environment_id) ?? null;
+          drift_badge.setAttribute("data-tone", drift_status_tone(status));
+          drift_badge.textContent = drift_status_label(status);
+          return drift_badge;
+        }
+      },
+      {
+        key: "last_applied_at",
+        label: "Last applied",
+        render: (environment) => format_timestamp(environment.last_applied_at)
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (environment) => {
+          const check_button = document.createElement("mj-button");
+          check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
+          check_button.setAttribute("type", "button");
+          check_button.setAttribute("data-role", "check-drift");
+          check_button.textContent = "Check Drift";
+          check_button.addEventListener("click", () => {
+            check_button.toggleAttribute("disabled", true);
+            void self._on_check_drift(environment, check_button);
+          });
+          return check_button;
+        }
+      }
+    ];
+    table.rows = this._environments;
+    return table;
   }
   /**
    * Update the pager controls -- enabled state + the page
@@ -743,15 +730,18 @@ class PycEnvironments extends HTMLElement {
     if (this._table_region === null) {
       return;
     }
-    const selector = 'tr[data-environment-id="' + environment_id + '"] [data-role="drift-indicator"]';
-    const badge = this._table_region.querySelector(selector);
-    if (badge instanceof HTMLElement === false) {
+    const table = this._table_region.querySelector("mj-table.pyc-infra__table");
+    if (table === null || table.shadowRoot === null) {
       return;
     }
-    const el = badge;
+    const selector = 'tr[data-environment-id="' + environment_id + '"] [data-role="drift-indicator"]';
+    const badge = table.shadowRoot.querySelector(selector);
+    if (badge === null) {
+      return;
+    }
     const status = this._drift.get(environment_id) ?? null;
-    el.setAttribute("data-tone", drift_status_tone(status));
-    el.textContent = drift_status_label(status);
+    badge.setAttribute("data-tone", drift_status_tone(status));
+    badge.textContent = drift_status_label(status);
     return;
   }
   /**

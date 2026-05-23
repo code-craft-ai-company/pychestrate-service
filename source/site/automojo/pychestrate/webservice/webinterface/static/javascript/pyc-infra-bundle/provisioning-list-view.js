@@ -579,63 +579,51 @@ class PycProvisioningList extends HTMLElement {
    * ``_runs`` list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-infra__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Run",
-      "Action",
-      "Driver",
-      "State",
-      "Started",
-      "Finished"
+    table.rowClass = "pyc-infra__row";
+    table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
+    table.columns = [
+      {
+        key: "run_id",
+        label: "Run",
+        render: (run) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-infra__run-link");
+          link.setAttribute(
+            "href",
+            build_provisioning_detail_link(run.project_id, run.run_id)
+          );
+          link.textContent = short_id(run.run_id);
+          link.title = run.run_id;
+          return link;
+        }
+      },
+      { key: "action", label: "Action" },
+      { key: "driver_name", label: "Driver" },
+      {
+        key: "state",
+        label: "State",
+        render: (run) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-infra__badge");
+          badge.setAttribute("data-tone", provisioning_state_tone(run.state));
+          badge.textContent = run.state;
+          return badge;
+        }
+      },
+      {
+        key: "started_at",
+        label: "Started",
+        render: (run) => format_timestamp(run.started_at)
+      },
+      {
+        key: "finished_at",
+        label: "Finished",
+        render: (run) => format_timestamp(run.finished_at)
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const run of this._runs) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-infra__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-infra__run-link");
-      link.setAttribute(
-        "href",
-        build_provisioning_detail_link(run.project_id, run.run_id)
-      );
-      link.textContent = short_id(run.run_id);
-      link.title = run.run_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const action_cell = document.createElement("td");
-      action_cell.textContent = run.action;
-      row.appendChild(action_cell);
-      const driver_cell = document.createElement("td");
-      driver_cell.textContent = run.driver_name;
-      row.appendChild(driver_cell);
-      const state_cell = document.createElement("td");
-      const badge = document.createElement("mj-chip");
-      badge.classList.add("pyc-infra__badge");
-      badge.setAttribute("data-tone", provisioning_state_tone(run.state));
-      badge.textContent = run.state;
-      state_cell.appendChild(badge);
-      row.appendChild(state_cell);
-      const started_cell = document.createElement("td");
-      started_cell.textContent = format_timestamp(run.started_at);
-      row.appendChild(started_cell);
-      const finished_cell = document.createElement("td");
-      finished_cell.textContent = format_timestamp(run.finished_at);
-      row.appendChild(finished_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rows = this._runs;
     return table;
   }
   /**

@@ -206,25 +206,6 @@ class PycFeatureFlags extends HTMLElement {
       region.replaceChildren(empty);
       return;
     }
-    const table = document.createElement("table");
-    table.classList.add("pyc-admin__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Flag Key",
-      "Kind",
-      "Version",
-      "State",
-      "Actions"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
     const ordered = this._entries.slice();
     ordered.sort(
       (left, right) => {
@@ -237,34 +218,44 @@ class PycFeatureFlags extends HTMLElement {
         return 0;
       }
     );
-    const tbody = document.createElement("tbody");
-    for (const entry of ordered) {
-      tbody.appendChild(this._build_row(entry));
-    }
-    table.appendChild(tbody);
+    const self = this;
+    const table = document.createElement("mj-table");
+    table.classList.add("pyc-admin__table");
+    table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
+    table.columns = [
+      { key: "flag_key", label: "Flag Key" },
+      {
+        key: "flag_kind",
+        label: "Kind",
+        render: (entry) => entry.flag_kind ?? "\u2014"
+      },
+      {
+        key: "current_version",
+        label: "Version",
+        render: (entry) => String(entry.current_version)
+      },
+      {
+        key: "state",
+        label: "State",
+        render: (entry) => {
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-admin__badge");
+          state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
+          state_badge.textContent = entry.state ?? "\u2014";
+          return state_badge;
+        }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (entry) => self._build_toggle(entry)
+      }
+    ];
+    table.rows = ordered;
     region.replaceChildren(table);
     return;
   }
-  _build_row(entry) {
-    const row = document.createElement("tr");
-    row.setAttribute("data-flag-key", entry.flag_key);
-    const key_cell = document.createElement("td");
-    key_cell.textContent = entry.flag_key;
-    row.appendChild(key_cell);
-    const kind_cell = document.createElement("td");
-    kind_cell.textContent = entry.flag_kind ?? "\u2014";
-    row.appendChild(kind_cell);
-    const version_cell = document.createElement("td");
-    version_cell.textContent = String(entry.current_version);
-    row.appendChild(version_cell);
-    const state_cell = document.createElement("td");
-    const state_badge = document.createElement("mj-chip");
-    state_badge.classList.add("pyc-admin__badge");
-    state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
-    state_badge.textContent = entry.state ?? "\u2014";
-    state_cell.appendChild(state_badge);
-    row.appendChild(state_cell);
-    const actions_cell = document.createElement("td");
+  _build_toggle(entry) {
     const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
     const toggle = document.createElement("mj-button");
     toggle.classList.add("pyc-admin__toggle");
@@ -279,9 +270,7 @@ class PycFeatureFlags extends HTMLElement {
       toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
-    actions_cell.appendChild(toggle);
-    row.appendChild(actions_cell);
-    return row;
+    return toggle;
   }
   async _on_toggle(entry, toggle) {
     const target = next_flag_state(entry.state);

@@ -612,64 +612,61 @@ class PycBuildsList extends HTMLElement {
    * list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-builds__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Build",
-      "Runner kind",
-      "State",
-      "Repro digest",
-      "Started",
-      "Finished"
+    table.rowClass = "pyc-builds__row";
+    table.rowAttrs = (build) => ({ "data-build-id": build.run_id });
+    table.columns = [
+      {
+        key: "run_id",
+        label: "Build",
+        render: (build) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-builds__build-link");
+          link.setAttribute("href", "/builds/" + build.run_id);
+          link.textContent = short_id(build.run_id);
+          link.title = build.run_id;
+          return link;
+        }
+      },
+      {
+        key: "runner_kind",
+        label: "Runner kind"
+      },
+      {
+        key: "state",
+        label: "State",
+        render: (build) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-builds__badge");
+          badge.setAttribute("data-tone", build_state_tone(build.state));
+          badge.textContent = build.state;
+          return badge;
+        }
+      },
+      {
+        key: "repro_digest_sha256",
+        label: "Repro digest",
+        render: (build) => {
+          const digest = document.createElement("span");
+          digest.classList.add("pyc-builds__digest");
+          digest.textContent = short_id(build.repro_digest_sha256);
+          digest.title = build.repro_digest_sha256;
+          return digest;
+        }
+      },
+      {
+        key: "started_at",
+        label: "Started",
+        render: (build) => format_timestamp(build.started_at)
+      },
+      {
+        key: "finished_at",
+        label: "Finished",
+        render: (build) => format_timestamp(build.finished_at)
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const build of this._builds) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-builds__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-builds__build-link");
-      link.setAttribute("href", "/builds/" + build.run_id);
-      link.textContent = short_id(build.run_id);
-      link.title = build.run_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const runner_cell = document.createElement("td");
-      runner_cell.textContent = build.runner_kind;
-      row.appendChild(runner_cell);
-      const state_cell = document.createElement("td");
-      const badge = document.createElement("mj-chip");
-      badge.classList.add("pyc-builds__badge");
-      badge.setAttribute("data-tone", build_state_tone(build.state));
-      badge.textContent = build.state;
-      state_cell.appendChild(badge);
-      row.appendChild(state_cell);
-      const digest_cell = document.createElement("td");
-      const digest = document.createElement("span");
-      digest.classList.add("pyc-builds__digest");
-      digest.textContent = short_id(build.repro_digest_sha256);
-      digest.title = build.repro_digest_sha256;
-      digest_cell.appendChild(digest);
-      row.appendChild(digest_cell);
-      const started_cell = document.createElement("td");
-      started_cell.textContent = format_timestamp(build.started_at);
-      row.appendChild(started_cell);
-      const finished_cell = document.createElement("td");
-      finished_cell.textContent = format_timestamp(build.finished_at);
-      row.appendChild(finished_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rows = this._builds;
     return table;
   }
   /**

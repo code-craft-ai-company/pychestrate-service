@@ -210,75 +210,65 @@ class PycExtensionRegistry extends HTMLElement {
       region.replaceChildren(empty);
       return;
     }
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-admin__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Precedence",
-      "Extension",
-      "Routes",
-      "Capabilities",
-      "Health",
-      "Actions"
+    table.rowAttrs = (extension) => ({ "data-ext-name": extension.extName });
+    table.columns = [
+      {
+        key: "precedence",
+        label: "Precedence",
+        render: (extension) => String(extension.precedence)
+      },
+      { key: "extName", label: "Extension" },
+      {
+        key: "routeCount",
+        label: "Routes",
+        render: (extension) => String(extension.routeCount)
+      },
+      {
+        key: "capabilities",
+        label: "Capabilities",
+        render: (extension) => {
+          if (extension.capabilities.length === 0) {
+            return "\u2014";
+          }
+          return extension.capabilities.join(", ");
+        }
+      },
+      {
+        key: "health",
+        label: "Health",
+        render: (_extension) => {
+          const health_badge = document.createElement("mj-chip");
+          health_badge.classList.add("pyc-admin__badge");
+          health_badge.setAttribute(
+            "data-tone",
+            mount_state_tone(self._mountState)
+          );
+          health_badge.textContent = self._mountState.length > 0 ? self._mountState : "unknown";
+          return health_badge;
+        }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (extension) => {
+          const detail_button = document.createElement("mj-button");
+          detail_button.classList.add("pyc-admin__toggle");
+          detail_button.setAttribute("type", "button");
+          detail_button.setAttribute("data-role", "show-routes");
+          detail_button.textContent = "Show Routes";
+          detail_button.addEventListener("click", () => {
+            self._render_detail(extension);
+          });
+          return detail_button;
+        }
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const extension of this._extensions) {
-      tbody.appendChild(this._build_row(extension));
-    }
-    table.appendChild(tbody);
+    table.rows = this._extensions;
     region.replaceChildren(table);
     return;
-  }
-  _build_row(extension) {
-    const row = document.createElement("tr");
-    row.setAttribute("data-ext-name", extension.extName);
-    const precedence_cell = document.createElement("td");
-    precedence_cell.textContent = String(extension.precedence);
-    row.appendChild(precedence_cell);
-    const name_cell = document.createElement("td");
-    name_cell.textContent = extension.extName;
-    row.appendChild(name_cell);
-    const routes_cell = document.createElement("td");
-    routes_cell.textContent = String(extension.routeCount);
-    row.appendChild(routes_cell);
-    const capabilities_cell = document.createElement("td");
-    if (extension.capabilities.length === 0) {
-      capabilities_cell.textContent = "\u2014";
-    } else {
-      capabilities_cell.textContent = extension.capabilities.join(", ");
-    }
-    row.appendChild(capabilities_cell);
-    const health_cell = document.createElement("td");
-    const health_badge = document.createElement("mj-chip");
-    health_badge.classList.add("pyc-admin__badge");
-    health_badge.setAttribute(
-      "data-tone",
-      mount_state_tone(this._mountState)
-    );
-    health_badge.textContent = this._mountState.length > 0 ? this._mountState : "unknown";
-    health_cell.appendChild(health_badge);
-    row.appendChild(health_cell);
-    const actions_cell = document.createElement("td");
-    const detail_button = document.createElement("mj-button");
-    detail_button.classList.add("pyc-admin__toggle");
-    detail_button.setAttribute("type", "button");
-    detail_button.setAttribute("data-role", "show-routes");
-    detail_button.textContent = "Show Routes";
-    detail_button.addEventListener("click", () => {
-      this._render_detail(extension);
-    });
-    actions_cell.appendChild(detail_button);
-    row.appendChild(actions_cell);
-    return row;
   }
   _render_detail(extension) {
     if (this._detail_region === null) {
@@ -291,39 +281,38 @@ class PycExtensionRegistry extends HTMLElement {
     const mount_note = document.createElement("p");
     mount_note.classList.add("pyc-admin__lede");
     mount_note.textContent = "Dynamic-mount state: " + (this._mountState.length > 0 ? this._mountState : "unknown");
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-admin__table");
     table.setAttribute("data-role", "route-detail");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const column of ["Method", "Path", "Permissions", "Handler"]) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const route of extension.routes) {
-      const route_row = document.createElement("tr");
-      const method_cell = document.createElement("td");
-      method_cell.textContent = route.method;
-      route_row.appendChild(method_cell);
-      const path_cell = document.createElement("td");
-      path_cell.classList.add("pyc-admin__mono");
-      path_cell.textContent = route.full_path;
-      route_row.appendChild(path_cell);
-      const perms_cell = document.createElement("td");
-      perms_cell.textContent = route.required_permissions.length > 0 ? route.required_permissions.join(", ") : "\u2014";
-      route_row.appendChild(perms_cell);
-      const handler_cell = document.createElement("td");
-      handler_cell.classList.add("pyc-admin__mono");
-      handler_cell.textContent = route.handler_class;
-      route_row.appendChild(handler_cell);
-      tbody.appendChild(route_row);
-    }
-    table.appendChild(tbody);
+    table.columns = [
+      { key: "method", label: "Method" },
+      {
+        key: "full_path",
+        label: "Path",
+        render: (route) => {
+          const path_cell = document.createElement("span");
+          path_cell.classList.add("pyc-admin__mono");
+          path_cell.textContent = route.full_path;
+          return path_cell;
+        }
+      },
+      {
+        key: "required_permissions",
+        label: "Permissions",
+        render: (route) => route.required_permissions.length > 0 ? route.required_permissions.join(", ") : "\u2014"
+      },
+      {
+        key: "handler_class",
+        label: "Handler",
+        render: (route) => {
+          const handler_cell = document.createElement("span");
+          handler_cell.classList.add("pyc-admin__mono");
+          handler_cell.textContent = route.handler_class;
+          return handler_cell;
+        }
+      }
+    ];
+    table.rows = extension.routes;
     region.replaceChildren(heading, mount_note, table);
     return;
   }

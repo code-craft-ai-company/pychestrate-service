@@ -357,24 +357,31 @@ class PycAdminOverview extends HTMLElement {
       return;
     }
     const children = [];
-    const table = document.createElement("table");
-    table.classList.add("pyc-admin__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const column of ["Flag Key", "State", "Actions"]) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
+    const self = this;
     const shown = this._flags.slice(0, QUICK_FLAG_LIMIT);
-    for (const entry of shown) {
-      tbody.appendChild(this._build_flag_row(entry));
-    }
-    table.appendChild(tbody);
+    const table = document.createElement("mj-table");
+    table.classList.add("pyc-admin__table");
+    table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
+    table.columns = [
+      { key: "flag_key", label: "Flag Key" },
+      {
+        key: "state",
+        label: "State",
+        render: (entry) => {
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-admin__badge");
+          state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
+          state_badge.textContent = entry.state ?? "—";
+          return state_badge;
+        }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        render: (entry) => self._build_flag_toggle(entry)
+      }
+    ];
+    table.rows = shown;
     children.push(table);
     if (this._flags.length > QUICK_FLAG_LIMIT) {
       const more = document.createElement("p");
@@ -391,20 +398,7 @@ class PycAdminOverview extends HTMLElement {
     region.replaceChildren(...children);
     return;
   }
-  _build_flag_row(entry) {
-    const row = document.createElement("tr");
-    row.setAttribute("data-flag-key", entry.flag_key);
-    const key_cell = document.createElement("td");
-    key_cell.textContent = entry.flag_key;
-    row.appendChild(key_cell);
-    const state_cell = document.createElement("td");
-    const state_badge = document.createElement("mj-chip");
-    state_badge.classList.add("pyc-admin__badge");
-    state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
-    state_badge.textContent = entry.state ?? "\u2014";
-    state_cell.appendChild(state_badge);
-    row.appendChild(state_cell);
-    const actions_cell = document.createElement("td");
+  _build_flag_toggle(entry) {
     const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
     const toggle = document.createElement("mj-button");
     toggle.classList.add("pyc-admin__toggle");
@@ -419,9 +413,7 @@ class PycAdminOverview extends HTMLElement {
       toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
-    actions_cell.appendChild(toggle);
-    row.appendChild(actions_cell);
-    return row;
+    return toggle;
   }
   async _on_toggle(entry, toggle) {
     const target = next_flag_state(entry.state);

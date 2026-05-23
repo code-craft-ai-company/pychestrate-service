@@ -342,43 +342,48 @@ class PycDashboardsList extends HTMLElement {
       region.appendChild(notice);
       return;
     }
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-metrics__table");
     table.setAttribute("data-role", "dashboards-table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const text of ["Name", "Description", "Tiles", "Version"]) {
-      const th = document.createElement("th");
-      th.textContent = text;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const dashboard of this._dashboards) {
-      const row = document.createElement("tr");
-      const name_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-metrics__row-link");
-      link.setAttribute(
-        "href",
-        DASHBOARDS_ROUTE + "/" + encodeURIComponent(dashboard.dashboard_id)
-      );
-      link.textContent = dashboard.name;
-      name_cell.appendChild(link);
-      row.appendChild(name_cell);
-      const desc_cell = document.createElement("td");
-      desc_cell.textContent = dashboard.description !== void 0 && dashboard.description.length > 0 ? dashboard.description : "\u2014";
-      row.appendChild(desc_cell);
-      const tiles_cell = document.createElement("td");
-      tiles_cell.textContent = String(dashboard.tiles.length);
-      row.appendChild(tiles_cell);
-      const version_cell = document.createElement("td");
-      version_cell.textContent = String(dashboard.version);
-      row.appendChild(version_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rowClass = "pyc-metrics__row";
+    table.rowAttrs = (dashboard) => ({
+      "data-dashboard-id": dashboard.dashboard_id
+    });
+    table.columns = [
+      {
+        key: "name",
+        label: "Name",
+        render: (dashboard) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-metrics__row-link");
+          link.setAttribute(
+            "href",
+            DASHBOARDS_ROUTE + "/" + encodeURIComponent(dashboard.dashboard_id)
+          );
+          link.textContent = dashboard.name;
+          return link;
+        }
+      },
+      {
+        key: "description",
+        label: "Description",
+        render: (dashboard) =>
+          dashboard.description !== void 0 && dashboard.description.length > 0
+            ? dashboard.description
+            : "\u2014"
+      },
+      {
+        key: "tiles",
+        label: "Tiles",
+        render: (dashboard) => String(dashboard.tiles.length)
+      },
+      {
+        key: "version",
+        label: "Version",
+        render: (dashboard) => String(dashboard.version)
+      }
+    ];
+    table.rows = this._dashboards;
     region.appendChild(table);
     return;
   }

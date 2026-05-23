@@ -401,81 +401,85 @@ class PycClientsList extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-clients-list__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Client",
-      "Pod",
-      "Status",
-      "Liveness",
-      "Last heartbeat",
-      "Agent version",
-      "Capabilities"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const client of this._page_slice()) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-clients-list__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-clients-list__client-link");
-      link.setAttribute("href", "/clients/" + client.client_id);
-      link.textContent = short_id(client.client_id);
-      link.title = client.client_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const pod_cell = document.createElement("td");
-      pod_cell.textContent = client.pod_name !== null && client.pod_name.length > 0 ? client.pod_name : "\u2014";
-      row.appendChild(pod_cell);
-      const status_cell = document.createElement("td");
-      const status_badge = document.createElement("mj-chip");
-      status_badge.classList.add("pyc-clients-list__badge");
-      status_badge.setAttribute("data-tone", status_tone(client.status));
-      status_badge.textContent = client.status;
-      status_cell.appendChild(status_badge);
-      row.appendChild(status_cell);
-      const liveness_cell = document.createElement("td");
-      const liveness_badge = document.createElement("mj-chip");
-      liveness_badge.classList.add("pyc-clients-list__badge");
-      liveness_badge.setAttribute(
-        "data-tone",
-        liveness_tone(client.liveness_state)
-      );
-      liveness_badge.textContent = client.liveness_state;
-      liveness_cell.appendChild(liveness_badge);
-      row.appendChild(liveness_cell);
-      const seen_cell = document.createElement("td");
-      seen_cell.textContent = format_timestamp(client.last_seen);
-      row.appendChild(seen_cell);
-      const version_cell = document.createElement("td");
-      version_cell.textContent = client.last_agent_version !== null && client.last_agent_version !== void 0 && client.last_agent_version.length > 0 ? client.last_agent_version : "\u2014";
-      row.appendChild(version_cell);
-      const caps_cell = document.createElement("td");
-      const tags = capability_tags(client.attributes);
-      if (tags.length === 0) {
-        caps_cell.textContent = "\u2014";
-      } else {
-        for (const tag of tags) {
-          const chip = document.createElement("mj-chip");
-          chip.classList.add("pyc-clients-list__tag");
-          chip.textContent = tag;
-          caps_cell.appendChild(chip);
+    table.rowClass = "pyc-clients-list__row";
+    table.rowAttrs = (client) => ({ "data-client-id": client.client_id });
+    table.columns = [
+      {
+        key: "client_id",
+        label: "Client",
+        render: (client) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-clients-list__client-link");
+          link.setAttribute("href", "/clients/" + client.client_id);
+          link.textContent = short_id(client.client_id);
+          link.title = client.client_id;
+          return link;
+        }
+      },
+      {
+        key: "pod_name",
+        label: "Pod",
+        render: (client) => client.pod_name !== null && client.pod_name.length > 0 ? client.pod_name : "\u2014"
+      },
+      {
+        key: "status",
+        label: "Status",
+        render: (client) => {
+          const status_badge = document.createElement("mj-chip");
+          status_badge.classList.add("pyc-clients-list__badge");
+          status_badge.setAttribute("data-tone", status_tone(client.status));
+          status_badge.textContent = client.status;
+          return status_badge;
+        }
+      },
+      {
+        key: "liveness_state",
+        label: "Liveness",
+        render: (client) => {
+          const liveness_badge = document.createElement("mj-chip");
+          liveness_badge.classList.add("pyc-clients-list__badge");
+          liveness_badge.setAttribute(
+            "data-tone",
+            liveness_tone(client.liveness_state)
+          );
+          liveness_badge.textContent = client.liveness_state;
+          return liveness_badge;
+        }
+      },
+      {
+        key: "last_seen",
+        label: "Last heartbeat",
+        render: (client) => format_timestamp(client.last_seen)
+      },
+      {
+        key: "last_agent_version",
+        label: "Agent version",
+        render: (client) => client.last_agent_version !== null && client.last_agent_version !== void 0 && client.last_agent_version.length > 0 ? client.last_agent_version : "\u2014"
+      },
+      {
+        key: "capabilities",
+        label: "Capabilities",
+        render: (client) => {
+          const tags = capability_tags(client.attributes);
+          if (tags.length === 0) {
+            const rtnval2 = document.createTextNode("\u2014");
+            return rtnval2;
+          }
+          const fragment = document.createElement("span");
+          fragment.classList.add("pyc-clients-list__tags");
+          for (const tag of tags) {
+            const chip = document.createElement("mj-chip");
+            chip.classList.add("pyc-clients-list__tag");
+            chip.textContent = tag;
+            fragment.appendChild(chip);
+          }
+          return fragment;
         }
       }
-      row.appendChild(caps_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    ];
+    table.rows = this._page_slice();
     return table;
   }
   _render_pager() {

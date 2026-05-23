@@ -334,53 +334,46 @@ class PycPodsList extends HTMLElement {
     return;
   }
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-pods-list__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Pod",
-      "Name",
-      "Version",
-      "Members",
-      "Created"
+    table.rowClass = "pyc-pods-list__row";
+    table.rowAttrs = (pod) => ({ "data-pod-id": pod.pod_id });
+    table.columns = [
+      {
+        key: "pod_id",
+        label: "Pod",
+        render: (pod) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-pods-list__pod-link");
+          const href = "/pods/" + pod.pod_id + "?project_id=" + encodeURIComponent(pod.project_id);
+          link.setAttribute("href", href);
+          link.textContent = short_id(pod.pod_id);
+          link.title = pod.pod_id;
+          return link;
+        }
+      },
+      {
+        key: "pod_name",
+        label: "Name",
+        render: (pod) => pod.pod_name !== null && pod.pod_name.length > 0 ? pod.pod_name : "\u2014"
+      },
+      {
+        key: "current_version",
+        label: "Version",
+        render: (pod) => "v" + String(pod.current_version)
+      },
+      {
+        key: "members",
+        label: "Members",
+        render: (pod) => String(member_count(pod.spec))
+      },
+      {
+        key: "created_at",
+        label: "Created",
+        render: (pod) => format_timestamp(pod.created_at)
+      }
     ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const pod of this._page_slice()) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-pods-list__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-pods-list__pod-link");
-      const href = "/pods/" + pod.pod_id + "?project_id=" + encodeURIComponent(pod.project_id);
-      link.setAttribute("href", href);
-      link.textContent = short_id(pod.pod_id);
-      link.title = pod.pod_id;
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const name_cell = document.createElement("td");
-      name_cell.textContent = pod.pod_name !== null && pod.pod_name.length > 0 ? pod.pod_name : "\u2014";
-      row.appendChild(name_cell);
-      const version_cell = document.createElement("td");
-      version_cell.textContent = "v" + String(pod.current_version);
-      row.appendChild(version_cell);
-      const members_cell = document.createElement("td");
-      members_cell.textContent = String(member_count(pod.spec));
-      row.appendChild(members_cell);
-      const created_cell = document.createElement("td");
-      created_cell.textContent = format_timestamp(pod.created_at);
-      row.appendChild(created_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rows = this._page_slice();
     return table;
   }
   _render_pager() {

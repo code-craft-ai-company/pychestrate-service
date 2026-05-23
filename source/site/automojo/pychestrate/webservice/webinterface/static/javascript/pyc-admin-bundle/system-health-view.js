@@ -221,40 +221,31 @@ class PycSystemHealth extends HTMLElement {
     card.appendChild(detail);
     const backends = subsystem.backends;
     if (backends !== void 0 && backends.length > 0) {
-      const table = document.createElement("table");
+      const table = document.createElement("mj-table");
       table.classList.add("pyc-admin__table");
-      const thead = document.createElement("thead");
-      const head_row = document.createElement("tr");
-      for (const column of ["Backend", "Status", "Reason"]) {
-        const th = document.createElement("th");
-        th.scope = "col";
-        th.textContent = column;
-        head_row.appendChild(th);
-      }
-      thead.appendChild(head_row);
-      table.appendChild(thead);
-      const tbody = document.createElement("tbody");
-      for (const backend of backends) {
-        const row = document.createElement("tr");
-        const name_cell = document.createElement("td");
-        name_cell.textContent = backend.name;
-        row.appendChild(name_cell);
-        const status_cell = document.createElement("td");
-        const status_badge = document.createElement("mj-chip");
-        status_badge.classList.add("pyc-admin__badge");
-        status_badge.setAttribute(
-          "data-tone",
-          health_status_tone(backend.status)
-        );
-        status_badge.textContent = backend.status;
-        status_cell.appendChild(status_badge);
-        row.appendChild(status_cell);
-        const reason_cell = document.createElement("td");
-        reason_cell.textContent = backend.reason.length > 0 ? backend.reason : "\u2014";
-        row.appendChild(reason_cell);
-        tbody.appendChild(row);
-      }
-      table.appendChild(tbody);
+      table.columns = [
+        { key: "name", label: "Backend" },
+        {
+          key: "status",
+          label: "Status",
+          render: (backend) => {
+            const status_badge = document.createElement("mj-chip");
+            status_badge.classList.add("pyc-admin__badge");
+            status_badge.setAttribute(
+              "data-tone",
+              health_status_tone(backend.status)
+            );
+            status_badge.textContent = backend.status;
+            return status_badge;
+          }
+        },
+        {
+          key: "reason",
+          label: "Reason",
+          render: (backend) => backend.reason.length > 0 ? backend.reason : "\u2014"
+        }
+      ];
+      table.rows = backends;
       card.appendChild(table);
     }
     return card;
