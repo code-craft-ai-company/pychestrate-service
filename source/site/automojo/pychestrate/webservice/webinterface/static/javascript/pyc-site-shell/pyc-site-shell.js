@@ -422,21 +422,23 @@ class PycSiteShell extends HTMLElement {
     const visible_entry_count = this._sidebar_registry.visibleEntryCount(
       perms
     );
-    // Permissions must have been fetched at least once before we
-    // can claim "no access". Without this gate, the first render
-    // (triggered by registry onChange while the initial perm
-    // fetch is still in flight) plants the empty state even for
-    // an admin and the subsequent perms-loaded render never
-    // removes it.
+    // Permissions AND the navigation manifest must have been
+    // loaded at least once before we can claim "no access".
+    // Without both gates, a fast perms fetch that resolves before
+    // the slower manifest fetch leaves the sidebar registry empty
+    // even for an admin -- triggering the empty-state branch and
+    // wiping any feature bundle (pyc-runs-list, pyc-secrets-list,
+    // etc.) that already mounted into main_region during boot.
     const perms_loaded = this._permission_cache !== null
       && this._permission_cache._last_success_at_ms !== null;
+    const manifest_loaded = this._nav_manifest_loaded === true;
     if (this._main_region === null) {
       return;
     }
     const existing_empty_state = this._main_region.querySelector(
       ".pyc-site-shell__empty-state"
     );
-    if (visible_entry_count === 0 && perms_loaded === true) {
+    if (visible_entry_count === 0 && perms_loaded === true && manifest_loaded === true) {
       const preserved = [];
       for (const child of Array.from(this._main_region.children)) {
         if (child.classList.contains(
