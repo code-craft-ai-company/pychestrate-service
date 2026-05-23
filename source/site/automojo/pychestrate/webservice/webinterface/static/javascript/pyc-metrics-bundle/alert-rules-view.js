@@ -246,7 +246,7 @@ class PycAlertRules extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const create_button = document.createElement("button");
+    const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-metrics__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "create-toggle");
@@ -255,7 +255,7 @@ class PycAlertRules extends HTMLElement {
       this._toggle_create_form();
     });
     controls.appendChild(create_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-metrics__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -662,7 +662,7 @@ class PycAlertRules extends HTMLElement {
     enabled_text.textContent = "Enabled";
     enabled_label.appendChild(enabled_text);
     form.appendChild(enabled_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-metrics__button");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "create-submit");
@@ -740,7 +740,7 @@ class PycAlertRules extends HTMLElement {
       window_seconds
     };
     const targets = parse_notification_targets(targets_input.value);
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Creating alert rule\u2026";
     }
@@ -751,7 +751,7 @@ class PycAlertRules extends HTMLElement {
       enabled_checkbox.checked,
       targets
     );
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -868,7 +868,7 @@ class PycAlertRules extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-metrics__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

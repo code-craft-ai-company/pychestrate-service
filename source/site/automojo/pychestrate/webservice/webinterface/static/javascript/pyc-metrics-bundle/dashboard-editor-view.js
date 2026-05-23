@@ -482,19 +482,19 @@ class PycDashboardEditor extends HTMLElement {
     }
     kind_label.appendChild(kind_select);
     form.appendChild(kind_label);
-    const add_button = document.createElement("button");
+    const add_button = document.createElement("mj-button");
     add_button.classList.add("pyc-metrics__button");
     add_button.setAttribute("type", "submit");
     add_button.setAttribute("data-role", "add-tile");
     add_button.textContent = "Add Tile";
     form.appendChild(add_button);
-    const save_button = document.createElement("button");
+    const save_button = document.createElement("mj-button");
     save_button.classList.add("pyc-metrics__button");
     save_button.setAttribute("type", "button");
     save_button.setAttribute("data-role", "save-layout");
     save_button.textContent = "Save Layout";
     save_button.addEventListener("click", () => {
-      save_button.disabled = true;
+      save_button.toggleAttribute("disabled", true);
       void this._on_save(save_button);
     });
     form.appendChild(save_button);
@@ -572,29 +572,29 @@ class PycDashboardEditor extends HTMLElement {
     card.appendChild(title);
     const actions = document.createElement("div");
     actions.classList.add("pyc-metrics__tile-actions");
-    const up_button = document.createElement("button");
+    const up_button = document.createElement("mj-button");
     up_button.classList.add("pyc-metrics__button");
     up_button.setAttribute("type", "button");
     up_button.setAttribute("data-role", "tile-up");
     up_button.setAttribute("aria-label", "Move tile up");
     up_button.textContent = "\u2191";
-    up_button.disabled = index === 0;
+    up_button.toggleAttribute("disabled", index === 0);
     up_button.addEventListener("click", () => {
       this.moveUp(index);
     });
     actions.appendChild(up_button);
-    const down_button = document.createElement("button");
+    const down_button = document.createElement("mj-button");
     down_button.classList.add("pyc-metrics__button");
     down_button.setAttribute("type", "button");
     down_button.setAttribute("data-role", "tile-down");
     down_button.setAttribute("aria-label", "Move tile down");
     down_button.textContent = "\u2193";
-    down_button.disabled = index === this._tiles.length - 1;
+    down_button.toggleAttribute("disabled", index === this._tiles.length - 1);
     down_button.addEventListener("click", () => {
       this.moveDown(index);
     });
     actions.appendChild(down_button);
-    const remove_button = document.createElement("button");
+    const remove_button = document.createElement("mj-button");
     remove_button.classList.add("pyc-metrics__button");
     remove_button.setAttribute("type", "button");
     remove_button.setAttribute("data-role", "tile-remove");
@@ -609,7 +609,7 @@ class PycDashboardEditor extends HTMLElement {
   }
   async _on_save(button) {
     const outcome = await this._do_save();
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
@@ -703,7 +703,7 @@ class PycDashboardEditor extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-metrics__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

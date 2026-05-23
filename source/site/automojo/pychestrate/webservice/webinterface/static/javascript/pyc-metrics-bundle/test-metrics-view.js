@@ -123,7 +123,7 @@ class PycTestMetrics extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-metrics__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");

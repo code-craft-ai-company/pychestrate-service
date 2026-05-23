@@ -107,7 +107,7 @@ class PycFeatureFlags extends HTMLElement {
     root.appendChild(lede);
     const controls = document.createElement("div");
     controls.classList.add("pyc-admin__controls");
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-admin__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -266,17 +266,17 @@ class PycFeatureFlags extends HTMLElement {
     row.appendChild(state_cell);
     const actions_cell = document.createElement("td");
     const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
-    const toggle = document.createElement("button");
+    const toggle = document.createElement("mj-button");
     toggle.classList.add("pyc-admin__toggle");
     toggle.setAttribute("type", "button");
     toggle.setAttribute("data-role", "toggle");
     const target = next_flag_state(entry.state);
     toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
     if (is_retired === true) {
-      toggle.disabled = true;
+      toggle.toggleAttribute("disabled", true);
     }
     toggle.addEventListener("click", () => {
-      toggle.disabled = true;
+      toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
     actions_cell.appendChild(toggle);
@@ -286,7 +286,7 @@ class PycFeatureFlags extends HTMLElement {
   async _on_toggle(entry, toggle) {
     const target = next_flag_state(entry.state);
     const outcome = await this.toggleFlag(entry.flag_key, target);
-    toggle.disabled = false;
+    toggle.toggleAttribute("disabled", false);
     this._show_status(
       outcome.message,
       outcome.ok === true ? "ok" : "error"

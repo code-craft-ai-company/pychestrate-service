@@ -130,7 +130,7 @@ class PycReleaseChannels extends HTMLElement {
     root.appendChild(heading);
     const controls = document.createElement("div");
     controls.classList.add("pyc-ops__controls");
-    const publish_button = document.createElement("button");
+    const publish_button = document.createElement("mj-button");
     publish_button.classList.add("pyc-ops__button");
     publish_button.setAttribute("type", "button");
     publish_button.setAttribute("data-role", "publish-toggle");
@@ -139,7 +139,7 @@ class PycReleaseChannels extends HTMLElement {
       this._toggle_publish_form();
     });
     controls.appendChild(publish_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-ops__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -326,13 +326,13 @@ class PycReleaseChannels extends HTMLElement {
       format_release_timestamp(entry.issued_at)
     );
     const actions_cell = document.createElement("td");
-    const show_button = document.createElement("button");
+    const show_button = document.createElement("mj-button");
     show_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
     show_button.setAttribute("type", "button");
     show_button.setAttribute("data-role", "show-release");
     show_button.textContent = "Show Published Release";
     show_button.addEventListener("click", () => {
-      show_button.disabled = true;
+      show_button.toggleAttribute("disabled", true);
       void this._on_show_release(entry, show_button);
     });
     actions_cell.appendChild(show_button);
@@ -341,7 +341,7 @@ class PycReleaseChannels extends HTMLElement {
   }
   async _on_show_release(entry, button) {
     const detail = await this.loadReleaseChannel(entry.channel_id);
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._render_detail(detail);
     return;
   }
@@ -492,7 +492,7 @@ class PycReleaseChannels extends HTMLElement {
       "publish-sha",
       ""
     );
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "publish-submit");
@@ -531,7 +531,7 @@ class PycReleaseChannels extends HTMLElement {
       status.textContent = "Artifact SHA-256 must be 64 hexadecimal characters.";
       return;
     }
-    submit.disabled = true;
+    submit.toggleAttribute("disabled", true);
     status.textContent = "Publishing release\u2026";
     const outcome = await this._do_publish(
       component,
@@ -540,7 +540,7 @@ class PycReleaseChannels extends HTMLElement {
       artifact_uri,
       artifact_sha256
     );
-    submit.disabled = false;
+    submit.toggleAttribute("disabled", false);
     status.textContent = "";
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     if (outcome.ok === true) {
@@ -673,7 +673,7 @@ class PycReleaseChannels extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-ops__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

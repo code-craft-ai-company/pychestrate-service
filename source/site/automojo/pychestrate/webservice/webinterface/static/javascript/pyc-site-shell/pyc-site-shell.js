@@ -163,7 +163,12 @@ class PycSiteShell extends HTMLElement {
     const initial_route_attr = this.getAttribute(ATTR_INITIAL_ROUTE);
     const initial_path = initial_route_attr !== null && initial_route_attr.length > 0 ? initial_route_attr : window.location.pathname;
     this.replaceChildren();
-    const layout = document.createElement("div");
+    // The outer layout is <mj-app-shell>: it owns the CSS grid
+    // ("app-bar", "nav", "main", "inspector", "status-bar"
+    // regions), responsive behavior, and the dock/anchor
+    // landmarks. Each region is a slotted child carrying the
+    // matching slot name.
+    const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const header = build_header({
@@ -171,11 +176,13 @@ class PycSiteShell extends HTMLElement {
       user_display_name: null
     });
     layout.appendChild(header);
-    const sidebar = document.createElement("aside");
+    const sidebar = document.createElement("mj-side-nav");
+    sidebar.setAttribute("slot", "nav");
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
     const main = document.createElement("main");
+    main.setAttribute("slot", "main");
     main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
     layout.appendChild(main);

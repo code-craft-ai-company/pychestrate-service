@@ -219,7 +219,7 @@ class PycSlos extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const create_button = document.createElement("button");
+    const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-metrics__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "create-toggle");
@@ -228,7 +228,7 @@ class PycSlos extends HTMLElement {
       this._toggle_create_form();
     });
     controls.appendChild(create_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-metrics__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -508,13 +508,13 @@ class PycSlos extends HTMLElement {
     burn_cell.appendChild(burn_badge);
     row.appendChild(burn_cell);
     const actions_cell = document.createElement("td");
-    const status_button = document.createElement("button");
+    const status_button = document.createElement("mj-button");
     status_button.classList.add("pyc-metrics__button");
     status_button.setAttribute("type", "button");
     status_button.setAttribute("data-role", "load-status");
     status_button.textContent = "Burn-rate Status";
     status_button.addEventListener("click", () => {
-      status_button.disabled = true;
+      status_button.toggleAttribute("disabled", true);
       void this._on_load_status(slo, status_button);
     });
     actions_cell.appendChild(status_button);
@@ -534,7 +534,7 @@ class PycSlos extends HTMLElement {
       this._status.set(slo.slo_id, outcome.sloStatus);
       this._render_burn_cell(slo.slo_id);
     }
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
@@ -696,7 +696,7 @@ class PycSlos extends HTMLElement {
     config_area.rows = 3;
     config_label.appendChild(config_area);
     form.appendChild(config_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-metrics__button");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "create-submit");
@@ -782,7 +782,7 @@ class PycSlos extends HTMLElement {
       );
       return;
     }
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Creating SLO\u2026";
     }
@@ -793,7 +793,7 @@ class PycSlos extends HTMLElement {
       window_seconds,
       definition_config
     );
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -905,7 +905,7 @@ class PycSlos extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-metrics__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

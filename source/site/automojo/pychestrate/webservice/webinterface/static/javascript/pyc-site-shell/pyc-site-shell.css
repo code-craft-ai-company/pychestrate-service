@@ -87,39 +87,16 @@ pyc-site-shell {
     font-size: var(--pyc-site-shell-font-size-body);
 }
 
-.pyc-site-shell__layout {
-    display: grid;
-    grid-template-areas:
-        "header header"
-        "sidebar main";
-    grid-template-rows: auto 1fr;
-    grid-template-columns: var(--pyc-site-shell-sidebar-width) 1fr;
-    min-height: 100vh;
-}
-
-.pyc-site-shell__header {
-    grid-area: header;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 1.25rem;
-    background-color: var(--pyc-site-shell-header-bg);
-    color: var(--pyc-site-shell-header-fg);
-}
-
-.pyc-site-shell__brand {
-    font-weight: 600;
-    font-size: var(--pyc-site-shell-font-size-brand);
-}
-
-.pyc-site-shell__header-spacer {
-    flex: 1 1 auto;
-}
+/*
+ * Layout, header chrome, and sidebar surface are owned by
+ * <mj-app-shell>, <mj-app-bar>, and <mj-side-nav>. We add only
+ * non-conflicting tweaks for slotted content here.
+ */
 
 .pyc-site-shell__user-menu {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: var(--mj-space-3, 0.75rem);
 }
 
 .pyc-site-shell__user-menu-name {
@@ -128,30 +105,7 @@ pyc-site-shell {
 
 .pyc-site-shell__logout-form {
     margin: 0;
-}
-
-.pyc-site-shell__logout-button {
-    background: transparent;
-    color: inherit;
-    border: 1px solid currentColor;
-    border-radius: 0.25rem;
-    padding: 0.25rem 0.75rem;
-    cursor: pointer;
-    font: inherit;
-}
-
-.pyc-site-shell__logout-button:focus-visible {
-    outline: var(--pyc-site-shell-focus-ring);
-    outline-offset: 2px;
-}
-
-.pyc-site-shell__sidebar {
-    grid-area: sidebar;
-    background-color: var(--pyc-site-shell-sidebar-bg);
-    color: var(--pyc-site-shell-sidebar-fg);
-    border-right: 1px solid var(--pyc-site-shell-divider);
-    padding: 0.5rem 0;
-    overflow-y: auto;
+    display: inline-flex;
 }
 
 .pyc-site-shell__sidebar-nav {
@@ -263,8 +217,9 @@ pyc-site-shell {
 }
 
 .pyc-site-shell__main {
-    grid-area: main;
-    padding: 1.5rem;
+    /* mj-app-shell places the main region; we only set inner
+     * padding here so feature bundles don't have to. */
+    padding: var(--mj-space-6, 1.5rem);
     min-width: 0;
 }
 

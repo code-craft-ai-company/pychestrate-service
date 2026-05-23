@@ -181,7 +181,7 @@ class PycRunsList extends HTMLElement {
     });
     project_label.appendChild(project_input);
     filters.appendChild(project_label);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-runs-list__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -198,7 +198,7 @@ class PycRunsList extends HTMLElement {
     this._table_region = table_region;
     const pager = document.createElement("div");
     pager.classList.add("pyc-runs-list__pager");
-    const prev_button = document.createElement("button");
+    const prev_button = document.createElement("mj-button");
     prev_button.classList.add("pyc-runs-list__button");
     prev_button.setAttribute("type", "button");
     prev_button.setAttribute("data-role", "prev-page");
@@ -214,7 +214,7 @@ class PycRunsList extends HTMLElement {
     page_indicator.classList.add("pyc-runs-list__page-indicator");
     page_indicator.setAttribute("data-role", "page-indicator");
     pager.appendChild(page_indicator);
-    const next_button = document.createElement("button");
+    const next_button = document.createElement("mj-button");
     next_button.classList.add("pyc-runs-list__button");
     next_button.setAttribute("type", "button");
     next_button.setAttribute("data-role", "next-page");
@@ -394,11 +394,11 @@ class PycRunsList extends HTMLElement {
     const prev = this._root.querySelector('[data-role="prev-page"]');
     const next = this._root.querySelector('[data-role="next-page"]');
     const indicator = this._root.querySelector('[data-role="page-indicator"]');
-    if (prev instanceof HTMLButtonElement) {
-      prev.disabled = has_previous_page(this._state) === false;
+    if (prev instanceof HTMLElement) {
+      prev.toggleAttribute("disabled", has_previous_page(this._state) === false);
     }
-    if (next instanceof HTMLButtonElement) {
-      next.disabled = has_next_page(this._state) === false;
+    if (next instanceof HTMLElement) {
+      next.toggleAttribute("disabled", has_next_page(this._state) === false);
     }
     if (indicator instanceof HTMLElement) {
       const label = "Page " + String(this._state.page) + " \xB7 " + String(this._state.total) + " total";

@@ -161,7 +161,7 @@ class PycDashboardsList extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(project_input);
-    const create_button = document.createElement("button");
+    const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-metrics__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "create-toggle");
@@ -423,7 +423,7 @@ class PycDashboardsList extends HTMLElement {
     desc_input.setAttribute("data-role", "description-input");
     desc_label.appendChild(desc_input);
     form.appendChild(desc_label);
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-metrics__button");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "create-submit");

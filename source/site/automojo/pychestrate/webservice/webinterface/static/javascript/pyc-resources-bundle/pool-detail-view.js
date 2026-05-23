@@ -428,7 +428,7 @@ class PycPoolDetail extends HTMLElement {
     id_input.setAttribute("data-role", "add-resource-id");
     id_label.appendChild(id_input);
     form.appendChild(id_label);
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-resources__button");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "add-resource-submit");
@@ -527,7 +527,7 @@ class PycPoolDetail extends HTMLElement {
     label.title = reservation.resource_id;
     item.appendChild(label);
     if (is_active_reservation(reservation.state) === true) {
-      const release = document.createElement("button");
+      const release = document.createElement("mj-button");
       release.classList.add("pyc-resources__button");
       release.setAttribute("type", "button");
       release.setAttribute("data-role", "release-reservation");
@@ -611,7 +611,7 @@ class PycPoolDetail extends HTMLElement {
     note_input.setAttribute("data-role", "reserve-note");
     note_label.appendChild(note_input);
     form.appendChild(note_label);
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-resources__button");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "reserve-submit");

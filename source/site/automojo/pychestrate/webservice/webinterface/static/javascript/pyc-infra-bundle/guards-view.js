@@ -238,7 +238,7 @@ class PycGuards extends HTMLElement {
     });
     env_label.appendChild(env_input);
     controls.appendChild(env_label);
-    const attach_button = document.createElement("button");
+    const attach_button = document.createElement("mj-button");
     attach_button.classList.add("pyc-infra__button");
     attach_button.setAttribute("type", "button");
     attach_button.setAttribute("data-role", "attach-toggle");
@@ -247,7 +247,7 @@ class PycGuards extends HTMLElement {
       this._toggle_attach_form();
     });
     controls.appendChild(attach_button);
-    const evaluate_button = document.createElement("button");
+    const evaluate_button = document.createElement("mj-button");
     evaluate_button.classList.add("pyc-infra__button");
     evaluate_button.setAttribute("type", "button");
     evaluate_button.setAttribute("data-role", "evaluate-toggle");
@@ -256,7 +256,7 @@ class PycGuards extends HTMLElement {
       this._toggle_evaluate_panel();
     });
     controls.appendChild(evaluate_button);
-    const refresh_button = document.createElement("button");
+    const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-infra__button");
     refresh_button.setAttribute("type", "button");
     refresh_button.setAttribute("data-role", "refresh");
@@ -550,7 +550,7 @@ class PycGuards extends HTMLElement {
     added_cell.textContent = format_guard_timestamp(guard.added_at);
     row.appendChild(added_cell);
     const actions_cell = document.createElement("td");
-    const toggle_button = document.createElement("button");
+    const toggle_button = document.createElement("mj-button");
     toggle_button.classList.add(
       "pyc-infra__button",
       "pyc-infra__row-action"
@@ -559,7 +559,7 @@ class PycGuards extends HTMLElement {
     toggle_button.setAttribute("data-role", "toggle-guard");
     toggle_button.textContent = guard.enabled === true ? "Disable" : "Enable";
     toggle_button.addEventListener("click", () => {
-      toggle_button.disabled = true;
+      toggle_button.toggleAttribute("disabled", true);
       void this._on_toggle(guard, toggle_button);
     });
     actions_cell.appendChild(toggle_button);
@@ -576,7 +576,7 @@ class PycGuards extends HTMLElement {
   async _on_toggle(guard, button) {
     const next_enabled = guard.enabled === false;
     const outcome = await this._do_toggle(guard.guard_id, next_enabled);
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._show_toast(
       outcome.message,
       outcome.ok === true ? "ok" : "error"
@@ -691,7 +691,7 @@ class PycGuards extends HTMLElement {
     rule_input.required = true;
     rule_label.appendChild(rule_input);
     form.appendChild(rule_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "attach-submit");
@@ -723,12 +723,12 @@ class PycGuards extends HTMLElement {
       }
       return;
     }
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Attaching guard\u2026";
     }
     const outcome = await this._do_attach(environment_id, rule_id);
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -874,7 +874,7 @@ class PycGuards extends HTMLElement {
     roles_input.setAttribute("data-role", "evaluate-roles");
     roles_label.appendChild(roles_input);
     form.appendChild(roles_label);
-    const submit_button = document.createElement("button");
+    const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "evaluate-submit");
@@ -913,7 +913,7 @@ class PycGuards extends HTMLElement {
       return;
     }
     const roles = parse_actor_roles(roles_input.value);
-    submit_button.disabled = true;
+    submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Evaluating\u2026";
     }
@@ -922,7 +922,7 @@ class PycGuards extends HTMLElement {
       action,
       roles
     );
-    submit_button.disabled = false;
+    submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
     }
@@ -1101,7 +1101,7 @@ class PycGuards extends HTMLElement {
     text.classList.add("pyc-infra__toast-message");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-infra__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");

@@ -227,7 +227,7 @@ class PycWebhooks extends HTMLElement {
    * @returns The created tab button.
    */
   _build_tab_button(tab_id, label) {
-    const button = document.createElement("button");
+    const button = document.createElement("mj-button");
     button.classList.add("pyc-ops__tab");
     button.setAttribute("type", "button");
     button.setAttribute("role", "tab");
@@ -314,7 +314,7 @@ class PycWebhooks extends HTMLElement {
     const panel = document.createElement("div");
     panel.classList.add("pyc-ops__panel");
     panel.setAttribute("data-role", "inbound-panel");
-    const create_button = document.createElement("button");
+    const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "inbound-create-toggle");
@@ -536,7 +536,7 @@ class PycWebhooks extends HTMLElement {
       "inbound-secret",
       "secret://hooks/github"
     );
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "inbound-submit");
@@ -567,14 +567,14 @@ class PycWebhooks extends HTMLElement {
       status.textContent = "Provider, hook name and secret ref are required.";
       return;
     }
-    submit.disabled = true;
+    submit.toggleAttribute("disabled", true);
     status.textContent = "Creating integration\u2026";
     const outcome = await this._do_create_integration(
       provider,
       hook_name,
       secret_ref
     );
-    submit.disabled = false;
+    submit.toggleAttribute("disabled", false);
     status.textContent = "";
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     if (outcome.ok === true) {
@@ -664,7 +664,7 @@ class PycWebhooks extends HTMLElement {
     const panel = document.createElement("div");
     panel.classList.add("pyc-ops__panel");
     panel.setAttribute("data-role", "outbound-panel");
-    const create_button = document.createElement("button");
+    const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
     create_button.setAttribute("data-role", "outbound-create-toggle");
@@ -778,17 +778,17 @@ class PycWebhooks extends HTMLElement {
     );
     row.appendChild(state_cell);
     const actions_cell = document.createElement("td");
-    const test_button = document.createElement("button");
+    const test_button = document.createElement("mj-button");
     test_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
     test_button.setAttribute("type", "button");
     test_button.setAttribute("data-role", "test-event");
     test_button.textContent = "Send Test Event";
     test_button.addEventListener("click", () => {
-      test_button.disabled = true;
+      test_button.toggleAttribute("disabled", true);
       void this._on_test(subscription, test_button);
     });
     actions_cell.appendChild(test_button);
-    const history_button = document.createElement("button");
+    const history_button = document.createElement("mj-button");
     history_button.classList.add(
       "pyc-ops__button",
       "pyc-ops__row-action"
@@ -797,7 +797,7 @@ class PycWebhooks extends HTMLElement {
     history_button.setAttribute("data-role", "delivery-history");
     history_button.textContent = "Delivery History";
     history_button.addEventListener("click", () => {
-      history_button.disabled = true;
+      history_button.toggleAttribute("disabled", true);
       void this._on_history(subscription, history_button);
     });
     actions_cell.appendChild(history_button);
@@ -806,7 +806,7 @@ class PycWebhooks extends HTMLElement {
   }
   async _on_test(subscription, button) {
     const outcome = await this._do_test(subscription.subscription_id);
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     return;
   }
@@ -862,7 +862,7 @@ class PycWebhooks extends HTMLElement {
     const deliveries = await this.loadSubscriptionDeliveries(
       subscription.subscription_id
     );
-    button.disabled = false;
+    button.toggleAttribute("disabled", false);
     this._render_outbound_history(subscription, deliveries);
     return;
   }
@@ -986,7 +986,7 @@ class PycWebhooks extends HTMLElement {
       "outbound-topics",
       "entity.release.published"
     );
-    const submit = document.createElement("button");
+    const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "outbound-submit");
@@ -1017,14 +1017,14 @@ class PycWebhooks extends HTMLElement {
       return;
     }
     const topic_filters = parse_topic_filters(topics_input.value);
-    submit.disabled = true;
+    submit.toggleAttribute("disabled", true);
     status.textContent = "Creating subscription\u2026";
     const outcome = await this._do_create_subscription(
       name,
       url,
       topic_filters
     );
-    submit.disabled = false;
+    submit.toggleAttribute("disabled", false);
     status.textContent = "";
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     if (outcome.ok === true) {
@@ -1201,7 +1201,7 @@ class PycWebhooks extends HTMLElement {
     const text = document.createElement("span");
     text.textContent = message;
     toast.appendChild(text);
-    const dismiss = document.createElement("button");
+    const dismiss = document.createElement("mj-button");
     dismiss.classList.add("pyc-ops__toast-dismiss");
     dismiss.setAttribute("type", "button");
     dismiss.setAttribute("aria-label", "Dismiss");
