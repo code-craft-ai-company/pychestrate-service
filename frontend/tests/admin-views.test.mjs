@@ -16,7 +16,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -35,19 +35,11 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/admin" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLAnchorElement = dom.window.HTMLAnchorElement
-globalThis.HTMLTableRowElement = dom.window.HTMLTableRowElement
-globalThis.HTMLSpanElement = dom.window.HTMLSpanElement
-globalThis.HTMLParagraphElement = dom.window.HTMLParagraphElement
+// jsdom + mj-* registration so the mj-table instances inside the
+// admin views actually mount and render rows into their shadow DOMs.
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/admin",
+})
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
 const {
@@ -324,7 +316,8 @@ test("PycFeatureFlags lists flags ordered by key", async () => {
     document.body.appendChild(el)
     await el.refresh()
     assert.equal(el.errored, false)
-    const rows = el.querySelectorAll("tbody tr")
+    const table = el.querySelector("mj-table.pyc-admin__table")
+    const rows = table.shadowRoot.querySelectorAll("tbody tr")
     assert.equal(rows.length, 3)
     assert.equal(rows[0].getAttribute("data-flag-key"), "alpha.dark-mode")
     el.remove()
@@ -338,7 +331,8 @@ test("PycFeatureFlags disables the toggle for retired flags", async () => {
     const el = new PycFeatureFlags()
     document.body.appendChild(el)
     await el.refresh()
-    const retired = el.querySelector('[data-flag-key="gone.legacy"]')
+    const table = el.querySelector("mj-table.pyc-admin__table")
+    const retired = table.shadowRoot.querySelector('[data-flag-key="gone.legacy"]')
     const toggle = retired.querySelector('[data-role="toggle"]')
     assert.equal(toggle.hasAttribute("disabled"), true)
     el.remove()
@@ -378,7 +372,8 @@ test("PycExtensionRegistry rows per extension", async () => {
     document.body.appendChild(el)
     await el.refresh()
     assert.equal(el.errored, false)
-    const rows = el.querySelectorAll("tbody tr")
+    const table = el.querySelector("mj-table.pyc-admin__table")
+    const rows = table.shadowRoot.querySelectorAll("tbody tr")
     assert.equal(rows.length, 2)
     assert.equal(rows[0].getAttribute("data-ext-name"), "alpha-ext")
     el.remove()
@@ -392,7 +387,8 @@ test("PycExtensionRegistry shows per-extension routes on demand", async () => {
     const el = new PycExtensionRegistry()
     document.body.appendChild(el)
     await el.refresh()
-    const button = el.querySelector('[data-role="show-routes"]')
+    const table = el.querySelector("mj-table.pyc-admin__table")
+    const button = table.shadowRoot.querySelector('[data-role="show-routes"]')
     button.dispatchEvent(new dom.window.Event("click"))
     const detail = el.querySelector('[data-role="route-detail"]')
     assert.notEqual(detail, null)
@@ -434,7 +430,8 @@ test("PycAdminOverview composes the three sections", async () => {
     assert.equal(health.textContent, "degraded")
     const count = el.querySelector('[data-role="extension-count"]')
     assert.equal(count.textContent, "2")
-    const flag_rows = el.querySelectorAll('[data-role="flags-region"] tbody tr')
+    const flag_table = el.querySelector('[data-role="flags-region"] mj-table.pyc-admin__table')
+    const flag_rows = flag_table.shadowRoot.querySelectorAll("tbody tr")
     assert.equal(flag_rows.length, 3)
     const ext_link = el.querySelector('[data-role="extension-link"]')
     assert.equal(ext_link.getAttribute("href"), "/admin/extensions")
