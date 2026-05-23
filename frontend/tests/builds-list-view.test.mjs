@@ -193,8 +193,8 @@ test("builds list fetches projects then builds and renders rows", async () => {
     document.body.appendChild(el)
     await el.loadProjects()
 
-    const table = el.querySelector("mj-table.pyc-builds__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-builds__row")
+    const table = el.querySelector("mj-data-table.pyc-builds__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-builds__row")
     assert.equal(rows.length, 2)
     assert.equal(el.listState.total, 2)
     assert.equal(el.listState.projectId, PROJECT_ID)

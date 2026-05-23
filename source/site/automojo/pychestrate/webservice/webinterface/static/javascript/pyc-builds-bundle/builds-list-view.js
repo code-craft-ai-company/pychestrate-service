@@ -605,14 +605,20 @@ class PycBuildsList extends HTMLElement {
    * list.
    */
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-builds__table");
+    // Sorting is client-side over the current page. The repro
+    // digest column sorts by its raw value; timestamps sort by
+    // their raw ISO strings, which collate as chronological order.
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-builds__row";
     table.rowAttrs = (build) => ({ "data-build-id": build.run_id });
     table.columns = [
       {
         key: "run_id",
         label: "Build",
+        width: "10rem",
         render: (build) => {
           const link = document.createElement("a");
           link.classList.add("pyc-builds__build-link");
@@ -624,11 +630,13 @@ class PycBuildsList extends HTMLElement {
       },
       {
         key: "runner_kind",
-        label: "Runner kind"
+        label: "Runner kind",
+        width: "10rem"
       },
       {
         key: "state",
         label: "State",
+        width: "8rem",
         render: (build) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-builds__badge");
@@ -640,6 +648,7 @@ class PycBuildsList extends HTMLElement {
       {
         key: "repro_digest_sha256",
         label: "Repro digest",
+        width: "12rem",
         render: (build) => {
           const digest = document.createElement("span");
           digest.classList.add("pyc-builds__digest");
@@ -651,11 +660,13 @@ class PycBuildsList extends HTMLElement {
       {
         key: "started_at",
         label: "Started",
+        width: "12rem",
         render: (build) => format_timestamp(build.started_at)
       },
       {
         key: "finished_at",
         label: "Finished",
+        width: "12rem",
         render: (build) => format_timestamp(build.finished_at)
       }
     ];
