@@ -16,6 +16,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -34,18 +35,9 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/environments" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
-globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/environments",
+})
 globalThis.HTMLFormElement = dom.window.HTMLFormElement
 globalThis.HTMLTableRowElement = dom.window.HTMLTableRowElement
 
@@ -243,11 +235,12 @@ test("environments view fetches projects then environments and renders rows", as
     document.body.appendChild(el)
     await el.loadProjects()
 
-    const rows = el.querySelectorAll(".pyc-infra__row")
+    const table = el.querySelector("mj-table.pyc-infra__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-infra__row")
     assert.equal(rows.length, 2)
     assert.equal(el.listState.total, 2)
     assert.equal(el.listState.projectId, PROJECT_ID)
-    const indicators = el.querySelectorAll('[data-role="drift-indicator"]')
+    const indicators = table.shadowRoot.querySelectorAll('[data-role="drift-indicator"]')
     assert.equal(indicators.length, 2)
     assert.equal(indicators[0].textContent, "Not checked")
     el.remove()
@@ -388,7 +381,8 @@ test("check-drift action POSTs drift:check then re-reads drift status", async ()
     assert.equal(checked, true)
 
     await el.loadDriftStatus(ENV_ID)
-    const indicator = el.querySelector('[data-role="drift-indicator"]')
+    const table = el.querySelector("mj-table.pyc-infra__table")
+    const indicator = table.shadowRoot.querySelector('[data-role="drift-indicator"]')
     assert.equal(indicator.textContent, "2 drifted")
     assert.equal(indicator.getAttribute("data-tone"), "warn")
     el.remove()
