@@ -193,7 +193,7 @@ class PycBuildsList extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-builds__field");
     project_label.textContent = "Project";
-    const project_select = document.createElement("select");
+    const project_select = document.createElement("mj-select");
     project_select.classList.add("pyc-builds__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -218,16 +218,16 @@ class PycBuildsList extends HTMLElement {
     const state_label = document.createElement("label");
     state_label.classList.add("pyc-builds__field");
     state_label.textContent = "State";
-    const state_select = document.createElement("select");
+    const state_select = document.createElement("mj-select");
     state_select.classList.add("pyc-builds__select");
     state_select.setAttribute("data-role", "state-filter");
-    const any_option = document.createElement("option");
-    any_option.value = "";
+    const any_option = document.createElement("mj-option");
+    any_option.setAttribute("value", "");
     any_option.textContent = "All states";
     state_select.appendChild(any_option);
     for (const build_state of BUILD_STATES) {
-      const option = document.createElement("option");
-      option.value = build_state;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", build_state);
       option.textContent = build_state;
       state_select.appendChild(option);
     }
@@ -395,7 +395,7 @@ class PycBuildsList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -405,8 +405,8 @@ class PycBuildsList extends HTMLElement {
       input_el.hidden = true;
       select_el.replaceChildren();
       for (const project of this._projects) {
-        const option = document.createElement("option");
-        option.value = project.project_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
         option.textContent = project.display_name;
         select_el.appendChild(option);
       }
@@ -727,18 +727,18 @@ class PycBuildsList extends HTMLElement {
     const integration_label = document.createElement("label");
     integration_label.classList.add("pyc-builds__field");
     integration_label.textContent = "Source integration";
-    const integration_select = document.createElement("select");
+    const integration_select = document.createElement("mj-select");
     integration_select.classList.add("pyc-builds__select");
     integration_select.setAttribute("data-role", "trigger-integration");
     if (this._integrations.length === 0) {
-      const none_option = document.createElement("option");
-      none_option.value = "";
+      const none_option = document.createElement("mj-option");
+      none_option.setAttribute("value", "");
       none_option.textContent = "No source integration registered";
       integration_select.appendChild(none_option);
     } else {
       for (const integration of this._integrations) {
-        const option = document.createElement("option");
-        option.value = integration.integration_id;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", integration.integration_id);
         option.textContent = integration.provider_name + " \xB7 " + integration.repo_key;
         integration_select.appendChild(option);
       }
