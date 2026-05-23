@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five reservation routes ported from the legacy flask
-``resources_blueprint``:
+The five reservation routes served under the resources
+blueprint:
 
 * ``GET  /resources/reservations``                          -- list
                                                                with

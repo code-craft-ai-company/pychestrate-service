@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The six release routes ported from the legacy flask
-``projects_blueprint``. All read-only -- release lifecycle
+The six release routes served under the projects blueprint.
+All read-only -- release lifecycle
 (triggering / promoting) goes through the build pipeline +
 REST API, not the consumer UI.
 

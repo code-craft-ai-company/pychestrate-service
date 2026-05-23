@@ -7,10 +7,9 @@
 
 The production webservice runs on ``automojo.webworks`` (see
 :mod:`app_pychestrate_main`). This module is the webworks-native
-REST surface for the M1 audit-record query endpoints, replacing
-the flask_restx ``audit_controller`` next to it.
+REST surface for the M1 audit-record query endpoints.
 
-Two routes mirror the flask_restx controller's matrix:
+Two routes:
 
 * ``GET    /api/v1/audit``                          — list records
 * ``GET    /api/v1/audit/{sequence_number}``        — read one record
@@ -119,9 +118,9 @@ def _resolve_db_session(request: Request) -> Optional[Any]:
 def _require_session(request: Request) -> Any:
     """
         Resolve the request-scoped db session or abort with a 503
-        problem document. Mirrors the flask controller's
-        ``"Request-scoped db_session not configured"`` wire response
-        on misconfigured deployments.
+        problem document carrying the
+        ``"Request-scoped db_session not configured"`` detail on
+        misconfigured deployments.
 
         :param request: Incoming webworks request.
 

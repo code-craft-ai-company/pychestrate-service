@@ -6,10 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask resources blueprint at
-``webinterface/blueprints/resources/endpoints.py`` (1,657 LOC,
-35 routes) is being ported to webworks across multiple PRs.
-This first slice (E1) lands the dashboard + the seven core
+The resources blueprint owns the consumer-facing ``/resources``
+surface. This module lands the dashboard + the seven core
 ``/resources/*`` routes (list / create / detail / edit / delete
 / checkout):
 
@@ -34,33 +32,30 @@ This first slice (E1) lands the dashboard + the seven core
                                                        resource for
                                                        a job.
 
-Pre-registers the URL patterns for the remaining E2/E3/E4
+Pre-registers the URL patterns for the sibling resource
 endpoints (pools / ip_pools / allocations / reservations /
 health / tags) so the dashboard sidebar's
 ``url_for('resources.pool_list')`` etc. resolve at template
-render time before those handlers ship.
+render time.
 
 Foundation pieces consumed
 --------------------------
 
 The auth resolver, session cookie management, CSRF guard,
 flash queue, jinja2 environment, ``url_for`` shim, multi-form
-parsing, default-context builder, and the new
+parsing, default-context builder, and the
 ``_require_permission_or_redirect`` admin guard all come from
-:mod:`webinterface.blueprints.config.routes`. The resources
-blueprint is the second consumer of that helper surface; the
-config blueprint shipped them in PRs D1-D4.
+:mod:`webinterface.blueprints.config.routes`.
 
 Auth backend
 ------------
 
 Every authenticated handler routes through
-:class:`SecurityManager` -- the same auth engine the flask
-blueprint used. The legacy ``@admin_required`` decorator's
-``check_permission(user_id, 'resources.manage')`` survives in
-the create / edit / delete handlers via the new
+:class:`SecurityManager`. The
+``check_permission(user_id, 'resources.manage')`` gate guards
+the create / edit / delete handlers via the
 ``_require_permission_or_redirect`` helper; checkout is
-``login_required`` only.
+login-required only.
 """
 
 __author__ = "Automation Mojo LLC"

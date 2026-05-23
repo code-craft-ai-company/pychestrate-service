@@ -7,10 +7,9 @@
 
 The production webservice runs on ``automojo.webworks`` (see
 :mod:`app_pychestrate_main`). This module is the webworks-native
-REST surface for the plugin-api meta endpoints, replacing the
-flask_restx ``catalog_controller`` next to it.
+REST surface for the plugin-api meta endpoints.
 
-Three read-only routes mirror the flask_restx controller's matrix:
+Three read-only routes:
 
 * ``GET /api/v1/plugin-api/_meta/catalog``
   — full published-surface catalog (factory protocols + resource
@@ -28,9 +27,8 @@ to evaluate that permission.
 
 Error responses are RFC 7807 problem documents per the convention
 in :mod:`api.problem_json_webworks`. The detail endpoint's 404
-upgrades the flask_restx ``ns.abort(404, ...)`` (which produced a
-``{"message": "..."}`` body) to a documented problem document with
-the protocol name carried as an extension member.
+emits a documented problem document with the protocol name carried
+as an extension member.
 """
 
 __author__ = "Automation Mojo LLC"

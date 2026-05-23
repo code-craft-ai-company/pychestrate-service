@@ -1,18 +1,18 @@
 """
 .. module:: webinterface.foundation.flash
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: One-shot user-facing messages, ported from
-               ``flask.flash``.
+    :synopsis: One-shot user-facing messages keyed off the
+               cookie-backed UI session.
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprints called ``flash('message', 'category')`` to
+Handlers call ``add_flash(session, 'message', 'category')`` to
 queue a user-facing message that the next request renders and
-discards. flask stored the queue in :data:`flask.session`; on
-the next request the templates iterated ``get_flashed_messages``
-to consume them.
+discards. Messages live in the cookie-backed UI session; on the
+next request the template calls :func:`consume_flashes` to drain
+them.
 
-This module ports that pattern to the cookie-backed UI session:
+This module exposes that pattern:
 
 * :func:`add_flash` -- append a ``(category, message)`` pair to
   the session's flash queue.
@@ -33,7 +33,7 @@ write-back).
 Categories
 ----------
 
-Flask conventionally uses ``"info"`` / ``"success"`` /
+The conventional categories are ``"info"`` / ``"success"`` /
 ``"warning"`` / ``"error"``. This module accepts arbitrary
 strings -- the existing config blueprint passes ``"warning"`` /
 ``"error"`` / ``"success"`` and templates branch on those

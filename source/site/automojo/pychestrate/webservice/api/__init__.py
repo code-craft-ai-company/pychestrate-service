@@ -9,8 +9,8 @@ This package houses utilities that the REST surface needs but that
 should not depend on a specific HTTP framework — RFC 7807 problem
 envelopes, future versioning helpers, content-negotiation routines,
 and so on. Keeping the helpers here means tests, the CLI, and any
-future ASGI / stdlib HTTP target can consume them without pulling in
-``flask`` or ``flask_restx``.
+future ASGI / stdlib HTTP target can consume them without pulling
+in a specific web framework.
 """
 
 __author__ = "Automation Mojo LLC"

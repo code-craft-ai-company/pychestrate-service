@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The four resource-pool routes ported from the legacy flask
-``resources_blueprint``:
+The four resource-pool routes served under the resources
+blueprint:
 
 * ``GET  /resources/pools``                   -- list.
 * ``GET  /resources/pools/create``            -- form.

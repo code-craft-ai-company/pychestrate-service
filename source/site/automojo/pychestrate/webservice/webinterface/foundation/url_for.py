@@ -6,12 +6,11 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprints' jinja2 templates call
+The blueprint jinja2 templates call
 ``url_for('config.dashboard')`` / ``url_for('config.user_detail',
-user_id='u-1')`` etc. to build links. Webworks has no equivalent
-helper, but the templates can be ported unchanged if the
-templating environment exposes a ``url_for`` callable that
-performs the same lookup.
+user_id='u-1')`` etc. to build links. Webworks has no built-in
+``url_for`` helper, so this module exposes a ``url_for`` callable
+the templating environment binds as a global.
 
 This module owns the registry + builder:
 
@@ -91,8 +90,8 @@ def register_endpoint(*, endpoint: str, pattern: str) -> None:
 def url_for(endpoint: str, **kwargs: Any) -> str:
     """
         Build a URL from a registered endpoint name + caller-
-        supplied path-param kwargs. Mirrors the flask
-        ``url_for(endpoint, **values)`` shape templates were
+        supplied path-param kwargs. Matches the
+        ``url_for(endpoint, **values)`` shape the templates were
         written against.
 
         :param endpoint: Registered endpoint name.

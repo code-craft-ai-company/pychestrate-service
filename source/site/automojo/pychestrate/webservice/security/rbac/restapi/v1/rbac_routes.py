@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``rbac_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``rbac`` controller.
 
-Six routes mirror the flask_restx controller's M2 matrix:
+Six routes:
 
 * ``GET    /api/v1/rbac/permissions``
   — list the permission key catalog.
@@ -160,8 +160,7 @@ def _decode_json_or_abort(*, request: Request) -> dict:
 def _parse_principal_kind(raw: str) -> PrincipalKind:
     """
         Coerce a ``principal_kind`` string. Raises SemanticError on
-        unknown so the caller chooses how to map it (mirrors the
-        flask controller's two-step flow).
+        unknown so the caller chooses how to map it.
 
         :param raw: Raw value.
 
@@ -327,7 +326,7 @@ def handle_create_binding(request: Request) -> Response:
             )
 
         # Re-read through the view helper so the created_at string is
-        # normalized. Mirrors the flask controller exactly.
+        # normalized.
         views = binding_service.list_bindings(
             db_session=db_session,
             principal_kind=None,
@@ -477,7 +476,7 @@ def handle_check_permission(request: Request) -> Response:
         permission_key = payload.get("permission_key", "")
 
         # Build a lightweight principal representation for the
-        # evaluator. Same shape as the flask controller built.
+        # evaluator.
         principal = AuthPrincipal(
             user_id=principal_id,
             session_id="rbac-check",

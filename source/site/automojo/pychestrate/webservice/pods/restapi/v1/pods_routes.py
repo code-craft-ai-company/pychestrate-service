@@ -6,12 +6,11 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``pods_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``pods`` controller.
 
-Thirteen routes mirror the flask_restx controller's matrix,
-spread across four logical groupings under ``/api/v1/projects/
-{project_id}/...``:
+Thirteen routes spread across four logical groupings under
+``/api/v1/projects/{project_id}/...``:
 
 * **Pod definitions** (versioned spec storage)
     * ``POST /pod-definitions``

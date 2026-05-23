@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five health routes ported from the legacy flask
-``resources_blueprint``:
+The five health routes served under the resources blueprint:
 
 * ``GET  /resources/health``                              -- dashboard
                                                              grouping

@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The two session-admin routes ported from the legacy flask
-``config_blueprint``:
+The session-admin routes served under the config blueprint:
 
 * ``GET  /config/sessions``                                -- list
                                                               active sessions

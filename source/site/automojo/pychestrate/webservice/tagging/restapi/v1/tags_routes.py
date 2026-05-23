@@ -6,19 +6,18 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``tags_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``tags`` controller.
 
-Five routes mirror the flask_restx controller's matrix:
+Five routes:
 
 * ``POST   /api/v1/tags/{entity_kind}/{entity_id}``
   — assign a tag to an entity.
 * ``GET    /api/v1/tags/{entity_kind}/{entity_id}``
   — list tags on an entity.
 * ``DELETE /api/v1/tags/{entity_kind}/{entity_id}/{tag:path}``
-  — remove a tag from an entity. The ``:path`` converter mirrors
-  flask's ``<path:tag>`` so multi-segment ``taxonomy:value`` tags
-  match.
+  — remove a tag from an entity. The ``:path`` converter lets
+  multi-segment ``taxonomy:value`` tags match.
 * ``GET    /api/v1/tags/search?kind=...&expr=...``
   — boolean tag-expression search.
 * ``GET    /api/v1/tags/taxonomies``

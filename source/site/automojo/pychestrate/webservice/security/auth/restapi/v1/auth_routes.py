@@ -7,8 +7,7 @@
 
 The production webservice runs on ``automojo.webworks`` (see
 :mod:`app_pychestrate_main`). This module is the webworks-native
-REST surface for the M1 auth-flow endpoints, replacing the
-flask_restx ``auth_controller`` next to it.
+REST surface for the M1 auth-flow endpoints.
 
 One route at M1:
 

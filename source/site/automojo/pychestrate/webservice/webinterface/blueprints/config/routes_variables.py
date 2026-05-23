@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The six global-variable routes ported from the legacy flask
-``config_blueprint``:
+The global-variable routes served under the config blueprint:
 
 * ``GET  /config/variables``                  -- paginated list +
                                                  ?search= filter.

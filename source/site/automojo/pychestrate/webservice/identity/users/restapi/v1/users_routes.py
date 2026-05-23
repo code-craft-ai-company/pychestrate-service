@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``users_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``users`` controller.
 
-Two routes mirror the flask_restx controller's M1 matrix:
+Two routes:
 
 * ``POST /api/v1/identity/users`` — create user.
 * ``GET  /api/v1/identity/users/{user_id}`` — read user.

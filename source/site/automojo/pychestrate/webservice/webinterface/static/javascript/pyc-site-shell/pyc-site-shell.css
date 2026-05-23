@@ -108,7 +108,7 @@ pyc-site-shell {
 }
 
 /*
- * Suppress the flash of unstyled server content. The Flask
+ * Suppress the flash of unstyled server content. The server
  * response inlines the route's page fragment inside
  * ``<pyc-site-shell>``; until the custom element's JS registers
  * and rewrites the DOM, the browser renders the bare fragment.

@@ -6,10 +6,9 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprints under ``webinterface/blueprints/{config,
-projects,resources}/`` are pre-migration scaffold pending their
-own webworks port. This package is the foundation those ports
-will build on:
+The blueprints under ``webinterface/blueprints/{config,
+projects,resources}/`` build on this package for jinja2 rendering,
+static asset serving, CSRF, and the cookie-backed UI session:
 
 * :mod:`templating` — jinja2 environment + render helpers that
   produce :class:`HTMLResponse` objects from the existing

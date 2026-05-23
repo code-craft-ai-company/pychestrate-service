@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The three secret-scope routes ported from the legacy flask
-``config_blueprint``:
+The secret-scope routes served under the config blueprint:
 
 * ``GET  /config/scopes``                       -- list.
 * ``GET  /config/scopes/create``                -- create form.
@@ -15,13 +14,11 @@ The three secret-scope routes ported from the legacy flask
 * ``POST /config/scopes/{scope_id}/delete``     -- delete.
 
 The :class:`SecretManager` constructor takes a SQLAlchemy
-session AND an encryption-key bytes parameter. The legacy flask
-code read the key from ``$SECRET_ENCRYPTION_KEY`` falling back
-to a hard-coded dev value -- that pattern is preserved here in
-:func:`_resolve_secret_encryption_key` so behavior matches the
-flask-era setup. PR D4 (secrets ports) will replace this with a
-KEK-derived key alongside the rest of the secret-management
-port.
+session AND an encryption-key bytes parameter. The key is read
+from ``$SECRET_ENCRYPTION_KEY`` with a hard-coded dev fallback
+in :func:`_resolve_secret_encryption_key`. A future secrets
+port will replace this with a KEK-derived key alongside the
+rest of the secret-management surface.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -80,9 +77,9 @@ _SECRET_ENCRYPTION_KEY_DEFAULT: str = "default-key-for-dev"
 def _resolve_secret_encryption_key() -> bytes:
     """
         Return the encryption-key bytes the SecretManager
-        constructor expects. Mirrors the legacy flask handler's
-        ``os.environ.get('SECRET_ENCRYPTION_KEY',
-        'default-key-for-dev').encode()`` pattern.
+        constructor expects. Reads the
+        ``SECRET_ENCRYPTION_KEY`` environment variable with a
+        hard-coded dev fallback and encodes to UTF-8.
 
         Test seam: tests patch this helper to bypass the env-var
         read.

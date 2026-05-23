@@ -7,15 +7,14 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The consumer-UI port (PRs F1..F5) preserved 1:1 the legacy
-flask-era handler shape that built a ``SecurityManager`` from
+The consumer-UI handlers historically built a
+``SecurityManager`` from
 ``automojo.pychestrate.core.managers.security_manager`` and
 called ``authenticate(AuthRequest)`` /
 ``validate_token(token)`` / ``logout(token)`` /
 ``check_permission(user_id, permission)`` on it. That stack
 queries the legacy ``user`` / ``password_history`` /
-``sessions`` tables on
-:class:`PychestrateModelBase`; see
+``sessions`` tables on :class:`PychestrateModelBase`; see
 ``userguide/12-00-consumer-ui-auth-stack.rst`` for the full
 context.
 

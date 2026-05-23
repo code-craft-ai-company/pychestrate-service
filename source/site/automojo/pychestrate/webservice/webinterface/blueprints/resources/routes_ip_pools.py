@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The seven IP pool routes ported from the legacy flask
-``resources_blueprint``:
+The seven IP pool routes served under the resources blueprint:
 
 * ``GET  /resources/ip-pools``                            -- list.
 * ``GET  /resources/ip-pools/create``                     -- form.
@@ -37,9 +36,8 @@ The seven IP pool routes ported from the legacy flask
                                                              allocation
                                                              for a job.
 
-The legacy flask handler split the create-form's
-``dns_servers`` / ``reserved_ips`` fields on commas; that
-behavior ports faithfully via :func:`_parse_csv_string`.
+The create-form's ``dns_servers`` / ``reserved_ips`` fields are
+split on commas via :func:`_parse_csv_string`.
 """
 
 __author__ = "Automation Mojo LLC"

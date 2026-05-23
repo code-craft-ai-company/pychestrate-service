@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five user-management routes ported from the flask
-``config_blueprint`` to webworks:
+The user-management routes served under the config blueprint:
 
 * ``GET  /config/users``                      -- paginated list +
                                                  search.
@@ -22,11 +21,9 @@ The five user-management routes ported from the flask
 All handlers gate on ``_resolve_authenticated_request`` and POST
 handlers additionally enforce CSRF via
 :func:`auth_guard.enforce_csrf_or_redirect`. The user-management
-admin permission check (``users.manage``) the legacy decorator
-performed lives at the manager layer -- the legacy port deferred
-the explicit check; until the user permission RBAC ports we
-allow any authenticated user. PR D4 wires the admin check
-back in once the permission-check helper is available.
+admin permission check (``users.manage``) lives at the manager
+layer; until the user-permission RBAC ports are complete we
+allow any authenticated user.
 
 Test seam
 ---------
@@ -34,7 +31,7 @@ Test seam
 ``_build_user_manager`` and ``_build_user_create_request`` /
 ``_build_user_update_request`` are module-level builders around
 the lazy imports so unit tests can patch them at the module
-binding without dragging the werkzeug-importing source modules
+binding without dragging the password-hashing source modules
 into the test process.
 """
 
@@ -98,8 +95,8 @@ def _build_user_manager(*, db_session: Any) -> Any:
     """
         Construct a :class:`UserManager` against the supplied
         SQLAlchemy session. Lazy-imports so the routes module
-        does not pull the manager (and its werkzeug-via-
-        SecurityManager-cousin chain) at import time.
+        does not pull the manager (and its password-hashing
+        chain via SecurityManager) at import time.
 
         :param db_session: Open SQLAlchemy session.
 
@@ -240,12 +237,10 @@ def _parse_pagination_params(
     ) -> Dict[str, Any]:
     """
         Pull ``page`` / ``per_page`` / ``search`` out of the query
-        string with safe defaults. Mirrors the legacy flask
-        ``request.args.get('page', 1, type=int)`` shape.
+        string with safe defaults.
 
         :param request: Webworks request.
-        :param default_per_page: Default items-per-page (matches
-                                 the legacy flask handler).
+        :param default_per_page: Default items-per-page.
 
         :returns: ``{"page": int, "per_page": int, "search": str}``
     """

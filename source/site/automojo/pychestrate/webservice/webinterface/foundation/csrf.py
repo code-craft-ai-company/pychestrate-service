@@ -5,10 +5,9 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprint flow stored a CSRF token in the
-:data:`flask.session` cookie at login time and validated
-form-submitted tokens against it on every POST. This module
-ports that pattern to webworks:
+The consumer web UI stores a CSRF token in the cookie-backed
+UI session at login time and validates form-submitted tokens
+against it on every POST. This module owns the primitives:
 
 * :func:`generate_csrf_token` -- produce 32 bytes of urlsafe
   base64 random material; intended to be stored in the UI
@@ -33,9 +32,7 @@ CSRF validation is deliberately scoped narrowly: this module
 performs constant-time string compare. The wider checks --
 "only POST requires CSRF", "GET is exempt", "AJAX may pass token
 in header X-CSRF-Token" -- are policy decisions left to the
-handler-level guard helper that ports the flask
-``@validate_csrf`` decorator (slated for the same
-foundation iteration as the auth-guard helper).
+handler-level CSRF guard in :mod:`auth_guard`.
 """
 
 __author__ = "Automation Mojo LLC"

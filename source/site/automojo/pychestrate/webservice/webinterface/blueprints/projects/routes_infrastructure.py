@@ -6,9 +6,9 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five infrastructure routes ported from the legacy flask
-``projects_blueprint``. All read-only -- the legacy blueprint
-doesn't expose form-based creation / triggering through this UI
+The five infrastructure routes served under the projects
+blueprint. All read-only -- this blueprint does not expose
+form-based creation / triggering through the UI
 (infrastructure jobs are produced by the build pipeline or via
 the REST API).
 

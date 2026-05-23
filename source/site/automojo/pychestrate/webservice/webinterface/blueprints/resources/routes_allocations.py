@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five allocation routes ported from the legacy flask
-``resources_blueprint``:
+The five allocation routes served under the resources
+blueprint:
 
 * ``GET  /resources/allocations``                                 -- active
                                                                      allocations

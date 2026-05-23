@@ -6,8 +6,8 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``agents_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``agents`` controller.
 
 Four routes — note that the agents namespace publishes routes
 across two top-level URL prefixes (``/clients`` and

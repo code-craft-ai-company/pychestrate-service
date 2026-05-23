@@ -7,10 +7,9 @@
 
 The production webservice runs on ``automojo.webworks`` (see
 :mod:`app_pychestrate_main`). This module is the webworks-native
-REST surface for the notification channel CRUD endpoints,
-replacing the flask_restx ``channels_controller`` next to it.
+REST surface for the notification channel CRUD endpoints.
 
-Three routes mirror the flask_restx controller's matrix:
+Three routes:
 
 * ``POST /api/v1/notifications/channels``
   — create a channel.
@@ -21,11 +20,9 @@ Three routes mirror the flask_restx controller's matrix:
   — read one channel.
 
 Error responses are RFC 7807 problem documents per the convention
-in :mod:`api.problem_json_webworks`. The flask controller's
-``channels_ns.abort(400|404|409, ...)`` calls (which produced
-flask's ``{"message": "..."}`` body) become documented problem
-documents with the channel id / scope level / kind carried as
-extension members where they apply.
+in :mod:`api.problem_json_webworks`. Validation and lookup errors
+become documented problem documents with the channel id / scope
+level / kind carried as extension members where they apply.
 """
 
 __author__ = "Automation Mojo LLC"
@@ -136,9 +133,9 @@ def _resolve_actor_user_id(request: Request) -> Optional[str]:
 def _require_session(request: Request) -> Any:
     """
         Resolve the request-scoped db session or abort with a 503
-        problem document. Mirrors the flask controller's
-        ``"Request-scoped db_session not configured"`` wire response
-        on misconfigured deployments.
+        problem document carrying the
+        ``"Request-scoped db_session not configured"`` detail on
+        misconfigured deployments.
 
         :param request: Incoming webworks request.
 

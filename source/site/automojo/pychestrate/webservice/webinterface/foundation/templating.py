@@ -6,14 +6,10 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask blueprints under ``webinterface/blueprints/`` ship
-their templates in per-blueprint ``templates/`` subdirectories
-(per the flask-restx ``Blueprint(template_folder=...)``
-convention). When the blueprints port to webworks the templates
-themselves can be reused unchanged -- only the route handlers
-and the render-call shape need updating.
-
-This module supplies that render-call shape:
+The blueprints under ``webinterface/blueprints/`` ship their
+templates in per-blueprint ``templates/`` subdirectories. This
+module supplies the render-call shape that lets webworks
+handlers reuse those templates unchanged:
 
 * :func:`build_jinja_environment` -- one-time builder that wires
   a ``ChoiceLoader`` over every per-blueprint ``templates/``
@@ -22,8 +18,7 @@ This module supplies that render-call shape:
 
 * :func:`render_template_response` -- the one call a webworks
   handler makes to convert ``(template_name, context)`` into a
-  :class:`HTMLResponse`. Mirrors flask's ``render_template``
-  signature so blueprint ports stay close to a one-line swap.
+  :class:`HTMLResponse`.
 
 * :func:`get_default_environment` -- module-level singleton
   pattern. The bootstrap calls
@@ -73,8 +68,7 @@ def build_jinja_environment(
                                       semantics).
         :param autoescape: When True, autoescape HTML / XML / SVG
                            extensions. The web UI is HTML so this
-                           is the safe default. Mirrors flask's
-                           ``select_autoescape``.
+                           is the safe default.
         :param cache_size: Number of compiled templates to cache
                            in-process. Set to 0 to disable caching
                            (development convenience).
@@ -163,9 +157,10 @@ def render_template_response(
     ) -> HTMLResponse:
     """
         Render a template with the supplied context and return a
-        webworks :class:`HTMLResponse`. The webworks port's
-        equivalent of flask's
-        ``return render_template("foo.html", **ctx)``.
+        webworks :class:`HTMLResponse`. Typical handler usage::
+
+            return render_template_response(
+                template_name="foo.html", context=ctx)
 
         :param template_name: Template path relative to the search
                               paths (e.g. ``config/users/list.html``).
@@ -253,8 +248,7 @@ def discover_blueprint_template_paths(
         Walk a blueprints root directory and return the ordered
         list of ``<blueprint>/templates`` subdirectories that
         exist on disk. Convention: each blueprint package owns its
-        own ``templates/`` subfolder, mirroring the flask
-        ``Blueprint(template_folder='templates')`` shape.
+        own ``templates/`` subfolder.
 
         :param blueprints_root: Filesystem path to the blueprints
                                 root (e.g.

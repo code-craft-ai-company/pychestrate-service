@@ -6,8 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The five test routes ported from the legacy flask
-``projects_blueprint``. All read-only -- test job lifecycle is
+The five test routes served under the projects blueprint.
+All read-only -- test job lifecycle is
 managed by the build pipeline / REST API, not the consumer UI.
 
 * ``GET /projects/{project_id}/tests``                          -- job

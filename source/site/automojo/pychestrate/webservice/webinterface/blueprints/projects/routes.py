@@ -5,14 +5,10 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The complete consumer-facing ``/projects`` UI on webworks. The
-flask projects blueprint at
-``webinterface/blueprints/projects/endpoints.py`` (53 routes
-across 2,529 LOC) was ported across PRs F1..F5 and the legacy
-file was removed in F5.
+The complete consumer-facing ``/projects`` UI on webworks.
 
-Routes landed in this module (the F1 slice -- dashboard +
-project core + members):
+Routes landed in this module (dashboard + project core +
+members):
 
 * ``GET  /projects/`` and ``/projects/dashboard``
 * ``GET  /projects/list``
@@ -349,12 +345,11 @@ def _require_project_permission_or_redirect(
         )
     ) -> Optional[Response]:
     """
-        Mirror the legacy flask
-        ``@project_permission_required(permission)`` decorator.
-        Calls :meth:`ProjectManager.check_permission` (3-arg
-        signature: project_id, user_id, permission) and either
-        returns ``None`` (allowed) or a redirect with an error
-        flash queued on the session (denied).
+        Project-permission gate. Calls
+        :meth:`ProjectManager.check_permission` (3-arg signature:
+        project_id, user_id, permission) and either returns
+        ``None`` (allowed) or a redirect with an error flash
+        queued on the session (denied).
 
         On the deny path the helper attaches the (mutated)
         session cookie to the redirect response. Treats any

@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The hub is a process-singleton that lazily constructs a
-:class:`RunRelay` per run on first publish. The Flask SSE route
-(M2) calls :meth:`subscribe_sse` to attach a streaming response
-to a relay; M1 ships :meth:`subscribe_callable` so tests can
-attach plain callables without a Flask app.
+:class:`RunRelay` per run on first publish. The SSE route (M2)
+calls :meth:`subscribe_sse` to attach a streaming response to a
+relay; M1 ships :meth:`subscribe_callable` so tests can attach
+plain callables without a running web app.
 """
 
 __author__ = "Automation Mojo LLC"

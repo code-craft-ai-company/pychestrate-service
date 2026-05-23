@@ -16,9 +16,9 @@ collision on ``ext_name`` / suffix is rejected at startup with
 
 The base lives under :mod:`extensions` (alongside
 :class:`FactoryProtocolBase` and :class:`ResourceExtension`) rather
-than under ``restapi`` so it does not depend on Flask at import time;
-the M2 router can be Flask-, ASGI-, or stdlib-backed without
-changing extension authoring.
+than under ``restapi`` so it does not depend on a specific web
+framework at import time; the M2 router can be webworks-, ASGI-,
+or stdlib-backed without changing extension authoring.
 """
 
 __author__ = "Automation Mojo LLC"

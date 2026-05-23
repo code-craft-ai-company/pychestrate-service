@@ -6,8 +6,7 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The single audit-log viewer route ported from the legacy flask
-``config_blueprint``:
+The audit-log viewer route served under the config blueprint:
 
 * ``GET /config/audit-logs`` -- paginated audit log viewer with
                                 ``?event_type=`` / ``?user_id=``

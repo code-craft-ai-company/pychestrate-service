@@ -409,9 +409,8 @@ def install_web_ui_templating() -> None:
         env through every callsite.
 
         Also attaches the :func:`url_for` shim to the environment as
-        a global so blueprint templates can build links the same way
-        the flask-era templates did (``{{ url_for('config.dashboard')
-        }}``).
+        a global so blueprint templates can build links using the
+        familiar ``{{ url_for('config.dashboard') }}`` syntax.
 
         Idempotent across calls -- the singleton is overwritten on
         each invocation; tests reset it with

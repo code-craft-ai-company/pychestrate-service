@@ -6,10 +6,10 @@
 .. moduleauthor:: Automation Mojo LLC
 
 The production webservice runs on ``automojo.webworks`` (see
-:mod:`app_pychestrate_main`). This module replaces the flask_restx
-``enrollment_controller`` next to it.
+:mod:`app_pychestrate_main`). This module provides the
+webworks-native ``enrollment`` controller.
 
-Five routes mirror the flask_restx controller's M1 matrix:
+Five routes:
 
 * ``POST   /api/v1/enrollment-tokens``
   — admin issues a new token for ``(project_id, pod_name)``.
@@ -520,8 +520,8 @@ def handle_revoke_client_under_enrollment(request: Request) -> Response:
 
         Note this duplicates the route surface served by
         :func:`clients_routes.handle_revoke_client` but goes through
-        the enrollment-namespaced URL path -- the flask controller
-        kept both surfaces deliberately for the RBAC gate alignment.
+        the enrollment-namespaced URL path -- both surfaces are
+        retained deliberately for RBAC gate alignment.
 
         :param request: Incoming webworks request.
 

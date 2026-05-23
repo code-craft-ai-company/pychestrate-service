@@ -6,10 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-WebWorks does not ship a static file handler. The flask web UI
-relied on flask's built-in ``send_from_directory`` plus the
-``Blueprint(static_folder=...)`` convention. This module provides
-the equivalent for webworks routes:
+WebWorks does not ship a static file handler. This module
+provides one for the consumer web UI:
 
 * :func:`serve_static_file` -- handler that resolves a request
   path inside a configured root directory, performs path

@@ -6,10 +6,8 @@
 
 .. moduleauthor:: Automation Mojo LLC
 
-The flask config blueprint at
-``webinterface/blueprints/config/endpoints.py`` (1,355 LOC) is
-being ported to webworks across multiple PRs. This first slice
-(D1) lands the auth + dashboard surface end-to-end:
+The config blueprint owns the consumer-facing ``/config``
+surface. This module lands the auth + dashboard slice:
 
 * ``GET /config/login`` -- render the login form.
 * ``POST /config/login`` -- authenticate and redirect.
@@ -17,9 +15,9 @@ being ported to webworks across multiple PRs. This first slice
 * ``GET /config/`` and ``GET /config/dashboard`` -- the
   authenticated dashboard.
 
-The remaining 25 routes (users / roles / variables / scopes /
-secrets / sessions / audit) land in PR D2/D3/D4 against the
-same foundation pieces this module exercises.
+The sibling ``routes_*.py`` modules carry the remaining 25
+routes (users / roles / variables / scopes / secrets /
+sessions / audit) on top of the same foundation pieces.
 
 Foundation pieces consumed
 --------------------------
@@ -33,8 +31,7 @@ Foundation pieces consumed
 * :mod:`webinterface.foundation.flash` for one-shot
   user-facing messages.
 * :mod:`webinterface.foundation.auth_guard` for the per-handler
-  ``require_login`` / ``enforce_csrf`` shape that mirrors the
-  flask ``@login_required`` / ``@validate_csrf`` decorators.
+  ``require_login`` / ``enforce_csrf`` gating shape.
 * :mod:`webinterface.foundation.templating` for the
   jinja2 render-to-HTMLResponse helper.
 * :mod:`webinterface.foundation.url_for` for the template
@@ -44,8 +41,8 @@ Auth backend
 ------------
 
 The actual authentication is delegated to
-:class:`automojo.pychestrate.core.managers.security_manager.SecurityManager`
--- the same auth engine the flask blueprint used. Webworks
+:class:`automojo.pychestrate.core.managers.security_manager.SecurityManager`.
+Webworks
 handlers open a SQLAlchemy session per request via the bootstrap-
 populated ``SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY`` and
 hand it to :class:`SecurityManager`. The cookie session merely
@@ -287,8 +284,8 @@ def _parse_form_multi(*, request: Request) -> Dict[str, List[str]]:
         every value for every key (preserving multi-checkbox
         submissions). The webworks ``request.form()`` collapses
         multi-value keys to the first value, which loses the
-        ``role_ids[]`` / ``permission_ids[]`` shape the legacy
-        flask templates rely on.
+        ``role_ids[]`` / ``permission_ids[]`` shape the
+        templates rely on.
 
         Returns an empty dict on any decode failure so handler
         callsites can branch on emptiness rather than catching.
@@ -323,10 +320,11 @@ def _parse_form_multi(*, request: Request) -> Dict[str, List[str]]:
 class MultiFormView:
     """
         Tiny wrapper exposing a ``getlist`` / ``get`` shape over a
-        parsed multi-value form dict. Lets the existing flask-era
-        templates -- which call ``form_data.getlist('role_ids')``
-        on form-redirect renders -- port unchanged. Built once per
-        handler from :func:`_parse_form_multi` output.
+        parsed multi-value form dict. Lets the existing templates
+        -- which call ``form_data.getlist('role_ids')`` on
+        form-redirect renders -- consume the form data unchanged.
+        Built once per handler from :func:`_parse_form_multi`
+        output.
 
         :param data: Dict of ``field_name → list-of-string-values``.
     """
@@ -351,7 +349,7 @@ class MultiFormView:
         ) -> Optional[str]:
         """
             Return the first submitted value for ``key`` (matches
-            flask MultiDict semantics).
+            the conventional MultiDict semantics).
 
             :param key: Form field name.
             :param default: Returned when the field is absent.
@@ -471,8 +469,8 @@ def _build_default_template_context(
 # tests can patch them at the module level (overriding the
 # lazy-imported SecurityManager / AuthRequest with fakes) without
 # having to import the source ``security_manager`` module --
-# whose werkzeug-derived password helpers are not part of the
-# test runtime's dep set.
+# whose password-hashing helpers are not part of the test
+# runtime's dep set.
 # ---------------------------------------------------------------------------
 
 
@@ -830,8 +828,7 @@ def _validate_session_via_security_manager(
         ``(user_id, username, csrf_token)`` on success or
         ``None`` when the token is missing / expired / revoked.
 
-        Mirrors the flask ``@login_required`` decorator's flow:
-        the cookie carries the token, but the source of truth
+        The cookie carries the token, but the source of truth
         for "is this token still valid" is the database.
 
         :param session: Session dict from the cookie.
@@ -910,12 +907,12 @@ def _require_permission_or_redirect(
         )
     ) -> Optional[Response]:
     """
-        Mirror the legacy flask ``@admin_required`` decorator's
-        check: build a SecurityManager against the auth-resolution's
-        open db_session, call ``check_permission(user_id,
-        permission)``, and either return ``None`` (allowed -- the
-        handler proceeds) or a redirect response with an error
-        flash queued on the session (denied).
+        Admin-permission gate. Builds a SecurityManager against
+        the auth-resolution's open db_session, calls
+        ``check_permission(user_id, permission)``, and either
+        returns ``None`` (allowed -- the handler proceeds) or a
+        redirect response with an error flash queued on the
+        session (denied).
 
         On the deny path the helper attaches the (mutated) session
         cookie to the redirect response.
