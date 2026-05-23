@@ -170,6 +170,10 @@ class PycSiteShell extends HTMLElement {
     // matching slot name.
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
+    // <mj-app-shell> collapses the nav track to width 0 unless the
+    // host carries nav-open. Without this attribute the sidebar
+    // groups render into a 0-width column and disappear visually.
+    layout.setAttribute("nav-open", "");
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
