@@ -1,0 +1,1053 @@
+"""
+.. module:: webinterface.blueprints.projects.routes_release_templates
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: WebWorks-native consumer-facing UI for
+               ``/projects/{project_id}/release-templates``.
+
+.. moduleauthor:: Automation Mojo LLC
+
+CRUD UI for project-scoped release templates -- modeled directly
+on the F2 ``routes_repositories`` slice.
+
+* ``GET  /projects/{project_id}/release-templates``
+* ``GET  /projects/{project_id}/release-templates/create``
+* ``POST /projects/{project_id}/release-templates/create``
+* ``GET  /projects/{project_id}/release-templates/{template_id}``
+* ``GET  /projects/{project_id}/release-templates/{template_id}/edit``
+* ``POST /projects/{project_id}/release-templates/{template_id}/edit``
+* ``POST /projects/{project_id}/release-templates/{template_id}/delete``
+
+Permission tiers:
+
+* ``view``      -- list + detail pages.
+* ``developer`` -- create / edit.
+* ``admin``     -- delete.
+"""
+
+__author__ = "Automation Mojo LLC"
+__copyright__ = "Copyright 2026, Automation Mojo LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+import json
+
+from typing import Any, Callable, Dict, List, Optional
+
+from automojo.webworks.routing.request import Request
+from automojo.webworks.routing.response import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
+
+from automojo.pychestrate.webservice.webinterface.foundation import (
+    auth_guard,
+    flash,
+    url_for as _url_for_module,
+)
+from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
+    MultiFormView,
+    _AuthResolution,
+    _attach_session_to_response,
+    _build_default_template_context,
+    _parse_form_multi,
+    _parse_form_or_empty,
+    _redirect_with_flash,
+    _render,
+    _resolve_authenticated_request,
+)
+from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes import (
+    PROJECTS_PATH,
+    _require_project_permission_or_redirect,
+    _resolve_project_or_redirect,
+)
+
+
+_ROUTE_TABLE = (
+    (
+        "projects.release_template_list",
+        "/{project_id}/release-templates",
+        ("GET",),
+    ),
+    (
+        "projects.release_template_create",
+        "/{project_id}/release-templates/create",
+        ("GET", "POST"),
+    ),
+    (
+        "projects.release_template_detail",
+        "/{project_id}/release-templates/{template_id}",
+        ("GET",),
+    ),
+    (
+        "projects.release_template_edit",
+        "/{project_id}/release-templates/{template_id}/edit",
+        ("GET", "POST"),
+    ),
+    (
+        "projects.release_template_delete",
+        "/{project_id}/release-templates/{template_id}/delete",
+        ("POST",),
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Lazy-import builder seams
+# ---------------------------------------------------------------------------
+
+
+def _build_project_manager(*, db_session: Any) -> Any:
+    """
+        Construct a :class:`ProjectManager`. Lazy-imports.
+    """
+    from automojo.pychestrate.core.managers.project_manager import (  # noqa: E402
+        ProjectManager,
+    )
+    rtnval = ProjectManager(db_session)
+    return rtnval
+
+
+def _build_template_manager(*, db_session: Any) -> Any:
+    """
+        Construct a :class:`ReleaseTemplateManager`. Lazy-imports.
+    """
+    from automojo.pychestrate.core.managers.release_template_manager import (  # noqa: E402
+        ReleaseTemplateManager,
+    )
+    rtnval = ReleaseTemplateManager(db_session=db_session)
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Local helpers
+# ---------------------------------------------------------------------------
+
+
+def _coerce_int(*, raw: Any) -> Optional[int]:
+    """
+        Coerce a value to ``Optional[int]``.
+
+        :param raw: Raw value.
+
+        :returns: Integer or ``None`` if coercion fails.
+    """
+    if raw is None:
+        return None
+    try:
+        rtnval = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return rtnval
+
+
+def _coerce_int_with_default(*, raw: Any, default: int) -> int:
+    """
+        Coerce ``raw`` to int, falling back to ``default``.
+
+        :param raw: Raw value.
+        :param default: Fallback integer.
+
+        :returns: Integer.
+    """
+    parsed = _coerce_int(raw=raw)
+    if parsed is None:
+        return default
+    return parsed
+
+
+def _parse_pagination_params(
+        *, request: Request, default_per_page: int = 20
+    ) -> Dict[str, Any]:
+    """
+        Parse ``page`` and ``per_page`` query parameters.
+
+        :param request: Incoming webworks request.
+        :param default_per_page: Default page size.
+
+        :returns: Dict containing ``page`` and ``per_page``.
+    """
+    page = _coerce_int_with_default(
+        raw=request.query_params.get("page", None), default=1
+    )
+    if page < 1:
+        page = 1
+    per_page = _coerce_int_with_default(
+        raw=request.query_params.get("per_page", None),
+        default=default_per_page,
+    )
+    if per_page < 1:
+        per_page = default_per_page
+    rtnval = {"page": page, "per_page": per_page}
+    return rtnval
+
+
+def _approximate_total_pages(
+        *, page: int, per_page: int, returned_count: int
+    ) -> int:
+    """
+        Compute an approximate ``total_pages`` for paginator UI.
+
+        :param page: Current 1-based page.
+        :param per_page: Page size.
+        :param returned_count: Rows on the current page.
+
+        :returns: Approximate total pages.
+    """
+    if returned_count < per_page:
+        if page == 1:
+            return 1
+        return page
+    return page + 1
+
+
+def _parse_json_object_or_none(
+        *, raw: str, field_label: str
+    ) -> Optional[Dict[str, Any]]:
+    """
+        Parse an optional JSON-object textarea field.
+
+        :param raw: Raw value from the form.
+        :param field_label: Label for error messages.
+
+        :returns: ``None`` for empty input; a dict otherwise.
+
+        :raises ValueError: Invalid JSON or non-object payload.
+    """
+    if raw is None:
+        return None
+    stripped = raw.strip()
+    if len(stripped) == 0:
+        return None
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        err_msg_lines = [
+            "Invalid JSON in {} field.".format(field_label)
+        ]
+        err_msg_lines.append("ERROR: {}".format(str(exc)))
+        err_msg = "; ".join(err_msg_lines)
+        raise ValueError(err_msg) from exc
+
+    if not isinstance(parsed, dict):
+        err_msg = "{} must be a JSON object.".format(field_label)
+        raise ValueError(err_msg)
+
+    rtnval = parsed
+    return rtnval
+
+
+def _parse_repo_id_csv(*, raw: str) -> List[int]:
+    """
+        Parse a comma-separated list of repository ids.
+
+        :param raw: Raw form value.
+
+        :returns: List of integers.
+
+        :raises ValueError: If any token cannot be coerced to int.
+    """
+    if raw is None:
+        return []
+    stripped = raw.strip()
+    if len(stripped) == 0:
+        return []
+
+    tokens = stripped.split(",")
+    rtnval: List[int] = []
+    for token in tokens:
+        candidate = token.strip()
+        if len(candidate) == 0:
+            continue
+        try:
+            value = int(candidate)
+        except ValueError as exc:
+            err_msg = (
+                "default_repo_ids contains a non-integer value: {!r}".format(
+                    candidate
+                )
+            )
+            raise ValueError(err_msg) from exc
+        rtnval.append(value)
+
+    return rtnval
+
+
+def _resolve_template_or_redirect(
+        *,
+        auth: _AuthResolution,
+        template_manager: Any,
+        project_id: int,
+        template_id: Optional[int]
+    ) -> Any:
+    """
+        Look up a release template AND verify it belongs to the
+        supplied project.
+
+        :param auth: Authenticated request resolution.
+        :param template_manager: ``ReleaseTemplateManager``.
+        :param project_id: Owning project id.
+        :param template_id: Candidate template id (may be ``None``).
+
+        :returns: Template response on success; a redirect response
+                  on failure.
+    """
+    if template_id is None:
+        rtnval = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for(
+                "projects.release_template_list",
+                project_id=project_id,
+            ),
+            message="Release template not found.",
+            category=flash.CATEGORY_ERROR,
+        )
+        return rtnval
+
+    template = template_manager.get(template_id)
+    if template is None:
+        rtnval = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for(
+                "projects.release_template_list",
+                project_id=project_id,
+            ),
+            message="Release template not found.",
+            category=flash.CATEGORY_ERROR,
+        )
+        return rtnval
+
+    if template.project_id != project_id:
+        rtnval = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for(
+                "projects.release_template_list",
+                project_id=project_id,
+            ),
+            message="Release template not found.",
+            category=flash.CATEGORY_ERROR,
+        )
+        return rtnval
+    return template
+
+
+# ---------------------------------------------------------------------------
+# Handlers
+# ---------------------------------------------------------------------------
+
+
+def handle_release_template_list(request: Request) -> Response:
+    """
+        ``GET /projects/{project_id}/release-templates``.
+
+        :param request: Incoming webworks request.
+
+        :returns: Rendered list view or a redirect on auth failure.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project = resolved
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="view",
+            deny_redirect_url=_url_for_module.url_for(
+                "projects.project_list"
+            ),
+            deny_message=(
+                "You do not have permission to view this project."
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+
+        template_manager = _build_template_manager(db_session=db_session)
+        result = template_manager.list_for_project(
+            project_id, offset=offset, limit=params["per_page"]
+        )
+        templates = result.templates
+
+        try:
+            can_manage = project_manager.check_permission(
+                project_id, auth.user_id, "developer"
+            )
+        except Exception:
+            can_manage = False
+
+        total_pages = _approximate_total_pages(
+            page=params["page"],
+            per_page=params["per_page"],
+            returned_count=len(templates),
+        )
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="projects.release_template_list",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["project"] = project
+        context["templates"] = templates
+        context["can_manage"] = can_manage
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+        context["total_pages"] = total_pages
+
+        response = _render(
+            template_name="projects/release_templates/list.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _render_template_create_form(
+        *,
+        auth: _AuthResolution,
+        project: Any,
+        form_data: Optional[MultiFormView],
+        status_code: int = 200
+    ) -> HTMLResponse:
+    """
+        Render the create form for a release template.
+
+        :param auth: Authenticated request resolution.
+        :param project: Resolved project.
+        :param form_data: Multi-form view for re-rendering after a
+                          validation failure.
+        :param status_code: HTTP status code.
+
+        :returns: Rendered HTML response.
+    """
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="projects.release_template_create",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["project"] = project
+    context["form_data"] = form_data
+    response = _render(
+        template_name="projects/release_templates/create.html",
+        context=context,
+        status_code=status_code,
+    )
+    _attach_session_to_response(
+        response=response, session=auth.session
+    )
+    return response
+
+
+def handle_release_template_create(request: Request) -> Response:
+    """
+        ``GET /projects/{project_id}/release-templates/create`` and
+        ``POST .../create``. ``developer``-gated.
+
+        :param request: Incoming webworks request.
+
+        :returns: Rendered HTML response or a redirect.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project = resolved
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="developer",
+            deny_redirect_url=_url_for_module.url_for(
+                "projects.project_detail", project_id=project_id
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        method = request.method.upper()
+
+        if method == "GET":
+            response = _render_template_create_form(
+                auth=auth, project=project, form_data=None
+            )
+            return response
+
+        # POST
+        single_form = _parse_form_or_empty(request=request)
+        multi_form = _parse_form_multi(request=request)
+        form_view = MultiFormView(data=multi_form)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for(
+                "projects.release_template_create",
+                project_id=project_id,
+            ),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        name = str(single_form.get("name", "")).strip()
+        description = str(single_form.get("description", "")).strip()
+        default_channel = str(
+            single_form.get("default_channel", "")
+        ).strip()
+        version_pattern = str(
+            single_form.get("version_pattern", "")
+        ).strip()
+        repo_ids_raw = str(single_form.get("default_repo_ids", ""))
+        pipeline_raw = str(single_form.get("default_pipeline", ""))
+        schedule_raw = str(single_form.get("default_schedule", ""))
+
+        template_manager = _build_template_manager(db_session=db_session)
+        try:
+            repo_ids = _parse_repo_id_csv(raw=repo_ids_raw)
+            pipeline_blob = _parse_json_object_or_none(
+                raw=pipeline_raw, field_label="default_pipeline"
+            )
+            schedule_blob = _parse_json_object_or_none(
+                raw=schedule_raw, field_label="default_schedule"
+            )
+
+            template = template_manager.create(
+                project_id,
+                name=name,
+                description=description,
+                default_channel=(
+                    default_channel if len(default_channel) > 0 else None
+                ),
+                version_pattern=(
+                    version_pattern if len(version_pattern) > 0 else None
+                ),
+                default_repo_ids=repo_ids,
+                default_pipeline=pipeline_blob,
+                default_schedule=schedule_blob,
+                created_by=auth.user_id,
+            )
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.release_template_detail",
+                    project_id=project_id,
+                    template_id=template.id,
+                ),
+                message='Release template "{}" created successfully.'.format(
+                    name
+                ),
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except ValueError as exc:
+            flash.add_flash(
+                session=auth.session,
+                message=str(exc),
+                category=flash.CATEGORY_ERROR,
+            )
+        except Exception as exc:
+            flash.add_flash(
+                session=auth.session,
+                message="Error creating release template: {}".format(
+                    str(exc)
+                ),
+                category=flash.CATEGORY_ERROR,
+            )
+
+        response = _render_template_create_form(
+            auth=auth,
+            project=project,
+            form_data=form_view,
+            status_code=400,
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_release_template_detail(request: Request) -> Response:
+    """
+        ``GET /projects/{project_id}/release-templates/{template_id}``.
+        ``view``-gated.
+
+        :param request: Incoming webworks request.
+
+        :returns: Rendered HTML response or a redirect.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        template_id = _coerce_int(
+            raw=request.path_params.get("template_id", None)
+        )
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project = resolved
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="view",
+            deny_redirect_url=_url_for_module.url_for(
+                "projects.project_list"
+            ),
+            deny_message=(
+                "You do not have permission to view this project."
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        template_manager = _build_template_manager(db_session=db_session)
+        template_or_redirect = _resolve_template_or_redirect(
+            auth=auth,
+            template_manager=template_manager,
+            project_id=project_id,
+            template_id=template_id,
+        )
+        if isinstance(template_or_redirect, RedirectResponse):
+            return template_or_redirect
+        template = template_or_redirect
+
+        try:
+            can_manage = project_manager.check_permission(
+                project_id, auth.user_id, "developer"
+            )
+        except Exception:
+            can_manage = False
+
+        try:
+            can_delete = project_manager.check_permission(
+                project_id, auth.user_id, "admin"
+            )
+        except Exception:
+            can_delete = False
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="projects.release_template_detail",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["project"] = project
+        context["template"] = template
+        context["can_manage"] = can_manage
+        context["can_delete"] = can_delete
+        context["default_pipeline_json"] = (
+            json.dumps(template.default_pipeline, indent=2)
+            if template.default_pipeline is not None else ""
+        )
+        context["default_schedule_json"] = (
+            json.dumps(template.default_schedule, indent=2)
+            if template.default_schedule is not None else ""
+        )
+
+        response = _render(
+            template_name="projects/release_templates/detail.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_release_template_edit(request: Request) -> Response:
+    """
+        ``GET .../{template_id}/edit`` / ``POST .../{template_id}/edit``.
+        ``developer``-gated.
+
+        :param request: Incoming webworks request.
+
+        :returns: Rendered HTML response or a redirect.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        template_id = _coerce_int(
+            raw=request.path_params.get("template_id", None)
+        )
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project = resolved
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="developer",
+            deny_redirect_url=_url_for_module.url_for(
+                "projects.project_detail", project_id=project_id
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        template_manager = _build_template_manager(db_session=db_session)
+        template_or_redirect = _resolve_template_or_redirect(
+            auth=auth,
+            template_manager=template_manager,
+            project_id=project_id,
+            template_id=template_id,
+        )
+        if isinstance(template_or_redirect, RedirectResponse):
+            return template_or_redirect
+        template = template_or_redirect
+
+        method = request.method.upper()
+
+        if method == "POST":
+            single_form = _parse_form_or_empty(request=request)
+
+            csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+                form=single_form,
+                session=auth.session,
+                fallback_url=_url_for_module.url_for(
+                    "projects.release_template_edit",
+                    project_id=project_id,
+                    template_id=template_id,
+                ),
+            )
+            if csrf_redirect is not None:
+                _attach_session_to_response(
+                    response=csrf_redirect, session=auth.session
+                )
+                return csrf_redirect
+
+            name = str(single_form.get("name", "")).strip()
+            description = str(single_form.get("description", "")).strip()
+            default_channel = str(
+                single_form.get("default_channel", "")
+            ).strip()
+            version_pattern = str(
+                single_form.get("version_pattern", "")
+            ).strip()
+            repo_ids_raw = str(single_form.get("default_repo_ids", ""))
+            pipeline_raw = str(single_form.get("default_pipeline", ""))
+            schedule_raw = str(single_form.get("default_schedule", ""))
+
+            try:
+                repo_ids = _parse_repo_id_csv(raw=repo_ids_raw)
+                pipeline_blob = _parse_json_object_or_none(
+                    raw=pipeline_raw, field_label="default_pipeline"
+                )
+                schedule_blob = _parse_json_object_or_none(
+                    raw=schedule_raw, field_label="default_schedule"
+                )
+
+                template_manager.update(
+                    template_id,
+                    name=name if len(name) > 0 else None,
+                    description=description,
+                    default_channel=default_channel,
+                    version_pattern=version_pattern,
+                    default_repo_ids=repo_ids,
+                    default_pipeline=(
+                        pipeline_blob
+                        if pipeline_blob is not None else {}
+                    ),
+                    default_schedule=(
+                        schedule_blob
+                        if schedule_blob is not None else {}
+                    ),
+                    updated_by=auth.user_id,
+                )
+                response = _redirect_with_flash(
+                    session=auth.session,
+                    url=_url_for_module.url_for(
+                        "projects.release_template_detail",
+                        project_id=project_id,
+                        template_id=template_id,
+                    ),
+                    message="Release template updated successfully.",
+                    category=flash.CATEGORY_SUCCESS,
+                )
+                return response
+            except ValueError as exc:
+                flash.add_flash(
+                    session=auth.session,
+                    message=str(exc),
+                    category=flash.CATEGORY_ERROR,
+                )
+            except Exception as exc:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error updating release template: {}".format(
+                        str(exc)
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="projects.release_template_edit",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["project"] = project
+        context["template"] = template
+        context["default_pipeline_json"] = (
+            json.dumps(template.default_pipeline, indent=2)
+            if template.default_pipeline is not None else ""
+        )
+        context["default_schedule_json"] = (
+            json.dumps(template.default_schedule, indent=2)
+            if template.default_schedule is not None else ""
+        )
+        context["default_repo_ids_csv"] = ", ".join(
+            str(value) for value in template.default_repo_ids
+        )
+
+        response = _render(
+            template_name="projects/release_templates/edit.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_release_template_delete(request: Request) -> Response:
+    """
+        ``POST /projects/{project_id}/release-templates/{template_id}/delete``.
+        ``admin``-gated.
+
+        :param request: Incoming webworks request.
+
+        :returns: Redirect response.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        template_id = _coerce_int(
+            raw=request.path_params.get("template_id", None)
+        )
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=(
+                _url_for_module.url_for(
+                    "projects.release_template_list",
+                    project_id=project_id,
+                )
+                if project_id is not None
+                else _url_for_module.url_for("projects.project_list")
+            ),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        if project_id is None or template_id is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("projects.project_list"),
+                message="Release template not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        project_manager = _build_project_manager(db_session=db_session)
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission="admin",
+            deny_redirect_url=_url_for_module.url_for(
+                "projects.project_detail", project_id=project_id
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        template_manager = _build_template_manager(db_session=db_session)
+        existing = template_manager.get(template_id)
+        if existing is None or existing.project_id != project_id:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.release_template_list",
+                    project_id=project_id,
+                ),
+                message="Release template not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        try:
+            template_manager.delete(
+                template_id, deleted_by=auth.user_id
+            )
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.release_template_list",
+                    project_id=project_id,
+                ),
+                message="Release template deleted successfully.",
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.release_template_list",
+                    project_id=project_id,
+                ),
+                message="Error deleting release template: {}".format(
+                    str(exc)
+                ),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+
+
+_HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
+    "projects.release_template_list": handle_release_template_list,
+    "projects.release_template_create": handle_release_template_create,
+    "projects.release_template_detail": handle_release_template_detail,
+    "projects.release_template_edit": handle_release_template_edit,
+    "projects.release_template_delete": handle_release_template_delete,
+}
+
+
+def register_release_templates_routes(*, app: Any) -> None:
+    """
+        Attach the release-template UI routes to a webworks app and
+        register their endpoint names with the url_for shim.
+
+        :param app: WebWorks application built by
+                    ``establish_webapp_persona``.
+
+        :returns: None.
+    """
+    for endpoint_name, relative_path, methods in _ROUTE_TABLE:
+        full_path = PROJECTS_PATH + relative_path
+        _url_for_module.register_endpoint(
+            endpoint=endpoint_name, pattern=full_path
+        )
+        handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
+        app.attach_route(full_path, methods=list(methods))(handler)
+    return
+
+
+__all__ = [
+    "register_release_templates_routes",
+    "handle_release_template_list",
+    "handle_release_template_create",
+    "handle_release_template_detail",
+    "handle_release_template_edit",
+    "handle_release_template_delete",
+]

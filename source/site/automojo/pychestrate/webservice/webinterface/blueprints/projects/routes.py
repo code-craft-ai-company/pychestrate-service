@@ -1458,6 +1458,12 @@ def register_projects_routes(*, app: Any) -> None:
     register_tests_routes(app=app)
     register_releases_routes(app=app)
 
+    # Project-scoped release templates UI.
+    from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_release_templates import (  # noqa: E402
+        register_release_templates_routes,
+    )
+    register_release_templates_routes(app=app)
+
     # F5 features -- calendar + watches (final slice).
     from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes_calendar import (  # noqa: E402
         register_calendar_routes,
