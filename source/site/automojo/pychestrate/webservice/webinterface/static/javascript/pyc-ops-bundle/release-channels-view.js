@@ -463,12 +463,12 @@ class PycReleaseChannels extends HTMLElement {
     const channel_label = document.createElement("label");
     channel_label.classList.add("pyc-ops__field");
     channel_label.textContent = "Channel";
-    const channel_select = document.createElement("select");
+    const channel_select = document.createElement("mj-select");
     channel_select.classList.add("pyc-ops__select");
     channel_select.setAttribute("data-role", "publish-channel");
     for (const channel of RELEASE_CHANNEL_VALUES) {
-      const option = document.createElement("option");
-      option.value = channel;
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", channel);
       option.textContent = channel;
       channel_select.appendChild(option);
     }

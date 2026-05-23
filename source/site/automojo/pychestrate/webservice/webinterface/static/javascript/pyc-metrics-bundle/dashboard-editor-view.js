@@ -450,18 +450,18 @@ class PycDashboardEditor extends HTMLElement {
     const metric_label = document.createElement("label");
     metric_label.classList.add("pyc-metrics__field");
     metric_label.textContent = "Metric";
-    const metric_select = document.createElement("select");
+    const metric_select = document.createElement("mj-select");
     metric_select.classList.add("pyc-metrics__select");
     metric_select.setAttribute("data-role", "add-metric");
     if (this._catalog.length === 0) {
-      const option = document.createElement("option");
-      option.value = "";
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", "");
       option.textContent = "No metrics in catalog";
       metric_select.appendChild(option);
     } else {
       for (const entry of this._catalog) {
-        const option = document.createElement("option");
-        option.value = entry.name;
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", entry.name);
         option.textContent = entry.name;
         metric_select.appendChild(option);
       }
@@ -471,12 +471,12 @@ class PycDashboardEditor extends HTMLElement {
     const kind_label = document.createElement("label");
     kind_label.classList.add("pyc-metrics__field");
     kind_label.textContent = "Tile kind";
-    const kind_select = document.createElement("select");
+    const kind_select = document.createElement("mj-select");
     kind_select.classList.add("pyc-metrics__select");
     kind_select.setAttribute("data-role", "add-kind");
     for (const option of TILE_KIND_OPTIONS) {
-      const opt = document.createElement("option");
-      opt.value = option.value;
+      const opt = document.createElement("mj-option");
+      opt.setAttribute("value", option.value);
       opt.textContent = option.label;
       kind_select.appendChild(opt);
     }
