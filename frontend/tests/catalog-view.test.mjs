@@ -163,8 +163,8 @@ test("project selection fetches the catalog and renders rows", async () => {
 
     assert.equal(calls[0].url, "/api/v1/projects")
     assert.equal(element.viewState.projectId, PROJECT_ID)
-    const table = element.querySelector("mj-table.pyc-catalog__table")
-    const rows = table.shadowRoot.querySelectorAll("tr.pyc-catalog__row")
+    const table = element.querySelector("mj-data-table.pyc-catalog__table")
+    const rows = table.shadowRoot.querySelectorAll(".row.pyc-catalog__row")
     assert.equal(rows.length, 2)
     element.remove()
 })

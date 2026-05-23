@@ -127,12 +127,16 @@ pyc-test-catalog {
 }
 
 .pyc-catalog__table {
+    /* mj-data-table virtualizes rows with absolute positioning,
+     * so the host needs a height for the body scroller. */
+    display: block;
     width: 100%;
-    border-collapse: collapse;
+    min-height: 24rem;
+    height: 60vh;
     font-size: var(--pyc-font-size-small, 0.875rem);
 }
 
-.pyc-catalog__table::part(th) {
+.pyc-catalog__table::part(header-cell) {
     text-align: left;
     padding: 0.5rem 0.75rem;
     font-size: var(--pyc-font-size-meta, 0.75rem);
@@ -140,16 +144,16 @@ pyc-test-catalog {
     border-bottom: 0.0625rem solid var(--pyc-catalog-border);
 }
 
-.pyc-catalog__table::part(td) {
+.pyc-catalog__table::part(cell) {
     padding: 0.5rem 0.75rem;
     border-bottom: 0.0625rem solid var(--pyc-catalog-divider);
 }
 
-.pyc-catalog__table::part(tr):hover {
+.pyc-catalog__table::part(row):hover {
     background-color: var(--pyc-catalog-surface-hover);
 }
 
-.pyc-catalog__table::part(tr)[data-retired] {
+.pyc-catalog__table::part(row)[data-retired] {
     opacity: 0.55;
 }
 
