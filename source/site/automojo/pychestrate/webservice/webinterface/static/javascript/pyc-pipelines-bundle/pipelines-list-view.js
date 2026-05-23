@@ -596,13 +596,16 @@ class PycPipelinesList extends HTMLElement {
    * ``_pipelines`` list.
    */
   _build_table() {
-    const table = document.createElement("mj-table");
+    const table = document.createElement("mj-data-table");
     table.classList.add("pyc-pipelines__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
     table.rowClass = "pyc-pipelines__row";
     table.columns = [
       {
         key: "pipeline_id",
         label: "Pipeline",
+        width: "12rem",
         render: (pipeline) => {
           const link = document.createElement("a");
           link.classList.add("pyc-pipelines__pipeline-link");
@@ -612,10 +615,12 @@ class PycPipelinesList extends HTMLElement {
           return link;
         }
       },
-      { key: "name", label: "Name" },
+      { key: "name", label: "Name", width: "16rem" },
       {
         key: "digest",
         label: "Digest",
+        width: "12rem",
+        sortable: false,
         render: (pipeline) => {
           const digest = document.createElement("span");
           digest.classList.add("pyc-pipelines__digest");
@@ -627,6 +632,7 @@ class PycPipelinesList extends HTMLElement {
       {
         key: "stages",
         label: "Stages",
+        width: "8rem",
         render: (pipeline) => {
           const stage_count = Array.isArray(pipeline.stages) ? pipeline.stages.length : 0;
           const rtnval = String(stage_count);
@@ -636,6 +642,7 @@ class PycPipelinesList extends HTMLElement {
       {
         key: "cached_at",
         label: "Cached",
+        width: "14rem",
         render: (pipeline) => format_timestamp(pipeline.cached_at)
       }
     ];
