@@ -162,6 +162,25 @@ class PycSiteShell extends HTMLElement {
   _render_skeleton() {
     const initial_route_attr = this.getAttribute(ATTR_INITIAL_ROUTE);
     const initial_path = initial_route_attr !== null && initial_route_attr.length > 0 ? initial_route_attr : window.location.pathname;
+    // Capture any server-rendered content the Flask shell document
+    // inlined inside <pyc-site-shell> (see
+    // ``site_shell/templates/site_shell/shell_document.html``).
+    // Without this, ``replaceChildren()`` below wipes the route's
+    // fragment and the user sees their page flash and then
+    // disappear once the shell mounts.
+    const preserved_main_content = Array.from(this.childNodes).filter(
+      (node) => {
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return node.nodeType === Node.TEXT_NODE && node.textContent.trim().length > 0;
+        }
+        const element = node;
+        // mj-app-shell layouts re-build themselves below; drop them.
+        if (element.tagName === "MJ-APP-SHELL") {
+          return false;
+        }
+        return true;
+      }
+    );
     this.replaceChildren();
     // The outer layout is <mj-app-shell>: it owns the CSS grid
     // ("app-bar", "nav", "main", "inspector", "status-bar"
@@ -189,6 +208,11 @@ class PycSiteShell extends HTMLElement {
     main.setAttribute("slot", "main");
     main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
+    // Re-attach any server-rendered fragment captured above so the
+    // route's page survives the skeleton rebuild.
+    for (const node of preserved_main_content) {
+      main.appendChild(node);
+    }
     layout.appendChild(main);
     this._main_region = main;
     this.appendChild(layout);
