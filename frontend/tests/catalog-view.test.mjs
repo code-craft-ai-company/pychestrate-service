@@ -15,6 +15,7 @@ import assert from "node:assert/strict"
 import * as path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { JSDOM } from "jsdom"
+import { setup_jsdom_with_mj } from "./_helpers/jsdom-mj-setup.mjs"
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const BUNDLE_PATH = path.resolve(
@@ -33,17 +34,9 @@ const BUNDLE_PATH = path.resolve(
     "index.js",
 )
 
-const dom = new JSDOM(
-    "<!doctype html><html><head></head><body></body></html>",
-    { url: "https://example.test/test-catalog" },
-)
-globalThis.window = dom.window
-globalThis.document = dom.window.document
-globalThis.customElements = dom.window.customElements
-globalThis.HTMLElement = dom.window.HTMLElement
-globalThis.HTMLButtonElement = dom.window.HTMLButtonElement
-globalThis.HTMLSelectElement = dom.window.HTMLSelectElement
-globalThis.HTMLInputElement = dom.window.HTMLInputElement
+const { dom } = await setup_jsdom_with_mj({
+    url: "https://example.test/test-catalog",
+})
 
 const bundle = await import(pathToFileURL(BUNDLE_PATH).href)
 const {
@@ -170,7 +163,8 @@ test("project selection fetches the catalog and renders rows", async () => {
 
     assert.equal(calls[0].url, "/api/v1/projects")
     assert.equal(element.viewState.projectId, PROJECT_ID)
-    const rows = element.querySelectorAll(".pyc-catalog__row")
+    const table = element.querySelector("mj-table.pyc-catalog__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-catalog__row")
     assert.equal(rows.length, 2)
     element.remove()
 })

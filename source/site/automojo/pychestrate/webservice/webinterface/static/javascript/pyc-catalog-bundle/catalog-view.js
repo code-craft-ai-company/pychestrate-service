@@ -481,70 +481,62 @@ class PycTestCatalog extends HTMLElement {
     return;
   }
   /**
-   * Build the catalog ``<table>`` from the current entries list.
+   * Build the catalog ``<mj-table>`` from the current entries list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const self = this;
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-catalog__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = [
-      "Entry",
-      "Name",
-      "Capabilities",
-      "Importer",
-      "Created",
-      "Action"
-    ];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const entry of this._entries) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-catalog__row");
+    table.rowClass = (entry) => {
       if (entry.retired === true) {
-        row.classList.add("pyc-catalog__row--retired");
+        const rtnval2 = ["pyc-catalog__row", "pyc-catalog__row--retired"];
+        return rtnval2;
       }
-      const key_cell = document.createElement("td");
-      const key_code = document.createElement("code");
-      key_code.classList.add("pyc-catalog__entry-key");
-      key_code.textContent = entry.entry_key;
-      key_cell.appendChild(key_code);
-      row.appendChild(key_cell);
-      const name_cell = document.createElement("td");
-      name_cell.textContent = entry.display_name;
-      row.appendChild(name_cell);
-      const caps_cell = document.createElement("td");
-      caps_cell.textContent = selection_summary(entry);
-      row.appendChild(caps_cell);
-      const importer_cell = document.createElement("td");
-      importer_cell.textContent = entry.importer_tag;
-      row.appendChild(importer_cell);
-      const created_cell = document.createElement("td");
-      created_cell.textContent = format_timestamp(entry.created_at);
-      row.appendChild(created_cell);
-      const action_cell = document.createElement("td");
-      const trigger_button = document.createElement("mj-button");
-      trigger_button.classList.add("pyc-catalog__trigger");
-      trigger_button.setAttribute("type", "button");
-      trigger_button.setAttribute("data-role", "trigger-run");
-      trigger_button.setAttribute("data-entry-id", entry.entry_id);
-      trigger_button.textContent = "Trigger Run";
-      trigger_button.toggleAttribute("disabled", entry.retired === true);
-      trigger_button.addEventListener("click", () => {
-        void this._trigger_run(entry, trigger_button);
-      });
-      action_cell.appendChild(trigger_button);
-      row.appendChild(action_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+      const rtnval = "pyc-catalog__row";
+      return rtnval;
+    };
+    table.columns = [
+      {
+        key: "entry_key",
+        label: "Entry",
+        render: (entry) => {
+          const key_code = document.createElement("code");
+          key_code.classList.add("pyc-catalog__entry-key");
+          key_code.textContent = entry.entry_key;
+          return key_code;
+        }
+      },
+      { key: "display_name", label: "Name" },
+      {
+        key: "capabilities",
+        label: "Capabilities",
+        render: (entry) => selection_summary(entry)
+      },
+      { key: "importer_tag", label: "Importer" },
+      {
+        key: "created_at",
+        label: "Created",
+        render: (entry) => format_timestamp(entry.created_at)
+      },
+      {
+        key: "action",
+        label: "Action",
+        render: (entry) => {
+          const trigger_button = document.createElement("mj-button");
+          trigger_button.classList.add("pyc-catalog__trigger");
+          trigger_button.setAttribute("type", "button");
+          trigger_button.setAttribute("data-role", "trigger-run");
+          trigger_button.setAttribute("data-entry-id", entry.entry_id);
+          trigger_button.textContent = "Trigger Run";
+          trigger_button.toggleAttribute("disabled", entry.retired === true);
+          trigger_button.addEventListener("click", () => {
+            void self._trigger_run(entry, trigger_button);
+          });
+          return trigger_button;
+        }
+      }
+    ];
+    table.rows = this._entries;
     return table;
   }
   /**
