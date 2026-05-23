@@ -20,14 +20,13 @@
 #}
 <section class="pyc-admin-page-fragment">
     {# Carry stylesheets the admin templates depend on, alongside any
-       extra_css the child block contributes. The shell document does
-       not load bootstrap / bootstrap-vue / material-icons itself, so
-       these <link> tags travel with each fragment for now. A future
-       PR consolidates them into the shell's global stylesheet. #}
+       extra_css the child block contributes. Material Icons is the
+       only stylesheet the shell document does not already provide;
+       color-theme.css is repo-local. bootstrap / bootstrap-vue /
+       automojo.css were dropped when the project moved to the
+       webworks + mj-* component stack -- the files no longer ship
+       and the legacy <link> tags returned 404. #}
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link href="/static/styles/bootstrap.css" rel="stylesheet">
-    <link href="/static/styles/bootstrap-vue.css" rel="stylesheet">
-    <link type="text/css" rel="stylesheet" href="/static/styles/automojo.css">
     <link type="text/css" rel="stylesheet" href="/static/styles/color-theme.css">
     <style>
         .pyc-admin-page-fragment .alert {

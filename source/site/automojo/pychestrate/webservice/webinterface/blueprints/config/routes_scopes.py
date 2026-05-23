@@ -67,6 +67,7 @@ _ROUTE_TABLE = (
 
 _SECRET_ENCRYPTION_KEY_ENV_VAR: str = "SECRET_ENCRYPTION_KEY"
 _SECRET_ENCRYPTION_KEY_DEFAULT: str = "default-key-for-dev"
+_SECRET_ENCRYPTION_KEY_REQUIRED_BYTES: int = 32
 
 
 # ---------------------------------------------------------------------------
@@ -76,19 +77,29 @@ _SECRET_ENCRYPTION_KEY_DEFAULT: str = "default-key-for-dev"
 
 def _resolve_secret_encryption_key() -> bytes:
     """
-        Return the encryption-key bytes the SecretManager
+        Return the 32-byte encryption key the SecretManager
         constructor expects. Reads the
         ``SECRET_ENCRYPTION_KEY`` environment variable with a
-        hard-coded dev fallback and encodes to UTF-8.
+        hard-coded dev fallback. If the raw value is exactly 32
+        bytes it is returned verbatim so an operator-supplied key
+        is honored byte-for-byte; otherwise the value is hashed
+        with SHA-256 to derive a deterministic 32-byte key. The
+        derive path covers the dev fallback (19 bytes) and any
+        operator who supplied a passphrase rather than a raw key.
 
         Test seam: tests patch this helper to bypass the env-var
         read.
     """
+    import hashlib
     raw = os.environ.get(
         _SECRET_ENCRYPTION_KEY_ENV_VAR,
         _SECRET_ENCRYPTION_KEY_DEFAULT,
     )
-    rtnval = raw.encode("utf-8")
+    raw_bytes = raw.encode("utf-8")
+    if len(raw_bytes) == _SECRET_ENCRYPTION_KEY_REQUIRED_BYTES:
+        rtnval = raw_bytes
+        return rtnval
+    rtnval = hashlib.sha256(raw_bytes).digest()
     return rtnval
 
 
