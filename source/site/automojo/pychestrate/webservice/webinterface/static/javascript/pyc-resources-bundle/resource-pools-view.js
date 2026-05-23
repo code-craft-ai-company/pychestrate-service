@@ -147,7 +147,7 @@ class PycResourcePools extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-resources__filter");
     project_label.textContent = "Project";
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-resources__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -236,7 +236,7 @@ class PycResourcePools extends HTMLElement {
     const name_label = document.createElement("label");
     name_label.classList.add("pyc-resources__filter");
     name_label.textContent = "Name";
-    const name_input = document.createElement("input");
+    const name_input = document.createElement("mj-text-field");
     name_input.classList.add("pyc-resources__input");
     name_input.setAttribute("type", "text");
     name_input.setAttribute("placeholder", "pool name");
@@ -246,7 +246,7 @@ class PycResourcePools extends HTMLElement {
     const desc_label = document.createElement("label");
     desc_label.classList.add("pyc-resources__filter");
     desc_label.textContent = "Description";
-    const desc_input = document.createElement("input");
+    const desc_input = document.createElement("mj-text-field");
     desc_input.classList.add("pyc-resources__input");
     desc_input.setAttribute("type", "text");
     desc_input.setAttribute("placeholder", "optional");
@@ -256,7 +256,7 @@ class PycResourcePools extends HTMLElement {
     const tags_label = document.createElement("label");
     tags_label.classList.add("pyc-resources__filter");
     tags_label.textContent = "Capability tags";
-    const tags_input = document.createElement("input");
+    const tags_input = document.createElement("mj-text-field");
     tags_input.classList.add("pyc-resources__input");
     tags_input.setAttribute("type", "text");
     tags_input.setAttribute("placeholder", "comma-separated");

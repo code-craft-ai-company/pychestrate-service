@@ -147,7 +147,7 @@ class PycPodsList extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-pods-list__filter");
     project_label.textContent = "Project";
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-pods-list__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");

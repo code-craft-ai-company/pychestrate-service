@@ -285,7 +285,7 @@ class PycEnvironments extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-infra__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -477,7 +477,7 @@ class PycEnvironments extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -913,7 +913,7 @@ class PycEnvironments extends HTMLElement {
     const name_label = document.createElement("label");
     name_label.classList.add("pyc-infra__field");
     name_label.textContent = "Environment name";
-    const name_input = document.createElement("input");
+    const name_input = document.createElement("mj-text-field");
     name_input.classList.add("pyc-infra__input");
     name_input.setAttribute("type", "text");
     name_input.setAttribute("placeholder", "staging");
@@ -924,7 +924,7 @@ class PycEnvironments extends HTMLElement {
     const kind_label = document.createElement("label");
     kind_label.classList.add("pyc-infra__field");
     kind_label.textContent = "Environment kind";
-    const kind_input = document.createElement("input");
+    const kind_input = document.createElement("mj-text-field");
     kind_input.classList.add("pyc-infra__input");
     kind_input.setAttribute("type", "text");
     kind_input.setAttribute("placeholder", "terraform");
@@ -938,7 +938,7 @@ class PycEnvironments extends HTMLElement {
       "pyc-infra__field--wide"
     );
     attrs_label.textContent = "Attributes (JSON)";
-    const attrs_area = document.createElement("textarea");
+    const attrs_area = document.createElement("mj-textarea");
     attrs_area.classList.add("pyc-infra__textarea");
     attrs_area.setAttribute("data-role", "register-attrs");
     attrs_area.setAttribute("placeholder", '{"region": "us-east-1"}');

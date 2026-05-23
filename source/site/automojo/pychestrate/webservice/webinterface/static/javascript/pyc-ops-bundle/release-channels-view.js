@@ -647,7 +647,7 @@ class PycReleaseChannels extends HTMLElement {
     const label = document.createElement("label");
     label.classList.add("pyc-ops__field");
     label.textContent = label_text;
-    const input = document.createElement("input");
+    const input = document.createElement("mj-text-field");
     input.classList.add("pyc-ops__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", role);

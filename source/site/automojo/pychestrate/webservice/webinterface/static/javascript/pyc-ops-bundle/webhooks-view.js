@@ -182,7 +182,7 @@ class PycWebhooks extends HTMLElement {
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-ops__field");
     project_label.textContent = "Project";
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-ops__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -1116,7 +1116,7 @@ class PycWebhooks extends HTMLElement {
     const label = document.createElement("label");
     label.classList.add("pyc-ops__field");
     label.textContent = label_text;
-    const input = document.createElement("input");
+    const input = document.createElement("mj-text-field");
     input.classList.add("pyc-ops__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", role);

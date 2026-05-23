@@ -213,7 +213,7 @@ class PycGuards extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-infra__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -227,7 +227,7 @@ class PycGuards extends HTMLElement {
     const env_label = document.createElement("label");
     env_label.classList.add("pyc-infra__field");
     env_label.textContent = "Environment filter";
-    const env_input = document.createElement("input");
+    const env_input = document.createElement("mj-text-field");
     env_input.classList.add("pyc-infra__input");
     env_input.setAttribute("type", "text");
     env_input.setAttribute("placeholder", "environment id (optional)");
@@ -344,7 +344,7 @@ class PycGuards extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -673,7 +673,7 @@ class PycGuards extends HTMLElement {
     const env_label = document.createElement("label");
     env_label.classList.add("pyc-infra__field");
     env_label.textContent = "Environment id";
-    const env_input = document.createElement("input");
+    const env_input = document.createElement("mj-text-field");
     env_input.classList.add("pyc-infra__input");
     env_input.setAttribute("type", "text");
     env_input.setAttribute("data-role", "attach-environment");
@@ -683,7 +683,7 @@ class PycGuards extends HTMLElement {
     const rule_label = document.createElement("label");
     rule_label.classList.add("pyc-infra__field");
     rule_label.textContent = "Rule id";
-    const rule_input = document.createElement("input");
+    const rule_input = document.createElement("mj-text-field");
     rule_input.classList.add("pyc-infra__input");
     rule_input.setAttribute("type", "text");
     rule_input.setAttribute("placeholder", "max-destroy-count");
@@ -846,7 +846,7 @@ class PycGuards extends HTMLElement {
     const env_label = document.createElement("label");
     env_label.classList.add("pyc-infra__field");
     env_label.textContent = "Environment id";
-    const env_input = document.createElement("input");
+    const env_input = document.createElement("mj-text-field");
     env_input.classList.add("pyc-infra__input");
     env_input.setAttribute("type", "text");
     env_input.setAttribute("data-role", "evaluate-environment");
@@ -856,7 +856,7 @@ class PycGuards extends HTMLElement {
     const action_label = document.createElement("label");
     action_label.classList.add("pyc-infra__field");
     action_label.textContent = "Action";
-    const action_input = document.createElement("input");
+    const action_input = document.createElement("mj-text-field");
     action_input.classList.add("pyc-infra__input");
     action_input.setAttribute("type", "text");
     action_input.setAttribute("placeholder", "environment.destroy");
@@ -867,7 +867,7 @@ class PycGuards extends HTMLElement {
     const roles_label = document.createElement("label");
     roles_label.classList.add("pyc-infra__field");
     roles_label.textContent = "Actor roles (comma-separated)";
-    const roles_input = document.createElement("input");
+    const roles_input = document.createElement("mj-text-field");
     roles_input.classList.add("pyc-infra__input");
     roles_input.setAttribute("type", "text");
     roles_input.setAttribute("placeholder", "operator, release-manager");

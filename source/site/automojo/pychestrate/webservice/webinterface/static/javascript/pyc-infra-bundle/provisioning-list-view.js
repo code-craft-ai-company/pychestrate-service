@@ -193,7 +193,7 @@ class PycProvisioningList extends HTMLElement {
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
-    const project_input = document.createElement("input");
+    const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-infra__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
@@ -385,7 +385,7 @@ class PycProvisioningList extends HTMLElement {
     }
     const select = this._root.querySelector('[data-role="project-select"]');
     const input = this._root.querySelector('[data-role="project-input"]');
-    if (select instanceof HTMLSelectElement === false || input instanceof HTMLInputElement === false) {
+    if (select instanceof HTMLSelectElement === false || input instanceof HTMLElement === false) {
       return;
     }
     const select_el = select;
@@ -716,7 +716,7 @@ class PycProvisioningList extends HTMLElement {
     const driver_label = document.createElement("label");
     driver_label.classList.add("pyc-infra__field");
     driver_label.textContent = "Driver name";
-    const driver_input = document.createElement("input");
+    const driver_input = document.createElement("mj-text-field");
     driver_input.classList.add("pyc-infra__input");
     driver_input.setAttribute("type", "text");
     driver_input.setAttribute("placeholder", "terraform");
@@ -744,7 +744,7 @@ class PycProvisioningList extends HTMLElement {
       "pyc-infra__field--wide"
     );
     inputs_label.textContent = "Driver inputs (JSON)";
-    const inputs_area = document.createElement("textarea");
+    const inputs_area = document.createElement("mj-textarea");
     inputs_area.classList.add("pyc-infra__textarea");
     inputs_area.setAttribute("data-role", "trigger-driver-inputs");
     inputs_area.setAttribute("placeholder", '{"auto_approve": false}');
