@@ -295,16 +295,18 @@ test("resource-pools view fetches and renders a pools table", async () => {
         ],
     ])
     const el = new PycResourcePools()
-    el.connectedCallback()
+    document.body.appendChild(el)
     const input = el.querySelector('[data-role="project-filter"]')
     input.value = PROJECT_ID
     input.dispatchEvent(new dom.window.Event("change"))
     await el.refresh()
     assert.equal(el.listState.errored, false)
-    const rows = el.querySelectorAll(".pyc-resources__row")
+    const table = el.querySelector("mj-table.pyc-resources__table")
+    const rows = table.shadowRoot.querySelectorAll("tr.pyc-resources__row")
     assert.equal(rows.length, 1)
-    const tags = el.querySelectorAll(".pyc-resources__tag")
+    const tags = table.shadowRoot.querySelectorAll(".pyc-resources__tag")
     assert.equal(tags.length, 2)
+    el.remove()
 })
 
 test("resource-pools view surfaces a fetch error", async () => {
