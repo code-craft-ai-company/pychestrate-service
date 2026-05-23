@@ -245,12 +245,19 @@ class SidebarRenderer {
       if (mouse_event.metaKey === true || mouse_event.ctrlKey === true || mouse_event.shiftKey === true || mouse_event.altKey === true) {
         return;
       }
-      event.preventDefault();
+      // The pychestrate site is server-rendered: every sidebar
+      // route is a distinct Flask page that returns its own HTML
+      // shell + main content. There is no SPA hot-swap that
+      // fetches a route's main and injects it into the existing
+      // shell, so calling ``_router.navigateTo`` (pushState only)
+      // would change the URL while leaving the previous page's
+      // empty main region untouched. Let the <a href> do a real
+      // browser navigation -- close the popup and fire telemetry
+      // first.
       this._close_popup();
       if (this._on_entry_clicked !== null) {
         this._on_entry_clicked(route, label);
       }
-      this._on_navigate(route);
     });
     return link;
   }
