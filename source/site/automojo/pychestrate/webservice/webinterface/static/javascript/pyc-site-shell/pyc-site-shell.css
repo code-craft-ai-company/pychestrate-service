@@ -78,10 +78,29 @@
         var(--pyc-space-sidebar-default, 16rem);
 }
 
+/*
+ * Match the bottom gutter to the top / left / right body margins.
+ * The user-agent default body margin (8px) shows on top, left,
+ * and right, but the shell's ``min-height: 100vh`` made it
+ * overflow the viewport by 8px and the bottom gutter disappeared
+ * behind a scrollbar. Pin the body to a uniform 5px gutter and
+ * cap the shell to the remaining space.
+ */
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    padding: 5px;
+    box-sizing: border-box;
+    min-height: 100vh;
+}
+
 pyc-site-shell {
     display: flex;
     flex-direction: column;
-    min-height: 100vh;
+    min-height: calc(100vh - 10px);
     background-color: var(--pyc-site-shell-bg);
     color: var(--pyc-site-shell-fg);
     font-family: var(--pyc-site-shell-font-family);
