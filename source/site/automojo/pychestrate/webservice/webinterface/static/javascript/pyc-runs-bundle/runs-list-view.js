@@ -335,52 +335,51 @@ class PycRunsList extends HTMLElement {
    * Build the runs ``<table>`` from the current ``_runs`` list.
    */
   _build_table() {
-    const table = document.createElement("table");
+    const table = document.createElement("mj-table");
     table.classList.add("pyc-runs-list__table");
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    const columns = ["Run", "Project", "State", "Created", "Started", "Completed"];
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    table.appendChild(thead);
-    const tbody = document.createElement("tbody");
-    for (const run of this._runs) {
-      const row = document.createElement("tr");
-      row.classList.add("pyc-runs-list__row");
-      const id_cell = document.createElement("td");
-      const link = document.createElement("a");
-      link.classList.add("pyc-runs-list__run-link");
-      link.setAttribute("href", "/runs/" + run.run_id);
-      link.textContent = short_run_id(run.run_id);
-      id_cell.appendChild(link);
-      row.appendChild(id_cell);
-      const project_cell = document.createElement("td");
-      project_cell.textContent = run.project_id;
-      row.appendChild(project_cell);
-      const state_cell = document.createElement("td");
-      const badge = document.createElement("mj-chip");
-      badge.classList.add("pyc-runs-list__badge");
-      badge.setAttribute("data-tone", state_badge_tone(run.state));
-      badge.textContent = run.state;
-      state_cell.appendChild(badge);
-      row.appendChild(state_cell);
-      const created_cell = document.createElement("td");
-      created_cell.textContent = format_timestamp(run.created_at);
-      row.appendChild(created_cell);
-      const started_cell = document.createElement("td");
-      started_cell.textContent = format_timestamp(run.started_at);
-      row.appendChild(started_cell);
-      const completed_cell = document.createElement("td");
-      completed_cell.textContent = format_timestamp(run.completed_at);
-      row.appendChild(completed_cell);
-      tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
+    table.rowClass = "pyc-runs-list__row";
+    table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
+    table.columns = [
+      {
+        key: "run_id",
+        label: "Run",
+        render: (run) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-runs-list__run-link");
+          link.setAttribute("href", "/runs/" + run.run_id);
+          link.textContent = short_run_id(run.run_id);
+          return link;
+        },
+      },
+      { key: "project_id", label: "Project" },
+      {
+        key: "state",
+        label: "State",
+        render: (run) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-runs-list__badge");
+          badge.setAttribute("data-tone", state_badge_tone(run.state));
+          badge.textContent = run.state;
+          return badge;
+        },
+      },
+      {
+        key: "created_at",
+        label: "Created",
+        render: (run) => format_timestamp(run.created_at),
+      },
+      {
+        key: "started_at",
+        label: "Started",
+        render: (run) => format_timestamp(run.started_at),
+      },
+      {
+        key: "completed_at",
+        label: "Completed",
+        render: (run) => format_timestamp(run.completed_at),
+      },
+    ];
+    table.rows = this._runs;
     return table;
   }
   /**

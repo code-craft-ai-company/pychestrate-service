@@ -363,7 +363,7 @@ oauth = ["authlib (>=1.6.0,<2.0.0)", "itsdangerous (>=2.2.0,<3.0.0)", "joserfc (
 type = "git"
 url = "https://github.com/automationmojo/automojo-webworks.git"
 reference = "main"
-resolved_reference = "67c761f40ec3c9f236c3467a4fcddff271cb8aca"
+resolved_reference = "d6bfb2ce6b372bbefb1a0ebfa33978f72e5d78e9"
 
 [[package]]
 name = "automojo-xmodules"
