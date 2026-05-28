@@ -68,6 +68,8 @@ _ROUTE_TABLE = (
 _SECRET_ENCRYPTION_KEY_ENV_VAR: str = "SECRET_ENCRYPTION_KEY"
 _SECRET_ENCRYPTION_KEY_DEFAULT: str = "default-key-for-dev"
 _SECRET_ENCRYPTION_KEY_REQUIRED_BYTES: int = 32
+_KEK_FILE_PATH_ENV_VAR: str = "PYCHESTRATE_KEK_FILE_PATH"
+_KEK_DERIVATION_SALT: bytes = b"pychestrate/secret-manager/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -78,28 +80,51 @@ _SECRET_ENCRYPTION_KEY_REQUIRED_BYTES: int = 32
 def _resolve_secret_encryption_key() -> bytes:
     """
         Return the 32-byte encryption key the SecretManager
-        constructor expects. Reads the
-        ``SECRET_ENCRYPTION_KEY`` environment variable with a
-        hard-coded dev fallback. If the raw value is exactly 32
-        bytes it is returned verbatim so an operator-supplied key
-        is honored byte-for-byte; otherwise the value is hashed
-        with SHA-256 to derive a deterministic 32-byte key. The
-        derive path covers the dev fallback (19 bytes) and any
-        operator who supplied a passphrase rather than a raw key.
+        constructor expects, resolved in this priority order:
+
+        1. ``SECRET_ENCRYPTION_KEY`` env var when set -- honored
+           byte-for-byte if exactly 32 bytes, else SHA-256-derived.
+           This is the operator's explicit override.
+        2. ``PYCHESTRATE_KEK_FILE_PATH`` env var when set -- the
+           KEK file the deploy provisions. SecretManager's
+           encryption key is derived from the KEK contents via
+           ``SHA-256(salt || kek)`` so a single secret (the KEK)
+           drives both the application KEK and SecretManager.
+        3. The hard-coded dev fallback, SHA-256-derived.
+
+        The salt domain-separates this derivation from any other
+        future use of the KEK (e.g. cookie-secret derivation) so
+        compromising one derived secret does not compromise the
+        others.
 
         Test seam: tests patch this helper to bypass the env-var
-        read.
+        / KEK-file read.
     """
     import hashlib
-    raw = os.environ.get(
-        _SECRET_ENCRYPTION_KEY_ENV_VAR,
-        _SECRET_ENCRYPTION_KEY_DEFAULT,
-    )
-    raw_bytes = raw.encode("utf-8")
-    if len(raw_bytes) == _SECRET_ENCRYPTION_KEY_REQUIRED_BYTES:
-        rtnval = raw_bytes
+    env_value = os.environ.get(_SECRET_ENCRYPTION_KEY_ENV_VAR)
+    if env_value is not None and len(env_value) > 0:
+        env_bytes = env_value.encode("utf-8")
+        if len(env_bytes) == _SECRET_ENCRYPTION_KEY_REQUIRED_BYTES:
+            rtnval = env_bytes
+            return rtnval
+        rtnval = hashlib.sha256(env_bytes).digest()
         return rtnval
-    rtnval = hashlib.sha256(raw_bytes).digest()
+
+    kek_file_path = os.environ.get(_KEK_FILE_PATH_ENV_VAR)
+    if kek_file_path is not None and len(kek_file_path) > 0:
+        try:
+            with open(kek_file_path, "rb") as kek_file:
+                kek_bytes = kek_file.read()
+        except OSError:
+            kek_bytes = None
+        if kek_bytes is not None and len(kek_bytes) > 0:
+            rtnval = hashlib.sha256(
+                _KEK_DERIVATION_SALT + kek_bytes
+            ).digest()
+            return rtnval
+
+    fallback_bytes = _SECRET_ENCRYPTION_KEY_DEFAULT.encode("utf-8")
+    rtnval = hashlib.sha256(fallback_bytes).digest()
     return rtnval
 
 
