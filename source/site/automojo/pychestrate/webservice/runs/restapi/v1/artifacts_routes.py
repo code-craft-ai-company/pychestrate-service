@@ -878,13 +878,6 @@ def register_artifacts_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{run_id}/artifacts/" + presign.LOCAL_UPLOAD_PATH_SEGMENT,
         methods=["PUT"],
     )(handle_local_upload)
-
-    _LOGGER.warning(
-        "pychestrate.runs.artifacts_routes.mtls_not_wired: the"
-        " result-upload endpoints require nginx mTLS but will reject"
-        " every request with 401 until SSL_CLIENT_S_DN_CN is"
-        " forwarded."
-    )
     return
 
 
