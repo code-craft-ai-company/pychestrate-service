@@ -536,12 +536,6 @@ def register_client_dispatch_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{client_id}/heartbeat", methods=["GET"],
     )(handle_client_heartbeat)
-
-    _LOGGER.warning(
-        "pychestrate.clients.dispatch_routes.mtls_not_wired: client"
-        " pull endpoints require nginx mTLS but will reject every"
-        " request with 401 until SSL_CLIENT_S_DN_CN is forwarded."
-    )
     return
 
 

@@ -1321,14 +1321,6 @@ def register_runs_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{run_id}/results/complete", methods=["POST"],
     )(handle_post_results_complete)
-
-    _LOGGER.warning(
-        "pychestrate.runs.routes.mtls_not_wired: ingest endpoints"
-        " (/dispatch-ack, /progress, /results/complete) require"
-        " nginx mTLS but nginx is not configured for client-cert"
-        " auth in PR p19c; these endpoints will reject every"
-        " request with 401 until SSL_CLIENT_S_DN_CN is forwarded."
-    )
     return
 
 
