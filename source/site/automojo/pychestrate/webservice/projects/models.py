@@ -15,6 +15,7 @@ __version__ = "1.0.0"
 import enum
 
 from sqlalchemy import (
+    BigInteger,
     Column,
     DateTime,
     Enum,
@@ -66,10 +67,24 @@ class Project(PychestratePhase1Base, SerializableModel):
     created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
     archived_at = Column(DateTime(timezone=True), nullable=True)
+    # Soft link to the legacy ``Project`` aggregate
+    # (``projects.proj_id`` BigInt) that every ``core/managers``
+    # feature manager FKs against. Not a cross-base SQLAlchemy
+    # ForeignKey -- the two models live on separate declarative
+    # bases -- so this is a plain indexed BigInt that the
+    # ``resolve_project`` helper uses to translate a slug/uuid into
+    # the legacy int id. Nullable: a slug-Project with no legacy
+    # counterpart simply leaves it unset. See
+    # ``specs/project-model-bridge.md``.
+    legacy_proj_id = Column(BigInteger, nullable=True)
 
     __table_args__ = (
         Index("ix_projects_projects_state", "state"),
         Index("ix_projects_projects_owning_group_id", "owning_group_id"),
+        UniqueConstraint(
+            "legacy_proj_id",
+            name="uq_projects_projects_legacy_proj_id",
+        ),
     )
 
 
