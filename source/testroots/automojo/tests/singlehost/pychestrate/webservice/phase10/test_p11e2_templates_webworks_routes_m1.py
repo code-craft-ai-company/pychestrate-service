@@ -20,7 +20,7 @@ __version__ = "1.0.0"
 
 import json
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, List, Optional
 
 from automojo import testbase
 from automojo.testbase.mocking import create_module_patch
@@ -40,51 +40,36 @@ from automojo.pychestrate.webservice.project_templates.restapi.v1 import (
     templates_routes,
 )
 
-
-class _FakeRequest:
-    def __init__(
-        self,
-        *,
-        path: str,
-        path_params: Optional[Dict[str, Any]] = None
-    ) -> None:
-        self.path: str = path
-        self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
-        return
+from automojo.tests.singlehost.pychestrate.webservice.shared.webworks_test_harness import (
+    make_fake_app,
+    make_fake_request,
+)
 
 
-class _FakeApp:
-    def __init__(self) -> None:
-        self.calls: List[Tuple[str, Tuple[str, ...], Callable]] = []
-        return
-
-    def attach_route(
-        self, path: str, methods: Optional[List[str]] = None
-    ) -> Callable:
-        resolved_methods = tuple(methods if methods is not None else ["GET"])
-
-        def decorator(func: Callable) -> Callable:
-            self.calls.append((path, resolved_methods, func))
-            rtnval = func
-            return rtnval
-
-        rtnval = decorator
-        return rtnval
+# ---------------------------------------------------------------------------
+# Local stubs -- only the bits the harness intentionally does not model.
+# ---------------------------------------------------------------------------
 
 
 class _FakeSummary:
+    """
+        Stand-in for a TemplateSummary the service layer returns.
+        Only the attributes ``_summary_to_dict`` reads are
+        modelled.
+    """
+
     def __init__(
-        self,
-        *,
-        template_id: str,
-        template_version: str = "1.0.0",
-        display_name: str = "Display",
-        description: str = "Desc",
-        variable_count: int = 0,
-        tag_count: int = 0,
-        notification_rule_count: int = 0,
-        recommended_roles: Optional[List[str]] = None,
-    ) -> None:
+            self,
+            *,
+            template_id: str,
+            template_version: str = "1.0.0",
+            display_name: str = "Display",
+            description: str = "Desc",
+            variable_count: int = 0,
+            tag_count: int = 0,
+            notification_rule_count: int = 0,
+            recommended_roles: Optional[List[str]] = None
+        ) -> None:
         self.template_id: str = template_id
         self.template_version: str = template_version
         self.display_name: str = display_name
@@ -92,17 +77,36 @@ class _FakeSummary:
         self.variable_count: int = variable_count
         self.tag_count: int = tag_count
         self.notification_rule_count: int = notification_rule_count
-        self.recommended_roles: List[str] = recommended_roles if recommended_roles is not None else []
+        if recommended_roles is not None:
+            self.recommended_roles: List[str] = recommended_roles
+        else:
+            self.recommended_roles = []
         return
 
 
 def _decode_body(response: Any) -> Any:
+    """
+        Decode a JSONResponse body to a Python object.
+
+        :param response: The response under test.
+
+        :returns: The decoded JSON payload.
+    """
     body_text = response.body.decode("utf-8")
     rtnval = json.loads(body_text)
     return rtnval
 
 
 def _raises(exc: BaseException) -> Callable[..., Any]:
+    """
+        Build a side-effect callable that raises the supplied
+        exception when invoked.
+
+        :param exc: The exception instance to raise.
+
+        :returns: A callable that raises ``exc`` on every call.
+    """
+
     def side(*args: Any, **kwargs: Any) -> Any:
         raise exc
 
@@ -121,17 +125,17 @@ def test_register_templates_routes_attaches_two_routes():
     **Property: register_templates_routes attaches the same two
     method+path pairs the flask_restx controller exposed.**
     """
-    app = _FakeApp()
+    app = make_fake_app()
     templates_routes.register_templates_routes(
         app=app, version_prefix="/api/v1"
     )
 
-    expected_pairs = (
+    expected_pairs = [
         ("/api/v1/project-templates", ("GET",)),
         ("/api/v1/project-templates/{template_id}", ("GET",)),
-    )
-    actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
-    testbase.assert_equal(actual_pairs, expected_pairs)
+    ]
+    actual_pairs = app.route_pairs()
+    testbase.assert_equal(tuple(actual_pairs), tuple(expected_pairs))
     return
 
 
@@ -160,7 +164,9 @@ def test_handle_list_returns_serialized_template_summaries():
     try:
         mock_list = list_patch.activate()
         mock_list.configure(return_value=summaries)
-        request = _FakeRequest(path="/api/v1/project-templates")
+        request = make_fake_request(
+            method="GET", path="/api/v1/project-templates"
+        )
         response = templates_routes.handle_list_templates(request)
     finally:
         list_patch.deactivate()
@@ -169,7 +175,9 @@ def test_handle_list_returns_serialized_template_summaries():
     body = _decode_body(response)
     testbase.assert_equal(len(body), 2)
     testbase.assert_equal(body[0]["template_id"], "tmpl-a")
-    testbase.assert_equal(body[0]["recommended_roles"], ["admin", "developer"])
+    testbase.assert_equal(
+        body[0]["recommended_roles"], ["admin", "developer"]
+    )
     return
 
 
@@ -191,7 +199,8 @@ def test_handle_read_returns_summary_on_match():
     try:
         mock_read = read_patch.activate()
         mock_read.configure(return_value=summary)
-        request = _FakeRequest(
+        request = make_fake_request(
+            method="GET",
             path="/api/v1/project-templates/tmpl-a",
             path_params={"template_id": "tmpl-a"},
         )
@@ -220,7 +229,8 @@ def test_handle_read_returns_404_with_template_id_extension():
         mock_read.configure(
             side_effect=_raises(TemplateNotRegisteredError("missing"))
         )
-        request = _FakeRequest(
+        request = make_fake_request(
+            method="GET",
             path="/api/v1/project-templates/missing",
             path_params={"template_id": "missing"},
         )
