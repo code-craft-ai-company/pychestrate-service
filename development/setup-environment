@@ -339,54 +339,54 @@ def setup_environment_main():
     print("")
     print("")
     print("---------------------------- VIRTUAL ENVIRONMENT CREATION -----------------------------")
-    if not os.path.exists(INITIALIZED_FILE):
+    # The activate-script presence gates the one-time ``poetry env
+    # use`` invocation that creates ``.venv/``. The ``poetry install``
+    # below runs UNCONDITIONALLY once the venv exists -- it is the
+    # only way to pick up new git-source dep commits or new
+    # dependencies that landed in ``poetry.lock`` after the venv was
+    # first created. Past deploys silently no-op'd ``poetry install``
+    # whenever ``.cache/initialized`` existed, which left stale venvs
+    # in production for days after a lockfile change.
+    prev_dir = os.curdir
+    os.chdir(REPOSITORY_DIR)
 
-        prev_dir = os.curdir
+    if not os.path.exists(ACTIVATE_SCRIPT):
 
-        os.chdir(REPOSITORY_DIR)
+        command = f"poetry env use {PYTHON_VERSION}"
+        if platform.system() == "Windows":
+            command = f"poetry env use python"
 
-        if not os.path.exists(ACTIVATE_SCRIPT):
-            
-            command = f"poetry env use {PYTHON_VERSION}"
-            if platform.system() == "Windows":
-                command = f"poetry env use python"
+        status = run_cmd(command)
+        if status != 0:
+            errmsg_lines = [
+                "Error attempting to select the python version for our virtual environment",
+                f"    COMMAND: {command}"
+            ]
+            errmsg = os.linesep.join(errmsg_lines)
+            print(errmsg, file=sys.stderr)
+            exit(1)
 
-            status = run_cmd(command)
-            if status != 0:
-                errmsg_lines = [
-                    "Error attempting to select the python version for our virtual environment",
-                    f"    COMMAND: {command}"
-                ]
-                errmsg = os.linesep.join(errmsg_lines)
-                print(errmsg, file=sys.stderr)
-                exit(1)
+    command = f"poetry install --no-root {EXTRA_POETRY_SETUP_FLAGS}"
+    status = run_cmd(command)
+    if status != 0:
+        errmsg_lines = [
+            "Error attempting install the poetry virtual environment depedencies.",
+            f"    COMMAND: {command}"
+        ]
+        errmsg = os.linesep.join(errmsg_lines)
+        print(errmsg, file=sys.stderr)
+        exit(1)
 
-            command = f"poetry install --no-root {EXTRA_POETRY_SETUP_FLAGS}"
-            status = run_cmd(command)
-            if status != 0:
-                errmsg_lines = [
-                    "Error attempting install the poetry virtual environment depedencies.",
-                    f"    COMMAND: {command}"
-                ]
-                errmsg = os.linesep.join(errmsg_lines)
-                print(errmsg, file=sys.stderr)
-                exit(1)
-        
-        os.chdir(prev_dir)
+    os.chdir(prev_dir)
 
-        if platform.system() != "Windows":
-            customize_activation_script(ACTIVATE_SCRIPT, ENV_FILE, CUSTOM_CLI_ALIAS, CUSTOM_CLI_ENTRY_SCRIPT)
-        else:
-            customize_activation_script_windows(ACTIVATE_SCRIPT, ENV_FILE, CUSTOM_CLI_ALIAS, CUSTOM_CLI_ENTRY_SCRIPT)
-
-        with open(INITIALIZED_FILE, 'w+') as initf:
-            initf.write("TRUE")
-            initf.write(LNSEP)
-
+    if platform.system() != "Windows":
+        customize_activation_script(ACTIVATE_SCRIPT, ENV_FILE, CUSTOM_CLI_ALIAS, CUSTOM_CLI_ENTRY_SCRIPT)
     else:
-        print("")
-        print("Virtual environment already intialized...")
-        print("")
+        customize_activation_script_windows(ACTIVATE_SCRIPT, ENV_FILE, CUSTOM_CLI_ALIAS, CUSTOM_CLI_ENTRY_SCRIPT)
+
+    with open(INITIALIZED_FILE, 'w+') as initf:
+        initf.write("TRUE")
+        initf.write(LNSEP)
 
     print("---------------------------------------------------------------------------------------")
 
