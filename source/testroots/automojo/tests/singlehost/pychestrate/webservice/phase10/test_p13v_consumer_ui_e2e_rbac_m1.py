@@ -94,7 +94,7 @@ def test_viewer_can_login_and_renders_resources_dashboard():
     # alias path -- in either case it must NOT redirect to
     # /login.
     location = response.header("Location") or ""
-    redirected_to_login = location.endswith("/login")
+    redirected_to_login = location.split("?")[0].endswith("/login")
     testbase.assert_equal(redirected_to_login, False)
     return
 
@@ -130,7 +130,7 @@ def test_viewer_denied_from_resources_create_form():
     # redirect to ``/login``, which would mean the
     # auth-resolver decided we were anonymous.
     testbase.assert_equal(
-        location.endswith("/login"), False
+        location.split("?")[0].endswith("/login"), False
     )
     testbase.assert_equal(
         location.startswith("/resources"), True
@@ -275,6 +275,6 @@ def test_anonymous_resources_create_redirects_to_login_not_dashboard():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location") or ""
     testbase.assert_equal(
-        location.endswith("/login"), True
+        location.split("?")[0].endswith("/login"), True
     )
     return

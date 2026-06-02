@@ -135,7 +135,7 @@ def test_config_dashboard_redirects_anonymous_to_login():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/login"),
+        location is not None and location.split("?")[0].endswith("/login"),
         True,
     )
     return
@@ -155,7 +155,7 @@ def test_resources_dashboard_redirects_anonymous_to_login():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/login"),
+        location is not None and location.split("?")[0].endswith("/login"),
         True,
     )
     return
@@ -174,7 +174,7 @@ def test_projects_dashboard_redirects_anonymous_to_login():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/login"),
+        location is not None and location.split("?")[0].endswith("/login"),
         True,
     )
     return
@@ -195,7 +195,7 @@ def test_projects_alternate_dashboard_path_redirects_anonymous():
     testbase.assert_equal(response.status_code, 302)
     location = response.header("Location")
     testbase.assert_equal(
-        location is not None and location.endswith("/login"),
+        location is not None and location.split("?")[0].endswith("/login"),
         True,
     )
     return

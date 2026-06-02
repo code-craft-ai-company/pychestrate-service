@@ -109,7 +109,9 @@ from automojo.pychestrate.webservice.webinterface.foundation.templating import (
     set_default_environment,
 )
 from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
+    get_registry_snapshot,
     install_url_for_global,
+    register_endpoint,
 )
 from automojo.pychestrate.webservice.webinterface.site_shell.shell_document import (
     get_shell_template_search_path,
@@ -148,6 +150,13 @@ _APP_HANDLE: Optional[TestAppHandle] = None
 # lets ``ensure_app`` re-assert the published globals on every call so
 # the authenticated E2E flows are order-independent.
 _RUNTIME_GLOBALS_SNAPSHOT: Optional[Dict[str, Any]] = None
+
+# Snapshot of the url_for endpoint registry captured after the one-time
+# app build. The infra-port suite's ``_reset_global_state`` clears the
+# registry (and the default jinja environment) in teardown, so without a
+# restore a later test that builds a URL or renders the site shell fails
+# with a KeyError / TemplateNotFound. ``ensure_app`` restores both.
+_URL_FOR_REGISTRY_SNAPSHOT: Optional[Dict[str, str]] = None
 
 
 def _write_test_kek_file() -> str:
@@ -288,12 +297,29 @@ def _capture_runtime_globals_snapshot() -> None:
         bootstrap so :func:`ensure_app` can re-assert them on later
         calls even after another test nulled them in teardown.
     """
-    global _RUNTIME_GLOBALS_SNAPSHOT
+    global _RUNTIME_GLOBALS_SNAPSHOT, _URL_FOR_REGISTRY_SNAPSHOT
     _RUNTIME_GLOBALS_SNAPSHOT = {
         "DATABASE_ENGINE": SITE_SHARED_GLOBALS.DATABASE_ENGINE,
         "DATABASE_SESSION_FACTORY": SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY,
         "UI_COOKIE_SECRET": SITE_SHARED_GLOBALS.UI_COOKIE_SECRET,
     }
+    _URL_FOR_REGISTRY_SNAPSHOT = get_registry_snapshot()
+    return
+
+
+def _reassert_url_for_registry() -> None:
+    """
+        Re-populate the url_for endpoint registry from the snapshot if
+        a prior test's teardown cleared it, so template ``url_for``
+        lookups keep resolving.
+    """
+    if _URL_FOR_REGISTRY_SNAPSHOT is None:
+        return
+    current = get_registry_snapshot()
+    if len(current) >= len(_URL_FOR_REGISTRY_SNAPSHOT):
+        return
+    for endpoint, pattern in _URL_FOR_REGISTRY_SNAPSHOT.items():
+        register_endpoint(endpoint=endpoint, pattern=pattern)
     return
 
 
@@ -306,19 +332,31 @@ def _reassert_runtime_globals() -> None:
     """
     if _RUNTIME_GLOBALS_SNAPSHOT is None:
         return
-    if SITE_SHARED_GLOBALS.DATABASE_ENGINE is None:
-        SITE_SHARED_GLOBALS.DATABASE_ENGINE = (
-            _RUNTIME_GLOBALS_SNAPSHOT["DATABASE_ENGINE"]
+    snap = _RUNTIME_GLOBALS_SNAPSHOT
+
+    # Self-healing: capture the latest VALID value (so the snapshot
+    # tracks the StaticPool engine the ``ensure_shared_in_memory_db_pool``
+    # swap installs after the initial bootstrap), and restore only when
+    # a prior test's teardown cleared the live global.
+    if SITE_SHARED_GLOBALS.DATABASE_ENGINE is not None:
+        snap["DATABASE_ENGINE"] = SITE_SHARED_GLOBALS.DATABASE_ENGINE
+    elif snap["DATABASE_ENGINE"] is not None:
+        SITE_SHARED_GLOBALS.DATABASE_ENGINE = snap["DATABASE_ENGINE"]
+
+    if SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY is not None:
+        snap["DATABASE_SESSION_FACTORY"] = (
+            SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
         )
-    if SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY is None:
+    elif snap["DATABASE_SESSION_FACTORY"] is not None:
         SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = (
-            _RUNTIME_GLOBALS_SNAPSHOT["DATABASE_SESSION_FACTORY"]
+            snap["DATABASE_SESSION_FACTORY"]
         )
+
     secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
-    if secret is None or len(secret) < 32:
-        SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = (
-            _RUNTIME_GLOBALS_SNAPSHOT["UI_COOKIE_SECRET"]
-        )
+    if secret is not None and len(secret) >= 32:
+        snap["UI_COOKIE_SECRET"] = secret
+    elif snap["UI_COOKIE_SECRET"] is not None:
+        SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = snap["UI_COOKIE_SECRET"]
     return
 
 
@@ -329,13 +367,18 @@ def ensure_app() -> TestAppHandle:
         calls. Idempotent across tests + across test modules.
 
         On every call the bootstrap-published runtime globals are
-        re-asserted onto ``SITE_SHARED_GLOBALS`` so a prior test that
-        nulled them in teardown cannot leave a later authenticated
-        flow with an unconfigured session secret / session factory.
+        re-asserted onto ``SITE_SHARED_GLOBALS``, the default jinja
+        environment is re-installed, and the url_for registry is
+        restored -- so a prior test that nulled any of those in
+        teardown cannot leave a later authenticated flow with an
+        unconfigured session secret / session factory / templating
+        environment.
     """
     global _APP_HANDLE
     if _APP_HANDLE is not None:
         _reassert_runtime_globals()
+        _install_test_templating()
+        _reassert_url_for_registry()
         return _APP_HANDLE
     kek_path = _write_test_kek_file()
     _bootstrap_runtime_for_tests(kek_file_path=kek_path)
