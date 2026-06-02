@@ -111,6 +111,9 @@ from automojo.pychestrate.webservice.webinterface.foundation.templating import (
 from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
+from automojo.pychestrate.webservice.webinterface.site_shell.shell_document import (
+    get_shell_template_search_path,
+)
 from automojo.webworks.wsgi.application import create_wsgi_application
 
 
@@ -135,6 +138,16 @@ class TestAppHandle:
 
 
 _APP_HANDLE: Optional[TestAppHandle] = None
+
+# Snapshot of the runtime globals published during the one-time
+# bootstrap. Some tests (e.g. runtime-bootstrap / infra-port suites)
+# intentionally null ``SITE_SHARED_GLOBALS`` entries in their teardown;
+# because ``ensure_app`` caches the app singleton and never re-publishes,
+# a later test that acquires the cached app would otherwise find the
+# globals cleared and 500 on any session-reading handler. The snapshot
+# lets ``ensure_app`` re-assert the published globals on every call so
+# the authenticated E2E flows are order-independent.
+_RUNTIME_GLOBALS_SNAPSHOT: Optional[Dict[str, Any]] = None
 
 
 def _write_test_kek_file() -> str:
@@ -185,6 +198,13 @@ def _install_test_templating() -> None:
     )
     if len(template_paths) == 0:
         template_paths = [SITE_DIRECTORIES.DIR_BLUEPRINTS]
+    # Site-shell template directory -- carries the shell document host
+    # page (``site_shell/shell_document.html``) that authenticated
+    # views render through. Production's ``install_web_ui_templating``
+    # appends this; mirror it here so authenticated dashboards resolve
+    # the shell template instead of raising TemplateNotFound (500).
+    shell_template_path = get_shell_template_search_path()
+    template_paths = list(template_paths) + [shell_template_path]
     environment = build_jinja_environment(
         template_search_paths=template_paths,
     )
@@ -262,14 +282,60 @@ def _build_consumer_ui_test_app() -> Any:
     return rtnval
 
 
+def _capture_runtime_globals_snapshot() -> None:
+    """
+        Record the runtime globals published by the one-time
+        bootstrap so :func:`ensure_app` can re-assert them on later
+        calls even after another test nulled them in teardown.
+    """
+    global _RUNTIME_GLOBALS_SNAPSHOT
+    _RUNTIME_GLOBALS_SNAPSHOT = {
+        "DATABASE_ENGINE": SITE_SHARED_GLOBALS.DATABASE_ENGINE,
+        "DATABASE_SESSION_FACTORY": SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY,
+        "UI_COOKIE_SECRET": SITE_SHARED_GLOBALS.UI_COOKIE_SECRET,
+    }
+    return
+
+
+def _reassert_runtime_globals() -> None:
+    """
+        Re-publish the snapshotted runtime globals onto
+        ``SITE_SHARED_GLOBALS``. Restores any entry a prior test's
+        teardown cleared so the cached app's session-reading handlers
+        keep working regardless of test execution order.
+    """
+    if _RUNTIME_GLOBALS_SNAPSHOT is None:
+        return
+    if SITE_SHARED_GLOBALS.DATABASE_ENGINE is None:
+        SITE_SHARED_GLOBALS.DATABASE_ENGINE = (
+            _RUNTIME_GLOBALS_SNAPSHOT["DATABASE_ENGINE"]
+        )
+    if SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY is None:
+        SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = (
+            _RUNTIME_GLOBALS_SNAPSHOT["DATABASE_SESSION_FACTORY"]
+        )
+    secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
+    if secret is None or len(secret) < 32:
+        SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = (
+            _RUNTIME_GLOBALS_SNAPSHOT["UI_COOKIE_SECRET"]
+        )
+    return
+
+
 def ensure_app() -> TestAppHandle:
     """
         Lazy module-level singleton: bootstrap the runtime + build
         the WSGI app once, return the cached handle on subsequent
         calls. Idempotent across tests + across test modules.
+
+        On every call the bootstrap-published runtime globals are
+        re-asserted onto ``SITE_SHARED_GLOBALS`` so a prior test that
+        nulled them in teardown cannot leave a later authenticated
+        flow with an unconfigured session secret / session factory.
     """
     global _APP_HANDLE
     if _APP_HANDLE is not None:
+        _reassert_runtime_globals()
         return _APP_HANDLE
     kek_path = _write_test_kek_file()
     _bootstrap_runtime_for_tests(kek_file_path=kek_path)
@@ -277,6 +343,7 @@ def ensure_app() -> TestAppHandle:
     _APP_HANDLE = TestAppHandle(
         wsgi_app=wsgi_app, kek_file_path=kek_path
     )
+    _capture_runtime_globals_snapshot()
     return _APP_HANDLE
 
 
