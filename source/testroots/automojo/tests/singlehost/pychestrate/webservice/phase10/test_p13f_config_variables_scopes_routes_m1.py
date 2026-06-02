@@ -1484,6 +1484,14 @@ def test_resolve_secret_encryption_key_uses_default_when_env_unset():
     saved = os.environ.pop(
         config_routes_scopes._SECRET_ENCRYPTION_KEY_ENV_VAR, None
     )
+    # The dev-default path is priority 3 in the resolver -- it is only
+    # reached when neither SECRET_ENCRYPTION_KEY nor the priority-2
+    # PYCHESTRATE_KEK_FILE_PATH is set. The shared E2E harness exports a
+    # KEK file path, so isolate it here too (and restore it after) to
+    # actually exercise the dev fallback.
+    saved_kek = os.environ.pop(
+        config_routes_scopes._KEK_FILE_PATH_ENV_VAR, None
+    )
     try:
         rtnval = config_routes_scopes._resolve_secret_encryption_key()
         testbase.assert_equal(rtnval, b"default-key-for-dev")
@@ -1492,6 +1500,10 @@ def test_resolve_secret_encryption_key_uses_default_when_env_unset():
             os.environ[
                 config_routes_scopes._SECRET_ENCRYPTION_KEY_ENV_VAR
             ] = saved
+        if saved_kek is not None:
+            os.environ[
+                config_routes_scopes._KEK_FILE_PATH_ENV_VAR
+            ] = saved_kek
     return
 
 
