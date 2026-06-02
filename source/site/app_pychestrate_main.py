@@ -63,6 +63,10 @@ from automojo.pychestrate.webservice.embed.restapi.v1.embed_routes import (
 from automojo.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     register_system_health_routes,
 )
+from automojo.pychestrate.webservice.mcp.service_endpoint import (
+    MCP_MIDDLEWARE_PREFIX,
+    register_mcp_service_routes,
+)
 from automojo.pychestrate.webservice.pods.restapi.v1.pods_routes import (
     register_pods_routes,
 )
@@ -472,6 +476,9 @@ def register_service_extensions() -> None:
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
     register_system_health_routes(app=app, version_prefix="/api/v1")
+    # MCP server endpoint for agents (fixed path /mcp/1/service, not
+    # under the versioned REST prefix).
+    register_mcp_service_routes(app=app)
     register_embed_routes(app=app, version_prefix="/api/v1")
     register_channels_routes(app=app, version_prefix="/api/v1")
     register_auth_routes(app=app, version_prefix="/api/v1")
@@ -578,7 +585,10 @@ def pychestrate_website_main():
 
     app.startup()
 
-    install_pychestrate_session_middleware(app=app)
+    install_pychestrate_session_middleware(
+        app=app,
+        path_prefixes=("/api/v1/", MCP_MIDDLEWARE_PREFIX),
+    )
 
     # Gate middleware installs LAST so it is the outermost wrapper:
     # webworks pipeline ``position="start"`` puts each new entry at
@@ -646,7 +656,10 @@ def build_wsgi_application_for_production():
 
     register_service_extensions()
     app.startup()
-    install_pychestrate_session_middleware(app=app)
+    install_pychestrate_session_middleware(
+        app=app,
+        path_prefixes=("/api/v1/", MCP_MIDDLEWARE_PREFIX),
+    )
     install_pychestrate_setup_gate_middleware(
         app=app,
         is_complete=lambda: _is_setup_complete(

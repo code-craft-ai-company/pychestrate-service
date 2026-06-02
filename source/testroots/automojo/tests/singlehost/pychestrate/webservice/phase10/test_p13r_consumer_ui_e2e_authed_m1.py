@@ -194,7 +194,7 @@ def test_authenticated_dashboard_renders_for_logged_in_user():
     # the route table fires. Either way we must NOT see a
     # redirect to /login.
     location = response.header("Location") or ""
-    redirected_to_login = location.endswith("/login")
+    redirected_to_login = location.split("?")[0].endswith("/login")
     testbase.assert_equal(redirected_to_login, False)
 
     # Follow any internal redirect to /admin/dashboard.
@@ -257,7 +257,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     is_redirect = logout_response.status_code in (302, 303)
     testbase.assert_equal(is_redirect, True)
     location = logout_response.header("Location") or ""
-    redirected_to_login = location.endswith("/login")
+    redirected_to_login = location.split("?")[0].endswith("/login")
     testbase.assert_equal(redirected_to_login, True)
 
     new_cookies = logout_response.collect_set_cookies()
@@ -276,7 +276,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     )
     testbase.assert_equal(is_redirect_after_logout, True)
     testbase.assert_equal(
-        (next_response.header("Location") or "").endswith(
+        (next_response.header("Location") or "").split("?")[0].endswith(
             "/login"
         ),
         True,
