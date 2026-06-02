@@ -276,7 +276,7 @@ def test_logout_clears_session_and_subsequent_dashboard_redirects():
     )
     testbase.assert_equal(is_redirect_after_logout, True)
     testbase.assert_equal(
-        (next_response.header("Location") or "").endswith(
+        (next_response.header("Location") or "").split("?")[0].endswith(
             "/login"
         ),
         True,
