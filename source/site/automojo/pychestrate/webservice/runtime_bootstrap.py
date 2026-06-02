@@ -121,6 +121,9 @@ from automojo.pychestrate.webservice.pychestrate_variables import (
 from automojo.pychestrate.webservice.persistence.schema import (
     PychestratePhase1Base,
 )
+from automojo.pychestrate.core.orm import (
+    PychestrateModelBase as PychestrateLegacyCoreBase,
+)
 from automojo.pychestrate.webservice.secrets.kek_loader import KekHandle
 from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 
@@ -658,6 +661,11 @@ def _maybe_create_schema(
         raise ConfigurationError(err_msg)
 
     PychestratePhase1Base.metadata.create_all(engine)
+    # The consumer web UI (projects / resources dashboards etc.) is served
+    # by the legacy "core ORM + managers" stack, whose tables live on a
+    # separate declarative base. Auto-create those too so the dashboards
+    # do not 500 with "no such table: projects" on a fresh dev/staging DB.
+    PychestrateLegacyCoreBase.metadata.create_all(engine)
     _module_logger.info(
         "pychestrate.runtime_bootstrap.schema_created environment=%s",
         config.runtime_environment,
