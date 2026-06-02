@@ -45,6 +45,7 @@ import base64
 import hashlib
 import hmac
 import json
+import os
 
 from typing import Any, Dict, Optional
 
@@ -52,6 +53,37 @@ from typing import Any, Dict, Optional
 COOKIE_NAME: str = "pychestrate_ui_session"
 
 _SIGNATURE_SEPARATOR: str = "."
+
+# Runtime environments that run over plain HTTP (behind a loopback
+# reverse proxy without TLS termination at the app), where a ``Secure``
+# session cookie would never be sent back by the browser and would
+# silently break the login round-trip.
+_HTTP_RUNTIME_ENVIRONMENTS = ("development", "staging", "testing")
+
+_RUNTIME_ENVIRONMENT_ENV_VAR: str = "PYCHESTRATE_RUNTIME_ENVIRONMENT"
+
+
+def _default_secure_cookie_flag() -> bool:
+    """
+        Resolve the default ``Secure`` flag for the session cookie from
+        the runtime environment.
+
+        Production deployments terminate TLS and serve over HTTPS, so the
+        cookie is marked ``Secure``. The development / staging / testing
+        deployments run over plain HTTP, where a ``Secure`` cookie is
+        never returned by the browser -- breaking authentication. For
+        those environments the flag is disabled. Any unrecognized /
+        unset environment fails safe to ``Secure``.
+
+        :returns: ``True`` to set ``Secure``; ``False`` otherwise.
+    """
+    raw = os.environ.get(_RUNTIME_ENVIRONMENT_ENV_VAR, "")
+    environment = raw.strip().lower()
+    if environment in _HTTP_RUNTIME_ENVIRONMENTS:
+        rtnval = False
+        return rtnval
+    rtnval = True
+    return rtnval
 
 
 def sign_session_payload(
@@ -197,7 +229,7 @@ def write_session_to_response(
         secret: bytes,
         cookie_name: str = COOKIE_NAME,
         max_age_seconds: Optional[int] = None,
-        secure: bool = True,
+        secure: Optional[bool] = None,
         http_only: bool = True,
         same_site: str = "Lax",
         path: str = "/"
@@ -207,26 +239,40 @@ def write_session_to_response(
         Defaults to ``Secure`` + ``HttpOnly`` + ``SameSite=Lax``
         per OWASP guidance.
 
+        When ``secure`` is ``None`` (the default) the ``Secure`` flag
+        is resolved from the runtime environment via
+        :func:`_default_secure_cookie_flag`: on in production, off for
+        the development / staging / testing deployments that run over
+        plain HTTP behind a loopback proxy -- a ``Secure`` cookie is
+        never sent back over HTTP, which silently breaks the login
+        round-trip. Resolution fails safe to ``Secure`` for any
+        unrecognized environment.
+
         :param response: Webworks Response.
         :param payload: Dict to sign + store.
         :param secret: HMAC secret bytes.
         :param cookie_name: Cookie name.
         :param max_age_seconds: Cookie ``Max-Age`` (None = session
                                 cookie that dies with the browser).
-        :param secure: Set the ``Secure`` flag.
+        :param secure: Set the ``Secure`` flag. ``None`` resolves from
+                       the runtime environment.
         :param http_only: Set the ``HttpOnly`` flag.
         :param same_site: ``Strict`` | ``Lax`` | ``None``.
         :param path: Cookie scope path.
 
         :returns: None.
     """
+    resolved_secure = secure
+    if resolved_secure is None:
+        resolved_secure = _default_secure_cookie_flag()
+
     cookie_value = sign_session_payload(payload=payload, secret=secret)
     response.set_cookie(
         name=cookie_name,
         value=cookie_value,
         max_age=max_age_seconds,
         path=path,
-        secure=secure,
+        secure=resolved_secure,
         httponly=http_only,
         samesite=same_site,
     )
