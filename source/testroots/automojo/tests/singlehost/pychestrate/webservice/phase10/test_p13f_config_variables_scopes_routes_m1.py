@@ -1476,10 +1476,12 @@ def test_handle_scope_delete_manager_error_flashes_error():
 def test_resolve_secret_encryption_key_uses_default_when_env_unset():
     """
     **Feature: D3 secret-key resolver T3.13**
-    **Property: With no SECRET_ENCRYPTION_KEY env var, the
-    resolver returns the documented default-key-for-dev bytes.
-    Mirrors the legacy flask handler's fallback.**
+    **Property: With no SECRET_ENCRYPTION_KEY env var and no KEK
+    file, the resolver returns a stable 32-byte key SHA-256-
+    derived from the documented dev-default string -- never the
+    raw, sub-32-byte literal (an unsafe AES key length).**
     """
+    import hashlib
     import os
     saved = os.environ.pop(
         config_routes_scopes._SECRET_ENCRYPTION_KEY_ENV_VAR, None
@@ -1494,7 +1496,14 @@ def test_resolve_secret_encryption_key_uses_default_when_env_unset():
     )
     try:
         rtnval = config_routes_scopes._resolve_secret_encryption_key()
-        testbase.assert_equal(rtnval, b"default-key-for-dev")
+        default_literal = config_routes_scopes._SECRET_ENCRYPTION_KEY_DEFAULT
+        expected_key = hashlib.sha256(
+            default_literal.encode("utf-8")
+        ).digest()
+        testbase.assert_equal(rtnval, expected_key)
+        # The derived key must be a valid 32-byte AES key, not the
+        # shorter raw literal the legacy handler used to return.
+        testbase.assert_equal(len(rtnval), 32)
     finally:
         if saved is not None:
             os.environ[
@@ -1510,19 +1519,35 @@ def test_resolve_secret_encryption_key_uses_default_when_env_unset():
 def test_resolve_secret_encryption_key_reads_env_when_set():
     """
     **Feature: D3 secret-key resolver T3.13**
-    **Property: With SECRET_ENCRYPTION_KEY set, the resolver
-    returns its UTF-8 bytes.**
+    **Property: SECRET_ENCRYPTION_KEY is honored byte-for-byte
+    when it is exactly 32 bytes (a valid AES key); any other
+    length is SHA-256-derived to a stable 32-byte key. Either
+    way the operator-supplied value drives the result.**
     """
+    import hashlib
     import os
     env_key = config_routes_scopes._SECRET_ENCRYPTION_KEY_ENV_VAR
     saved = os.environ.get(env_key, None)
-    os.environ[env_key] = "operator-supplied-key-1234"
     try:
-        rtnval = config_routes_scopes._resolve_secret_encryption_key()
-        testbase.assert_equal(rtnval, b"operator-supplied-key-1234")
+        # Branch 1: an exactly-32-byte value is used verbatim.
+        exact_32_byte_key = "0123456789abcdef0123456789abcdef"
+        os.environ[env_key] = exact_32_byte_key
+        rtnval_raw = config_routes_scopes._resolve_secret_encryption_key()
+        testbase.assert_equal(rtnval_raw, exact_32_byte_key.encode("utf-8"))
+
+        # Branch 2: any other length is SHA-256-derived (so a short
+        # operator string still yields a valid 32-byte AES key).
+        operator_key = "operator-supplied-key-1234"
+        os.environ[env_key] = operator_key
+        rtnval_derived = config_routes_scopes._resolve_secret_encryption_key()
+        expected_derived = hashlib.sha256(
+            operator_key.encode("utf-8")
+        ).digest()
+        testbase.assert_equal(rtnval_derived, expected_derived)
+        testbase.assert_equal(len(rtnval_derived), 32)
     finally:
         if saved is None:
-            del os.environ[env_key]
+            os.environ.pop(env_key, None)
         else:
             os.environ[env_key] = saved
     return

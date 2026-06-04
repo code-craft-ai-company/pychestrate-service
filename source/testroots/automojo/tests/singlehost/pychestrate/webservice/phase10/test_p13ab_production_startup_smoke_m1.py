@@ -179,8 +179,11 @@ def test_production_startup_completes_against_alembic_migrated_db():
     REST + UI registrar imports cleanly, every Phase-1..6
     builtin extension registers cleanly, the lifecycle
     advances to ``INFRASTRUCTURE_READY``, and the resulting
-    WSGI app answers a probe to ``GET /`` with a 2xx
-    response.
+    WSGI app answers a probe to ``GET /`` cleanly. The root is
+    auth-gated, so an anonymous probe is redirected to the login
+    page (3xx) rather than served a body (2xx) -- either way the
+    pipeline answered without erroring, which is what this smoke
+    asserts.
 
     Runs the bootstrap in a subprocess so the production
     persona singleton stays isolated from the rest of the
@@ -297,14 +300,23 @@ def test_production_startup_completes_against_alembic_migrated_db():
     if probe_ok is False:
         raise AssertionError(err_msg)
 
-    # The hello-world handler returns a 200 with a small HTML
-    # body. The status line should start with ``200``.
+    # The root is auth-gated: an anonymous probe is answered with a
+    # redirect to the login page (3xx), and a served page would be a
+    # 2xx. Either is a clean answer from the WSGI pipeline -- a 4xx or
+    # 5xx (or a non-numeric/empty status) is the failure signal this
+    # smoke guards against.
     status_line = ""
     for line in startup_proc.stdout.splitlines():
         if line.startswith("STATUS: "):
             status_line = line[len("STATUS: "):]
             break
-    if not status_line.startswith("200"):
+    status_code = -1
+    status_fields = status_line.split()
+    if len(status_fields) > 0:
+        status_token = status_fields[0]
+        if status_token.isdigit():
+            status_code = int(status_token)
+    if status_code < 200 or status_code >= 400:
         err_msg_lines.append("FOUND_STATUS: {}".format(status_line))
         raise AssertionError(os.linesep.join(err_msg_lines))
 

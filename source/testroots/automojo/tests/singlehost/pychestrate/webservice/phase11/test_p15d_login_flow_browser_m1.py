@@ -99,7 +99,12 @@ def test_login_form_submission_lands_on_post_login_page(browser: Browser):
         page.fill("input[name='username']", login_name)
         page.fill("input[name='password']", password)
         page.click("button[type='submit']")
-        page.wait_for_load_state("networkidle")
+        # The post-login destination is the site shell. Wait for its
+        # host element rather than networkidle -- the authenticated
+        # shell polls its navigation/permissions endpoints on an
+        # interval, so the network is never idle and a networkidle
+        # wait would burn its full timeout on every run.
+        page.wait_for_selector("pyc-site-shell", timeout=NAVIGATION_TIMEOUT_MS)
 
         landed_url = page.url
         # Direct check: after login the URL bar must be on the

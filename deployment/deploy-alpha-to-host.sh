@@ -225,6 +225,22 @@ echo "    OK"
 echo
 
 # ---------------------------------------------------------------------------
+# Step 1a -- build the consumer-UI bundles locally (before the rsync)
+#
+# The frontend ships as native ES modules; build-frontend.sh pre-bundles
+# them with esbuild so a deployed page loads a handful of files instead of
+# ~270 (which stalls/flakes on a single-worker server). The bundle is built
+# HERE -- the dev machine has Node/npx -- and the rsync below carries the
+# built bundles up, so the target host stays Node-free. The shell document
+# references the mj-* library bundle, so this step is required, not optional;
+# a build failure aborts the deploy (set -e) rather than shipping a template
+# that points at a missing bundle.
+# ---------------------------------------------------------------------------
+echo "==> Step 1a: build consumer-UI bundles locally (esbuild)"
+bash "${REPO_ROOT}/development/build-frontend.sh"
+echo
+
+# ---------------------------------------------------------------------------
 # Step 1 -- rsync the working tree
 # ---------------------------------------------------------------------------
 

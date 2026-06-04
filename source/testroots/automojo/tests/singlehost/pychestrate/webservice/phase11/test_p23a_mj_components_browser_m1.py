@@ -111,7 +111,11 @@ def _sign_in(page: Page, login_name: str, password: str) -> None:
     page.fill("input[name='username']", login_name)
     page.fill("input[name='password']", password)
     page.click("button[type='submit']")
-    page.wait_for_load_state("networkidle")
+    # Land on the authenticated shell. Wait for its host element
+    # rather than networkidle: the shell polls its navigation /
+    # permissions endpoints on an interval, so the network never
+    # goes idle and a networkidle wait would always time out.
+    page.wait_for_selector("pyc-site-shell", timeout=NAVIGATION_TIMEOUT_MS)
     return
 
 
@@ -132,9 +136,9 @@ def test_shell_loads_with_mj_app_shell_scaffolding(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/")
-        page.wait_for_load_state("networkidle")
-        # Wait for the shell to attach -- the host custom
-        # element is the upgrade signal.
+        # Wait for the shell to attach -- the host custom element is
+        # the upgrade signal. (No networkidle: the shell polls, so
+        # the network never goes idle.)
         page.wait_for_selector("pyc-site-shell", timeout=NAVIGATION_TIMEOUT_MS)
 
         app_shell_count = page.locator("mj-app-shell").count()
@@ -165,7 +169,6 @@ def test_runs_list_renders_data_rows(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/runs")
-        page.wait_for_load_state("networkidle")
         page.wait_for_selector(
             ".pyc-runs-list__table", timeout=NAVIGATION_TIMEOUT_MS
         )
@@ -215,7 +218,6 @@ def test_runs_list_state_filter_is_an_mj_select(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/runs")
-        page.wait_for_load_state("networkidle")
         page.wait_for_selector(
             "[data-role='state-filter']", timeout=NAVIGATION_TIMEOUT_MS
         )
@@ -245,7 +247,6 @@ def test_runs_list_project_filter_is_an_mj_text_field(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/runs")
-        page.wait_for_load_state("networkidle")
         page.wait_for_selector(
             "[data-role='project-filter']", timeout=NAVIGATION_TIMEOUT_MS
         )
@@ -275,7 +276,6 @@ def test_runs_list_pager_is_an_mj_pagination(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/runs")
-        page.wait_for_load_state("networkidle")
         page.wait_for_selector(
             "mj-pagination[data-role='pager']",
             timeout=NAVIGATION_TIMEOUT_MS,
@@ -312,7 +312,6 @@ def test_sign_out_control_is_an_mj_button(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/")
-        page.wait_for_load_state("networkidle")
         page.wait_for_selector("mj-app-bar", timeout=NAVIGATION_TIMEOUT_MS)
 
         button_tag = page.locator(

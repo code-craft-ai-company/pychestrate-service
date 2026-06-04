@@ -222,11 +222,14 @@ def _make_config(
 # ---------------------------------------------------------------------------
 
 
-def test_load_config_raises_when_database_url_missing():
+def test_load_config_defaults_database_url_when_missing():
     """
     **Feature: runtime bootstrap T1.1**
-    **Property: A missing DATABASE_URL is a hard ConfigurationError
-    -- the service must not start with no database.**
+    **Property: DATABASE_URL is optional. When it is unset the
+    loader resolves the persona-derived default (a sqlite file
+    under the presence dir) rather than raising -- a first-run
+    deploy boots against a local sqlite store instead of failing
+    on a missing env var. KEK_SOURCE remains hard-required.**
     """
     snapshot = _EnvSnapshot()
     try:
@@ -235,12 +238,15 @@ def test_load_config_raises_when_database_url_missing():
             ENV_KEK_ID: "k-1",
             ENV_KEK_FILE_PATH: "/tmp/x",
         })
-        raised = False
-        try:
-            load_config_from_environment()
-        except ConfigurationError:
-            raised = True
-        testbase.assert_equal(raised, True)
+        # No DATABASE_URL in the environment -- the loader must still
+        # produce a config, falling back to the persona sqlite default.
+        config = load_config_from_environment()
+        resolved_url = config.database_url
+        testbase.assert_true(resolved_url is not None)
+        testbase.assert_true(len(resolved_url) > 0)
+        # The persona default is a sqlite store named ``pychestrate``.
+        testbase.assert_true(resolved_url.lower().startswith("sqlite"))
+        testbase.assert_true("pychestrate" in resolved_url.lower())
     finally:
         snapshot.restore()
     return
