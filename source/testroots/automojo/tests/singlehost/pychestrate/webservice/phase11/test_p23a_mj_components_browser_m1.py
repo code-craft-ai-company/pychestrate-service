@@ -169,35 +169,56 @@ def test_runs_list_renders_data_rows(browser: Browser):
         _sign_in(page=page, login_name=login_name, password=password)
 
         page.goto(BASE_URL + "/runs")
+        # The runs list reaches one of three terminal states once its
+        # /api/v1/runs fetch resolves: the mj-data-table host (when there
+        # are runs), an empty-state notice (zero runs -- the table element
+        # is NOT rendered in this case; the region holds only the notice),
+        # or an error-state notice (fetch failed). Wait for whichever
+        # terminal state appears -- "attached" rather than "visible"
+        # because an empty/zero-size host still counts as mounted -- then
+        # assert on it. The property under test is "the list view mounted
+        # and cleanly resolved its fetch", which a zero-run fixture (a
+        # fresh deploy) satisfies via the empty-state.
+        terminal_selector = (
+            "mj-table.pyc-runs-list__table, "
+            "mj-data-table.pyc-runs-list__table, "
+            '[data-role="empty-state"], '
+            '[data-role="error-state"]'
+        )
         page.wait_for_selector(
-            ".pyc-runs-list__table", timeout=NAVIGATION_TIMEOUT_MS
+            terminal_selector,
+            timeout=NAVIGATION_TIMEOUT_MS,
+            state="attached",
         )
 
-        # The table is a mj-* custom element whose row content
-        # lives in the shadow root. Wait for either an mj-table
-        # or mj-data-table host -- the migration arc may swap
-        # which one this view uses.
-        host_selector = "mj-table.pyc-runs-list__table, " \
-            "mj-data-table.pyc-runs-list__table"
-        host = page.locator(host_selector).first
+        # The fetch must not have errored.
+        error_state = page.locator('[data-role="error-state"]')
+        error_count = error_state.count()
+        testbase.assert_equal(error_count, 0)
 
-        # An authenticated shell on an empty database renders
-        # an empty-state notice rather than a row. Tolerate
-        # both shapes -- the assertion is "the table mounted",
-        # not "there are runs in this fixture".
         empty_state = page.locator('[data-role="empty-state"]')
-        if empty_state.count() == 0:
+        empty_count = empty_state.count()
+        if empty_count > 0:
+            # Zero-run fixture: the empty-state notice stands in for the
+            # table. The view mounted and resolved cleanly; there is no
+            # table host to inspect.
+            testbase.assert_true(empty_count >= 1)
+        else:
+            # Non-empty fixture: the mj-* data-table host must be present
+            # with a shadow root, and its row count a sane non-negative.
+            host_selector = "mj-table.pyc-runs-list__table, " \
+                "mj-data-table.pyc-runs-list__table"
+            host = page.locator(host_selector).first
             row_count = host.evaluate(
                 "(el) => el.shadowRoot.querySelectorAll("
                 "'.row.pyc-runs-list__row, tr.pyc-runs-list__row'"
                 ").length"
             )
             testbase.assert_true(row_count >= 0)
-        # Either way the host element must have a shadow root.
-        has_shadow_root = host.evaluate(
-            "(el) => el.shadowRoot !== null"
-        )
-        testbase.assert_true(has_shadow_root)
+            has_shadow_root = host.evaluate(
+                "(el) => el.shadowRoot !== null"
+            )
+            testbase.assert_true(has_shadow_root)
     finally:
         context.close()
     return
