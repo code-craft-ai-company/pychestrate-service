@@ -9,7 +9,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import List
+import os
+
+from typing import List, Optional, Tuple
 
 from automojo import testbase
 
@@ -54,6 +56,32 @@ from automojo.pychestrate.webservice.orchestration.build.artifacts import (
     synthesize_manifest,
 )
 
+from automojo.pychestrate.webservice.jobs.dispatch import (
+    InMemoryTransport,
+    JobDispatcher,
+    register_builtin_extensions as dispatch_register,
+)
+from automojo.pychestrate.webservice.jobs.dispatch.factories.strategy import (
+    DispatchCandidate,
+)
+from automojo.pychestrate.webservice.jobs.envelope import (
+    EnvelopeSignerBootstrapConfig,
+    install_envelope_signer,
+)
+from automojo.pychestrate.webservice.jobs.envelope import signer as envelope_signer
+from automojo.pychestrate.webservice.orchestration.build import (
+    service as build_service,
+)
+
+# Side-effect imports so the dispatch / envelope / run-state tables attach
+# to the shared Phase-1 metadata before ``create_all`` runs in the
+# in-memory fixture -- ``trigger_run`` now dispatches a signed build
+# envelope through the JobDispatcher and records a dispatch attempt.
+from automojo.pychestrate.webservice.jobs.run.state import models as _run_state_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401
+from automojo.pychestrate.webservice.jobs.results import models as _results_models  # noqa: F401
+
 from automojo.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
     build_in_memory_session,
 )
@@ -67,9 +95,69 @@ LAYER5_UUID = "00000000-0000-4000-8000-000000030003"
 def _prepare_runtime() -> None:
     reset_registry_for_testing()
     reset_event_bus()
+    envelope_signer.reset_for_testing()
+    build_service.set_active_job_dispatcher(dispatcher=None)
+    dispatch_register()
     build_register()
     artifacts_register()
+    # ``trigger_run`` builds + signs a job_kind=build envelope and
+    # dispatches it through the wired JobDispatcher, so the test harness
+    # must install a dev envelope signer and wire an in-memory dispatcher
+    # (mirrors test_p20j_build_dispatch_wiring). A fresh dispatcher is
+    # wired here -- ``_prepare_runtime`` runs once per test.
+    os.environ["PYCHESTRATE_DEV_MODE"] = "1"
+    try:
+        install_envelope_signer(
+            config=EnvelopeSignerBootstrapConfig(
+                source="dev",
+                file_path=None,
+                env_var=None,
+                key_id="test-build-p6c-ed25519",
+            ),
+        )
+    finally:
+        del os.environ["PYCHESTRATE_DEV_MODE"]
+    build_service.set_active_job_dispatcher(
+        dispatcher=JobDispatcher(transport=InMemoryTransport()),
+    )
     return
+
+
+def _one_candidate() -> Tuple[DispatchCandidate, ...]:
+    """
+        A single eligible dispatch candidate so ``trigger_run`` can
+        dispatch the build envelope to an enrolled client.
+
+        :returns: One-element tuple of :class:`DispatchCandidate`.
+    """
+    rtnval = (
+        DispatchCandidate(
+            client_id="11111111-1111-4000-8000-0000000030a1",
+            pod_id="22222222-2222-4000-8000-0000000030a2",
+            capability_tags=tuple(),
+            inflight_dispatch_count=0,
+            last_dispatched_at_iso="",
+        ),
+    )
+    return rtnval
+
+
+def _dispatch_aspects(*, actor_id: Optional[str] = None) -> BuildTriggerAspects:
+    """
+        Build the trigger aspects every happy-path ``trigger_run`` call
+        needs now that the trigger dispatches: a single eligible
+        candidate plus a project slug.
+
+        :param actor_id: Optional actor id to stamp on the run.
+
+        :returns: A dispatchable :class:`BuildTriggerAspects`.
+    """
+    rtnval = BuildTriggerAspects(
+        actor_id=actor_id,
+        candidates=_one_candidate(),
+        project_slug="proj-slug",
+    )
+    return rtnval
 
 
 def _valid_makefile_inputs() -> BuildRunInputs:
@@ -157,8 +245,9 @@ def test_repro_digest_changes_with_input_changes():
 def test_trigger_run_persists_and_emits():
     """
     **Feature: 6-build-orchestration (M1)**
-    **Property: trigger_run persists a BuildRun in PENDING +
-    toolchain rows + emits entity.build.run_triggered.**
+    **Property: trigger_run persists a BuildRun + toolchain rows,
+    emits entity.build.run_triggered, and -- now that the trigger
+    dispatches the build envelope -- flips the run PENDING -> RUNNING.**
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
@@ -171,9 +260,9 @@ def test_trigger_run_persists_and_emits():
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
-        aspects=BuildTriggerAspects(actor_id=ACTOR_UUID),
+        aspects=_dispatch_aspects(actor_id=ACTOR_UUID),
     )
-    testbase.assert_equal(view.state, BuildRunState.PENDING)
+    testbase.assert_equal(view.state, BuildRunState.RUNNING)
     testbase.assert_equal(view.runner_kind, "makefile")
     testbase.assert_equal(view.actor_id, ACTOR_UUID)
     testbase.assert_equal(len(view.repro_digest_sha256), 64)
@@ -281,6 +370,7 @@ def test_apply_run_terminal_completed_emits_topics():
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     completed = apply_run_terminal(
         db_session=session,
@@ -318,6 +408,7 @@ def test_apply_run_terminal_failed_emits_failed_topic():
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     apply_run_terminal(
         db_session=session,
@@ -347,6 +438,7 @@ def test_apply_run_terminal_idempotent():
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     apply_run_terminal(
         db_session=session,
@@ -374,6 +466,7 @@ def test_apply_run_terminal_non_terminal_state_raises():
         db_session=session,
         project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     raised = False
     try:
@@ -417,14 +510,17 @@ def test_list_build_runs_scopes_to_project():
     trigger_run(
         db_session=session, project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     trigger_run(
         db_session=session, project_id=PROJECT_UUID,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     trigger_run(
         db_session=session, project_id=other_project,
         inputs=_valid_makefile_inputs(),
+        aspects=_dispatch_aspects(),
     )
     rows = list_build_runs_for_project(
         db_session=session, project_id=PROJECT_UUID,
