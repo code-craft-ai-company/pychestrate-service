@@ -226,6 +226,60 @@ def bootstrap_setup_state(*, session_factory: SessionFactory) -> str:
     return rtnval
 
 
+def mark_setup_complete_for_test_admin(
+        *,
+        session_factory: SessionFactory,
+        completed_by_user_id: str
+    ) -> None:
+    """
+        Provision the initial-setup row if absent and stamp it complete so
+        the setup-gate middleware lets ``/login`` and the rest of the app
+        through. Used ONLY by the runtime ``PYCHESTRATE_TEST_MODE`` hook
+        after it seeds the test admin -- an injected credential is useless
+        if the wizard gate still redirects every request to
+        ``/setup/unlock``.
+
+        Idempotent: when the row is already complete it only re-flips the
+        process fast-path flag.
+
+        :param session_factory: Zero-arg callable that returns a fresh
+                                SQLAlchemy session.
+        :param completed_by_user_id: ``identity_users.user_id`` of the
+                                     seeded admin (UUID string).
+
+        :returns: None.
+        :raises: ConfigurationError on env / filesystem misconfig.
+    """
+    import uuid as _uuid
+
+    runtime_dir = _read_persona_presence_dir()
+    _ensure_runtime_dir(runtime_dir=runtime_dir)
+
+    db_session = session_factory()
+    try:
+        manager = InitialSetupManager(
+            db_session=db_session,
+            runtime_dir=runtime_dir,
+        )
+        manager.ensure_token_provisioned()
+        if manager.is_complete() is False:
+            completed_uuid = _uuid.UUID(completed_by_user_id)
+            manager.mark_complete(completed_by_user_id=completed_uuid)
+            _module_logger.info(
+                "pychestrate.setup.completed_by_test_mode completed_by=%s",
+                completed_by_user_id,
+            )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        raise
+    finally:
+        db_session.close()
+
+    _set_complete_flag(value=True)
+    return
+
+
 def _set_complete_flag(*, value: bool) -> None:
     """
         Update the process-level fast-path flag under the lock.
@@ -487,6 +541,7 @@ __all__ = [
     "bootstrap_setup_state",
     "create_initial_admin",
     "is_setup_complete",
+    "mark_setup_complete_for_test_admin",
     "mark_setup_complete_in_process_cache",
     "reset_complete_flag_for_testing",
 ]

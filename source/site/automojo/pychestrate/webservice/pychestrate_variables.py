@@ -221,6 +221,51 @@ class PychestrateVariablesDesc(AppVarSet):
         default="false",
     )
 
+    # ------------------------------------------------------------------
+    # RUNTIME section -- test mode
+    #
+    # Test mode is OFF by default and REFUSED in production (the
+    # bootstrap gate raises ConfigurationError). When enabled in a
+    # non-production environment, the runtime seeds / resets a known
+    # admin credential from the variables below so the live-deploy test
+    # suites can authenticate deterministically. Never enable on an
+    # internet-facing instance -- it injects a backdoor admin by design.
+    # ------------------------------------------------------------------
+
+    # Kept as a string so the ``_read_env_bool`` parser at the call site
+    # interprets ``true|yes|1`` unchanged.
+    PYCHESTRATE_TEST_MODE = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="false",
+    )
+
+    PYCHESTRATE_TEST_ADMIN_LOGIN = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="admin",
+    )
+
+    PYCHESTRATE_TEST_ADMIN_EMAIL = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="admin@example.com",
+    )
+
+    # No default -- a password MUST be supplied when test mode is on.
+    # The bootstrap gate raises ConfigurationError when it is missing.
+    PYCHESTRATE_TEST_ADMIN_PASSWORD = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_TEST_ADMIN_DISPLAY_NAME = AppVarDesc(
+        section=SECTION_RUNTIME,
+        source=VariableSource.ENVIRONMENT,
+        default="Test Admin",
+    )
+
 
 class PychestrateVariables:
     """
@@ -283,6 +328,22 @@ class PychestrateVariables:
     )
     PYCHESTRATE_AUTO_CREATE_SCHEMA = AppVarAccessor(
         PychestrateVariablesDesc.PYCHESTRATE_AUTO_CREATE_SCHEMA
+    )
+
+    PYCHESTRATE_TEST_MODE = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_TEST_MODE
+    )
+    PYCHESTRATE_TEST_ADMIN_LOGIN = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_TEST_ADMIN_LOGIN
+    )
+    PYCHESTRATE_TEST_ADMIN_EMAIL = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_TEST_ADMIN_EMAIL
+    )
+    PYCHESTRATE_TEST_ADMIN_PASSWORD = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_TEST_ADMIN_PASSWORD
+    )
+    PYCHESTRATE_TEST_ADMIN_DISPLAY_NAME = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_TEST_ADMIN_DISPLAY_NAME
     )
 
 

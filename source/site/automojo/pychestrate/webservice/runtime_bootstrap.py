@@ -149,6 +149,11 @@ ENV_PEPPER_ENV_VAR: str = "PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR"
 ENV_UI_COOKIE_SECRET_SOURCE: str = "PYCHESTRATE_UI_COOKIE_SECRET_SOURCE"
 ENV_UI_COOKIE_SECRET_FILE_PATH: str = "PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH"
 ENV_UI_COOKIE_SECRET_ENV_VAR: str = "PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR"
+ENV_TEST_MODE: str = "PYCHESTRATE_TEST_MODE"
+ENV_TEST_ADMIN_LOGIN: str = "PYCHESTRATE_TEST_ADMIN_LOGIN"
+ENV_TEST_ADMIN_EMAIL: str = "PYCHESTRATE_TEST_ADMIN_EMAIL"
+ENV_TEST_ADMIN_PASSWORD: str = "PYCHESTRATE_TEST_ADMIN_PASSWORD"
+ENV_TEST_ADMIN_DISPLAY_NAME: str = "PYCHESTRATE_TEST_ADMIN_DISPLAY_NAME"
 
 
 _VALID_RUNTIME_ENVIRONMENTS = (
@@ -195,6 +200,17 @@ class RuntimeBootstrapConfig:
                                    production.
         :param sql_echo: When True, SQLAlchemy echoes every
                          executed statement. For local debugging.
+        :param test_mode: When True, seed / reset a known admin
+                          credential at the end of bootstrap. OFF by
+                          default; refused in production.
+        :param test_admin_login: Login name for the seeded test admin.
+        :param test_admin_email: Primary email for the seeded test
+                                 admin.
+        :param test_admin_password: Cleartext password for the seeded
+                                    test admin. Required when
+                                    ``test_mode`` is True.
+        :param test_admin_display_name: Display name for the seeded
+                                        test admin.
     """
     database_url: str
     runtime_environment: str
@@ -210,6 +226,15 @@ class RuntimeBootstrapConfig:
     ui_cookie_secret_env_var: Optional[str]
     auto_create_schema: bool
     sql_echo: bool
+    # Test-mode fields carry defaults so existing constructors (tests,
+    # the e2e harness) keep working unchanged and test mode stays OFF
+    # unless an operator explicitly opts in. ``load_config_from_environment``
+    # always populates them from the documented env vars.
+    test_mode: bool = False
+    test_admin_login: Optional[str] = None
+    test_admin_email: Optional[str] = None
+    test_admin_password: Optional[str] = None
+    test_admin_display_name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -433,6 +458,24 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
             accessor_name="PYCHESTRATE_AUTO_CREATE_SCHEMA"
         ),
         sql_echo=_read_env_bool(name="PYCHESTRATE_SQL_ECHO"),
+        test_mode=_read_app_var_bool(
+            accessor_name="PYCHESTRATE_TEST_MODE"
+        ),
+        test_admin_login=_read_app_var(
+            accessor_name="PYCHESTRATE_TEST_ADMIN_LOGIN",
+            default="admin",
+        ),
+        test_admin_email=_read_app_var(
+            accessor_name="PYCHESTRATE_TEST_ADMIN_EMAIL",
+            default="admin@example.com",
+        ),
+        test_admin_password=_read_app_var(
+            accessor_name="PYCHESTRATE_TEST_ADMIN_PASSWORD"
+        ),
+        test_admin_display_name=_read_app_var(
+            accessor_name="PYCHESTRATE_TEST_ADMIN_DISPLAY_NAME",
+            default="Test Admin",
+        ),
     )
     return rtnval
 
@@ -673,6 +716,106 @@ def _maybe_create_schema(
     return
 
 
+def _maybe_seed_test_admin(
+        *, config: RuntimeBootstrapConfig, session_factory: SessionFactory
+    ) -> None:
+    """
+        Seed / reset a known admin credential when the operator has opted
+        in via ``test_mode``. OFF by default. REFUSED in production -- test
+        mode injects a backdoor admin from environment variables, which must
+        never run on an internet-facing instance, so the gate raises rather
+        than silently seeding.
+
+        Idempotent: creates the admin on a fresh database or resets the
+        existing admin's password, so the live-deploy test suites always
+        authenticate with the same login / password pair.
+
+        Call AFTER the Phase-1 runtime is bootstrapped so the password
+        pepper is installed and ``local_flow.hash_password`` succeeds.
+
+        :param config: Full runtime config.
+        :param session_factory: Active session factory published by the
+                                bootstrap.
+
+        :returns: None.
+        :raises: ConfigurationError when test mode is set in production or
+                 when no admin password is supplied.
+    """
+    if config.test_mode is False:
+        return
+
+    if config.runtime_environment == RUNTIME_ENVIRONMENTS.PRODUCTION:
+        err_msg_lines = [
+            "{} is refused in production.".format(ENV_TEST_MODE)
+        ]
+        err_msg_lines.append(
+            "Test mode injects a known admin credential from the"
+            " environment and must never run on a production instance."
+            " Set {}=development|staging|testing to use it.".format(
+                ENV_RUNTIME_ENVIRONMENT
+            )
+        )
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ConfigurationError(err_msg)
+
+    password = config.test_admin_password
+    if password is None or len(password) == 0:
+        err_msg_lines = [
+            "{} is set but no admin password was supplied.".format(
+                ENV_TEST_MODE
+            )
+        ]
+        err_msg_lines.append(
+            "Set {} to the password the test admin should authenticate"
+            " with.".format(ENV_TEST_ADMIN_PASSWORD)
+        )
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ConfigurationError(err_msg)
+
+    # Lazy imports so the module stays importable in unit tests that do
+    # not exercise the full Phase-1 stack.
+    from automojo.pychestrate.webservice.identity.setup.testadmin_seeder import (
+        seed_or_reset_test_admin,
+    )
+    from automojo.pychestrate.webservice.identity.setup.setup_service import (
+        mark_setup_complete_for_test_admin,
+    )
+    from automojo.pychestrate.webservice.security.auth import local_flow
+
+    # Reset exponential login backoff so the freshly seeded admin is not
+    # rate-limited by stale failed-attempt state from a prior run.
+    reset_helper = getattr(local_flow, "reset_backoff_for_testing", None)
+    if reset_helper is not None:
+        reset_helper()
+
+    result = seed_or_reset_test_admin(
+        session_factory=session_factory,
+        login=config.test_admin_login,
+        email=config.test_admin_email,
+        password=password,
+        display_name=config.test_admin_display_name,
+    )
+
+    # An injected credential is useless if the setup-gate middleware still
+    # redirects every request to the wizard. Stamp setup complete so
+    # ``/login`` and the authenticated surfaces are immediately reachable.
+    mark_setup_complete_for_test_admin(
+        session_factory=session_factory,
+        completed_by_user_id=result.user_id,
+    )
+
+    _module_logger.warning(
+        "pychestrate.runtime_bootstrap.test_admin_seeded action=%s login=%s"
+        " user_id=%s legacy_row=%s environment=%s",
+        result.action,
+        result.login,
+        result.user_id,
+        result.legacy_written,
+        config.runtime_environment,
+    )
+    return
+
+
 # ---------------------------------------------------------------------------
 # One-call entry
 # ---------------------------------------------------------------------------
@@ -731,6 +874,11 @@ def bootstrap_runtime(
     phase6_config = Phase6BootstrapConfig(session_factory=session_factory)
     phase6_result = bootstrap_phase6_runtime(config=phase6_config)
 
+    # Test-mode admin seeding runs last so the pepper, KEK, session
+    # factory, and RBAC seeding helpers are all live. No-op (and OFF) by
+    # default; refused in production.
+    _maybe_seed_test_admin(config=config, session_factory=session_factory)
+
     _module_logger.info(
         "pychestrate.runtime_bootstrap.ready environment=%s kek_id=%s"
         " pepper_loaded=%s ui_cookie_secret_loaded=%s"
@@ -766,6 +914,11 @@ __all__ = [
     "ENV_UI_COOKIE_SECRET_SOURCE",
     "ENV_UI_COOKIE_SECRET_FILE_PATH",
     "ENV_UI_COOKIE_SECRET_ENV_VAR",
+    "ENV_TEST_MODE",
+    "ENV_TEST_ADMIN_LOGIN",
+    "ENV_TEST_ADMIN_EMAIL",
+    "ENV_TEST_ADMIN_PASSWORD",
+    "ENV_TEST_ADMIN_DISPLAY_NAME",
     "RuntimeBootstrapConfig",
     "RuntimeBootstrapResult",
     "load_config_from_environment",
