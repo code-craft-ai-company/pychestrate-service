@@ -298,43 +298,18 @@ class _FakeSecretManager:
         return
 
 
-class _FakeActiveSession:
-    def __init__(
-            self, *, session_id: int, username: str
-        ) -> None:
-        self.session_id: int = session_id
-        self.username: str = username
-        return
-
-
-class _FakeSessionAdmin:
+class _SessionSeamRecorder:
     """
-        Stand-in for SecurityManager methods used by the
-        session-admin handlers (list_active_sessions /
-        terminate_session).
+        Records calls to the patched ``routes_sessions`` data-access
+        seams (``_list_active_sessions`` / ``_terminate_session``) and
+        supplies their canned responses.
     """
 
-    last_instance: Optional["_FakeSessionAdmin"] = None
-
-    def __init__(self, db_session: Any) -> None:
-        self.db_session: Any = db_session
-        self.list_active_sessions_response: List[_FakeActiveSession] = []
-        self.list_active_sessions_calls: List[Optional[str]] = []
-        self.terminate_session_calls: List[int] = []
-        self.terminate_session_raises: Optional[Exception] = None
-        _FakeSessionAdmin.last_instance = self
-        return
-
-    def list_active_sessions(
-            self, *, user_id: Optional[str]
-        ) -> List[_FakeActiveSession]:
-        self.list_active_sessions_calls.append(user_id)
-        return self.list_active_sessions_response
-
-    def terminate_session(self, session_id: int) -> None:
-        self.terminate_session_calls.append(session_id)
-        if self.terminate_session_raises is not None:
-            raise self.terminate_session_raises
+    def __init__(self) -> None:
+        self.list_calls: List[Optional[str]] = []
+        self.list_response: List[Any] = []
+        self.terminate_calls: List[str] = []
+        self.terminate_raises: Optional[Exception] = None
         return
 
 
@@ -410,7 +385,6 @@ def _reset_global_state() -> None:
     SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = None
     _FakeSecurityManager.last_instance = None
     _FakeSecretManager.last_instance = None
-    _FakeSessionAdmin.last_instance = None
     _FakeAuditLogger.last_instance = None
     return
 
@@ -496,21 +470,38 @@ def _patch_resolve_secret_type() -> Any:
     return patch
 
 
-def _patch_session_admin(
-        *, configure: Optional[Callable[[_FakeSessionAdmin], None]] = None
-    ) -> Any:
-    def _builder(*, db_session: Any) -> _FakeSessionAdmin:
-        instance = _FakeSessionAdmin(db_session)
-        if configure is not None:
-            configure(instance)
-        return instance
+def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
+    """
+        Patch the modern ``_list_active_sessions`` / ``_terminate_session``
+        seams in ``routes_sessions`` so the handler tests stay
+        DB-independent. Returns the patches for the caller to deactivate.
+    """
+    def _fake_list(
+            *, db_session: Any, filter_user_id: Optional[str]
+        ) -> List[Any]:
+        recorder.list_calls.append(filter_user_id)
+        return recorder.list_response
 
-    patch = create_module_patch(
-        config_routes_sessions, "_build_security_manager_for_sessions"
+    def _fake_terminate(*, db_session: Any, session_id: str) -> None:
+        recorder.terminate_calls.append(session_id)
+        if recorder.terminate_raises is not None:
+            raise recorder.terminate_raises
+        return
+
+    list_patch = create_module_patch(
+        config_routes_sessions, "_list_active_sessions"
     )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=_fake_list)
+
+    terminate_patch = create_module_patch(
+        config_routes_sessions, "_terminate_session"
+    )
+    terminate_mock = terminate_patch.activate()
+    terminate_mock.configure(side_effect=_fake_terminate)
+
+    rtnval = [list_patch, terminate_patch]
+    return rtnval
 
 
 def _patch_audit_logger(
@@ -1024,28 +1015,43 @@ def test_handle_session_list_renders_with_active_sessions():
     """
     **Feature: webworks config sessions port T4.8**
     **Property: GET /admin/sessions renders the sessions list
-    template with the SecurityManager.list_active_sessions
-    output and passes filter_user_id through.**
+    template with the _list_active_sessions output and passes
+    filter_user_id through.**
     """
     _reset_global_state()
     sm_patch = None
-    sa_patch = None
+    seam_patches: List[Any] = []
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
+
+        when = datetime(2026, 6, 11, 12, 0, 0)
         active = [
-            _FakeActiveSession(session_id=11, username="alice"),
-            _FakeActiveSession(session_id=12, username="bob"),
+            config_routes_sessions._SessionRow(
+                session_id="11111111-1111-1111-1111-111111111111",
+                username="alice",
+                created_at=when,
+                last_activity=when,
+                expires_at=when,
+                client_ip="10.0.0.1",
+                user_agent="ua-a",
+            ),
+            config_routes_sessions._SessionRow(
+                session_id="22222222-2222-2222-2222-222222222222",
+                username="bob",
+                created_at=when,
+                last_activity=when,
+                expires_at=when,
+                client_ip="10.0.0.2",
+                user_agent="ua-b",
+            ),
         ]
-
-        def _seed(instance: _FakeSessionAdmin) -> None:
-            instance.list_active_sessions_response = active
-            return
-
-        sa_patch = _patch_session_admin(configure=_seed)
+        recorder = _SessionSeamRecorder()
+        recorder.list_response = active
+        seam_patches = _patch_session_seams(recorder=recorder)
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1061,12 +1067,12 @@ def test_handle_session_list_renders_with_active_sessions():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["sessions"], active)
         testbase.assert_equal(ctx["filter_user_id"], "u-7")
-        sa = _FakeSessionAdmin.last_instance
-        testbase.assert_equal(sa.list_active_sessions_calls, ["u-7"])
+        testbase.assert_equal(recorder.list_calls, ["u-7"])
     finally:
-        for p in (sa_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
+        for patch in seam_patches:
+            patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
         _reset_global_state()
     return
 
@@ -1074,27 +1080,29 @@ def test_handle_session_list_renders_with_active_sessions():
 def test_handle_session_terminate_happy_path_redirects():
     """
     **Feature: webworks config sessions port T4.9**
-    **Property: A valid POST calls terminate_session with the
+    **Property: A valid POST calls _terminate_session with the
     session_id and redirects to /admin/sessions.**
     """
     _reset_global_state()
     sm_patch = None
-    sa_patch = None
+    seam_patches: List[Any] = []
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        sa_patch = _patch_session_admin()
+        recorder = _SessionSeamRecorder()
+        seam_patches = _patch_session_seams(recorder=recorder)
 
+        target_session_id = "33333333-3333-3333-3333-333333333333"
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh"
         request = _FakeRequest(
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"session_id": "55"},
+            path_params={"session_id": target_session_id},
         )
         response = config_routes_sessions.handle_session_terminate(
             request
@@ -1105,40 +1113,39 @@ def test_handle_session_terminate_happy_path_redirects():
         testbase.assert_equal(
             response.headers["Location"], "/admin/sessions"
         )
-        sa = _FakeSessionAdmin.last_instance
-        testbase.assert_equal(sa.terminate_session_calls, [55])
+        testbase.assert_equal(
+            recorder.terminate_calls, [target_session_id]
+        )
     finally:
-        for p in (sa_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
+        for patch in seam_patches:
+            patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
         _reset_global_state()
     return
 
 
-def test_handle_session_terminate_manager_error_flashes_error():
+def test_handle_session_terminate_service_error_flashes_error():
     """
     **Feature: webworks config sessions port T4.9**
-    **Property: terminate_session raising yields a 303 redirect
+    **Property: _terminate_session raising yields a 303 redirect
     with an error-category flash; the failure is non-fatal to
     the request lifecycle.**
     """
     _reset_global_state()
     sm_patch = None
-    sa_patch = None
+    seam_patches: List[Any] = []
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeSessionAdmin) -> None:
-            instance.terminate_session_raises = RuntimeError(
-                "session already terminated"
-            )
-            return
-
-        sa_patch = _patch_session_admin(configure=_seed)
+        recorder = _SessionSeamRecorder()
+        recorder.terminate_raises = RuntimeError(
+            "session already terminated"
+        )
+        seam_patches = _patch_session_seams(recorder=recorder)
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh"
@@ -1146,7 +1153,9 @@ def test_handle_session_terminate_manager_error_flashes_error():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"session_id": "55"},
+            path_params={
+                "session_id": "44444444-4444-4444-4444-444444444444"
+            },
         )
         response = config_routes_sessions.handle_session_terminate(
             request
@@ -1155,30 +1164,32 @@ def test_handle_session_terminate_manager_error_flashes_error():
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
     finally:
-        for p in (sa_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
+        for patch in seam_patches:
+            patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
         _reset_global_state()
     return
 
 
-def test_handle_session_terminate_unparsable_id_short_circuits():
+def test_handle_session_terminate_missing_id_short_circuits():
     """
     **Feature: webworks config sessions port T4.9**
-    **Property: A non-int session_id path param yields a
-    redirect with a "Session not found" flash WITHOUT building
-    the SecurityManager / calling terminate_session.**
+    **Property: A missing session_id path param yields a redirect
+    with a "Session not found" flash WITHOUT calling
+    _terminate_session.**
     """
     _reset_global_state()
     sm_patch = None
-    sa_patch = None
+    seam_patches: List[Any] = []
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        sa_patch = _patch_session_admin()
+        recorder = _SessionSeamRecorder()
+        seam_patches = _patch_session_seams(recorder=recorder)
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh"
@@ -1186,7 +1197,7 @@ def test_handle_session_terminate_unparsable_id_short_circuits():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"session_id": "not-an-int"},
+            path_params={},
         )
         response = config_routes_sessions.handle_session_terminate(
             request
@@ -1194,11 +1205,12 @@ def test_handle_session_terminate_unparsable_id_short_circuits():
 
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(_FakeSessionAdmin.last_instance, None)
+        testbase.assert_equal(recorder.terminate_calls, [])
     finally:
-        for p in (sa_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
+        for patch in seam_patches:
+            patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
         _reset_global_state()
     return
 

@@ -539,20 +539,15 @@ def patch_utc_now_for_sqlite_tz_compat() -> None:
     """
         SQLAlchemy's ``DateTime(timezone=True)`` columns
         round-trip through SQLite as naive datetimes (SQLite has
-        no native tz support). The legacy
-        :meth:`SecurityManager.validate_token` compares
-        ``session.expires_at`` (naive on read-back) against
-        ``utc_now()`` (timezone-aware) and raises ``TypeError``,
-        which the handler swallows as "session invalid".
+        no native tz support). Legacy code paths that compare a
+        read-back ``expires_at`` (naive) against ``utc_now()``
+        (timezone-aware) would raise ``TypeError``.
 
-        Monkey-patch :func:`utc_now` on the security_manager and
-        defaults modules to return naive UTC. Idempotent.
+        Monkey-patch :func:`utc_now` on the core defaults module to
+        return naive UTC. Idempotent.
     """
     from datetime import datetime, timezone  # noqa: E402
     from automojo.pychestrate.core import defaults as _defaults  # noqa: E402
-    from automojo.pychestrate.core.managers import (  # noqa: E402
-        security_manager as _sm,
-    )
 
     def naive_utc_now() -> datetime:
         rtnval = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -560,8 +555,6 @@ def patch_utc_now_for_sqlite_tz_compat() -> None:
 
     if getattr(_defaults.utc_now, "__name__", "") != "naive_utc_now":
         _defaults.utc_now = naive_utc_now
-    if getattr(_sm.utc_now, "__name__", "") != "naive_utc_now":
-        _sm.utc_now = naive_utc_now
     return
 
 

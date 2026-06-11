@@ -12,7 +12,6 @@ __credits__ = []
 __version__ = "1.0.0"
 
 from automojo.pychestrate.core.managers.user_manager import UserManager
-from automojo.pychestrate.core.managers.security_manager import SecurityManager
 from automojo.pychestrate.core.managers.global_variable_store import GlobalVariableStore
 from automojo.pychestrate.core.managers.resource_manager import ResourceManager
 from automojo.pychestrate.core.managers.ip_pool_manager import IPPoolManager
@@ -28,7 +27,6 @@ from automojo.pychestrate.core.managers.watch_manager import WatchManager
 
 __all__ = [
     "UserManager",
-    "SecurityManager",
     "GlobalVariableStore",
     "ResourceManager",
     "IPPoolManager",
