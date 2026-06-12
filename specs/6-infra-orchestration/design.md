@@ -202,7 +202,7 @@ class InfraToolDriverProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations under
-`source/site/automojo/factories/pychestrate/infra/`:
+`source/site/ccai/factories/pychestrate/infra/`:
 
 - `TerraformInfraDriver` — `PRECEDENCE = 500`; supports plan replay.
 - `PulumiInfraDriver` — `PRECEDENCE = 500`.
@@ -224,7 +224,7 @@ Reference implementations under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/infra/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/infra/`:
 
 - `__init__.py`
 - `orchestrator.py` — `InfraOrchestrator`.
@@ -237,7 +237,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/i
 - `errors.py` — `GuardDeniedError`, `FrozenEnvironmentError`, `PlanExpiredError`.
 - `rest/v1_routes.py`.
 
-Factories under `source/site/automojo/factories/pychestrate/infra/`.
+Factories under `source/site/ccai/factories/pychestrate/infra/`.
 
 ## Key Flows
 

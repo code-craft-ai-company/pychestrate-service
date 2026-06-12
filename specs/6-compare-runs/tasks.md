@@ -10,12 +10,12 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/test/compare/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/test/compare/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `compare_report` with unique `(base_run_id, candidate_run_id)`.
 - [ ] T1.3 — Implement `diff_engine.py` per-test diff algebra producing `list[TestDiff]`.
 - [ ] T1.4 — Implement `service.py::CompareRunsService.build` persisting the row and running the diff inline for M1.
 - [ ] T1.5 — Register REST `POST /api/v1/projects/{id}/compare` and `GET /api/v1/projects/{id}/compare/{report_id}`.
-- [ ] T1.6 — Implement `PxGenericTwoPaneDiffViewer` under `source/site/automojo/extensions/pychestrate/artifact_diff_viewer/generic_two_pane.py`.
+- [ ] T1.6 — Implement `PxGenericTwoPaneDiffViewer` under `source/site/ccai/extensions/pychestrate/artifact_diff_viewer/generic_two_pane.py`.
 - [ ] T1.7 — Implement `viewer_protocol.py::ArtifactDiffViewerExtension` base.
 
 ### M2 — Core Behavior

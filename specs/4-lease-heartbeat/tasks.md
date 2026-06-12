@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/lease/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/lease/` per design.md.
 - [ ] T1.2 — Alembic migration `0060_leases` creating `core.leases` with PK, UNIQUE on `reservation_id`, INDEX `(state, expires_at)`, INDEX `(pool_id)`.
 - [ ] T1.3 — Implement `models.py` for `Lease`, `LeaseState`, `LeaseAspects`, `RenewalDecision`.
 - [ ] T1.4 — Implement `repository.py::LeaseRepository` with `insert`, `update_expires`, `close`, and the sweeper query with `FOR UPDATE SKIP LOCKED`.

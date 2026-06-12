@@ -118,8 +118,8 @@ The authoritative contract for the `/api/v1/*` REST surface lives in
 It covers every currently-implemented endpoint and the Phase 3
 minimum-viable test-run slice (planned operations are flagged with
 `x-pychestrate-status: planned`). The same file is consumed by
-`automojo-restclient-base`'s `RestClientGenerator` to generate the
-typed `automojo-restclient-pychestrate` Python client in a follow-on
+`codecraftai-restclient-base`'s `RestClientGenerator` to generate the
+typed `codecraftai-restclient-pychestrate` Python client in a follow-on
 PR, and is the reference the parallel server-side route
 implementations conform to. Every PR that touches the REST surface
 must update this spec in the same PR; `make openapi-validate` is the

@@ -177,7 +177,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/dispatch/receipt/__init__.py`
 - `jobs/dispatch/receipt/schema.py` — `DispatchReceipt`,

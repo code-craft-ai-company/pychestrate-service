@@ -10,9 +10,9 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/domains/build/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/domains/build/` package per design.md.
 - [ ] T1.2 — Implement `resolver.py::BuildMetricResolver` with `on_build_queued`, `on_build_started`, `on_build_completed` stubs.
-- [ ] T1.3 — Implement `source/site/automojo/extensions/pychestrate/metric_definition/build/duration.py::BuildDurationMetric` (histogram; buckets `[1,5,15,30,60,120,300,600,1800,3600]`).
+- [ ] T1.3 — Implement `source/site/ccai/extensions/pychestrate/metric_definition/build/duration.py::BuildDurationMetric` (histogram; buckets `[1,5,15,30,60,120,300,600,1800,3600]`).
 - [ ] T1.4 — Implement `BuildQueueMetric` (histogram; buckets `[0.1,1,5,15,60,300,900]`).
 - [ ] T1.5 — Implement `BuildResultMetric` (counter; `result` ∈ `{success,failure,cancelled,timeout}`).
 - [ ] T1.6 — Wire subscriptions for `entity.build.queued`, `entity.build.started`, `entity.build.completed` to `BuildMetricResolver` via `MetricDefinitionExtension.subscriptions`.

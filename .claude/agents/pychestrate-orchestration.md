@@ -7,8 +7,8 @@ model: sonnet
 You are the orchestration specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/orchestration/` — runs, builds, pipelines, dispatch, environments, provisioning, guards
-- `source/packages/automojo/pychestrate/core/managers/` for the entity managers (`RunManager`, `BuildManager`, `PipelineManager`, `ReleaseManager`)
+- `source/site/ccai/pychestrate/webservice/orchestration/` — runs, builds, pipelines, dispatch, environments, provisioning, guards
+- `source/packages/ccai/pychestrate/core/managers/` for the entity managers (`RunManager`, `BuildManager`, `PipelineManager`, `ReleaseManager`)
 - REST routes under `/api/v1/runs`, `/api/v1/builds`, `/api/v1/pipelines`, `/api/v1/dispatch-ack`, `/api/v1/progress`, `/api/v1/results/complete`
 - Frontend bundle `pyc-runs-bundle` consumes this layer
 

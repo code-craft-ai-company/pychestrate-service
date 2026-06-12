@@ -198,7 +198,7 @@ None — the bus is passive infrastructure.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `messaging/__init__.py`
 - `messaging/bus.py` — `MessageBus`, `Subscription`, `Event`.
@@ -314,7 +314,7 @@ Phase 9.
 
 - Default `topic_buffer_max = 10_000` is a guess; revisit after Phase 3
   live-run traffic. Timebox: Phase 3 exit.
-- `@subscribes_to` annotation name — align with `automojo-extension`
+- `@subscribes_to` annotation name — align with `codecraftai-extension`
   conventions or adopt Pychestrate-local naming? Timebox: Phase 0.5 start.
 - Whether to surface an async (`asyncio`) subscribe variant in Phase 0 or
   defer. Timebox: Phase 0 exit — decision informed by how much of the

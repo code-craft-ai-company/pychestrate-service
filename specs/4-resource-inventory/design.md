@@ -212,7 +212,7 @@ class ResourceKindExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree under
-`source/site/automojo/extensions/pychestrate/resources/kinds/`:
+`source/site/ccai/extensions/pychestrate/resources/kinds/`:
 
 - `DeviceResourceKind` — generic lab device (attrs: `mac`, `serial`,
   `vendor`, `model`, `rack_slot`).
@@ -240,7 +240,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `resources/inventory/__init__.py`
 - `resources/inventory/models.py` — `Resource` dataclass, `ResourceState` enum.
@@ -255,7 +255,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
   `entity.resource.*`.
 
 Extension home:
-`source/site/automojo/extensions/pychestrate/resources/kinds/`.
+`source/site/ccai/extensions/pychestrate/resources/kinds/`.
 
 ## Key Flows
 

@@ -17,7 +17,7 @@
 ### M1 — Skeleton
 
 - [x] T1.1 — Create `jobs/dispatch/receipt/` package skeleton per design.md Component Breakdown.
-      *(``source/site/automojo/pychestrate/webservice/jobs/dispatch/receipt/``
+      *(``source/site/ccai/pychestrate/webservice/jobs/dispatch/receipt/``
       with ``schema.py``, ``models.py``, ``repository.py``,
       ``service.py``, ``timer_wheel.py``, ``errors.py``, and
       ``__init__.py``.)*

@@ -202,7 +202,7 @@ class BugTrackerDriverProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations under
-`source/site/automojo/factories/pychestrate/bug_tracker/`:
+`source/site/ccai/factories/pychestrate/bug_tracker/`:
 
 - `JiraBugTrackerDriver` — `PRECEDENCE = 500`.
 - `GithubIssuesBugTrackerDriver` — `PRECEDENCE = 500`.
@@ -226,7 +226,7 @@ Reference implementations under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/triage/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/triage/`:
 
 - `__init__.py`
 - `service.py` — `TriageService`.
@@ -240,7 +240,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/t
 - `config.py` — `TriageConfig`.
 - `rest/v1_routes.py` — REST endpoints.
 
-Factories under `source/site/automojo/factories/pychestrate/bug_tracker/`.
+Factories under `source/site/ccai/factories/pychestrate/bug_tracker/`.
 
 ## Key Flows
 

@@ -3,7 +3,7 @@
 ## Architecture
 
 Pod Lifecycle lives at
-`source/site/automojo/pychestrate/webservice/pods/lifecycle/`. It is a
+`source/site/ccai/pychestrate/webservice/pods/lifecycle/`. It is a
 state-machine engine driven by bus events from neighbouring features and
 REST admin actions. The engine itself is a pure function
 (`transition_from`) that takes `(current_state, event_kind, context)` and
@@ -157,7 +157,7 @@ entity.pod.state_changed   {
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/lifecycle/
+source/site/ccai/pychestrate/webservice/pods/lifecycle/
     __init__.py
     enums.py
     dtos.py                    -- TransitionContext, TransitionResult,

@@ -279,9 +279,9 @@ class MetricExporterProtocol(FactoryProtocolBase):
 
 Reference implementations:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/core_catalog.py` — declares every core `pychestrate_*` family shipped in-tree.
-- `source/site/automojo/factories/pychestrate/metric_exporter/prometheus_remote_write.py` — `PRECEDENCE = 1000`; pushes to a Prometheus Remote-Write endpoint.
-- `source/site/automojo/factories/pychestrate/metric_exporter/otlp.py` — `PRECEDENCE = 1100`; OTLP/HTTP sink.
+- `source/site/ccai/extensions/pychestrate/metric_definition/core_catalog.py` — declares every core `pychestrate_*` family shipped in-tree.
+- `source/site/ccai/factories/pychestrate/metric_exporter/prometheus_remote_write.py` — `PRECEDENCE = 1000`; pushes to a Prometheus Remote-Write endpoint.
+- `source/site/ccai/factories/pychestrate/metric_exporter/otlp.py` — `PRECEDENCE = 1100`; OTLP/HTTP sink.
 
 ### Events Emitted
 
@@ -295,7 +295,7 @@ Reference implementations:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/ingest/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/ingest/`:
 
 - `__init__.py`
 - `worker.py` — `MetricIngestWorker`.
@@ -310,8 +310,8 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/ingest/
 - `errors.py` — `MetricTranslationError`, `MetricExporterError`.
 - `rest/v1_routes.py` — admin REST endpoints.
 
-Factories under `source/site/automojo/factories/pychestrate/metric_exporter/`.
-In-tree resource catalog under `source/site/automojo/extensions/pychestrate/metric_definition/`.
+Factories under `source/site/ccai/factories/pychestrate/metric_exporter/`.
+In-tree resource catalog under `source/site/ccai/extensions/pychestrate/metric_definition/`.
 
 ## Key Flows
 

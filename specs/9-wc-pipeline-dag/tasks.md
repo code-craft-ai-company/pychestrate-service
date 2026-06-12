@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-pipeline-dag/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-pipeline-dag/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-pipeline-dag.ts::PycPipelineDag` Custom Element with observed attributes `pipeline-run-id`, `direction`, `expand-matrix`, `zoom-min`, `zoom-max`, `initial-zoom`, `stream`, `aria-label`.
 - [ ] T1.3 — Implement `layout/sugiyama.ts` with deterministic layer assignment, crossing minimisation, and stable tie-breakers keyed by `nodeId`.
 - [ ] T1.4 — Implement `renderer/svg-renderer.ts` drawing nodes and edges with per-step-kind shapes.

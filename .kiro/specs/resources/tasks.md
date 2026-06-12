@@ -8,13 +8,13 @@ This implementation plan breaks down the Resource Management module into discret
 
 The following components from system-configuration will be leveraged:
 
-### Core Package (`source/packages/automojo/pychestrate/core/`)
+### Core Package (`source/packages/ccai/pychestrate/core/`)
 - **orm.py**: Base models, User, Role, Permission models
 - **managers/**: UserManager, SecurityManager, AuditLogger
 - **dbconnection.py**: PostgreSQL connection factory
 - **dbio.py**: Database helper functions
 
-### Web Service (`source/site/automojo/pychestrate/webservice/`)
+### Web Service (`source/site/ccai/pychestrate/webservice/`)
 - **restapi/versions/v1/config/**: REST API patterns and authentication decorators
 - **webinterface/blueprints/config/**: Web interface patterns with Vue.js/Bootstrap
 
@@ -52,7 +52,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 2. Implement Resource Manager
   - [x] 2.1 Create ResourceManager class with validation methods
-    - Create `source/packages/automojo/pychestrate/core/managers/resource_manager.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/resource_manager.py`
     - Implement validate_resource_name (alphanumeric, underscore, hyphen, period)
     - Implement validate_tag_name (alphanumeric, underscore, hyphen)
     - Create dataclasses for requests/responses
@@ -97,7 +97,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 4. Implement IP Pool Manager
   - [x] 4.1 Create IPPoolManager class with CIDR utilities
-    - Create `source/packages/automojo/pychestrate/core/managers/ip_pool_manager.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/ip_pool_manager.py`
     - Implement validate_cidr using Python ipaddress module
     - Implement calculate_pool_stats (total, reserved, allocated, available)
     - Implement check_cidr_overlap
@@ -145,7 +145,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 6. Implement Allocation Manager
   - [x] 6.1 Create AllocationManager class
-    - Create `source/packages/automojo/pychestrate/core/managers/allocation_manager.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/allocation_manager.py`
     - Implement check_availability for exclusive and shared modes
     - Implement find_available_resource for tag-based selection
     - _Requirements: 3.1, 7.3, 7.4_
@@ -222,7 +222,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 9. Implement Health Monitor
   - [x] 9.1 Create HealthMonitor class
-    - Create `source/packages/automojo/pychestrate/core/managers/health_monitor.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/health_monitor.py`
     - Implement update_health_status with transition logging
     - Implement get_health_history
     - _Requirements: 6.1, 6.2_
@@ -270,7 +270,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 12. Implement REST API endpoints
   - [x] 12.1 Create REST API namespace and base configuration
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/resources/` directory
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/resources/` directory
     - Set up Flask-RestX namespace for /api/v1/resources
     - Implement authentication decorator
     - _Requirements: 10.1, 10.2_
@@ -346,7 +346,7 @@ The following components from system-configuration will be leveraged:
 
 - [x] 14. Implement Web Interface
   - [x] 14.1 Create web interface blueprints structure
-    - Create `source/site/automojo/pychestrate/webservice/webinterface/blueprints/resources/` directory
+    - Create `source/site/ccai/pychestrate/webservice/webinterface/blueprints/resources/` directory
     - Use SecurityBlueprint for route security
     - _Requirements: 11.1_
   - [x] 14.2 Implement resource management pages

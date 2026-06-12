@@ -3,7 +3,7 @@
 ## Architecture
 
 Enrollment lives at
-`source/site/automojo/pychestrate/webservice/clients/enrollment/`. It is a
+`source/site/ccai/pychestrate/webservice/clients/enrollment/`. It is a
 REST-fronted admin surface (token issuance + revocation) plus an internal
 hook exposed to `3-client-agent-protocol` that converts an inbound
 `ClientEnrollRequest` frame into a persisted client identity. Token
@@ -178,9 +178,9 @@ class ClientIdentityVerifierProtocol(FactoryProtocolBase):
 Reference implementations shipped in-tree:
 
 - `Argon2TokenIssuer` (`PRECEDENCE=100`) at
-  `source/site/automojo/pychestrate/factories/enrollment_token_issuer/argon2_random.py`.
+  `source/site/ccai/pychestrate/factories/enrollment_token_issuer/argon2_random.py`.
 - `CsrSubjectVerifier` (`PRECEDENCE=100`) at
-  `source/site/automojo/pychestrate/factories/client_identity_verifier/csr_subject.py`.
+  `source/site/ccai/pychestrate/factories/client_identity_verifier/csr_subject.py`.
 
 ### Events Emitted
 
@@ -199,7 +199,7 @@ entity.client.revoked          { client_id, cert_serial, reason, revoked_by }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/enrollment/
+source/site/ccai/pychestrate/webservice/clients/enrollment/
     __init__.py
     enums.py
     dtos.py                   -- IssuedToken, EnrollmentResult, TokenScope, ParsedCsr
@@ -209,9 +209,9 @@ source/site/automojo/pychestrate/webservice/clients/enrollment/
     rest.py                   -- Flask-RestX router
     rate_limit.py             -- per-project token issuance limiter
 
-source/site/automojo/pychestrate/factories/enrollment_token_issuer/
+source/site/ccai/pychestrate/factories/enrollment_token_issuer/
     argon2_random.py
-source/site/automojo/pychestrate/factories/client_identity_verifier/
+source/site/ccai/pychestrate/factories/client_identity_verifier/
     csr_subject.py
 ```
 

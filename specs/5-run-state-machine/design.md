@@ -4,7 +4,7 @@
 
 The state machine is a pure-Python table-driven transition engine
 over the `run` row owned by `0-persistence`. It lives at
-`source/site/automojo/pychestrate/webservice/jobs/run/state/`. It is
+`source/site/ccai/pychestrate/webservice/jobs/run/state/`. It is
 the *only* component that writes `run.state` — every other feature
 that needs to change state calls `run_state_machine.transition(...)`
 with an event name, never a raw state. This is load-bearing: it
@@ -242,7 +242,7 @@ class RunReconciled:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/run/state/__init__.py`
 - `jobs/run/state/enums.py` — `RunState`, `RunEvent`,

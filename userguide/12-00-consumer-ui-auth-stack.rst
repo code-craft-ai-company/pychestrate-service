@@ -19,17 +19,17 @@ Background
 
 The codebase has been migrated in waves. The web UI consumer surface
 (``/config`` / ``/resources`` / ``/projects``) was originally a flask
-blueprint backed by ``automojo.pychestrate.core.managers.SecurityManager``,
-which in turn queried the ``automojo.pychestrate.core.orm`` model classes
+blueprint backed by ``ccai.pychestrate.core.managers.SecurityManager``,
+which in turn queried the ``ccai.pychestrate.core.orm`` model classes
 (``User``, ``PasswordHistory``, ``Session``, …). All of those models
 live on the older ``PychestrateModelBase`` declarative base.
 
 Layer-1 modernization introduced
-``automojo.pychestrate.webservice.persistence.schema.PychestratePhase1Base``
+``ccai.pychestrate.webservice.persistence.schema.PychestratePhase1Base``
 as the canonical declarative base for everything new
 (``identity_users``, ``identity_groups``, ``auth_local_credentials``,
 ``rbac_*``, …) and a parallel auth implementation under
-``automojo.pychestrate.webservice.security.auth.local_flow`` /
+``ccai.pychestrate.webservice.security.auth.local_flow`` /
 ``factories.password_hasher``. The flask consumer UI was then ported
 to webworks across PRs F1..F5; the port preserved every call to the
 legacy ``SecurityManager`` 1:1.
@@ -247,7 +247,7 @@ Legacy import surface (audit)
 =============================
 
 A targeted ``grep`` over ``source/site/`` for
-``from automojo.pychestrate.core`` produces 306 import lines.
+``from ccai.pychestrate.core`` produces 306 import lines.
 Categorizing them clarifies what is genuine legacy debt versus
 shared utility, and scopes the remaining migration work for
 post-alpha planning.
@@ -256,9 +256,9 @@ Tier A — shared utilities (not legacy debt)
 -------------------------------------------
 
 **225 import lines across 167 files.** These reference
-``automojo.pychestrate.core.defaults`` (date/uuid helpers
+``ccai.pychestrate.core.defaults`` (date/uuid helpers
 ``utc_now`` / ``new_uuid``) and
-``automojo.pychestrate.core.orm.SerializableModel`` (a base
+``ccai.pychestrate.core.orm.SerializableModel`` (a base
 class for SQLAlchemy models, used by both legacy and modern
 schemas).
 
@@ -278,7 +278,7 @@ Tier B — legacy managers (real legacy data path)
 -------------------------------------------------
 
 **81 import lines across 21 files.** These reference
-``automojo.pychestrate.core.managers.*`` modules:
+``ccai.pychestrate.core.managers.*`` modules:
 
 ================================  ================
 Manager                           Imports

@@ -3,7 +3,7 @@
 ## Architecture
 
 `8-embeddable-views` lives under
-`source/site/automojo/pychestrate/webservice/embed/` and owns two
+`source/site/ccai/pychestrate/webservice/embed/` and owns two
 things: a *signing service* that issues signed embed URLs, and an
 *embed renderer* that verifies those URLs and returns a minimal HTML
 document hosting the appropriate `9-*` WebComponent. Issuance is an
@@ -95,7 +95,7 @@ Rendering (public):
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.embed.signing`:
+`ccai.pychestrate.webservice.embed.signing`:
 
 ```python
 def issue_signed_url(
@@ -137,7 +137,7 @@ def verify_signed_url(
 ```
 
 Module
-`automojo.pychestrate.webservice.embed.key_service`:
+`ccai.pychestrate.webservice.embed.key_service`:
 
 ```python
 def get_current_signing_key() -> EmbedSigningKey:
@@ -173,7 +173,7 @@ def resolve_key_by_id(*, key_id: str, now: datetime) -> EmbedSigningKey:
 ```
 
 Module
-`automojo.pychestrate.webservice.embed.inline_token`:
+`ccai.pychestrate.webservice.embed.inline_token`:
 
 ```python
 def mint_inline_token(
@@ -194,7 +194,7 @@ def mint_inline_token(
 ```
 
 Module
-`automojo.pychestrate.webservice.embed.renderer`:
+`ccai.pychestrate.webservice.embed.renderer`:
 
 ```python
 def render_embed_document(
@@ -246,7 +246,7 @@ later release.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/embed/
+source/site/ccai/pychestrate/webservice/embed/
     __init__.py
     signing.py                     # issue_signed_url, verify_signed_url
     key_service.py                 # get_current/rotate/revoke/resolve

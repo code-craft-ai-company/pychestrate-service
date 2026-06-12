@@ -5,9 +5,9 @@
 E-factory-protocols lives one layer above `E-extension-host`. The host owns
 *loaded implementations*; this feature owns *declared protocols*. It ships
 the `FactoryProtocolCatalog` singleton, the module tree under
-`source/site/automojo/pychestrate/webservice/extension/protocols/` where
+`source/site/ccai/pychestrate/webservice/extension/protocols/` where
 each protocol is its own Python module, the reference-implementation
-convention under `source/site/automojo/factories/pychestrate/_reference/`,
+convention under `source/site/ccai/factories/pychestrate/_reference/`,
 and a lint step that enforces the declaration template. Downstream
 consumers import their protocol class directly; they never hand-write
 magic strings against the host. The catalog is the authoritative source
@@ -49,7 +49,7 @@ REST under `9-admin-ui` (Phase 10, surfaced by
 ### Internal API
 
 Code lives under
-`source/site/automojo/pychestrate/webservice/extension/protocols/`.
+`source/site/ccai/pychestrate/webservice/extension/protocols/`.
 
 ```python
 # catalog.py
@@ -118,7 +118,7 @@ class ProtocolProxy:
 Every protocol module under `protocols/` follows:
 
 ```python
-from automojo.extension.factory.factoryprotocolbase import FactoryProtocolBase
+from ccai.extension.factory.factoryprotocolbase import FactoryProtocolBase
 
 
 class ObjectStoreDriverProtocol(FactoryProtocolBase):
@@ -143,7 +143,7 @@ class ObjectStoreDriverProtocol(FactoryProtocolBase):
   subclass to declare new internal protocols. External-stable declarations
   live in `E-plugin-api`.
 - Reference implementations live under
-  `source/site/automojo/factories/pychestrate/_reference/` and set
+  `source/site/ccai/factories/pychestrate/_reference/` and set
   `PRECEDENCE = 1000` (the "reference" band; lower is higher priority).
 
 ### Events Emitted
@@ -162,7 +162,7 @@ class ObjectStoreDriverProtocol(FactoryProtocolBase):
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/protocols/
+source/site/ccai/pychestrate/webservice/extension/protocols/
     __init__.py
     catalog.py             # FactoryProtocolCatalog + singleton accessor
     proxy.py               # ProtocolProxy

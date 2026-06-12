@@ -10,7 +10,7 @@ name: deploy
 # Required GitHub secrets (org or repo level):
 #
 #   AUTOMOJO_REPO_TOKEN     fine-grained PAT with Contents:Read
-#                           on the nine private automojo-* repos.
+#                           on the nine private codecraftai-* repos.
 #                           Same secret CI's test workflow uses.
 #
 #   TS_OAUTH_CLIENT_ID      OAuth client ID created in Tailscale

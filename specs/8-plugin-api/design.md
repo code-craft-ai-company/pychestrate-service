@@ -3,7 +3,7 @@
 ## Architecture
 
 `8-plugin-api` lives under
-`source/site/automojo/pychestrate/webservice/plugin_api/`. It is a
+`source/site/ccai/pychestrate/webservice/plugin_api/`. It is a
 thin catalog + policy layer that sits on top of `E-extension-host`.
 Its job is *not* to discover or load extensions — the host already
 does that — but to (a) publish the supported subset of factory
@@ -73,7 +73,7 @@ per `(extension_name, protocol_name)`.
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.plugin_api.catalog_builder`:
+`ccai.pychestrate.webservice.plugin_api.catalog_builder`:
 
 ```python
 def build_catalog(
@@ -105,7 +105,7 @@ def validate_catalog_against_code(
 ```
 
 Module
-`automojo.pychestrate.webservice.plugin_api.load_policy`:
+`ccai.pychestrate.webservice.plugin_api.load_policy`:
 
 ```python
 def evaluate_extension_load(
@@ -125,7 +125,7 @@ def evaluate_extension_load(
 ```
 
 Module
-`automojo.pychestrate.webservice.plugin_api.deprecation_reporter`:
+`ccai.pychestrate.webservice.plugin_api.deprecation_reporter`:
 
 ```python
 def report_deprecation_hit(
@@ -143,7 +143,7 @@ def report_deprecation_hit(
 ```
 
 Module
-`automojo.pychestrate.webservice.plugin_api.promotion_check`:
+`ccai.pychestrate.webservice.plugin_api.promotion_check`:
 
 ```python
 def assert_promotion_criteria_met(
@@ -180,7 +180,7 @@ class AuthProviderProtocol(FactoryProtocolBase):
     published_sunset_date: Optional[datetime] = None
     published_docs_url: str = "/docs/plugin-api/auth_provider"
     published_reference: str = \
-        "automojo.pychestrate.webservice.security.auth." \
+        "ccai.pychestrate.webservice.security.auth." \
         "factories.oidc_provider.OidcAuthProvider"
 ```
 
@@ -212,7 +212,7 @@ Protocols lacking `is_published = True` remain internal-only.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/plugin_api/
+source/site/ccai/pychestrate/webservice/plugin_api/
     __init__.py
     catalog_builder.py             # build_catalog, validate_catalog_against_code
     load_policy.py                 # evaluate_extension_load

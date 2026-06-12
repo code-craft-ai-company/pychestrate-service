@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/slo/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/slo/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `slo` and `slo_burn_rate_state`.
 - [ ] T1.3 — Implement `extension_base.py::SLODefinitionExtension` and `registry.py::SLODefinitionKindRegistry.build()`.
-- [ ] T1.4 — Ship reference `source/site/automojo/extensions/pychestrate/slo_definition/availability_ratio.py`.
+- [ ] T1.4 — Ship reference `source/site/ccai/extensions/pychestrate/slo_definition/availability_ratio.py`.
 - [ ] T1.5 — Implement `service.py::SLOService.create_slo` + `get_slo`.
 - [ ] T1.6 — Implement `status.py::SLOStatusService.compute_status`.
 - [ ] T1.7 — Register REST endpoints `POST /`, `GET /`, `GET /{id}`, `GET /{id}/status`, `GET /kinds` under `8-rest-api-v1`.

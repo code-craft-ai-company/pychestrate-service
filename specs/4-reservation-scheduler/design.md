@@ -166,7 +166,7 @@ class ReservationSchedulerProtocol(FactoryProtocolBase):
 ```
 
 In-tree implementations under
-`source/site/automojo/factories/pychestrate/reservation_scheduler/`:
+`source/site/ccai/factories/pychestrate/reservation_scheduler/`:
 
 - `FifoScheduler` — `PRECEDENCE = 1000`; earliest `enqueued_at`.
 - `PriorityScheduler` — `PRECEDENCE = 1100`; `priority` ASC, tie-break on
@@ -200,7 +200,7 @@ recovery fires regardless of algorithm.
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/scheduler/`:
+Under `source/site/ccai/pychestrate/webservice/resources/scheduler/`:
 
 - `models.py` — `SchedulerEntry`, `SchedulerEntryState`,
   `SchedulerAspects`, `SchedulerAccounting`.
@@ -214,7 +214,7 @@ Under `source/site/automojo/pychestrate/webservice/resources/scheduler/`:
 - `errors.py` — `SchedulerUnavailableError`, `SchedulerAspectsInvalidError`.
 
 Factory impls at
-`source/site/automojo/factories/pychestrate/reservation_scheduler/`.
+`source/site/ccai/factories/pychestrate/reservation_scheduler/`.
 
 ## Key Flows
 

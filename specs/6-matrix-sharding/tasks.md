@@ -10,11 +10,11 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/pipelines/sharding/` package per design.md Component Breakdown.
+- [ ] T1.1 — Create the `source/site/ccai/pychestrate/webservice/orchestration/pipelines/sharding/` package per design.md Component Breakdown.
 - [ ] T1.2 — Add `0-persistence` migration for `shard_set` and `shard_spec` with indices listed in design.md.
 - [ ] T1.3 — Implement `expansion.py` with canonical JSON for `MatrixSpec` and `shard_id = sha256(canonical_dims)[:16]`.
 - [ ] T1.4 — Implement `strategy_protocol.py::ShardingStrategyProtocol`.
-- [ ] T1.5 — Implement `CartesianShardingStrategy` under `source/site/automojo/factories/pychestrate/sharding/cartesian.py` with `PRECEDENCE = 1000`.
+- [ ] T1.5 — Implement `CartesianShardingStrategy` under `source/site/ccai/factories/pychestrate/sharding/cartesian.py` with `PRECEDENCE = 1000`.
 - [ ] T1.6 — Implement `service.py::MatrixShardingService.expand` producing persisted rows + emitting `entity.shard_set.expanded`.
 - [ ] T1.7 — Implement `dispatch_shards` honoring `max_parallelism` via a semaphore.
 - [ ] T1.8 — Register `GET /api/v1/projects/{id}/shard-sets/{set_id}` observability endpoint.
@@ -25,7 +25,7 @@
 - [ ] T2.2 — Implement `reassembly.py` with group-ordered aggregation (lex order of dimension tuples).
 - [ ] T2.3 — Implement `FailFastCartesianStrategy` and plumb `should_cancel_on_failure`; call `5-cancel-reconcile.cancel_bulk(...)` on trigger.
 - [ ] T2.4 — Implement deadline sweep (60 s scheduled job) marking `timed_out` shard sets.
-- [ ] T2.5 — Implement `WeightedByHistoryStrategy` at `source/site/automojo/factories/pychestrate/sharding/weighted_by_history.py` using `RuntimeHistoryQuery`.
+- [ ] T2.5 — Implement `WeightedByHistoryStrategy` at `source/site/ccai/factories/pychestrate/sharding/weighted_by_history.py` using `RuntimeHistoryQuery`.
 - [ ] T2.6 — Implement includes/excludes support in `CartesianShardingStrategy`.
 - [ ] T2.7 — Emit `entity.shard_set.completed`, `entity.shard.state_changed`, `entity.shard_set.fail_fast_triggered`.
 - [ ] T2.8 — Implement `strategy_registry.py` accessor over the extension host; subscribe to `extension.reloaded`.

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pychestrate-service"
-description = "Automation Mojo - Pychestrate Service"
+description = "Code Craft AI - Pychestrate Service"
 version = "0.0.1"
 authors = []
 readme = "README.rst"
@@ -14,31 +14,31 @@ keywords = [
     "python"
 ]
 packages = [
-    {include="automojo", from="source/packages"},
-    {include="automojo", from="source/site"},
+    {include="ccai", from="source/packages"},
+    {include="ccai", from="source/site"},
 ]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"
-automojo-errors = { git = "https://github.com/automationmojo/automojo-errors.git", branch = "main" }
-automojo-runtime = { git = "https://github.com/automationmojo/automojo-runtime.git", branch = "main" }
-automojo-credentials = { git = "https://github.com/automationmojo/automojo-credentials.git", branch = "main" }
-automojo-dataprofiles = { git = "https://github.com/automationmojo/automojo-dataprofiles.git", branch = "main" }
-automojo-storage-database = { git = "https://github.com/automationmojo/automojo-storage-database.git", branch = "main" }
-automojo-testbase = { git = "https://github.com/automationmojo/automojo-testbase.git", branch = "main" }
-automojo-webworks = { git = "https://github.com/automationmojo/automojo-webworks.git", branch = "main" }
+codecraftai-errors = { git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main" }
+codecraftai-runtime = { git = "https://github.com/automationmojo/codecraftai-runtime.git", branch = "main" }
+codecraftai-credentials = { git = "https://github.com/automationmojo/codecraftai-credentials.git", branch = "main" }
+codecraftai-dataprofiles = { git = "https://github.com/automationmojo/codecraftai-dataprofiles.git", branch = "main" }
+codecraftai-storage-database = { git = "https://github.com/automationmojo/codecraftai-storage-database.git", branch = "main" }
+codecraftai-testbase = { git = "https://github.com/automationmojo/codecraftai-testbase.git", branch = "main" }
+codecraftai-webworks = { git = "https://github.com/automationmojo/codecraftai-webworks.git", branch = "main" }
 # NOTE: pychestrate-core was previously a git-source dep but it
-# ships an empty ``automojo/pychestrate/__init__.py`` that
-# converts ``automojo.pychestrate`` from a PEP-420 namespace
+# ships an empty ``ccai/pychestrate/__init__.py`` that
+# converts ``ccai.pychestrate`` from a PEP-420 namespace
 # package into a regular package, blocking access to
-# ``automojo.pychestrate.webservice`` (which lives at
-# ``source/site/automojo/pychestrate/webservice/``). The repo
-# provides the ``automojo.pychestrate.core.*`` modules it
+# ``ccai.pychestrate.webservice`` (which lives at
+# ``source/site/ccai/pychestrate/webservice/``). The repo
+# provides the ``ccai.pychestrate.core.*`` modules it
 # actually consumes (``orm``, ``defaults``, ``managers``,
-# ``migrations``) from ``source/packages/automojo/pychestrate/
+# ``migrations``) from ``source/packages/ccai/pychestrate/
 # core/`` directly, so the external dep was redundant -- the
 # only file that referenced pychestrate-core's installed content
-# was ``source/packages/automojo/pychestrate/core/dbio.py``,
+# was ``source/packages/ccai/pychestrate/core/dbio.py``,
 # which is dead code (no consumer in the codebase). When dbio
 # is retired (post-alpha cleanup) it can be deleted; for now
 # leaving it in place is harmless because nothing imports it.

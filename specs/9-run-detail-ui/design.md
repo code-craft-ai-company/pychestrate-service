@@ -130,7 +130,7 @@ via SSE.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-run-detail/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-run-detail/`:
 
 - `pyc-run-detail.ts` — composition Custom Element.
 - `run-header.ts` — header subcomponent.

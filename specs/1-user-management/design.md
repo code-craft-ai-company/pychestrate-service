@@ -5,7 +5,7 @@
 The user-management feature is a Layer 1 service that owns the canonical
 `users` and `groups` tables and the `user_directory_source` factory protocol.
 It lives under
-`source/site/automojo/pychestrate/webservice/identity/users/` and is wired
+`source/site/ccai/pychestrate/webservice/identity/users/` and is wired
 into the WebWorks app by `0-web-app-host` at startup. Persistence goes
 through the repository abstraction provided by `0-persistence`; inbound
 events from external directories run through the factory registry owned by
@@ -79,7 +79,7 @@ REST routes under `/api/v1/identity/`:
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.identity.users.user_service`:
+Module `ccai.pychestrate.webservice.identity.users.user_service`:
 
 ```python
 def create_user(
@@ -161,7 +161,7 @@ def add_group_member(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.identity.users.directory_sync`:
+Module `ccai.pychestrate.webservice.identity.users.directory_sync`:
 
 ```python
 def run_directory_sync(*, source_name: str, actor_user_id: UUID) -> DirectorySyncReport:
@@ -180,7 +180,7 @@ def run_directory_sync(*, source_name: str, actor_user_id: UUID) -> DirectorySyn
 ### Extension Surface
 
 Factory protocol `user_directory_source` declared in
-`automojo.pychestrate.webservice.identity.users.factories.user_directory_source`:
+`ccai.pychestrate.webservice.identity.users.factories.user_directory_source`:
 
 ```python
 class UserDirectorySourceProtocol(FactoryProtocolBase):
@@ -210,7 +210,7 @@ class UserDirectorySourceProtocol(FactoryProtocolBase):
 ```
 
 Reference implementation `LocalDatabaseUserDirectorySource` ships in
-`automojo.pychestrate.webservice.identity.users.factories.local_directory`
+`ccai.pychestrate.webservice.identity.users.factories.local_directory`
 with `PRECEDENCE = 1000`, producing the local-administration path.
 
 ### Events Emitted
@@ -232,7 +232,7 @@ with `PRECEDENCE = 1000`, producing the local-administration path.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/identity/users/
+source/site/ccai/pychestrate/webservice/identity/users/
     __init__.py
     models.py                       # SQLAlchemy models: User, Group, GroupMembership
     user_service.py                 # public API surface above

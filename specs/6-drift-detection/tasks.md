@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/infra/drift/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/infra/drift/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `drift_schedule`, `drift_run`, `drift_tick_ledger`.
 - [ ] T1.3 — Implement `checker_protocol.py::DriftCheckerProtocol`.
-- [ ] T1.4 — Implement `TerraformDriftChecker` at `source/site/automojo/factories/pychestrate/drift_checker/terraform.py` with `PRECEDENCE = 500`.
+- [ ] T1.4 — Implement `TerraformDriftChecker` at `source/site/ccai/factories/pychestrate/drift_checker/terraform.py` with `PRECEDENCE = 500`.
 - [ ] T1.5 — Implement `scheduler.py` with cron evaluator (croniter-based) and exactly-once tick insert.
 - [ ] T1.6 — Implement `service.py::DriftDetection.set_schedule` and `tick`.
 - [ ] T1.7 — Register REST `PUT /.../drift-schedule` and `GET /.../drift-runs`.

@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/lifecycle/`.
+  `source/site/ccai/pychestrate/webservice/extension/lifecycle/`.
 - [ ] T1.2 — Implement `ExtensionLifecycleRecord` and
   `ExtensionHealthState` dataclasses.
 - [ ] T1.3 — Implement signature-validation helper in

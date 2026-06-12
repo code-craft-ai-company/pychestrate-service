@@ -14,24 +14,24 @@ The module consists of four primary components:
 
 The following components already exist and will be leveraged:
 
-### Core Package (`source/packages/automojo/pychestrate/core/`)
+### Core Package (`source/packages/ccai/pychestrate/core/`)
 - **orm.py**: Contains `PychestrateModelBase`, `SerializableModel` mixin, and existing `User` model (OAuth-based with provider, status, roles as comma-separated string)
 - **dbconnection.py**: `DatabaseConnectionFactory` with `BasicSocketDatabaseConnectionFactory` and `BasicTcpDatabaseConnectionFactory` for PostgreSQL
 - **dbio.py**: Helper functions `database_exists()`, `database_create()`, `create_network_attached_database()`, `open_network_attached_database()`
 - **defaults.py**: Utility functions `utc_now()`, `new_uuid()`, `reset_token_expiration()`
 
-### Web Service (`source/site/automojo/pychestrate/webservice/`)
+### Web Service (`source/site/ccai/pychestrate/webservice/`)
 - **security.py**: `csrf_token_generate()`, `csrf_token_validate()`, `send_password_reset_email()`
 - **metadata.py**: `SITE_SHARED_GLOBALS` with DATABASE_ENGINE, DATABASE_SESSION_FACTORY, SMTP config
 - **dbio.py**: `get_database_session()` helper
 - **restapi/versions/v1/__init__.py**: Flask-RestX API setup with namespace pattern
 
-### Web Interface (`source/site/automojo/pychestrate/webservice/webinterface/`)
+### Web Interface (`source/site/ccai/pychestrate/webservice/webinterface/`)
 - **blueprints/public/home.html**: Vue.js/Bootstrap template pattern
 - **static/**: JavaScript libraries (Vue, Bootstrap-Vue, bcrypt.js, etc.)
 
-### Base Framework (`automojo-webservice-flask` package in .venv)
-The `automojo.webservice.xflask` module provides extensive base infrastructure:
+### Base Framework (`codecraftai-webservice-flask` package in .venv)
+The `ccai.webservice.xflask` module provides extensive base infrastructure:
 
 #### ORM Models (`baseorm.py`)
 - **User**: OAuth-based user with provider, provider_ref_id, roles (comma-separated), status, usertype

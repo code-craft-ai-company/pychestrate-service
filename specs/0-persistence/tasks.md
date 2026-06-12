@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Add `source/site/automojo/pychestrate/webservice/persistence/` package skeleton per design.md Component Breakdown.
+- [ ] T1.1 — Add `source/site/ccai/pychestrate/webservice/persistence/` package skeleton per design.md Component Breakdown.
 - [ ] T1.2 — Implement `persistence/config.py::PersistenceConfig` with DSN redaction in `__repr__`.
 - [ ] T1.3 — Initialize Alembic under `persistence/alembic/` with an empty `versions/` directory and an `env.py` that accepts a `MigrationPack`.
 - [ ] T1.4 — Implement `persistence/migrations/runner.py` supporting a single core pack (extension composition deferred to T2.5).
@@ -31,7 +31,7 @@
 - [ ] T2.3 — Implement `persistence/uow.py::unit_of_work` context manager with `SAVEPOINT` for nesting; raise `SemanticError` if inner `commit()` is called.
 - [ ] T2.4 — Emit `entity.<kind>.saved` / `entity.<kind>.deleted` on the lifecycle channel (forwarded to `0-message-bus` once available).
 - [ ] T2.5 — Implement `EntityMigrationExtension` resource surface and fold discovered packs into `alembic upgrade head` (depends on `E-resource-extensions` from Phase 0.5; stub until then).
-- [ ] T2.6 — Ship `CoreMigrationExtension` as the in-tree reference under `source/site/automojo/extensions/pychestrate/core/migrations/`.
+- [ ] T2.6 — Ship `CoreMigrationExtension` as the in-tree reference under `source/site/ccai/extensions/pychestrate/core/migrations/`.
 - [ ] T2.7 — Write first two real core migrations: `0001_pychestrate_base` (schema `core`, extensions for uuid-ossp + pgcrypto) and `0002_service_bookkeeping` (service_info table).
 - [ ] T2.8 — Wire per-query span `pychestrate.persistence.query` and unit-of-work span `pychestrate.persistence.unit_of_work`.
 

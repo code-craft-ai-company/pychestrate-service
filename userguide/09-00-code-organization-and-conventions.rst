@@ -8,15 +8,15 @@ Code Organization and Conventions
 REST API Framework — Production State
 =====================================
 
-The production webservice runs on ``automojo.webworks``.  The bootstrap
+The production webservice runs on ``ccai.webworks``.  The bootstrap
 at ``source/site/app_pychestrate_main.py`` builds the application via
-``automojo.webworks.webapplication.establish_webapp_persona`` and
+``ccai.webworks.webapplication.establish_webapp_persona`` and
 attaches handlers with ``@app.attach_route(...)``.  The runtime request
-type is ``automojo.webworks.routing.request.Request``; the runtime
-response types live under ``automojo.webworks.routing.response``
+type is ``ccai.webworks.routing.request.Request``; the runtime
+response types live under ``ccai.webworks.routing.response``
 (``Response``, ``JSONResponse``, ``HTMLResponse``, ``RedirectResponse``,
 ``StreamingResponse``).  Handlers signal HTTP errors by raising
-``automojo.webworks.routing.exceptions.HTTPException`` (or one of the
+``ccai.webworks.routing.exceptions.HTTPException`` (or one of the
 documented subclasses ``NotFound`` / ``BadRequest`` / ``Unauthorized`` /
 ``Forbidden`` / ``MethodNotAllowed``); the dispatcher converts those to
 responses.
@@ -31,7 +31,7 @@ flask_restx ``*_controller.py`` files are pre-migration scaffold
 
 A number of files named ``*_controller.py`` still live next to feature
 modules under
-``source/site/automojo/pychestrate/webservice/**/restapi/v1/``.  These
+``source/site/ccai/pychestrate/webservice/**/restapi/v1/``.  These
 were written against ``flask_restx`` before the webworks migration and
 are **not loaded by the production bootstrap**.  They are dead code
 that exists only as a reference for porting.
@@ -50,7 +50,7 @@ Conventions for working with these files:
   ``app.attach_route(...)`` and uses the webworks request / response
   types.  Wire the registration into ``register_service_extensions()``
   in ``app_pychestrate_main.py``.  See
-  ``source/site/automojo/pychestrate/webservice/identity/flags/restapi/v1/flags_routes.py``
+  ``source/site/ccai/pychestrate/webservice/identity/flags/restapi/v1/flags_routes.py``
   for the reference template.
 
 * **Delete the flask_restx controller after the port is wired and
@@ -66,9 +66,9 @@ Every 4xx / 5xx response from the webservice's REST surface SHALL be
 an RFC 7807 problem document served with the
 ``application/problem+json`` content type.  The framework-agnostic
 builder lives at
-``source/site/automojo/pychestrate/webservice/api/problem_json.py``;
+``source/site/ccai/pychestrate/webservice/api/problem_json.py``;
 the webworks adapter lives at
-``source/site/automojo/pychestrate/webservice/api/problem_json_webworks.py``
+``source/site/ccai/pychestrate/webservice/api/problem_json_webworks.py``
 and exposes ``problem_response_for_http_status(...)`` plus
 ``build_webworks_problem_response(...)``.
 

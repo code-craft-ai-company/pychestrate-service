@@ -129,7 +129,7 @@ interface PodMemberRendererRecord {
 ```
 
 In-tree reference renderers served alongside `9-ui-design-tokens`'s static
-dispatcher under `source/site/automojo/pychestrate/webservice/webinterface/components/`:
+dispatcher under `source/site/ccai/pychestrate/webservice/webinterface/components/`:
 
 - `<pyc-pod-member-generic>` — default fallback.
 - `<pyc-pod-member-linux-host>` — Linux host, inline load badge.
@@ -145,7 +145,7 @@ Transport-level events from fetch + SSE/WebSocket streams.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-pod-topology/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-pod-topology/`:
 
 - `pyc-pod-topology.ts` — Custom Element.
 - `layout/radial.ts` — deterministic radial layout.
@@ -159,7 +159,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/co
 - `tests/`.
 
 In-tree reference member renderers under
-`source/site/automojo/pychestrate/webservice/webinterface/components/pyc-pod-member-linux-host/` etc.
+`source/site/ccai/pychestrate/webservice/webinterface/components/pyc-pod-member-linux-host/` etc.
 
 Bundle emitted at `/ui/components/pyc-pod-topology/pyc-pod-topology.js`.
 

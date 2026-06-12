@@ -3,7 +3,7 @@
 ## Architecture
 
 Progress ingest is a WebWorks-routed HTTP receiver under
-`source/site/automojo/pychestrate/webservice/ingest/progress/`. Two
+`source/site/ccai/pychestrate/webservice/ingest/progress/`. Two
 routes fan into a single `ProgressIngestService` that performs auth,
 run/envelope identifier validation, parser selection (via
 `E-extension-host`), persistence, aggregate-counter update, and
@@ -242,7 +242,7 @@ class ProgressParserProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/factories/pychestrate/progress_parser/`):
+`source/site/ccai/factories/pychestrate/progress_parser/`):
 
 - `TestBaseProgressParser` — `format_tag = "testbase-v1"`,
   `PRECEDENCE = 1000`. Parses testbase's
@@ -270,7 +270,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `ingest/progress/__init__.py`
 - `ingest/progress/routes.py` — WebWorks routes for the two endpoints.
@@ -292,7 +292,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
   service and registers routes.
 
 Factories live under
-`source/site/automojo/factories/pychestrate/progress_parser/`.
+`source/site/ccai/factories/pychestrate/progress_parser/`.
 
 ## Key Flows
 

@@ -15,7 +15,7 @@
 ### M1 — Skeleton
 
 - [x] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/pack_template/`.
+  `source/site/ccai/pychestrate/webservice/extension/pack_template/`.
   *(Subsystem rooted at ``extension.pack_template`` with ``models``,
   ``corpus_loader``, ``generator``, ``cli`` modules; corpus is
   vendored under ``corpus/v1/`` so service CI exercises it.)*

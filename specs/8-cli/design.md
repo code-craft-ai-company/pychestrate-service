@@ -4,7 +4,7 @@
 
 `8-cli` is a standalone Python package `pychestrate-cli` installed as
 the `pyc` entry point. Its source lives under
-`source/site/automojo/pychestrate/cli/` and it depends only on the
+`source/site/ccai/pychestrate/cli/` and it depends only on the
 published surface of `8-rest-api-v1`. The command tree is generated
 at build time from the server's OpenAPI document
 (`/api/v1/_meta/openapi.json`) plus the list of
@@ -112,7 +112,7 @@ Meta:
 
 ### Internal API
 
-Module `automojo.pychestrate.cli.parser`:
+Module `ccai.pychestrate.cli.parser`:
 
 ```python
 def build_command_tree(
@@ -142,7 +142,7 @@ def parse_invocation(
     ...
 ```
 
-Module `automojo.pychestrate.cli.credentials`:
+Module `ccai.pychestrate.cli.credentials`:
 
 ```python
 def load_profile(
@@ -170,7 +170,7 @@ def store_token(
     return rtnval
 ```
 
-Module `automojo.pychestrate.cli.transport`:
+Module `ccai.pychestrate.cli.transport`:
 
 ```python
 def execute_request(
@@ -191,7 +191,7 @@ def execute_request(
     ...
 ```
 
-Module `automojo.pychestrate.cli.renderer`:
+Module `ccai.pychestrate.cli.renderer`:
 
 ```python
 def render(
@@ -205,7 +205,7 @@ def render(
     ...
 ```
 
-Module `automojo.pychestrate.cli.download`:
+Module `ccai.pychestrate.cli.download`:
 
 ```python
 def resumable_download(
@@ -225,7 +225,7 @@ def resumable_download(
 ### Extension Surface
 
 Resource base `CLISubcommandExtension` declared in
-`automojo.pychestrate.cli.extensions.cli_subcommand`:
+`ccai.pychestrate.cli.extensions.cli_subcommand`:
 
 ```python
 class CLISubcommandExtension(ResourceExtension):
@@ -267,7 +267,7 @@ local files.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/cli/
+source/site/ccai/pychestrate/cli/
     __init__.py
     entry.py                        # `pyc` entry point
     parser.py                       # argparse builder from OpenAPI

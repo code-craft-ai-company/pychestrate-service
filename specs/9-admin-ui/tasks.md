@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-admin-ui/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-admin-ui/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-admin-ui.ts::PycAdminUi` shell with observed attributes `default-tab`, `disable-palette`, `rescan-timeout-seconds`, `aria-label`.
 - [ ] T1.3 — Implement `permission-set.ts` and `tab-registry.ts`; declare built-in tabs with `requiredPerms`.
 - [ ] T1.4 — Implement `admin-router.ts` hash router with `push`, `parse`, `onChange`.

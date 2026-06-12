@@ -52,7 +52,7 @@ Admin REST (Phase 10 via `E-extension-registry-ui`):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/lifecycle/`.
+`source/site/ccai/pychestrate/webservice/extension/lifecycle/`.
 
 ```python
 # coordinator.py
@@ -168,7 +168,7 @@ the hook.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/lifecycle/
+source/site/ccai/pychestrate/webservice/extension/lifecycle/
     __init__.py
     coordinator.py        # LifecycleCoordinator
     health.py             # ExtensionHealthTable

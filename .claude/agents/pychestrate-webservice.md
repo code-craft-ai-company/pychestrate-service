@@ -7,11 +7,11 @@ model: sonnet
 You are the REST API specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/**/restapi/v1/` — every `*_routes.py` module
-- `source/site/automojo/pychestrate/webservice/middleware_webworks.py` and `middleware_setup_gate.py`
-- `source/site/automojo/pychestrate/webservice/api/problem_json*.py` — RFC 7807 problem documents
+- `source/site/ccai/pychestrate/webservice/**/restapi/v1/` — every `*_routes.py` module
+- `source/site/ccai/pychestrate/webservice/middleware_webworks.py` and `middleware_setup_gate.py`
+- `source/site/ccai/pychestrate/webservice/api/problem_json*.py` — RFC 7807 problem documents
 - `source/site/app_pychestrate_main.py` — wiring + route registration
-- Webworks routing imports: `automojo.webworks.routing.request`, `.response`, etc.
+- Webworks routing imports: `ccai.webworks.routing.request`, `.response`, etc.
 
 ## Conventions you enforce
 - Routes register via `register_<feature>_routes(app, version_prefix)` exported from each module.

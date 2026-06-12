@@ -133,7 +133,7 @@ SSE/WebSocket status events from `6-live-run-view`.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-pipeline-dag/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-pipeline-dag/`:
 
 - `pyc-pipeline-dag.ts` — Custom Element.
 - `layout/sugiyama.ts` — deterministic layered layout.

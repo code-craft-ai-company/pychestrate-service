@@ -167,7 +167,7 @@ upstream through `factory: progress_parser` in `5-progress-ingest`.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/live/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/live/`:
 
 - `__init__.py`
 - `hub.py` — `LiveRunHub`.

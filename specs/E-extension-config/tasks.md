@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/config/`.
+  `source/site/ccai/pychestrate/webservice/extension/config/`.
 - [ ] T1.2 — Implement `ExtensionConfigScope` with `get_variable`
   and `list_variable_names`.
 - [ ] T1.3 — Implement `build_scope_for_extension` factory.

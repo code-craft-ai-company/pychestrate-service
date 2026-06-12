@@ -199,7 +199,7 @@ class CheckoutValidatorExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree under
-`source/site/automojo/extensions/pychestrate/resources/checkout_validators/`:
+`source/site/ccai/extensions/pychestrate/resources/checkout_validators/`:
 
 - `RequireReasonValidator` — reason must be non-empty, ≥ 8 chars.
 - `PodMemberExclusionValidator` — rejects direct checkout of
@@ -236,7 +236,7 @@ queued ones.
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/checkout/`:
+Under `source/site/ccai/pychestrate/webservice/resources/checkout/`:
 
 - `models.py` — `Reservation`, `ReservationMode`, `ReservationState`,
   `ReservationAspects`, `ReservationTarget`, `WaitStrategy`.

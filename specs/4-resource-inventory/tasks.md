@@ -16,7 +16,7 @@
 
 ### M1 — Skeleton
 
-- [x] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/inventory/` per design.md Component Breakdown.
+- [x] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/inventory/` per design.md Component Breakdown.
 - [~] T1.2 — Add Alembic migration `0010_resources_core` creating `core.resources` with PK, unique partial index `(kind, identity_hash) WHERE state != 'retired'`, index `(kind, state)`, GIN on `tags`.
       *(Migration 022 creates ``resources_resource``. Partial
       unique index + GIN are Postgres-specific M2/M3 work; M1
@@ -40,7 +40,7 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Replace the hard-coded kind with discovery via `E-resource-extensions`; rebuild the registry on `extension.reloaded`.
-- [ ] T2.2 — Ship the four reference kinds: `DeviceResourceKind`, `IPAddressResourceKind`, `IPSubnetResourceKind`, `LicenseResourceKind` under `source/site/automojo/extensions/pychestrate/resources/kinds/`.
+- [ ] T2.2 — Ship the four reference kinds: `DeviceResourceKind`, `IPAddressResourceKind`, `IPSubnetResourceKind`, `LicenseResourceKind` under `source/site/ccai/extensions/pychestrate/resources/kinds/`.
 - [ ] T2.3 — Add `render_public` redaction for sensitive attrs and route sensitive fields through `1-secrets-vault` at registration time.
 - [ ] T2.4 — Implement `PATCH /api/v1/resources/{id}` with kind-validated attrs update and version-checked optimistic concurrency.
 - [ ] T2.5 — Implement state-transition endpoints `:quarantine`, `:heal`, `:retire` with `ResourceStateTransitionError` on illegal moves; forbid any transition out of `retired`.

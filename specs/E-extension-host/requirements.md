@@ -3,8 +3,8 @@
 ## Introduction
 
 E-extension-host is the `SuperFactory`-style core of Pychestrate's Layer E
-extensibility model. It scans the configured `automojo.factories.pychestrate.*`
-and `automojo.extensions.pychestrate.*` namespaces on `sys.path` at service
+extensibility model. It scans the configured `ccai.factories.pychestrate.*`
+and `ccai.extensions.pychestrate.*` namespaces on `sys.path` at service
 startup, loads `FactoryExtension` and `ResourceExtension` descendants into
 typed registries, sorts factories by `PRECEDENCE`, and exposes the lookup API
 that every other Pychestrate feature consumes to acquire its drivers,
@@ -28,8 +28,8 @@ accepts traffic.
 **Acceptance Criteria (EARS):**
 
 1. WHEN the service process reaches the Layer E bootstrap step THEN the system
-   SHALL walk every directory on `sys.path` for `automojo/factories/pychestrate`
-   and `automojo/extensions/pychestrate` trees and record a module list sorted
+   SHALL walk every directory on `sys.path` for `ccai/factories/pychestrate`
+   and `ccai/extensions/pychestrate` trees and record a module list sorted
    by dotted name.
 2. IF the same dotted module name is discovered on more than one `sys.path`
    entry THEN the system SHALL log a `pychestrate_extension_duplicate_module`

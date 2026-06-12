@@ -15,7 +15,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/precedence/`.
+  `source/site/ccai/pychestrate/webservice/extension/precedence/`.
 - [ ] T1.2 — Implement `PrecedencePin` and `PrecedenceOverrideTable` in
   `table.py`.
 - [ ] T1.3 — Implement `apply_precedence(factory_classes=, table=,

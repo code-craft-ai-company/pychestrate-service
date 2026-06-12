@@ -10,13 +10,13 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/pipelines/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/pipelines/` package per design.md.
 - [ ] T1.2 — Ship `pipeline.schema.v1.json` under `schemas/` covering stages, steps, matrix, when, uses.
 - [ ] T1.3 — Implement `parser.py` with safe YAML/JSON parsing and `jsonschema` validation; aggregate line-numbered errors.
 - [ ] T1.4 — Implement `dag.py` with cycle detection (Tarjan) and topological walk.
 - [ ] T1.5 — Implement `canonicalization.py` producing canonical JSON and SHA-256 digest.
 - [ ] T1.6 — Add `0-persistence` migration for `pipeline_run`, `pipeline_stage_run`, `pipeline_step_run`, `pipeline_document_cache`.
-- [ ] T1.7 — Implement built-in step kinds `BuildStepKind`, `TestStepKind`, `ScriptStepKind` under `source/site/automojo/extensions/pychestrate/pipeline_step/`.
+- [ ] T1.7 — Implement built-in step kinds `BuildStepKind`, `TestStepKind`, `ScriptStepKind` under `source/site/ccai/extensions/pychestrate/pipeline_step/`.
 - [ ] T1.8 — Implement `service.py::PipelineService.load_from_source` and `trigger_run` happy path; register `POST /api/v1/projects/{id}/pipelines:trigger`.
 
 ### M2 — Core Behavior

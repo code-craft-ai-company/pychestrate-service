@@ -138,7 +138,7 @@ metric.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-admin-ui/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-admin-ui/`:
 
 - `pyc-admin-ui.ts` — shell Custom Element.
 - `tabs/pyc-admin-tab-users.ts` — users + groups.

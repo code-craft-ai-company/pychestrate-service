@@ -39,7 +39,7 @@
       and SQL compiler, honoring `limit/offset`.
 - [ ] T2.5 — Ship reference taxonomies (`EnvironmentTaxonomy`,
       `PlatformTaxonomy`, `ComplianceTaxonomy`) under
-      `automojo/extensions/pychestrate/tagging/`.
+      `ccai/extensions/pychestrate/tagging/`.
 - [ ] T2.6 — `GET /api/v1/taxonomies` endpoint (filtered by caller
       read perms).
 - [ ] T2.7 — Wire the search endpoint

@@ -94,7 +94,7 @@ files = [
 ]
 
 [[package]]
-name = "automojo-arcli"
+name = "codecraftai-arcli"
 version = "0.0.1"
 description = "Advanced Re-Usable Commandline Interface Framework"
 optional = false
@@ -104,18 +104,18 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", rev = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", rev = "main"}
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-arcli.git"
+url = "https://github.com/automationmojo/codecraftai-arcli.git"
 reference = "main"
 resolved_reference = "44ddc3c2f8bd7a8d0123078f14f9d97057a42b14"
 
 [[package]]
-name = "automojo-configuration"
+name = "codecraftai-configuration"
 version = "0.0.1"
-description = "Automation Mojo - Configuration"
+description = "Code Craft AI - Configuration"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -123,9 +123,9 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-this-app = {git = "https://github.com/automationmojo/automojo-this-app.git", branch = "main"}
-automojo-xmodules = {git = "https://github.com/automationmojo/automojo-xmodules.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-this-app = {git = "https://github.com/automationmojo/codecraftai-this-app.git", branch = "main"}
+codecraftai-xmodules = {git = "https://github.com/automationmojo/codecraftai-xmodules.git", branch = "main"}
 cryptography = "^45.0.5"
 pyyaml = "^6.0.2"
 requests = "^2.32.4"
@@ -136,14 +136,14 @@ pymongo = ["pymongo (>=4.13.2,<5.0.0)"]
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-configuration.git"
+url = "https://github.com/automationmojo/codecraftai-configuration.git"
 reference = "main"
 resolved_reference = "265b239476144a7bd0b7ac08cc88c70003ed6145"
 
 [[package]]
-name = "automojo-credentials"
+name = "codecraftai-credentials"
 version = "0.0.1"
-description = "Automation Mojo - Credentials Package"
+description = "Code Craft AI - Credentials Package"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -151,18 +151,18 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-credentials.git"
+url = "https://github.com/automationmojo/codecraftai-credentials.git"
 reference = "main"
 resolved_reference = "bac9322312e6874c68ff0d10dda808da09b83b5c"
 
 [[package]]
-name = "automojo-dataprofiles"
+name = "codecraftai-dataprofiles"
 version = "0.0.1"
-description = "Automation Mojo - Data Profiles Package"
+description = "Code Craft AI - Data Profiles Package"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -170,19 +170,19 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-interfaces = {git = "https://github.com/automationmojo/automojo-interfaces.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-interfaces = {git = "https://github.com/automationmojo/codecraftai-interfaces.git", branch = "main"}
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-dataprofiles.git"
+url = "https://github.com/automationmojo/codecraftai-dataprofiles.git"
 reference = "main"
 resolved_reference = "197fa0cc5e670912a3750d498c4292079730236b"
 
 [[package]]
-name = "automojo-errors"
+name = "codecraftai-errors"
 version = "0.0.2"
-description = "Automation Mojo - Errors"
+description = "Code Craft AI - Errors"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -191,14 +191,14 @@ develop = false
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-errors.git"
+url = "https://github.com/automationmojo/codecraftai-errors.git"
 reference = "main"
 resolved_reference = "ad780c867d929b6b579f0ced1322ecf7d84feec2"
 
 [[package]]
-name = "automojo-extension"
+name = "codecraftai-extension"
 version = "0.0.1"
-description = "Automation Mojo - Extension Package"
+description = "Code Craft AI - Extension Package"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -207,14 +207,14 @@ develop = false
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-extension.git"
+url = "https://github.com/automationmojo/codecraftai-extension.git"
 reference = "main"
 resolved_reference = "6ce106e0b3f039924ed152b68a625481a0482e66"
 
 [[package]]
-name = "automojo-interfaces"
+name = "codecraftai-interfaces"
 version = "0.0.1"
-description = "Automation Mojo - Interfaces Package"
+description = "Code Craft AI - Interfaces Package"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -223,14 +223,14 @@ develop = false
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-interfaces.git"
+url = "https://github.com/automationmojo/codecraftai-interfaces.git"
 reference = "main"
 resolved_reference = "3d679f84c34b751700820f6e8f4384f74d752aad"
 
 [[package]]
-name = "automojo-runtime"
+name = "codecraftai-runtime"
 version = "0.0.1"
-description = "Automation Mojo - Runtime"
+description = "Code Craft AI - Runtime"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -238,23 +238,23 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-configuration = {git = "https://github.com/automationmojo/automojo-configuration.git", branch = "main"}
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-this-app = {git = "https://github.com/automationmojo/automojo-this-app.git", branch = "main"}
-automojo-waiting = {git = "https://github.com/automationmojo/automojo-waiting.git", branch = "main"}
-automojo-xmodules = {git = "https://github.com/automationmojo/automojo-xmodules.git", branch = "main"}
+codecraftai-configuration = {git = "https://github.com/automationmojo/codecraftai-configuration.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-this-app = {git = "https://github.com/automationmojo/codecraftai-this-app.git", branch = "main"}
+codecraftai-waiting = {git = "https://github.com/automationmojo/codecraftai-waiting.git", branch = "main"}
+codecraftai-xmodules = {git = "https://github.com/automationmojo/codecraftai-xmodules.git", branch = "main"}
 debugpy = "^1.8.12"
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-runtime.git"
+url = "https://github.com/automationmojo/codecraftai-runtime.git"
 reference = "main"
 resolved_reference = "baeb571920404cb962d594b3b51435dcef21c094"
 
 [[package]]
-name = "automojo-storage-database"
+name = "codecraftai-storage-database"
 version = "0.0.1"
-description = "Automation Mojo - Storage Database"
+description = "Code Craft AI - Storage Database"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -262,24 +262,24 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-credentials = {git = "https://github.com/automationmojo/automojo-credentials.git", branch = "main"}
-automojo-dataprofiles = {git = "https://github.com/automationmojo/automojo-dataprofiles.git", branch = "main"}
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-runtime = {git = "https://github.com/automationmojo/automojo-runtime.git", branch = "main"}
+codecraftai-credentials = {git = "https://github.com/automationmojo/codecraftai-credentials.git", branch = "main"}
+codecraftai-dataprofiles = {git = "https://github.com/automationmojo/codecraftai-dataprofiles.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-runtime = {git = "https://github.com/automationmojo/codecraftai-runtime.git", branch = "main"}
 psycopg2-binary = "^2.0.10"
 sqlalchemy = "^2.0.43"
 sqlalchemy-utils = "^0.42.0"
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-storage-database.git"
+url = "https://github.com/automationmojo/codecraftai-storage-database.git"
 reference = "main"
 resolved_reference = "e0c769c39c67e08b37f1d1df638b413f401b6c8a"
 
 [[package]]
-name = "automojo-testbase"
+name = "codecraftai-testbase"
 version = "0.0.1"
-description = "Automation Mojo - TestBase"
+description = "Code Craft AI - TestBase"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -287,25 +287,25 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-arcli = {git = "https://github.com/automationmojo/automojo-arcli.git", branch = "main"}
-automojo-configuration = {git = "https://github.com/automationmojo/automojo-configuration.git", branch = "main"}
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-interfaces = {git = "https://github.com/automationmojo/automojo-interfaces.git", branch = "main"}
-automojo-runtime = {git = "https://github.com/automationmojo/automojo-runtime.git", branch = "main"}
-automojo-this-app = {git = "https://github.com/automationmojo/automojo-this-app.git", branch = "main"}
-automojo-waiting = {git = "https://github.com/automationmojo/automojo-waiting.git", branch = "main"}
-automojo-xmodules = {git = "https://github.com/automationmojo/automojo-xmodules.git", branch = "main"}
+codecraftai-arcli = {git = "https://github.com/automationmojo/codecraftai-arcli.git", branch = "main"}
+codecraftai-configuration = {git = "https://github.com/automationmojo/codecraftai-configuration.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-interfaces = {git = "https://github.com/automationmojo/codecraftai-interfaces.git", branch = "main"}
+codecraftai-runtime = {git = "https://github.com/automationmojo/codecraftai-runtime.git", branch = "main"}
+codecraftai-this-app = {git = "https://github.com/automationmojo/codecraftai-this-app.git", branch = "main"}
+codecraftai-waiting = {git = "https://github.com/automationmojo/codecraftai-waiting.git", branch = "main"}
+codecraftai-xmodules = {git = "https://github.com/automationmojo/codecraftai-xmodules.git", branch = "main"}
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-testbase.git"
+url = "https://github.com/automationmojo/codecraftai-testbase.git"
 reference = "main"
 resolved_reference = "b2bc37fef3711ad5d8349e3f2fe7b7256411650e"
 
 [[package]]
-name = "automojo-this-app"
+name = "codecraftai-this-app"
 version = "0.0.1"
-description = "Automation Mojo - This-App"
+description = "Code Craft AI - This-App"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -313,19 +313,19 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-extension = {git = "https://github.com/automationmojo/automojo-extension.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-extension = {git = "https://github.com/automationmojo/codecraftai-extension.git", branch = "main"}
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-this-app.git"
+url = "https://github.com/automationmojo/codecraftai-this-app.git"
 reference = "main"
 resolved_reference = "7047b031cba302bf833e04bf56ab3e4cc82a7302"
 
 [[package]]
-name = "automojo-waiting"
+name = "codecraftai-waiting"
 version = "0.0.1"
-description = "Automation Mojo - Waiting Package"
+description = "Code Craft AI - Waiting Package"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -334,14 +334,14 @@ develop = false
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-waiting.git"
+url = "https://github.com/automationmojo/codecraftai-waiting.git"
 reference = "main"
 resolved_reference = "b2086b40c1d3a4771b57b7b3ee609ce7249fbe71"
 
 [[package]]
-name = "automojo-webworks"
+name = "codecraftai-webworks"
 version = "0.0.1"
-description = "Automation Mojo - WebWorks"
+description = "Code Craft AI - WebWorks"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -349,11 +349,11 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-configuration = {git = "https://github.com/automationmojo/automojo-configuration.git", branch = "main"}
-automojo-credentials = {git = "https://github.com/automationmojo/automojo-credentials.git", branch = "main"}
-automojo-dataprofiles = {git = "https://github.com/automationmojo/automojo-dataprofiles.git", branch = "main"}
-automojo-testbase = {git = "https://github.com/automationmojo/automojo-testbase.git", branch = "main"}
-automojo-this-app = {git = "https://github.com/automationmojo/automojo-this-app.git", branch = "main"}
+codecraftai-configuration = {git = "https://github.com/automationmojo/codecraftai-configuration.git", branch = "main"}
+codecraftai-credentials = {git = "https://github.com/automationmojo/codecraftai-credentials.git", branch = "main"}
+codecraftai-dataprofiles = {git = "https://github.com/automationmojo/codecraftai-dataprofiles.git", branch = "main"}
+codecraftai-testbase = {git = "https://github.com/automationmojo/codecraftai-testbase.git", branch = "main"}
+codecraftai-this-app = {git = "https://github.com/automationmojo/codecraftai-this-app.git", branch = "main"}
 requests = "^2.32.5"
 
 [package.extras]
@@ -361,14 +361,14 @@ oauth = ["authlib (>=1.6.0,<2.0.0)", "itsdangerous (>=2.2.0,<3.0.0)", "joserfc (
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-webworks.git"
+url = "https://github.com/automationmojo/codecraftai-webworks.git"
 reference = "main"
 resolved_reference = "d6bfb2ce6b372bbefb1a0ebfa33978f72e5d78e9"
 
 [[package]]
-name = "automojo-xmodules"
+name = "codecraftai-xmodules"
 version = "0.0.1"
-description = "Automation Mojo - Python Extension Modules"
+description = "Code Craft AI - Python Extension Modules"
 optional = false
 python-versions = ">=3.10,<4.0"
 groups = ["main"]
@@ -376,13 +376,13 @@ files = []
 develop = false
 
 [package.dependencies]
-automojo-errors = {git = "https://github.com/automationmojo/automojo-errors.git", branch = "main"}
-automojo-waiting = {git = "https://github.com/automationmojo/automojo-waiting.git", branch = "main"}
+codecraftai-errors = {git = "https://github.com/automationmojo/codecraftai-errors.git", branch = "main"}
+codecraftai-waiting = {git = "https://github.com/automationmojo/codecraftai-waiting.git", branch = "main"}
 debugpy = "^1.8.14"
 
 [package.source]
 type = "git"
-url = "https://github.com/automationmojo/automojo-xmodules.git"
+url = "https://github.com/automationmojo/codecraftai-xmodules.git"
 reference = "main"
 resolved_reference = "52f84dc74db08f9e45e8615f3689b664a9acc0cf"
 

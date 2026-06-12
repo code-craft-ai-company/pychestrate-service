@@ -24,7 +24,7 @@ These constraints are load-bearing; every feature below assumes them.
   shared results backend and/or POSTs progress summaries to Pychestrate's forwarding
   endpoint. Pychestrate's ingester is passive.
 - **testbase is the result contract.** Pychestrate's ingest must accept the artifact
-  set produced by `automojo-testbase`:
+  set produced by `codecraftai-testbase`:
   `testrun_summary.json`, `testrun_results_stream.jsos`, `testrun_results.json`,
   `testsummary.html`, plus `artifacts/`, `taskings/`, `tc-by-products/`, `diagnostics/`
   subtrees. Live progress matches testbase's `ProgressConcentratorServer` and
@@ -32,7 +32,7 @@ These constraints are load-bearing; every feature below assumes them.
 - **All UI controls are WebComponents.** Framework-agnostic custom elements, themed
   via CSS custom properties, embeddable outside Pychestrate.
 - **Every significant behavior has an extension point.** The Layer E extensibility
-  model (below) — modeled on `automojo-extension` — governs how external packages add
+  model (below) — modeled on `codecraftai-extension` — governs how external packages add
   drivers, strategies, event subscribers, UI contributions, and new resource kinds
   without forking Pychestrate.
 
@@ -40,10 +40,10 @@ These constraints are load-bearing; every feature below assumes them.
 
 ## Layer E — Extensibility (Cross-Cutting)
 
-The extensibility layer is modeled directly on `automojo-extension`. It is listed as
+The extensibility layer is modeled directly on `codecraftai-extension`. It is listed as
 a separate layer because every other layer's features consume it.
 
-### Design Inheritance from `automojo-extension`
+### Design Inheritance from `codecraftai-extension`
 
 Two complementary mechanisms, kept deliberately distinct:
 
@@ -64,10 +64,10 @@ Two complementary mechanisms, kept deliberately distinct:
      merging — it is a *set of kinds*, not a *chain of overrides*.
 
 Pychestrate inherits the scan-on-sys.path discovery pattern: extensions live under
-`automojo/factories/pychestrate/...` and `automojo/extensions/pychestrate/...`,
+`ccai/factories/pychestrate/...` and `ccai/extensions/pychestrate/...`,
 distributed as ordinary Python packages named `pychestrate-ext-<name>`.
 
-Pychestrate **adds** versioning and lifecycle semantics that `automojo-extension`
+Pychestrate **adds** versioning and lifecycle semantics that `codecraftai-extension`
 leaves to the caller, because extensions run inside a long-lived, multi-tenant
 service rather than a CLI process.
 

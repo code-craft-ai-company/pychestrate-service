@@ -14,7 +14,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/usage_history/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/usage_history/` per design.md.
 - [ ] T1.2 — Alembic migration `0080_resource_timeline_events` creating `core.resource_timeline_events` with PK, UNIQUE `(event_id, resource_id)`, INDEX `(resource_id, at_ts DESC)`, INDEX `(event_type, at_ts DESC)`, INDEX `(pod_event_group_id)`.
 - [ ] T1.3 — Alembic migration `0081_resource_usage_rollups` creating `core.resource_usage_rollups` with PK `(resource_id, window)` and INDEX `(window, computed_at DESC)`.
 - [ ] T1.4 — Implement `models.py`: `ResourceTimelineEvent`, `ResourceUsageRollup`, `RollupWindow`, `UsageHookContext`.

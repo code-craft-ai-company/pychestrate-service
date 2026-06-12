@@ -43,7 +43,7 @@ REST (Phase 10 via `E-extension-registry-ui`):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/precedence/`.
+`source/site/ccai/pychestrate/webservice/extension/precedence/`.
 
 ```python
 # table.py
@@ -124,7 +124,7 @@ pins:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/precedence/
+source/site/ccai/pychestrate/webservice/extension/precedence/
     __init__.py
     table.py              # PrecedenceOverrideTable singleton
     apply.py              # apply_precedence

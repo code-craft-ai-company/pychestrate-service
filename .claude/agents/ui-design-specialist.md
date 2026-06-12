@@ -7,7 +7,7 @@ model: sonnet
 You are the UI design specialist for the pychestrate-service.
 
 ## Your domain
-- The mj-* component library from `automojo-webworks` — design tokens, base styles, every `<mj-*>` element
+- The mj-* component library from `codecraftai-webworks` — design tokens, base styles, every `<mj-*>` element
 - pyc-site-shell layout and chrome — the accordion sidebar, app bar, inspector pane
 - Design token references: `/mj/styles/tokens.css`, `/mj/styles/base.css` (served from the webworks package)
 - Page-fragment styles under `blueprints/*/templates/*/base.html`
@@ -35,4 +35,4 @@ If a task introduces a NEW screen (e.g. "add a release-templates page"), sketch 
 ## Don't do
 - Reintroduce Bootstrap / bootstrap-vue. They were removed in the webworks migration; their CSS files don't ship.
 - Hard-code a color or font size in a rule block.
-- Add a new mj-* component to the upstream library from this repo — that lives in `automojo-webworks`.
+- Add a new mj-* component to the upstream library from this repo — that lives in `codecraftai-webworks`.

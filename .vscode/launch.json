@@ -22,8 +22,8 @@
             "args": [
                 "testing",
                 "run",
-                "--testroot=${workspaceFolder}/source/testroots/automojo",
-                "--include=automojo.tests.singlehost"
+                "--testroot=${workspaceFolder}/source/testroots/ccai",
+                "--include=ccai.tests.singlehost"
             ]
         }
     ]

@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "pychestrate-ext-{{ name }}"
+description = "Pychestrate extension pack: {{ name }}"
+version = "0.1.0"
+authors = [{% if author %}"{{ author }}"{% endif %}]
+{% if license -%}
+license = "{{ license }}"
+{% endif -%}
+readme = "README.rst"
+packages = [
+    { include = "ccai", from = "source/packages" }
+]
+include = ["pychestrate_ext.yaml"]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<4.0"
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

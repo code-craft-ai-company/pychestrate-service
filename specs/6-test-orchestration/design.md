@@ -257,10 +257,10 @@ class TestRunnerKindProtocol(FactoryProtocolBase):
 ```
 
 Reference implementation shipped in-tree under
-`source/site/automojo/factories/pychestrate/test_runner/testbase.py`:
+`source/site/ccai/factories/pychestrate/test_runner/testbase.py`:
 
 - `TestbaseRunnerKind` — `kind_name() == "testbase"`, `PRECEDENCE = 1000`.
-  Builds an envelope that invokes `automojo-testbase`'s runner on the
+  Builds an envelope that invokes `codecraftai-testbase`'s runner on the
   pod client, declares `parse_progress_format_tag() == "testbase.forwarding_info.v1"`,
   and `parse_result_format_tag() == "testbase.tree.v1"`.
 
@@ -281,7 +281,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/`:
 
 - `__init__.py`
 - `orchestrator.py` — `TestOrchestrator` class (public internal API).
@@ -296,7 +296,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/t
 - `events.py` — typed event payload dataclasses.
 - `rest/v1_routes.py` — REST route registration under Flask-RestX.
 
-Reference runner under `source/site/automojo/factories/pychestrate/test_runner/testbase.py`.
+Reference runner under `source/site/ccai/factories/pychestrate/test_runner/testbase.py`.
 
 ## Key Flows
 

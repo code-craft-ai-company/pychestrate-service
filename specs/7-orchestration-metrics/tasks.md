@@ -10,8 +10,8 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/domains/orchestration/` package per design.md.
-- [ ] T1.2 — Implement `PipelineLeadTimeMetric`, `PipelineStageDurationMetric`, `PipelineResultMetric` under `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/`.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/domains/orchestration/` package per design.md.
+- [ ] T1.2 — Implement `PipelineLeadTimeMetric`, `PipelineStageDurationMetric`, `PipelineResultMetric` under `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/`.
 - [ ] T1.3 — Implement `resolver.py::OrchestrationMetricResolver.on_pipeline_run_completed` + `on_stage_completed`.
 - [ ] T1.4 — Wire subscriptions `entity.pipeline.run_completed` and `entity.pipeline.stage_completed`.
 - [ ] T1.5 — Verify end-to-end: synthetic run of 3 stages populates all three metrics.

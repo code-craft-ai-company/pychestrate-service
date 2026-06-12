@@ -7,8 +7,8 @@ model: sonnet
 You are the observability specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/audit/` — audit-record write + query
-- `source/site/automojo/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/observability/metrics-beacon.js` — frontend metrics
+- `source/site/ccai/pychestrate/webservice/audit/` — audit-record write + query
+- `source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/observability/metrics-beacon.js` — frontend metrics
 - `/api/v1/_metrics/ui` — ingest endpoint
 - Structured log emitters: `pychestrate.<area>.<event>` naming convention used throughout
 

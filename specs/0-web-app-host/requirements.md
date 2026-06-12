@@ -151,7 +151,7 @@ carry a correlation id that flows through logs, metrics, and traces.
 
 ## Dependencies
 
-- **Depends on:** `automojo-webworks` (external package providing
+- **Depends on:** `codecraftai-webworks` (external package providing
   `establish_webapp_persona`, `create_wsgi_application`, `run_server`).
 - **Depended on by:** `0-persistence`, `0-message-bus`, `0-object-store`,
   `0-system-health`, `0-maintenance-mode`, `10-observability`,

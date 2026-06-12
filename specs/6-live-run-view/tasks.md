@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/live/` package per design.md Component Breakdown.
+- [x] T1.1 — Create the `source/site/ccai/pychestrate/webservice/orchestration/test/live/` package per design.md Component Breakdown.
 - [x] T1.2 — Implement `snapshot.py` with `ProgressSnapshot`, `ProgressEvent`, delta-merge helper.
       *(``empty_snapshot`` + pure ``merge_event``.)*
 - [x] T1.3 — Implement `relay.py::RunRelay` with ring buffer, subscriber set, `publish(event)` and `emit_terminal`.

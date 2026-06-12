@@ -50,7 +50,7 @@ up in the catalog and in the admin UI.
 **Acceptance Criteria (EARS):**
 
 1. WHEN a module under
-   `source/site/automojo/pychestrate/webservice/extension/resources/_declarations/`
+   `source/site/ccai/pychestrate/webservice/extension/resources/_declarations/`
    declares a `ResourceExtension` subclass marked with
    `is_resource_extension_base = True` THEN the system SHALL register it
    in `ResourceExtensionCatalog`.

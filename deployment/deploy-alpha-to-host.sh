@@ -26,7 +26,7 @@
 #      interactively.  Skipped under ``--skip-system-setup``;
 #      replaced with a prerequisite probe.
 #   3. Configure git credentials on the remote so the nine private
-#      ``automojo-*`` git-source deps can be cloned (uses
+#      ``codecraftai-*`` git-source deps can be cloned (uses
 #      ``AUTOMOJO_REPO_TOKEN`` from the local env or repo-root
 #      ``.env`` -- the same mechanism as CI).
 #   4. ``repository-setup/rehome-repository``        -- generates
@@ -355,10 +355,10 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# Step 3 -- git URL rewrite for private automojo-* repos
+# Step 3 -- git URL rewrite for private codecraftai-* repos
 # ---------------------------------------------------------------------------
 
-echo "==> Step 3/8: configure git insteadOf for private automojo-* deps"
+echo "==> Step 3/8: configure git insteadOf for private codecraftai-* deps"
 ssh "${REMOTE_TARGET}" \
     "git config --global url.\"https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
 echo "    OK"

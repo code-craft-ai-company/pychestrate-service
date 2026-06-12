@@ -17,7 +17,7 @@
 ### M1 — Skeleton
 
 - [x] T1.1 — Create `jobs/run/state/` package skeleton per design.md Component Breakdown.
-      *(``source/site/automojo/pychestrate/webservice/jobs/run/state/``
+      *(``source/site/ccai/pychestrate/webservice/jobs/run/state/``
       with ``enums.py``, ``transition_table.py``, ``models.py``,
       ``repository.py``, ``machine.py``, ``events.py``,
       ``errors.py``, ``outbox_publisher.py``, and a public

@@ -236,7 +236,7 @@ class WebhookPayloadParserExtension(ResourceExtension):
 ```
 
 Reference implementations under
-`source/site/automojo/factories/pychestrate/scm_provider/`:
+`source/site/ccai/factories/pychestrate/scm_provider/`:
 
 - `GithubScmProvider` — `PRECEDENCE = 500`.
 - `GitlabScmProvider` — `PRECEDENCE = 500`.
@@ -256,7 +256,7 @@ Reference implementations under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/source/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/source/`:
 
 - `__init__.py`
 - `service.py` — `SourceIntegrations`.
@@ -271,8 +271,8 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/s
 - `errors.py` — `ProviderTransientError`.
 - `rest/v1_routes.py` — REST endpoints.
 
-Factories under `source/site/automojo/factories/pychestrate/scm_provider/`.
-Parser extensions under `source/site/automojo/extensions/pychestrate/webhook_parser/`.
+Factories under `source/site/ccai/factories/pychestrate/scm_provider/`.
+Parser extensions under `source/site/ccai/extensions/pychestrate/webhook_parser/`.
 
 ## Key Flows
 

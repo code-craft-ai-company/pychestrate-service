@@ -130,7 +130,7 @@ Specifically:
 ```bash
 export AUTOMOJO_REPO_TOKEN=ghp_xxx     # the same fine-grained
                                        # PAT used by CI for
-                                       # private automojo-* deps
+                                       # private codecraftai-* deps
 
 deployment/deploy-alpha-to-host.sh \
     --host=tc-app-server.local \
@@ -186,7 +186,7 @@ The script aborts with a typed error if:
 |---|---|---|
 | 1 | `rsync` | excludes `.venv`, `.output`, `.cache`, `.git`, `.claude`, `.kiro`, `.vscode`, `__pycache__`, `*.pyc`, `.DS_Store`, `.env`, `*.sqlite`. |
 | 2 | `repository-setup/setup-debian-machine` | installs `build-essential`, `python3`, `python3-dev`, `python3-venv`, `python3-pip`, `pipx`, `tmux`, `make`, `nginx`, plus poetry via pipx. **Requires sudo on the remote** — you'll be prompted for the password. |
-| 3 | `git config --global url.<base>.insteadOf` | injects the PAT for cloning private `automojo-*` deps. |
+| 3 | `git config --global url.<base>.insteadOf` | injects the PAT for cloning private `codecraftai-*` deps. |
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
 | 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
 | 6 | `alembic upgrade head` | applies both migrations against `.cache/dev-db/pychestrate.sqlite`. |
@@ -231,7 +231,7 @@ unlock-then-create-admin flow.
 The service writes a high-entropy token to a 0600 file in the
 pychestrate **presence directory** — `~/pychestrate/` under the
 service user's home, which is the
-`automojo.thisapp.persona`-default for `name="pychestrate"`. The
+`ccai.thisapp.persona`-default for `name="pychestrate"`. The
 systemd unit logs the path on startup:
 
 ```bash
@@ -419,7 +419,7 @@ secret:
 | `TS_OAUTH_CLIENT_ID` | OAuth client ID from step 1 |
 | `TS_OAUTH_SECRET` | OAuth client secret from step 1 |
 | `DEPLOY_SSH_KEY` | Full contents of `~/.ssh/pychestrate-deploy` (the **private** key, including the `-----BEGIN ...` header / footer) |
-| `AUTOMOJO_REPO_TOKEN` | (already configured) — fine-grained PAT for cloning private `automojo-*` deps |
+| `AUTOMOJO_REPO_TOKEN` | (already configured) — fine-grained PAT for cloning private `codecraftai-*` deps |
 
 #### 4. Pre-provision the target
 

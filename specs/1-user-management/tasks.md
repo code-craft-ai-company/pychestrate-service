@@ -23,7 +23,7 @@
       *(Models landed in `identity/users/models.py` as `IdentityUser`,
       `IdentityGroup`, `IdentityGroupMembership`, `IdentityEmailVerification`.
       Alembic migration at
-      `source/packages/automojo/pychestrate/core/migrations/versions/004_phase1_identity_tables.py`
+      `source/packages/ccai/pychestrate/core/migrations/versions/004_phase1_identity_tables.py`
       covers all four plus the cross-feature Phase-1 tables. A proper
       `EntityMigrationExtension` wrapper lands with the `0-persistence`
       feature work; the Alembic migration is the deployable unit today.)*

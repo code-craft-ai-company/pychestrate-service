@@ -5,7 +5,7 @@
 The dispatcher is the single entry point for moving a submitted job
 from orchestration features into a pod client's process. It is a
 stateful service-owned component living under
-`source/site/automojo/pychestrate/webservice/jobs/dispatch/`. At
+`source/site/ccai/pychestrate/webservice/jobs/dispatch/`. At
 dispatch time it composes three dependencies:
 
 1. the capability-filter over the `3-client-registry` snapshot,
@@ -194,7 +194,7 @@ class DispatchStrategyProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/factories/pychestrate/dispatch_strategy/`):
+`source/site/ccai/factories/pychestrate/dispatch_strategy/`):
 
 - `FifoDispatchStrategy` — `PRECEDENCE = 1000`. Chooses the
   least-inflight pod, breaking ties by oldest `last_heartbeat_at`.
@@ -224,7 +224,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/dispatch/__init__.py`
 - `jobs/dispatch/dispatcher.py` — `JobDispatcher` facade.
@@ -241,7 +241,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
 - `jobs/dispatch/hooks.py` — startup rehydration hook.
 
 Factories live under
-`source/site/automojo/factories/pychestrate/dispatch_strategy/`.
+`source/site/ccai/factories/pychestrate/dispatch_strategy/`.
 
 ## Key Flows
 

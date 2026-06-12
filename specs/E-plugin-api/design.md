@@ -4,7 +4,7 @@
 
 E-plugin-api is a re-export package that curates the external-stable
 subset of Layer E. It lives at
-`source/site/automojo/pychestrate/plugin/v<N>/__init__.py` and
+`source/site/ccai/pychestrate/plugin/v<N>/__init__.py` and
 imports from the internal Layer E modules only those symbols whose
 catalog entries carry `stability = "published"`. A companion
 stability-review corpus under `docs/extensions/_stability_reviews/`
@@ -55,8 +55,8 @@ Import surface:
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/plugin/` and
-`source/site/automojo/pychestrate/webservice/extension/plugin_api/`.
+`source/site/ccai/pychestrate/plugin/` and
+`source/site/ccai/pychestrate/webservice/extension/plugin_api/`.
 
 ```python
 # plugin/v1/__init__.py
@@ -138,7 +138,7 @@ None new; re-exports only.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/plugin/
+source/site/ccai/pychestrate/plugin/
     __init__.py
     v1/
         __init__.py            # generated + manually curated re-exports
@@ -146,7 +146,7 @@ source/site/automojo/pychestrate/plugin/
             __init__.py
             fake_service.py
             fixtures.py
-source/site/automojo/pychestrate/webservice/extension/plugin_api/
+source/site/ccai/pychestrate/webservice/extension/plugin_api/
     __init__.py
     curator.py                 # PluginApiCurator
     deprecation.py             # Deprecation dataclass

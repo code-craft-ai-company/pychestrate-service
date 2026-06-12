@@ -10,8 +10,8 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/domains/resource/` package per design.md.
-- [ ] T1.2 — Implement `ResourcePoolSizeMetric` and `ResourceReservationWaitMetric` under `source/site/automojo/extensions/pychestrate/metric_definition/resource/`.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/domains/resource/` package per design.md.
+- [ ] T1.2 — Implement `ResourcePoolSizeMetric` and `ResourceReservationWaitMetric` under `source/site/ccai/extensions/pychestrate/metric_definition/resource/`.
 - [ ] T1.3 — Implement `resolver.py::ResourceMetricResolver.on_reservation_created` → wait metric.
 - [ ] T1.4 — Implement `sampler.py::UtilizationSampler.tick()` that snapshots pool state and emits `pool_size` gauges.
 - [ ] T1.5 — Wire subscription `entity.reservation.created` and start the sampler at service boot.

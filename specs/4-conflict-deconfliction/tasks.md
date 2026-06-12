@@ -16,7 +16,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/conflict/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/conflict/` per design.md.
 - [ ] T1.2 — Implement `models.py` dataclasses: `RuleDecision`, `ConflictEvaluation`, `ActiveReservationSnapshot`.
 - [ ] T1.3 — Implement `repository_views.py::ReadOnlyRepositoryHandle` wrapping `0-persistence`; every write method raises `SemanticError`.
 - [ ] T1.4 — Implement `rule_registry.py` with per-kind lookup and wildcard routing.

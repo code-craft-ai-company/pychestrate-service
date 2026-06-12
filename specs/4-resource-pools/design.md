@@ -160,7 +160,7 @@ class PoolAllocationStrategyProtocol(FactoryProtocolBase):
 ```
 
 In-tree implementations shipped under
-`source/site/automojo/factories/pychestrate/pool_allocation/`:
+`source/site/ccai/factories/pychestrate/pool_allocation/`:
 
 - `FifoAllocationStrategy` — round-robin, `PRECEDENCE = 1000`.
 - `LruAllocationStrategy` — oldest-last-used, `PRECEDENCE = 1100`.
@@ -191,7 +191,7 @@ From `0-message-bus` (emitted by `4-resource-inventory`):
 
 ## Component Breakdown
 
-All under `source/site/automojo/pychestrate/webservice/resources/pools/`:
+All under `source/site/ccai/pychestrate/webservice/resources/pools/`:
 
 - `models.py` — `ResourcePool` dataclass, `PoolCandidate` dataclass.
 - `repository.py` — pool CRUD, membership view rebuild.
@@ -204,7 +204,7 @@ All under `source/site/automojo/pychestrate/webservice/resources/pools/`:
   `PoolKindRejectedError`.
 
 Strategy implementations live under
-`source/site/automojo/factories/pychestrate/pool_allocation/`.
+`source/site/ccai/factories/pychestrate/pool_allocation/`.
 
 ## Key Flows
 

@@ -8,7 +8,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 1. Set up database models and migrations
   - [x] 1.1 Create Project and ProjectMember ORM models
-    - Create models in `source/packages/automojo/pychestrate/core/orm.py`
+    - Create models in `source/packages/ccai/pychestrate/core/orm.py`
     - Include Project, ProjectMember, ProjectVariable models
     - Add indexes and constraints as specified in design
     - _Requirements: 1.1, 1.2, 1.6, 14.1_
@@ -49,7 +49,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
     - _Requirements: 10.1_
 
   - [x] 1.9 Create database migration
-    - Create Alembic migration file in `source/packages/automojo/pychestrate/core/migrations/versions/`
+    - Create Alembic migration file in `source/packages/ccai/pychestrate/core/migrations/versions/`
     - Include all project-related tables
     - _Requirements: All_
 
@@ -59,7 +59,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 3. Implement Project Manager
   - [x] 3.1 Implement project CRUD operations
-    - Create ProjectManager class in `source/packages/automojo/pychestrate/core/managers/project_manager.py`
+    - Create ProjectManager class in `source/packages/ccai/pychestrate/core/managers/project_manager.py`
     - Implement create_project, get_project, update_project, delete_project
     - Implement list_projects with pagination
     - Implement validate_project_name
@@ -100,7 +100,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 4. Implement Repository Manager
   - [x] 4.1 Implement repository CRUD operations
-    - Create RepositoryManager class in `source/packages/automojo/pychestrate/core/managers/repository_manager.py`
+    - Create RepositoryManager class in `source/packages/ccai/pychestrate/core/managers/repository_manager.py`
     - Implement add_repository, get_repository, update_repository, remove_repository
     - Implement list_repositories
     - _Requirements: 3.1, 3.2, 3.6, 3.7_
@@ -122,7 +122,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 6. Implement Build Manager
   - [x] 6.1 Implement build specification CRUD
-    - Create BuildManager class in `source/packages/automojo/pychestrate/core/managers/build_manager.py`
+    - Create BuildManager class in `source/packages/ccai/pychestrate/core/managers/build_manager.py`
     - Implement create_spec, get_spec, update_spec, delete_spec
     - Implement list_specs, validate_spec
     - Include versioning on update
@@ -149,7 +149,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 7. Implement Infrastructure Manager
   - [x] 7.1 Implement infrastructure specification CRUD
-    - Create InfrastructureManager class in `source/packages/automojo/pychestrate/core/managers/infrastructure_manager.py`
+    - Create InfrastructureManager class in `source/packages/ccai/pychestrate/core/managers/infrastructure_manager.py`
     - Implement create_spec, get_spec, update_spec, delete_spec
     - Implement list_specs, validate_spec
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
@@ -168,7 +168,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 8. Implement Test Manager
   - [x] 8.1 Implement test specification CRUD
-    - Create TestManager class in `source/packages/automojo/pychestrate/core/managers/test_manager.py`
+    - Create TestManager class in `source/packages/ccai/pychestrate/core/managers/test_manager.py`
     - Implement create_spec, get_spec, update_spec, delete_spec
     - Implement list_specs, validate_spec
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5_
@@ -195,7 +195,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 10. Implement Release Manager
   - [x] 10.1 Implement release pipeline CRUD
-    - Create ReleaseManager class in `source/packages/automojo/pychestrate/core/managers/release_manager.py`
+    - Create ReleaseManager class in `source/packages/ccai/pychestrate/core/managers/release_manager.py`
     - Implement create_pipeline, get_pipeline, update_pipeline, delete_pipeline
     - Implement list_pipelines, validate_pipeline
     - _Requirements: 17.1, 17.2, 17.3, 17.4, 17.5_
@@ -306,7 +306,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 13. Implement Watch Manager
   - [x] 13.1 Implement watch CRUD
-    - Create WatchManager class in `source/packages/automojo/pychestrate/core/managers/watch_manager.py`
+    - Create WatchManager class in `source/packages/ccai/pychestrate/core/managers/watch_manager.py`
     - Implement create_watch, get_watch, update_watch, delete_watch
     - Implement list_watches, enable_watch, disable_watch
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
@@ -329,12 +329,12 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 15. Implement REST API endpoints
   - [x] 15.1 Create projects REST API namespace
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/__init__.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/__init__.py`
     - Set up Flask-RestX namespace for /api/v1/projects
     - _Requirements: 12.1_
 
   - [x] 15.2 Implement project endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/projects.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/projects.py`
     - Implement GET /projects, POST /projects, GET /projects/{id}, PUT /projects/{id}, DELETE /projects/{id}
     - Implement GET /projects/{id}/members, POST /projects/{id}/members, DELETE /projects/{id}/members/{user_id}
     - Implement GET /projects/{id}/resources, POST /projects/{id}/resources, DELETE /projects/{id}/resources/{resource_id}
@@ -342,27 +342,27 @@ This implementation plan covers the Projects module for the Pychestrate system. 
     - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7_
 
   - [x] 15.3 Implement repository endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/repositories.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/repositories.py`
     - Implement GET /projects/{id}/repositories, POST /projects/{id}/repositories
     - Implement GET /projects/{id}/repositories/{id}, PUT /projects/{id}/repositories/{id}, DELETE /projects/{id}/repositories/{id}
     - Implement POST /projects/{id}/repositories/{id}/test, POST /projects/{id}/repositories/{id}/fetch
     - _Requirements: 12.1_
 
   - [x] 15.4 Implement build endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/builds.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/builds.py`
     - Implement build spec CRUD endpoints
     - Implement build execution endpoints
     - Implement artifact endpoints
     - _Requirements: 12.1_
 
   - [x] 15.5 Implement infrastructure endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/infrastructure.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/infrastructure.py`
     - Implement infra spec CRUD endpoints
     - Implement infra job endpoints
     - _Requirements: 12.1_
 
   - [x] 15.6 Implement test endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/tests.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/tests.py`
     - Implement test spec CRUD endpoints
     - Implement test job endpoints
     - Implement test results endpoints
@@ -370,7 +370,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 
   - [x] 15.7 Implement release endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/releases.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/releases.py`
     - Implement release pipeline CRUD endpoints
     - Implement pipeline run endpoints
     - Implement release CRUD endpoints
@@ -380,7 +380,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
     - _Requirements: 12.1_
 
   - [x] 15.8 Implement calendar event endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/calendar.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/calendar.py`
     - Implement release event endpoints
     - Implement phase event endpoints
     - Implement release branch endpoints
@@ -390,7 +390,7 @@ This implementation plan covers the Projects module for the Pychestrate system. 
     - _Requirements: 12.1_
 
   - [x] 15.9 Implement watch endpoints
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects/watches.py`
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects/watches.py`
     - Implement watch CRUD endpoints
     - Implement watch trigger log endpoints
     - _Requirements: 12.1_
@@ -407,8 +407,8 @@ This implementation plan covers the Projects module for the Pychestrate system. 
 
 - [x] 17. Implement Web Interface
   - [x] 17.1 Create projects blueprint
-    - Create `source/site/automojo/pychestrate/webservice/webinterface/blueprints/projects/__init__.py`
-    - Create `source/site/automojo/pychestrate/webservice/webinterface/blueprints/projects/endpoints.py`
+    - Create `source/site/ccai/pychestrate/webservice/webinterface/blueprints/projects/__init__.py`
+    - Create `source/site/ccai/pychestrate/webservice/webinterface/blueprints/projects/endpoints.py`
     - Set up routes for project pages
     - _Requirements: 13.1_
 

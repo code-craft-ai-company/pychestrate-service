@@ -128,7 +128,7 @@ Transport-level availability events from `4-resource-health`.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-resource-picker/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-resource-picker/`:
 
 - `pyc-resource-picker.ts` — Custom Element.
 - `transport/resource-transport.ts` — REST + SSE.

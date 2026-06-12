@@ -193,7 +193,7 @@ walkthrough** — the surfaces that exist are stable.
    blank shell (no 404 status, no message); `/admin/system-health` shows
    "Loading system health…" forever.
 5. **Dead CSS links.** Login, projects, and resources bases request
-   `bootstrap.css`, `bootstrap-vue.css`, `automojo.css` — none ship; 3 404s
+   `bootstrap.css`, `bootstrap-vue.css`, `ccai.css` — none ship; 3 404s
    on every page load (`chromeless_base.html:12-14` and both legacy bases).
 6. **Raw-identifier cliff edges (MAJOR).** Enrollment tokens require typing a
    project UUID; repository creation requires typing a secret ref from
@@ -300,8 +300,8 @@ walkthrough** — the surfaces that exist are stable.
 
 ## 5. Test Suite Results
 
-_Run: `testbase testing run --root source/testroots/automojo
---includes=automojo.tests.singlehost --output=./.output/release-audit-2`
+_Run: `testbase testing run --root source/testroots/ccai
+--includes=ccai.tests.singlehost --output=./.output/release-audit-2`
 (2026-06-11, 21 min wall time)_
 
 **2,876 total — 2,841 passed · 28 failed · 7 errored · 0 skipped (98.8%).**

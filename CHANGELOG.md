@@ -23,9 +23,9 @@ bumped when the project crosses the preview-to-alpha threshold.
   `GET /clients/{client_id}/dispatches:next` and
   `GET /clients/{client_id}/heartbeat`. The supporting code module
   moved from
-  `automojo.pychestrate.webservice.agents.restapi.v1.agent_dispatch_routes`
+  `ccai.pychestrate.webservice.agents.restapi.v1.agent_dispatch_routes`
   to
-  `automojo.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes`,
+  `ccai.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes`,
   and the registration symbol from `register_agent_dispatch_routes`
   to `register_client_dispatch_routes`. No redirect shim is provided
   — this is an alpha pre-stability rename. OpenAPI spec bumped to
@@ -137,13 +137,13 @@ operated end-to-end, and exercised by an admin against either SQLite
 ### Changed
 
 - **`pychestrate-core` git-source dependency removed.** It shipped
-  an empty `automojo/pychestrate/__init__.py` that converted
-  `automojo.pychestrate` from a PEP-420 namespace package into a
+  an empty `ccai/pychestrate/__init__.py` that converted
+  `ccai.pychestrate` from a PEP-420 namespace package into a
   regular package, blocking access to
-  `automojo.pychestrate.webservice` (which lives at
+  `ccai.pychestrate.webservice` (which lives at
   `source/site/...`). Audit confirmed the dep was unused; removing
   it restored namespace package semantics. The `dbio.py` module
-  in `source/packages/automojo/pychestrate/core/` that referenced
+  in `source/packages/ccai/pychestrate/core/` that referenced
   pychestrate-core's content is left as dead code (no consumer)
   (#171).
 - **`werkzeug` dependency removed.** Was a transitive of
@@ -160,7 +160,7 @@ operated end-to-end, and exercised by an admin against either SQLite
   PAT injected as `AUTOMOJO_REPO_TOKEN` repo / org secret. The
   workflow installs a global `git url.<base>.insteadOf` rewrite
   before each `poetry install`, silently authenticating clones
-  of the nine private `automojo-*` / `pychestrate-core` git deps.
+  of the nine private `codecraftai-*` / `pychestrate-core` git deps.
   Setup procedure documented in the deploy runbook (#170).
 - **Consumer-UI handlers no longer treat empty CSRF as a refresh
   signal.** `ConsumerUISecurityAdapter.validate_token` returns
@@ -239,7 +239,7 @@ all are tracked for follow-up:
 For first-time deployments and CI:
 
 1. Create a fine-grained PAT against the `automationmojo` org
-   with `Contents: Read` on the nine private `automojo-*` /
+   with `Contents: Read` on the nine private `codecraftai-*` /
    `pychestrate-core` repos.
 2. Add it as a repo or org secret named `AUTOMOJO_REPO_TOKEN`.
 3. Provision the KEK, pepper, and UI cookie secret per the

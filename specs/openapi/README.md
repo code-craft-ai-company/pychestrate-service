@@ -15,14 +15,14 @@ Pychestrate Service REST surface.
 
 The same YAML file drives three independent consumers:
 
-1. **`automojo-restclient-pychestrate` (generated client, future PR).**
-   `automojo-restclient-base`'s `RestClientGenerator` reads this spec and
+1. **`codecraftai-restclient-pychestrate` (generated client, future PR).**
+   `codecraftai-restclient-base`'s `RestClientGenerator` reads this spec and
    emits a typed Python client. Tags become `RestApiGroup` subclasses,
    `operationId`s become snake_case method names, and component schemas
    become `SchemaObject` subclasses with `Field` descriptors. Operations
    that declare pagination via `page` / `per_page` query params plus a
    `Page<T>` response are surfaced through the base
-   `automojo.restclient.base.pagedlist.PagedList`.
+   `ccai.restclient.base.pagedlist.PagedList`.
 2. **Server-side route implementations.** Route handlers landing in
    subsequent PRs are expected to conform to the request / response
    schemas declared here. Schema drift between this document and the
@@ -77,7 +77,7 @@ produce equivalent output.
 
 ## Code generation (future)
 
-The follow-on PR will land `automojo-restclient-pychestrate` and wire
+The follow-on PR will land `codecraftai-restclient-pychestrate` and wire
 `RestClientGenerator` against this file. The generator's output goes
 into a sibling repo and is regenerated from this spec — no hand-edits
 to the generated tree.

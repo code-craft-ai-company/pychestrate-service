@@ -10,11 +10,11 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/alerts/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/alerts/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `alert_rule`, `alert_live_state`, `alert_notification_retry_queue`.
 - [ ] T1.3 — Implement `extension_base.py::AlertRuleKindExtension`, `EvaluationContext`, `FiringResult`.
 - [ ] T1.4 — Implement `registry.py::AlertRuleKindRegistry.build()`.
-- [ ] T1.5 — Ship reference `source/site/automojo/extensions/pychestrate/alert_rule_kind/threshold.py`.
+- [ ] T1.5 — Ship reference `source/site/ccai/extensions/pychestrate/alert_rule_kind/threshold.py`.
 - [ ] T1.6 — Implement `service.py::AlertRuleService.create_rule` + `get_rule` + `list_rules`.
 - [ ] T1.7 — Implement `evaluator.py::AlertEvaluator.tick` loading due rules and calling `evaluate_rule` → stdout + counter.
 - [ ] T1.8 — Register REST endpoints `POST /`, `GET /`, `GET /{id}`, `GET /kinds` under `8-rest-api-v1`.

@@ -2,14 +2,14 @@
 
 ## 1. The two models (confirmed)
 
-**Legacy `Project`** — `source/packages/automojo/pychestrate/core/orm.py:1494`
+**Legacy `Project`** — `source/packages/ccai/pychestrate/core/orm.py:1494`
 - Table `projects`; PK `id` mapped to column `proj_id` (`BigInteger`, autoincrement).
 - Identity key in practice: `proj_name` (`VARCHAR(128)`, unique) — managers look up by `Project.name`.
 - Scope/RBAC: owner via `proj_owner_id` (FK `user.user_id`); membership via `project_members` (`pm_role` strings: owner/administrator/developer/viewer). RBAC enforced by `ProjectManager.check_permission(project_id:int, user_id, permission)`.
 - Base: `PychestrateModelBase` (a `declarative_base()` at orm.py:79).
 - Every legacy feature manager FKs `projects.proj_id`: members, variables, repositories, build_specs, infra_specs, test_specs, release_pipelines, releases, release_channels, release_templates, watches, calendar/phase/merge/pull events (all confirmed via `__tablename__` + `ForeignKey('projects.proj_id')`).
 
-**New slug `Project`** — `source/site/automojo/pychestrate/webservice/projects/models.py:46`
+**New slug `Project`** — `source/site/ccai/pychestrate/webservice/projects/models.py:46`
 - Table `projects_projects`; PK `project_id` (`UUIDType`).
 - `slug` (`String(63)`, unique), `display_name`, `description`, `state` (enum ACTIVE/ARCHIVED), `owning_group_id` (UUID, nullable), `template_id/version`, `extension_fields` (JSONB), timestamps + `archived_at`.
 - Scope/RBAC: membership via `projects_project_member_bindings` (`role_name` strings, FK `projects_projects.project_id` ON DELETE CASCADE); REST gated on `system:projects.*` permission keys via `rbac_evaluator`.
@@ -59,7 +59,7 @@ Assumption (stated explicitly): the alpha host is near-empty; expect a handful o
 
 ## 5. The resolver
 
-`resolve_project(...)` — new function in `source/site/automojo/pychestrate/webservice/projects/repository.py` (it already owns `get_project_by_slug` / `get_project_by_id` and imports the new model).
+`resolve_project(...)` — new function in `source/site/ccai/pychestrate/webservice/projects/repository.py` (it already owns `get_project_by_slug` / `get_project_by_id` and imports the new model).
 
 - Accepts: `db_session`, plus exactly one of `slug: str | uuid: str | legacy_id: int` (keyword-only, mirroring existing repo style). A thin `resolve_project_ref(ref: str)` wrapper sniffs the token: parseable UUID → uuid; all-digits → legacy_id; otherwise → slug.
 - Returns: the new `Project` ORM row (canonical), from which callers read `.project_id`, `.slug`, and the new `.legacy_proj_id`. Return `None` when unresolved (callers raise their own 404 problem doc).

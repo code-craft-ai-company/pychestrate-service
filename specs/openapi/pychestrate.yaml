@@ -9,8 +9,8 @@ info:
     This document is the single source of truth for the `/api/v1/*` HTTP
     surface. It is consumed by:
 
-    * `automojo-restclient-base`'s `RestClientGenerator`, which produces the
-      typed Python client `automojo-restclient-pychestrate`.
+    * `codecraftai-restclient-base`'s `RestClientGenerator`, which produces the
+      typed Python client `codecraftai-restclient-pychestrate`.
     * Server-side route implementations in the `pychestrate-service` repo
       (route handlers are expected to conform to the schemas declared here).
     * External integrators and tooling authors.
@@ -18,7 +18,7 @@ info:
     ## Scope
 
     * Every endpoint currently implemented under
-      `source/site/automojo/pychestrate/webservice/**/restapi/v1/*_routes.py`
+      `source/site/ccai/pychestrate/webservice/**/restapi/v1/*_routes.py`
       is described.
     * Endpoints planned for the Phase 3 minimum-viable test-run slice
       (runs, dispatch ack, progress, results, test catalog, artifacts,
@@ -43,9 +43,9 @@ info:
       (`application/problem+json`) — see the `Problem` schema.
     * Paginated list endpoints return a `Page<T>` envelope (see the
       `Page` schema for the shape) so the codegen surfaces them through
-      `automojo.restclient.base.pagedlist.PagedList`.
+      `ccai.restclient.base.pagedlist.PagedList`.
   contact:
-    name: Automation Mojo LLC
+    name: Code Craft AI LLC
     url: https://github.com/automationmojo/pychestrate-service
   license:
     name: Apache-2.0
@@ -2037,7 +2037,7 @@ paths:
       x-pychestrate-status: planned
       description: |
         Posted by the pod client agent over mTLS at intervals during the
-        run. Payload shape matches the `automojo-testbase`
+        run. Payload shape matches the `codecraftai-testbase`
         `ProgressConcentratorServer` / `ForwardingInfo` contract so an
         unmodified testbase client can post directly without
         translation.
@@ -5456,7 +5456,7 @@ components:
       type: object
       description: |
         Canonical dispatch envelope. Matches the dataclass in
-        `source/site/automojo/pychestrate/webservice/jobs/envelope/schema.py`.
+        `source/site/ccai/pychestrate/webservice/jobs/envelope/schema.py`.
         Serialized with RFC 8785 (JCS) canonical JSON; consumers MUST
         verify against the declared `schema_version`
         (current: `2026-04-24`).

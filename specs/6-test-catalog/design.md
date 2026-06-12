@@ -224,7 +224,7 @@ class TestCatalogImporterProtocol(FactoryProtocolBase):
         ...
 ```
 
-Reference implementations in `source/site/automojo/factories/pychestrate/test_catalog/`:
+Reference implementations in `source/site/ccai/factories/pychestrate/test_catalog/`:
 
 - `TestbaseProjectImporter` — `PRECEDENCE = 1000`; walks a testbase project layout.
 - `PytestCollectImporter` — `PRECEDENCE = 1000`; parses `pytest --collect-only`.
@@ -244,7 +244,7 @@ Reference implementations in `source/site/automojo/factories/pychestrate/test_ca
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/catalog/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/catalog/`:
 
 - `__init__.py`
 - `catalog.py` — `TestCatalog` class.
@@ -257,7 +257,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/t
 - `errors.py` — `EntryNotFoundError`, `ImporterTransientError`.
 - `rest/v1_routes.py` — REST endpoints.
 
-Factories under `source/site/automojo/factories/pychestrate/test_catalog/`.
+Factories under `source/site/ccai/factories/pychestrate/test_catalog/`.
 
 ## Key Flows
 

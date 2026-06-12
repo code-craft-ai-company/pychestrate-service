@@ -3,7 +3,7 @@
 ## Architecture
 
 `8-webhooks-in` lives under
-`source/site/automojo/pychestrate/webservice/webhooks/inbound/` and
+`source/site/ccai/pychestrate/webservice/webhooks/inbound/` and
 mounts its routes under `/api/v1/webhooks/in/<provider>/<hook_name>`
 through the `8-rest-api-v1` dispatcher, reusing that feature's
 authentication, rate-limit, and problem-json machinery. The core of
@@ -91,7 +91,7 @@ class StructuredRejection:
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.webhooks.inbound.dispatcher`:
+Module `ccai.pychestrate.webservice.webhooks.inbound.dispatcher`:
 
 ```python
 def dispatch_inbound_webhook(
@@ -121,7 +121,7 @@ def dispatch_inbound_webhook(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.webhooks.inbound.verification`:
+Module `ccai.pychestrate.webservice.webhooks.inbound.verification`:
 
 ```python
 def verify_signature(
@@ -139,7 +139,7 @@ def verify_signature(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.webhooks.inbound.replay_cache`:
+Module `ccai.pychestrate.webservice.webhooks.inbound.replay_cache`:
 
 ```python
 def record_delivery_or_replay(
@@ -155,7 +155,7 @@ def record_delivery_or_replay(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.webhooks.inbound.deadletter`:
+Module `ccai.pychestrate.webservice.webhooks.inbound.deadletter`:
 
 ```python
 def store_deadletter(
@@ -178,7 +178,7 @@ def replay_deadletter(*, request_id: UUID) -> WebhookDispatchResult:
     ...
 ```
 
-Module `automojo.pychestrate.webservice.webhooks.inbound.normalization`:
+Module `ccai.pychestrate.webservice.webhooks.inbound.normalization`:
 
 ```python
 def publish_domain_events(
@@ -198,7 +198,7 @@ def publish_domain_events(
 ### Extension Surface
 
 Factory protocol `inbound_webhook_parser` declared in
-`automojo.pychestrate.webservice.webhooks.inbound.factories.inbound_webhook_parser`:
+`ccai.pychestrate.webservice.webhooks.inbound.factories.inbound_webhook_parser`:
 
 ```python
 class InboundWebhookParserProtocol(FactoryProtocolBase):
@@ -281,7 +281,7 @@ feature.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/webhooks/inbound/
+source/site/ccai/pychestrate/webservice/webhooks/inbound/
     __init__.py
     dispatcher.py                 # top-level dispatch pipeline
     verification.py               # signature verification

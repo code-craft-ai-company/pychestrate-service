@@ -170,7 +170,7 @@ class UsageAnalyticsHookExtension(ResourceExtension):
 ```
 
 In-tree implementations under
-`source/site/automojo/extensions/pychestrate/resources/usage_hooks/`:
+`source/site/ccai/extensions/pychestrate/resources/usage_hooks/`:
 
 - `ProjectAttributionHook` — records `project_id`, `project_name`.
 - `OwnerTeamHook` — records `owner_team` from the owner's `1-user-management`
@@ -209,7 +209,7 @@ From `0-message-bus`:
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/usage_history/`:
+Under `source/site/ccai/pychestrate/webservice/resources/usage_history/`:
 
 - `models.py` — `ResourceTimelineEvent`, `ResourceUsageRollup`,
   `RollupWindow`, `UsageHookContext`.
@@ -223,7 +223,7 @@ Under `source/site/automojo/pychestrate/webservice/resources/usage_history/`:
 - `api.py` — `/timeline` and `/usage-rollups` endpoints.
 
 Hooks at
-`source/site/automojo/extensions/pychestrate/resources/usage_hooks/`.
+`source/site/ccai/extensions/pychestrate/resources/usage_hooks/`.
 
 ## Key Flows
 

@@ -3,7 +3,7 @@
 ## Architecture
 
 `2-tagging` is a Layer 2 shared service owned by
-`automojo.pychestrate.webservice.model.tagging`. It exposes one unified
+`ccai.pychestrate.webservice.model.tagging`. It exposes one unified
 `TagAssignment` table and one taxonomy registry; every other feature that
 needs tagging calls the service rather than implementing its own. The
 taxonomy registry is populated at startup by `TagTaxonomyExtension`
@@ -58,7 +58,7 @@ Indexes:
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/model/tagging/service.py
+# source/site/ccai/pychestrate/webservice/model/tagging/service.py
 
 def assign_tag(
     *,
@@ -122,7 +122,7 @@ def search_entities(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/model/tagging/canonical.py
+# source/site/ccai/pychestrate/webservice/model/tagging/canonical.py
 
 def canonicalize_tag(
     *,
@@ -144,7 +144,7 @@ def canonicalize_tag(
 ### Extension Surface
 
 - `resource: TagTaxonomyExtension`
-  (`source/site/automojo/pychestrate/webservice/model/tagging/extensions.py`)
+  (`source/site/ccai/pychestrate/webservice/model/tagging/extensions.py`)
 
 ```python
 class TagTaxonomyExtension(ResourceExtension):
@@ -162,7 +162,7 @@ class TagTaxonomyExtension(ResourceExtension):
 ```
 
 Reference impls shipped in-tree under
-`automojo/extensions/pychestrate/tagging/`: `EnvironmentTaxonomy`
+`ccai/extensions/pychestrate/tagging/`: `EnvironmentTaxonomy`
 (values `dev|stage|prod`), `PlatformTaxonomy`,
 `ComplianceTaxonomy`.
 
@@ -183,7 +183,7 @@ subscribe to the owner entity's events and join on the tag table.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/model/tagging/
+source/site/ccai/pychestrate/webservice/model/tagging/
     __init__.py
     entities.py         # TagAssignment, Taxonomy dataclasses + ORM
     repository.py       # DB access, search_by_expression SQL compiler
@@ -193,7 +193,7 @@ source/site/automojo/pychestrate/webservice/model/tagging/
     extensions.py       # TagTaxonomyExtension base
     expression.py       # Parser + SQL compiler for boolean tag expressions
     errors.py
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/tags.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/tags.py
 ```
 
 ## Key Flows

@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-metric-tile/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-metric-tile/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-metric-tile.ts::PycMetricTile` Custom Element with observed attributes `kind`, `query`, `range`, `step`, `unit`, `title`, `subtitle`, `refresh-seconds`, `thresholds`, `announce-refresh`, `aria-label`.
 - [ ] T1.3 — Implement `transport/tile-transport.ts` against `/api/v1/metrics/query`.
 - [ ] T1.4 — Implement built-in `<pyc-metric-tile-number>` inner child.

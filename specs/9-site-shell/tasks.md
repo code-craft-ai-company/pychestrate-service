@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-site-shell/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-site-shell/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-site-shell.ts::PycSiteShell` with observed attributes `initial-route`, `permissions-endpoint`, `palette-timeout-ms`, `aria-label`.
 - [ ] T1.3 — Implement `permissions/permission-set.ts` and `permissions/permission-cache.ts` (fetch, diff, degraded-state tracking).
 - [ ] T1.4 — Implement `sidebar/sidebar-registry.ts` with `registerGroup`, `registerEntry`, `visible(perms)`; dedup by `route` with logged warning on collision.

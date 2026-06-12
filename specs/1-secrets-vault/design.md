@@ -3,7 +3,7 @@
 ## Architecture
 
 `1-secrets-vault` lives under
-`source/site/automojo/pychestrate/webservice/secrets/`. It exposes a
+`source/site/ccai/pychestrate/webservice/secrets/`. It exposes a
 narrow API (`put_secret`, `read_secret`, `rotate_secret`,
 `delete_secret`) that every other feature uses. Behavior is controlled
 by a caller-supplied `SecretsAspects` object per AGENTS.md (not by
@@ -76,7 +76,7 @@ REST routes:
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.secrets.secrets_service`:
+Module `ccai.pychestrate.webservice.secrets.secrets_service`:
 
 ```python
 @dataclass(frozen=True)
@@ -175,7 +175,7 @@ def force_expire_secret(
     return rtnval
 ```
 
-Module `automojo.pychestrate.webservice.secrets.secrets_router`:
+Module `ccai.pychestrate.webservice.secrets.secrets_router`:
 
 ```python
 def resolve_backend(*, secret_ref: str) -> SecretsBackendProtocol:
@@ -191,7 +191,7 @@ def resolve_backend(*, secret_ref: str) -> SecretsBackendProtocol:
 ### Extension Surface
 
 Factory protocol `secrets_backend` declared in
-`automojo.pychestrate.webservice.secrets.factories.secrets_backend`:
+`ccai.pychestrate.webservice.secrets.factories.secrets_backend`:
 
 ```python
 class SecretsBackendProtocol(FactoryProtocolBase):
@@ -257,7 +257,7 @@ skeleton.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/secrets/
+source/site/ccai/pychestrate/webservice/secrets/
     __init__.py
     secrets_service.py
     secrets_router.py

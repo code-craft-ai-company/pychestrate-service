@@ -19,7 +19,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/sandbox/`.
+  `source/site/ccai/pychestrate/webservice/extension/sandbox/`.
 - [ ] T1.2 — Implement `VOCABULARY` constant and `CapabilityAuthority`
   skeleton with `reload_from_manifests`, `granted_for`.
 - [ ] T1.3 — Implement `CapabilityGrantRepo` with list + upsert + mark

@@ -3,7 +3,7 @@
 ## Architecture
 
 The Agent Upgrade Channel lives at
-`source/site/automojo/pychestrate/webservice/clients/upgrades/`. It is
+`source/site/ccai/pychestrate/webservice/clients/upgrades/`. It is
 two things:
 
 1. **A rollout-orchestrator** — a small state machine that walks a
@@ -247,7 +247,7 @@ entity.upgrade.integrity_failed{ offer_id, client_id }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/upgrades/
+source/site/ccai/pychestrate/webservice/clients/upgrades/
     __init__.py
     enums.py
     dtos.py                      -- RolloutStage, FleetSnapshot,
@@ -261,11 +261,11 @@ source/site/automojo/pychestrate/webservice/clients/upgrades/
     rest.py
     metrics.py
 
-source/site/automojo/pychestrate/factories/upgrade_artifact_source/
+source/site/ccai/pychestrate/factories/upgrade_artifact_source/
     object_store.py             -- PRECEDENCE=100
     github_releases.py          -- PRECEDENCE=110
 
-source/site/automojo/pychestrate/factories/rollout_policy/
+source/site/ccai/pychestrate/factories/rollout_policy/
     percent.py                  -- PRECEDENCE=100
     ring.py                     -- PRECEDENCE=110
     canary_fleet.py             -- PRECEDENCE=120

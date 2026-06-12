@@ -192,7 +192,7 @@ class SystemHealthProbeExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/extensions/pychestrate/system_health/`):
+`source/site/ccai/extensions/pychestrate/system_health/`):
 
 - `PostgresHealthProbe` — liveness `ok` if `SELECT 1` succeeds within
   `timeout_seconds`.
@@ -221,7 +221,7 @@ probe extensions.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `system_health/__init__.py`
 - `system_health/config.py` — `HealthConfig` (probe worker count,
@@ -238,7 +238,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
   the endpoints from `0-web-app-host`.
 
 Probe reference implementations under
-`source/site/automojo/extensions/pychestrate/system_health/`.
+`source/site/ccai/extensions/pychestrate/system_health/`.
 
 ## Key Flows
 

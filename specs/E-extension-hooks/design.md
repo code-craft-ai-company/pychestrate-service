@@ -47,7 +47,7 @@ REST (Phase 10 via `E-extension-registry-ui`):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/hooks/`.
+`source/site/ccai/pychestrate/webservice/extension/hooks/`.
 
 ```python
 # decorator.py
@@ -133,7 +133,7 @@ class JobCompletedAuditExtension(ResourceExtension):
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/hooks/
+source/site/ccai/pychestrate/webservice/extension/hooks/
     __init__.py
     decorator.py           # subscribes_to metadata decorator
     aspects.py             # HookAspects dataclass

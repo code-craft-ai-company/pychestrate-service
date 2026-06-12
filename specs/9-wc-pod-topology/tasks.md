@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-pod-topology/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-pod-topology/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-pod-topology.ts::PycPodTopology` Custom Element with observed attributes `pod-id`, `layout`, `stream`, `metrics`, `aria-label`.
 - [ ] T1.3 — Implement `transport/topology-transport.ts` fetching `/api/v1/pods/{pod_id}/topology.json`.
 - [ ] T1.4 — Implement `layout/radial.ts` deterministic in member order.

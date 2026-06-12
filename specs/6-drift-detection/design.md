@@ -167,7 +167,7 @@ class DriftCheckerProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations under
-`source/site/automojo/factories/pychestrate/drift_checker/`:
+`source/site/ccai/factories/pychestrate/drift_checker/`:
 
 - `TerraformDriftChecker` — `PRECEDENCE = 500`; calls `terraform plan -refresh-only -detailed-exitcode`.
 - `PulumiDriftChecker` — `PRECEDENCE = 500`; calls `pulumi preview --diff`.
@@ -189,7 +189,7 @@ Reference implementations under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/infra/drift/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/infra/drift/`:
 
 - `__init__.py`
 - `service.py` — `DriftDetection`.
@@ -202,7 +202,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/i
 - `errors.py` — `CapabilityMismatchError`.
 - `rest/v1_routes.py`.
 
-Factories under `source/site/automojo/factories/pychestrate/drift_checker/`.
+Factories under `source/site/ccai/factories/pychestrate/drift_checker/`.
 
 ## Key Flows
 

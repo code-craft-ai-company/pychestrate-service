@@ -3,7 +3,7 @@
 ## Architecture
 
 `E-extension-host` is a process-singleton owned by Layer 0's app bootstrap. It
-is constructed during the `automojo-webworks` startup hook after the message
+is constructed during the `codecraftai-webworks` startup hook after the message
 bus and persistence layer come online but before any feature-level singletons
 that consume drivers (e.g., `0-object-store`, `1-secrets-vault`). The host owns
 two typed registries: an ordered `FactoryExtension` chain (sorted ascending by
@@ -11,7 +11,7 @@ two typed registries: an ordered `FactoryExtension` chain (sorted ascending by
 list[type[ResourceExtension]]]` grouped by declared base. The host is the
 authoritative source of truth for *which implementations are installed*; each
 consumer layer is the source of truth for *which protocol methods exist*.
-Lookup calls mirror `automojo-extension`'s `SuperFactory`
+Lookup calls mirror `codecraftai-extension`'s `SuperFactory`
 (`create_instance_by_order`, `create_instance_for_each`,
 `get_override_types_by_order`, `iterate_override_types_for_each`); Pychestrate
 adds `rescan`, `snapshot_digest`, `list_factory_protocols`, and
@@ -56,7 +56,7 @@ Admin HTTP (Phase 0.5 minimal; richer UI ships with `E-extension-registry-ui`):
 ### Internal API
 
 All code lives under
-`source/site/automojo/pychestrate/webservice/extension/host/`.
+`source/site/ccai/pychestrate/webservice/extension/host/`.
 
 ```python
 # host.py
@@ -120,8 +120,8 @@ def get_extension_host() -> ExtensionHost:
 # scanner.py
 def scan_pychestrate_namespaces(*, scan_paths: List[str]) -> List[str]:
     """
-        Walks each scan path for automojo/factories/pychestrate and
-        automojo/extensions/pychestrate descendant modules.
+        Walks each scan path for ccai/factories/pychestrate and
+        ccai/extensions/pychestrate descendant modules.
     """
     ...
 
@@ -154,7 +154,7 @@ kinds themselves are declared in `E-factory-protocols` and
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/
+source/site/ccai/pychestrate/webservice/extension/
     __init__.py
     host/
         __init__.py
@@ -174,7 +174,7 @@ source/site/automojo/pychestrate/webservice/extension/
 
 ### Flow A — Cold startup
 
-1. `automojo-webworks` app factory resolves env vars, constructs
+1. `codecraftai-webworks` app factory resolves env vars, constructs
    `ExtensionHost(scan_paths=..., strict=True)`.
 2. `bootstrap()` calls `scan_pychestrate_namespaces` which walks `sys.path`
    entries (or the allow-list), producing a sorted module list.

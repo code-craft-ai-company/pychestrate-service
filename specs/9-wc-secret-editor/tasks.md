@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-secret-editor/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-secret-editor/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-secret-editor.ts::PycSecretEditor` Custom Element with observed attributes `secret-id`, `read-only`, `require-confirm-label`, `aria-label`.
 - [ ] T1.3 — Implement `plaintext-guard.ts` scanning JSON for forbidden field names and emitting `pyc-secret-editor-policy-violation` on match.
 - [ ] T1.4 — Implement `transport/secret-transport.ts` fetching `/api/v1/secrets/{secret_id}/metadata` and rendering read-only view.

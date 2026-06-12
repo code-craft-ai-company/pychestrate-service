@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/artifact_browser/` package per design.md Component Breakdown.
+- [ ] T1.1 — Create the `source/site/ccai/pychestrate/webservice/orchestration/test/artifact_browser/` package per design.md Component Breakdown.
 - [ ] T1.2 — Implement `path_safety.py::normalize(path, root_key)` rejecting `..`, encoded escapes, and non-descendants.
 - [ ] T1.3 — Implement `browser.py::ArtifactBrowser.list` calling `ObjectStore.list` and sorting dirs-first.
 - [ ] T1.4 — Register `GET /api/v1/runs/{run_id}/artifacts` REST endpoint.
@@ -23,7 +23,7 @@
 - [ ] T2.1 — Implement `ArtifactBrowser.sign_download` with `max_presign_expires_seconds` clamping.
 - [ ] T2.2 — Implement `proxy.py` streaming endpoint `/api/v1/runs/{run_id}/artifacts/{path}:proxy`.
 - [ ] T2.3 — Wire `ClassifierQuery` against `5-result-ingest-watcher` with a 60 s LRU cache.
-- [ ] T2.4 — Ship in-tree renderers under `source/site/automojo/extensions/pychestrate/artifact_renderer/`: `PxLogStreamRenderer`, `PxImageRenderer`, `PxAudioRenderer`, `PxPcapRenderer`, `PxFlamegraphRenderer`, `PxMarkdownRenderer`.
+- [ ] T2.4 — Ship in-tree renderers under `source/site/ccai/extensions/pychestrate/artifact_renderer/`: `PxLogStreamRenderer`, `PxImageRenderer`, `PxAudioRenderer`, `PxPcapRenderer`, `PxFlamegraphRenderer`, `PxMarkdownRenderer`.
 - [ ] T2.5 — Emit `entity.test.artifact.accessed` bus events and `1-audit-log` entries for signs and proxy opens.
 - [ ] T2.6 — Enforce RBAC `run.artifacts.view` / `run.artifacts.download` on every route.
 - [ ] T2.7 — Implement renderer fallback when bundle fails to load (generic download).

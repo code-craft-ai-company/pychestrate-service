@@ -4,7 +4,7 @@
 
 The `5-progress-ingest` feature is Pychestrate's passive HTTP
 receiver for live run progress. It matches the shape of
-`automojo-testbase`'s `ProgressConcentratorServer`: the pod client's
+`codecraftai-testbase`'s `ProgressConcentratorServer`: the pod client's
 test runner opens a `ForwardingInfo` channel to a URL Pychestrate
 exposes, then periodically POSTs two flavors of payload — per-record
 progress (one task started / finished / partial) and periodic run

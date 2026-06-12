@@ -17,8 +17,8 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/plugin/v1/` and
-  `source/site/automojo/pychestrate/webservice/extension/plugin_api/`.
+  `source/site/ccai/pychestrate/plugin/v1/` and
+  `source/site/ccai/pychestrate/webservice/extension/plugin_api/`.
 - [ ] T1.2 — Implement `Deprecation` dataclass and
   `PluginApiCurator.compute_export_set` by walking the catalogs.
 - [ ] T1.3 — Implement `__getattr__` in `plugin/v1/__init__.py` for

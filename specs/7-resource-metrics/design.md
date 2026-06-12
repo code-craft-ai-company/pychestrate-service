@@ -149,13 +149,13 @@ def truncate_reason(
 Shares `MetricDefinitionExtension` (owned by `7-metrics-ingest`). In-tree
 subclasses shipped here:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/utilization.py` — `ResourcePoolUtilizationMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/pool_size.py` — `ResourcePoolSizeMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/wait.py` — `ResourceReservationWaitMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/conflict.py` — `ResourceConflictMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/quarantine.py` — `ResourceQuarantineMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/forced_release.py` — `ResourceForcedReleaseMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/resource/probe.py` — `ResourceHealthProbeDurationMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/utilization.py` — `ResourcePoolUtilizationMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/pool_size.py` — `ResourcePoolSizeMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/wait.py` — `ResourceReservationWaitMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/conflict.py` — `ResourceConflictMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/quarantine.py` — `ResourceQuarantineMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/forced_release.py` — `ResourceForcedReleaseMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/resource/probe.py` — `ResourceHealthProbeDurationMetric`.
 
 ### Events Emitted
 
@@ -172,7 +172,7 @@ subclasses shipped here:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains/resource/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/domains/resource/`:
 
 - `__init__.py`
 - `resolver.py` — `ResourceMetricResolver`.
@@ -182,7 +182,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains
 - `value_types.py` — `PoolUtilizationSnapshot`, event payload dataclasses.
 
 `MetricDefinitionExtension` subclasses under
-`source/site/automojo/extensions/pychestrate/metric_definition/resource/`.
+`source/site/ccai/extensions/pychestrate/metric_definition/resource/`.
 
 ## Key Flows
 

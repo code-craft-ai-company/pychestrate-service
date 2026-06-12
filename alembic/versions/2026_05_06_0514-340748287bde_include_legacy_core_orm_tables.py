@@ -1,7 +1,7 @@
 """include legacy core orm tables
 
 Brings every table on
-``automojo.pychestrate.core.orm.PychestrateModelBase.metadata``
+``ccai.pychestrate.core.orm.PychestrateModelBase.metadata``
 under alembic management. The legacy core models (``user``,
 ``password_history``, ``sessions``, ``permissions``,
 ``system_roles``, ``global_variables``, …) were never produced

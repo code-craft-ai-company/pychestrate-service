@@ -14,13 +14,13 @@ The module consists of four primary components:
 
 The following components from the system-configuration module will be leveraged:
 
-### Core Package (`source/packages/automojo/pychestrate/core/`)
+### Core Package (`source/packages/ccai/pychestrate/core/`)
 - **orm.py**: Contains base models, User, Role, Permission models
 - **managers/**: UserManager, SecurityManager, AuditLogger for authentication and logging
 - **dbconnection.py**: PostgreSQL connection factory
 - **dbio.py**: Database helper functions
 
-### Web Service (`source/site/automojo/pychestrate/webservice/`)
+### Web Service (`source/site/ccai/pychestrate/webservice/`)
 - **restapi/versions/v1/config/**: REST API patterns and authentication decorators
 - **webinterface/blueprints/config/**: Web interface patterns with Vue.js/Bootstrap
 
@@ -668,7 +668,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Foreign
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
-from automojo.pychestrate.core.orm import PychestrateModelBase
+from ccai.pychestrate.core.orm import PychestrateModelBase
 
 # Association table for resource-tag many-to-many
 resource_tags = Table(

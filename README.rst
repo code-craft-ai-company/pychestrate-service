@@ -2,11 +2,11 @@
 pychestrate-service
 ===================
 
-Automation Mojo - Pychestrate Service
+Code Craft AI - Pychestrate Service
 
 Overview
 ========
-pychestrate-service is a core component of the Automation Mojo technology stack. It provides robust, reusable foundation code designed to enable and orchestrate complex software automation tasks.
+pychestrate-service is a core component of the Code Craft AI technology stack. It provides robust, reusable foundation code designed to enable and orchestrate complex software automation tasks.
 
 Installation
 ============

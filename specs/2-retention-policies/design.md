@@ -3,7 +3,7 @@
 ## Architecture
 
 `2-retention-policies` lives in Layer 2 and is owned by
-`automojo.pychestrate.webservice.retention`. It contains three pieces: a
+`ccai.pychestrate.webservice.retention`. It contains three pieces: a
 policy model (persisted in `0-persistence`), an evaluator that selects
 matching rows per data class, and a dispatcher that invokes the
 registered `retention_action` factory chain. A scheduler loop — backed by
@@ -103,7 +103,7 @@ Indexes: `UNIQUE (scope_level, scope_id, name)`;
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/retention/service.py
+# source/site/ccai/pychestrate/webservice/retention/service.py
 
 def create_policy(
     *,
@@ -148,7 +148,7 @@ def dry_run_policy(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/retention/evaluator.py
+# source/site/ccai/pychestrate/webservice/retention/evaluator.py
 
 def evaluate_policy(
     *,
@@ -158,7 +158,7 @@ def evaluate_policy(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/retention/dispatcher.py
+# source/site/ccai/pychestrate/webservice/retention/dispatcher.py
 
 def dispatch_action_chain(
     *,
@@ -173,7 +173,7 @@ def dispatch_action_chain(
 ### Extension Surface
 
 - `factory: retention_action`
-  (`source/site/automojo/pychestrate/webservice/retention/factories.py`)
+  (`source/site/ccai/pychestrate/webservice/retention/factories.py`)
 
 ```python
 class RetentionActionProtocol(FactoryProtocolBase):
@@ -196,7 +196,7 @@ class RetentionActionProtocol(FactoryProtocolBase):
 ```
 
 Reference impls shipped in-tree under
-`automojo/factories/pychestrate/retention/`:
+`ccai/factories/pychestrate/retention/`:
 - `TierMoveAction` (cooperates with `0-object-store` tier API;
   non-terminal).
 - `ArchiveAction` (copies then marks source as cold-archive tier;
@@ -232,7 +232,7 @@ Topic: `entity.retention.applied`.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/retention/
+source/site/ccai/pychestrate/webservice/retention/
     __init__.py
     entities.py         # RetentionPolicy, SelectorClause, ActionStep,
                         # RetentionRunRecord, RetentionActionResult
@@ -246,7 +246,7 @@ source/site/automojo/pychestrate/webservice/retention/
                         # run_result.py, log_stream.py, audit_record.py,
                         # metric_sample.py)
     errors.py
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/retention.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/retention.py
 ```
 
 ## Key Flows

@@ -3,7 +3,7 @@
 ## Architecture
 
 `10-release-channels` lives under
-`source/site/automojo/pychestrate/webservice/ops/release/`. It owns the
+`source/site/ccai/pychestrate/webservice/ops/release/`. It owns the
 `releases` table and the channel-state table, the signing/verification
 surface (via a dedicated signer subprocess that holds the signing key
 far from REST handlers), the stage machine (initial → promoted →
@@ -110,7 +110,7 @@ CLI (under `8-cli`):
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.ops.release.release_service`:
+`ccai.pychestrate.webservice.ops.release.release_service`:
 
 ```python
 @dataclass(frozen=True)
@@ -217,7 +217,7 @@ def record_consumer_outcome(
 ```
 
 Module
-`automojo.pychestrate.webservice.ops.release.manifest_signer`:
+`ccai.pychestrate.webservice.ops.release.manifest_signer`:
 
 ```python
 def sign_manifest(
@@ -248,7 +248,7 @@ def verify_manifest(
 ```
 
 Module
-`automojo.pychestrate.webservice.ops.release.policy_router`:
+`ccai.pychestrate.webservice.ops.release.policy_router`:
 
 ```python
 def resolve_policy(
@@ -267,7 +267,7 @@ def resolve_policy(
 ### Extension Surface
 
 Factory protocol `release_channel_policy` declared in
-`automojo.pychestrate.webservice.ops.release.factories.release_channel_policy`:
+`ccai.pychestrate.webservice.ops.release.factories.release_channel_policy`:
 
 ```python
 class ReleaseChannelPolicyProtocol(FactoryProtocolBase):
@@ -346,7 +346,7 @@ in-tree guidance skeletons: `RingBasedChannelPolicy` (by region),
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/ops/release/
+source/site/ccai/pychestrate/webservice/ops/release/
     __init__.py
     release_service.py             # publish / promote / rollback / record_outcome
     release_aspects.py             # ReleaseAspects dataclass + default builder

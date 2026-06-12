@@ -10,8 +10,8 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/domains/test/` package per design.md.
-- [ ] T1.2 — Implement `TestResultMetric` (counter) and `TestCaseDurationMetric` (histogram) under `source/site/automojo/extensions/pychestrate/metric_definition/test/`.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/domains/test/` package per design.md.
+- [ ] T1.2 — Implement `TestResultMetric` (counter) and `TestCaseDurationMetric` (histogram) under `source/site/ccai/extensions/pychestrate/metric_definition/test/`.
 - [ ] T1.3 — Implement `resolver.py::TestMetricResolver.on_test_case_completed` writing both metrics.
 - [ ] T1.4 — Wire subscription `entity.run.test_case_completed` via `SubscriptionSpec`.
 - [ ] T1.5 — Verify end-to-end: 10 synthetic case-completed events populate both metrics.

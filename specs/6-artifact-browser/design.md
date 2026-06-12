@@ -182,7 +182,7 @@ class ArtifactRendererExtension(ResourceExtension):
 ```
 
 Reference renderers in-tree under
-`source/site/automojo/extensions/pychestrate/artifact_renderer/`:
+`source/site/ccai/extensions/pychestrate/artifact_renderer/`:
 
 - `PxLogStreamRenderer` — log files (`classifier_tag == "log"` or `content_type startswith "text/"`).
 - `PxImageRenderer` — `image/*`.
@@ -205,7 +205,7 @@ WebComponent bundles are served under `/ext/<ext-name>/bundle/<path>` by `9-ui-d
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/artifact_browser/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/artifact_browser/`:
 
 - `__init__.py`
 - `browser.py` — `ArtifactBrowser` class.
@@ -217,7 +217,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/t
 - `errors.py` — `ArtifactNotFoundError`.
 - `rest/v1_routes.py` — REST endpoints.
 
-Renderer bundles under `source/site/automojo/extensions/pychestrate/artifact_renderer/`.
+Renderer bundles under `source/site/ccai/extensions/pychestrate/artifact_renderer/`.
 
 ## Key Flows
 

@@ -216,7 +216,7 @@ class FlakeClassifierProtocol(FactoryProtocolBase):
         ...
 ```
 
-Reference implementation in `source/site/automojo/factories/pychestrate/flake_classifier/window_ratio.py`:
+Reference implementation in `source/site/ccai/factories/pychestrate/flake_classifier/window_ratio.py`:
 
 - `WindowRatioClassifier` — `PRECEDENCE = 1000`; `stable` if last 20 runs pass; `flaky` if 2+ transitions in last 20; `broken` if 0 passes in last 5; `intermittent` otherwise.
 
@@ -235,7 +235,7 @@ Reference implementation in `source/site/automojo/factories/pychestrate/flake_cl
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/flake/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/flake/`:
 
 - `__init__.py`
 - `tracker.py` — `FlakeTracker`.
@@ -249,7 +249,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/t
 - `errors.py` — `RunNotFoundError`.
 - `rest/v1_routes.py` — REST endpoints.
 
-Factories under `source/site/automojo/factories/pychestrate/flake_classifier/`.
+Factories under `source/site/ccai/factories/pychestrate/flake_classifier/`.
 
 ## Key Flows
 

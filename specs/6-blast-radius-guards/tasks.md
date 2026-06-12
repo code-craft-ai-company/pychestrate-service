@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/infra/guards/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/infra/guards/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `guard_attachment`, `guard_review_request`, `guard_review_entry`.
 - [ ] T1.3 — Implement `rule_protocol.py::GuardRuleExtension`.
-- [ ] T1.4 — Implement `FrozenEnvBlockRule`, `ApplyRequiresInfraOperatorRoleRule` under `source/site/automojo/extensions/pychestrate/guard_rule/`.
+- [ ] T1.4 — Implement `FrozenEnvBlockRule`, `ApplyRequiresInfraOperatorRoleRule` under `source/site/ccai/extensions/pychestrate/guard_rule/`.
 - [ ] T1.5 — Implement `engine.py::BlastRadiusGuards.allow` and `explain` with fail-closed semantics.
 - [ ] T1.6 — Register REST `GET /guards/rules`, `PUT /environments/{env_id}/guards/{rule_id}`, `POST :explain`.
 - [ ] T1.7 — Implement `rule_registry.py` accessor with atomic swap on `extension.reloaded`.

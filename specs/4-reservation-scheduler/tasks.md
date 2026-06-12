@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/scheduler/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/scheduler/` per design.md.
 - [ ] T1.2 — Alembic migration `0040_scheduler_entries` creating `core.scheduler_entries` with PK, UNIQUE on `reservation_id`, and the three composite indices in design.md.
 - [ ] T1.3 — Implement `models.py` with `SchedulerEntry`, `SchedulerEntryState`, `SchedulerAspects`, `SchedulerAccounting`.
 - [ ] T1.4 — Implement `repository.py::SchedulerRepository` with `insert`, `cancel_by_reservation`, `next_for_pool`, and the fair-share running-seconds query.
@@ -27,7 +27,7 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Declare `ReservationSchedulerProtocol` (FactoryProtocolBase) and register it through `E-factory-protocols`.
-- [ ] T2.2 — Implement `FifoScheduler` (PRECEDENCE 1000), `PriorityScheduler` (1100), `FairShareScheduler` (1200), `DeadlineScheduler` (1300) under `source/site/automojo/factories/pychestrate/reservation_scheduler/`.
+- [ ] T2.2 — Implement `FifoScheduler` (PRECEDENCE 1000), `PriorityScheduler` (1100), `FairShareScheduler` (1200), `DeadlineScheduler` (1300) under `source/site/ccai/factories/pychestrate/reservation_scheduler/`.
 - [ ] T2.3 — Wire per-pool algorithm selection via factory lookup by name; fall back to FIFO on missing algorithm, emit `algorithm_missing` exactly once per pool, set `pychestrate_scheduler_algorithm_fallback{pool}=1`.
 - [ ] T2.4 — Add materialized view `core.fair_share_running_seconds_mv` with a 30s refresh; `FairShareScheduler` reads from it.
 - [ ] T2.5 — Implement `starvation.py::run_starvation_sweep` with the threshold formula in requirements.md (Requirement 3); set `promoted_at`, head-of-queue promotion, emit `.starvation_promoted`.

@@ -3,7 +3,7 @@
 ## Architecture
 
 The result watcher is a pair of long-running tasks owned by
-`source/site/automojo/pychestrate/webservice/ingest/result/`:
+`source/site/ccai/pychestrate/webservice/ingest/result/`:
 
 1. A **detector** that observes the shared backend — either via a
    driver-native change feed (S3/EventBridge, Azure Event Grid, GCS
@@ -257,8 +257,8 @@ class ArtifactClassifierExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree (paths rooted under
-`source/site/automojo/factories/pychestrate/result_tree_parser/`
-and `source/site/automojo/extensions/pychestrate/artifact_classifiers/`):
+`source/site/ccai/factories/pychestrate/result_tree_parser/`
+and `source/site/ccai/extensions/pychestrate/artifact_classifiers/`):
 
 - `TestBaseResultTreeParser` — `format_tag = "testbase-v1"`,
   `PRECEDENCE = 1000`. Parses the full testbase tree:
@@ -297,7 +297,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `ingest/result/__init__.py`
 - `ingest/result/detector.py` — `ResultWatcherDetector`.
@@ -316,9 +316,9 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
   + scanner tasks.
 
 Factories under
-`source/site/automojo/factories/pychestrate/result_tree_parser/`,
+`source/site/ccai/factories/pychestrate/result_tree_parser/`,
 extensions under
-`source/site/automojo/extensions/pychestrate/artifact_classifiers/`.
+`source/site/ccai/extensions/pychestrate/artifact_classifiers/`.
 
 ## Key Flows
 

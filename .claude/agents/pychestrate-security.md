@@ -7,10 +7,10 @@ model: sonnet
 You are the security specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/security/` — auth, rbac, sessions
-- `source/site/automojo/pychestrate/webservice/security/rbac/extensions/core_permissions.py`, `core_roles.py` — the in-memory catalog
-- `source/site/automojo/pychestrate/webservice/webinterface/foundation/cookie_session.py`, `csrf.py`, `auth_guard.py`
-- `source/packages/automojo/pychestrate/core/managers/security_manager.py` — password hashing (pbkdf2-sha256, NOT werkzeug)
+- `source/site/ccai/pychestrate/webservice/security/` — auth, rbac, sessions
+- `source/site/ccai/pychestrate/webservice/security/rbac/extensions/core_permissions.py`, `core_roles.py` — the in-memory catalog
+- `source/site/ccai/pychestrate/webservice/webinterface/foundation/cookie_session.py`, `csrf.py`, `auth_guard.py`
+- `source/packages/ccai/pychestrate/core/managers/security_manager.py` — password hashing (pbkdf2-sha256, NOT werkzeug)
 
 ## RBAC model
 - Permissions: `system:<feature>.<action>` keys, declared in `core_permissions.py`.
@@ -25,7 +25,7 @@ You are the security specialist for the pychestrate-service.
 - mTLS: dispatch endpoints (`/dispatch-ack`, `/progress`, `/results/complete`) require nginx to forward `SSL_CLIENT_S_DN_CN`.
 
 ## Password hashing
-- Production uses pbkdf2-sha256 via the webworks stdlib. **Never reintroduce werkzeug.security imports.** The legacy compatibility shim `automojo.webservice.xflask` still exists for password verification of historical hashes only.
+- Production uses pbkdf2-sha256 via the webworks stdlib. **Never reintroduce werkzeug.security imports.** The legacy compatibility shim `ccai.webservice.xflask` still exists for password verification of historical hashes only.
 
 ## Don't do
 - Catch `SemanticError`. It's API-misuse and must bubble.

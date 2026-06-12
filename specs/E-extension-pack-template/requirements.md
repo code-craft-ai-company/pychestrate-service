@@ -23,8 +23,8 @@ conventions.
 1. WHEN `pychestrate-admin pack-template new --name=<name>` is run
    THEN the system SHALL materialize a directory `pychestrate-ext-<name>/`
    containing: `pychestrate_ext.yaml`, `pyproject.toml`,
-   `source/packages/automojo/factories/pychestrate/<name>/...`,
-   `source/packages/automojo/extensions/pychestrate/<name>/...`,
+   `source/packages/ccai/factories/pychestrate/<name>/...`,
+   `source/packages/ccai/extensions/pychestrate/<name>/...`,
    `tests/`, `.github/workflows/ci.yaml`, `README.rst`, `AGENTS.md`.
 2. IF the target directory already exists and is non-empty THEN the
    system SHALL refuse to overwrite and exit non-zero with a readable

@@ -47,7 +47,7 @@ Admin REST:
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/sandbox/`.
+`source/site/ccai/pychestrate/webservice/extension/sandbox/`.
 
 ```python
 # authority.py
@@ -144,7 +144,7 @@ class CapabilityGrantRepo:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/sandbox/
+source/site/ccai/pychestrate/webservice/extension/sandbox/
     __init__.py
     authority.py           # CapabilityAuthority singleton
     repo.py                # CapabilityGrantRepo (DB-backed)

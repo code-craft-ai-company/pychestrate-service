@@ -3,7 +3,7 @@
 ## Architecture
 
 The Client Registry lives at
-`source/site/automojo/pychestrate/webservice/clients/registry/`. It owns the
+`source/site/ccai/pychestrate/webservice/clients/registry/`. It owns the
 server-side mutable view of every enrolled client — authoritative for
 `liveness_state`, `last_seen`, agent version, transport name, and the set of
 typed attributes contributed by extensions. Writes flow in through two
@@ -132,7 +132,7 @@ class ClientAttributeExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/pychestrate/extensions/client_attributes/`):
+`source/site/ccai/pychestrate/extensions/client_attributes/`):
 
 - `OsKindAttribute` (`attribute_kind_name="os"`), value is
   `{"family": "linux|macos|windows|other", "version": str}`.
@@ -163,7 +163,7 @@ entity.client.registry_write_failed   { client_id, kind, error_class }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/registry/
+source/site/ccai/pychestrate/webservice/clients/registry/
     __init__.py
     enums.py                     -- imports + small re-exports
     dtos.py                      -- ClientRow, ClientFilter, AttributeUpdate,
@@ -175,7 +175,7 @@ source/site/automojo/pychestrate/webservice/clients/registry/
     rest.py                      -- admin REST router
     metrics.py                   -- pychestrate_client_registry_* instruments
 
-source/site/automojo/pychestrate/extensions/client_attributes/
+source/site/ccai/pychestrate/extensions/client_attributes/
     os_kind.py
     cpu_arch.py
     concurrency.py

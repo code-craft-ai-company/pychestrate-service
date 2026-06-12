@@ -3,7 +3,7 @@
 ## Architecture
 
 `2-project-templates` lives in Layer 2 under
-`automojo.pychestrate.webservice.model.project_templates`. It is a thin
+`ccai.pychestrate.webservice.model.project_templates`. It is a thin
 service that composes three existing services — `2-global-variables` for
 variable seeding, `2-tagging` for tag seeding, `2-notification-hub` for
 routing-rule seeding — inside the same DB transaction as the project
@@ -78,7 +78,7 @@ populates them.
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/model/project_templates/service.py
+# source/site/ccai/pychestrate/webservice/model/project_templates/service.py
 
 def list_templates() -> list[ProjectTemplateRecord]:
     ...
@@ -137,7 +137,7 @@ def diff_template_against_project(
 ### Extension Surface
 
 - `resource: ProjectTemplateExtension`
-  (`source/site/automojo/pychestrate/webservice/model/project_templates/extensions.py`)
+  (`source/site/ccai/pychestrate/webservice/model/project_templates/extensions.py`)
 
 ```python
 class ProjectTemplateExtension(ResourceExtension):
@@ -153,7 +153,7 @@ class ProjectTemplateExtension(ResourceExtension):
 ```
 
 Reference impls shipped in-tree under
-`automojo/extensions/pychestrate/project_templates/`:
+`ccai/extensions/pychestrate/project_templates/`:
 - `StandardCiTemplate` — one `environment:dev` tag, two variables
   (`default_timeout_seconds=900`, `notify_on_failure=true`), one
   notification rule `entity.run.failed → #ci-failures`, roles
@@ -194,7 +194,7 @@ None.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/model/project_templates/
+source/site/ccai/pychestrate/webservice/model/project_templates/
     __init__.py
     entities.py         # ProjectTemplateRecord, specs, TemplateApplyDiff
     registry.py         # loaded from ProjectTemplateExtension on startup
@@ -202,7 +202,7 @@ source/site/automojo/pychestrate/webservice/model/project_templates/
     extensions.py       # ProjectTemplateExtension base
     events.py
     errors.py           # TemplateApplyError, UnknownTemplateError
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/project_templates.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/project_templates.py
 ```
 
 ## Key Flows

@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create the `source/site/automojo/pychestrate/webservice/webinterface/design_tokens/` package per design.md Component Breakdown.
+- [ ] T1.1 — Create the `source/site/ccai/pychestrate/webservice/webinterface/design_tokens/` package per design.md Component Breakdown.
 - [ ] T1.2 — Author `manifest.py` declaring the canonical `--pyc-*` namespace (color, space, font, radius, elevation, motion, focus).
 - [ ] T1.3 — Implement `pack_protocol.py::DesignTokenPackExtension` base with `pack_id`, `inherits_from`, `PRECEDENCE`, `css_source_path`, `load_css`.
 - [ ] T1.4 — Write `components/design_tokens/styles/pychestrate.default.light.css` in full multi-line form per AGENTS.md CSS convention.

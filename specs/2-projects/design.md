@@ -4,7 +4,7 @@
 
 `2-projects` lives in Layer 2 — Core Entity Model — and is the anchor entity
 that every downstream feature scopes against. It is owned by the
-`automojo.pychestrate.webservice.model.projects` package. The project row in
+`ccai.pychestrate.webservice.model.projects` package. The project row in
 Postgres (`0-persistence`) is the authoritative source of truth for a
 project's existence, state, and slug; membership lives in a child table
 (`project_member_bindings`) keyed by `(project_id, user_id)`. Events are
@@ -83,7 +83,7 @@ Indexes: `UNIQUE (lower(slug))`; `INDEX (state, updated_at)`;
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/model/projects/service.py
+# source/site/ccai/pychestrate/webservice/model/projects/service.py
 
 def create_project(
     *,
@@ -153,7 +153,7 @@ def remove_member(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/model/projects/slug.py
+# source/site/ccai/pychestrate/webservice/model/projects/slug.py
 
 def canonicalize_project_slug(raw: str) -> str:
     """
@@ -170,7 +170,7 @@ def canonicalize_project_slug(raw: str) -> str:
 ### Extension Surface
 
 - `resource: ProjectMetadataFieldExtension`
-  (`source/site/automojo/pychestrate/webservice/model/projects/extensions.py`)
+  (`source/site/ccai/pychestrate/webservice/model/projects/extensions.py`)
   - Subclasses declare class attributes `field_name: str`,
     `field_type: Literal[...]`, `required: bool`,
     `default_value: Any | None`, `enum_values: list[str] | None`, and a
@@ -178,7 +178,7 @@ def canonicalize_project_slug(raw: str) -> str:
     `ValidationError` on failure.
   - Reference implementation shipped in-tree: `CostCenterFieldExtension`
     under
-    `automojo/extensions/pychestrate/projects/cost_center_field.py`.
+    `ccai/extensions/pychestrate/projects/cost_center_field.py`.
 
 ### Events Emitted
 
@@ -235,7 +235,7 @@ Topics (published via `0-message-bus`):
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/model/projects/
+source/site/ccai/pychestrate/webservice/model/projects/
     __init__.py
     entities.py         # Project, ProjectMemberBinding dataclasses + ORM
     repository.py       # DB access
@@ -244,7 +244,7 @@ source/site/automojo/pychestrate/webservice/model/projects/
     extensions.py       # ProjectMetadataFieldExtension base
     events.py           # event dataclasses and topic constants
     errors.py           # DuplicateSlugError, etc.
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/projects.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/projects.py
                         # Flask-RestX resources delegating to service.py
 ```
 

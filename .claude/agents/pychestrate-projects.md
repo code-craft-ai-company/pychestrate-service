@@ -13,9 +13,9 @@ You are the projects specialist for the pychestrate-service.
 There is **no bridge** between the two. A follow-on PR will bridge them; until then, pick one based on what siblings use.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/projects/` — REST surface
-- `source/site/automojo/pychestrate/webservice/webinterface/blueprints/projects/` — UI blueprint
-- `source/packages/automojo/pychestrate/core/managers/release_template_manager.py`, `release_manager.py`, `repository_manager.py`, etc.
+- `source/site/ccai/pychestrate/webservice/projects/` — REST surface
+- `source/site/ccai/pychestrate/webservice/webinterface/blueprints/projects/` — UI blueprint
+- `source/packages/ccai/pychestrate/core/managers/release_template_manager.py`, `release_manager.py`, `repository_manager.py`, etc.
 - Templates under `blueprints/projects/templates/projects/`
 
 ## Per-project sub-pages

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-E-extension-precedence preserves the upstream `automojo-extension`
+E-extension-precedence preserves the upstream `codecraftai-extension`
 PRECEDENCE semantics (lower numeric value = higher priority) and adds a
 per-site override file — `etc/pychestrate/extension_precedence.yaml` —
 that re-pins PRECEDENCE for a specific extension without editing its

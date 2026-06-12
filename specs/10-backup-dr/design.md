@@ -3,7 +3,7 @@
 ## Architecture
 
 `10-backup-dr` lives under
-`source/site/automojo/pychestrate/webservice/ops/backup/`. It is a
+`source/site/ccai/pychestrate/webservice/ops/backup/`. It is a
 self-contained subsystem with three substrate drivers (DB, object
 store, secrets), a backup scheduler, a restore orchestrator, a drill
 runner, a manifest store (the authoritative source of truth for
@@ -115,7 +115,7 @@ CLI (under `8-cli`):
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.ops.backup.backup_service`:
+`ccai.pychestrate.webservice.ops.backup.backup_service`:
 
 ```python
 @dataclass(frozen=True)
@@ -221,7 +221,7 @@ def latest_good_backup(
 ```
 
 Module
-`automojo.pychestrate.webservice.ops.backup.substrates.db_substrate`:
+`ccai.pychestrate.webservice.ops.backup.substrates.db_substrate`:
 
 ```python
 def snapshot_full(
@@ -249,7 +249,7 @@ verifies the BMK through `kek_escrow.load_backup_master_key()` before
 any write.
 
 Module
-`automojo.pychestrate.webservice.ops.backup.kek_escrow`:
+`ccai.pychestrate.webservice.ops.backup.kek_escrow`:
 
 ```python
 def load_backup_master_key(
@@ -268,7 +268,7 @@ def load_backup_master_key(
 ### Extension Surface
 
 Factory protocol `backup_storage_backend` declared in
-`automojo.pychestrate.webservice.ops.backup.factories.backup_storage_backend`:
+`ccai.pychestrate.webservice.ops.backup.factories.backup_storage_backend`:
 
 ```python
 class BackupStorageBackendProtocol(FactoryProtocolBase):
@@ -360,7 +360,7 @@ Reference implementations:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/ops/backup/
+source/site/ccai/pychestrate/webservice/ops/backup/
     __init__.py
     backup_service.py             # run_backup / restore_point_in_time / run_drill
     backup_aspects.py             # BackupAspects dataclass + default builder

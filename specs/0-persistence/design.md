@@ -199,7 +199,7 @@ class EntityMigrationExtension(ResourceExtension):
 ```
 
 Reference implementation shipped in-tree:
-`automojo/extensions/pychestrate/core/migrations/CoreMigrationExtension` —
+`ccai/extensions/pychestrate/core/migrations/CoreMigrationExtension` —
 registers the core `alembic/` directory as a pack so core migrations are
 discovered through the same mechanism extensions use (dogfood).
 
@@ -225,7 +225,7 @@ on a `extension.reloaded` event.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `persistence/__init__.py`
 - `persistence/config.py` — `PersistenceConfig` dataclass.
@@ -241,7 +241,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
 - `persistence/alembic/` — core migration directory (env.py, script_mako,
   versions/).
 
-Extension reference in `source/site/automojo/extensions/pychestrate/core/migrations/`.
+Extension reference in `source/site/ccai/extensions/pychestrate/core/migrations/`.
 
 ## Key Flows
 

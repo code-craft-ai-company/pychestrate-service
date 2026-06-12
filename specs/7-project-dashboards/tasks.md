@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/dashboards/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/dashboards/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `dashboard` and `dashboard_audit` with JSONB columns and indices `(project_id)`, `(project_id, name)` unique.
 - [ ] T1.3 — Implement `extension_base.py::DashboardTileKindExtension` and `registry.py::TileKindRegistry.build()`.
-- [ ] T1.4 — Ship reference tile kind `source/site/automojo/extensions/pychestrate/dashboard_tile_kind/metric_line.py`.
+- [ ] T1.4 — Ship reference tile kind `source/site/ccai/extensions/pychestrate/dashboard_tile_kind/metric_line.py`.
 - [ ] T1.5 — Implement `service.py::DashboardService.create_dashboard` + `get_dashboard` wiring through repository.
 - [ ] T1.6 — Register REST endpoints `POST /` and `GET /{id}` + `GET /tile-kinds` under `8-rest-api-v1`.
 - [ ] T1.7 — Emit `entity.dashboard.saved` on create.

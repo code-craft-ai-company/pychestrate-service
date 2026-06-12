@@ -1,0 +1,1620 @@
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/builds-list-view.js
+var BUILD_STATES = [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "cancelled"
+];
+var TERMINAL_BUILD_STATES = [
+  "completed",
+  "failed",
+  "cancelled"
+];
+var DEFAULT_PER_PAGE = 25;
+var PROJECTS_API_PATH = "/api/v1/projects";
+function build_builds_query_url(state) {
+  const params = new URLSearchParams();
+  if (state.stateFilter.length > 0) {
+    params.set("state", state.stateFilter);
+  }
+  params.set("page", String(state.page));
+  params.set("per_page", String(state.perPage));
+  const query = params.toString();
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(state.projectId) + "/builds?" + query;
+  return rtnval;
+}
+function build_builds_collection_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/builds";
+  return rtnval;
+}
+function build_source_integrations_url(project_id) {
+  const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/source-integrations";
+  return rtnval;
+}
+function short_id(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const dash_index = value.indexOf("-");
+  if (dash_index > 0) {
+    const rtnval2 = value.slice(0, dash_index);
+    return rtnval2;
+  }
+  if (value.length > 12) {
+    const rtnval2 = value.slice(0, 12);
+    return rtnval2;
+  }
+  const rtnval = value;
+  return rtnval;
+}
+function format_timestamp(value) {
+  if (value === null || value === void 0 || value.length === 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = value;
+    return rtnval2;
+  }
+  const rtnval = parsed.toLocaleString();
+  return rtnval;
+}
+function build_state_tone(build_state) {
+  if (build_state === "completed") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (build_state === "failed") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  if (build_state === "cancelled") {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  const rtnval = "neutral";
+  return rtnval;
+}
+function is_terminal_build_state(build_state) {
+  const rtnval = TERMINAL_BUILD_STATES.indexOf(build_state) >= 0;
+  return rtnval;
+}
+function has_next_page(state) {
+  const consumed = state.page * state.perPage;
+  const rtnval = consumed < state.total;
+  return rtnval;
+}
+function has_previous_page(state) {
+  const rtnval = state.page > 1;
+  return rtnval;
+}
+function trigger_message_for_status(status) {
+  if (status === 202 || status === 200 || status === 201) {
+    const rtnval2 = "Build triggered.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "Runner inputs were rejected \u2014 check the runner kind.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "Unknown project or runner kind.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to trigger builds.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to trigger build (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function parse_runner_inputs(raw) {
+  if (typeof raw !== "string" || raw.trim().length === 0) {
+    const rtnval2 = {};
+    return rtnval2;
+  }
+  const parsed = JSON.parse(raw);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed) === true) {
+    throw new SyntaxError("runner inputs must be a JSON object");
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+var PycBuildsList = class extends HTMLElement {
+  _pager;
+  _state;
+  _builds;
+  _projects;
+  _projectsAvailable;
+  _integrations;
+  _root;
+  _table_region;
+  _trigger_region;
+  _toast_region;
+  constructor() {
+    super();
+    this._state = {
+      projectId: "",
+      stateFilter: "",
+      page: 1,
+      perPage: DEFAULT_PER_PAGE,
+      total: 0,
+      loading: false,
+      errored: false
+    };
+    this._builds = [];
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._integrations = [];
+    this._root = null;
+    this._table_region = null;
+    this._pager = null;
+    this._trigger_region = null;
+    this._toast_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the
+   * project + pagination state without scraping the DOM.
+   */
+  get listState() {
+    const rtnval = {
+      projectId: this._state.projectId,
+      stateFilter: this._state.stateFilter,
+      page: this._state.page,
+      perPage: this._state.perPage,
+      total: this._state.total,
+      loading: this._state.loading,
+      errored: this._state.errored
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * project list fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._load_projects();
+    return;
+  }
+  /**
+   * Build the persistent chrome -- heading, project selector,
+   * state filter, trigger action, table region, pager, toast.
+   */
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-builds");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-builds__heading");
+    heading.textContent = "Builds";
+    root.appendChild(heading);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-builds__controls");
+    const project_label = document.createElement("label");
+    project_label.classList.add("pyc-builds__field");
+    project_label.textContent = "Project";
+    const project_select = document.createElement("mj-select");
+    project_select.classList.add("pyc-builds__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.addEventListener("change", () => {
+      this._state.projectId = project_select.value;
+      this._state.page = 1;
+      void this._on_project_changed();
+    });
+    project_label.appendChild(project_select);
+    controls.appendChild(project_label);
+    const project_input = document.createElement("mj-text-field");
+    project_input.classList.add("pyc-builds__input");
+    project_input.setAttribute("type", "text");
+    project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("data-role", "project-input");
+    project_input.hidden = true;
+    project_input.addEventListener("change", () => {
+      this._state.projectId = project_input.value.trim();
+      this._state.page = 1;
+      void this._on_project_changed();
+    });
+    controls.appendChild(project_input);
+    const state_label = document.createElement("label");
+    state_label.classList.add("pyc-builds__field");
+    state_label.textContent = "State";
+    const state_select = document.createElement("mj-select");
+    state_select.classList.add("pyc-builds__select");
+    state_select.setAttribute("data-role", "state-filter");
+    const any_option = document.createElement("mj-option");
+    any_option.setAttribute("value", "");
+    any_option.textContent = "All states";
+    state_select.appendChild(any_option);
+    for (const build_state of BUILD_STATES) {
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", build_state);
+      option.textContent = build_state;
+      state_select.appendChild(option);
+    }
+    state_select.addEventListener("change", () => {
+      this._state.stateFilter = state_select.value;
+      this._state.page = 1;
+      void this._refresh();
+    });
+    state_label.appendChild(state_select);
+    controls.appendChild(state_label);
+    const trigger_button = document.createElement("mj-button");
+    trigger_button.classList.add("pyc-builds__button");
+    trigger_button.setAttribute("type", "button");
+    trigger_button.setAttribute("data-role", "trigger-toggle");
+    trigger_button.textContent = "Trigger Build";
+    trigger_button.addEventListener("click", () => {
+      this._toggle_trigger_form();
+    });
+    controls.appendChild(trigger_button);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-builds__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    root.appendChild(controls);
+    const trigger_region = document.createElement("div");
+    trigger_region.classList.add("pyc-builds__trigger-region");
+    trigger_region.setAttribute("data-role", "trigger-region");
+    trigger_region.hidden = true;
+    root.appendChild(trigger_region);
+    this._trigger_region = trigger_region;
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-builds__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
+    const table_region = document.createElement("div");
+    table_region.classList.add("pyc-builds__table-region");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    const pager = document.createElement("mj-pagination");
+    pager.classList.add("pyc-builds__pager");
+    pager.setAttribute("data-role", "pager");
+    pager.setAttribute("page", String(this._state.page));
+    pager.setAttribute("page-size", String(this._state.perPage));
+    pager.setAttribute("total-items", String(this._state.total));
+    pager.addEventListener("mj-pagination-change", (event) => {
+      this._state.page = event.detail.page;
+      void this._refresh();
+    });
+    this._pager = pager;
+    root.appendChild(pager);
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the selector.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    let projects = null;
+    try {
+      const response = await fetch(PROJECTS_API_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = this._extract_projects(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (projects !== null && projects.length > 0) {
+      this._projects = projects;
+      this._projectsAvailable = true;
+      this._state.projectId = projects[0].project_id;
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+    }
+    this._render_project_control();
+    if (this._state.projectId.length > 0) {
+      await this._on_project_changed();
+    } else {
+      this._render_table_region();
+    }
+    return;
+  }
+  /**
+   * Normalise a projects-list response body into ``ProjectOption``
+   * records. Accepts both a bare array and a ``{items}`` page
+   * envelope so the view tolerates either shape.
+   *
+   * @param body Parsed JSON response body.
+   *
+   * @returns A list of project options (possibly empty).
+   */
+  _extract_projects(body) {
+    let raw = [];
+    if (Array.isArray(body) === true) {
+      raw = body;
+    } else if (body !== null && typeof body === "object") {
+      const items = body.items;
+      if (Array.isArray(items) === true) {
+        raw = items;
+      }
+    }
+    const rtnval = [];
+    for (const item of raw) {
+      if (item === null || typeof item !== "object") {
+        continue;
+      }
+      const record = item;
+      const project_id = record.project_id;
+      if (typeof project_id !== "string" || project_id.length === 0) {
+        continue;
+      }
+      const display = record.display_name;
+      const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+      rtnval.push({ project_id, display_name });
+    }
+    return rtnval;
+  }
+  /**
+   * Render the project-select control or, when no projects
+   * collection is available, swap to the manual text input.
+   */
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-input"]');
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      for (const project of this._projects) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectId;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    return;
+  }
+  /**
+   * React to a project change -- reload the source integrations
+   * (so the trigger form's selector is fresh) and the builds
+   * page.
+   */
+  async _on_project_changed() {
+    await this._load_integrations();
+    await this._refresh();
+    return;
+  }
+  /**
+   * Fetch the active project's source integrations. A failed
+   * fetch leaves the integrations list empty -- the trigger form
+   * degrades to a manual integration-id-free flow.
+   */
+  async _load_integrations() {
+    this._integrations = [];
+    if (this._state.projectId.length === 0) {
+      return;
+    }
+    try {
+      const url = build_source_integrations_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        this._integrations = this._extract_integrations(body);
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.integrations_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    return;
+  }
+  /**
+   * Normalise a source-integrations page body into option
+   * records.
+   *
+   * @param body Parsed JSON response body.
+   *
+   * @returns A list of source integration options.
+   */
+  _extract_integrations(body) {
+    let raw = [];
+    if (body !== null && typeof body === "object") {
+      const items = body.items;
+      if (Array.isArray(items) === true) {
+        raw = items;
+      }
+    }
+    const rtnval = [];
+    for (const item of raw) {
+      if (item === null || typeof item !== "object") {
+        continue;
+      }
+      const record = item;
+      const integration_id = record.integration_id;
+      const project_id = record.project_id;
+      const provider_name = record.provider_name;
+      const repo_key = record.repo_key;
+      if (typeof integration_id !== "string" || typeof project_id !== "string" || typeof provider_name !== "string" || typeof repo_key !== "string") {
+        continue;
+      }
+      rtnval.push({
+        integration_id,
+        project_id,
+        provider_name,
+        repo_key
+      });
+    }
+    return rtnval;
+  }
+  /**
+   * Fetch the current page of builds and re-render the table.
+   * Exposed so unit tests can await a fetch cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    if (this._state.projectId.length === 0) {
+      this._builds = [];
+      this._render_table_region();
+      return;
+    }
+    this._state.loading = true;
+    this._state.errored = false;
+    this._render_table_region();
+    const url = build_builds_query_url(this._state);
+    let page = null;
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error("builds fetch failed: HTTP " + String(response.status));
+      }
+      const body = await response.json();
+      page = body;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.list_fetch_failed",
+        { reason: String(reason) }
+      );
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    if (page === null || Array.isArray(page.items) === false) {
+      this._state.loading = false;
+      this._state.errored = true;
+      this._render_table_region();
+      return;
+    }
+    this._builds = page.items;
+    const meta = page.meta;
+    if (meta !== void 0 && meta !== null) {
+      if (typeof meta.total === "number") {
+        this._state.total = meta.total;
+      }
+      if (typeof meta.page === "number") {
+        this._state.page = meta.page;
+      }
+      if (typeof meta.per_page === "number") {
+        this._state.perPage = meta.per_page;
+      }
+    }
+    this._state.loading = false;
+    this._state.errored = false;
+    this._render_table_region();
+    return;
+  }
+  /**
+   * Re-render the table region from the current state + builds.
+   */
+  _render_table_region() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    if (this._state.projectId.length === 0) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-builds__status");
+      notice.setAttribute("data-role", "no-project-state");
+      notice.textContent = "Select a project to view its builds.";
+      region.replaceChildren(notice);
+      this._render_pager();
+      return;
+    }
+    if (this._state.loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-builds__status");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading builds\u2026";
+      region.replaceChildren(loading);
+      this._render_pager();
+      return;
+    }
+    if (this._state.errored === true) {
+      const error = document.createElement("p");
+      error.classList.add("pyc-builds__status", "pyc-builds__status--error");
+      error.setAttribute("data-role", "error-state");
+      error.textContent = "Failed to load builds. Try refreshing.";
+      region.replaceChildren(error);
+      this._render_pager();
+      return;
+    }
+    if (this._builds.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-builds__status");
+      empty.setAttribute("data-role", "empty-state");
+      empty.textContent = "No builds yet";
+      region.replaceChildren(empty);
+      this._render_pager();
+      return;
+    }
+    const table = this._build_table();
+    region.replaceChildren(table);
+    this._render_pager();
+    return;
+  }
+  /**
+   * Build the builds ``<table>`` from the current ``_builds``
+   * list.
+   */
+  _build_table() {
+    const table = document.createElement("mj-data-table");
+    table.classList.add("pyc-builds__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-builds__row";
+    table.rowAttrs = (build) => ({ "data-build-id": build.run_id });
+    table.columns = [
+      {
+        key: "run_id",
+        label: "Build",
+        width: "10rem",
+        render: (build) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-builds__build-link");
+          link.setAttribute("href", "/builds/" + build.run_id);
+          link.textContent = short_id(build.run_id);
+          link.title = build.run_id;
+          return link;
+        }
+      },
+      {
+        key: "runner_kind",
+        label: "Runner kind",
+        width: "10rem"
+      },
+      {
+        key: "state",
+        label: "State",
+        width: "8rem",
+        render: (build) => {
+          const badge = document.createElement("mj-chip");
+          badge.classList.add("pyc-builds__badge");
+          badge.setAttribute("data-tone", build_state_tone(build.state));
+          badge.textContent = build.state;
+          return badge;
+        }
+      },
+      {
+        key: "repro_digest_sha256",
+        label: "Repro digest",
+        width: "12rem",
+        render: (build) => {
+          const digest = document.createElement("span");
+          digest.classList.add("pyc-builds__digest");
+          digest.textContent = short_id(build.repro_digest_sha256);
+          digest.title = build.repro_digest_sha256;
+          return digest;
+        }
+      },
+      {
+        key: "started_at",
+        label: "Started",
+        width: "12rem",
+        render: (build) => format_timestamp(build.started_at)
+      },
+      {
+        key: "finished_at",
+        label: "Finished",
+        width: "12rem",
+        render: (build) => format_timestamp(build.finished_at)
+      }
+    ];
+    table.rows = this._builds;
+    return table;
+  }
+  /**
+   * Update the pager controls -- enabled state + the page
+   * indicator label -- from the current state.
+   */
+  _render_pager() {
+    if (this._pager === null || this._pager === void 0) {
+      return;
+    }
+    this._pager.setAttribute("page", String(this._state.page));
+    this._pager.setAttribute("page-size", String(this._state.perPage));
+    this._pager.setAttribute("total-items", String(this._state.total));
+    return;
+  }
+  /**
+   * Toggle the inline trigger-build form's visibility, rendering
+   * it on first reveal.
+   */
+  _toggle_trigger_form() {
+    if (this._trigger_region === null) {
+      return;
+    }
+    const region = this._trigger_region;
+    if (region.hidden === true) {
+      this._render_trigger_form();
+      region.hidden = false;
+    } else {
+      region.hidden = true;
+    }
+    return;
+  }
+  /**
+   * Render the trigger-build form into the trigger region -- a
+   * source-integration selector, a runner-kind input, a runner-
+   * inputs JSON textarea, and a submit button.
+   */
+  _render_trigger_form() {
+    if (this._trigger_region === null) {
+      return;
+    }
+    const form = document.createElement("form");
+    form.classList.add("pyc-builds__trigger-form");
+    form.setAttribute("data-role", "trigger-form");
+    const integration_label = document.createElement("label");
+    integration_label.classList.add("pyc-builds__field");
+    integration_label.textContent = "Source integration";
+    const integration_select = document.createElement("mj-select");
+    integration_select.classList.add("pyc-builds__select");
+    integration_select.setAttribute("data-role", "trigger-integration");
+    if (this._integrations.length === 0) {
+      const none_option = document.createElement("mj-option");
+      none_option.setAttribute("value", "");
+      none_option.textContent = "No source integration registered";
+      integration_select.appendChild(none_option);
+    } else {
+      for (const integration of this._integrations) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", integration.integration_id);
+        option.textContent = integration.provider_name + " \xB7 " + integration.repo_key;
+        integration_select.appendChild(option);
+      }
+    }
+    integration_label.appendChild(integration_select);
+    form.appendChild(integration_label);
+    const runner_label = document.createElement("label");
+    runner_label.classList.add("pyc-builds__field");
+    runner_label.textContent = "Runner kind";
+    const runner_input = document.createElement("mj-text-field");
+    runner_input.classList.add("pyc-builds__input");
+    runner_input.setAttribute("type", "text");
+    runner_input.setAttribute("placeholder", "makefile");
+    runner_input.setAttribute("data-role", "trigger-runner-kind");
+    runner_input.required = true;
+    runner_label.appendChild(runner_input);
+    form.appendChild(runner_label);
+    const inputs_label = document.createElement("label");
+    inputs_label.classList.add("pyc-builds__field", "pyc-builds__field--wide");
+    inputs_label.textContent = "Runner inputs (JSON)";
+    const inputs_area = document.createElement("mj-textarea");
+    inputs_area.classList.add("pyc-builds__textarea");
+    inputs_area.setAttribute("data-role", "trigger-runner-inputs");
+    inputs_area.setAttribute("placeholder", '{"target": "all"}');
+    inputs_area.rows = 3;
+    inputs_label.appendChild(inputs_area);
+    form.appendChild(inputs_label);
+    const submit_button = document.createElement("mj-button");
+    submit_button.classList.add("pyc-builds__trigger");
+    submit_button.setAttribute("type", "submit");
+    submit_button.setAttribute("data-role", "trigger-submit");
+    submit_button.textContent = "Trigger Build";
+    form.appendChild(submit_button);
+    const status = document.createElement("p");
+    status.classList.add("pyc-builds__trigger-status");
+    status.setAttribute("data-role", "trigger-status");
+    form.appendChild(status);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_trigger(form, runner_input, inputs_area, submit_button);
+    });
+    this._trigger_region.replaceChildren(form);
+    return;
+  }
+  /**
+   * Submit the trigger-build form -- POST a
+   * ``BuildRunCreateRequest`` and surface the outcome. Exposed so
+   * unit tests can invoke a trigger without a real form-submit
+   * event.
+   *
+   * @param runner_kind The runner-kind identifier.
+   * @param runner_inputs Free-form runner inputs object.
+   *
+   * @returns The trigger outcome.
+   */
+  async triggerBuild(runner_kind, runner_inputs) {
+    const rtnval = await this._do_trigger(runner_kind, runner_inputs);
+    return rtnval;
+  }
+  async _submit_trigger(form, runner_input, inputs_area, submit_button) {
+    const status = form.querySelector('[data-role="trigger-status"]');
+    const runner_kind = runner_input.value.trim();
+    if (runner_kind.length === 0) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Runner kind is required.";
+      }
+      return;
+    }
+    let runner_inputs = {};
+    try {
+      runner_inputs = parse_runner_inputs(inputs_area.value);
+    } catch (reason) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Runner inputs must be valid JSON.";
+      }
+      console.warn(
+        "pychestrate.ui.builds.trigger_inputs_invalid",
+        { reason: String(reason) }
+      );
+      return;
+    }
+    submit_button.toggleAttribute("disabled", true);
+    if (status instanceof HTMLElement) {
+      status.textContent = "Triggering build\u2026";
+    }
+    const outcome = await this._do_trigger(runner_kind, runner_inputs);
+    submit_button.toggleAttribute("disabled", false);
+    if (status instanceof HTMLElement) {
+      status.textContent = "";
+    }
+    this._show_trigger_toast(outcome);
+    if (outcome.ok === true) {
+      await this._refresh();
+    }
+    return;
+  }
+  async _do_trigger(runner_kind, runner_inputs) {
+    if (this._state.projectId.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        buildId: "",
+        message: "Select a project before triggering a build."
+      };
+      return rtnval2;
+    }
+    const payload = {
+      runner_kind,
+      runner_inputs
+    };
+    let status = 0;
+    let build_id = "";
+    try {
+      const url = build_builds_collection_url(this._state.projectId);
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        const run = body;
+        if (run !== null && typeof run.run_id === "string") {
+          build_id = run.run_id;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.trigger_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        buildId: "",
+        message: "Failed to reach the build service."
+      };
+      return rtnval2;
+    }
+    const ok = status === 202 || status === 200 || status === 201;
+    const rtnval = {
+      ok,
+      status,
+      buildId: build_id,
+      message: trigger_message_for_status(status)
+    };
+    return rtnval;
+  }
+  /**
+   * Render a dismissible toast for a trigger outcome -- on
+   * success the toast links to the new build's detail page.
+   *
+   * @param outcome The trigger-build outcome.
+   */
+  _show_trigger_toast(outcome) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-builds__toast");
+    toast.setAttribute("data-role", "trigger-toast");
+    toast.setAttribute("data-tone", outcome.ok === true ? "ok" : "error");
+    const message = document.createElement("span");
+    message.classList.add("pyc-builds__toast-message");
+    message.textContent = outcome.message;
+    toast.appendChild(message);
+    if (outcome.ok === true && outcome.buildId.length > 0) {
+      const link = document.createElement("a");
+      link.classList.add("pyc-builds__toast-link");
+      link.setAttribute("href", "/builds/" + outcome.buildId);
+      link.setAttribute("data-role", "trigger-toast-link");
+      link.textContent = "View build";
+      toast.appendChild(link);
+    }
+    const dismiss = document.createElement("mj-button");
+    dismiss.classList.add("pyc-builds__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "\xD7";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    this._toast_region.replaceChildren(toast);
+    return;
+  }
+};
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/build-detail-view.js
+var PROJECTS_API_PATH2 = "/api/v1/projects";
+var BUILDS_RESOLVER_PATH = "/api/v1/builds";
+var POLL_INTERVAL_MS = 5e3;
+var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function build_id_from_path(path) {
+  if (typeof path !== "string" || path.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const prefix = "/builds/";
+  if (path.startsWith(prefix) === false) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  let tail = path.slice(prefix.length);
+  const slash_index = tail.indexOf("/");
+  if (slash_index >= 0) {
+    tail = tail.slice(0, slash_index);
+  }
+  const query_index = tail.indexOf("?");
+  if (query_index >= 0) {
+    tail = tail.slice(0, query_index);
+  }
+  const rtnval = tail;
+  return rtnval;
+}
+function is_valid_build_id(build_id) {
+  if (typeof build_id !== "string") {
+    const rtnval2 = false;
+    return rtnval2;
+  }
+  const rtnval = UUID_PATTERN.test(build_id);
+  return rtnval;
+}
+function build_detail_url(project_id, build_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/builds/" + encodeURIComponent(build_id);
+  return rtnval;
+}
+function build_artifacts_url(project_id, build_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/builds/" + encodeURIComponent(build_id) + "/artifacts";
+  return rtnval;
+}
+var PycBuildDetail = class extends HTMLElement {
+  _build_id;
+  _project_id;
+  _build;
+  _artifacts;
+  _loading;
+  _errored;
+  _terminal;
+  _poll_status;
+  _poll_timer;
+  _root;
+  constructor() {
+    super();
+    this._build_id = "";
+    this._project_id = "";
+    this._build = null;
+    this._artifacts = [];
+    this._loading = false;
+    this._errored = false;
+    this._terminal = false;
+    this._poll_status = "idle";
+    this._poll_timer = null;
+    this._root = null;
+  }
+  /**
+   * Observed attributes -- ``build-id`` may be supplied
+   * explicitly by a host; otherwise it is read from the path on
+   * mount.
+   */
+  static get observedAttributes() {
+    const rtnval = ["build-id"];
+    return rtnval;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to inspect the view's
+   * runtime state without scraping the DOM.
+   */
+  get detailState() {
+    const rtnval = {
+      buildId: this._build_id,
+      projectId: this._project_id,
+      loading: this._loading,
+      errored: this._errored,
+      pollStatus: this._poll_status,
+      terminal: this._terminal
+    };
+    return rtnval;
+  }
+  /**
+   * Lifecycle hook -- resolve the build id, render the chrome,
+   * and fetch the initial snapshot.
+   */
+  connectedCallback() {
+    const attr_id = this.getAttribute("build-id");
+    if (attr_id !== null && attr_id.length > 0) {
+      this._build_id = attr_id;
+    } else {
+      this._build_id = build_id_from_path(window.location.pathname);
+    }
+    this._render_chrome();
+    void this._load();
+    return;
+  }
+  /**
+   * Lifecycle hook -- stop the live-poll timer so a navigation
+   * away from the build never leaks a timer.
+   */
+  disconnectedCallback() {
+    this._stop_poll();
+    return;
+  }
+  /**
+   * Fetch the build snapshot + artifacts then -- when the build
+   * is not already terminal -- start the live-poll loop. Exposed
+   * so unit tests can await a load cycle.
+   */
+  async load() {
+    await this._load();
+    return;
+  }
+  async _load() {
+    if (is_valid_build_id(this._build_id) === false) {
+      this._loading = false;
+      this._errored = true;
+      this._render_body();
+      return;
+    }
+    this._loading = true;
+    this._errored = false;
+    this._render_body();
+    const build = await this._fetch_build();
+    if (build === null) {
+      this._loading = false;
+      this._errored = true;
+      this._render_body();
+      return;
+    }
+    this._build = build;
+    this._project_id = build.project_id;
+    this._loading = false;
+    this._errored = false;
+    this._terminal = is_terminal_build_state(build.state);
+    this._render_body();
+    await this._load_artifacts();
+    if (this._terminal === false) {
+      this._start_poll();
+    } else {
+      this._poll_status = "stopped";
+      this._render_poll_banner();
+    }
+    return;
+  }
+  /**
+   * Fetch the current build snapshot. The first fetch addresses
+   * the project-agnostic resolver path; once ``project_id`` is
+   * known, project-scoped poll fetches address the scoped path.
+   *
+   * @returns The ``BuildRun`` snapshot, or ``null`` on failure.
+   */
+  async _fetch_build() {
+    let url = BUILDS_RESOLVER_PATH + "/" + encodeURIComponent(this._build_id);
+    if (this._project_id.length > 0) {
+      url = build_detail_url(this._project_id, this._build_id);
+    }
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error("build fetch failed: HTTP " + String(response.status));
+      }
+      const body = await response.json();
+      const rtnval = body;
+      return rtnval;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.detail_fetch_failed",
+        { reason: String(reason) }
+      );
+      const rtnval = null;
+      return rtnval;
+    }
+  }
+  /**
+   * Fetch the build's artifact manifest. A failed fetch leaves
+   * the artifacts list empty -- the section renders an empty
+   * state rather than an error.
+   */
+  async _load_artifacts() {
+    if (this._project_id.length === 0) {
+      return;
+    }
+    try {
+      const url = build_artifacts_url(this._project_id, this._build_id);
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        const page = body;
+        if (page !== null && Array.isArray(page.items) === true) {
+          this._artifacts = page.items;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.artifacts_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    this._render_artifacts();
+    return;
+  }
+  /**
+   * Start the live-poll loop. A no-op when a poll is already
+   * scheduled.
+   */
+  _start_poll() {
+    if (this._poll_timer !== null) {
+      return;
+    }
+    this._poll_status = "polling";
+    this._render_poll_banner();
+    this._schedule_poll();
+    return;
+  }
+  _schedule_poll() {
+    const timer = setTimeout(() => {
+      this._poll_timer = null;
+      void this._poll_once();
+    }, POLL_INTERVAL_MS);
+    const handle = timer;
+    if (typeof handle.unref === "function") {
+      handle.unref();
+    }
+    this._poll_timer = timer;
+    return;
+  }
+  /**
+   * Run one poll cycle -- re-fetch the build snapshot, re-render,
+   * and either reschedule (still non-terminal) or stop (now
+   * terminal). Exposed so unit tests can drive a poll cycle
+   * without waiting on a real timer.
+   */
+  async pollOnce() {
+    await this._poll_once();
+    return;
+  }
+  async _poll_once() {
+    const build = await this._fetch_build();
+    if (build !== null) {
+      this._build = build;
+      this._project_id = build.project_id;
+      this._terminal = is_terminal_build_state(build.state);
+      this._render_body();
+      await this._load_artifacts();
+    }
+    if (this._terminal === true) {
+      this._stop_poll();
+      this._poll_status = "stopped";
+      this._render_poll_banner();
+      return;
+    }
+    this._schedule_poll();
+    return;
+  }
+  /**
+   * Stop the live-poll loop, clearing any pending timer.
+   */
+  _stop_poll() {
+    if (this._poll_timer !== null) {
+      clearTimeout(this._poll_timer);
+      this._poll_timer = null;
+    }
+    return;
+  }
+  /**
+   * Build the persistent chrome -- heading, back link, the poll
+   * banner, and the body region the data render replaces.
+   */
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-build-detail");
+    root.setAttribute("role", "main");
+    root.setAttribute("aria-label", "Build detail");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-build-detail__heading");
+    heading.textContent = "Build detail";
+    root.appendChild(heading);
+    const back = document.createElement("a");
+    back.classList.add("pyc-build-detail__back-link");
+    back.setAttribute("href", "/builds");
+    back.setAttribute("data-role", "back-link");
+    back.textContent = "Back to builds";
+    root.appendChild(back);
+    const banner = document.createElement("p");
+    banner.classList.add("pyc-build-detail__banner");
+    banner.setAttribute("data-role", "poll-banner");
+    banner.setAttribute("role", "status");
+    banner.hidden = true;
+    root.appendChild(banner);
+    const body = document.createElement("div");
+    body.classList.add("pyc-build-detail__body");
+    body.setAttribute("data-role", "body");
+    root.appendChild(body);
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Re-render the body region from the current build snapshot,
+   * driving the loading / error / loaded states.
+   */
+  _render_body() {
+    if (this._root === null) {
+      return;
+    }
+    const body = this._root.querySelector('[data-role="body"]');
+    if (body === null) {
+      return;
+    }
+    if (this._loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-build-detail__status");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading build\u2026";
+      body.replaceChildren(loading);
+      return;
+    }
+    if (this._errored === true || this._build === null) {
+      const error = document.createElement("p");
+      error.classList.add(
+        "pyc-build-detail__status",
+        "pyc-build-detail__status--error"
+      );
+      error.setAttribute("data-role", "error-state");
+      error.textContent = "Failed to load this build. Try refreshing.";
+      body.replaceChildren(error);
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    fragment.appendChild(this._build_summary(this._build));
+    if (this._build.toolchain !== void 0 && this._build.toolchain !== null) {
+      if (this._build.toolchain.length > 0) {
+        fragment.appendChild(this._build_toolchain(this._build.toolchain));
+      }
+    }
+    const artifacts_section = document.createElement("section");
+    artifacts_section.classList.add("pyc-build-detail__artifacts");
+    artifacts_section.setAttribute("data-role", "artifacts-section");
+    artifacts_section.setAttribute("role", "region");
+    artifacts_section.setAttribute("aria-label", "Artifacts");
+    fragment.appendChild(artifacts_section);
+    body.replaceChildren(fragment);
+    this._render_artifacts();
+    return;
+  }
+  /**
+   * Build the build summary block -- identity, state badge,
+   * runner kind, reproducibility digest, timestamps, and the
+   * final-state reason.
+   *
+   * @param build The current build snapshot.
+   *
+   * @returns A populated summary section element.
+   */
+  _build_summary(build) {
+    const section = document.createElement("section");
+    section.classList.add("pyc-build-detail__summary");
+    section.setAttribute("role", "region");
+    section.setAttribute("aria-label", "Build summary");
+    const id_row = document.createElement("div");
+    id_row.classList.add("pyc-build-detail__id-row");
+    const id_value = document.createElement("span");
+    id_value.classList.add("pyc-build-detail__build-id");
+    id_value.setAttribute("data-role", "build-id");
+    id_value.textContent = short_id(build.run_id);
+    id_value.title = build.run_id;
+    id_row.appendChild(id_value);
+    const badge = document.createElement("mj-chip");
+    badge.classList.add("pyc-build-detail__badge");
+    badge.setAttribute("data-role", "state-badge");
+    badge.setAttribute("data-tone", build_state_tone(build.state));
+    badge.textContent = build.state;
+    id_row.appendChild(badge);
+    section.appendChild(id_row);
+    const grid = document.createElement("dl");
+    grid.classList.add("pyc-build-detail__grid");
+    this._append_field(grid, "Project", build.project_id);
+    this._append_field(grid, "Runner kind", build.runner_kind);
+    this._append_field(grid, "Repro digest", build.repro_digest_sha256);
+    this._append_field(grid, "Started", format_timestamp(build.started_at));
+    this._append_field(grid, "Finished", format_timestamp(build.finished_at));
+    const layer5 = build.layer5_run_id;
+    if (layer5 !== void 0 && layer5 !== null && layer5.length > 0) {
+      this._append_field(grid, "Layer-5 run", layer5);
+    }
+    const reason = build.final_state_reason;
+    if (reason !== void 0 && reason !== null && reason.length > 0) {
+      this._append_field(grid, "Final state reason", reason);
+    }
+    section.appendChild(grid);
+    return section;
+  }
+  /**
+   * Append one labelled field to a definition-list grid.
+   *
+   * @param grid The ``<dl>`` to append into.
+   * @param label The field's display label.
+   * @param value The field's display value.
+   */
+  _append_field(grid, label, value) {
+    const field = document.createElement("div");
+    field.classList.add("pyc-build-detail__field");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const def = document.createElement("dd");
+    def.textContent = value;
+    field.appendChild(term);
+    field.appendChild(def);
+    grid.appendChild(field);
+    return;
+  }
+  /**
+   * Build the toolchain-snapshot section -- one row per pinned
+   * toolchain entry.
+   *
+   * @param toolchain The build's toolchain snapshot rows.
+   *
+   * @returns A populated toolchain section element.
+   */
+  _build_toolchain(toolchain) {
+    const section = document.createElement("section");
+    section.classList.add("pyc-build-detail__toolchain");
+    section.setAttribute("role", "region");
+    section.setAttribute("aria-label", "Toolchain");
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-build-detail__section-heading");
+    heading.textContent = "Toolchain";
+    section.appendChild(heading);
+    const list = document.createElement("ul");
+    list.classList.add("pyc-build-detail__toolchain-list");
+    for (const entry of toolchain) {
+      const item = document.createElement("li");
+      item.classList.add("pyc-build-detail__toolchain-entry");
+      const key = document.createElement("strong");
+      key.textContent = entry.key;
+      item.appendChild(key);
+      const version = entry.version;
+      if (version !== void 0 && version !== null && version.length > 0) {
+        const version_el = document.createElement("span");
+        version_el.textContent = " " + version;
+        item.appendChild(version_el);
+      }
+      list.appendChild(item);
+    }
+    section.appendChild(list);
+    return section;
+  }
+  /**
+   * Render the artifacts section from the current ``_artifacts``
+   * list -- a heading plus one row per artifact, or an empty
+   * state.
+   */
+  _render_artifacts() {
+    if (this._root === null) {
+      return;
+    }
+    const section = this._root.querySelector('[data-role="artifacts-section"]');
+    if (section === null) {
+      return;
+    }
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-build-detail__section-heading");
+    heading.textContent = "Artifacts";
+    const list = document.createElement("ul");
+    list.classList.add("pyc-build-detail__artifact-list");
+    list.setAttribute("data-role", "artifact-list");
+    if (this._artifacts.length === 0) {
+      const empty = document.createElement("li");
+      empty.classList.add("pyc-build-detail__artifact-empty");
+      empty.setAttribute("data-role", "artifacts-empty");
+      empty.textContent = "No artifacts recorded for this build.";
+      list.appendChild(empty);
+    } else {
+      for (const artifact of this._artifacts) {
+        const item = document.createElement("li");
+        item.classList.add("pyc-build-detail__artifact");
+        const name = document.createElement("span");
+        name.classList.add("pyc-build-detail__artifact-name");
+        const display = artifact.artifact_name;
+        name.textContent = display !== void 0 && display !== null && display.length > 0 ? display : artifact.artifact_id;
+        item.appendChild(name);
+        const type_chip = document.createElement("span");
+        type_chip.classList.add("pyc-build-detail__artifact-type");
+        type_chip.textContent = artifact.artifact_type;
+        item.appendChild(type_chip);
+        const storage = artifact.storage_uri;
+        if (storage !== void 0 && storage !== null && storage.length > 0) {
+          const link = document.createElement("a");
+          link.classList.add("pyc-build-detail__artifact-link");
+          link.setAttribute("href", storage);
+          link.setAttribute("rel", "noopener noreferrer");
+          link.textContent = "Download";
+          item.appendChild(link);
+        }
+        const digest = document.createElement("span");
+        digest.classList.add("pyc-build-detail__artifact-digest");
+        digest.textContent = short_id(artifact.sha256);
+        digest.title = artifact.sha256;
+        item.appendChild(digest);
+        list.appendChild(item);
+      }
+    }
+    section.replaceChildren(heading, list);
+    return;
+  }
+  /**
+   * Update the live-poll status banner. Shows a "live updates
+   * on" affordance while polling and a "build finished" note
+   * once the build reaches a terminal state.
+   */
+  _render_poll_banner() {
+    if (this._root === null) {
+      return;
+    }
+    const banner = this._root.querySelector('[data-role="poll-banner"]');
+    if (banner instanceof HTMLElement === false) {
+      return;
+    }
+    const el = banner;
+    if (this._poll_status === "polling") {
+      el.hidden = false;
+      el.setAttribute("data-tone", "neutral");
+      el.textContent = "Build in progress \u2014 refreshing every 5 seconds.";
+      return;
+    }
+    if (this._poll_status === "stopped" && this._terminal === true) {
+      el.hidden = false;
+      el.setAttribute("data-tone", "neutral");
+      el.textContent = "Build finished \u2014 live updates ended.";
+      return;
+    }
+    el.hidden = true;
+    el.textContent = "";
+    return;
+  }
+};
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/index.entry.js
+var ORCHESTRATION_GROUP_ID = "orchestration";
+var BUILDS_READ_PERMISSION = "system:builds.read";
+var BUILDS_ROUTE = "/builds";
+var BUILDS_LIST_TAG = "pyc-builds-list";
+var BUILD_DETAIL_TAG = "pyc-build-detail";
+var BUILDS_STYLESHEET_HREF = "/static/javascript/pyc-builds-bundle/pyc-builds-bundle.css";
+function ensure_builds_stylesheet() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const selector = 'link[data-pyc-bundle="pyc-builds-bundle"]';
+  if (document.head.querySelector(selector) !== null) {
+    return;
+  }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = BUILDS_STYLESHEET_HREF;
+  link.setAttribute("data-pyc-bundle", "pyc-builds-bundle");
+  document.head.appendChild(link);
+  return;
+}
+var BUILDS_ENTRY = {
+  entryId: "orchestration.builds",
+  label: "Builds",
+  route: BUILDS_ROUTE,
+  requiredPermissions: [BUILDS_READ_PERMISSION],
+  group: ORCHESTRATION_GROUP_ID
+};
+function register_builds_sidebar(sidebar) {
+  sidebar.registerGroup({
+    groupId: ORCHESTRATION_GROUP_ID,
+    label: "Orchestration",
+    requiredPermissions: [BUILDS_READ_PERMISSION]
+  });
+  sidebar.registerEntry(BUILDS_ENTRY);
+  return;
+}
+function define_builds_elements() {
+  if (typeof customElements === "undefined") {
+    return;
+  }
+  if (customElements.get(BUILDS_LIST_TAG) === void 0) {
+    customElements.define(BUILDS_LIST_TAG, PycBuildsList);
+  }
+  if (customElements.get(BUILD_DETAIL_TAG) === void 0) {
+    customElements.define(BUILD_DETAIL_TAG, PycBuildDetail);
+  }
+  return;
+}
+function classify_builds_route(path) {
+  if (typeof path !== "string") {
+    const rtnval2 = "none";
+    return rtnval2;
+  }
+  let working = path;
+  const query_index = working.indexOf("?");
+  if (query_index >= 0) {
+    working = working.slice(0, query_index);
+  }
+  if (working === BUILDS_ROUTE || working === BUILDS_ROUTE + "/") {
+    const rtnval2 = "list";
+    return rtnval2;
+  }
+  const detail_id = build_id_from_path(working);
+  if (detail_id.length > 0) {
+    const rtnval2 = "detail";
+    return rtnval2;
+  }
+  const rtnval = "none";
+  return rtnval;
+}
+function mount_builds_view_if_active() {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const route = classify_builds_route(window.location.pathname);
+  if (route === "none") {
+    return;
+  }
+  const main = document.querySelector("pyc-site-shell main.pyc-site-shell__main");
+  if (main === null) {
+    return;
+  }
+  const target_tag = route === "detail" ? BUILD_DETAIL_TAG : BUILDS_LIST_TAG;
+  const existing = main.querySelector(target_tag);
+  if (existing !== null) {
+    return;
+  }
+  define_builds_elements();
+  ensure_builds_stylesheet();
+  const view = document.createElement(target_tag);
+  main.replaceChildren(view);
+  return;
+}
+function _register_against(handle) {
+  mount_builds_view_if_active();
+  return;
+}
+function _boot() {
+  define_builds_elements();
+  const target = window;
+  const handle = target.pychestrateShell;
+  if (handle !== void 0 && handle.sidebar !== void 0) {
+    _register_against(handle);
+    return;
+  }
+  queueMicrotask(() => {
+    const retry = target.pychestrateShell;
+    if (retry !== void 0 && retry.sidebar !== void 0) {
+      _register_against(retry);
+      return;
+    }
+    console.warn(
+      "pychestrate.ui.builds.bundle_no_shell_handle",
+      {
+        reason: "window.pychestrateShell missing after microtask retry"
+      }
+    );
+  });
+  return;
+}
+if (typeof window !== "undefined") {
+  _boot();
+}
+export {
+  BUILD_STATES,
+  PycBuildDetail,
+  PycBuildsList,
+  TERMINAL_BUILD_STATES,
+  build_artifacts_url,
+  build_builds_collection_url,
+  build_builds_query_url,
+  build_detail_url,
+  build_id_from_path,
+  build_source_integrations_url,
+  build_state_tone,
+  classify_builds_route,
+  define_builds_elements,
+  ensure_builds_stylesheet,
+  format_timestamp,
+  has_next_page,
+  has_previous_page,
+  is_terminal_build_state,
+  is_valid_build_id,
+  mount_builds_view_if_active,
+  parse_runner_inputs,
+  register_builds_sidebar,
+  short_id,
+  trigger_message_for_status
+};

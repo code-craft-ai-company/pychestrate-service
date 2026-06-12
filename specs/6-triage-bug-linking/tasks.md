@@ -10,18 +10,18 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/test/triage/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/test/triage/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `triage_case`, `triage_case_ledger`, `triage_signature_cache`, `triage_project_tracker_config`.
 - [ ] T1.3 — Implement `signature.py::normalize_trace` and SHA-256 signature.
 - [ ] T1.4 — Implement `classifier.py::classify(inputs)` as a pure function.
 - [ ] T1.5 — Implement `tracker_protocol.py::BugTrackerDriverProtocol`.
-- [ ] T1.6 — Implement `NullBugTrackerDriver` at `source/site/automojo/factories/pychestrate/bug_tracker/null.py` with `PRECEDENCE = 1000`.
+- [ ] T1.6 — Implement `NullBugTrackerDriver` at `source/site/ccai/factories/pychestrate/bug_tracker/null.py` with `PRECEDENCE = 1000`.
 - [ ] T1.7 — Implement `service.py::TriageService.classify_run` happy path reading flake/compare signals.
 - [ ] T1.8 — Subscribe to `entity.run.completed` and invoke classify.
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Implement `JiraBugTrackerDriver`, `GithubIssuesBugTrackerDriver`, `LinearBugTrackerDriver` under `source/site/automojo/factories/pychestrate/bug_tracker/`.
+- [ ] T2.1 — Implement `JiraBugTrackerDriver`, `GithubIssuesBugTrackerDriver`, `LinearBugTrackerDriver` under `source/site/ccai/factories/pychestrate/bug_tracker/`.
 - [ ] T2.2 — Implement `tracker_registry.py` accessor; subscribe to `extension.reloaded`.
 - [ ] T2.3 — Implement `auto_open_queue.py` with idempotency key `(project, stack_signature_sha256)` and bounded backoff.
 - [ ] T2.4 — Implement `set_project_tracker` persisting `triage_project_tracker_config`.

@@ -3,7 +3,7 @@
 ## Architecture
 
 `1-audit-log` lives under
-`source/site/automojo/pychestrate/webservice/audit/`. It is a
+`source/site/ccai/pychestrate/webservice/audit/`. It is a
 consumer-only service in steady state: a bus subscriber maps every
 registered `entity.*` topic into an `AuditRecord`, writes it to the
 canonical local table (INSERT-only), computes the hash chain, and fans
@@ -91,7 +91,7 @@ There is **no** audit mutation endpoint — UPDATE/DELETE on
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.audit.audit_writer`:
+Module `ccai.pychestrate.webservice.audit.audit_writer`:
 
 ```python
 def capture_event(
@@ -121,7 +121,7 @@ def capture_event(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.audit.chain_verifier`:
+Module `ccai.pychestrate.webservice.audit.chain_verifier`:
 
 ```python
 def verify_audit_chain(
@@ -137,7 +137,7 @@ def verify_audit_chain(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.audit.sink_dispatcher`:
+Module `ccai.pychestrate.webservice.audit.sink_dispatcher`:
 
 ```python
 def dispatch_record(*, sequence_number: int) -> None:
@@ -158,7 +158,7 @@ def drain_sink_outbox(*, sink_name: str) -> int:
 ### Extension Surface
 
 Factory protocol `audit_sink` declared in
-`automojo.pychestrate.webservice.audit.factories.audit_sink`:
+`ccai.pychestrate.webservice.audit.factories.audit_sink`:
 
 ```python
 class AuditSinkProtocol(FactoryProtocolBase):
@@ -191,7 +191,7 @@ Reference implementations (in-tree):
 Skeletons for guidance: `SplunkHecAuditSink`, `SiemSyslogAuditSink`.
 
 Resource base `AuditEventTypeExtension` declared in
-`automojo.pychestrate.webservice.audit.extensions.event_type`:
+`ccai.pychestrate.webservice.audit.extensions.event_type`:
 
 ```python
 class AuditEventTypeExtension(ResourceExtension):
@@ -224,7 +224,7 @@ Reference implementations: `UserLifecycleAuditEvents`,
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/audit/
+source/site/ccai/pychestrate/webservice/audit/
     __init__.py
     audit_writer.py                # capture_event, payload validation
     chain_verifier.py              # verify_audit_chain

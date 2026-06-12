@@ -46,8 +46,8 @@ feature declares no extension points.>
 ## Component Breakdown
 
 <Submodule structure — which Python package owns what. Follow the
-automojo-webworks layout conventions and the repo's existing
-`source/site/automojo/pychestrate/webservice/` tree.>
+codecraftai-webworks layout conventions and the repo's existing
+`source/site/ccai/pychestrate/webservice/` tree.>
 
 ## Key Flows
 

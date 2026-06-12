@@ -25,7 +25,7 @@ build time and track protocol changes across phases.
 
 **Acceptance Criteria (EARS):**
 
-1. WHEN a module under `source/site/automojo/pychestrate/webservice/extension/protocols/`
+1. WHEN a module under `source/site/ccai/pychestrate/webservice/extension/protocols/`
    declares a new `FactoryProtocolBase` subclass THEN the system SHALL
    register the subclass in the process-wide `FactoryProtocolCatalog` keyed
    by `factory_protocol_name`.
@@ -55,7 +55,7 @@ with uniform shape and pass the linter on first PR.
    catalog registration SHALL raise `ConfigurationError` with the list of
    missing fields and block service startup.
 3. WHEN a protocol's reference implementation is missing from
-   `source/site/automojo/factories/pychestrate/_reference/` THEN the
+   `source/site/ccai/factories/pychestrate/_reference/` THEN the
    system SHALL emit a `pychestrate_extension_reference_missing` warning
    during bootstrap.
 

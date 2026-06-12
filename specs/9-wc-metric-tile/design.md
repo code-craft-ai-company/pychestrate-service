@@ -134,7 +134,7 @@ interface DashboardTileKindRecord {
 }
 ```
 
-In-tree built-ins under `source/site/automojo/pychestrate/webservice/webinterface/components/`:
+In-tree built-ins under `source/site/ccai/pychestrate/webservice/webinterface/components/`:
 
 - `<pyc-metric-tile-number>` — scalar number.
 - `<pyc-metric-tile-sparkline>` — 64x24 SVG sparkline.
@@ -151,7 +151,7 @@ None.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-metric-tile/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-metric-tile/`:
 
 - `pyc-metric-tile.ts` — parent Custom Element with wrapper + dispatch.
 - `transport/tile-transport.ts` — metric query client.
