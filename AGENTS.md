@@ -62,7 +62,7 @@ Rules:
 ## REST API Interface
 The REST API is published on the same webworks app as the web interface entrypoint and consumed by the (future) Code Craft AI website code as well as by tests and the `pyc` CLI.  Routes are versioned with a `/api/v1/` prefix; for example:
 
-https://automationmojo.com/api/v1/flags
+https://code-craft.ai/api/v1/flags
 
 REST routes for a given feature live next to the feature module under `<repository folder>/source/site/ccai/pychestrate/webservice/<feature>/restapi/v1/<feature>_routes.py`.  Each `*_routes.py` exposes a `register_<feature>_routes(*, app, version_prefix)` function that the bootstrap calls from `register_service_extensions()`.  See `webservice/identity/flags/restapi/v1/flags_routes.py` for the reference template.
 
