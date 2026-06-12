@@ -475,7 +475,7 @@ EOF
 
 # Derive the client-certificate Common Name from the verified
 # subject DN. Stock nginx exposes \$ssl_client_s_dn (RFC2253
-# format, e.g. ``CN=worker1,O=automojo``) but has no built-in
+# format, e.g. ``CN=worker1,O=codecraftai``) but has no built-in
 # CN accessor -- this map extracts it so the orchestration-ingest
 # location blocks can forward it as the SSL_CLIENT_S_DN_CN header.
 map \$ssl_client_s_dn \$ssl_client_s_dn_cn {
