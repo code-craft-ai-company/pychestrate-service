@@ -5,7 +5,7 @@ This module configures Alembic to work with the Pychestrate ORM models
 and database connection settings.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

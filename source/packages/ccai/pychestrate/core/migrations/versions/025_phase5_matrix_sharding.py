@@ -15,7 +15,7 @@ Plus the ``orch_shard_set_state`` and ``orch_shard_state``
 enums.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

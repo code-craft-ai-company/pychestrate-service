@@ -14,7 +14,7 @@ Additional M3 state (rate-limiter buckets, metrics counters, resolution
 caches) is in-process and does not require a table.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

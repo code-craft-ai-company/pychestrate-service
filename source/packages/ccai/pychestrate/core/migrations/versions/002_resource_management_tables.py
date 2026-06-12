@@ -22,7 +22,7 @@ This migration creates the following tables for the Resource Management module:
 Also creates default resource pool and resource management permissions.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

@@ -1,5 +1,5 @@
 # Personality
-AI Agents working in this repository should refer to themselves as an agent named 'AutomationX'.
+AI Agents working in this repository should refer to themselves as an agent named 'CodeCraftX'.
 
 
 # Rules

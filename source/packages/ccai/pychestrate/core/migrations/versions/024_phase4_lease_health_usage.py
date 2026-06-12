@@ -16,7 +16,7 @@ Plus the ``resources_lease_state``,
 ``resources_usage_event_type`` enums.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

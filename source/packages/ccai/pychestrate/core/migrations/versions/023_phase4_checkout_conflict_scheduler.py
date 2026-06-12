@@ -19,7 +19,7 @@ its rules read snapshots of ``resources_reservation`` and produce
 ``RuleDecision`` objects for the checkout service. No new tables.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

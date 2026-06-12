@@ -25,7 +25,7 @@ Plus the ``orch_build_run_state`` and
 ``orch_build_artifact_promotion_action`` enums.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

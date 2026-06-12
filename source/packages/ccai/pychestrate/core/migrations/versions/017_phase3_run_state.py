@@ -28,7 +28,7 @@ indeterminate order (both are parallel DDL-only migrations with no
 conflicting table names) and then applies ``017``.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

@@ -10,7 +10,7 @@ Testing Frameworks - TestBase and TestPlus
 Purpose and Audience
 --------------------
 
-- Describe how this repository applies the ``testbase`` and ``testplus`` frameworks so contributors and AutomationX can create, organize, and run scenarios consistently.
+- Describe how this repository applies the ``testbase`` and ``testplus`` frameworks so contributors and CodeCraftX can create, organize, and run scenarios consistently.
 - Clarify when to choose ``testbase`` (single-host or self-contained integration tests) versus ``testplus`` (multi-host or clustered resources).
 - Complement :doc:`10-03-testing-patterns-and-practices` by focusing on framework-specific conventions, directory layout, and result artifacts.
 
@@ -28,7 +28,7 @@ Environment Preparation
 
 - Execute ``repository-setup/rehome-repository`` after cloning so the expected ``.env`` file exists for both frameworks.
 - Run ``development/setup-environment`` to create or refresh the virtual environment, then activate it before invoking ``testbase`` or ``testplus`` entry points.
-- Inside Codex containers, start with ``development/codex-setup``; it chains the repository bootstrap steps AutomationX relies on.
+- Inside Codex containers, start with ``development/codex-setup``; it chains the repository bootstrap steps CodeCraftX relies on.
 - Create a dedicated output directory per run so logs, JSOS streams, and other artifacts remain isolated and easy to archive.
 
 Writing Tests with TestBase
@@ -65,8 +65,8 @@ Working with TestPlus
 ---------------------
 
 - Use ``testplus`` for suites that orchestrate multiple networked machines, clusters, or hardware resources that exceed a single host.
-- Mirror the same directory and naming conventions described above so AutomationX can pivot between ``testbase`` (single host) and ``testplus`` (multi host) suites without relearning structure.
-- Document any cluster-specific constraints inside the relevant ``testplus`` subdirectories, especially if human approval or provisioning is required before AutomationX can execute the suite.
+- Mirror the same directory and naming conventions described above so CodeCraftX can pivot between ``testbase`` (single host) and ``testplus`` (multi host) suites without relearning structure.
+- Document any cluster-specific constraints inside the relevant ``testplus`` subdirectories, especially if human approval or provisioning is required before CodeCraftX can execute the suite.
 
 Running Tests
 -------------

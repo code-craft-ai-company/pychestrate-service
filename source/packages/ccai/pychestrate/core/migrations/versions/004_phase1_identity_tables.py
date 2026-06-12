@@ -46,7 +46,7 @@ tables until the Phase 10 cut-over retires the legacy schema.
     - feature_flag_versions
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

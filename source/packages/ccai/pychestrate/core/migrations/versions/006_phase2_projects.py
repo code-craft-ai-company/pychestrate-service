@@ -15,7 +15,7 @@ and the ProjectMetadataFieldExtension registry which persists into the
 existing ``extension_fields`` JSONB column.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

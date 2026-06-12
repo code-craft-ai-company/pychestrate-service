@@ -17,7 +17,7 @@ is implemented. M1 tokens redeem to a server-generated bearer token
 stored as a digest on ``clients_clients.bearer_token_hash``.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

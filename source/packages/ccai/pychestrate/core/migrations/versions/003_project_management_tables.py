@@ -37,7 +37,7 @@ This migration creates the following tables for the Project Management module:
 - project_watch_trigger_logs: Watch trigger logs
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

@@ -22,7 +22,7 @@ This migration creates the following tables for the System Configuration module:
 Also creates default system roles and permissions.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2025, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

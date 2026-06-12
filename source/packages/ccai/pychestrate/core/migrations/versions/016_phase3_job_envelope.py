@@ -21,7 +21,7 @@ needs a trivial chain-reconciliation commit to bump its
 ``merge-heads`` or a ``down_revision`` bump suffices.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"

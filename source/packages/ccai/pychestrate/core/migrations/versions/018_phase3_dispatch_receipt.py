@@ -18,7 +18,7 @@ Chain: extends the single-head chain ``017_phase3_run_state``
 that PR #7 established after merging the 015/016 fork.
 """
 
-__author__ = "AutomationX"
+__author__ = "CodeCraftX"
 __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"
