@@ -286,7 +286,7 @@ A first-run admin-bootstrap CLI is tracked as a beta enhancement.
 For the alpha, the operator runs the seed step out-of-band.
 
 
-CI prerequisite — ``AUTOMOJO_REPO_TOKEN`` secret
+CI prerequisite — ``CODECRAFTAI_REPO_TOKEN`` secret
 ================================================
 
 The repo's :file:`pyproject.toml` declares git-source dependencies
@@ -314,14 +314,14 @@ Setup (one-time, per repo):
      error if the secret is missing).
 2. Add the PAT as a repo secret on
    ``automationmojo/pychestrate-service`` named
-   ``AUTOMOJO_REPO_TOKEN``.
+   ``CODECRAFTAI_REPO_TOKEN``.
 
 The :file:`.github/workflows/test.yml` workflow then injects the
 PAT into a global ``url.<base>.insteadOf`` rewrite right before
 each ``poetry install`` step::
 
     git config --global \\
-      url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \\
+      url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \\
       "https://github.com/automationmojo/"
 
 so every clone of an ``https://github.com/automationmojo/<repo>``

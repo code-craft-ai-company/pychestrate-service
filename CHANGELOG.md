@@ -119,7 +119,7 @@ operated end-to-end, and exercised by an admin against either SQLite
 - **Deploy runbook** (`userguide/13-00-alpha-deployment.rst`)
   covering environment variables, KEK / pepper / cookie-secret
   provisioning, alembic migrations, gunicorn invocation, and
-  CI prerequisites (`AUTOMOJO_REPO_TOKEN` setup) (#168, #170).
+  CI prerequisites (`CODECRAFTAI_REPO_TOKEN` setup) (#168, #170).
 - **Auth-stack documentation** (`userguide/12-00-consumer-ui-auth-stack.rst`)
   covering the legacy-vs-modern split, the migration history, and a
   detailed audit of the residual legacy import surface
@@ -157,7 +157,7 @@ operated end-to-end, and exercised by an admin against either SQLite
 - **Python `alembic` is a direct dependency** (was transitive
   through pychestrate-core). Pinned `^1.13.0` (#171).
 - **CI workflow private-repo authentication** uses a fine-grained
-  PAT injected as `AUTOMOJO_REPO_TOKEN` repo / org secret. The
+  PAT injected as `CODECRAFTAI_REPO_TOKEN` repo / org secret. The
   workflow installs a global `git url.<base>.insteadOf` rewrite
   before each `poetry install`, silently authenticating clones
   of the nine private `codecraftai-*` / `pychestrate-core` git deps.
@@ -241,7 +241,7 @@ For first-time deployments and CI:
 1. Create a fine-grained PAT against the `automationmojo` org
    with `Contents: Read` on the nine private `codecraftai-*` /
    `pychestrate-core` repos.
-2. Add it as a repo or org secret named `AUTOMOJO_REPO_TOKEN`.
+2. Add it as a repo or org secret named `CODECRAFTAI_REPO_TOKEN`.
 3. Provision the KEK, pepper, and UI cookie secret per the
    procedure in the deploy runbook.
 4. Run `alembic upgrade head` against your production database
