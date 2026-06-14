@@ -53,7 +53,20 @@ from ccai.pychestrate.webservice.jobs.dispatch import (
     register_builtin_extensions as dispatch_register,
 )
 from ccai.pychestrate.webservice.jobs.dispatch.receipt.timer_wheel import (
+    TimerEntry,
     default_timer_wheel,
+)
+from ccai.pychestrate.webservice.jobs.run.state.advance import (
+    advance_to_dispatched as _advance_to_dispatched,
+)
+from ccai.pychestrate.webservice.jobs.run.state.enums import RunEvent
+from ccai.pychestrate.webservice.jobs.run.state.errors import (
+    IllegalTransitionError,
+    RunNotFoundError,
+    TerminalStateError,
+)
+from ccai.pychestrate.webservice.jobs.run.state.machine import (
+    transition as _run_state_transition,
 )
 from ccai.pychestrate.webservice.jobs.offline.cancel_queue import (
     DeferredCancelQueue,
@@ -207,23 +220,78 @@ def _make_outbox_drain_task(
 
 def _make_timer_wheel_tick_task(
         *,
+        session_factory: SessionFactory,
         interval_seconds: float
     ) -> PeriodicTask:
     """
         Build the dispatch-receipt timer-wheel ``fire_expired``
         tick. The wheel is the process-wide default returned by
-        :func:`default_timer_wheel`. PR A wires the tick to the
-        wheel; the actual on-timeout bus publish lands when the
-        dispatcher passes its publisher callback down to the wheel
-        (M2 scope).
+        :func:`default_timer_wheel`. When an entry fires, the
+        on-timeout callback applies
+        :attr:`RunEvent.RECEIPT_ACK_TIMEOUT` to the run-state row
+        (DISPATCHING -> DISPATCH_UNCONFIRMED). The callback is
+        tolerant: rows already advanced past DISPATCHING or in a
+        terminal state are silently skipped.
 
+        :param session_factory: Operator session factory used by
+                                the on-timeout callback to open a
+                                fresh session per fired entry.
         :param interval_seconds: Tick cadence.
 
         :returns: :class:`PeriodicTask`.
     """
+    def _on_timeout(entry: TimerEntry) -> None:
+        """
+            Apply RECEIPT_ACK_TIMEOUT to the run identified by
+            ``entry.run_id``. Opens a fresh session per entry so
+            each timeout is an independent unit of work.
+
+            :param entry: Fired timer entry.
+
+            :returns: None.
+        """
+        session = session_factory()
+        try:
+            _run_state_transition(
+                db_session=session,
+                run_id=entry.run_id,
+                event=RunEvent.RECEIPT_ACK_TIMEOUT,
+                actor="system:dispatch-timeout",
+                reason="dispatch receipt ack timeout for attempt={}".format(
+                    entry.attempt_id
+                ),
+            )
+            logger.info(
+                "phase5.timer_wheel.timeout run_id=%s attempt_id=%s",
+                entry.run_id,
+                entry.attempt_id,
+            )
+        except (IllegalTransitionError, TerminalStateError):
+            # The run advanced past DISPATCHING before the timer
+            # fired -- the receipt arrived in the gap.  No-op.
+            logger.debug(
+                "phase5.timer_wheel.timeout_skipped run_id=%s"
+                " (already advanced or terminal)",
+                entry.run_id,
+            )
+        except RunNotFoundError:
+            logger.warning(
+                "phase5.timer_wheel.timeout_no_run run_id=%s",
+                entry.run_id,
+            )
+        except Exception as xcpt:
+            logger.error(
+                "phase5.timer_wheel.timeout_error run_id=%s err=%s",
+                entry.run_id,
+                xcpt,
+            )
+        finally:
+            session.close()
+        return
+
     def _tick() -> None:
         wheel = default_timer_wheel()
-        fired = wheel.fire_expired()
+        fired = wheel.fire_expired(on_timeout=_on_timeout)
         if len(fired) > 0:
             logger.debug(
                 "phase5.timer_wheel.fired count=%s", len(fired)
@@ -385,6 +453,7 @@ def _register_periodic_tasks(
         scheduler.register(task=outbox_task)
 
     timer_task = _make_timer_wheel_tick_task(
+        session_factory=session_factory,
         interval_seconds=config.timer_wheel_tick_interval_seconds,
     )
     if timer_task.name not in existing_names:
