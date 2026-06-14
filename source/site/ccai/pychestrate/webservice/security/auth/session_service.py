@@ -168,6 +168,37 @@ def resolve_session(
             err_msg = os.linesep.join(err_msg_lines)
             raise SessionExpiredError(err_msg) from None
 
+    if (session.idle_timeout_seconds is not None
+            and session.last_seen_at is not None):
+        last_seen_at = session.last_seen_at
+        if last_seen_at.tzinfo is None:
+            last_seen_at = last_seen_at.replace(tzinfo=timezone.utc)
+        idle_deadline = last_seen_at + timedelta(
+            seconds=int(session.idle_timeout_seconds)
+        )
+        if idle_deadline <= now:
+            err_msg_lines = [
+                "Session resolution failed — idle timeout exceeded."
+            ]
+            err_msg_lines.append("SESSION_ID: {}".format(session_id))
+            err_msg_lines.append(
+                "LAST_SEEN_AT: {}".format(
+                    session.last_seen_at.isoformat()
+                )
+            )
+            err_msg_lines.append(
+                "IDLE_TIMEOUT_SECONDS: {}".format(
+                    session.idle_timeout_seconds
+                )
+            )
+            err_msg = os.linesep.join(err_msg_lines)
+            raise SessionExpiredError(err_msg) from None
+
+    # Activity refreshes the idle window so long-lived interactive
+    # sessions stay alive under sustained use.
+    session.last_seen_at = now
+    db_session.flush()
+
     rtnval = AuthPrincipal(
         user_id=str(session.user_id),
         session_id=str(session.session_id),
