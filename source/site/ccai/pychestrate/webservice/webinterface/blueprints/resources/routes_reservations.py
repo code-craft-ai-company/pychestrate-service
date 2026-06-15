@@ -122,7 +122,7 @@ def _resolve_allocation_mode(*, mode_str: str) -> Any:
         :class:`AllocationMode` enum value. Raises ValueError on
         unknown.
     """
-    from ccai.pychestrate.core.managers.allocation_manager import (  # noqa: E402
+    from ccai.pychestrate.core.orm import (  # noqa: E402
         AllocationMode,
     )
     rtnval = AllocationMode(mode_str)

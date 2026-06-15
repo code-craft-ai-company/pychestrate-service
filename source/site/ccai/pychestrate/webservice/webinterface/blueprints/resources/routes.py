@@ -175,7 +175,7 @@ def _resolve_resource_type(*, resource_type_str: str) -> Any:
         :class:`ResourceType` enum value. Raises ValueError on
         unknown.
     """
-    from ccai.pychestrate.core.managers.resource_manager import (  # noqa: E402
+    from ccai.pychestrate.core.orm import (  # noqa: E402
         ResourceType,
     )
     rtnval = ResourceType(resource_type_str)
@@ -193,7 +193,7 @@ def _resolve_health_status_or_none(
     if health_status_str is None or len(health_status_str) == 0:
         return None
     try:
-        from ccai.pychestrate.core.managers.resource_manager import (  # noqa: E402
+        from ccai.pychestrate.core.orm import (  # noqa: E402
             HealthStatus,
         )
         rtnval = HealthStatus(health_status_str)
@@ -208,7 +208,7 @@ def _resolve_allocation_mode(*, mode_str: str) -> Any:
         :class:`AllocationMode` enum value. Raises ValueError on
         unknown.
     """
-    from ccai.pychestrate.core.managers.allocation_manager import (  # noqa: E402
+    from ccai.pychestrate.core.orm import (  # noqa: E402
         AllocationMode,
     )
     rtnval = AllocationMode(mode_str)

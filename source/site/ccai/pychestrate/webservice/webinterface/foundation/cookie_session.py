@@ -113,12 +113,17 @@ def sign_session_payload(
     payload_json = json.dumps(
         payload, separators=(",", ":"), sort_keys=True
     ).encode("utf-8")
-    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("ascii")
+    # Strip '=' padding so the resulting cookie value contains only
+    # URL-safe base64 characters (A-Z a-z 0-9 - _) plus the '.'
+    # separator.  Unpadded values are not quoted by SimpleCookie, which
+    # means browsers receive and re-send the cookie without surrounding
+    # DQUOTE characters.  The verifier adds padding back before decoding.
+    payload_b64 = base64.urlsafe_b64encode(payload_json).decode("ascii").rstrip("=")
 
     signature = hmac.new(
         secret, payload_b64.encode("ascii"), hashlib.sha256
     ).digest()
-    signature_b64 = base64.urlsafe_b64encode(signature).decode("ascii")
+    signature_b64 = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
 
     rtnval = payload_b64 + _SIGNATURE_SEPARATOR + signature_b64
     return rtnval
@@ -161,13 +166,25 @@ def verify_session_payload(
     if len(payload_b64) == 0 or len(signature_b64) == 0:
         return None
 
+    # HMAC is computed over the payload_b64 string exactly as stored in
+    # the cookie (i.e. without '=' padding) so the expected signature
+    # matches what sign_session_payload produced.
     expected_signature = hmac.new(
         secret, payload_b64.encode("ascii"), hashlib.sha256
     ).digest()
 
+    # base64.urlsafe_b64decode requires padding; restore it before
+    # decoding.  Both payload_b64 and signature_b64 may have been
+    # stripped of trailing '=' by sign_session_payload.
+    def _restore_b64_padding(s: str) -> str:
+        rem = len(s) % 4
+        if rem == 0:
+            return s
+        return s + "=" * (4 - rem)
+
     try:
         actual_signature = base64.urlsafe_b64decode(
-            signature_b64.encode("ascii")
+            _restore_b64_padding(signature_b64).encode("ascii")
         )
     except (ValueError, TypeError):
         return None
@@ -177,7 +194,7 @@ def verify_session_payload(
 
     try:
         payload_json = base64.urlsafe_b64decode(
-            payload_b64.encode("ascii")
+            _restore_b64_padding(payload_b64).encode("ascii")
         )
     except (ValueError, TypeError):
         return None
