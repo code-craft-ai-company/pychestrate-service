@@ -153,7 +153,7 @@ class BuildJobTemplate(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "buildjob_template"
 
-    id = Column('bjtmp_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('bjtmp_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('bjtmp_name', VARCHAR(128), nullable=False, unique=True)
     description = Column('bjtmp_description', Text, nullable=True)
     specification = Column('bjtmp_specification', JSON, nullable=False)
@@ -166,7 +166,7 @@ class BuildTemplate(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "build_template"
 
-    id = Column('btmp_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('btmp_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('btmp_name', VARCHAR(128), nullable=False, unique=True)
     description = Column('btmp_description', Text, nullable=True)
     specification = Column('btmp_specification', JSON, nullable=False)
@@ -179,7 +179,7 @@ class TestJobTemplate(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "testjob_template"
 
-    id = Column('tjtmp_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('tjtmp_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('tjtmp_name', VARCHAR(128), nullable=False, unique=True)
     description = Column('tjtmp_description', Text, nullable=True)
     specification = Column('tjtmp_specification', JSON, nullable=False)
@@ -191,7 +191,7 @@ class Product(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "product"
 
-    id = Column("prod_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("prod_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column("prod_name", VARCHAR(128), nullable=False, unique=True)
     description = Column("prod_description", Text, nullable=True)
 
@@ -226,7 +226,7 @@ class ProductComponent(PychestrateModelBase, SerializableModel):
         UniqueConstraint("prod_id", "comp_name", name="uq_component_product_name"),
     )
 
-    id = Column("comp_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("comp_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column("comp_name", VARCHAR(128), nullable=False)
     description = Column("comp_description", Text, nullable=True)
 
@@ -250,7 +250,7 @@ class ProductToRepository(PychestrateModelBase, SerializableModel):
         UniqueConstraint("prod_id", "repo_id", name="uq_product_repository"),
     )
 
-    id = Column("ptor_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("ptor_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     product_id = Column(
         "prod_id", BigInteger, ForeignKey("product.prod_id"), nullable=False, index=True
     )
@@ -267,7 +267,7 @@ class ReleaseTrain(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "release_train"
 
-    id = Column("rtrain_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("rtrain_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column("rtrain_name", VARCHAR(128), nullable=False, unique=True)
     description = Column("rtrain_description", Text, nullable=True)
 
@@ -304,7 +304,7 @@ class ReleaseTrainBranch(PychestrateModelBase, SerializableModel):
         UniqueConstraint("rtrain_id", "rtbranch_name", name="uq_release_train_branch"),
     )
 
-    id = Column("rtbranch_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("rtbranch_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column("rtbranch_name", VARCHAR(128), nullable=False)
     description = Column("rtbranch_description", Text, nullable=True)
     branch_type = Column(
@@ -357,7 +357,7 @@ class Release(PychestrateModelBase, SerializableModel):
         UniqueConstraint("prod_id", "release_name", name="uq_release_product_name"),
     )
 
-    id = Column("release_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("release_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column("release_name", VARCHAR(128), nullable=False)
     description = Column("release_description", Text, nullable=True)
     documentation_url = Column("release_documentation_url", VARCHAR(2048), nullable=True)
@@ -395,7 +395,7 @@ class ReleaseBranchAssignment(PychestrateModelBase, SerializableModel):
         ),
     )
 
-    id = Column("rba_id", BigInteger, primary_key=True, autoincrement=True)
+    id = Column("rba_id", BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     literal_branch_name = Column("rba_literal_branch_name", VARCHAR(256), nullable=False)
 
     release_id = Column(
@@ -422,7 +422,7 @@ class Repository(PychestrateModelBase, SerializableModel):
 
     __table_args__ = (UniqueConstraint('repo_name', 'repo_repository', name='uq_repository_name_url'),)
 
-    id = Column('repo_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('repo_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('repo_name', VARCHAR(128), nullable=False)
     url = Column('repo_repository', VARCHAR(2048), nullable=False, unique=True)
     repotype = Column('repo_type', Enum(RepositoryType, name='repository_type', native_enum=False), nullable=False)
@@ -442,7 +442,7 @@ class Branch(PychestrateModelBase, SerializableModel):
 
     __table_args__ = (UniqueConstraint('repo_id', 'branch_name', name='uq_branch_repo_name'),)
 
-    id = Column('branch_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('branch_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('branch_name', VARCHAR(128), nullable=False)
     owner = Column('branch_owner', VARCHAR(128), nullable=False)
 
@@ -461,7 +461,7 @@ class BuildJob(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "build_job"
 
-    id = Column('bjob_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('bjob_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('bjob_name', VARCHAR(128), nullable=False)
     start = Column('bjob_start', DateTime(timezone=True), nullable=False, server_default=func.now())
     stop = Column('bjob_stop', DateTime(timezone=True), nullable=True)
@@ -481,7 +481,7 @@ class BuildResult(PychestrateModelBase, SerializableModel):
 
     __tablename__ = "build_result"
 
-    id = Column('build_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('build_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('build_name', VARCHAR(128), nullable=False)
     start = Column('build_start', DateTime(timezone=True), nullable=False, server_default=func.now())
     stop = Column('build_stop', DateTime(timezone=True), nullable=True)
@@ -502,7 +502,7 @@ class BuildByProduct(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = "build_byproduct"
 
-    id = Column('bbp_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('bbp_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     product = Column('bbp_product', VARCHAR(128), nullable=False)
     arch = Column('bbp_arch', VARCHAR(128), nullable=False)
     buildno = Column('bbp_buildno', VARCHAR(128), nullable=False)
@@ -569,7 +569,7 @@ class WorkPacket(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'work_packet'
     
-    id = Column('wkpack_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('wkpack_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
 
     jtype = Column('wkpk_jtype', Enum(WorkQueueJobType, name='work_queue_job_type', native_enum=False), nullable=False)
     title =  Column('wkpk_title', String(1024), nullable=False)
@@ -599,7 +599,7 @@ class FeatureGroup(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'feature_group'
     
-    id = Column('fg_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('fg_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('fg_name', VARCHAR(256), nullable=False)
     description = Column('fg_description', TEXT, nullable=False)
 
@@ -689,7 +689,7 @@ class TestResultContainer(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'test_result_container'
     
-    id = Column('tstrcont_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('tstrcont_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name =  Column('tstrcont_name', VARCHAR(1024), nullable=False)
     instance = Column('tstrcont_instance', UUIDType, nullable=False, default=uuid.uuid4, server_default=text('gen_random_uuid()'))
     parent = Column('tstrcont_parent', UUIDType, nullable=True)
@@ -737,7 +737,7 @@ class Permission(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'permissions'
 
-    id = Column('perm_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('perm_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('perm_name', VARCHAR(64), unique=True, nullable=False, index=True,
                   doc="Permission name in format 'resource.action' (e.g., 'users.create', 'users.read')")
     description = Column('perm_description', VARCHAR(255), nullable=True,
@@ -754,7 +754,7 @@ class SystemRole(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'system_roles'
 
-    id = Column('role_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('role_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('role_name', VARCHAR(64), unique=True, nullable=False, index=True,
                   doc="Unique name for the role (e.g., 'Administrator', 'Operator', 'Viewer')")
     description = Column('role_description', VARCHAR(255), nullable=True,
@@ -774,7 +774,7 @@ class Session(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'sessions'
 
-    id = Column('sess_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('sess_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     token = Column('sess_token', VARCHAR(64), unique=True, nullable=False, index=True,
                    doc="Unique session token used for authentication")
     user_id = Column('sess_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
@@ -800,7 +800,7 @@ class PasswordHistory(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'password_history'
 
-    id = Column('pwdhist_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pwdhist_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     user_id = Column('pwdhist_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
                      doc="Reference to the user whose password history this is")
     password_hash = Column('pwdhist_password_hash', VARCHAR(255), nullable=False,
@@ -827,7 +827,7 @@ class GlobalVariable(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'global_variables'
 
-    id = Column('gvar_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('gvar_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('gvar_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the global variable")
     value_json = Column('gvar_value_json', Text, nullable=False,
@@ -853,7 +853,7 @@ class GlobalVariableHistory(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'global_variable_history'
 
-    id = Column('gvarhist_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('gvarhist_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     variable_id = Column('gvarhist_variable_id', BigInteger, ForeignKey('global_variables.gvar_id'), nullable=False, index=True,
                          doc="Reference to the global variable")
     variable_name = Column('gvarhist_variable_name', VARCHAR(128), nullable=False,
@@ -897,7 +897,7 @@ class SecretScope(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'secret_scopes'
 
-    id = Column('scope_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('scope_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('scope_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the secret scope")
     description = Column('scope_description', VARCHAR(512), nullable=True,
@@ -923,7 +923,7 @@ class Secret(PychestrateModelBase, SerializableModel):
         Index('ix_secrets_scope_name', 'secret_scope_id', 'secret_name', unique=True),
     )
 
-    id = Column('secret_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('secret_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('secret_name', VARCHAR(128), nullable=False, index=True,
                   doc="Name of the secret within its scope")
     scope_id = Column('secret_scope_id', BigInteger, ForeignKey('secret_scopes.scope_id'), nullable=False, index=True,
@@ -956,7 +956,7 @@ class SecretVersion(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'secret_versions'
 
-    id = Column('secver_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('secver_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     secret_id = Column('secver_secret_id', BigInteger, ForeignKey('secrets.secret_id'), nullable=False, index=True,
                        doc="Reference to the secret")
     version = Column('secver_version', Integer, nullable=False,
@@ -1003,7 +1003,7 @@ class PasswordResetToken(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'password_reset_tokens'
 
-    id = Column('prt_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prt_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     user_id = Column('prt_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
                      doc="Reference to the user requesting password reset")
     token = Column('prt_token', VARCHAR(64), unique=True, nullable=False, index=True,
@@ -1023,7 +1023,7 @@ class AuditLog(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'audit_logs'
 
-    id = Column('audit_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('audit_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     event_type = Column('audit_event_type', VARCHAR(64), nullable=False, index=True,
                         doc="Type of audit event")
     timestamp = Column('audit_timestamp', DateTime(timezone=True), default=utc_now, nullable=False, index=True,
@@ -1140,7 +1140,7 @@ class ResourcePool(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'resource_pools'
 
-    id = Column('pool_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pool_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('pool_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the resource pool")
     description = Column('pool_description', VARCHAR(512), nullable=True,
@@ -1162,7 +1162,7 @@ class Tag(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'resource_tags_def'
 
-    id = Column('tag_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('tag_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('tag_name', VARCHAR(64), unique=True, nullable=False, index=True,
                   doc="Unique name for the tag (alphanumeric, underscores, hyphens only)")
     description = Column('tag_description', VARCHAR(255), nullable=True,
@@ -1185,7 +1185,7 @@ class Resource(PychestrateModelBase, SerializableModel):
         Index('ix_resources_pool_name', 'res_pool_id', 'res_name', unique=True),
     )
 
-    id = Column('res_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('res_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('res_name', VARCHAR(128), nullable=False, index=True,
                   doc="Name of the resource (unique within pool)")
     resource_type = Column('res_type', VARCHAR(32), nullable=False,
@@ -1226,7 +1226,7 @@ class IPPool(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'ip_pools'
 
-    id = Column('ippool_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ippool_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('ippool_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the IP pool")
     cidr = Column('ippool_cidr', VARCHAR(64), nullable=False,
@@ -1268,7 +1268,7 @@ class IPAllocation(PychestrateModelBase, SerializableModel):
         Index('ix_ip_allocations_job', 'ipalloc_job_id'),
     )
 
-    id = Column('ipalloc_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ipalloc_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     pool_id = Column('ipalloc_pool_id', BigInteger, ForeignKey('ip_pools.ippool_id'), nullable=False, index=True,
                      doc="Reference to the IP pool")
     ip_address = Column('ipalloc_ip_address', VARCHAR(64), nullable=False,
@@ -1305,7 +1305,7 @@ class Allocation(PychestrateModelBase, SerializableModel):
         Index('ix_allocations_job', 'alloc_job_id'),
     )
 
-    id = Column('alloc_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('alloc_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     resource_id = Column('alloc_resource_id', BigInteger, ForeignKey('resources.res_id'), nullable=False, index=True,
                          doc="Reference to the allocated resource")
     user_id = Column('alloc_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
@@ -1348,7 +1348,7 @@ class Reservation(PychestrateModelBase, SerializableModel):
         Index('ix_reservations_job', 'resv_job_id'),
     )
 
-    id = Column('resv_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('resv_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     resource_id = Column('resv_resource_id', BigInteger, ForeignKey('resources.res_id'), nullable=False, index=True,
                          doc="Reference to the reserved resource")
     user_id = Column('resv_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
@@ -1381,7 +1381,7 @@ class HealthCheckConfig(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'health_check_configs'
 
-    id = Column('hcc_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('hcc_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     resource_id = Column('hcc_resource_id', BigInteger, ForeignKey('resources.res_id'), unique=True, nullable=False, index=True,
                          doc="Reference to the resource being monitored")
     probe_url = Column('hcc_probe_url', VARCHAR(512), nullable=True,
@@ -1421,7 +1421,7 @@ class HealthTransitionLog(PychestrateModelBase, SerializableModel):
         Index('ix_health_transition_logs_resource_time', 'htl_resource_id', 'htl_timestamp'),
     )
 
-    id = Column('htl_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('htl_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     resource_id = Column('htl_resource_id', BigInteger, ForeignKey('resources.res_id'), nullable=False, index=True,
                          doc="Reference to the resource")
     old_status = Column('htl_old_status', VARCHAR(32), nullable=False,
@@ -1451,7 +1451,7 @@ class ResourceMetadataHistory(PychestrateModelBase, SerializableModel):
         Index('ix_resource_metadata_history_resource_time', 'rmh_resource_id', 'rmh_changed_at'),
     )
 
-    id = Column('rmh_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('rmh_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     resource_id = Column('rmh_resource_id', BigInteger, ForeignKey('resources.res_id'), nullable=False, index=True,
                          doc="Reference to the resource")
     old_metadata_json = Column('rmh_old_metadata_json', JSON, nullable=True,
@@ -1500,7 +1500,7 @@ class Project(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'projects'
 
-    id = Column('proj_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('proj_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('proj_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the project (alphanumeric, underscores, hyphens, periods)")
     description = Column('proj_description', Text, nullable=True,
@@ -1543,7 +1543,7 @@ class ProjectMember(PychestrateModelBase, SerializableModel):
         Index('ix_project_members_project_user', 'proj_id', 'user_id'),
     )
 
-    id = Column('pm_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pm_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     user_id = Column('user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
@@ -1568,7 +1568,7 @@ class ProjectVariable(PychestrateModelBase, SerializableModel):
         Index('ix_project_variables_project_name', 'proj_id', 'pvar_name'),
     )
 
-    id = Column('pvar_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pvar_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('pvar_name', VARCHAR(128), nullable=False,
@@ -1611,7 +1611,7 @@ class ProjectRepository(PychestrateModelBase, SerializableModel):
         Index('ix_project_repositories_project_name', 'proj_id', 'prepo_name'),
     )
 
-    id = Column('prepo_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prepo_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('prepo_name', VARCHAR(128), nullable=False,
@@ -1683,7 +1683,7 @@ class ProjectBuildSpec(PychestrateModelBase, SerializableModel):
         Index('ix_project_build_specs_project_name', 'proj_id', 'pbspec_name'),
     )
 
-    id = Column('pbspec_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pbspec_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     repository_id = Column('prepo_id', BigInteger, ForeignKey('project_repositories.prepo_id'), nullable=False, index=True,
@@ -1724,7 +1724,7 @@ class ProjectBuild(PychestrateModelBase, SerializableModel):
         Index('ix_project_builds_spec_status', 'pbspec_id', 'pbuild_status'),
     )
 
-    id = Column('pbuild_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pbuild_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     spec_id = Column('pbspec_id', BigInteger, ForeignKey('project_build_specs.pbspec_id'), nullable=False, index=True,
@@ -1767,7 +1767,7 @@ class ProjectBuildArtifact(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_build_artifacts'
 
-    id = Column('pbartifact_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pbartifact_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     build_id = Column('pbuild_id', BigInteger, ForeignKey('project_builds.pbuild_id'), nullable=False, index=True,
                       doc="Reference to the build")
     name = Column('pbartifact_name', VARCHAR(256), nullable=False,
@@ -1833,7 +1833,7 @@ class ProjectInfraSpec(PychestrateModelBase, SerializableModel):
         Index('ix_project_infra_specs_project_name', 'proj_id', 'pispec_name'),
     )
 
-    id = Column('pispec_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pispec_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('pispec_name', VARCHAR(128), nullable=False,
@@ -1871,7 +1871,7 @@ class ProjectInfraJob(PychestrateModelBase, SerializableModel):
         Index('ix_project_infra_jobs_spec_status', 'pispec_id', 'pijob_status'),
     )
 
-    id = Column('pijob_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pijob_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     spec_id = Column('pispec_id', BigInteger, ForeignKey('project_infra_specs.pispec_id'), nullable=False, index=True,
@@ -1938,7 +1938,7 @@ class ProjectTestSpec(PychestrateModelBase, SerializableModel):
         Index('ix_project_test_specs_project_name', 'proj_id', 'ptspec_name'),
     )
 
-    id = Column('ptspec_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ptspec_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('ptspec_name', VARCHAR(128), nullable=False,
@@ -1984,7 +1984,7 @@ class ProjectTestJob(PychestrateModelBase, SerializableModel):
         Index('ix_project_test_jobs_spec_status', 'ptspec_id', 'ptjob_status'),
     )
 
-    id = Column('ptjob_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ptjob_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     spec_id = Column('ptspec_id', BigInteger, ForeignKey('project_test_specs.ptspec_id'), nullable=False, index=True,
@@ -2026,7 +2026,7 @@ class ProjectTestResult(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_test_results'
 
-    id = Column('ptresult_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ptresult_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     job_id = Column('ptjob_id', BigInteger, ForeignKey('project_test_jobs.ptjob_id'), nullable=False, index=True,
                     doc="Reference to the test job")
     name = Column('ptresult_name', VARCHAR(512), nullable=False,
@@ -2107,7 +2107,7 @@ class ProjectReleasePipeline(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_pipelines_project_name', 'proj_id', 'prpipe_name'),
     )
 
-    id = Column('prpipe_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prpipe_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('prpipe_name', VARCHAR(128), nullable=False,
@@ -2142,7 +2142,7 @@ class ProjectPipelineRun(PychestrateModelBase, SerializableModel):
         Index('ix_project_pipeline_runs_pipeline_status', 'prpipe_id', 'prrun_status'),
     )
 
-    id = Column('prrun_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prrun_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     pipeline_id = Column('prpipe_id', BigInteger, ForeignKey('project_release_pipelines.prpipe_id'), nullable=False, index=True,
                          doc="Reference to the release pipeline")
     pipeline_version = Column('prrun_pipeline_version', Integer, nullable=False,
@@ -2176,7 +2176,7 @@ class ProjectStageRun(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_stage_runs'
 
-    id = Column('pstagerun_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pstagerun_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     pipeline_run_id = Column('prrun_id', BigInteger, ForeignKey('project_pipeline_runs.prrun_id'), nullable=False, index=True,
                              doc="Reference to the pipeline run")
     stage_name = Column('pstagerun_stage_name', VARCHAR(128), nullable=False,
@@ -2216,7 +2216,7 @@ class ProjectRelease(PychestrateModelBase, SerializableModel):
         Index('ix_project_releases_project_status', 'proj_id', 'prelease_status'),
     )
 
-    id = Column('prelease_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prelease_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     version = Column('prelease_version', VARCHAR(64), nullable=False,
@@ -2256,7 +2256,7 @@ class ProjectReleaseArtifact(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_release_artifacts'
 
-    id = Column('prartifact_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prartifact_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
                         doc="Reference to the release")
     name = Column('prartifact_name', VARCHAR(256), nullable=False,
@@ -2291,7 +2291,7 @@ class ProjectReleaseChannel(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_channels_project_name', 'proj_id', 'prchan_name'),
     )
 
-    id = Column('prchan_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prchan_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('prchan_name', VARCHAR(64), nullable=False,
@@ -2317,7 +2317,7 @@ class ProjectChannelHistory(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_channel_history'
 
-    id = Column('pchanhist_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pchanhist_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     channel_id = Column('prchan_id', BigInteger, ForeignKey('project_release_channels.prchan_id'), nullable=False, index=True,
                         doc="Reference to the channel")
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
@@ -2343,7 +2343,7 @@ class ProjectReleaseSchedule(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_schedules_next_run', 'prsched_enabled', 'prsched_next_run_time'),
     )
 
-    id = Column('prsched_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prsched_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('prsched_name', VARCHAR(128), nullable=False,
@@ -2415,7 +2415,7 @@ class ProjectCalendarEvent(PychestrateModelBase, SerializableModel):
         Index('ix_project_calendar_events_type', 'pcalevent_event_type'),
     )
 
-    id = Column('pcalevent_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pcalevent_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     event_type = Column('pcalevent_event_type', VARCHAR(32), nullable=False,
@@ -2446,7 +2446,7 @@ class ProjectReleaseEvent(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_events_release', 'prelease_id'),
     )
 
-    id = Column('prelevent_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prelevent_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
@@ -2479,7 +2479,7 @@ class ProjectPhaseEvent(PychestrateModelBase, SerializableModel):
         Index('ix_project_phase_events_release_order', 'prelevent_id', 'pphase_order'),
     )
 
-    id = Column('pphase_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pphase_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     release_event_id = Column('prelevent_id', BigInteger, ForeignKey('project_release_events.prelevent_id'), nullable=False, index=True,
                               doc="Reference to the release event")
     name = Column('pphase_name', VARCHAR(256), nullable=False,
@@ -2513,7 +2513,7 @@ class ProjectReleaseBranch(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_branches_release_repo', 'prelease_id', 'prepo_id'),
     )
 
-    id = Column('prelbranch_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('prelbranch_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
                         doc="Reference to the release")
     repository_id = Column('prepo_id', BigInteger, ForeignKey('project_repositories.prepo_id'), nullable=False, index=True,
@@ -2541,7 +2541,7 @@ class ProjectMergeEvent(PychestrateModelBase, SerializableModel):
         Index('ix_project_merge_events_status', 'pmerge_status'),
     )
 
-    id = Column('pmerge_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pmerge_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
@@ -2587,7 +2587,7 @@ class ProjectPullEvent(PychestrateModelBase, SerializableModel):
         Index('ix_project_pull_events_status', 'ppull_status'),
     )
 
-    id = Column('ppull_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('ppull_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
@@ -2656,7 +2656,7 @@ class ProjectWatch(PychestrateModelBase, SerializableModel):
         Index('ix_project_watches_source', 'pwatch_trigger_source', 'pwatch_source_id'),
     )
 
-    id = Column('pwatch_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pwatch_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), nullable=False, index=True,
                         doc="Reference to the project")
     name = Column('pwatch_name', VARCHAR(128), nullable=False,
@@ -2696,7 +2696,7 @@ class ProjectWatchTriggerLog(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'project_watch_trigger_logs'
 
-    id = Column('pwatchlog_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('pwatchlog_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     watch_id = Column('pwatch_id', BigInteger, ForeignKey('project_watches.pwatch_id'), nullable=False, index=True,
                       doc="Reference to the watch")
     triggered_at = Column('pwatchlog_triggered_at', DateTime(timezone=True), default=utc_now, nullable=False,
@@ -2730,7 +2730,7 @@ class ProjectReleaseTemplate(PychestrateModelBase, SerializableModel):
         Index('ix_project_release_templates_project', 'proj_id'),
     )
 
-    id = Column('rtmpl_id', BigInteger, primary_key=True, autoincrement=True)
+    id = Column('rtmpl_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     project_id = Column('proj_id', BigInteger, ForeignKey('projects.proj_id', ondelete='CASCADE'),
                         nullable=False, index=True,
                         doc="Reference to the owning project")
