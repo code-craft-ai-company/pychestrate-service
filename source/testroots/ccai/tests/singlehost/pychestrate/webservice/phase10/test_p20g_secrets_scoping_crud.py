@@ -283,13 +283,17 @@ def test_list_filters_by_scope_and_omits_values():
     )
 
     org_rows = secrets_service.list_secrets(
-        db_session=session, scope_kind=SecretScopeKind.ORG,
+        db_session=session,
+        principal=_principal(admin_id),
+        scope_kind=SecretScopeKind.ORG,
     )
     testbase.assert_equal(len(org_rows), 1)
     testbase.assert_equal(org_rows[0].secret_ref, "system:o1")
 
     proj_rows = secrets_service.list_secrets(
-        db_session=session, scope_kind=SecretScopeKind.PROJECT,
+        db_session=session,
+        principal=_principal(admin_id),
+        scope_kind=SecretScopeKind.PROJECT,
         scope_ref=project_id,
     )
     testbase.assert_equal(len(proj_rows), 1)

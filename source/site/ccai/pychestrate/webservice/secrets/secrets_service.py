@@ -358,6 +358,7 @@ def _resolve_scope_or_raise(
 def list_secrets(
         *,
         db_session: DbSession,
+        principal: AuthPrincipal,
         scope_kind: Optional[SecretScopeKind] = None,
         scope_ref: Optional[str] = None
     ) -> list:
@@ -365,12 +366,37 @@ def list_secrets(
         Return secret metadata rows, optionally filtered by scope. No
         plaintext or ciphertext is touched by this function.
 
+        The caller must hold ``system:secrets.read`` OR
+        ``system:secrets.admin``. This mirrors the pattern used in
+        :func:`read_secret` and :func:`put_secret` where
+        :func:`_has_read_permission` / :func:`_has_write_permission`
+        gate the operation at the service layer.
+
         :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal; used for the
+                          service-layer authz check.
         :param scope_kind: Optional :class:`SecretScopeKind` filter.
         :param scope_ref: Optional scope_ref filter.
 
         :returns: List of :class:`SecretRecord` rows.
+        :raises: SecretAccessDeniedError
     """
+    holds_read = _holds_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key="system:secrets.read",
+    )
+    holds_admin = _holds_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key="system:secrets.admin",
+    )
+    if holds_read is False and holds_admin is False:
+        err_msg_lines = ["Secret list access denied."]
+        err_msg_lines.append("PRINCIPAL: {}".format(principal.user_id))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretAccessDeniedError(err_msg) from None
+
     query = db_session.query(SecretRecord)
     if scope_kind is not None:
         query = query.filter(SecretRecord.scope_kind == scope_kind)

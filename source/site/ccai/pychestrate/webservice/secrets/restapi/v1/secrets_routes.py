@@ -35,6 +35,7 @@ __credits__ = []
 __version__ = "2.0.0"
 
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ccai.errors.exceptions import SemanticError
@@ -59,6 +60,9 @@ from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 from ccai.pychestrate.webservice.secrets.secrets_aspects import (
     build_default_aspects,
 )
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+
+_PERM_SECRETS_READ: str = "system:secrets.read"
 
 
 SECRETS_PATH = "/secrets"
@@ -182,6 +186,48 @@ def _require_principal(request: Request) -> Any:
     return rtnval
 
 
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        principal: Any,
+        permission_key: str
+    ) -> None:
+    """
+        Check that ``principal`` holds ``permission_key`` via the RBAC
+        evaluator. Abort 403 when the decision is denied.
+
+        Mirrors the gating pattern used in
+        :func:`handle_read_secret_value` (which calls
+        ``secrets_service.read_secret`` — itself guarded by
+        :func:`_has_read_permission` inside the service layer).  The
+        route-layer gate here covers metadata endpoints that the
+        service layer does not independently guard.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param permission_key: RBAC permission key to evaluate.
+
+        :returns: None.
+        :raises: :class:`_ProblemAbort` (403).
+    """
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=datetime.now(timezone.utc),
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}.".format(permission_key),
+            extensions={"permission_key": permission_key},
+        )
+    return
+
+
 def _parse_scope_kind_or_abort(
         *, request: Request, raw: str
     ) -> SecretScopeKind:
@@ -282,15 +328,29 @@ def handle_list_secrets(request: Request) -> Response:
         ``secret_ref`` ascending, optionally filtered by
         ``scope_kind`` / ``scope_ref``.
 
+        Requires the caller to be authenticated and hold
+        ``system:secrets.read`` (or ``system:secrets.admin``; the
+        service layer re-evaluates scope-aware rules). Mirrors the
+        gating pattern used in :func:`handle_create_secret` and
+        :func:`handle_delete_secret` via ``_require_principal``.
+
         The list NEVER carries secret values.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) carrying a list of metadata
-                  dicts, or problem response on failure.
+                  dicts, or problem response on failure
+                  (401/403/503).
     """
     try:
+        principal = _require_principal(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_SECRETS_READ,
+        )
 
         scope_kind_arg = request.query_params.get("scope_kind", None)
         scope_ref_arg = request.query_params.get("scope_ref", None)
@@ -303,6 +363,7 @@ def handle_list_secrets(request: Request) -> Response:
 
         records = secrets_service.list_secrets(
             db_session=db_session,
+            principal=principal,
             scope_kind=scope_kind,
             scope_ref=scope_ref_arg,
         )
@@ -401,19 +462,31 @@ def handle_create_secret(request: Request) -> Response:
 def handle_read_secret(request: Request) -> Response:
     """
         ``GET /api/v1/secrets/{secret_ref:path}`` — read metadata for
-        one secret. Returns 404 problem+json with the secret_ref as
-        an extension member when the record does not exist.
+        one secret. Requires the caller to be authenticated and hold
+        ``system:secrets.read`` (or ``system:secrets.admin``).
+        Returns 404 problem+json with the secret_ref as an extension
+        member when the record does not exist.
 
         The metadata response NEVER carries the secret value.
+
+        Mirrors the gating pattern used in
+        :func:`handle_read_secret_value` via ``_require_principal``.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) with the metadata dict, or
-                  problem response on failure.
+                  problem response on failure (401/403/404/503).
     """
     secret_ref = request.path_params.get("secret_ref", "")
     try:
+        principal = _require_principal(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_SECRETS_READ,
+        )
 
         record = (
             db_session.query(SecretRecord)

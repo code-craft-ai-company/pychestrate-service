@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai import testbase
+from ccai.testbase.mocking import create_module_patch
 from ccai.webworks.routing.response import JSONResponse
 
 from ccai.pychestrate.webservice.api.problem_json import (
@@ -34,6 +35,21 @@ from ccai.pychestrate.webservice.api.problem_json import (
 from ccai.pychestrate.webservice.secrets.restapi.v1 import secrets_routes
 
 
+class _FakePrincipal:
+    def __init__(self, *, user_id: str = "caller-1") -> None:
+        self.user_id: str = user_id
+        self.session_id: str = "sess-caller-1"
+        return
+
+
+class _FakeAllowedDecision:
+    def __init__(self) -> None:
+        self.allowed: bool = True
+        self.reason: str = "test-allow"
+        self.permission_key: str = "system:secrets.read"
+        return
+
+
 class _FakeRequest:
     def __init__(
         self,
@@ -42,6 +58,7 @@ class _FakeRequest:
         path_params: Optional[Dict[str, Any]] = None,
         query_params: Optional[Dict[str, Any]] = None,
         db_session: Optional[Any] = None,
+        auth_principal: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
@@ -49,6 +66,7 @@ class _FakeRequest:
             query_params if query_params is not None else {}
         )
         self.db_session: Optional[Any] = db_session
+        self.auth_principal: Optional[Any] = auth_principal
         return
 
 
@@ -225,13 +243,33 @@ def test_register_secrets_routes_declares_fixed_prefixes_before_parameterized():
 # ---------------------------------------------------------------------------
 
 
+def test_handle_list_returns_401_when_principal_missing():
+    """
+    **Feature: 1-secrets-vault T1.1 auth hardening**
+    **Property: A request with no auth_principal returns 401. The
+    auth check now fires before the session check.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/secrets",
+        db_session=None,
+        auth_principal=None,
+    )
+    response = secrets_routes.handle_list_secrets(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
 def test_handle_list_returns_503_when_session_missing():
     """
     **Feature: 1-secrets-vault T1.1 (webworks routes)**
-    **Property: A request with no db_session attached produces the
-    same 503 problem document the flask controller emitted.**
+    **Property: A request with auth_principal present but no
+    db_session returns 503 (middleware misconfiguration).**
     """
-    request = _FakeRequest(path="/api/v1/secrets", db_session=None)
+    request = _FakeRequest(
+        path="/api/v1/secrets",
+        db_session=None,
+        auth_principal=_FakePrincipal(),
+    )
     response = secrets_routes.handle_list_secrets(request)
     testbase.assert_equal(response.status_code, 503)
     body = _decode_body(response)
@@ -239,16 +277,34 @@ def test_handle_list_returns_503_when_session_missing():
     return
 
 
-def test_handle_read_returns_503_when_session_missing():
+def test_handle_read_returns_401_when_principal_missing():
     """
-    **Feature: 1-secrets-vault T1.1 (webworks routes)**
-    **Property: detail handler also returns 503 when the
-    db_session attribute is missing.**
+    **Feature: 1-secrets-vault T1.1 auth hardening**
+    **Property: detail handler returns 401 when auth_principal is
+    absent.**
     """
     request = _FakeRequest(
         path="/api/v1/secrets/x",
         path_params={"secret_ref": "x"},
         db_session=None,
+        auth_principal=None,
+    )
+    response = secrets_routes.handle_read_secret(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+def test_handle_read_returns_503_when_session_missing():
+    """
+    **Feature: 1-secrets-vault T1.1 (webworks routes)**
+    **Property: detail handler returns 503 when auth_principal is
+    present but db_session is missing.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/secrets/x",
+        path_params={"secret_ref": "x"},
+        db_session=None,
+        auth_principal=_FakePrincipal(),
     )
     response = secrets_routes.handle_read_secret(request)
     testbase.assert_equal(response.status_code, 503)
@@ -260,20 +316,70 @@ def test_handle_read_returns_503_when_session_missing():
 # ---------------------------------------------------------------------------
 
 
+def _patch_evaluator_allow(module: Any) -> Any:
+    """
+        Patch ``<module>.rbac_evaluator.check_permission`` so it always
+        returns an allowed decision.
+
+        :param module: The route module (secrets_routes) whose
+                       ``rbac_evaluator`` attribute is patched.
+
+        :returns: Active patch object; caller must call
+                  ``patch.deactivate()``.
+    """
+    allowed_decision = _FakeAllowedDecision()
+    patch = create_module_patch(module, "rbac_evaluator")
+    mock_module = patch.activate()
+    mock_module.configure(recursive=True)
+    mock_module.mock_context().set_attribute(
+        "check_permission", lambda **kwargs: allowed_decision
+    )
+    return patch
+
+
+def _patch_list_secrets(*, rows: List[Any]) -> Any:
+    """
+        Patch ``secrets_routes.secrets_service.list_secrets`` to return
+        ``rows`` without touching the DB.
+
+        :param rows: Rows to return.
+
+        :returns: Active patch object; caller must call
+                  ``patch.deactivate()``.
+    """
+    patch = create_module_patch(secrets_routes, "secrets_service")
+    mock_module = patch.activate()
+    mock_module.configure(recursive=True)
+    mock_module.mock_context().set_attribute(
+        "list_secrets", lambda **kwargs: rows
+    )
+    return patch
+
+
 def test_handle_list_returns_serialized_metadata_only():
     """
     **Feature: 1-secrets-vault T1.1 (webworks routes)**
     **Property: List returns 200 with metadata dicts. The wire
     response NEVER carries plaintext -- only the documented metadata
-    fields.**
+    fields. Now requires auth_principal + system:secrets.read
+    (evaluator patched to allow).**
     """
     rows = [
         _FakeRecord(secret_ref="alpha/key-1", backend_name="vault"),
         _FakeRecord(secret_ref="beta/key-2", backend_name="vault"),
     ]
-    session = _FakeSession(rows=rows)
-    request = _FakeRequest(path="/api/v1/secrets", db_session=session)
-    response = secrets_routes.handle_list_secrets(request)
+    eval_patch = _patch_evaluator_allow(module=secrets_routes)
+    svc_patch = _patch_list_secrets(rows=rows)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/secrets",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = secrets_routes.handle_list_secrets(request)
+    finally:
+        eval_patch.deactivate()
+        svc_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -296,7 +402,8 @@ def test_handle_read_returns_serialized_record_on_match():
     """
     **Feature: 1-secrets-vault T1.1 (webworks routes)**
     **Property: A known secret_ref (multi-segment) returns 200 with
-    metadata dict.**
+    metadata dict. Now requires auth_principal + system:secrets.read
+    (evaluator patched to allow).**
     """
     record = _FakeRecord(
         secret_ref="project/team/db-password",
@@ -304,12 +411,18 @@ def test_handle_read_returns_serialized_record_on_match():
         current_version_id="ver-7",
     )
     session = _FakeSession(first_value=record)
-    request = _FakeRequest(
-        path="/api/v1/secrets/project/team/db-password",
-        path_params={"secret_ref": "project/team/db-password"},
-        db_session=session,
-    )
-    response = secrets_routes.handle_read_secret(request)
+    eval_patch = _patch_evaluator_allow(module=secrets_routes)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/secrets/project/team/db-password",
+            path_params={"secret_ref": "project/team/db-password"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+        )
+        response = secrets_routes.handle_read_secret(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(body["secret_ref"], "project/team/db-password")
@@ -321,15 +434,22 @@ def test_handle_read_returns_404_with_secret_ref_extension():
     """
     **Feature: 1-secrets-vault T1.1 (webworks routes)**
     **Property: An unknown secret_ref returns 404 problem+json with
-    the secret_ref as an extension member.**
+    the secret_ref as an extension member. Evaluator patched to
+    allow so the DB lookup is reached.**
     """
     session = _FakeSession(first_value=None)
-    request = _FakeRequest(
-        path="/api/v1/secrets/missing",
-        path_params={"secret_ref": "missing"},
-        db_session=session,
-    )
-    response = secrets_routes.handle_read_secret(request)
+    eval_patch = _patch_evaluator_allow(module=secrets_routes)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/secrets/missing",
+            path_params={"secret_ref": "missing"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+        )
+        response = secrets_routes.handle_read_secret(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 404)
     testbase.assert_equal(
         response.headers["Content-Type"], PROBLEM_JSON_MEDIA_TYPE

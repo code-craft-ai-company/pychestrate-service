@@ -71,6 +71,9 @@ from ccai.pychestrate.webservice.security.rbac.models import (
     PrincipalKind,
 )
 
+_PERM_RBAC_ADMIN: str = "system:rbac.admin"
+_PERM_RBAC_READ: str = "system:rbac.read"
+
 
 RBAC_PATH = "/rbac"
 
@@ -115,6 +118,81 @@ def _resolve_db_session(request: Request) -> Optional[Any]:
 def _resolve_actor_user_id(request: Request) -> Optional[str]:
     rtnval = getattr(request, "actor_user_id", None)
     return rtnval
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session middleware,
+        or ``None`` when the request is anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_principal(request: Request) -> Any:
+    """
+        Resolve the authenticated principal or abort with a 401.
+        Mirrors the pattern in
+        :func:`secrets_routes._require_principal`.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal.
+        :raises: :class:`_ProblemAbort` (401).
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+    rtnval = principal
+    return rtnval
+
+
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        principal: Any,
+        permission_key: str
+    ) -> None:
+    """
+        Check that ``principal`` holds ``permission_key`` via the RBAC
+        evaluator. Abort 403 when the decision is denied.
+
+        Mirrors the gating pattern used in
+        :func:`handle_check_permission` (line ~488) where
+        ``rbac_evaluator.check_permission`` is called with ``now``
+        forwarded from :func:`datetime.now`.
+
+        :param request: Incoming webworks request (for problem URI).
+        :param db_session: Active SQLAlchemy session.
+        :param principal: The authenticated principal.
+        :param permission_key: RBAC permission key to evaluate.
+
+        :returns: None.
+        :raises: :class:`_ProblemAbort` (403).
+    """
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=datetime.now(timezone.utc),
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}.".format(permission_key),
+            extensions={"permission_key": permission_key},
+        )
+    return
 
 
 def _require_session(request: Request) -> Any:
@@ -221,43 +299,73 @@ def _binding_to_dict(view: BindingView) -> dict:
 def handle_list_permissions(request: Request) -> Response:
     """
         ``GET /api/v1/rbac/permissions`` — list the permission key
-        catalog. Read-only over the in-process registry — no
-        SQLAlchemy session required.
+        catalog. Requires the caller to be authenticated and hold
+        ``system:rbac.read``.
 
-        :param request: Incoming webworks request (unused).
+        :param request: Incoming webworks request.
 
-        :returns: JSON response (200) with the permission catalog.
+        :returns: JSON response (200) with the permission catalog, or
+                  problem response (401/403/503).
     """
-    catalog = load_catalog_from_registry()
-    body = []
-    for key in sorted(catalog.permissions.keys()):
-        descriptor = catalog.permissions[key]
-        body.append({
-            "permission_key": descriptor.permission_key,
-            "description": descriptor.description,
-            "namespace": descriptor.namespace,
-        })
-    rtnval = JSONResponse(content=body, status_code=200)
+    try:
+        principal = _require_principal(request=request)
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_RBAC_READ,
+        )
+
+        catalog = load_catalog_from_registry()
+        body = []
+        for key in sorted(catalog.permissions.keys()):
+            descriptor = catalog.permissions[key]
+            body.append({
+                "permission_key": descriptor.permission_key,
+                "description": descriptor.description,
+                "namespace": descriptor.namespace,
+            })
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+
     return rtnval
 
 
 def handle_list_roles(request: Request) -> Response:
     """
         ``GET /api/v1/rbac/roles`` — list registered role presets.
+        Requires the caller to be authenticated and hold
+        ``system:rbac.read``.
 
-        :param request: Incoming webworks request (unused).
+        :param request: Incoming webworks request.
 
-        :returns: JSON response (200) with role summaries.
+        :returns: JSON response (200) with role summaries, or problem
+                  response (401/403/503).
     """
-    catalog = load_catalog_from_registry()
-    body = []
-    for role_name in sorted(catalog.roles.keys()):
-        grants = catalog.roles[role_name]
-        body.append({
-            "role_name": role_name,
-            "permission_count": len(grants),
-        })
-    rtnval = JSONResponse(content=body, status_code=200)
+    try:
+        principal = _require_principal(request=request)
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_RBAC_READ,
+        )
+
+        catalog = load_catalog_from_registry()
+        body = []
+        for role_name in sorted(catalog.roles.keys()):
+            grants = catalog.roles[role_name]
+            body.append({
+                "role_name": role_name,
+                "permission_count": len(grants),
+            })
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+
     return rtnval
 
 
@@ -269,16 +377,25 @@ def handle_list_roles(request: Request) -> Response:
 def handle_create_binding(request: Request) -> Response:
     """
         ``POST /api/v1/rbac/bindings`` — assign a role to a
-        principal at a scope. Returns 201 with the created
+        principal at a scope. Requires the caller to be authenticated
+        and hold ``system:rbac.admin``. Returns 201 with the created
         binding's view dict.
 
         :param request: Incoming webworks request.
 
-        :returns: JSON response (201), or problem response.
+        :returns: JSON response (201), or problem response
+                  (400/401/403/404/500/503).
     """
     try:
+        principal = _require_principal(request=request)
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_RBAC_ADMIN,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -360,13 +477,25 @@ def handle_list_bindings(request: Request) -> Response:
         filters: ``principal_kind`` / ``principal_id`` /
         ``scope_kind`` / ``scope_id``.
 
+        Requires the caller to be authenticated and hold
+        ``system:rbac.read`` — the binding list reveals which
+        principals hold which roles, so it is gated the same as the
+        other RBAC read endpoints.
+
         :param request: Incoming webworks request.
 
-        :returns: JSON response (200), or problem response on filter
-                  coercion failure.
+        :returns: JSON response (200), or problem response
+                  (401/403/503) / on filter coercion failure (400).
     """
     try:
+        principal = _require_principal(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_RBAC_READ,
+        )
 
         principal_id = request.query_params.get("principal_id", None)
         scope_id = request.query_params.get("scope_id", None)
@@ -418,17 +547,25 @@ def handle_list_bindings(request: Request) -> Response:
 def handle_revoke_binding(request: Request) -> Response:
     """
         ``DELETE /api/v1/rbac/bindings/{binding_id}`` — revoke a
-        binding. Returns 200 with
+        binding. Requires the caller to be authenticated and hold
+        ``system:rbac.admin``. Returns 200 with
         ``{binding_id, status: "revoked"}``.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200), or problem response on
-                  failure.
+                  failure (401/403/404/503).
     """
     binding_id = request.path_params.get("binding_id", "")
     try:
+        principal = _require_principal(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=principal,
+            permission_key=_PERM_RBAC_ADMIN,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -462,15 +599,24 @@ def handle_check_permission(request: Request) -> Response:
     """
         ``POST /api/v1/rbac/check`` — evaluate a single permission
         for a principal. Used by out-of-process integrations.
+        Requires the caller to be authenticated and hold
+        ``system:rbac.read`` before the lookup is evaluated.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) with the decision dict, or
-                  problem response on failure.
+                  problem response on failure (400/401/403/503).
     """
     try:
+        caller_principal = _require_principal(request=request)
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            principal=caller_principal,
+            permission_key=_PERM_RBAC_READ,
+        )
 
         principal_id = payload.get("principal_id", "")
         permission_key = payload.get("permission_key", "")

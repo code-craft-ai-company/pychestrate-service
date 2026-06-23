@@ -63,6 +63,13 @@ class _FakeQueryParams:
         return rtnval
 
 
+class _FakePrincipal:
+    def __init__(self, *, user_id: str = "caller-1") -> None:
+        self.user_id: str = user_id
+        self.session_id: str = "sess-caller-1"
+        return
+
+
 class _FakeRequest:
     def __init__(
         self,
@@ -74,6 +81,7 @@ class _FakeRequest:
         body_raises: bool = False,
         db_session: Optional[Any] = None,
         actor_user_id: Optional[str] = None,
+        auth_principal: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
@@ -82,6 +90,7 @@ class _FakeRequest:
         self._body_raises: bool = body_raises
         self.db_session: Optional[Any] = db_session
         self.actor_user_id: Optional[str] = actor_user_id
+        self.auth_principal: Optional[Any] = auth_principal
         return
 
     def json(self) -> Any:
@@ -209,6 +218,25 @@ def _patch_routes_attr(*, name: str, value: Any) -> Any:
     return patch
 
 
+def _patch_evaluator_allow() -> Any:
+    """
+        Patch ``rbac_routes.rbac_evaluator.check_permission`` so it
+        always returns an allowed decision. Used by happy-path tests
+        that need to bypass the RBAC gate without a real DB.
+    """
+    allowed_decision = _FakeDecision(
+        allowed=True,
+        reason="test-allow",
+        permission_key="system:rbac.read",
+    )
+    patch = _patch_service_module_attr(
+        module_attr="rbac_evaluator",
+        attr_name="check_permission",
+        value=lambda **kwargs: allowed_decision,
+    )
+    return patch
+
+
 def _patch_service_module_attr(
         *, module_attr: str, attr_name: str, value: Any
     ) -> Any:
@@ -261,7 +289,8 @@ def test_handle_list_permissions_returns_sorted_descriptors():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: list_permissions returns 200 with descriptors
-    sorted by permission_key.**
+    sorted by permission_key. Requires an authenticated principal
+    holding system:rbac.read — evaluator is patched to allow.**
     """
     catalog = _FakeCatalog(
         permissions={
@@ -278,15 +307,21 @@ def test_handle_list_permissions_returns_sorted_descriptors():
         },
         roles={},
     )
-    patch = _patch_routes_attr(
+    catalog_patch = _patch_routes_attr(
         name="load_catalog_from_registry",
         value=lambda: catalog,
     )
+    eval_patch = _patch_evaluator_allow()
     try:
-        request = _FakeRequest(path="/api/v1/rbac/permissions")
+        request = _FakeRequest(
+            path="/api/v1/rbac/permissions",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
         response = rbac_routes.handle_list_permissions(request)
     finally:
-        patch.deactivate()
+        catalog_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -301,7 +336,8 @@ def test_handle_list_roles_returns_sorted_summaries_with_grant_count():
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: list_roles returns 200 with role summaries sorted
     by role_name; permission_count reflects the grants list
-    length.**
+    length. Requires an authenticated principal holding
+    system:rbac.read — evaluator is patched to allow.**
     """
     catalog = _FakeCatalog(
         permissions={},
@@ -310,15 +346,21 @@ def test_handle_list_roles_returns_sorted_summaries_with_grant_count():
             "admin": ["g1", "g2", "g3"],
         },
     )
-    patch = _patch_routes_attr(
+    catalog_patch = _patch_routes_attr(
         name="load_catalog_from_registry",
         value=lambda: catalog,
     )
+    eval_patch = _patch_evaluator_allow()
     try:
-        request = _FakeRequest(path="/api/v1/rbac/roles")
+        request = _FakeRequest(
+            path="/api/v1/rbac/roles",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
         response = rbac_routes.handle_list_roles(request)
     finally:
-        patch.deactivate()
+        catalog_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -334,7 +376,13 @@ def test_handle_list_roles_returns_sorted_summaries_with_grant_count():
 # ---------------------------------------------------------------------------
 
 
-def test_handle_create_binding_returns_503_when_session_missing():
+def test_handle_create_binding_returns_401_when_principal_missing():
+    """
+    **Feature: 1-rbac T1.1 auth hardening**
+    **Property: create_binding returns 401 when no auth_principal is
+    on the request (unauthenticated caller). Old test relied on 503
+    from missing session; now auth check fires first.**
+    """
     request = _FakeRequest(
         path="/api/v1/rbac/bindings",
         body={
@@ -342,6 +390,27 @@ def test_handle_create_binding_returns_503_when_session_missing():
             "principal_id": "u-1", "scope_kind": "SYSTEM",
         },
         db_session=None,
+        auth_principal=None,
+    )
+    response = rbac_routes.handle_create_binding(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+def test_handle_create_binding_returns_503_when_session_missing():
+    """
+    **Feature: 1-rbac T1.1 (webworks routes)**
+    **Property: create_binding returns 503 when principal is
+    present but db_session is missing (misconfigured middleware).**
+    """
+    request = _FakeRequest(
+        path="/api/v1/rbac/bindings",
+        body={
+            "role_name": "viewer", "principal_kind": "USER",
+            "principal_id": "u-1", "scope_kind": "SYSTEM",
+        },
+        db_session=None,
+        auth_principal=_FakePrincipal(),
     )
     response = rbac_routes.handle_create_binding(request)
     testbase.assert_equal(response.status_code, 503)
@@ -350,29 +419,100 @@ def test_handle_create_binding_returns_503_when_session_missing():
     return
 
 
+def test_handle_list_bindings_returns_401_when_principal_missing():
+    """
+    **Feature: 1-rbac T1.1 auth hardening**
+    **Property: list_bindings returns 401 when no auth_principal is
+    on the request. Auth check fires before the session check.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/rbac/bindings",
+        db_session=None,
+        auth_principal=None,
+    )
+    response = rbac_routes.handle_list_bindings(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
 def test_handle_list_bindings_returns_503_when_session_missing():
-    request = _FakeRequest(path="/api/v1/rbac/bindings", db_session=None)
+    """
+    **Feature: 1-rbac T1.1 (webworks routes)**
+    **Property: list_bindings returns 503 when auth_principal is
+    present but db_session is missing (middleware misconfiguration).**
+    """
+    request = _FakeRequest(
+        path="/api/v1/rbac/bindings",
+        db_session=None,
+        auth_principal=_FakePrincipal(),
+    )
     response = rbac_routes.handle_list_bindings(request)
     testbase.assert_equal(response.status_code, 503)
     return
 
 
-def test_handle_revoke_binding_returns_503_when_session_missing():
+def test_handle_revoke_binding_returns_401_when_principal_missing():
+    """
+    **Feature: 1-rbac T1.1 auth hardening**
+    **Property: revoke_binding returns 401 when no auth_principal is
+    on the request.**
+    """
     request = _FakeRequest(
         path="/api/v1/rbac/bindings/b-1",
         path_params={"binding_id": "b-1"},
         db_session=None,
+        auth_principal=None,
+    )
+    response = rbac_routes.handle_revoke_binding(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+def test_handle_revoke_binding_returns_503_when_session_missing():
+    """
+    **Feature: 1-rbac T1.1 (webworks routes)**
+    **Property: revoke_binding returns 503 when principal is present
+    but db_session is missing.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/rbac/bindings/b-1",
+        path_params={"binding_id": "b-1"},
+        db_session=None,
+        auth_principal=_FakePrincipal(),
     )
     response = rbac_routes.handle_revoke_binding(request)
     testbase.assert_equal(response.status_code, 503)
     return
 
 
-def test_handle_check_returns_503_when_session_missing():
+def test_handle_check_returns_401_when_principal_missing():
+    """
+    **Feature: 1-rbac T1.1 auth hardening**
+    **Property: check_permission returns 401 when no auth_principal
+    is on the request.**
+    """
     request = _FakeRequest(
         path="/api/v1/rbac/check",
         body={"principal_id": "u-1", "permission_key": "system:read"},
         db_session=None,
+        auth_principal=None,
+    )
+    response = rbac_routes.handle_check_permission(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+def test_handle_check_returns_503_when_session_missing():
+    """
+    **Feature: 1-rbac T1.1 (webworks routes)**
+    **Property: check_permission returns 503 when principal is
+    present but db_session is missing.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/rbac/check",
+        body={"principal_id": "u-1", "permission_key": "system:read"},
+        db_session=None,
+        auth_principal=_FakePrincipal(),
     )
     response = rbac_routes.handle_check_permission(request)
     testbase.assert_equal(response.status_code, 503)
@@ -388,7 +528,9 @@ def test_handle_create_binding_returns_201_with_normalized_view():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: Successful create returns 201 with the BindingView
-    re-read via list_bindings (so created_at is normalized).**
+    re-read via list_bindings (so created_at is normalized).
+    Requires an authenticated principal holding system:rbac.admin —
+    evaluator is patched to allow.**
     """
     binding = _FakeBinding(binding_id="b-1")
     view = _FakeView(binding_id="b-1", role_name="viewer")
@@ -401,9 +543,10 @@ def test_handle_create_binding_returns_201_with_normalized_view():
     def fake_list(**kwargs: Any) -> Any:
         return [view]
 
-    patch = create_module_patch(rbac_routes, "binding_service")
+    svc_patch = create_module_patch(rbac_routes, "binding_service")
+    eval_patch = _patch_evaluator_allow()
     try:
-        mock_module = patch.activate()
+        mock_module = svc_patch.activate()
         mock_module.configure(recursive=True)
         mock_module.mock_context().set_attribute("assign_role", fake_assign)
         mock_module.mock_context().set_attribute("list_bindings", fake_list)
@@ -411,6 +554,7 @@ def test_handle_create_binding_returns_201_with_normalized_view():
             path="/api/v1/rbac/bindings",
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             body={
                 "role_name": "viewer",
                 "principal_kind": "USER",
@@ -421,7 +565,8 @@ def test_handle_create_binding_returns_201_with_normalized_view():
         )
         response = rbac_routes.handle_create_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
@@ -442,19 +587,26 @@ def test_handle_create_binding_returns_400_on_unknown_principal_kind():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: An unknown principal_kind returns 400 problem+json
-    with role_name as an extension member.**
+    with role_name as an extension member. Evaluator is patched
+    to allow so the enum-parse failure is reached.**
     """
-    request = _FakeRequest(
-        path="/api/v1/rbac/bindings",
-        db_session=object(),
-        body={
-            "role_name": "viewer",
-            "principal_kind": "GARBAGE",
-            "principal_id": "u-1",
-            "scope_kind": "SYSTEM",
-        },
-    )
-    response = rbac_routes.handle_create_binding(request)
+    eval_patch = _patch_evaluator_allow()
+    try:
+        request = _FakeRequest(
+            path="/api/v1/rbac/bindings",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={
+                "role_name": "viewer",
+                "principal_kind": "GARBAGE",
+                "principal_id": "u-1",
+                "scope_kind": "SYSTEM",
+            },
+        )
+        response = rbac_routes.handle_create_binding(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["role_name"], "viewer")
@@ -465,17 +617,20 @@ def test_handle_create_binding_returns_404_on_unknown_role_with_extension():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: RoleNotFoundError → 404 problem+json with
-    role_name as an extension member.**
+    role_name as an extension member. Evaluator is patched to
+    allow.**
     """
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="assign_role",
         value=_raises(RoleNotFoundError("no such role")),
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/bindings",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={
                 "role_name": "missing-role",
                 "principal_kind": "USER",
@@ -485,7 +640,8 @@ def test_handle_create_binding_returns_404_on_unknown_role_with_extension():
         )
         response = rbac_routes.handle_create_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
@@ -498,17 +654,20 @@ def test_handle_create_binding_returns_400_on_invalid_scope():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: InvalidBindingScopeError → 400 problem+json with
-    scope_kind / scope_id extension members.**
+    scope_kind / scope_id extension members. Evaluator is patched
+    to allow.**
     """
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="assign_role",
         value=_raises(InvalidBindingScopeError("scope_id required")),
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/bindings",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={
                 "role_name": "viewer",
                 "principal_kind": "USER",
@@ -518,7 +677,8 @@ def test_handle_create_binding_returns_400_on_invalid_scope():
         )
         response = rbac_routes.handle_create_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
@@ -533,7 +693,7 @@ def test_handle_create_binding_returns_500_when_view_lookup_fails():
     matching row, the handler emits a 500 problem document with
     binding_id extension. Mirrors the flask controller's hard
     fall-through and gives operators the binding id to investigate
-    with.**
+    with. Evaluator is patched to allow.**
     """
     binding = _FakeBinding(binding_id="b-orphan")
 
@@ -543,15 +703,17 @@ def test_handle_create_binding_returns_500_when_view_lookup_fails():
     def fake_list(**kwargs: Any) -> Any:
         return []  # empty -- view lookup misses
 
-    patch = create_module_patch(rbac_routes, "binding_service")
+    svc_patch = create_module_patch(rbac_routes, "binding_service")
+    eval_patch = _patch_evaluator_allow()
     try:
-        mock_module = patch.activate()
+        mock_module = svc_patch.activate()
         mock_module.configure(recursive=True)
         mock_module.mock_context().set_attribute("assign_role", fake_assign)
         mock_module.mock_context().set_attribute("list_bindings", fake_list)
         request = _FakeRequest(
             path="/api/v1/rbac/bindings",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={
                 "role_name": "viewer",
                 "principal_kind": "USER",
@@ -561,7 +723,8 @@ def test_handle_create_binding_returns_500_when_view_lookup_fails():
         )
         response = rbac_routes.handle_create_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 500)
     body = _decode_body(response)
@@ -572,14 +735,21 @@ def test_handle_create_binding_returns_500_when_view_lookup_fails():
 def test_handle_create_binding_returns_400_on_undecodable_body():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
-    **Property: Undecodable body returns 400, not 500.**
+    **Property: Undecodable body returns 400, not 500. Evaluator
+    is patched to allow so body-parse failure is reached.**
     """
-    request = _FakeRequest(
-        path="/api/v1/rbac/bindings",
-        db_session=object(),
-        body_raises=True,
-    )
-    response = rbac_routes.handle_create_binding(request)
+    eval_patch = _patch_evaluator_allow()
+    try:
+        request = _FakeRequest(
+            path="/api/v1/rbac/bindings",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body_raises=True,
+        )
+        response = rbac_routes.handle_create_binding(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 400)
     return
 
@@ -593,7 +763,9 @@ def test_handle_list_bindings_returns_serialized_views_with_no_filters():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: With no filters, list_bindings returns 200 with
-    serialized views; all four filter args forward as None.**
+    serialized views; all four filter args forward as None.
+    Requires an authenticated principal holding system:rbac.read —
+    evaluator is patched to allow.**
     """
     captured: Dict[str, Any] = {}
     views = [
@@ -605,18 +777,22 @@ def test_handle_list_bindings_returns_serialized_views_with_no_filters():
         captured.update(kwargs)
         return views
 
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="list_bindings",
         value=fake_list,
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
-            path="/api/v1/rbac/bindings", db_session=object()
+            path="/api/v1/rbac/bindings",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
         response = rbac_routes.handle_list_bindings(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -633,7 +809,7 @@ def test_handle_list_bindings_propagates_all_four_filters():
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: principal_kind / principal_id / scope_kind /
     scope_id query params propagate with enum coercion on the
-    enum ones.**
+    enum ones. Evaluator is patched to allow.**
     """
     captured: Dict[str, Any] = {}
 
@@ -641,15 +817,17 @@ def test_handle_list_bindings_propagates_all_four_filters():
         captured.update(kwargs)
         return []
 
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="list_bindings",
         value=fake_list,
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/bindings",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             query={
                 "principal_kind": "USER",
                 "principal_id": "u-1",
@@ -659,7 +837,8 @@ def test_handle_list_bindings_propagates_all_four_filters():
         )
         rbac_routes.handle_list_bindings(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(captured["principal_kind"], PrincipalKind.USER)
     testbase.assert_equal(captured["principal_id"], "u-1")
@@ -672,14 +851,21 @@ def test_handle_list_bindings_returns_400_on_unknown_principal_kind_filter():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: Unknown principal_kind filter returns 400 problem
-    +json with the raw value as an extension member.**
+    +json with the raw value as an extension member. Evaluator is
+    patched to allow so the filter-parse failure is reached.**
     """
-    request = _FakeRequest(
-        path="/api/v1/rbac/bindings",
-        db_session=object(),
-        query={"principal_kind": "GARBAGE"},
-    )
-    response = rbac_routes.handle_list_bindings(request)
+    eval_patch = _patch_evaluator_allow()
+    try:
+        request = _FakeRequest(
+            path="/api/v1/rbac/bindings",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            query={"principal_kind": "GARBAGE"},
+        )
+        response = rbac_routes.handle_list_bindings(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["principal_kind"], "GARBAGE")
@@ -690,14 +876,21 @@ def test_handle_list_bindings_returns_400_on_unknown_scope_kind_filter():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: Unknown scope_kind filter returns 400 problem+json
-    with the raw value as an extension member.**
+    with the raw value as an extension member. Evaluator is patched
+    to allow.**
     """
-    request = _FakeRequest(
-        path="/api/v1/rbac/bindings",
-        db_session=object(),
-        query={"scope_kind": "GARBAGE"},
-    )
-    response = rbac_routes.handle_list_bindings(request)
+    eval_patch = _patch_evaluator_allow()
+    try:
+        request = _FakeRequest(
+            path="/api/v1/rbac/bindings",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            query={"scope_kind": "GARBAGE"},
+        )
+        response = rbac_routes.handle_list_bindings(request)
+    finally:
+        eval_patch.deactivate()
+
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["scope_kind"], "GARBAGE")
@@ -713,7 +906,8 @@ def test_handle_revoke_binding_returns_200_with_status_revoked():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: Successful revoke returns 200 with
-    ``{binding_id, status: revoked}``.**
+    ``{binding_id, status: revoked}``. Evaluator is patched to
+    allow system:rbac.admin.**
     """
     captured: Dict[str, Any] = {}
 
@@ -721,21 +915,24 @@ def test_handle_revoke_binding_returns_200_with_status_revoked():
         captured.update(kwargs)
         return None
 
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="revoke_role",
         value=fake_revoke,
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/bindings/b-1",
             path_params={"binding_id": "b-1"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
         )
         response = rbac_routes.handle_revoke_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
@@ -749,22 +946,25 @@ def test_handle_revoke_binding_returns_404_with_binding_id_extension():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: BindingNotFoundError → 404 problem+json with
-    binding_id extension.**
+    binding_id extension. Evaluator is patched to allow.**
     """
-    patch = _patch_service_module_attr(
+    svc_patch = _patch_service_module_attr(
         module_attr="binding_service",
         attr_name="revoke_role",
         value=_raises(BindingNotFoundError("missing")),
     )
+    eval_patch = _patch_evaluator_allow()
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/bindings/b-missing",
             path_params={"binding_id": "b-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
         response = rbac_routes.handle_revoke_binding(request)
     finally:
-        patch.deactivate()
+        svc_patch.deactivate()
+        eval_patch.deactivate()
 
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
@@ -781,14 +981,25 @@ def test_handle_check_permission_returns_decision_dict():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
     **Property: Successful check returns 200 with
-    ``{allowed, reason, permission_key}``.**
+    ``{allowed, reason, permission_key}``. The handler now calls
+    check_permission twice: once to authorize the caller
+    (system:rbac.read) and once for the actual business check.
+    The fake returns allowed=True for the first call and the
+    real decision for the second.**
     """
-    decision = _FakeDecision(
+    business_decision = _FakeDecision(
         allowed=True, reason="binding present", permission_key="system:read"
     )
+    auth_decision = _FakeDecision(
+        allowed=True, reason="caller authorized", permission_key="system:rbac.read"
+    )
+    call_count: Dict[str, int] = {"n": 0}
 
     def fake_check(**kwargs: Any) -> Any:
-        return decision
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return auth_decision
+        return business_decision
 
     patch = _patch_service_module_attr(
         module_attr="rbac_evaluator",
@@ -799,6 +1010,7 @@ def test_handle_check_permission_returns_decision_dict():
         request = _FakeRequest(
             path="/api/v1/rbac/check",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"principal_id": "u-1", "permission_key": "system:read"},
         )
         response = rbac_routes.handle_check_permission(request)
@@ -816,18 +1028,32 @@ def test_handle_check_permission_returns_decision_dict():
 def test_handle_check_permission_returns_400_on_semantic_error():
     """
     **Feature: 1-rbac T1.1 (webworks routes)**
-    **Property: SemanticError from the evaluator → 400 problem
-    +json with principal_id + permission_key extensions.**
+    **Property: SemanticError from the evaluator on the business
+    check → 400 problem+json with principal_id + permission_key
+    extensions. The auth gate (first check) is allowed; the
+    second call raises SemanticError.**
     """
+    auth_decision = _FakeDecision(
+        allowed=True, reason="caller authorized", permission_key="system:rbac.read"
+    )
+    call_count: Dict[str, int] = {"n": 0}
+
+    def fake_check(**kwargs: Any) -> Any:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            return auth_decision
+        raise SemanticError("malformed permission key")
+
     patch = _patch_service_module_attr(
         module_attr="rbac_evaluator",
         attr_name="check_permission",
-        value=_raises(SemanticError("malformed permission key")),
+        value=fake_check,
     )
     try:
         request = _FakeRequest(
             path="/api/v1/rbac/check",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={
                 "principal_id": "u-1",
                 "permission_key": "garbage",

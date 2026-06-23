@@ -39,6 +39,18 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1 import (
 )
 
 
+class _FakePrincipal:
+    def __init__(
+        self,
+        *,
+        user_id: str = "caller-1",
+        session_id: str = "sess-caller-1",
+    ) -> None:
+        self.user_id: str = user_id
+        self.session_id: str = session_id
+        return
+
+
 class _FakeRequest:
     """
         Minimal duck-typed Request for the auth handlers.
@@ -51,12 +63,14 @@ class _FakeRequest:
         body: Any = None,
         body_raises: bool = False,
         db_session: Optional[Any] = None,
+        auth_principal: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self._body: Any = body
         self._body_raises: bool = body_raises
         self.db_session: Optional[Any] = db_session
         self.path_params: Dict[str, Any] = {}
+        self.auth_principal: Optional[Any] = auth_principal
         return
 
     def json(self) -> Any:
@@ -117,16 +131,35 @@ def test_register_auth_routes_attaches_logout_route():
 # ---------------------------------------------------------------------------
 
 
-def test_handle_logout_returns_503_when_session_missing():
+def test_handle_logout_returns_401_when_principal_missing():
     """
-    **Feature: 1-authentication T1.1 (webworks routes)**
-    **Property: A request with no db_session attached produces the
-    same 503 problem document the flask controller emitted.**
+    **Feature: 1-authentication T1.1 auth hardening**
+    **Property: A request with no auth_principal returns 401. The
+    auth check now fires before the session/body checks.**
     """
     request = _FakeRequest(
         path="/api/v1/auth/logout",
         body={"session_id": "sess-x"},
         db_session=None,
+        auth_principal=None,
+    )
+    response = auth_routes.handle_logout(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+def test_handle_logout_returns_503_when_session_missing():
+    """
+    **Feature: 1-authentication T1.1 (webworks routes)**
+    **Property: A request with auth_principal present but no
+    db_session returns 503 (middleware misconfiguration).**
+    """
+    principal = _FakePrincipal(session_id="sess-x")
+    request = _FakeRequest(
+        path="/api/v1/auth/logout",
+        body={"session_id": "sess-x"},
+        db_session=None,
+        auth_principal=principal,
     )
     response = auth_routes.handle_logout(request)
     testbase.assert_equal(response.status_code, 503)
@@ -138,12 +171,15 @@ def test_handle_logout_returns_503_when_session_missing():
 def test_handle_logout_returns_400_when_body_is_not_json():
     """
     **Feature: 1-authentication T1.1 (webworks routes)**
-    **Property: An undecodable request body returns 400 problem+json.**
+    **Property: An undecodable request body returns 400 problem+json.
+    auth_principal is required now (supplied); the body-parse error
+    fires after auth.**
     """
     request = _FakeRequest(
         path="/api/v1/auth/logout",
         body_raises=True,
         db_session=object(),
+        auth_principal=_FakePrincipal(),
     )
     response = auth_routes.handle_logout(request)
     testbase.assert_equal(response.status_code, 400)
@@ -157,7 +193,7 @@ def test_handle_logout_returns_400_when_session_id_missing():
     **Feature: 1-authentication T1.1 (webworks routes)**
     **Property: A payload without ``session_id`` returns 400
     problem+json. Session_service.close_session must never be called
-    with an empty session_id.**
+    with an empty session_id. auth_principal is supplied.**
     """
     close_patch = create_module_patch(
         session_service_module, "close_session"
@@ -169,12 +205,32 @@ def test_handle_logout_returns_400_when_session_id_missing():
             path="/api/v1/auth/logout",
             body={},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
         response = auth_routes.handle_logout(request)
         testbase.assert_equal(response.status_code, 400)
         testbase.assert_equal(mock_close.call_count, 0)
     finally:
         close_patch.deactivate()
+    return
+
+
+def test_handle_logout_returns_403_when_session_id_belongs_to_other():
+    """
+    **Feature: 1-authentication T1.1 auth hardening**
+    **Property: A caller cannot close another user's session.
+    The session_id in the body differs from the caller's own
+    session_id — the handler must return 403.**
+    """
+    caller = _FakePrincipal(session_id="my-sess")
+    request = _FakeRequest(
+        path="/api/v1/auth/logout",
+        body={"session_id": "other-users-sess"},
+        db_session=object(),
+        auth_principal=caller,
+    )
+    response = auth_routes.handle_logout(request)
+    testbase.assert_equal(response.status_code, 403)
     return
 
 
@@ -188,7 +244,8 @@ def test_handle_logout_invokes_session_service_and_returns_closed_status():
     **Feature: 1-authentication T1.1 (webworks routes)**
     **Property: A valid request invokes session_service.close_session
     with the supplied session_id and returns 200 with
-    ``{session_id, status: closed}``.**
+    ``{session_id, status: closed}``. The session_id in the body
+    matches the caller's own session_id (ownership enforced).**
     """
     close_patch = create_module_patch(
         session_service_module, "close_session"
@@ -196,10 +253,12 @@ def test_handle_logout_invokes_session_service_and_returns_closed_status():
     try:
         mock_close = close_patch.activate()
         mock_close.configure(return_value=None)
+        caller = _FakePrincipal(session_id="sess-abc")
         request = _FakeRequest(
             path="/api/v1/auth/logout",
             body={"session_id": "sess-abc"},
             db_session=object(),
+            auth_principal=caller,
         )
         response = auth_routes.handle_logout(request)
 
@@ -261,19 +320,31 @@ def test_every_error_response_is_application_problem_json():
     """
     cases: List[Any] = []
 
+    # 401 — no principal
     cases.append(auth_routes.handle_logout(
-        _FakeRequest(path="/api/v1/auth/logout", body={}, db_session=None)
+        _FakeRequest(
+            path="/api/v1/auth/logout",
+            body={"session_id": "s"},
+            db_session=None,
+            auth_principal=None,
+        )
     ))
+    # 400 — bad JSON (principal present, session present)
     cases.append(auth_routes.handle_logout(
         _FakeRequest(
             path="/api/v1/auth/logout",
             body_raises=True,
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
     ))
+    # 400 — empty session_id
     cases.append(auth_routes.handle_logout(
         _FakeRequest(
-            path="/api/v1/auth/logout", body={}, db_session=object()
+            path="/api/v1/auth/logout",
+            body={},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
     ))
 

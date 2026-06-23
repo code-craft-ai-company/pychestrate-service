@@ -32,6 +32,9 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
 from ccai.pychestrate.webservice.security.auth import session_service
+from ccai.pychestrate.webservice.security.auth.exceptions import (
+    SessionNotFoundError,
+)
 
 
 AUTH_PATH = "/auth"
@@ -106,6 +109,19 @@ def _require_session(request: Request) -> Any:
     return rtnval
 
 
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session
+        middleware, or ``None`` when the request is anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
 def _decode_json_or_abort(*, request: Request) -> dict:
     """
         Decode the request body as JSON, aborting with a 400 when
@@ -146,12 +162,25 @@ def handle_logout(request: Request) -> Response:
         ``POST /api/v1/auth/logout`` — close the session named in
         the request body and return ``{session_id, status: closed}``.
 
+        A caller may only close a session that belongs to them. The
+        caller must be authenticated (auth_principal present); if the
+        supplied ``session_id`` does not match the caller's own
+        session, the request is rejected with 403.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) on success, problem response
-                  on failure.
+                  on failure (400/401/403/503).
     """
     try:
+        caller_principal = _resolve_auth_principal(request=request)
+        if caller_principal is None:
+            _abort_problem(
+                request=request,
+                status=401,
+                detail="Authentication required.",
+            )
+
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
 
@@ -161,6 +190,16 @@ def handle_logout(request: Request) -> Response:
                 request=request,
                 status=400,
                 detail="session_id is required",
+            )
+
+        # Enforce ownership: the caller may only close their own
+        # session. caller_principal.session_id is the session that
+        # the middleware resolved from the cookie.
+        if session_id != caller_principal.session_id:
+            _abort_problem(
+                request=request,
+                status=403,
+                detail="You may only close your own session.",
             )
 
         session_service.close_session(
