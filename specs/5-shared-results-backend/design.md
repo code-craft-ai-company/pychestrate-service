@@ -6,7 +6,7 @@ This feature is a thin service that mints and lifecycle-manages
 per-run prefixes on the object store. It owns one table and one
 small API; it delegates every byte-level operation to
 `0-object-store`. It lives at
-`source/site/automojo/pychestrate/webservice/jobs/results/`. There
+`source/site/ccai/pychestrate/webservice/jobs/results/`. There
 are no factory or resource extension points declared here — the only
 pluggable aspect, the object-store driver, is owned by
 `0-object-store` and reused unmodified. This feature lands in
@@ -202,7 +202,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/results/__init__.py`
 - `jobs/results/backend.py` — `SharedResultsBackend` facade.

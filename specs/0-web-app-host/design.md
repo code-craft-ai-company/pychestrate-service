@@ -3,7 +3,7 @@
 ## Architecture
 
 The web app host is the outermost process shell. It owns a single
-`WebApplication` persona (provided by `automojo-webworks`), a single WSGI
+`WebApplication` persona (provided by `codecraftai-webworks`), a single WSGI
 dispatcher, and the native WebWorks WSGI server. All feature modules (Layer 0
 siblings, Layer E, Layer 1+) register against it during startup via a typed
 registration API. The host is authoritative for the following state:
@@ -169,13 +169,13 @@ None.
 
 ## Component Breakdown
 
-All paths are rooted at `source/site/automojo/pychestrate/webservice/`.
+All paths are rooted at `source/site/ccai/pychestrate/webservice/`.
 
 - `host/app_pychestrate_main.py` — process entrypoint (replaces current
   scaffold at `source/site/app_pychestrate_main.py` by moving into the
   package; the current file becomes a thin re-export shim).
 - `host/persona.py` — `establish_pychestrate_app`, wraps
-  `automojo.webworks.webapplication.establish_webapp_persona`.
+  `ccai.webworks.webapplication.establish_webapp_persona`.
 - `host/config.py` — `ServiceConfig`, env + yaml loader.
 - `host/registration.py` — `register_route`, `register_startup_hook`,
   `register_shutdown_hook`.
@@ -185,7 +185,7 @@ All paths are rooted at `source/site/automojo/pychestrate/webservice/`.
   binding, access log emission.
 - `host/middleware/error_boundary.py` — production-vs-dev error rendering.
 - `host/runner.py` — `run_pychestrate_server`, wraps
-  `automojo.webworks.wsgi.server.run_server`.
+  `ccai.webworks.wsgi.server.run_server`.
 - `host/probes.py` — minimal `/__health/live` and `/__health/startup`
   handlers, superseded by `0-system-health` once it lands.
 

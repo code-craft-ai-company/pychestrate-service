@@ -3,7 +3,7 @@
 ## Architecture
 
 `8-webhooks-out` lives under
-`source/site/automojo/pychestrate/webservice/webhooks/outbound/`. It
+`source/site/ccai/pychestrate/webservice/webhooks/outbound/`. It
 is the *surface* for outbound URL targets — configuration CRUD,
 topic filtering, payload signing, and the `WebhookNotificationChannel`
 implementation of `2-notification-hub`'s `notification_channel`
@@ -87,7 +87,7 @@ Extensibility Completion**.
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.webhooks.outbound.signing`:
+Module `ccai.pychestrate.webservice.webhooks.outbound.signing`:
 
 ```python
 def sign_payload(
@@ -107,7 +107,7 @@ def sign_payload(
 ```
 
 Module
-`automojo.pychestrate.webservice.webhooks.outbound.target_service`:
+`ccai.pychestrate.webservice.webhooks.outbound.target_service`:
 
 ```python
 def create_target(
@@ -146,7 +146,7 @@ def disable_target(*, target_id: UUID, reason: str) -> None:
 ```
 
 Module
-`automojo.pychestrate.webservice.webhooks.outbound.filter_engine`:
+`ccai.pychestrate.webservice.webhooks.outbound.filter_engine`:
 
 ```python
 def decide_delivery(
@@ -165,7 +165,7 @@ def decide_delivery(
 ```
 
 Module
-`automojo.pychestrate.webservice.webhooks.outbound.channel`:
+`ccai.pychestrate.webservice.webhooks.outbound.channel`:
 
 ```python
 class WebhookNotificationChannel:
@@ -189,7 +189,7 @@ class WebhookNotificationChannel:
 ```
 
 Module
-`automojo.pychestrate.webservice.webhooks.outbound.delivery_recorder`:
+`ccai.pychestrate.webservice.webhooks.outbound.delivery_recorder`:
 
 ```python
 def record_attempt(
@@ -209,7 +209,7 @@ This feature does **not** declare a new factory protocol or resource
 base. It registers `WebhookNotificationChannel` through the
 `notification_channel` factory owned by `2-notification-hub`. The
 registration body is a minimal adapter declared in
-`automojo.pychestrate.webservice.webhooks.outbound.factories.http_webhook_channel`:
+`ccai.pychestrate.webservice.webhooks.outbound.factories.http_webhook_channel`:
 
 ```python
 class HttpWebhookChannel(NotificationChannelProtocol):
@@ -260,7 +260,7 @@ at `PRECEDENCE = 500` to replace the default, without touching
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/webhooks/outbound/
+source/site/ccai/pychestrate/webservice/webhooks/outbound/
     __init__.py
     signing.py                      # sign_payload
     target_service.py               # CRUD + rotate_secret + disable_target

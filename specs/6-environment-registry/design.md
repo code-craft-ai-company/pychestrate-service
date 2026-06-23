@@ -218,7 +218,7 @@ class EnvironmentKindExtension(ResourceExtension):
 ```
 
 Reference kinds shipped in-tree under
-`source/site/automojo/extensions/pychestrate/environment_kind/`:
+`source/site/ccai/extensions/pychestrate/environment_kind/`:
 
 - `K8sClusterEnvironmentKind` — schema includes `cluster_name`, `region`, `kubeconfig_secret_ref`.
 - `VmPoolEnvironmentKind` — `pool_name`, `region`, `hypervisor_type`.
@@ -241,7 +241,7 @@ Reference kinds shipped in-tree under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/infra/environment/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/infra/environment/`:
 
 - `__init__.py`
 - `registry.py` — `EnvironmentRegistry`.
@@ -252,7 +252,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/i
 - `errors.py` — `EnvironmentNotFoundError`, `KindNotFoundError`.
 - `rest/v1_routes.py`.
 
-Kind extensions under `source/site/automojo/extensions/pychestrate/environment_kind/`.
+Kind extensions under `source/site/ccai/extensions/pychestrate/environment_kind/`.
 
 ## Key Flows
 

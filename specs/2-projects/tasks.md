@@ -74,7 +74,7 @@
       `register_phase1_builtin_extensions`; post-freeze mutation
       raises `ConfigurationError`.)
 - [x] T2.6 — Ship in-tree reference
-      `CostCenterFieldExtension` under `automojo/extensions/pychestrate/projects/`.
+      `CostCenterFieldExtension` under `ccai/extensions/pychestrate/projects/`.
       (lives alongside the feature module at
       `webservice/projects/extensions/cost_center.py`.)
 - [x] T2.7 — Implement `PATCH /projects/{slug}` honoring the metadata

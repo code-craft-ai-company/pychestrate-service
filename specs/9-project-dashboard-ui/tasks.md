@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-project-dashboard/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-project-dashboard/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-project-dashboard.ts::PycProjectDashboard` with observed attributes `project-id`, `edit-mode`, `refresh-multiplier`, `aria-label`.
 - [ ] T1.3 — Implement `grid-model.ts` for 12-column non-overlapping placements, `serialize` / `deserialize`, validity checks.
 - [ ] T1.4 — Implement `transport/dashboard-transport.ts` against `/api/v1/projects/{project_id}/dashboard`.

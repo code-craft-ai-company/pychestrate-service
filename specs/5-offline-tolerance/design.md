@@ -6,16 +6,16 @@ This feature ties together three previously-existing subsystems into
 one cohesive offline story. It contributes:
 
 1. A **degraded-pod transition service** living at
-   `source/site/automojo/pychestrate/webservice/jobs/offline/pod_state.py`
+   `source/site/ccai/pychestrate/webservice/jobs/offline/pod_state.py`
    that watches `3-client-agent-protocol` session-drop events and
    transitions the owning pod through `ready → degraded → offline`
    / back.
 2. A **replay extension** to `5-progress-ingest`'s two endpoints —
    the endpoints stay in place; a replay-header gating pathway and a
    per-client replay-seq tracker land under
-   `source/site/automojo/pychestrate/webservice/ingest/progress/replay.py`.
+   `source/site/ccai/pychestrate/webservice/ingest/progress/replay.py`.
 3. A **deferred-cancel queue** living at
-   `source/site/automojo/pychestrate/webservice/jobs/offline/cancel_queue.py`
+   `source/site/ccai/pychestrate/webservice/jobs/offline/cancel_queue.py`
    that persists cancel requests while the client is offline and
    drains them after reconciliation completes.
 
@@ -274,7 +274,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/offline/__init__.py`
 - `jobs/offline/pod_state.py` — `PodOfflineStateService`.

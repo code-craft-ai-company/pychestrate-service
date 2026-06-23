@@ -3,7 +3,7 @@
 ## Architecture
 
 Dynamic Pods live at
-`source/site/automojo/pychestrate/webservice/pods/dynamic/`. The feature
+`source/site/ccai/pychestrate/webservice/pods/dynamic/`. The feature
 owns three concepts that pod-definitions does not:
 
 - **Template** — a parameterized description from which a concrete `PodSpec`
@@ -169,7 +169,7 @@ class PodProvisionerProtocol(FactoryProtocolBase):
 ```
 
 Reference in-tree implementations (under
-`source/site/automojo/pychestrate/factories/pod_provisioner/`):
+`source/site/ccai/pychestrate/factories/pod_provisioner/`):
 
 - `LibvirtProvisioner` (`PRECEDENCE=100`) — local VM farm.
 - `TerraformProvisioner` (`PRECEDENCE=110`) — wraps a `terraform apply`
@@ -220,7 +220,7 @@ entity.pod.orphaned                    { materialization_id, reason }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/dynamic/
+source/site/ccai/pychestrate/webservice/pods/dynamic/
     __init__.py
     enums.py
     dtos.py                      -- PodTemplate, RenderedMember, ProvisioningStep,
@@ -235,11 +235,11 @@ source/site/automojo/pychestrate/webservice/pods/dynamic/
     rest.py                      -- REST router
     metrics.py
 
-source/site/automojo/pychestrate/factories/pod_provisioner/
+source/site/ccai/pychestrate/factories/pod_provisioner/
     libvirt.py                   -- PRECEDENCE=100
     terraform.py                 -- PRECEDENCE=110
 
-source/site/automojo/pychestrate/extensions/pod_template_kinds/
+source/site/ccai/pychestrate/extensions/pod_template_kinds/
     jinja2_sandboxed.py
     json_substitute.py
 ```

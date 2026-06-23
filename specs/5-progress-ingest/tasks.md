@@ -41,7 +41,7 @@
       decision as ``5-job-envelope`` M1 to avoid the new runtime
       dep. Wire-level strict validation attaches when the route
       layer lands.)*
-- [~] T1.7 — Implement `TestBaseProgressParser` at `source/site/automojo/factories/pychestrate/progress_parser/testbase_v1.py` with `PRECEDENCE = 1000`.
+- [~] T1.7 — Implement `TestBaseProgressParser` at `source/site/ccai/factories/pychestrate/progress_parser/testbase_v1.py` with `PRECEDENCE = 1000`.
       *(Located in-package at
       ``ingest/progress/factories/testbase_v1.py``;
       ``PRECEDENCE=1000`` preserved. Registered via

@@ -10,8 +10,8 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/domains/pod/` package per design.md.
-- [ ] T1.2 — Implement `PodBringupMetric`, `PodTeardownMetric`, `PodLifecycleResultMetric` under `source/site/automojo/extensions/pychestrate/metric_definition/pod/`.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/domains/pod/` package per design.md.
+- [ ] T1.2 — Implement `PodBringupMetric`, `PodTeardownMetric`, `PodLifecycleResultMetric` under `source/site/ccai/extensions/pychestrate/metric_definition/pod/`.
 - [ ] T1.3 — Implement `resolver.py::PodMetricResolver` with `pairing_map`, `on_pod_state_changed`.
 - [ ] T1.4 — Wire `entity.pod.state_changed` subscription.
 - [ ] T1.5 — Verify end-to-end: synthetic pod lifecycle `bringing_up → ready → running → tearing_down → torn_down` emits both duration metrics once each.

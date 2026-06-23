@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/` package per design.md Component Breakdown.
+- [x] T1.1 — Create the `source/site/ccai/pychestrate/webservice/orchestration/test/` package per design.md Component Breakdown.
 - [x] T1.2 — Implement `repository.py::TestRunRepository` with the `test_run` schema (`0-persistence` migration included).
       *(``insert_run`` / ``get_run`` / ``update_state`` /
       ``list_runs_for_project`` against
@@ -27,7 +27,7 @@
       RBAC ``AuthorizationError`` re-export lands with M2 RBAC
       integration.)*
 - [x] T1.5 — Implement `runner_protocol.py::TestRunnerKindProtocol` declaring `factory_protocol_name = "test_runner_kind"` and every required classmethod.
-- [x] T1.6 — Implement `TestbaseRunnerKind` at `source/site/automojo/factories/pychestrate/test_runner/testbase.py` with `PRECEDENCE = 1000`.
+- [x] T1.6 — Implement `TestbaseRunnerKind` at `source/site/ccai/factories/pychestrate/test_runner/testbase.py` with `PRECEDENCE = 1000`.
       *(In-package at
       ``orchestration/test/factories/testbase_runner.py``;
       ``PRECEDENCE=1000`` preserved.)*

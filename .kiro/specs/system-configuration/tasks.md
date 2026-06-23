@@ -9,17 +9,17 @@ This implementation plan breaks down the System Configuration module into discre
 The following components already exist and should be leveraged:
 
 ### Local Repository Code
-- **User model** (`source/packages/automojo/pychestrate/core/orm.py`): OAuth-based User model with provider, status, roles (as comma-separated string), authtype fields
-- **Database connection factory** (`source/packages/automojo/pychestrate/core/dbconnection.py`): PostgreSQL connection via socket or TCP
-- **Database IO helpers** (`source/packages/automojo/pychestrate/core/dbio.py`): Database creation, opening, reset functions
-- **CSRF token handling** (`source/site/automojo/pychestrate/webservice/security.py`): `csrf_token_generate()` and `csrf_token_validate()` functions
-- **Password reset email** (`source/site/automojo/pychestrate/webservice/security.py`): `send_password_reset_email()` function
-- **Site metadata** (`source/site/automojo/pychestrate/webservice/metadata.py`): `SITE_SHARED_GLOBALS` with database engine, session factory, SMTP config
-- **REST API structure** (`source/site/automojo/pychestrate/webservice/restapi/`): Flask-RestX v1 API with namespace pattern
-- **Web interface structure** (`source/site/automojo/pychestrate/webservice/webinterface/`): Blueprint pattern with Vue.js/Bootstrap templates
+- **User model** (`source/packages/ccai/pychestrate/core/orm.py`): OAuth-based User model with provider, status, roles (as comma-separated string), authtype fields
+- **Database connection factory** (`source/packages/ccai/pychestrate/core/dbconnection.py`): PostgreSQL connection via socket or TCP
+- **Database IO helpers** (`source/packages/ccai/pychestrate/core/dbio.py`): Database creation, opening, reset functions
+- **CSRF token handling** (`source/site/ccai/pychestrate/webservice/security.py`): `csrf_token_generate()` and `csrf_token_validate()` functions
+- **Password reset email** (`source/site/ccai/pychestrate/webservice/security.py`): `send_password_reset_email()` function
+- **Site metadata** (`source/site/ccai/pychestrate/webservice/metadata.py`): `SITE_SHARED_GLOBALS` with database engine, session factory, SMTP config
+- **REST API structure** (`source/site/ccai/pychestrate/webservice/restapi/`): Flask-RestX v1 API with namespace pattern
+- **Web interface structure** (`source/site/ccai/pychestrate/webservice/webinterface/`): Blueprint pattern with Vue.js/Bootstrap templates
 
-### Base Framework (`automojo-webservice-flask` package)
-The `automojo.webservice.xflask` module provides extensive base infrastructure that should be extended:
+### Base Framework (`codecraftai-webservice-flask` package)
+The `ccai.webservice.xflask` module provides extensive base infrastructure that should be extended:
 
 - **ORM Models** (`baseorm.py`): User, Credential, CredentialResetToken, Organization, Membership, Role, UserGroup, OAuthToken
 - **Security** (`basesecurity.py`): RouteSecurityManager, get_csrf_token(), validate_csrf_token()
@@ -42,10 +42,10 @@ The base framework provides user authentication but lacks:
 
 - [x] 1. Set up project structure and core models
   - [x] 1.1 Create ORM models for Permission and association tables
-    - Add Permission model with id, name, description fields to `source/packages/automojo/pychestrate/core/orm.py`
+    - Add Permission model with id, name, description fields to `source/packages/ccai/pychestrate/core/orm.py`
     - Add SystemRole model (extends base Role with is_system flag and permission associations)
     - Define role_permissions association table
-    - Note: Base User, Credential, Role models exist in `automojo.webservice.xflask.baseorm`
+    - Note: Base User, Credential, Role models exist in `ccai.webservice.xflask.baseorm`
     - _Requirements: 1.1, 4.1_
   - [x] 1.2 Create ORM models for Session, PasswordHistory
     - Add Session model with token, user_id, created_at, expires_at, last_activity, client_ip, user_agent, csrf_token
@@ -74,10 +74,10 @@ The base framework provides user authentication but lacks:
 
 - [-] 2. Implement User Manager
   - [x] 2.1 Create UserManager class with validation methods
-    - Create `source/packages/automojo/pychestrate/core/managers/user_manager.py`
-    - Extend base framework's user operations from `automojo.webservice.xflask.baseoperations`
+    - Create `source/packages/ccai/pychestrate/core/managers/user_manager.py`
+    - Extend base framework's user operations from `ccai.webservice.xflask.baseoperations`
     - Implement username validation (alphanumeric, underscore, hyphen only)
-    - Implement email validation (leverage `automojo.webservice.xflask.basevalidation`)
+    - Implement email validation (leverage `ccai.webservice.xflask.basevalidation`)
     - Create dataclasses for requests/responses
     - _Requirements: 1.6, 1.7_
   - [x] 2.2 Write property test for username validation
@@ -115,10 +115,10 @@ The base framework provides user authentication but lacks:
 
 - [ ] 4. Implement Security Manager - Authentication
   - [x] 4.1 Create SecurityManager class with password utilities
-    - Create `source/packages/automojo/pychestrate/core/managers/security_manager.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/security_manager.py`
     - Leverage werkzeug's `generate_password_hash()` and `check_password_hash()` (already used in base framework)
     - Implement validate_password_strength (12+ chars, uppercase, lowercase, digit, special)
-    - Leverage existing CSRF functions from `automojo.webservice.xflask.basesecurity`
+    - Leverage existing CSRF functions from `ccai.webservice.xflask.basesecurity`
     - _Requirements: 3.1, 3.2, 3.3_
   - [x] 4.2 Write property test for password strength validation
     - **Property 9: Password Strength Validation**
@@ -189,7 +189,7 @@ The base framework provides user authentication but lacks:
     - **Property 8: Password Reset Token Lifecycle**
     - **Validates: Requirements 2.5, 2.6, 2.7**
   - [x] 6.3 Leverage existing CSRF token management
-    - Use `get_csrf_token()` and `validate_csrf_token()` from `automojo.webservice.xflask.basesecurity`
+    - Use `get_csrf_token()` and `validate_csrf_token()` from `ccai.webservice.xflask.basesecurity`
     - These are already session-based and use `secrets.token_urlsafe(32)`
     - _Requirements: 6.1, 6.2, 6.3_
   - [x] 6.4 Write property test for CSRF token uniqueness
@@ -210,7 +210,7 @@ The base framework provides user authentication but lacks:
 
 - [x] 8. Implement Global Variable Store
   - [x] 8.1 Create GlobalVariableStore class with type handling
-    - Create `source/packages/automojo/pychestrate/core/managers/global_variable_store.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/global_variable_store.py`
     - Implement validate_value for each type (string, integer, float, boolean, json)
     - Implement serialize_value (to JSON)
     - Implement deserialize_value (from JSON)
@@ -238,7 +238,7 @@ The base framework provides user authentication but lacks:
 
 - [x] 9. Implement Secret Manager
   - [x] 9.1 Create SecretManager class with encryption utilities
-    - Create `source/packages/automojo/pychestrate/core/managers/secret_manager.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/secret_manager.py`
     - Implement AES-256-GCM encryption using cryptography library
     - Implement _encrypt_value, _decrypt_value
     - _Requirements: 11.1, 11.2_
@@ -281,7 +281,7 @@ The base framework provides user authentication but lacks:
 
 - [x] 11. Implement Audit Logger
   - [x] 11.1 Create AuditLogger class
-    - Create `source/packages/automojo/pychestrate/core/managers/audit_logger.py`
+    - Create `source/packages/ccai/pychestrate/core/managers/audit_logger.py`
     - Implement log_event for all event types
     - Implement query_logs with filtering and pagination
     - Implement cleanup_old_logs
@@ -301,7 +301,7 @@ The base framework provides user authentication but lacks:
 
 - [x] 12. Implement REST API endpoints
   - [x] 12.1 Create REST API namespace and base configuration
-    - Create `source/site/automojo/pychestrate/webservice/restapi/versions/v1/config/` directory
+    - Create `source/site/ccai/pychestrate/webservice/restapi/versions/v1/config/` directory
     - Set up Flask-RestX namespace for /api/v1/config following existing pattern in `restapi/versions/v1/__init__.py`
     - Implement authentication decorator using bearer token validation
     - _Requirements: 9.1, 9.2_
@@ -369,8 +369,8 @@ The base framework provides user authentication but lacks:
 
 - [x] 14. Implement Web Interface
   - [x] 14.1 Create web interface blueprints structure
-    - Create `source/site/automojo/pychestrate/webservice/webinterface/blueprints/config/` directory
-    - Use `SecurityBlueprint` from `automojo.webservice.xflask.securityblueprint` for route security integration
+    - Create `source/site/ccai/pychestrate/webservice/webinterface/blueprints/config/` directory
+    - Use `SecurityBlueprint` from `ccai.webservice.xflask.securityblueprint` for route security integration
     - Use Vue.js/Bootstrap pattern from existing `home.html` template
     - _Requirements: 10.1_
   - [x] 14.2 Leverage existing authentication pages from base framework
@@ -409,7 +409,7 @@ The base framework provides user authentication but lacks:
     - Create audit log list page with filtering
     - _Requirements: 10.1, 10.4_
   - [x] 14.9 Leverage existing authentication middleware from base framework
-    - Use `check_authentication_with_roles()` from `automojo.webservice.xflask.baseauthentication`
+    - Use `check_authentication_with_roles()` from `ccai.webservice.xflask.baseauthentication`
     - Use `RouteSecurityManager` for endpoint protection
     - Redirect to login handled automatically by base framework
     - _Requirements: 10.4, 10.5_

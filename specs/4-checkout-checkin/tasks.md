@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/checkout/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/checkout/` per design.md.
 - [ ] T1.2 — Alembic migration `0030_reservations` creating `core.reservations` with the PK, the unique partial index on `(resource_id) WHERE state='granted' AND mode='exclusive'`, and the helper indices.
 - [ ] T1.3 — Alembic migration `0031_resources_pod_lock` adding `pod_locked_by UUID` to `core.resources` with partial index on `pod_locked_by`.
 - [ ] T1.4 — Implement `models.py` dataclasses for `Reservation`, `ReservationMode`, `ReservationState`, `ReservationAspects`, `ReservationTarget`, `WaitStrategy`.

@@ -141,7 +141,7 @@ Transport-level events from fetch + JSOS stream; nothing from the message bus.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-result-viewer/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-result-viewer/`:
 
 - `pyc-result-viewer.ts` — Custom Element.
 - `result-tree.ts` — in-memory tree + outline projection.

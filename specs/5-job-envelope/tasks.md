@@ -20,7 +20,7 @@
 ### M1 — Skeleton
 
 - [x] T1.1 — Create `jobs/envelope/` package skeleton per design.md Component Breakdown.
-      *(``source/site/automojo/pychestrate/webservice/jobs/envelope/`` with
+      *(``source/site/ccai/pychestrate/webservice/jobs/envelope/`` with
       ``schema.py``, ``canonical.py``, ``signer.py``, ``codec.py``,
       ``repository.py``, ``models.py``, ``startup.py``, ``errors.py``,
       and a public-re-export ``__init__.py``.)*
@@ -61,7 +61,7 @@
 
 - [ ] T2.1 — Implement `jobs/envelope/field_registry.py::EnvelopeFieldRegistry` collecting `EnvelopeFieldExtension` subclasses via `E-resource-extensions`.
 - [ ] T2.2 — Declare `EnvelopeFieldExtension` base at `jobs/envelope/extensions/envelope_field.py`; enforce unique `field_name` at load time.
-- [ ] T2.3 — Implement `TestBaseBuildInfoField` reference extension under `source/site/automojo/extensions/pychestrate/envelope_fields/test_base_build_info.py`.
+- [ ] T2.3 — Implement `TestBaseBuildInfoField` reference extension under `source/site/ccai/extensions/pychestrate/envelope_fields/test_base_build_info.py`.
 - [ ] T2.4 — Implement `TestBasePipelineField` reference extension at the same path.
 - [ ] T2.5 — Add scoped-secret minting through `1-secrets-vault`'s short-lived-cred interface; clamp TTL to `hard_deadline_at + 300 s`.
 - [ ] T2.6 — Publish `entity.run.dispatched` on `0-message-bus` after successful sign + persist.

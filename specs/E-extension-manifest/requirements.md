@@ -26,7 +26,7 @@ Python class is registered.
 **Acceptance Criteria (EARS):**
 
 1. WHEN the host scans a namespace package under
-   `automojo/factories/pychestrate` or `automojo/extensions/pychestrate`
+   `ccai/factories/pychestrate` or `ccai/extensions/pychestrate`
    THEN the system SHALL look for a sibling `pychestrate_ext.yaml` in
    the package's distribution root (`importlib.metadata.Distribution.files`).
 2. IF a `pychestrate_ext.yaml` is missing and strict mode is active

@@ -39,24 +39,24 @@ jobs:
         run: |
           poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set." \
-                 "The pyproject.toml git-source deps (automojo-errors," \
-                 "automojo-runtime, automojo-arcli, automojo-credentials," \
-                 "automojo-dataprofiles, automojo-storage-database," \
-                 "automojo-testbase, automojo-webworks, pychestrate-core)" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set." \
+                 "The pyproject.toml git-source deps (codecraftai-errors," \
+                 "codecraftai-runtime, codecraftai-arcli, codecraftai-credentials," \
+                 "codecraftai-dataprofiles, codecraftai-storage-database," \
+                 "codecraftai-testbase, codecraftai-webworks, pychestrate-core)" \
                  "live in private repos under the automationmojo org and the" \
                  "default GITHUB_TOKEN cannot read sibling private repos." \
                  "Add a fine-grained PAT (Contents: Read on the automationmojo" \
-                 "org private repos) to this repo's secrets as AUTOMOJO_REPO_TOKEN."
+                 "org private repos) to this repo's secrets as CODECRAFTAI_REPO_TOKEN."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -68,9 +68,9 @@ jobs:
           PYTHONPATH: source/site:source/packages:source/service:source/testroots/testbase
         run: |
           poetry run python -c "
-          from automojo.pychestrate.webservice.security.auth import local_flow, session_service
-          from automojo.pychestrate.webservice.security.rbac import rbac_evaluator
-          from automojo.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (
+          from ccai.pychestrate.webservice.security.auth import local_flow, session_service
+          from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+          from ccai.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (
               ConsumerUISecurityAdapter,
           )
           print('OK: modern auth + RBAC + adapter import cleanly')
@@ -93,17 +93,17 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
                  "(see lint-and-build job for setup instructions)."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -156,17 +156,17 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
                  "(see lint-and-build job for setup instructions)."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -191,7 +191,7 @@ jobs:
           # argument can never have a leading ``/``. The exclusion
           # check ``candidate.startswith(prefix)`` therefore never
           # matches, and the flag is silently a no-op. (Tracked
-          # for upstream fix in automojo-testbase.)
+          # for upstream fix in codecraftai-testbase.)
           #
           # Workaround: enumerate the includes explicitly so the
           # brittle modules never get picked up.
@@ -207,54 +207,54 @@ jobs:
           # stable-prefix wildcards (p10*/p11*/p12*) and the 17
           # stable p13 module names.
           poetry run testbase testing run \
-            --root source/testroots/automojo \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_audit_writer \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_bootstrap \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_extensions_registry \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_flag_evaluator \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_flag_m2 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_local_flow \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_messaging_bus \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_extensions \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_integration \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_lifecycle_property \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_service \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_project_slug_property \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_rbac_evaluator \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_rbac_m2 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_secret_bytes \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_secrets_service \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_session_service \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase1.test_user_service \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase2 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase3 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase4 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase5 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase6 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase7 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase8 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase9 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.restapi \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p10 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p11 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p12 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13a_alembic_setup_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13b_webui_foundation_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13c_webui_session_csrf_flash_guard_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13d_config_webui_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13e_config_users_roles_routes_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13f_config_variables_scopes_routes_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13g_config_secrets_sessions_audit_routes_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13h_resources_core_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13i_resources_pools_ipools_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13j_resources_allocations_reservations_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13k_resources_health_tags_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13l_projects_core_members_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13m_projects_repositories_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13n_projects_builds_infra_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13o_projects_tests_releases_port_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13p_projects_calendar_watches_final_m1 \
+            --root source/testroots/ccai \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_audit_writer \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_bootstrap \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_extensions_registry \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_flag_evaluator \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_flag_m2 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_local_flow \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_messaging_bus \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_project_extensions \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_project_integration \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_project_lifecycle_property \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_project_service \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_project_slug_property \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_rbac_evaluator \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_rbac_m2 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_secret_bytes \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_secrets_service \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_session_service \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase1.test_user_service \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase2 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase3 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase4 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase5 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase6 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase7 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase8 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase9 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.restapi \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p10 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p11 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p12 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13a_alembic_setup_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13b_webui_foundation_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13c_webui_session_csrf_flash_guard_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13d_config_webui_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13e_config_users_roles_routes_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13f_config_variables_scopes_routes_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13g_config_secrets_sessions_audit_routes_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13h_resources_core_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13i_resources_pools_ipools_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13j_resources_allocations_reservations_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13k_resources_health_tags_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13l_projects_core_members_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13m_projects_repositories_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13n_projects_builds_infra_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13o_projects_tests_releases_port_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13p_projects_calendar_watches_final_m1 \
             --output=./.output/ci-singlehost
 
       - name: Upload test artifacts
@@ -282,17 +282,17 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
                  "(see lint-and-build job for setup instructions)."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -304,13 +304,13 @@ jobs:
         run: |
           mkdir -p .output/ci-e2e
           poetry run testbase testing run \
-            --root source/testroots/automojo \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13q_consumer_ui_e2e_smoke_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13r_consumer_ui_e2e_authed_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13u_static_assets_e2e_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13v_consumer_ui_e2e_rbac_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ac_consumer_ui_e2e_tier4_m1 \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ae_alpha_acceptance_m1 \
+            --root source/testroots/ccai \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13q_consumer_ui_e2e_smoke_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13r_consumer_ui_e2e_authed_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13u_static_assets_e2e_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13v_consumer_ui_e2e_rbac_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13ac_consumer_ui_e2e_tier4_m1 \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13ae_alpha_acceptance_m1 \
             --output=./.output/ci-e2e
 
       - name: Upload test artifacts
@@ -352,17 +352,17 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
                  "(see lint-and-build job for setup instructions)."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -412,17 +412,17 @@ jobs:
       - name: Configure poetry to use in-tree venv
         run: poetry config virtualenvs.in-project true
 
-      - name: Configure git to clone private automojo-* deps
+      - name: Configure git to clone private codecraftai-* deps
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
-          if [ -z "${AUTOMOJO_REPO_TOKEN}" ]; then
-            echo "::error::AUTOMOJO_REPO_TOKEN secret is not set" \
+          if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+            echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
                  "(see lint-and-build job for setup instructions)."
             exit 1
           fi
           git config --global \
-            url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+            url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
             "https://github.com/automationmojo/"
 
       - name: Install dependencies
@@ -434,8 +434,8 @@ jobs:
         run: |
           mkdir -p .output/ci-smoke
           poetry run testbase testing run \
-            --root source/testroots/automojo \
-            --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
+            --root source/testroots/ccai \
+            --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
             --output=./.output/ci-smoke
 
       - name: Upload test artifacts

@@ -9,8 +9,8 @@ name: deploy
 #
 # Required GitHub secrets (org or repo level):
 #
-#   AUTOMOJO_REPO_TOKEN     fine-grained PAT with Contents:Read
-#                           on the nine private automojo-* repos.
+#   CODECRAFTAI_REPO_TOKEN     fine-grained PAT with Contents:Read
+#                           on the nine private codecraftai-* repos.
 #                           Same secret CI's test workflow uses.
 #
 #   TS_OAUTH_CLIENT_ID      OAuth client ID created in Tailscale
@@ -45,7 +45,7 @@ name: deploy
 # bootstrap completes -- ``setup-debian-machine`` requires sudo
 # and CI cannot satisfy an interactive password prompt):
 #
-#   AUTOMOJO_REPO_TOKEN=ghp_xxx \\
+#   CODECRAFTAI_REPO_TOKEN=ghp_xxx \\
 #       deployment/deploy-alpha-to-host.sh \\
 #           --host=tc-app-server --user=myron
 #
@@ -179,7 +179,7 @@ jobs:
 
       - name: Run deploy
         env:
-          AUTOMOJO_REPO_TOKEN: ${{ secrets.AUTOMOJO_REPO_TOKEN }}
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
         run: |
           # Start an ephemeral ssh-agent and load the deploy key.
           # The deploy script's ssh invocations pick up the

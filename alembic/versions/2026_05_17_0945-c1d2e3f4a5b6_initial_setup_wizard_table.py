@@ -4,7 +4,7 @@ Adds ``system_initial_setup`` -- the singleton-by-construction
 row that backs the Jenkins-style first-run setup wizard.
 
 Originally landed in PR #188 at
-``source/packages/automojo/pychestrate/core/migrations/versions/
+``source/packages/ccai/pychestrate/core/migrations/versions/
 041_initial_setup_table.py``, but that directory is NOT the
 active alembic ``script_location`` (``alembic/versions``). The
 041 migration was therefore never applied -- every gunicorn

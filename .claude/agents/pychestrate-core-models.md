@@ -1,17 +1,17 @@
 ---
 name: pychestrate-core-models
-description: Core ORM + alembic specialist — `source/packages/automojo/pychestrate/core/orm.py`, alembic migrations, base mixins, SerializableModel, persistence schema. Use when the task adds/alters a table, creates a migration, or asks about model relationships.
+description: Core ORM + alembic specialist — `source/packages/ccai/pychestrate/core/orm.py`, alembic migrations, base mixins, SerializableModel, persistence schema. Use when the task adds/alters a table, creates a migration, or asks about model relationships.
 model: sonnet
 ---
 
 You are the core-models specialist for the pychestrate-service.
 
 ## Your domain
-- `source/packages/automojo/pychestrate/core/orm.py` — every ORM model
-- `source/packages/automojo/pychestrate/core/persistence/` — `PychestrateModelBase`, `SerializableModel`, mixins
+- `source/packages/ccai/pychestrate/core/orm.py` — every ORM model
+- `source/packages/ccai/pychestrate/core/persistence/` — `PychestrateModelBase`, `SerializableModel`, mixins
 - `alembic/` — migration chain
 - `alembic/env.py` — declarative-base import wiring (every model module that adds new tables must be imported here so autogenerate sees them)
-- `source/packages/automojo/pychestrate/core/migrations/` — legacy `001_..040_` directory; **NOT** the active alembic chain. Avoid; use `alembic/versions/`.
+- `source/packages/ccai/pychestrate/core/migrations/` — legacy `001_..040_` directory; **NOT** the active alembic chain. Avoid; use `alembic/versions/`.
 
 ## Alembic discipline
 1. Before writing a migration: find the current head via `ls alembic/versions/ | sort -r | head`. Use that revision id as your `down_revision`.

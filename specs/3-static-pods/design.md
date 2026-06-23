@@ -3,7 +3,7 @@
 ## Architecture
 
 Static Pods live at
-`source/site/automojo/pychestrate/webservice/pods/static/`. Responsibility
+`source/site/ccai/pychestrate/webservice/pods/static/`. Responsibility
 split:
 
 - The client agent announces a pod via the transport (`3-client-agent-protocol`)
@@ -130,7 +130,7 @@ entity.pod.registration_rejected          { client_id, pod_id, code, reason }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/static/
+source/site/ccai/pychestrate/webservice/pods/static/
     __init__.py
     enums.py
     dtos.py                       -- MemberReport, StaticPodRegistrationResult,

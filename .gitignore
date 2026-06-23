@@ -12,17 +12,17 @@ build/
 # Source-tree exception: the Layer-6 build orchestration package
 # is a Python sub-module under orchestration/, not a build-output
 # directory.
-!source/site/automojo/pychestrate/webservice/orchestration/build/
-!source/site/automojo/pychestrate/webservice/orchestration/build/**
+!source/site/ccai/pychestrate/webservice/orchestration/build/
+!source/site/ccai/pychestrate/webservice/orchestration/build/**
 # Keep cache + bytecode out of the unignored sub-tree.
-source/site/automojo/pychestrate/webservice/orchestration/build/**/__pycache__/
+source/site/ccai/pychestrate/webservice/orchestration/build/**/__pycache__/
 develop-eggs/
 dist/
 # Source-tree exception: the prebuilt frontend bundles emitted by
 # the frontend/ TypeScript toolchain are checked in so the Python
 # deploy does not need Node. See frontend/README.md for policy.
-!source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/
-!source/site/automojo/pychestrate/webservice/webinterface/static/javascript/dist/**
+!source/site/ccai/pychestrate/webservice/webinterface/static/javascript/dist/
+!source/site/ccai/pychestrate/webservice/webinterface/static/javascript/dist/**
 downloads/
 eggs/
 .eggs/

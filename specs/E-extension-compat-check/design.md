@@ -51,7 +51,7 @@ REST:
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/compat/`.
+`source/site/ccai/pychestrate/webservice/extension/compat/`.
 
 ```python
 # checker.py
@@ -108,7 +108,7 @@ def get_compat_checker() -> CompatChecker:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/compat/
+source/site/ccai/pychestrate/webservice/extension/compat/
     __init__.py
     checker.py            # CompatChecker
     rejection.py          # CompatRejection dataclass

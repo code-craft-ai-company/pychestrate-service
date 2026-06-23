@@ -137,7 +137,7 @@ None.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-secret-editor/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-secret-editor/`:
 
 - `pyc-secret-editor.ts` — Custom Element.
 - `plaintext-guard.ts` — hard scan against forbidden field names.

@@ -23,7 +23,7 @@ reconnect. This feature lands in **Phase 3** and is the producer of
 machine consumes, plus the downstream-visible
 `entity.run.cancelled | completed | failed` events (emitted by the
 state machine on the terminal transition this feature triggers).
-Lives at `source/site/automojo/pychestrate/webservice/jobs/cancel/`
+Lives at `source/site/ccai/pychestrate/webservice/jobs/cancel/`
 and `.../jobs/reconcile/`.
 
 ## Data Model
@@ -227,7 +227,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/cancel/__init__.py`
 - `jobs/cancel/dispatcher.py` — `CancelDispatcher`.

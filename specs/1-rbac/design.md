@@ -3,7 +3,7 @@
 ## Architecture
 
 `1-rbac` lives under
-`source/site/automojo/pychestrate/webservice/security/rbac/`. It is a
+`source/site/ccai/pychestrate/webservice/security/rbac/`. It is a
 read-heavy, write-rare service providing one canonical evaluator —
 `rbac_evaluator.check_permission` — consumed by every controller guard
 and every internal service that needs an authorization decision. The
@@ -73,7 +73,7 @@ Indexes: `INDEX(principal_kind, principal_id)`,
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.security.rbac.rbac_evaluator`:
+Module `ccai.pychestrate.webservice.security.rbac.rbac_evaluator`:
 
 ```python
 def check_permission(
@@ -110,7 +110,7 @@ def require_permission(
     return rtnval
 ```
 
-Module `automojo.pychestrate.webservice.security.rbac.binding_service`:
+Module `ccai.pychestrate.webservice.security.rbac.binding_service`:
 
 ```python
 def assign_role(
@@ -141,7 +141,7 @@ def revoke_role(*, binding_id: UUID, actor_user_id: UUID) -> None:
     return rtnval
 ```
 
-Module `automojo.pychestrate.webservice.security.rbac.catalog`:
+Module `ccai.pychestrate.webservice.security.rbac.catalog`:
 
 ```python
 def load_catalog_from_registry() -> CatalogSnapshot:
@@ -157,7 +157,7 @@ def load_catalog_from_registry() -> CatalogSnapshot:
 ### Extension Surface
 
 Resource base `PermissionExtension` declared in
-`automojo.pychestrate.webservice.security.rbac.extensions.permission_extension`:
+`ccai.pychestrate.webservice.security.rbac.extensions.permission_extension`:
 
 ```python
 class PermissionExtension(ResourceExtension):
@@ -210,7 +210,7 @@ Reference implementations: `SystemAdminRole`, `ProjectOwnerRole`,
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/security/rbac/
+source/site/ccai/pychestrate/webservice/security/rbac/
     __init__.py
     rbac_evaluator.py              # check_permission, require_permission
     binding_service.py             # assign_role, revoke_role, list_bindings

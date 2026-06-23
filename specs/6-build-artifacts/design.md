@@ -161,7 +161,7 @@ None declared here. Reuses:
 - `resource: ArtifactTypeExtension` from `5-artifact-store`.
 
 Built-in declared artifact types shipped under
-`source/site/automojo/extensions/pychestrate/artifact_type/`:
+`source/site/ccai/extensions/pychestrate/artifact_type/`:
 
 - `ContainerImageArtifactType` — validates OCI digest + tag.
 - `SbomArtifactType` — validates CycloneDX or SPDX JSON.
@@ -182,7 +182,7 @@ Built-in declared artifact types shipped under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/build/artifacts/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/build/artifacts/`:
 
 - `__init__.py`
 - `service.py` — `BuildArtifactsService`.
@@ -196,7 +196,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/b
 - `rest/v1_routes.py`.
 
 Built-in artifact type extensions under
-`source/site/automojo/extensions/pychestrate/artifact_type/`.
+`source/site/ccai/extensions/pychestrate/artifact_type/`.
 
 ## Key Flows
 

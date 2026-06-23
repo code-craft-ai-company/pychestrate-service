@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/infra/environment/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/infra/environment/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `environment`, `environment_probe_assignment`, `environment_guard_assignment`, `environment_history`.
 - [ ] T1.3 — Implement `kind_protocol.py::EnvironmentKindExtension`.
-- [ ] T1.4 — Implement `K8sClusterEnvironmentKind` at `source/site/automojo/extensions/pychestrate/environment_kind/k8s_cluster.py` with declared `attrs_schema`.
+- [ ] T1.4 — Implement `K8sClusterEnvironmentKind` at `source/site/ccai/extensions/pychestrate/environment_kind/k8s_cluster.py` with declared `attrs_schema`.
 - [ ] T1.5 — Implement `registry.py::EnvironmentRegistry.declare`, `list`, `get`.
 - [ ] T1.6 — Register REST `POST/GET /api/v1/projects/{id}/environments`, `GET /environments/{id}`.
 
@@ -22,7 +22,7 @@
 - [ ] T2.1 — Implement `archive`, `freeze`, `unfreeze` with REST endpoints; emit corresponding events.
 - [ ] T2.2 — Implement `record_apply` and `mark_destroyed` with row-level locking and monotonicity.
 - [ ] T2.3 — Implement `set_probes`, `set_guards`, and `PATCH /attrs` with schema revalidation.
-- [ ] T2.4 — Implement `VmPoolEnvironmentKind`, `CloudAccountEnvironmentKind`, `DatabaseServiceEnvironmentKind` under `source/site/automojo/extensions/pychestrate/environment_kind/`.
+- [ ] T2.4 — Implement `VmPoolEnvironmentKind`, `CloudAccountEnvironmentKind`, `DatabaseServiceEnvironmentKind` under `source/site/ccai/extensions/pychestrate/environment_kind/`.
 - [ ] T2.5 — Implement `kind_registry.py` accessor; subscribe to `extension.reloaded`.
 - [ ] T2.6 — Emit `entity.env.declared`, `entity.env.archived`, `entity.env.frozen`, `entity.env.unfrozen`, `entity.env.applied`, `entity.env.destroyed`.
 - [ ] T2.7 — Wire audit log for every mutation.

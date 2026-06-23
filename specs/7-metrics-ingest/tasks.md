@@ -10,12 +10,12 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/metrics/ingest/` package skeleton per design.md Component Breakdown.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/metrics/ingest/` package skeleton per design.md Component Breakdown.
 - [ ] T1.2 — Implement `extension_base.py::MetricDefinitionExtension` with `SubscriptionSpec`, `LabelResolver`, `ValueResolver` value types.
 - [ ] T1.3 — Implement `registry.py::MetricRegistry.build()` scanning `MetricDefinitionExtension` subclasses via `E-extension-host` and populating `_metrics` + `_subscriptions`.
 - [ ] T1.4 — Add `0-persistence` migration for `metric_definition_snapshot` and `metric_translation_dead_letter`.
 - [ ] T1.5 — Implement `worker.py::MetricIngestWorker.start()` subscribing to a single bootstrap topic (`entity.run.completed`) and writing to `TimeseriesFacade`.
-- [ ] T1.6 — Ship core in-tree catalog stub `source/site/automojo/extensions/pychestrate/metric_definition/core_catalog.py` with `pychestrate_metric_definitions_registered` and `pychestrate_metrics_ingest_events_total`.
+- [ ] T1.6 — Ship core in-tree catalog stub `source/site/ccai/extensions/pychestrate/metric_definition/core_catalog.py` with `pychestrate_metric_definitions_registered` and `pychestrate_metrics_ingest_events_total`.
 - [ ] T1.7 — Register `GET /api/v1/metrics/definitions` admin endpoint under `8-rest-api-v1`.
 - [ ] T1.8 — Emit `entity.metric.definition_registered` on each successful registration.
 
@@ -24,7 +24,7 @@
 - [ ] T2.1 — Implement full `translation.py` applying every binding for a topic, returning `list[Sample]`; 200-char label truncation.
 - [ ] T2.2 — Implement dead-letter writer `dead_letter.py`; wire `MetricTranslationError` path in the worker to append + emit `entity.metric.translation_failed`.
 - [ ] T2.3 — Implement `exporter_protocol.py::MetricExporterProtocol` and `exporter_registry.py::MetricExporterRegistry.build()`.
-- [ ] T2.4 — Implement reference exporter `source/site/automojo/factories/pychestrate/metric_exporter/prometheus_remote_write.py` (`PRECEDENCE = 1000`).
+- [ ] T2.4 — Implement reference exporter `source/site/ccai/factories/pychestrate/metric_exporter/prometheus_remote_write.py` (`PRECEDENCE = 1000`).
 - [ ] T2.5 — Implement `circuit.py` per-exporter circuit breaker with `exporter_circuit_open_threshold`, `exporter_circuit_open_seconds`.
 - [ ] T2.6 — Wire fan-out: `TimeseriesFacade.write_batch(...)` + `MetricExporterRegistry.fan_out(...)` after every translation batch.
 - [ ] T2.7 — Add uniqueness + shape validation in `MetricRegistry.build()` — raise `ConfigurationError` on conflicting `metric_name`.
@@ -34,7 +34,7 @@
 ### M3 — Hardening
 
 - [ ] T3.1 — Implement bounded `collections.deque` buffer in the worker; flush on driver-health recovery; emit `pychestrate_metrics_ingest_buffer_depth`.
-- [ ] T3.2 — Implement OTLP exporter `source/site/automojo/factories/pychestrate/metric_exporter/otlp.py` (`PRECEDENCE = 1100`) with `supports_exemplars = True`.
+- [ ] T3.2 — Implement OTLP exporter `source/site/ccai/factories/pychestrate/metric_exporter/otlp.py` (`PRECEDENCE = 1100`) with `supports_exemplars = True`.
 - [ ] T3.3 — Implement exemplar propagation when events carry `trace_id`.
 - [ ] T3.4 — Emit all Prometheus metrics and OTel spans listed in design.md Observability.
 - [ ] T3.5 — Benchmark NFR-1: 2 000 events/s sustained with p99 < 250 ms end-to-end; 500-metric registry scan < 750 ms. Fail CI on regression.

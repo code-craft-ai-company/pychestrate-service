@@ -22,8 +22,8 @@
 
 - [x] T1.1 — Stand up the `pychestrate-cli` Python package with
       `pyc` entry point in
-      `source/site/automojo/pychestrate/cli/entry.py`.
-      *(Package rooted at ``automojo.pychestrate.cli`` with
+      `source/site/ccai/pychestrate/cli/entry.py`.
+      *(Package rooted at ``ccai.pychestrate.cli`` with
       ``entry`` / ``parser`` / ``credentials`` / ``transport`` /
       ``openapi_cache`` / ``models`` / ``exit_codes`` /
       ``exceptions`` modules. Console-script registration in

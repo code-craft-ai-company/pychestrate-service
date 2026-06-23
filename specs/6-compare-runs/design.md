@@ -156,7 +156,7 @@ class ArtifactDiffViewerExtension(ResourceExtension):
 ```
 
 Reference viewers in-tree under
-`source/site/automojo/extensions/pychestrate/artifact_diff_viewer/`:
+`source/site/ccai/extensions/pychestrate/artifact_diff_viewer/`:
 
 - `PxGenericTwoPaneDiffViewer` — default fallback.
 - `PxTextLineDiffViewer` — text/* with classifier `log` or size < 2 MiB.
@@ -177,7 +177,7 @@ Reference viewers in-tree under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/test/compare/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/test/compare/`:
 
 - `__init__.py`
 - `service.py` — `CompareRunsService`.

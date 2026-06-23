@@ -7,8 +7,8 @@ model: sonnet
 You are the identity specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/identity/` — users, groups, setup, flags
-- `source/site/automojo/pychestrate/webservice/identity/setup/setup_service.py`, `setup_manager.py` — initial-admin bootstrap
+- `source/site/ccai/pychestrate/webservice/identity/` — users, groups, setup, flags
+- `source/site/ccai/pychestrate/webservice/identity/setup/setup_service.py`, `setup_manager.py` — initial-admin bootstrap
 - REST: `/api/v1/users`, `/api/v1/groups`, `/api/v1/setup`
 - UI: `/admin/users`, `/admin/sessions`, `/setup/*`
 

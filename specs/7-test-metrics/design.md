@@ -139,12 +139,12 @@ def clamp01(
 Shares `MetricDefinitionExtension` (owned by `7-metrics-ingest`). In-tree
 subclasses shipped here:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/result.py` — `TestResultMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/duration.py` — `TestCaseDurationMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/mttr.py` — `TestMttrMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/flake_rate.py` — `TestFlakeRateMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/coverage.py` — `TestCoverageLineRatioMetric` + `TestCoverageDeltaMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/test/slowest.py` — `TestCaseSlowestMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/result.py` — `TestResultMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/duration.py` — `TestCaseDurationMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/mttr.py` — `TestMttrMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/flake_rate.py` — `TestFlakeRateMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/coverage.py` — `TestCoverageLineRatioMetric` + `TestCoverageDeltaMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/test/slowest.py` — `TestCaseSlowestMetric`.
 
 Internal resource extension declared here:
 
@@ -165,7 +165,7 @@ class CoverageArtifactTypeExtension(ResourceExtension):
 ```
 
 Reference implementation:
-`source/site/automojo/extensions/pychestrate/coverage_artifact/cobertura_v4.py`.
+`source/site/ccai/extensions/pychestrate/coverage_artifact/cobertura_v4.py`.
 
 ### Events Emitted
 
@@ -181,7 +181,7 @@ Reference implementation:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains/test/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/domains/test/`:
 
 - `__init__.py`
 - `resolver.py` — `TestMetricResolver`.
@@ -193,7 +193,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains
 - `errors.py` — `CoverageParseError`.
 
 `MetricDefinitionExtension` subclasses under
-`source/site/automojo/extensions/pychestrate/metric_definition/test/`.
+`source/site/ccai/extensions/pychestrate/metric_definition/test/`.
 
 ## Key Flows
 

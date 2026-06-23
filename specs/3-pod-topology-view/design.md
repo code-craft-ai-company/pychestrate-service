@@ -3,7 +3,7 @@
 ## Architecture
 
 The Topology View lives at
-`source/site/automojo/pychestrate/webservice/pods/topology/`. It is a
+`source/site/ccai/pychestrate/webservice/pods/topology/`. It is a
 read-through composition layer — it does not own any persistent state of
 its own. The composer reads the pinned `pod_definition_version`, the
 active `pod_registration`, and the current `pod_runtime_state`, merges
@@ -120,7 +120,7 @@ class PodMemberRendererExtension(ResourceExtension):
 ```
 
 Reference implementations (in-tree, under
-`source/site/automojo/pychestrate/extensions/pod_member_renderers/`):
+`source/site/ccai/pychestrate/extensions/pod_member_renderers/`):
 
 - `LinuxHostRenderer` -> `<pcx-linux-host>`.
 - `WindowsHostRenderer` -> `<pcx-windows-host>`.
@@ -139,7 +139,7 @@ None directly. This feature is a read path.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/topology/
+source/site/ccai/pychestrate/webservice/pods/topology/
     __init__.py
     dtos.py
     composer.py                -- compose_topology pure function
@@ -148,7 +148,7 @@ source/site/automojo/pychestrate/webservice/pods/topology/
     rest.py                    -- Flask-RestX router with If-None-Match handling
     metrics.py
 
-source/site/automojo/pychestrate/extensions/pod_member_renderers/
+source/site/ccai/pychestrate/extensions/pod_member_renderers/
     linux_host.py
     windows_host.py
     network_switch.py

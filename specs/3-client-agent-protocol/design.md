@@ -3,7 +3,7 @@
 ## Architecture
 
 The Client Agent Protocol implementation lives under
-`source/site/automojo/pychestrate/webservice/clients/transport/` and is the
+`source/site/ccai/pychestrate/webservice/clients/transport/` and is the
 lowest-level Layer 3 module: every other Layer 3 feature consumes the session
 objects and bus events it produces. The transport is pluggable through the
 `client_transport` factory protocol — the in-tree default is a WebSocket-over-
@@ -167,7 +167,7 @@ class ClientTransportProtocol(FactoryProtocolBase):
 
 Reference implementation shipped in-tree: `WebSocketMtlsClientTransport`
 (`PRECEDENCE=100`), at
-`source/site/automojo/pychestrate/factories/client_transport/websocket_mtls.py`.
+`source/site/ccai/pychestrate/factories/client_transport/websocket_mtls.py`.
 Test-only override: `InMemoryLoopbackTransport` at `PRECEDENCE=50` used by the
 property-based test suite to exercise the state machine without real sockets.
 
@@ -195,7 +195,7 @@ entity.run.reconciled              { client_run_id, from_state, to_state }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/transport/
+source/site/ccai/pychestrate/webservice/clients/transport/
     __init__.py
     enums.py                    -- FrameKind, LivenessState, Direction
     frames.py                   -- @dataclass InboundFrame / OutboundFrame variants
@@ -213,7 +213,7 @@ source/site/automojo/pychestrate/webservice/clients/transport/
     validator.py                -- frame schema validation
     metrics.py                  -- pychestrate_client_* Prometheus instruments
 
-source/site/automojo/pychestrate/factories/client_transport/
+source/site/ccai/pychestrate/factories/client_transport/
     websocket_mtls.py           -- reference implementation, PRECEDENCE=100
     loopback.py                 -- test helper (tests import only)
 ```

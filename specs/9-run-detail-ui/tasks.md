@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-run-detail/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-run-detail/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-run-detail.ts::PycRunDetail` with observed attributes `run-id`, `default-pane`, `aria-label`.
 - [ ] T1.3 — Implement `transport/run-context-transport.ts` fetching `/api/v1/runs/{run_id}/context`.
 - [ ] T1.4 — Implement `run-header.ts` rendering run identity, state badge, timing.

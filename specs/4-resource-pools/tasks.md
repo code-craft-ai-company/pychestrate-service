@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [x] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/pools/` per design.md.
+- [x] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/pools/` per design.md.
 - [x] T1.2 — Alembic migration `0020_resource_pools` creating `core.resource_pools` and `core.resource_pool_members` with the indices listed in design.md.
       *(Migration 022 creates both tables.)*
 - [x] T1.3 — Implement `models.py::ResourcePool` + `PoolCandidate`, plus `allocation_aspects.py::AllocationAspects` dataclass (sticky_tag, job_hint, preferred_member).

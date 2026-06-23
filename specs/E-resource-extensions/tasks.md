@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/resources/`.
+  `source/site/ccai/pychestrate/webservice/extension/resources/`.
 - [ ] T1.2 — Implement `ResourceExtensionBaseEntry` and
   `ResourceExtensionKindEntry` dataclasses in `entry.py`.
 - [ ] T1.3 — Implement `ResourceExtensionCatalog` with `register_base`,

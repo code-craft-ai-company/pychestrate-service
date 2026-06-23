@@ -161,7 +161,7 @@ class LeaseRenewalPolicyProtocol(FactoryProtocolBase):
 ```
 
 In-tree implementations at
-`source/site/automojo/factories/pychestrate/lease_renewal_policy/`:
+`source/site/ccai/factories/pychestrate/lease_renewal_policy/`:
 
 - `FixedTtlRenewalPolicy` — `PRECEDENCE = 1000`; heartbeat bumps
   `expires_at = heartbeat_ts + ttl_seconds`.
@@ -199,7 +199,7 @@ Test-only `NeverRenewPolicy` at `PRECEDENCE = 100` always returns
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/lease/`:
+Under `source/site/ccai/pychestrate/webservice/resources/lease/`:
 
 - `models.py` — `Lease`, `LeaseState`, `LeaseAspects`, `RenewalDecision`.
 - `repository.py` — CRUD, sweeper query with `FOR UPDATE SKIP LOCKED`.
@@ -211,7 +211,7 @@ Under `source/site/automojo/pychestrate/webservice/resources/lease/`:
 - `errors.py` — `LeaseNotFoundError`, `LeaseAlreadyCappedError`,
   `LeaseAlreadyExpiredError`.
 
-Policies at `source/site/automojo/factories/pychestrate/lease_renewal_policy/`.
+Policies at `source/site/ccai/factories/pychestrate/lease_renewal_policy/`.
 
 ## Key Flows
 

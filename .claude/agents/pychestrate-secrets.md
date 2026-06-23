@@ -7,9 +7,9 @@ model: sonnet
 You are the secrets specialist for the pychestrate-service.
 
 ## Your domain
-- `source/packages/automojo/pychestrate/core/managers/secret_manager.py` — `SecretManager` (CRUD + encryption)
-- `source/site/automojo/pychestrate/webservice/secrets/` — REST surface
-- `source/site/automojo/pychestrate/webservice/webinterface/blueprints/config/routes_scopes.py`, `routes_secrets.py` — UI
+- `source/packages/ccai/pychestrate/core/managers/secret_manager.py` — `SecretManager` (CRUD + encryption)
+- `source/site/ccai/pychestrate/webservice/secrets/` — REST surface
+- `source/site/ccai/pychestrate/webservice/webinterface/blueprints/config/routes_scopes.py`, `routes_secrets.py` — UI
 - `.cache/dev-secrets/` (local dev) and the KEK file path under `~/.pychestrate/` on alpha
 
 ## Encryption-key contract

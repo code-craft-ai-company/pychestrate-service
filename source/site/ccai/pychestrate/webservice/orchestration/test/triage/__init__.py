@@ -1,0 +1,80 @@
+"""
+.. module:: orchestration.test.triage
+    :synopsis: 6-triage-bug-linking — failure classification + tracker linking.
+
+Public surface:
+
+* :class:`TriageCase`, :class:`TriageCaseLedger`,
+  :class:`TriageClass` — persistence + enum.
+* :class:`TriageCaseView`, :class:`TriageSignals` — IO shapes.
+* :func:`open_case`, :func:`reclassify_case`,
+  :func:`link_ticket`, :func:`get_case`,
+  :func:`list_cases_for_run`, :func:`compute_stack_signature`.
+* :class:`BugTrackerDriverProtocol` factory contract +
+  reference :class:`NullBugTrackerDriver`.
+* :class:`TriageClassifierProtocol` factory contract +
+  reference :class:`InfraFlakeClassifier`.
+* :class:`TriageEventTopics`.
+* Errors: :class:`TriageError`, :class:`TriageCaseNotFoundError`,
+  :class:`TriageClassifierNotFoundError`,
+  :class:`TriageStackSignatureInvalidError`.
+* :func:`register_builtin_extensions`.
+"""
+
+__author__ = "Code Craft AI LLC"
+__copyright__ = "Copyright 2026, Code Craft AI LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+from ccai.pychestrate.webservice.extensions.registry import (
+    register_factory_implementation,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.errors import (
+    TriageCaseNotFoundError,
+    TriageClassifierNotFoundError,
+    TriageError,
+    TriageStackSignatureInvalidError,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.events import (
+    TriageEventTopics,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.factories.classifier_protocol import (
+    TriageClassifierDecision,
+    TriageClassifierProtocol,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.factories.infra_flake_classifier import (
+    InfraFlakeClassifier,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.factories.null_tracker_driver import (
+    NullBugTrackerDriver,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.factories.tracker_protocol import (
+    BugTrackerDriverProtocol,
+    TrackerLink,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.models import (
+    TriageCase,
+    TriageCaseLedger,
+    TriageClass,
+)
+from ccai.pychestrate.webservice.orchestration.test.triage.service import (
+    TriageCaseView,
+    TriageSignals,
+    compute_stack_signature,
+    get_case,
+    link_ticket,
+    list_cases_for_run,
+    open_case,
+    reclassify_case,
+)
+
+
+def register_builtin_extensions() -> None:
+    """
+        Seed the in-tree triage classifier + tracker driver
+        reference implementations.
+    """
+    register_factory_implementation(implementation=InfraFlakeClassifier)
+    register_factory_implementation(implementation=NullBugTrackerDriver)
+    return

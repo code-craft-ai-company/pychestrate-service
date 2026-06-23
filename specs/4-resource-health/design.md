@@ -153,7 +153,7 @@ class ResourceHealthProbeProtocol(FactoryProtocolBase):
 ```
 
 In-tree implementations under
-`source/site/automojo/factories/pychestrate/resource_health_probe/`:
+`source/site/ccai/factories/pychestrate/resource_health_probe/`:
 
 - `DevicePingProbe` — ICMP echo; `kind_name="device"`, PRECEDENCE 1000.
 - `DeviceTCPProbe` — TCP connect check; `kind_name="device"`, PRECEDENCE
@@ -195,7 +195,7 @@ Directly:
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/health/`:
+Under `source/site/ccai/pychestrate/webservice/resources/health/`:
 
 - `models.py` — `ResourceHealthRow`, `ProbeOutcome`, `ProbeResult`,
   `ProbeAspects`.
@@ -210,7 +210,7 @@ Under `source/site/automojo/pychestrate/webservice/resources/health/`:
 - `api.py` — `/api/v1/resources/{id}/health` REST.
 - `errors.py` — `ProbeNotFoundError`, `ProbeTimeoutError`.
 
-Probes at `source/site/automojo/factories/pychestrate/resource_health_probe/`.
+Probes at `source/site/ccai/factories/pychestrate/resource_health_probe/`.
 
 ## Key Flows
 

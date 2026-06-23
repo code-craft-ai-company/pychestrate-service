@@ -201,8 +201,8 @@ path to a loaded extension is under a day.
   `E.protocol_schema_version`.
 - **Generator:** Strategy drawing catalog entries at random and
   a code-walker that enumerates in-tree references from
-  `automojo/factories/pychestrate/...` and
-  `automojo/extensions/pychestrate/...`.
+  `ccai/factories/pychestrate/...` and
+  `ccai/extensions/pychestrate/...`.
 - **Assertion:** Bijection between catalog entries and the
   reference-implementation set (per `name`); no entries with
   missing refs, no refs without catalog entries.

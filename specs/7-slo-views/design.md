@@ -248,9 +248,9 @@ class SLODefinitionExtension(ResourceExtension):
 
 Reference implementations shipped in-tree:
 
-- `source/site/automojo/extensions/pychestrate/slo_definition/availability_ratio.py` — `kind="availability_ratio"`; target = success ratio over a metric pair (`success_total`, `total`).
-- `source/site/automojo/extensions/pychestrate/slo_definition/latency_quantile.py` — `kind="latency_quantile"`; target = fraction of samples below a latency threshold.
-- `source/site/automojo/extensions/pychestrate/slo_definition/threshold_budget.py` — `kind="threshold_budget"`; target = fraction of time a metric stays below a threshold.
+- `source/site/ccai/extensions/pychestrate/slo_definition/availability_ratio.py` — `kind="availability_ratio"`; target = success ratio over a metric pair (`success_total`, `total`).
+- `source/site/ccai/extensions/pychestrate/slo_definition/latency_quantile.py` — `kind="latency_quantile"`; target = fraction of samples below a latency threshold.
+- `source/site/ccai/extensions/pychestrate/slo_definition/threshold_budget.py` — `kind="threshold_budget"`; target = fraction of time a metric stays below a threshold.
 
 ### Events Emitted
 
@@ -266,7 +266,7 @@ Reference implementations shipped in-tree:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/slo/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/slo/`:
 
 - `__init__.py`
 - `service.py` — `SLOService`.
@@ -282,7 +282,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/slo/`:
 - `rest/v1_routes.py` — REST endpoints.
 
 Kind extensions under
-`source/site/automojo/extensions/pychestrate/slo_definition/`.
+`source/site/ccai/extensions/pychestrate/slo_definition/`.
 
 ## Key Flows
 

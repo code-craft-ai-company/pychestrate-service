@@ -54,7 +54,7 @@ REST (Phase 10 via `E-extension-registry-ui`):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/manifest/`.
+`source/site/ccai/pychestrate/webservice/extension/manifest/`.
 
 ```python
 # parser.py
@@ -124,7 +124,7 @@ def get_manifest_registry() -> ManifestRegistry:
 schema_version: 1
 name: pychestrate-ext-s3-object-store
 version: 1.2.0
-author: "AutomationMojo"
+author: "CodeCraftAI"
 homepage: "https://github.com/automationmojo/pychestrate-ext-s3-object-store"
 license: "MIT"
 min_service_version: "1.0.0"
@@ -162,7 +162,7 @@ extension must ship.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/manifest/
+source/site/ccai/pychestrate/webservice/extension/manifest/
     __init__.py
     schema.py              # ExtensionManifest dataclass + constants
     parser.py              # YAML → ExtensionManifest

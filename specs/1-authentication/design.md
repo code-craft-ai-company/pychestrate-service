@@ -3,7 +3,7 @@
 ## Architecture
 
 `1-authentication` lives under
-`source/site/automojo/pychestrate/webservice/security/auth/`. It wires a
+`source/site/ccai/pychestrate/webservice/security/auth/`. It wires a
 WebWorks middleware that resolves every incoming request's session cookie
 to a principal, plus a family of inbound endpoints for each `auth_provider`
 kind (OIDC, SAML, local). The feature declares the `auth_provider` factory
@@ -102,7 +102,7 @@ the first-run wizard is incomplete.
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.security.auth.session_service`:
+Module `ccai.pychestrate.webservice.security.auth.session_service`:
 
 ```python
 def open_session(
@@ -157,7 +157,7 @@ def close_session(*, session_id: UUID) -> None:
     return rtnval
 ```
 
-Module `automojo.pychestrate.webservice.security.auth.oidc_flow`:
+Module `ccai.pychestrate.webservice.security.auth.oidc_flow`:
 
 ```python
 def begin_oidc_login(*, provider_name: str, redirect_target: str) -> OidcRedirect:
@@ -189,7 +189,7 @@ def refresh_oidc_session(*, session_id: UUID) -> AuthSession:
     ...
 ```
 
-Module `automojo.pychestrate.webservice.security.auth.saml_flow`:
+Module `ccai.pychestrate.webservice.security.auth.saml_flow`:
 
 ```python
 def validate_saml_assertion(
@@ -206,7 +206,7 @@ def validate_saml_assertion(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.security.auth.local_flow`:
+Module `ccai.pychestrate.webservice.security.auth.local_flow`:
 
 ```python
 def verify_local_credentials(
@@ -227,7 +227,7 @@ def verify_local_credentials(
 ### Extension Surface
 
 Factory protocol `auth_provider` declared in
-`automojo.pychestrate.webservice.security.auth.factories.auth_provider`:
+`ccai.pychestrate.webservice.security.auth.factories.auth_provider`:
 
 ```python
 class AuthProviderProtocol(FactoryProtocolBase):
@@ -256,7 +256,7 @@ Reference implementations (in-tree):
 `LocalCredentialAuthProvider` (`PRECEDENCE = 1000`).
 
 Resource base `MFAMethodExtension` declared in
-`automojo.pychestrate.webservice.security.auth.extensions.mfa_method`:
+`ccai.pychestrate.webservice.security.auth.extensions.mfa_method`:
 
 ```python
 class MFAMethodExtension(ResourceExtension):
@@ -292,7 +292,7 @@ Reference implementation: `TotpMfaMethod` shipping in-tree.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/security/auth/
+source/site/ccai/pychestrate/webservice/security/auth/
     __init__.py
     middleware.py                     # request-scoped session resolver
     session_service.py

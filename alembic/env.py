@@ -3,7 +3,7 @@
     :platform: Darwin, Linux, Unix, Windows
     :synopsis: Alembic environment for the Pychestrate webservice.
 
-.. moduleauthor:: Automation Mojo LLC
+.. moduleauthor:: Code Craft AI LLC
 
 This module is the configuration entry point alembic invokes for
 ``revision --autogenerate``, ``upgrade``, ``downgrade``, etc.
@@ -51,8 +51,8 @@ Online vs offline
   DBA runs it.
 """
 
-__author__ = "Automation Mojo LLC"
-__copyright__ = "Copyright 2026, Automation Mojo LLC"
+__author__ = "Code Craft AI LLC"
+__copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
@@ -71,7 +71,7 @@ from sqlalchemy import engine_from_config, pool
 #
 # Alembic is invoked from the repo root, so ``source/site``,
 # ``source/packages``, and ``source/service`` need to be on the
-# path before any ``from automojo.pychestrate.webservice...`` line.
+# path before any ``from ccai.pychestrate.webservice...`` line.
 # Mirrors the layout in ``development/run-website.sh``.
 # ---------------------------------------------------------------------------
 
@@ -85,9 +85,9 @@ for _component in ("source/site", "source/packages", "source/service"):
 # Side-effect imports — load every phase's bootstrap module so the
 # noqa-F401 model imports inside them register every in-tree table
 # on PychestratePhase1Base.metadata before alembic walks the diff.
-from automojo.pychestrate.webservice.extensions import bootstrap as _phase1_bootstrap  # noqa: E402, F401
-from automojo.pychestrate.webservice.extensions import phase2_bootstrap as _phase2_bootstrap  # noqa: E402, F401
-from automojo.pychestrate.webservice.extensions import phase3_bootstrap as _phase3_bootstrap  # noqa: E402, F401
+from ccai.pychestrate.webservice.extensions import bootstrap as _phase1_bootstrap  # noqa: E402, F401
+from ccai.pychestrate.webservice.extensions import phase2_bootstrap as _phase2_bootstrap  # noqa: E402, F401
+from ccai.pychestrate.webservice.extensions import phase3_bootstrap as _phase3_bootstrap  # noqa: E402, F401
 
 # Setup-wizard model. Lives outside the phase-bootstrap import
 # chain because it is operator infrastructure (first-run flow)
@@ -95,22 +95,22 @@ from automojo.pychestrate.webservice.extensions import phase3_bootstrap as _phas
 # so ``system_initial_setup`` is on
 # :data:`PychestratePhase1Base.metadata` when alembic autogenerate
 # walks the diff and when ``upgrade head`` reads target_metadata.
-from automojo.pychestrate.webservice.identity.setup import models as _setup_models  # noqa: E402, F401
+from ccai.pychestrate.webservice.identity.setup import models as _setup_models  # noqa: E402, F401
 
 # 10-backup-dr model. Imported explicitly so ``backup_record`` is
 # on :data:`PychestratePhase1Base.metadata` when alembic
 # autogenerate walks the diff and when ``upgrade head`` reads
 # target_metadata. Added by PR p21d.
-from automojo.pychestrate.webservice.backup import models as _backup_models  # noqa: E402, F401
+from ccai.pychestrate.webservice.backup import models as _backup_models  # noqa: E402, F401
 
-from automojo.pychestrate.webservice.persistence.schema import (  # noqa: E402
+from ccai.pychestrate.webservice.persistence.schema import (  # noqa: E402
     PychestratePhase1Base,
 )
 # Importing ``core.orm`` registers the legacy ``user`` /
 # ``password_history`` / ``sessions`` / ``permissions`` /
 # ``system_roles`` / ``global_variables`` (etc.) tables on
 # ``PychestrateModelBase.metadata``. Alembic walks both bases.
-from automojo.pychestrate.core.orm import (  # noqa: E402
+from ccai.pychestrate.core.orm import (  # noqa: E402
     PychestrateModelBase,
 )
 

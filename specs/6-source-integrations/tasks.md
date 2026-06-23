@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/source/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/source/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `scm_project_config`, `scm_webhook_delivery`, `scm_last_seen_head`.
 - [ ] T1.3 — Implement `provider_protocol.py::ScmProviderProtocol` and `parser_extension.py::WebhookPayloadParserExtension`.
-- [ ] T1.4 — Implement `GithubScmProvider` at `source/site/automojo/factories/pychestrate/scm_provider/github.py` with `PRECEDENCE = 500`.
+- [ ] T1.4 — Implement `GithubScmProvider` at `source/site/ccai/factories/pychestrate/scm_provider/github.py` with `PRECEDENCE = 500`.
 - [ ] T1.5 — Implement `service.py::SourceIntegrations.handle_webhook` happy path (verify → dedup → parse → read file → `PipelineService.trigger_run`).
 - [ ] T1.6 — Register `POST /api/v1/webhooks/scm/{project_id}`.
 - [ ] T1.7 — Implement `dedup.py` delivery store with `dedup_window_seconds` TTL.

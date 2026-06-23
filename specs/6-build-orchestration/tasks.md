@@ -10,11 +10,11 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/build/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/build/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `build_run`, `build_toolchain_snapshot`, `build_cache_scope`.
 - [ ] T1.3 — Implement `repro_snapshot.py::ReproSnapshot.compute(...)` with canonical ordering and SHA-256 over file paths + content hashes + toolchain versions + environment fingerprint.
 - [ ] T1.4 — Implement `runner_protocol.py::BuildRunnerKindProtocol`.
-- [ ] T1.5 — Implement `MakefileRunnerKind` at `source/site/automojo/factories/pychestrate/build/makefile.py` with `PRECEDENCE = 1000`.
+- [ ] T1.5 — Implement `MakefileRunnerKind` at `source/site/ccai/factories/pychestrate/build/makefile.py` with `PRECEDENCE = 1000`.
 - [ ] T1.6 — Implement `orchestrator.py::BuildOrchestrator.trigger_run` happy path wiring to `5-job-dispatch` with no cache.
 - [ ] T1.7 — Register `POST /api/v1/projects/{id}/build-runs` and `GET /api/v1/projects/{id}/build-runs/{run_id}`.
 - [ ] T1.8 — Subscribe to `entity.run.state_changed|completed|failed|cancelled` and mirror onto `BuildRun`.
@@ -22,7 +22,7 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Implement `cache_protocol.py::BuildCacheBackendProtocol`.
-- [ ] T2.2 — Implement `FsBuildCacheBackend` at `source/site/automojo/factories/pychestrate/build/fs_cache.py` with `PRECEDENCE = 1000`.
+- [ ] T2.2 — Implement `FsBuildCacheBackend` at `source/site/ccai/factories/pychestrate/build/fs_cache.py` with `PRECEDENCE = 1000`.
 - [ ] T2.3 — Implement `cache_registry.py` and cache-scope allocation path in `trigger_run`.
 - [ ] T2.4 — Implement `PoetryBuildRunnerKind` and `DockerBuildRunnerKind`.
 - [ ] T2.5 — Implement `replay` endpoint `POST /.../build-runs/{id}:replay` with `ReproducibilityError` handling.
@@ -32,7 +32,7 @@
 
 ### M3 — Hardening
 
-- [ ] T3.1 — Implement `S3BuildCacheBackend` at `source/site/automojo/factories/pychestrate/build/s3_cache.py` with `PRECEDENCE = 500`.
+- [ ] T3.1 — Implement `S3BuildCacheBackend` at `source/site/ccai/factories/pychestrate/build/s3_cache.py` with `PRECEDENCE = 500`.
 - [ ] T3.2 — Emit Prometheus metrics and OTel spans per design.md Observability.
 - [ ] T3.3 — Benchmark NFR-1: trigger p99 < 180 ms; state mirror p99 < 25 ms; replay p99 < 350 ms; digest compute p99 < 150 ms at 1 000 inputs / 50 MiB. Fail CI on regression.
 - [ ] T3.4 — Enforce `capability_requirements` mismatch handling with multiline error body.

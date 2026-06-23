@@ -123,7 +123,7 @@ Chromeless Routes
 =================
 
 Chromeless routes are listed in
-``source/site/automojo/pychestrate/webservice/webinterface/site_shell/chromeless_routes.py``.
+``source/site/ccai/pychestrate/webservice/webinterface/site_shell/chromeless_routes.py``.
 The route-registration pipeline rejects any new shell route
 colliding with a chromeless prefix at startup with
 ``ConfigurationError`` (B-3 in ``9-site-shell/tasks.md``).
@@ -199,7 +199,7 @@ Testing Your Bundle Inside the Shell
 Bundle tests are Playwright-driven and run against a real
 deployed instance -- there is no Node-based unit-test harness.
 The browser tests live in
-``source/testroots/automojo/tests/singlehost/pychestrate/``
+``source/testroots/ccai/tests/singlehost/pychestrate/``
 ``webservice/phase11/test_p23a_mj_components_browser_m1.py``
 (and any sibling ``test_p*_browser_*.py`` files for view-
 specific coverage). The conventional pattern:

@@ -1,0 +1,40 @@
+"""
+.. module:: ccai.factories.pychestrate.{{ name | replace("-", "_") }}.sample_factory
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: Sample FactoryProtocolBase implementation for pack '{{ name }}'.
+
+.. moduleauthor:: {% if author %}{{ author }}{% else %}<author>{% endif %}
+
+This stub exists so the generated pack passes manifest registration on
+load. Replace ``RaiseUntilImplementedFactory`` with a real
+implementation matching the contract of the protocol you declared in
+``pychestrate_ext.yaml``.
+"""
+
+__author__ = "{% if author %}{{ author }}{% else %}<author>{% endif %}"
+__copyright__ = "Copyright 2025"
+__credits__ = []
+__version__ = "0.1.0"
+
+
+class RaiseUntilImplementedFactory:
+    """
+        Placeholder implementation. The Layer E host will load this class
+        and refuse to dispatch through it because every classmethod
+        raises :class:`NotImplementedError`. Real packs replace this stub
+        before declaring themselves production-ready.
+    """
+
+    factory_protocol_name: str = "{{ first_protocol_name }}"
+    protocol_schema_version: int = 1
+    PRECEDENCE: int = 1000
+
+    @classmethod
+    def name(cls) -> str:
+        """
+            Identifier the registry uses to address this implementation.
+
+            :returns: Stable string identifier.
+        """
+        rtnval = "{{ name | replace("-", "_") }}_sample_factory"
+        return rtnval

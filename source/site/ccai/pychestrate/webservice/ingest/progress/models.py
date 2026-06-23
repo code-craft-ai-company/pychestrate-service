@@ -1,0 +1,159 @@
+"""
+.. module:: ingest.progress.models
+    :platform: Darwin, Linux, Unix, Windows
+    :synopsis: SQLAlchemy models for the progress receiver.
+
+.. moduleauthor:: Code Craft AI LLC
+
+Three tables capture progress observations:
+
+- ``ingest_run_progress_summary`` — one row per posted summary.
+- ``ingest_run_progress_record`` — one row per individual test
+  record. ``UNIQUE (run_id, record_index)`` so the client
+  re-posting the same record is a no-op.
+- ``ingest_run_progress_counters`` — one rolling-counter row per
+  run; fast path for the live-run-view roll-up.
+"""
+
+__author__ = "Code Craft AI LLC"
+__copyright__ = "Copyright 2026, Code Craft AI LLC"
+__credits__ = []
+__version__ = "1.0.0"
+
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.types import JSON
+from sqlalchemy_utils.types.uuid import UUIDType
+
+from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.orm import SerializableModel
+
+from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
+
+
+class RunProgressSummary(PychestratePhase1Base, SerializableModel):
+    """
+        Snapshot of a forwarded ``ForwardingInfo`` summary.
+    """
+
+    __tablename__ = "ingest_run_progress_summary"
+
+    summary_id = Column(UUIDType(binary=False), primary_key=True)
+    run_id = Column(UUIDType(binary=False), nullable=False)
+    client_id = Column(UUIDType(binary=False), nullable=False)
+    format_tag = Column(String(64), nullable=False, default="")
+    tests_total = Column(Integer, nullable=True)
+    tests_passed = Column(Integer, nullable=False, default=0)
+    tests_failed = Column(Integer, nullable=False, default=0)
+    tests_skipped = Column(Integer, nullable=False, default=0)
+    tests_errored = Column(Integer, nullable=False, default=0)
+    percent_complete = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        Index("ix_ingest_run_progress_summary_run_id", "run_id"),
+        Index("ix_ingest_run_progress_summary_received_at", "received_at"),
+    )
+
+
+class RunProgressRecord(PychestratePhase1Base, SerializableModel):
+    """
+        One persisted record from the testbase results stream.
+    """
+
+    __tablename__ = "ingest_run_progress_record"
+
+    record_id = Column(UUIDType(binary=False), primary_key=True)
+    run_id = Column(UUIDType(binary=False), nullable=False)
+    client_id = Column(UUIDType(binary=False), nullable=False)
+    record_index = Column(Integer, nullable=False)
+    test_name = Column(String(512), nullable=False, default="")
+    result = Column(String(32), nullable=False, default="UNSET")
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "record_index",
+            name="uq_ingest_run_progress_record_run_index",
+        ),
+        Index("ix_ingest_run_progress_record_run_id", "run_id"),
+        Index("ix_ingest_run_progress_record_result", "result"),
+    )
+
+
+class RunProgressFrame(PychestratePhase1Base, SerializableModel):
+    """
+        One generalized progress frame for a ``build`` /
+        ``provision`` run.
+
+        Test runs persist their progress through the test-shaped
+        ``RunProgressSummary`` / ``RunProgressRecord`` tables. Build
+        and provision runs are not test-shaped — a build emits
+        phase transitions + log-line excerpts, a provision run
+        emits plan/apply step transitions — so they land here. The
+        ``(run_id, frame_kind, frame_index)`` triple is unique so a
+        client re-posting the same frame is a no-op.
+    """
+
+    __tablename__ = "ingest_run_progress_frame"
+
+    frame_id = Column(UUIDType(binary=False), primary_key=True)
+    run_id = Column(UUIDType(binary=False), nullable=False)
+    client_id = Column(UUIDType(binary=False), nullable=False)
+    frame_kind = Column(String(32), nullable=False, default="build")
+    frame_index = Column(Integer, nullable=False)
+    phase = Column(String(128), nullable=True)
+    status = Column(String(32), nullable=True)
+    percent_complete = Column(Float, nullable=True)
+    notes = Column(Text, nullable=True)
+    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "run_id", "frame_kind", "frame_index",
+            name="uq_ingest_run_progress_frame_run_kind_index",
+        ),
+        Index("ix_ingest_run_progress_frame_run_id", "run_id"),
+        Index("ix_ingest_run_progress_frame_received_at", "received_at"),
+    )
+
+
+class RunProgressCounters(PychestratePhase1Base, SerializableModel):
+    """
+        Rolling counter row — one per run. Updated whenever a
+        summary lands so live-run-view does not have to aggregate.
+    """
+
+    __tablename__ = "ingest_run_progress_counters"
+
+    run_id = Column(UUIDType(binary=False), primary_key=True)
+    project_id = Column(UUIDType(binary=False), nullable=False)
+    tests_total = Column(Integer, nullable=True)
+    tests_passed = Column(Integer, nullable=False, default=0)
+    tests_failed = Column(Integer, nullable=False, default=0)
+    tests_skipped = Column(Integer, nullable=False, default=0)
+    tests_errored = Column(Integer, nullable=False, default=0)
+    percent_complete = Column(Float, nullable=True)
+    last_summary_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_ingest_run_progress_counters_project_id", "project_id"),
+    )

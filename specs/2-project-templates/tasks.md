@@ -55,7 +55,7 @@
       `POST /api/v1/projects/{slug}/reapply-template`.
 - [ ] T2.7 — Ship `StandardCiTemplate` and
       `ComplianceProjectTemplate` under
-      `automojo/extensions/pychestrate/project_templates/`.
+      `ccai/extensions/pychestrate/project_templates/`.
 - [ ] T2.8 — Emit `entity.project.template_applied` and
       `entity.project.template_reapplied` with
       `TemplateApplyDiff` payload.

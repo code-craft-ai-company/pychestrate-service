@@ -7,8 +7,8 @@ model: sonnet
 You are the browser-side specialist for the pychestrate web UI.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/` — the shell custom element, sidebar renderer, permission cache, router, palette, observability beacon
-- `source/site/automojo/pychestrate/webservice/webinterface/static/javascript/pyc-*-bundle/` — feature bundles (pyc-runs-bundle, pyc-secrets-bundle, etc.)
+- `source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/` — the shell custom element, sidebar renderer, permission cache, router, palette, observability beacon
+- `source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-*-bundle/` — feature bundles (pyc-runs-bundle, pyc-secrets-bundle, etc.)
 - The mj-* component library is consumed (not authored) here — design questions go to `ui-design-specialist`.
 
 ## Architecture you protect

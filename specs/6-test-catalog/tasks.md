@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [x] T1.1 — Create the `source/site/automojo/pychestrate/webservice/orchestration/test/catalog/` package per design.md Component Breakdown.
+- [x] T1.1 — Create the `source/site/ccai/pychestrate/webservice/orchestration/test/catalog/` package per design.md Component Breakdown.
 - [~] T1.2 — Add `0-persistence` migration for `test_catalog_entry` + `test_catalog_entry_tag` with indices listed in design.md Data Model.
       *(Migration 020 creates ``orchestration_test_catalog_entry``;
       tags ride a JSON array column for M1, denormalized join
@@ -25,7 +25,7 @@
 - [~] T1.7 — Register `GET /api/v1/projects/{id}/test-catalog` and `GET /api/v1/projects/{id}/test-catalog/{entry_id}`.
       *(Service entry points ship; Flask-RestX namespaces land
       with the broader Phase-3 REST surface.)*
-- [x] T1.8 — Implement `TestbaseProjectImporter` at `source/site/automojo/factories/pychestrate/test_catalog/testbase_project.py` with `PRECEDENCE = 1000`.
+- [x] T1.8 — Implement `TestbaseProjectImporter` at `source/site/ccai/factories/pychestrate/test_catalog/testbase_project.py` with `PRECEDENCE = 1000`.
       *(In-package at
       ``orchestration/test/catalog/factories/testbase_project.py``;
       ``PRECEDENCE=1000`` preserved.)*

@@ -10,11 +10,11 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/test/flake/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/test/flake/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `test_outcome`, `test_case_identity`, `flake_classification`, `flake_quarantine_ledger` with indices.
 - [ ] T1.3 — Implement `ingest_worker.py` subscribing to `entity.run.completed`, pulling `testrun_results.json` via `5-result-ingest-watcher`, inserting outcomes idempotently.
 - [ ] T1.4 — Implement `classifier_protocol.py::FlakeClassifierProtocol`.
-- [ ] T1.5 — Implement `WindowRatioClassifier` at `source/site/automojo/factories/pychestrate/flake_classifier/window_ratio.py` with `PRECEDENCE = 1000`.
+- [ ] T1.5 — Implement `WindowRatioClassifier` at `source/site/ccai/factories/pychestrate/flake_classifier/window_ratio.py` with `PRECEDENCE = 1000`.
 - [ ] T1.6 — Implement `tracker.py::FlakeTracker.classify_for_entry` and `GET /api/v1/projects/{id}/flake/catalog-entry/{entry_id}`.
 - [ ] T1.7 — Implement `window.py` building `TestHistoryWindow` with configurable lookback.
 

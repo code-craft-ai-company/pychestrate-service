@@ -46,7 +46,7 @@ REST (Phase 10 via `E-extension-registry-ui`):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/resources/`.
+`source/site/ccai/pychestrate/webservice/extension/resources/`.
 
 ```python
 # catalog.py
@@ -99,7 +99,7 @@ def collect_resource_extensions_under_module(*, module_name: str,
 Every base declaration module under `resources/_declarations/` follows:
 
 ```python
-from automojo.extension.resource.resourceextension import ResourceExtension
+from ccai.extension.resource.resourceextension import ResourceExtension
 
 
 class PodMemberKindExtension(ResourceExtension):
@@ -138,11 +138,11 @@ full list. Consumer subclasses live in extension packs.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/resources/
+source/site/ccai/pychestrate/webservice/extension/resources/
     __init__.py
     catalog.py             # ResourceExtensionCatalog + singleton accessor
     entry.py               # Dataclasses
-    scanner.py             # Reuses automojo-extension helpers with
+    scanner.py             # Reuses codecraftai-extension helpers with
                            # Pychestrate filters
     admin_routes.py        # GET /admin/extensions/resources
     _declarations/         # Per-base declaration modules

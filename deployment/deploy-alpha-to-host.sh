@@ -26,8 +26,8 @@
 #      interactively.  Skipped under ``--skip-system-setup``;
 #      replaced with a prerequisite probe.
 #   3. Configure git credentials on the remote so the nine private
-#      ``automojo-*`` git-source deps can be cloned (uses
-#      ``AUTOMOJO_REPO_TOKEN`` from the local env or repo-root
+#      ``codecraftai-*`` git-source deps can be cloned (uses
+#      ``CODECRAFTAI_REPO_TOKEN`` from the local env or repo-root
 #      ``.env`` -- the same mechanism as CI).
 #   4. ``repository-setup/rehome-repository``        -- generates
 #      ``.env`` with PYTHONPATH composition.
@@ -55,7 +55,7 @@
 #
 # Usage:
 #
-#   AUTOMOJO_REPO_TOKEN=ghp_xxx \
+#   CODECRAFTAI_REPO_TOKEN=ghp_xxx \
 #       deployment/deploy-alpha-to-host.sh \
 #           [--host=tc-app-server.local] \
 #           [--user=myron] \
@@ -126,7 +126,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Source repo-root .env (if present)
 #
 # Pulls in any operator-set environment variables -- most notably
-# ``AUTOMOJO_REPO_TOKEN`` -- so the operator does not have to
+# ``CODECRAFTAI_REPO_TOKEN`` -- so the operator does not have to
 # ``export`` them on every invocation.  ``.env`` is gitignored;
 # the rehome-repository script generates a base file that the
 # operator extends.  Already-set environment variables (e.g.
@@ -184,19 +184,19 @@ echo "  app port     : ${REMOTE_PORT}  (gunicorn / dev-up, loopback only)"
 echo "================================================================"
 echo
 
-if [ -z "${AUTOMOJO_REPO_TOKEN:-}" ]; then
+if [ -z "${CODECRAFTAI_REPO_TOKEN:-}" ]; then
     cat >&2 <<EOF
-ERROR: AUTOMOJO_REPO_TOKEN is not set.
+ERROR: CODECRAFTAI_REPO_TOKEN is not set.
 
 The deploy installs nine private git-source dependencies under the
 'automationmojo' GitHub org.  Without a Personal Access Token, the
 remote's 'poetry install' step will fail.
 
 Set the same fine-grained PAT you configured for CI as
-AUTOMOJO_REPO_TOKEN before re-running.  Required scope on the
+CODECRAFTAI_REPO_TOKEN before re-running.  Required scope on the
 'automationmojo' org: Contents -- Read.
 
-  export AUTOMOJO_REPO_TOKEN=ghp_xxx
+  export CODECRAFTAI_REPO_TOKEN=ghp_xxx
   deployment/deploy-alpha-to-host.sh
 EOF
     exit 2
@@ -355,12 +355,12 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# Step 3 -- git URL rewrite for private automojo-* repos
+# Step 3 -- git URL rewrite for private codecraftai-* repos
 # ---------------------------------------------------------------------------
 
-echo "==> Step 3/8: configure git insteadOf for private automojo-* deps"
+echo "==> Step 3/8: configure git insteadOf for private codecraftai-* deps"
 ssh "${REMOTE_TARGET}" \
-    "git config --global url.\"https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
+    "git config --global url.\"https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
 echo "    OK"
 echo
 
@@ -475,7 +475,7 @@ EOF
 
 # Derive the client-certificate Common Name from the verified
 # subject DN. Stock nginx exposes \$ssl_client_s_dn (RFC2253
-# format, e.g. ``CN=worker1,O=automojo``) but has no built-in
+# format, e.g. ``CN=worker1,O=codecraftai``) but has no built-in
 # CN accessor -- this map extracts it so the orchestration-ingest
 # location blocks can forward it as the SSL_CLIENT_S_DN_CN header.
 map \$ssl_client_s_dn \$ssl_client_s_dn_cn {

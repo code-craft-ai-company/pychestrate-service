@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/manifest/`.
+  `source/site/ccai/pychestrate/webservice/extension/manifest/`.
 - [ ] T1.2 — Implement `ExtensionManifest` dataclass in `schema.py`
   with the required fields only (`name`, `version`, `schema_version`).
 - [ ] T1.3 — Implement `find_manifest_for_distribution` via

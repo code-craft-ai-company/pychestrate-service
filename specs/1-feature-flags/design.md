@@ -3,7 +3,7 @@
 ## Architecture
 
 `1-feature-flags` lives under
-`source/site/automojo/pychestrate/webservice/identity/flags/`. Its public
+`source/site/ccai/pychestrate/webservice/identity/flags/`. Its public
 surface is one hot-path function — `flag_evaluator.evaluate_flag` — and
 a small REST surface for lifecycle operations. The authoritative store
 is a pair of tables in `0-persistence` (`feature_flags` +
@@ -79,7 +79,7 @@ REST routes:
 
 ### Internal API
 
-Module `automojo.pychestrate.webservice.identity.flags.flag_evaluator`:
+Module `ccai.pychestrate.webservice.identity.flags.flag_evaluator`:
 
 ```python
 @dataclass(frozen=True)
@@ -121,7 +121,7 @@ def evaluate_boolean(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.identity.flags.flag_service`:
+Module `ccai.pychestrate.webservice.identity.flags.flag_service`:
 
 ```python
 def create_flag(
@@ -166,7 +166,7 @@ def retire_flag(
     ...
 ```
 
-Module `automojo.pychestrate.webservice.identity.flags.backend_router`:
+Module `ccai.pychestrate.webservice.identity.flags.backend_router`:
 
 ```python
 def resolve_backend(*, flag_key: str) -> FeatureFlagBackendProtocol:
@@ -179,7 +179,7 @@ def resolve_backend(*, flag_key: str) -> FeatureFlagBackendProtocol:
 ### Extension Surface
 
 Factory protocol `feature_flag_backend` declared in
-`automojo.pychestrate.webservice.identity.flags.factories.feature_flag_backend`:
+`ccai.pychestrate.webservice.identity.flags.factories.feature_flag_backend`:
 
 ```python
 class FeatureFlagBackendProtocol(FactoryProtocolBase):
@@ -236,7 +236,7 @@ Reference implementation: `LocalDatabaseFeatureFlagBackend` at
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/identity/flags/
+source/site/ccai/pychestrate/webservice/identity/flags/
     __init__.py
     flag_evaluator.py             # evaluate_flag, evaluate_boolean
     flag_service.py               # create, update, retire

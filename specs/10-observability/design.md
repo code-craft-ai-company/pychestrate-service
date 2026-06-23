@@ -3,7 +3,7 @@
 ## Architecture
 
 `10-observability` lives under
-`source/site/automojo/pychestrate/webservice/ops/observability/`. It is
+`source/site/ccai/pychestrate/webservice/ops/observability/`. It is
 wired into the Phase 0 boot sequence so every subsequent feature emits
 through it. Internally it owns (1) a `TraceContextManager` — the
 singleton that holds the current trace via a `contextvars.ContextVar`,
@@ -84,7 +84,7 @@ CLI:
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.ops.observability.trace_context`:
+`ccai.pychestrate.webservice.ops.observability.trace_context`:
 
 ```python
 @dataclass(frozen=True)
@@ -182,7 +182,7 @@ def inject_traceparent(
 ```
 
 Module
-`automojo.pychestrate.webservice.ops.observability.structured_logger`:
+`ccai.pychestrate.webservice.ops.observability.structured_logger`:
 
 ```python
 def emit(
@@ -215,7 +215,7 @@ def redact_attributes(
 ```
 
 Module
-`automojo.pychestrate.webservice.ops.observability.span_processor`:
+`ccai.pychestrate.webservice.ops.observability.span_processor`:
 
 ```python
 def enqueue_span(
@@ -258,7 +258,7 @@ def set_active_exporter(
 ### Extension Surface
 
 Factory protocol `trace_exporter` declared in
-`automojo.pychestrate.webservice.ops.observability.factories.trace_exporter`:
+`ccai.pychestrate.webservice.ops.observability.factories.trace_exporter`:
 
 ```python
 class TraceExporterProtocol(FactoryProtocolBase):
@@ -329,7 +329,7 @@ Reference implementations:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/ops/observability/
+source/site/ccai/pychestrate/webservice/ops/observability/
     __init__.py
     boot.py                         # Phase 0 boot wiring
     trace_context.py                # TraceContext, start/close span, traceparent

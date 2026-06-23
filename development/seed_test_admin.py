@@ -210,11 +210,11 @@ def _establish_persona_if_needed() -> None:
 
         :returns: None.
     """
-    from automojo.webworks.webapplication import (
+    from ccai.webworks.webapplication import (
         establish_webapp_persona,
         PersonaAlreadyEstablishedError,
     )
-    from automojo.pychestrate.webservice.pychestrate_presence import (
+    from ccai.pychestrate.webservice.pychestrate_presence import (
         resolve_presence_dir,
     )
 
@@ -242,7 +242,7 @@ def _bootstrap_runtime() -> None:
 
         :returns: None.
     """
-    from automojo.pychestrate.webservice.runtime_bootstrap import (
+    from ccai.pychestrate.webservice.runtime_bootstrap import (
         load_config_from_environment,
         bootstrap_runtime,
     )
@@ -262,7 +262,7 @@ def _get_session_factory() -> object:
 
         :raises RuntimeError: If the factory was not published.
     """
-    from automojo.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
+    from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
 
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     if session_factory is None:
@@ -284,7 +284,7 @@ def _reset_login_backoff() -> None:
 
         :returns: None.
     """
-    from automojo.pychestrate.webservice.security.auth import local_flow
+    from ccai.pychestrate.webservice.security.auth import local_flow
 
     reset_helper = getattr(local_flow, "reset_backoff_for_testing", None)
     if reset_helper is not None:
@@ -311,7 +311,7 @@ def _upsert_admin(*, options: SeedAdminOptions) -> SeedAdminResult:
 
         :raises RuntimeError: If the database write fails.
     """
-    from automojo.pychestrate.webservice.identity.setup.testadmin_seeder import (
+    from ccai.pychestrate.webservice.identity.setup.testadmin_seeder import (
         seed_or_reset_test_admin,
     )
 

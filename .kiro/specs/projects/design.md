@@ -17,13 +17,13 @@ The module consists of the following primary components:
 
 The following components from existing modules will be leveraged:
 
-### Core Package (`source/packages/automojo/pychestrate/core/`)
+### Core Package (`source/packages/ccai/pychestrate/core/`)
 - **orm.py**: Contains base models, User, Role, Permission models
 - **managers/**: UserManager, SecurityManager, AuditLogger, ResourceManager
 - **dbconnection.py**: PostgreSQL connection factory
 - **dbio.py**: Database helper functions
 
-### Web Service (`source/site/automojo/pychestrate/webservice/`)
+### Web Service (`source/site/ccai/pychestrate/webservice/`)
 - **restapi/versions/v1/config/**: REST API patterns and authentication decorators
 - **restapi/versions/v1/resources/**: Resource management API patterns
 - **webinterface/blueprints/**: Web interface patterns with Vue.js/Bootstrap
@@ -1687,7 +1687,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Foreign
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
-from automojo.pychestrate.core.orm import PychestrateModelBase
+from ccai.pychestrate.core.orm import PychestrateModelBase
 
 # Association table for project-resource assignments
 project_resources = Table(

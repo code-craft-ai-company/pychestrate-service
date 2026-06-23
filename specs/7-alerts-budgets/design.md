@@ -226,9 +226,9 @@ class AlertRuleKindExtension(ResourceExtension):
 
 Reference implementations shipped in-tree:
 
-- `source/site/automojo/extensions/pychestrate/alert_rule_kind/threshold.py` — `kind="threshold"`.
-- `source/site/automojo/extensions/pychestrate/alert_rule_kind/rate_of_change.py` — `kind="rate_of_change"`.
-- `source/site/automojo/extensions/pychestrate/alert_rule_kind/absence.py` — `kind="absence"`.
+- `source/site/ccai/extensions/pychestrate/alert_rule_kind/threshold.py` — `kind="threshold"`.
+- `source/site/ccai/extensions/pychestrate/alert_rule_kind/rate_of_change.py` — `kind="rate_of_change"`.
+- `source/site/ccai/extensions/pychestrate/alert_rule_kind/absence.py` — `kind="absence"`.
 
 (`7-slo-views` ships its own `kind="slo_burn_rate"` subclass against this surface.)
 
@@ -246,7 +246,7 @@ Reference implementations shipped in-tree:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/alerts/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/alerts/`:
 
 - `__init__.py`
 - `service.py` — `AlertRuleService`.
@@ -262,7 +262,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/alerts/`:
 - `rest/v1_routes.py` — REST endpoints.
 
 Kind extensions under
-`source/site/automojo/extensions/pychestrate/alert_rule_kind/`.
+`source/site/ccai/extensions/pychestrate/alert_rule_kind/`.
 
 ## Key Flows
 

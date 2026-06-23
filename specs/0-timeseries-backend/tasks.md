@@ -17,12 +17,12 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/timeseries/` package skeleton per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/timeseries/` package skeleton per design.md.
 - [ ] T1.2 — Implement `timeseries/config.py::TimeseriesConfig` and `DriverConfig`.
 - [ ] T1.3 — Implement `timeseries/metric_registry.py::MetricRegistry`, `MetricDefinition` (counter, gauge, histogram kinds).
 - [ ] T1.4 — Implement `timeseries/driver_base.py::TimeseriesDriver` abstract class.
 - [ ] T1.5 — Implement `timeseries/facade.py::TimeseriesFacade.write_counter` and `write_gauge` with definition lookup + basic label validation.
-- [ ] T1.6 — Implement `NativePgTimeseriesDriver` at `source/site/automojo/factories/pychestrate/timeseries/native_pg.py` (`PRECEDENCE = 1000`) writing to partitioned `core.ts_samples`.
+- [ ] T1.6 — Implement `NativePgTimeseriesDriver` at `source/site/ccai/factories/pychestrate/timeseries/native_pg.py` (`PRECEDENCE = 1000`) writing to partitioned `core.ts_samples`.
 - [ ] T1.7 — Add core migrations for `core.ts_samples` (monthly partitioned by `observed_at`) via `0-persistence`.
 - [ ] T1.8 — Register `timeseries_startup_hook` at priority `35` and `timeseries_shutdown_hook` on the web app.
 

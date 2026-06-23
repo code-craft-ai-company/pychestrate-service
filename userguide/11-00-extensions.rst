@@ -78,7 +78,7 @@ matching the convention ``pychestrate-ext-<name>``. A minimal layout:
             argon2id_hasher.py
             register.py
 
-The package does not need to live under ``automojo/factories/...`` — the
+The package does not need to live under ``ccai/factories/...`` — the
 in-process registry is explicit, not filesystem-scanning. The on-disk scanner
 mentioned in the ``E-extension-host`` spec arrives in a later milestone; today
 operators call ``register.register()`` explicitly during service bootstrap.
@@ -93,13 +93,13 @@ Factory protocol implementation
 To contribute an implementation of an existing factory protocol:
 
 1. **Find the protocol class.** It lives next to the feature that owns it
-   under ``source/site/automojo/pychestrate/webservice/.../factories/``. The
+   under ``source/site/ccai/pychestrate/webservice/.../factories/``. The
    protocol declares ``factory_protocol_name``, ``protocol_schema_version``,
    and the classmethods implementations must provide.
 2. **Subclass it.** Set ``PRECEDENCE`` to a value lower than the in-tree
    reference. Implement every classmethod listed on the base.
 3. **Register it.** Call
-   :func:`automojo.pychestrate.webservice.extensions.registry.register_factory_implementation`
+   :func:`ccai.pychestrate.webservice.extensions.registry.register_factory_implementation`
    once at service startup, before the first consumer reads from the registry.
 
 Resource extension contribution
@@ -108,13 +108,13 @@ Resource extension contribution
 To add a new kind of thing:
 
 1. **Find the base class.** It lives next to the feature that owns it under
-   ``source/site/automojo/pychestrate/webservice/.../extensions/``. Each base
+   ``source/site/ccai/pychestrate/webservice/.../extensions/``. Each base
    declares the class attributes implementations must set (``permission_keys``,
    ``kind``, ``source_topic``, …).
 2. **Subclass it.** Set every class attribute the base declares. Do not set
    ``PRECEDENCE`` — resource extensions are not ordered.
 3. **Register it.** Call
-   :func:`automojo.pychestrate.webservice.extensions.registry.register_resource_extension`
+   :func:`ccai.pychestrate.webservice.extensions.registry.register_resource_extension`
    once at startup with both the base class and your subclass.
 
 Registering multiple extensions at once
@@ -125,7 +125,7 @@ The convention is a single ``register()`` function exported from the pack's
 
 .. code-block:: python
 
-    from automojo.pychestrate.webservice.extensions.registry import (
+    from ccai.pychestrate.webservice.extensions.registry import (
         register_factory_implementation,
     )
     from .argon2id_hasher import Argon2idPasswordHasher
@@ -138,7 +138,7 @@ Confirm the extension is active
 -------------------------------
 
 Call
-:func:`automojo.pychestrate.webservice.extensions.registry.list_factory_implementations`
+:func:`ccai.pychestrate.webservice.extensions.registry.list_factory_implementations`
 after bootstrap and assert your class is in the returned tuple. The tuple is
 sorted ascending by ``PRECEDENCE`` so the winning implementation for new
 resolutions is always ``result[0]``.
@@ -203,8 +203,8 @@ Step 2 — Implement the hasher
     from argon2 import PasswordHasher
     from argon2.exceptions import VerificationError, VerifyMismatchError
 
-    from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
-    from automojo.pychestrate.webservice.security.auth.factories.password_hasher import (
+    from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+    from ccai.pychestrate.webservice.security.auth.factories.password_hasher import (
         EncodedHash,
         PasswordHasherProtocol,
     )
@@ -322,7 +322,7 @@ Step 3 — Expose a register() entry point
         Argon2id password hasher extension for Pychestrate.
     """
 
-    from automojo.pychestrate.webservice.extensions.registry import (
+    from ccai.pychestrate.webservice.extensions.registry import (
         register_factory_implementation,
     )
 
@@ -358,11 +358,11 @@ register and before the first request. If the service uses
 
 .. code-block:: python
 
-    from automojo.pychestrate.webservice.extensions.bootstrap import (
+    from ccai.pychestrate.webservice.extensions.bootstrap import (
         Phase1BootstrapConfig,
         bootstrap_phase1_runtime,
     )
-    from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+    from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 
     import pychestrate_ext_auth_argon2id
 
@@ -387,7 +387,7 @@ At a REPL or in a startup diagnostic:
 
 .. code-block:: python
 
-    from automojo.pychestrate.webservice.extensions.registry import (
+    from ccai.pychestrate.webservice.extensions.registry import (
         list_factory_implementations,
     )
 
@@ -412,7 +412,7 @@ In the service process:
 
 .. code-block:: python
 
-    from automojo.pychestrate.webservice.security.auth.local_flow import hash_password
+    from ccai.pychestrate.webservice.security.auth.local_flow import hash_password
 
     encoded_bytes, algo_params = hash_password(password="correct horse battery staple")
     print(algo_params["algorithm"])
@@ -485,9 +485,9 @@ Argon2id hasher extension looks like:
 
 .. code-block:: python
 
-    from automojo import testbase
+    from ccai import testbase
 
-    from automojo.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+    from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 
     from pychestrate_ext_auth_argon2id.argon2id_hasher import Argon2idPasswordHasher
 
@@ -525,12 +525,12 @@ at a non-default ``PRECEDENCE`` and asserts the resolver picks it up:
 
 .. code-block:: python
 
-    from automojo.pychestrate.webservice.extensions.registry import (
+    from ccai.pychestrate.webservice.extensions.registry import (
         register_factory_implementation,
         reset_registry_for_testing,
         unregister_factory_implementation,
     )
-    from automojo.pychestrate.webservice.security.auth.factories.password_hasher import (
+    from ccai.pychestrate.webservice.security.auth.factories.password_hasher import (
         resolve_hasher_for_hashing,
     )
 
@@ -546,7 +546,7 @@ at a non-default ``PRECEDENCE`` and asserts the resolver picks it up:
         reset_registry_for_testing()
 
         # Imitate the in-tree registration.
-        from automojo.pychestrate.webservice.security.auth import (
+        from ccai.pychestrate.webservice.security.auth import (
             register_builtin_extensions,
         )
         register_builtin_extensions()
@@ -601,7 +601,7 @@ pack must be registered explicitly in the service bootstrap code.
 
 **Tests interact with each other through global registry state.**
 
-Use :func:`automojo.pychestrate.webservice.extensions.registry.reset_registry_for_testing`
+Use :func:`ccai.pychestrate.webservice.extensions.registry.reset_registry_for_testing`
 at the top of each test, then call the specific extension's ``register()``
 within the test. Most Phase-1 testbase fixtures already do this through the
 ``reset_phase1_runtime()`` helper.

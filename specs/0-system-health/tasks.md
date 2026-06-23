@@ -16,13 +16,13 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/system_health/` package skeleton per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/system_health/` package skeleton per design.md.
 - [ ] T1.2 — Implement `system_health/config.py::HealthConfig` (probe_worker_count=4, detailed-permission name).
 - [ ] T1.3 — Implement `system_health/registry.py` with `ProbeRecord`, `ProbeKind`, `ProbeResult`, `HealthSnapshot`, and duplicate-name `SemanticError`.
 - [ ] T1.4 — Implement `system_health/scheduler.py` with a dedicated `ThreadPoolExecutor(max_workers=4)`, per-probe interval scheduling, and timeout enforcement via `future.result(timeout=...)`.
 - [ ] T1.5 — Implement `system_health/endpoints.py` with `/__health/live`, `/__health/ready`, `/__health/detailed` handlers reading from `HealthSnapshot`.
 - [ ] T1.6 — Implement `system_health/hooks.py` startup hook priority `50` that unregisters the `0-web-app-host` stubs and registers the real handlers plus the built-in `PostgresHealthProbe`.
-- [ ] T1.7 — Implement `PostgresHealthProbe` at `source/site/automojo/extensions/pychestrate/system_health/postgres.py` (liveness, interval 10s, timeout 2s).
+- [ ] T1.7 — Implement `PostgresHealthProbe` at `source/site/ccai/extensions/pychestrate/system_health/postgres.py` (liveness, interval 10s, timeout 2s).
 - [ ] T1.8 — Wire readiness `503 {"status":"starting"}` while the host's startup hooks have not all completed.
 
 ### M2 — Core Behavior
@@ -62,7 +62,7 @@
 - [ ] Extension surface (if any) has at least one in-tree reference
       implementation and one test-only override using a different `PRECEDENCE`
       (Resource extensions have no PRECEDENCE — the test uses a different
-      `name` instead, per `automojo-extension` resource semantics.)
+      `name` instead, per `codecraftai-extension` resource semantics.)
 - [ ] Metrics / logs / traces emitted per requirements.md NFR-3
 - [ ] Sphinx docs generated for public and internal APIs
 - [ ] Code conforms to AGENTS.md coding standards (no mutable defaults,

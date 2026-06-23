@@ -3,233 +3,233 @@ import os
 
 from typing import Any
 
-from automojo.pychestrate.webservice.extensions.bootstrap import (
+from ccai.pychestrate.webservice.extensions.bootstrap import (
     register_phase1_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.phase2_bootstrap import (
+from ccai.pychestrate.webservice.extensions.phase2_bootstrap import (
     register_phase2_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.phase3_bootstrap import (
+from ccai.pychestrate.webservice.extensions.phase3_bootstrap import (
     register_phase3_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.phase4_bootstrap import (
+from ccai.pychestrate.webservice.extensions.phase4_bootstrap import (
     register_phase4_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.phase5_bootstrap import (
+from ccai.pychestrate.webservice.extensions.phase5_bootstrap import (
     register_phase5_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.phase6_bootstrap import (
+from ccai.pychestrate.webservice.extensions.phase6_bootstrap import (
     register_phase6_builtin_extensions,
 )
-from automojo.pychestrate.webservice.extensions.ext_router import (
+from ccai.pychestrate.webservice.extensions.ext_router import (
     mount_extension_routes,
 )
-from automojo.pychestrate.webservice.agents.restapi.v1.agents_routes import (
+from ccai.pychestrate.webservice.agents.restapi.v1.agents_routes import (
     register_agents_routes,
 )
-from automojo.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes import (
+from ccai.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes import (
     register_client_dispatch_routes,
 )
-from automojo.pychestrate.webservice.audit.restapi.v1.audit_routes import (
+from ccai.pychestrate.webservice.audit.restapi.v1.audit_routes import (
     register_audit_routes,
 )
-from automojo.pychestrate.webservice.clients.restapi.v1.clients_routes import (
+from ccai.pychestrate.webservice.clients.restapi.v1.clients_routes import (
     register_clients_routes,
 )
-from automojo.pychestrate.webservice.clients.restapi.v1.enrollment_routes import (
+from ccai.pychestrate.webservice.clients.restapi.v1.enrollment_routes import (
     register_enrollment_routes,
 )
-from automojo.pychestrate.webservice.identity.flags.restapi.v1.flags_routes import (
+from ccai.pychestrate.webservice.identity.flags.restapi.v1.flags_routes import (
     register_flags_routes,
 )
-from automojo.pychestrate.webservice.identity.users.restapi.v1.users_routes import (
+from ccai.pychestrate.webservice.identity.users.restapi.v1.users_routes import (
     register_users_routes,
 )
-from automojo.pychestrate.webservice.middleware_setup_gate import (
+from ccai.pychestrate.webservice.middleware_setup_gate import (
     install_pychestrate_setup_gate_middleware,
 )
-from automojo.pychestrate.webservice.middleware_webworks import (
+from ccai.pychestrate.webservice.middleware_webworks import (
     install_pychestrate_session_middleware,
 )
-from automojo.pychestrate.webservice.notifications.restapi.v1.channels_routes import (
+from ccai.pychestrate.webservice.notifications.restapi.v1.channels_routes import (
     register_channels_routes,
 )
-from automojo.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
+from ccai.pychestrate.webservice.plugin_api.restapi.v1.catalog_routes import (
     register_catalog_routes,
 )
-from automojo.pychestrate.webservice.embed.restapi.v1.embed_routes import (
+from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
     register_embed_routes,
 )
-from automojo.pychestrate.webservice.system.restapi.v1.system_health_routes import (
+from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     register_system_health_routes,
 )
-from automojo.pychestrate.webservice.mcp.service_endpoint import (
+from ccai.pychestrate.webservice.mcp.service_endpoint import (
     MCP_MIDDLEWARE_PREFIX,
     register_mcp_service_routes,
 )
-from automojo.pychestrate.webservice.pods.restapi.v1.pods_routes import (
+from ccai.pychestrate.webservice.pods.restapi.v1.pods_routes import (
     register_pods_routes,
 )
-from automojo.pychestrate.webservice.projects.restapi.v1.projects_routes import (
+from ccai.pychestrate.webservice.projects.restapi.v1.projects_routes import (
     register_projects_routes,
 )
-from automojo.pychestrate.webservice.projects.restapi.v1.release_templates_routes import (
+from ccai.pychestrate.webservice.projects.restapi.v1.release_templates_routes import (
     register_release_templates_routes,
 )
-from automojo.pychestrate.webservice.plugin_api.runtime import (
+from ccai.pychestrate.webservice.plugin_api.runtime import (
     build_and_validate_catalog as build_and_validate_plugin_api_catalog,
 )
-from automojo.pychestrate.webservice.retention.restapi.v1.retention_routes import (
+from ccai.pychestrate.webservice.retention.restapi.v1.retention_routes import (
     register_retention_routes,
 )
-from automojo.pychestrate.webservice.identity.setup.setup_service import (
+from ccai.pychestrate.webservice.identity.setup.setup_service import (
     bootstrap_setup_state,
     is_setup_complete as _is_setup_complete,
 )
-from automojo.pychestrate.webservice.runtime_bootstrap import (
+from ccai.pychestrate.webservice.runtime_bootstrap import (
     bootstrap_runtime,
     load_config_from_environment,
 )
-from automojo.pychestrate.webservice.project_templates.restapi.v1.templates_routes import (
+from ccai.pychestrate.webservice.project_templates.restapi.v1.templates_routes import (
     register_templates_routes,
 )
-from automojo.pychestrate.webservice.secrets.restapi.v1.secrets_routes import (
+from ccai.pychestrate.webservice.secrets.restapi.v1.secrets_routes import (
     register_secrets_routes,
 )
-from automojo.pychestrate.webservice.tagging.restapi.v1.tags_routes import (
+from ccai.pychestrate.webservice.tagging.restapi.v1.tags_routes import (
     register_tags_routes,
 )
-from automojo.pychestrate.webservice.variables.restapi.v1.variables_routes import (
+from ccai.pychestrate.webservice.variables.restapi.v1.variables_routes import (
     register_variables_routes,
 )
-from automojo.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
+from ccai.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
     register_auth_routes,
 )
-from automojo.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
+from ccai.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
     register_me_routes,
 )
-from automojo.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
+from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
 )
-from automojo.pychestrate.webservice.metrics.restapi.v1.metrics_routes import (
+from ccai.pychestrate.webservice.metrics.restapi.v1.metrics_routes import (
     register_metrics_routes,
 )
-from automojo.pychestrate.webservice.metrics.restapi.v1.dashboards_routes import (
+from ccai.pychestrate.webservice.metrics.restapi.v1.dashboards_routes import (
     register_dashboards_routes,
 )
-from automojo.pychestrate.webservice.metrics.restapi.v1.metric_alerts_routes import (
+from ccai.pychestrate.webservice.metrics.restapi.v1.metric_alerts_routes import (
     register_metric_alerts_routes,
 )
-from automojo.pychestrate.webservice.runs.restapi.v1.runs_routes import (
+from ccai.pychestrate.webservice.runs.restapi.v1.runs_routes import (
     register_runs_routes,
 )
-from automojo.pychestrate.webservice.jobs.envelope.restapi.v1.signing_keys_routes import (
+from ccai.pychestrate.webservice.jobs.envelope.restapi.v1.signing_keys_routes import (
     register_signing_keys_routes,
 )
-from automojo.pychestrate.webservice.jobs.envelope.startup import (
+from ccai.pychestrate.webservice.jobs.envelope.startup import (
     install_envelope_signer_from_environment,
 )
-from automojo.pychestrate.webservice.runs.restapi.v1.runs_events_routes import (
+from ccai.pychestrate.webservice.runs.restapi.v1.runs_events_routes import (
     register_runs_events_routes,
 )
-from automojo.pychestrate.webservice.runs.restapi.v1.artifacts_routes import (
+from ccai.pychestrate.webservice.runs.restapi.v1.artifacts_routes import (
     register_artifacts_routes,
 )
-from automojo.pychestrate.webservice.orchestration.test.restapi.v1.test_catalog_routes import (
+from ccai.pychestrate.webservice.orchestration.test.restapi.v1.test_catalog_routes import (
     register_test_catalog_routes,
 )
-from automojo.pychestrate.webservice.orchestration.test.restapi.v1.test_runs_routes import (
+from ccai.pychestrate.webservice.orchestration.test.restapi.v1.test_runs_routes import (
     register_test_runs_routes,
 )
-from automojo.pychestrate.webservice.orchestration.build.restapi.v1.build_runs_routes import (
+from ccai.pychestrate.webservice.orchestration.build.restapi.v1.build_runs_routes import (
     register_build_runs_routes,
 )
-from automojo.pychestrate.webservice.orchestration.pipelines.restapi.v1.pipeline_definitions_routes import (
+from ccai.pychestrate.webservice.orchestration.pipelines.restapi.v1.pipeline_definitions_routes import (
     register_pipeline_definitions_routes,
 )
-from automojo.pychestrate.webservice.orchestration.pipelines.restapi.v1.pipeline_runs_routes import (
+from ccai.pychestrate.webservice.orchestration.pipelines.restapi.v1.pipeline_runs_routes import (
     register_pipeline_runs_routes,
 )
-from automojo.pychestrate.webservice.orchestration.source.restapi.v1.source_integrations_routes import (
+from ccai.pychestrate.webservice.orchestration.source.restapi.v1.source_integrations_routes import (
     register_source_integrations_routes,
 )
-from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.environments_routes import (
+from ccai.pychestrate.webservice.orchestration.infra.restapi.v1.environments_routes import (
     register_environments_routes,
 )
-from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.provisioning_runs_routes import (
+from ccai.pychestrate.webservice.orchestration.infra.restapi.v1.provisioning_runs_routes import (
     register_provisioning_runs_routes,
 )
-from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.drift_routes import (
+from ccai.pychestrate.webservice.orchestration.infra.restapi.v1.drift_routes import (
     register_drift_routes,
 )
-from automojo.pychestrate.webservice.orchestration.infra.restapi.v1.guards_routes import (
+from ccai.pychestrate.webservice.orchestration.infra.restapi.v1.guards_routes import (
     register_guards_routes,
 )
-from automojo.pychestrate.webservice.metrics.restapi.v1.slos_routes import (
+from ccai.pychestrate.webservice.metrics.restapi.v1.slos_routes import (
     register_slos_routes,
 )
-from automojo.pychestrate.webservice.ops.release.restapi.v1.release_channels_routes import (
+from ccai.pychestrate.webservice.ops.release.restapi.v1.release_channels_routes import (
     register_release_channels_routes,
 )
-from automojo.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
+from ccai.pychestrate.webservice.security.rbac.restapi.v1.rbac_routes import (
     register_rbac_routes,
 )
-from automojo.pychestrate.webservice.webhooks_in.restapi.v1.webhooks_in_routes import (
+from ccai.pychestrate.webservice.webhooks_in.restapi.v1.webhooks_in_routes import (
     register_webhooks_in_routes,
 )
-from automojo.pychestrate.webservice.webhooks_out.restapi.v1.webhooks_out_routes import (
+from ccai.pychestrate.webservice.webhooks_out.restapi.v1.webhooks_out_routes import (
     register_webhooks_out_routes,
 )
-from automojo.pychestrate.webservice.backup.restapi.v1.backup_routes import (
+from ccai.pychestrate.webservice.backup.restapi.v1.backup_routes import (
     register_backup_routes,
 )
-from automojo.pychestrate.webservice.resources.restapi.v1.resource_pools_routes import (
+from ccai.pychestrate.webservice.resources.restapi.v1.resource_pools_routes import (
     register_resource_pools_routes,
 )
-from automojo.pychestrate.webservice.resources.restapi.v1.resources_routes import (
+from ccai.pychestrate.webservice.resources.restapi.v1.resources_routes import (
     register_resources_routes as register_resources_api_routes,
 )
-from automojo.pychestrate.webservice.webinterface.blueprints.config.routes import (
+from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     register_config_routes,
 )
-from automojo.pychestrate.webservice.webinterface.blueprints.setup.routes import (
+from ccai.pychestrate.webservice.webinterface.blueprints.setup.routes import (
     register_setup_routes,
 )
-from automojo.pychestrate.webservice.webinterface.blueprints.projects.routes import (
+from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     register_projects_routes as register_projects_web_ui_routes,
 )
-from automojo.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     register_resources_routes,
 )
-from automojo.pychestrate.webservice.webinterface.foundation.static_files import (
+from ccai.pychestrate.webservice.webinterface.foundation.static_files import (
     register_static_routes,
 )
-from automojo.pychestrate.webservice.webinterface.foundation.templating import (
+from ccai.pychestrate.webservice.webinterface.foundation.templating import (
     build_jinja_environment,
     discover_blueprint_template_paths,
     set_default_environment,
 )
-from automojo.pychestrate.webservice.webinterface.site_shell.bundle_registry import (
+from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import (
     install_default_bundles as install_shell_default_bundles,
 )
-from automojo.pychestrate.webservice.webinterface.site_shell.catchall_route import (
+from ccai.pychestrate.webservice.webinterface.site_shell.catchall_route import (
     register_shell_catchall,
 )
-from automojo.pychestrate.webservice.webinterface.site_shell.shell_document import (
+from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
     get_shell_template_search_path,
 )
-from automojo.pychestrate.webservice.webinterface.foundation.url_for import (
+from ccai.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
-from automojo.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
-from automojo.pychestrate.webservice.pychestrate_variables import (
+from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
+from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
 )
-from automojo.webworks.webapplication import establish_webapp_persona
-from automojo.webworks.wsgi.application import create_wsgi_application
-from automojo.webworks.wsgi.server import run_server
-from automojo.webworks.routing.request import Request
-from automojo.webworks.routing.response import HTMLResponse, Response
+from ccai.webworks.webapplication import establish_webapp_persona
+from ccai.webworks.wsgi.application import create_wsgi_application
+from ccai.webworks.wsgi.server import run_server
+from ccai.webworks.routing.request import Request
+from ccai.webworks.routing.response import HTMLResponse, Response
 
 
 def _eager_start_response_wsgi(wsgi_app: Any) -> Any:
@@ -290,7 +290,7 @@ def build_wsgi_compat_dispatch(*, app: Any) -> Any:
     """
         Return a callable that dispatches a webworks request and
         massages the returned :class:`Response` so the bundled
-        :class:`automojo.webworks.wsgi.response.WSGIResponseBuilder`
+        :class:`ccai.webworks.wsgi.response.WSGIResponseBuilder`
         emits a correct HTTP response. Two version-skew bugs in
         the venv'd webworks library have to be papered over here:
 
@@ -384,7 +384,7 @@ logger = logging.getLogger("scms")
 # read from settings without a chicken-and-egg.
 import sys
 
-from automojo.pychestrate.webservice.pychestrate_presence import (
+from ccai.pychestrate.webservice.pychestrate_presence import (
     resolve_presence_dir,
 )
 
@@ -527,13 +527,13 @@ def register_service_extensions() -> None:
         url_prefix="/static",
         static_root=SITE_DIRECTORIES.DIR_STATIC,
     )
-    # automojo-webworks ships the mj-* component library + chart
+    # codecraftai-webworks ships the mj-* component library + chart
     # renderers + design tokens as static assets under its site-
     # packages ``static/`` directory. Mount that directory at
     # ``/mj`` so the shell document can pull in
     # ``/mj/styles/tokens.css`` and ``/mj/javascript/index.js``
     # to register every <mj-*> custom element.
-    import automojo.webworks as _ww_pkg
+    import ccai.webworks as _ww_pkg
     webworks_static_dir = os.path.join(
         os.path.dirname(_ww_pkg.__file__), "static"
     )

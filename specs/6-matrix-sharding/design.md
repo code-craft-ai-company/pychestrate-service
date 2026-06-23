@@ -202,7 +202,7 @@ class ShardingStrategyProtocol(FactoryProtocolBase):
         ...
 ```
 
-Reference implementations in `source/site/automojo/factories/pychestrate/sharding/`:
+Reference implementations in `source/site/ccai/factories/pychestrate/sharding/`:
 
 - `CartesianShardingStrategy` — `PRECEDENCE = 1000`; full cartesian expansion with includes/excludes.
 - `FailFastCartesianStrategy` — `PRECEDENCE = 1000`; cartesian + `should_cancel_on_failure == True`.
@@ -223,7 +223,7 @@ Reference implementations in `source/site/automojo/factories/pychestrate/shardin
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/pipelines/sharding/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/pipelines/sharding/`:
 
 - `__init__.py`
 - `service.py` — `MatrixShardingService`.
@@ -236,7 +236,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/p
 - `errors.py` — `ShardSetTimedOutError`.
 - `rest/v1_routes.py` — observability endpoint.
 
-Factories under `source/site/automojo/factories/pychestrate/sharding/`.
+Factories under `source/site/ccai/factories/pychestrate/sharding/`.
 
 ## Key Flows
 

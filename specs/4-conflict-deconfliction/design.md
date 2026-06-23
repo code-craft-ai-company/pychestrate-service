@@ -127,7 +127,7 @@ class ConflictRuleExtension(ResourceExtension):
 ```
 
 In-tree implementations under
-`source/site/automojo/extensions/pychestrate/resources/conflict_rules/`:
+`source/site/ccai/extensions/pychestrate/resources/conflict_rules/`:
 
 - `ExclusiveModeRule` — priority 10, `applies_to_kinds=("*",)`,
   `requires_db_view=True`. Enforces Requirement 2.1 and 2.2.
@@ -158,7 +158,7 @@ Test-only `AlwaysViolateRule` at priority 0 for extension-point coverage.
 
 ## Component Breakdown
 
-Under `source/site/automojo/pychestrate/webservice/resources/conflict/`:
+Under `source/site/ccai/pychestrate/webservice/resources/conflict/`:
 
 - `models.py` — `RuleDecision`, `ConflictEvaluation`,
   `ActiveReservationSnapshot`, `ReadOnlyRepositoryHandle`.
@@ -172,7 +172,7 @@ Under `source/site/automojo/pychestrate/webservice/resources/conflict/`:
 - `errors.py` — `ConfigurationError` on duplicate `rule_name`.
 
 Rule implementations at
-`source/site/automojo/extensions/pychestrate/resources/conflict_rules/`.
+`source/site/ccai/extensions/pychestrate/resources/conflict_rules/`.
 
 ## Key Flows
 

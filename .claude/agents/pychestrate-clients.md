@@ -7,10 +7,10 @@ model: sonnet
 You are the pod-side client specialist for the pychestrate-service.
 
 ## Naming
-The pod-side runtime is `pychestrate-client`. **Never call it "agent"** — it follows the `automojo *-client` convention.
+The pod-side runtime is `pychestrate-client`. **Never call it "agent"** — it follows the `codecraftai *-client` convention.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/clients/restapi/v1/clients_routes.py`, `enrollment_routes.py` — REST surfaces the client calls
+- `source/site/ccai/pychestrate/webservice/clients/restapi/v1/clients_routes.py`, `enrollment_routes.py` — REST surfaces the client calls
 - Enrollment token endpoints under `/admin/enrollment-tokens`
 - Dispatch handoff endpoints (`/dispatch-ack`, `/progress`, `/results/complete`) — these the client calls into
 
@@ -25,8 +25,8 @@ The pod-side runtime is `pychestrate-client`. **Never call it "agent"** — it f
 - The CN encodes the client identity; the server resolves it to a `Client` record
 
 ## Conventions
-- Client and server share a packages namespace under `automojo.pychestrate.*` (NOT `automojo.client.*`). Per project convention, packages live under `automojo.pychestrate.<component>.*`.
-- Reuse `automojo.*` libraries (testbase, configuration, credentials) rather than rolling new client code.
+- Client and server share a packages namespace under `ccai.pychestrate.*` (NOT `ccai.client.*`). Per project convention, packages live under `ccai.pychestrate.<component>.*`.
+- Reuse `ccai.*` libraries (testbase, configuration, credentials) rather than rolling new client code.
 
 ## Don't do
 - Refer to the client as "the agent" or "pychestrate-agent" anywhere in code, logs, or docs.

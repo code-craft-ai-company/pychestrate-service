@@ -42,7 +42,7 @@ endpoints):
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/ui/`.
+`source/site/ccai/pychestrate/webservice/extension/ui/`.
 
 ```python
 # composer.py
@@ -120,13 +120,13 @@ WebComponent tag surface (`source/site/.../webinterface/static/components/`):
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/ui/
+source/site/ccai/pychestrate/webservice/extension/ui/
     __init__.py
     composer.py            # ExtensionViewComposer
     stream.py              # ExtensionViewStream (WebSocket)
     admin_routes.py        # GET /admin/extensions[/{name}]
     panels.py              # ExtensionDetailPanelExtension base
-source/site/automojo/pychestrate/webservice/webinterface/static/components/
+source/site/ccai/pychestrate/webservice/webinterface/static/components/
     pychestrate-extension-list.js
     pychestrate-extension-detail.js
     pychestrate-extension-panel.js

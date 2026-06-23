@@ -4,7 +4,7 @@
 #
 # The consumer web UI ships as native ES modules (no Node toolchain at
 # runtime). Served raw, a single page pulls ~270 separate module files
-# (the automojo-webworks mj-* component library is ~249 of them), which
+# (the codecraftai-webworks mj-* component library is ~249 of them), which
 # is slow and -- on a single-threaded dev server -- unreliable: a module
 # request can stall, leaving the shell's custom element unregistered.
 #
@@ -24,24 +24,24 @@ cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
 # Activate the in-repo venv so the mj component library can be located via
-# the installed automojo-webworks package.
+# the installed codecraftai-webworks package.
 if [ -f "${REPO_ROOT}/.venv/bin/activate" ]; then
     # shellcheck disable=SC1091
     source "${REPO_ROOT}/.venv/bin/activate"
 fi
 
-STATIC_JS="${REPO_ROOT}/source/site/automojo/pychestrate/webservice/webinterface/static/javascript"
+STATIC_JS="${REPO_ROOT}/source/site/ccai/pychestrate/webservice/webinterface/static/javascript"
 
 ESBUILD="npx --yes esbuild"
 
 echo "==> build-frontend: bundling consumer UI JavaScript"
 
 # ---------------------------------------------------------------------------
-# 1. The automojo-webworks mj-* component library (the big one).
+# 1. The codecraftai-webworks mj-* component library (the big one).
 # ---------------------------------------------------------------------------
 MJ_INDEX="$(python3 - <<'PY'
 import os
-import automojo.webworks as w
+import ccai.webworks as w
 print(os.path.join(os.path.dirname(w.__file__), "static", "javascript", "index.js"))
 PY
 )"

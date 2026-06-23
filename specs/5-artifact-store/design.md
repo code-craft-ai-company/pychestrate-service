@@ -7,7 +7,7 @@ per-run-prefixed files (landed by `5-result-ingest-watcher` into
 the backend allocated by `5-shared-results-backend`) into a
 content-addressed store with reference counting and lifecycle
 tiers. It lives at
-`source/site/automojo/pychestrate/webservice/artifacts/`. Owned
+`source/site/ccai/pychestrate/webservice/artifacts/`. Owned
 physical layout on the object store:
 
 - `cas/<first2>/<full-hash>` — canonical CAS blob.
@@ -266,7 +266,7 @@ class ArtifactTypeExtension(ResourceExtension):
 Reference implementations shipped in-tree:
 
 - `DefaultPromotionStrategy` at
-  `source/site/automojo/factories/pychestrate/promotion_strategy/default.py`,
+  `source/site/ccai/factories/pychestrate/promotion_strategy/default.py`,
   `PRECEDENCE = 1000`. 30-day retention, no promotion.
 - `SbomPromotionStrategy` at same path, `PRECEDENCE = 500`.
   7-year retention, promote to cold after 30 days; keyed by
@@ -275,7 +275,7 @@ Reference implementations shipped in-tree:
   500`. 1-year retention, promote to cold after 90 days; keyed
   by category `build-output`.
 - `SbomArtifactType` at
-  `source/site/automojo/extensions/pychestrate/artifact_types/sbom.py`
+  `source/site/ccai/extensions/pychestrate/artifact_types/sbom.py`
   — `type_name = "sbom"`.
 - `ContainerImageArtifactType` at same path — `type_name =
   "container-image"`.
@@ -308,7 +308,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `artifacts/__init__.py`
 - `artifacts/store.py` — `ArtifactStore` facade.

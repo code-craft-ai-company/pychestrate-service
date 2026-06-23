@@ -15,7 +15,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/maintenance/` package skeleton per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/maintenance/` package skeleton per design.md.
 - [ ] T1.2 — Implement `maintenance/mode.py::MaintenanceMode` enum and `mode_precedence`.
 - [ ] T1.3 — Implement `maintenance/gate.py::MaintenanceGate` stub that always returns `active`; wire into the web app host so Phase 0 siblings can integrate.
 - [ ] T1.4 — Implement `maintenance/errors.py::MaintenanceModeError` with scope / mode / retry_after / ends_at payload.

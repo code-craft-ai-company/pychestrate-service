@@ -30,7 +30,7 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Implement `WebSocketMtlsClientTransport` at `PRECEDENCE=100` using
-  `automojo-webworks` WebSocket support.
+  `codecraftai-webworks` WebSocket support.
 - [ ] T2.2 — Add `client_session`, `client_frame_audit`, `client_run_reconcile_log`
   tables via `0-persistence` migration pack with namespaced prefix `clients_`.
 - [ ] T2.3 — Implement `ClientSessionRepository` with async SQL helpers for

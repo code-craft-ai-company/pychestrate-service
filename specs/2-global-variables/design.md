@@ -3,7 +3,7 @@
 ## Architecture
 
 `2-global-variables` lives in Layer 2 and is owned by
-`automojo.pychestrate.webservice.model.variables`. Bindings persist in
+`ccai.pychestrate.webservice.model.variables`. Bindings persist in
 `0-persistence`; resolution is stateless and layered through a chain of
 `variable_resolver` factory impls (lowest `PRECEDENCE` first). The in-tree
 reference implementation, `DatabaseVariableResolver`, reads directly from the
@@ -95,7 +95,7 @@ class TraceEntry:
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/model/variables/service.py
+# source/site/ccai/pychestrate/webservice/model/variables/service.py
 
 def set_variable(
     *,
@@ -183,7 +183,7 @@ def collect_trace(
 ### Extension Surface
 
 - `factory: variable_resolver`
-  (`source/site/automojo/pychestrate/webservice/model/variables/factories.py`)
+  (`source/site/ccai/pychestrate/webservice/model/variables/factories.py`)
 
 ```python
 class VariableResolverProtocol(FactoryProtocolBase):
@@ -266,7 +266,7 @@ Topics: `entity.variable.set`, `entity.variable.unset`.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/model/variables/
+source/site/ccai/pychestrate/webservice/model/variables/
     __init__.py
     entities.py         # VariableBinding, EffectiveValue, TraceEntry
     repository.py       # DB access used by DatabaseVariableResolver
@@ -279,7 +279,7 @@ source/site/automojo/pychestrate/webservice/model/variables/
                         # VaultSecretRefDereferencer
     events.py
     errors.py           # VariableNotBoundError, ConcurrentUpdateError
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/variables.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/variables.py
 ```
 
 ## Key Flows

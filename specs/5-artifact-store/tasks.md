@@ -30,7 +30,7 @@
       ``ObjectStore.copy_object`` call lands when the storage
       driver wiring is finalized — M1 callers pre-compute digest
       and size.)*
-- [x] T1.7 — Implement `DefaultPromotionStrategy` at `source/site/automojo/factories/pychestrate/promotion_strategy/default.py` with `PRECEDENCE = 1000`.
+- [x] T1.7 — Implement `DefaultPromotionStrategy` at `source/site/ccai/factories/pychestrate/promotion_strategy/default.py` with `PRECEDENCE = 1000`.
       *(In-package at
       ``artifacts/factories/default_promotion.py``; PRECEDENCE
       preserved.)*
@@ -43,7 +43,7 @@
 - [ ] T2.1 — Declare `PromotionStrategyProtocol` factory and `ArtifactTypeExtension` resource at `artifacts/protocols.py`.
 - [ ] T2.2 — Implement `artifacts/strategy_registry.py` and `artifacts/type_registry.py` via `E-extension-host`.
 - [ ] T2.3 — Implement `SbomPromotionStrategy`, `BuildArtifactPromotionStrategy` at same factory path with `PRECEDENCE = 500`.
-- [ ] T2.4 — Implement `SbomArtifactType`, `ContainerImageArtifactType`, `FirmwareImageArtifactType` under `source/site/automojo/extensions/pychestrate/artifact_types/`.
+- [ ] T2.4 — Implement `SbomArtifactType`, `ContainerImageArtifactType`, `FirmwareImageArtifactType` under `source/site/ccai/extensions/pychestrate/artifact_types/`.
 - [ ] T2.5 — Implement `artifacts/sweeper.py` promotion + expiration workers driven by `retention.sweep.tick`.
 - [ ] T2.6 — Implement oversize skip path: record stub with `oversize=true`, no CAS copy, emit `pychestrate.artifact.oversize_skipped`.
 - [ ] T2.7 — Implement stream-copy fallback with `client_copy_max_bytes` gate (256 MiB default); refuse larger files on non-server-side-copy drivers.

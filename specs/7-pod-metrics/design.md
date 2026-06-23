@@ -148,11 +148,11 @@ def classify_failure(
 Shares `MetricDefinitionExtension` (owned by `7-metrics-ingest`). In-tree
 subclasses shipped here:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/pod/bringup.py` — `PodBringupMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/pod/teardown.py` — `PodTeardownMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/pod/result.py` — `PodLifecycleResultMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/pod/active.py` — `PodActiveCountMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/pod/failure.py` — `PodFailureMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/pod/bringup.py` — `PodBringupMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/pod/teardown.py` — `PodTeardownMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/pod/result.py` — `PodLifecycleResultMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/pod/active.py` — `PodActiveCountMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/pod/failure.py` — `PodFailureMetric`.
 
 ### Events Emitted
 
@@ -166,7 +166,7 @@ subclasses shipped here:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains/pod/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/domains/pod/`:
 
 - `__init__.py`
 - `resolver.py` — `PodMetricResolver`.
@@ -176,7 +176,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains
 - `value_types.py` — `PodPairingEntry`, event payload dataclasses.
 
 `MetricDefinitionExtension` subclasses under
-`source/site/automojo/extensions/pychestrate/metric_definition/pod/`.
+`source/site/ccai/extensions/pychestrate/metric_definition/pod/`.
 
 ## Key Flows
 

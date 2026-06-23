@@ -241,7 +241,7 @@ class ObjectStoreDriverProtocol(FactoryProtocolBase):
 `presign_get`, `close`.
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/factories/pychestrate/object_store/`):
+`source/site/ccai/factories/pychestrate/object_store/`):
 
 - `LocalFsObjectStoreDriver` — `PRECEDENCE = 1000`. Backed by a filesystem
   path (works for dev, single-node, and NFS/SMB mounts). Always available;
@@ -277,7 +277,7 @@ Consumers: `7-metrics-ingest`, `1-audit-log`, `5-artifact-store`.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `object_store/__init__.py`
 - `object_store/config.py` — `ObjectStoreConfig`, `DriverConfig` dataclasses.
@@ -294,7 +294,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
 - `object_store/hooks.py` — startup/shutdown hooks and driver resolution.
 
 Factories live under
-`source/site/automojo/factories/pychestrate/object_store/` — one file per
+`source/site/ccai/factories/pychestrate/object_store/` — one file per
 reference driver as listed above.
 
 ## Key Flows

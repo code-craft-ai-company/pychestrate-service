@@ -222,7 +222,7 @@ class TimeseriesDriverProtocol(FactoryProtocolBase):
 `flush()`, `health()`, `close()`.
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/factories/pychestrate/timeseries/`):
+`source/site/ccai/factories/pychestrate/timeseries/`):
 
 - `NativePgTimeseriesDriver` — `PRECEDENCE = 1000`. Postgres-partitioned
   table; works on every deployment since Postgres is already required by
@@ -252,7 +252,7 @@ Operators / site extensions override by shipping a lower-PRECEDENCE driver
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `timeseries/__init__.py`
 - `timeseries/config.py` — `TimeseriesConfig`, `DriverConfig`.
@@ -270,7 +270,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
   PromQL AST nodes (shared across Influx / Timescale drivers).
 
 Factories under
-`source/site/automojo/factories/pychestrate/timeseries/`:
+`source/site/ccai/factories/pychestrate/timeseries/`:
 
 - `native_pg.py` — `NativePgTimeseriesDriver`
 - (Phase 9) `prometheus_remote_write.py`, `influxdb.py`, `timescale_db.py`

@@ -38,7 +38,7 @@ No persistent state. Build-time transient:
 ### Internal API
 
 Code under `docs/` (Sphinx root) and
-`source/site/automojo/pychestrate/webservice/extension/docs_ext/`
+`source/site/ccai/pychestrate/webservice/extension/docs_ext/`
 (Sphinx extension).
 
 ```python
@@ -95,7 +95,7 @@ docs/
         protocols/  (generated)
         resources/  (generated)
         compat.rst  (generated)
-source/site/automojo/pychestrate/webservice/extension/docs_ext/
+source/site/ccai/pychestrate/webservice/extension/docs_ext/
     __init__.py
     catalog_walker.py
     templates/

@@ -24,7 +24,7 @@
   carries a top-level toctree pointing at the generated category
   indexes. ``docs/Makefile`` provides ``html`` + ``clean`` targets.)*
 - [x] T1.2 — Create
-  `source/site/automojo/pychestrate/webservice/extension/docs_ext/`
+  `source/site/ccai/pychestrate/webservice/extension/docs_ext/`
   with a `setup(app)` entry point.
   *(Subsystem rooted at ``extension.docs_ext`` with ``models``,
   ``catalog_walker`` modules and a ``templates/`` directory.
@@ -43,7 +43,7 @@
   `make -C docs html` target invocation from the repo Makefile.
   *(Repo Makefile gains ``docs-html`` / ``docs-clean`` targets
   delegating to ``docs/Makefile``. ``conf.py``'s ``extensions``
-  list registers ``automojo.pychestrate.webservice.extension.docs_ext``.)*
+  list registers ``ccai.pychestrate.webservice.extension.docs_ext``.)*
 
 ### M2 — Core Behavior
 

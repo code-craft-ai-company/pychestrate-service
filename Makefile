@@ -20,7 +20,7 @@ docs-clean:
 #
 # ``openapi-validate`` runs the Python ``openapi-spec-validator`` package
 # against ``specs/openapi/pychestrate.yaml`` -- the single-file authoritative
-# REST contract that drives both the generated ``automojo-restclient-pychestrate``
+# REST contract that drives both the generated ``codecraftai-restclient-pychestrate``
 # client and the route handler implementations. Every PR that adds, removes,
 # or modifies a REST endpoint must update the spec and this target must pass.
 #
@@ -44,7 +44,7 @@ openapi-validate:
 #
 # ``serve-prod`` runs the same one-call bootstrap but assumes the operator
 # has already populated PYCHESTRATE_DATABASE_URL / KEK / pepper / etc. via
-# the deploy environment (see source/site/automojo/pychestrate/webservice/
+# the deploy environment (see source/site/ccai/pychestrate/webservice/
 # runtime_bootstrap.py for the full env contract). Schema is expected to
 # have been created out-of-band (alembic or equivalent).
 #

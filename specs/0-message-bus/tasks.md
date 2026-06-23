@@ -16,7 +16,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/messaging/` package skeleton.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/messaging/` package skeleton.
 - [ ] T1.2 — Implement `messaging/config.py::MessageBusConfig` with fields `topic_buffer_max`, `bus_drain_seconds`, `default_overflow_policy`.
 - [ ] T1.3 — Implement `messaging/bus.py::Event` envelope (ULID event_id, UTC microsecond published_at, request_id from ambient ContextVar).
 - [ ] T1.4 — Implement `MessageBus.publish` exact-match delivery with zero subscribers (fast path) and per-subscriber queue enqueue.

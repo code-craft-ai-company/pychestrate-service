@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/infra/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/infra/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `infra_run`, `infra_guard_decision_cache`.
 - [ ] T1.3 — Implement `driver_protocol.py::InfraToolDriverProtocol`.
-- [ ] T1.4 — Implement `TerraformInfraDriver` at `source/site/automojo/factories/pychestrate/infra/terraform.py` with `PRECEDENCE = 500`.
+- [ ] T1.4 — Implement `TerraformInfraDriver` at `source/site/ccai/factories/pychestrate/infra/terraform.py` with `PRECEDENCE = 500`.
 - [ ] T1.5 — Implement `orchestrator.py::InfraOrchestrator.trigger_run` happy path for `action="plan"`.
 - [ ] T1.6 — Implement `state_mirror.py` subscriber mirroring Layer 5 onto `InfraRun` and persisting `plan_summary_ref` + `plan_artifact_ref` + `plan_diff_digest` on terminal plans.
 - [ ] T1.7 — Register `POST /api/v1/projects/{id}/infra-runs` and `GET /.../{run_id}`.

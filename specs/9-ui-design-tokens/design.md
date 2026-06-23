@@ -152,7 +152,7 @@ class DesignTokenPackExtension(ResourceExtension):
         ...
 ```
 
-Reference implementations in-tree under `source/site/automojo/extensions/pychestrate/design_tokens/`:
+Reference implementations in-tree under `source/site/ccai/extensions/pychestrate/design_tokens/`:
 
 - `PychestrateDefaultLightPack` — `pack_id="pychestrate.default.light"`, `PRECEDENCE=1000`.
 - `PychestrateDefaultDarkPack` — `pack_id="pychestrate.default.dark"`, `inherits_from="pychestrate.default.light"`, `PRECEDENCE=900`.
@@ -169,7 +169,7 @@ Reference implementations in-tree under `source/site/automojo/extensions/pychest
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/design_tokens/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/design_tokens/`:
 
 - `__init__.py`
 - `registry.py` — `DesignTokenRegistry`.
@@ -181,12 +181,12 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/de
 - `config.py` — defaults.
 - `errors.py` — `DesignTokenConfigurationError`.
 
-Default pack source under `source/site/automojo/pychestrate/webservice/webinterface/components/design_tokens/styles/`:
+Default pack source under `source/site/ccai/pychestrate/webservice/webinterface/components/design_tokens/styles/`:
 
 - `pychestrate.default.light.css`
 - `pychestrate.default.dark.css`
 
-Document-shell helper at `source/site/automojo/pychestrate/webservice/webinterface/components/design_tokens/pyc-theme.js`.
+Document-shell helper at `source/site/ccai/pychestrate/webservice/webinterface/components/design_tokens/pyc-theme.js`.
 
 ## Key Flows
 

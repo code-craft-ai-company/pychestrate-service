@@ -29,7 +29,7 @@ Prerequisites
   files; the in-tree :mod:`secrets_loader` is pluggable for HSM /
   vault sources but the alpha ships with file + env sources only).
 * ``gunicorn`` for production fronting (the in-tree
-  ``automojo.webworks.wsgi.server.run_server`` is for development).
+  ``ccai.webworks.wsgi.server.run_server`` is for development).
 
 Bringing the Postgres instance up out-of-band is the operator's
 responsibility. The service makes no assumptions about which Postgres
@@ -43,7 +43,7 @@ Environment-variable contract
 Every runtime knob the service reads is namespaced ``PYCHESTRATE_*``.
 A copy-paste-ready template is shipped at ``development/sample.env``;
 the canonical authority is
-``source/site/automojo/pychestrate/webservice/runtime_bootstrap.py`` --
+``source/site/ccai/pychestrate/webservice/runtime_bootstrap.py`` --
 operators can ``grep PYCHESTRATE_`` against the source tree to confirm
 the live contract.
 
@@ -257,8 +257,8 @@ bootstrap path is intact:
 .. code-block:: bash
 
     poetry run testbase testing run \
-        --root source/testroots/automojo \
-        --includes=automojo.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
+        --root source/testroots/ccai \
+        --includes=ccai.tests.singlehost.pychestrate.webservice.phase10.test_p13ab_production_startup_smoke_m1 \
         --output=./.output/smoke
 
 
@@ -286,19 +286,19 @@ A first-run admin-bootstrap CLI is tracked as a beta enhancement.
 For the alpha, the operator runs the seed step out-of-band.
 
 
-CI prerequisite — ``AUTOMOJO_REPO_TOKEN`` secret
+CI prerequisite — ``CODECRAFTAI_REPO_TOKEN`` secret
 ================================================
 
 The repo's :file:`pyproject.toml` declares git-source dependencies
 on nine private repositories under the ``automationmojo`` org
-(``automojo-errors``, ``automojo-runtime``, ``automojo-arcli``,
-``automojo-credentials``, ``automojo-dataprofiles``,
-``automojo-storage-database``, ``automojo-testbase``,
-``automojo-webworks``, ``pychestrate-core``). GitHub Actions'
+(``codecraftai-errors``, ``codecraftai-runtime``, ``codecraftai-arcli``,
+``codecraftai-credentials``, ``codecraftai-dataprofiles``,
+``codecraftai-storage-database``, ``codecraftai-testbase``,
+``codecraftai-webworks``, ``pychestrate-core``). GitHub Actions'
 default ``GITHUB_TOKEN`` only authorizes against the repo it runs
 in, so ``poetry install`` fails on a fresh runner with::
 
-    Failed to clone https://github.com/automationmojo/automojo-arcli.git,
+    Failed to clone https://github.com/automationmojo/codecraftai-arcli.git,
     check your git configuration and permissions for this repository.
 
 Setup (one-time, per repo):
@@ -307,21 +307,21 @@ Setup (one-time, per repo):
    https://github.com/settings/personal-access-tokens.
    - Resource owner: ``automationmojo`` org.
    - Repository access: **All repositories** (or at minimum every
-     ``automojo-*`` and ``pychestrate-core`` private repo).
+     ``codecraftai-*`` and ``pychestrate-core`` private repo).
    - Permissions → Repository permissions → **Contents: Read-only**.
    - Expiration: pick a rotation cadence the team can sustain
      (90d is reasonable; the workflow fails fast with a clear
      error if the secret is missing).
 2. Add the PAT as a repo secret on
    ``automationmojo/pychestrate-service`` named
-   ``AUTOMOJO_REPO_TOKEN``.
+   ``CODECRAFTAI_REPO_TOKEN``.
 
 The :file:`.github/workflows/test.yml` workflow then injects the
 PAT into a global ``url.<base>.insteadOf`` rewrite right before
 each ``poetry install`` step::
 
     git config --global \\
-      url."https://x-access-token:${AUTOMOJO_REPO_TOKEN}@github.com/automationmojo/".insteadOf \\
+      url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \\
       "https://github.com/automationmojo/"
 
 so every clone of an ``https://github.com/automationmojo/<repo>``

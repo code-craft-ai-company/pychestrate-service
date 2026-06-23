@@ -173,8 +173,8 @@ fi
 # Order matters: the alpha host's .venv/bin/activate was customized to
 # re-export a PYTHONPATH (the rehome-generated one that contains
 # source/service + source/testroots but NOT source/site -- a regular
-# ``automojo`` package there SHADOWS the namespace package and hides
-# automojo.pychestrate.webservice). If we set PYTHONPATH before activating,
+# ``ccai`` package there SHADOWS the namespace package and hides
+# ccai.pychestrate.webservice). If we set PYTHONPATH before activating,
 # activation clobbers it. So activate first, then export our clean path so
 # it wins at exec time.
 # ----------------------------------------------------------------------------
@@ -196,12 +196,12 @@ fi
 # We do NOT append the inherited ${PYTHONPATH:-}: it carries the shadowing
 # source/service + source/testroots entries described above. source/packages
 # + source/site are all the runtime needs; the activated venv supplies the
-# installed automojo-* dependencies. The ../automojo-* sibling entries
+# installed codecraftai-* dependencies. The ../codecraftai-* sibling entries
 # support a local multi-checkout dev box and are harmlessly ignored on the
 # host. This export runs AFTER venv activation so it is the final word.
 # ----------------------------------------------------------------------------
 
-export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:../automojo-webworks/source/packages:../automojo-this-app/source/packages:../automojo-testbase/source/packages:../automojo-configuration/source/packages:../automojo-credentials/source/packages:../automojo-dataprofiles/source/packages:../automojo-errors/source/packages:../pychestrate-core/source/packages"
+export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:../codecraftai-webworks/source/packages:../codecraftai-this-app/source/packages:../codecraftai-testbase/source/packages:../codecraftai-configuration/source/packages:../codecraftai-credentials/source/packages:../codecraftai-dataprofiles/source/packages:../codecraftai-errors/source/packages:../pychestrate-core/source/packages"
 
 echo "seed-test-admin: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
 echo "seed-test-admin: db=${PYCHESTRATE_DATABASE_URL:-<persona default sqlite:///<presence-dir>/pychestrate.sqlite>}"

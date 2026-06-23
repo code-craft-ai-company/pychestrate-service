@@ -144,7 +144,7 @@ From the SSE/WebSocket transport: `open`, `message`, `close`, `error`.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-log-stream/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-log-stream/`:
 
 - `pyc-log-stream.ts` — the Custom Element class and registration.
 - `log-ring-buffer.ts` — ring-buffer implementation.

@@ -17,12 +17,12 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/object_store/` package skeleton per design.md Component Breakdown.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/object_store/` package skeleton per design.md Component Breakdown.
 - [ ] T1.2 — Implement `object_store/config.py::ObjectStoreConfig` and `DriverConfig`.
 - [ ] T1.3 — Implement `object_store/key_validation.py` enforcing `^[A-Za-z0-9/_.\-]{1,1024}$` and project-slug extraction.
 - [ ] T1.4 — Implement `object_store/driver_base.py::ObjectStoreDriver` abstract class with instance methods listed in design.md.
 - [ ] T1.5 — Implement `object_store/facade.py::ObjectStore` single-shot put/get/stat/list/delete without multipart; wire ProjectLookup and MaintenanceGate dependencies.
-- [ ] T1.6 — Implement `LocalFsObjectStoreDriver` at `source/site/automojo/factories/pychestrate/object_store/local_fs.py` with `PRECEDENCE = 1000`.
+- [ ] T1.6 — Implement `LocalFsObjectStoreDriver` at `source/site/ccai/factories/pychestrate/object_store/local_fs.py` with `PRECEDENCE = 1000`.
 - [ ] T1.7 — Register `object_store_startup_hook` on the web app at priority `30`; wire `active_driver` via the extension host (or direct instantiation pre-Phase-0.5).
 - [ ] T1.8 — Implement `object_store/errors.py` with the error hierarchy listed in design.md.
 
@@ -34,7 +34,7 @@
 - [ ] T2.4 — Implement `object_store/integrity.py` streaming SHA-256, set `etag = "sha256:<hex>"` when driver does not provide one.
 - [ ] T2.5 — Subscribe to `maintenance.mode.changed` on `0-message-bus`; update `MaintenanceGate`; raise `MaintenanceModeError` on put/delete/copy for affected scopes.
 - [ ] T2.6 — Publish `object_store.driver.activated`, `object_store.object.put`, `object_store.object.deleted` events on the bus.
-- [ ] T2.7 — Implement `S3ObjectStoreDriver` at `source/site/automojo/factories/pychestrate/object_store/s3.py` with `PRECEDENCE = 500`; source credentials via `SecretsAccessor`.
+- [ ] T2.7 — Implement `S3ObjectStoreDriver` at `source/site/ccai/factories/pychestrate/object_store/s3.py` with `PRECEDENCE = 500`; source credentials via `SecretsAccessor`.
 - [ ] T2.8 — Implement `copy_within` and `presign_get` in facade with capability gating (`UnsupportedOperationError` when driver disables).
 
 ### M3 — Hardening

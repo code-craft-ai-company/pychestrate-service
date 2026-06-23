@@ -128,7 +128,7 @@ notifications.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-project-dashboard/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-project-dashboard/`:
 
 - `pyc-project-dashboard.ts` — Custom Element.
 - `grid-model.ts` — 12-column validity + layout algebra.

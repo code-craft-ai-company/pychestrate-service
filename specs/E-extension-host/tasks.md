@@ -20,7 +20,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/host/` with empty
+  `source/site/ccai/pychestrate/webservice/extension/host/` with empty
   `__init__.py`, `host.py`, `scanner.py`, `registries.py`, `snapshot.py`,
   `failures.py`, `admin_routes.py`.
 - [ ] T1.2 — Implement `ExtensionHostSnapshot` dataclass in `snapshot.py` with
@@ -29,7 +29,7 @@
 - [ ] T1.3 — Implement `ExtensionHost.__init__` and a no-op `bootstrap()` that
   returns an empty snapshot; add `get_extension_host()` module-level function
   that raises `SemanticError` before bootstrap.
-- [ ] T1.4 — Wire host construction into the `automojo-webworks` app factory so
+- [ ] T1.4 — Wire host construction into the `codecraftai-webworks` app factory so
   it runs after the message bus comes up.
 - [ ] T1.5 — Add the `GET /admin/extensions/snapshot` route under
   `admin_routes.py` returning the empty snapshot shape.
@@ -37,8 +37,8 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Implement `scan_pychestrate_namespaces(scan_paths=...)` in
-  `scanner.py` walking `automojo/factories/pychestrate` and
-  `automojo/extensions/pychestrate` trees.
+  `scanner.py` walking `ccai/factories/pychestrate` and
+  `ccai/extensions/pychestrate` trees.
 - [ ] T2.2 — Implement `load_factory_extension_types` and
   `load_resource_extension_types` with defensive `__module__` checks to avoid
   re-loading imported-from-elsewhere symbols.
@@ -55,7 +55,7 @@
 - [ ] T2.7 — Add `POST /admin/extensions/rescan` route with permission
   `extensions.rescan` gating; emit audit-log entry on success.
 - [ ] T2.8 — Ship a minimal in-tree sample module under
-  `source/site/automojo/factories/pychestrate/_samples/` wired to prove the
+  `source/site/ccai/factories/pychestrate/_samples/` wired to prove the
   host loads something.
 
 ### M3 — Hardening

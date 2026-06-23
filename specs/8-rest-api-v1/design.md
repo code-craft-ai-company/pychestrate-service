@@ -3,9 +3,9 @@
 ## Architecture
 
 `8-rest-api-v1` lives under
-`source/site/automojo/pychestrate/webservice/restapi/` with one
+`source/site/ccai/pychestrate/webservice/restapi/` with one
 sub-package per major version. The authoritative v1 tree is
-`source/site/automojo/pychestrate/webservice/restapi/versions/v1/` —
+`source/site/ccai/pychestrate/webservice/restapi/versions/v1/` —
 each major version is a sibling folder (e.g. `.../versions/v2/`) so a
 future version can ship without disturbing v1 code paths. A thin
 top-level dispatcher (`restapi/api_root.py`) mounts every version's
@@ -94,7 +94,7 @@ Extension routes:
 ### Internal API
 
 Module
-`automojo.pychestrate.webservice.restapi.versions.v1.routing`:
+`ccai.pychestrate.webservice.restapi.versions.v1.routing`:
 
 ```python
 def register_route(
@@ -124,7 +124,7 @@ def register_route(
 ```
 
 Module
-`automojo.pychestrate.webservice.restapi.versions.v1.idempotency`:
+`ccai.pychestrate.webservice.restapi.versions.v1.idempotency`:
 
 ```python
 def lookup_or_record(
@@ -158,7 +158,7 @@ def store_response(
 ```
 
 Module
-`automojo.pychestrate.webservice.restapi.versions.v1.versioning`:
+`ccai.pychestrate.webservice.restapi.versions.v1.versioning`:
 
 ```python
 def resolve_requested_version(
@@ -186,7 +186,7 @@ def record_deprecation_hit(
 ```
 
 Module
-`automojo.pychestrate.webservice.restapi.versions.v1.rate_limit`:
+`ccai.pychestrate.webservice.restapi.versions.v1.rate_limit`:
 
 ```python
 def consume_token(
@@ -203,7 +203,7 @@ def consume_token(
 ```
 
 Module
-`automojo.pychestrate.webservice.restapi.ext_router`:
+`ccai.pychestrate.webservice.restapi.ext_router`:
 
 ```python
 def mount_extension_routes(*, host_registry: ExtensionHostRegistry) -> None:
@@ -220,7 +220,7 @@ def mount_extension_routes(*, host_registry: ExtensionHostRegistry) -> None:
 ### Extension Surface
 
 Resource base `RestEndpointExtension` declared in
-`automojo.pychestrate.webservice.restapi.extensions.rest_endpoint`:
+`ccai.pychestrate.webservice.restapi.extensions.rest_endpoint`:
 
 ```python
 class RestEndpointExtension(ResourceExtension):
@@ -264,7 +264,7 @@ Reference implementations (in-tree):
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/restapi/
+source/site/ccai/pychestrate/webservice/restapi/
     __init__.py
     api_root.py                     # top-level dispatcher; mounts /api/v<N>
     ext_router.py                   # collects RestEndpointExtension

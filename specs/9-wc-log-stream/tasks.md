@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-log-stream/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-log-stream/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-log-stream.ts::PycLogStream` Custom Element with observed attributes `run-id`, `src`, `since`, `follow-tail`, `buffer-cap`, `level-filter`, `aria-label`.
 - [ ] T1.3 — Implement `log-transport.ts` SSE transport against `/api/v1/runs/{run_id}/logs.stream`.
 - [ ] T1.4 — Author `styles.css` (multi-line per AGENTS.md) mapping `--pyc-log-stream-*` tokens to base `--pyc-*` tokens.

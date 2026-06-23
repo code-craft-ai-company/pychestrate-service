@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/hooks/`.
+  `source/site/ccai/pychestrate/webservice/extension/hooks/`.
 - [ ] T1.2 — Implement `subscribes_to` decorator in `decorator.py`
   attaching `_subscribes_to_metadata` to the method.
 - [ ] T1.3 — Implement `HookAspects` dataclass with the fields listed

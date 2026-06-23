@@ -10,7 +10,7 @@ order with a per-hook timeout, captures exceptions as
 `extension.call_failed` events, and refuses to advance the service to
 `ready` if any `on_service_ready` hook fails under strict mode. This
 feature ships in Phase 0.5 with `E-extension-host` and provides the
-missing long-lived-service semantics that `automojo-extension` leaves to
+missing long-lived-service semantics that `codecraftai-extension` leaves to
 the caller.
 
 ## Requirements

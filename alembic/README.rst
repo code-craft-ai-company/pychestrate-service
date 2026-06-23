@@ -4,7 +4,7 @@ Alembic migrations for pychestrate-service
 
 This directory holds the alembic configuration and migration
 versions for the production database schema. The runtime layer
-under ``source/site/automojo/pychestrate/webservice/`` declares
+under ``source/site/ccai/pychestrate/webservice/`` declares
 its own SQLAlchemy metadata via
 ``PychestratePhase1Base = declarative_base()`` in
 ``webservice/persistence/schema.py``; alembic walks that metadata

@@ -45,7 +45,7 @@ CLI:
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/pack_template/`.
+`source/site/ccai/pychestrate/webservice/extension/pack_template/`.
 
 ```python
 # generator.py
@@ -81,14 +81,14 @@ def load_template_manifest(*, corpus_root: Path, version: int) -> PackTemplateMa
 ### Template corpus layout
 
 ```
-source/site/automojo/pychestrate/webservice/extension/pack_template/corpus/
+source/site/ccai/pychestrate/webservice/extension/pack_template/corpus/
     v1/
         _meta.yaml
         pyproject.toml.jinja
         pychestrate_ext.yaml.jinja
         source/
             packages/
-                automojo/
+                ccai/
                     factories/
                         pychestrate/
                             __NAME__/
@@ -124,7 +124,7 @@ None.
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/pack_template/
+source/site/ccai/pychestrate/webservice/extension/pack_template/
     __init__.py
     generator.py
     corpus.py
@@ -167,7 +167,7 @@ source/site/automojo/pychestrate/webservice/extension/pack_template/
 2. Spins a fixture service; calls
    `fixture.install_pack(pack_root=.)`; asserts the pack loads and
    passes manifest, compat, and (optionally) sandbox checks.
-3. Emits a `testrun_summary.json` compatible with `automojo-testbase`.
+3. Emits a `testrun_summary.json` compatible with `codecraftai-testbase`.
 
 ## Error Handling
 

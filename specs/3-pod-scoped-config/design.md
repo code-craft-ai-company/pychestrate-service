@@ -3,7 +3,7 @@
 ## Architecture
 
 Pod-Scoped Config lives at
-`source/site/automojo/pychestrate/webservice/pods/scoped_config/`. It is
+`source/site/ccai/pychestrate/webservice/pods/scoped_config/`. It is
 the *scope layer* that teaches `2-global-variables` and `1-secrets-vault`
 about a new `pod_run` scope. It contributes:
 
@@ -175,7 +175,7 @@ entity.pod.scoped_purged           { run_id }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/scoped_config/
+source/site/ccai/pychestrate/webservice/pods/scoped_config/
     __init__.py
     dtos.py                     -- ResolvedVariable, DereferencedSecret,
                                    SecretPolicy, BearerReference

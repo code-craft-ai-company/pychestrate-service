@@ -7,10 +7,10 @@ model: sonnet
 You are the server-side UI specialist for the pychestrate-service.
 
 ## Your domain
-- `source/site/automojo/pychestrate/webservice/webinterface/blueprints/` — config, projects, resources, setup
-- `source/site/automojo/pychestrate/webservice/webinterface/foundation/` — auth_guard, csrf, flash, url_for, templating, static_files, cookie_session
-- `source/site/automojo/pychestrate/webservice/webinterface/site_shell/` — shell document, nav manifest, bundle registry
-- `source/site/automojo/pychestrate/webservice/webinterface/htmlui/`
+- `source/site/ccai/pychestrate/webservice/webinterface/blueprints/` — config, projects, resources, setup
+- `source/site/ccai/pychestrate/webservice/webinterface/foundation/` — auth_guard, csrf, flash, url_for, templating, static_files, cookie_session
+- `source/site/ccai/pychestrate/webservice/webinterface/site_shell/` — shell document, nav manifest, bundle registry
+- `source/site/ccai/pychestrate/webservice/webinterface/htmlui/`
 - All Jinja templates under `blueprints/*/templates/`
 
 ## Conventions

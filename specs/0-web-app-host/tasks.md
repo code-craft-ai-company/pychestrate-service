@@ -17,12 +17,12 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/host/` package skeleton with empty modules listed in design.md Component Breakdown.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/host/` package skeleton with empty modules listed in design.md Component Breakdown.
 - [ ] T1.2 — Implement `host/config.py` with `ServiceConfig` dataclass and `load_service_config()` that reads `PYCHESTRATE_*` env vars plus an optional `pychestrate.yaml`.
-- [ ] T1.3 — Implement `host/persona.py::establish_pychestrate_app` wrapping `automojo.webworks.webapplication.establish_webapp_persona`.
+- [ ] T1.3 — Implement `host/persona.py::establish_pychestrate_app` wrapping `ccai.webworks.webapplication.establish_webapp_persona`.
 - [ ] T1.4 — Implement `host/registration.py` with `register_route`, `register_startup_hook`, `register_shutdown_hook`, duplicate-name `SemanticError` enforcement.
 - [ ] T1.5 — Implement `host/lifecycle.py::invoke_startup_hooks` and `invoke_shutdown_hooks` with stable `(priority, name)` sort.
-- [ ] T1.6 — Implement `host/runner.py::run_pychestrate_server` wrapping `automojo.webworks.wsgi.server.run_server` and installing a SIGTERM handler.
+- [ ] T1.6 — Implement `host/runner.py::run_pychestrate_server` wrapping `ccai.webworks.wsgi.server.run_server` and installing a SIGTERM handler.
 - [ ] T1.7 — Port `app_pychestrate_main.py` to use the new APIs; keep the existing `/` greeting route as a registered route.
 - [ ] T1.8 — Wire minimal `host/probes.py` serving `/__health/live` and `/__health/startup` until `0-system-health` ships.
 

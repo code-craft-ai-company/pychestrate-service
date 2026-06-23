@@ -16,7 +16,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/ui/`.
+  `source/site/ccai/pychestrate/webservice/extension/ui/`.
 - [ ] T1.2 — Implement `ExtensionViewComposer` with `build_list` and
   `build_detail`.
 - [ ] T1.3 — Add `GET /admin/extensions` and

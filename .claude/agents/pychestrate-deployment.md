@@ -24,7 +24,7 @@ You are the deployment specialist for the pychestrate-service.
 ## Deploy steps (`deploy-alpha-to-host.sh`)
 1. rsync working tree (excludes .venv, .cache, .claude, .git)
 2. Optional system-setup (apt, nginx) — `--skip-system-setup` skips
-3. Git credentials via `AUTOMOJO_REPO_TOKEN`
+3. Git credentials via `CODECRAFTAI_REPO_TOKEN`
 4. `rehome-repository` — generate `.env`
 5. `setup-environment` — venv + poetry install
 6. `alembic upgrade head` — against SQLite at `~/pychestrate/pychestrate.sqlite`

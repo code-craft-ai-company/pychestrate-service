@@ -18,7 +18,7 @@
 ### M1 — Skeleton
 
 - [x] T1.1 — Create `jobs/dispatch/` package skeleton per design.md Component Breakdown.
-      *(``source/site/automojo/pychestrate/webservice/jobs/dispatch/``
+      *(``source/site/ccai/pychestrate/webservice/jobs/dispatch/``
       with ``dispatcher.py``, ``repository.py``, ``models.py``,
       ``transport_adapter.py``, ``factories/{strategy,fifo}.py``,
       ``errors.py``, and ``__init__.py`` with
@@ -36,7 +36,7 @@
       (tests / orchestration) pre-filter. Live integration with
       ``3-client-registry`` + ``3-pod-lifecycle`` lands in M2
       when the dispatcher owns its own in-memory state snapshot.)*
-- [~] T1.4 — Implement `FifoDispatchStrategy` at `source/site/automojo/factories/pychestrate/dispatch_strategy/fifo.py` with `PRECEDENCE = 1000`.
+- [~] T1.4 — Implement `FifoDispatchStrategy` at `source/site/ccai/factories/pychestrate/dispatch_strategy/fifo.py` with `PRECEDENCE = 1000`.
       *(In-package location instead of external factories tree:
       ``jobs/dispatch/factories/fifo.py``. PRECEDENCE=1000 preserved.
       Registered via ``jobs.dispatch.register_builtin_extensions``.)*
@@ -65,7 +65,7 @@
 - [ ] T2.3 — Implement `jobs/dispatch/backoff_queue.py` with exponential 1 s → 60 s backoff and scheduler tick every 500 ms.
 - [ ] T2.4 — Implement `handle_ack`: persist `DispatchReceipt` through `5-dispatch-receipt`, increment `_inflight_by_pod`, transition run state.
 - [ ] T2.5 — Publish `entity.run.dispatched` and `pychestrate.job_dispatch.failed` on `0-message-bus`.
-- [ ] T2.6 — Implement `StickyPodDispatchStrategy` at `source/site/automojo/factories/pychestrate/dispatch_strategy/sticky.py` with `PRECEDENCE = 900`.
+- [ ] T2.6 — Implement `StickyPodDispatchStrategy` at `source/site/ccai/factories/pychestrate/dispatch_strategy/sticky.py` with `PRECEDENCE = 900`.
 - [ ] T2.7 — Implement `DispatchAspects` (retry policy, timeout, logging knobs).
 - [ ] T2.8 — Implement ack-timeout path transitioning run to `dispatch_unconfirmed` and deferring to `5-cancel-reconcile`.
 

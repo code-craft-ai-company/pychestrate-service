@@ -141,11 +141,11 @@ def sanitize_label_value(
 Shares `MetricDefinitionExtension` (owned by `7-metrics-ingest`). In-tree
 subclasses shipped here:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/build/duration.py` — `BuildDurationMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/build/queue.py` — `BuildQueueMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/build/result.py` — `BuildResultMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/build/cache.py` — `BuildCacheHitRatioMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/build/artifact.py` — `BuildArtifactBytesMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/build/duration.py` — `BuildDurationMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/build/queue.py` — `BuildQueueMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/build/result.py` — `BuildResultMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/build/cache.py` — `BuildCacheHitRatioMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/build/artifact.py` — `BuildArtifactBytesMetric`.
 
 Each subclass references `BuildMetricResolver` methods via its
 `SubscriptionSpec.value_resolver` and
@@ -165,7 +165,7 @@ Each subclass references `BuildMetricResolver` methods via its
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains/build/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/domains/build/`:
 
 - `__init__.py`
 - `resolver.py` — `BuildMetricResolver`.
@@ -174,7 +174,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains
 - `value_types.py` — `QueueEntry`, `BuildCompletedEvent`, etc.
 
 `MetricDefinitionExtension` subclasses under
-`source/site/automojo/extensions/pychestrate/metric_definition/build/`.
+`source/site/ccai/extensions/pychestrate/metric_definition/build/`.
 
 ## Key Flows
 

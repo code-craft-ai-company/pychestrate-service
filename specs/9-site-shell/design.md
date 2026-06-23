@@ -189,7 +189,7 @@ keyboard navigation.
 ## Component Breakdown
 
 All paths rooted at
-`source/site/automojo/pychestrate/webservice/webinterface/components/pyc-site-shell/`:
+`source/site/ccai/pychestrate/webservice/webinterface/components/pyc-site-shell/`:
 
 - `pyc-site-shell.ts` — shell Custom Element.
 - `sidebar/sidebar-registry.ts` — registry + visibility intersection.
@@ -207,7 +207,7 @@ All paths rooted at
 - `tests/`.
 
 Server-side adapter under
-`source/site/automojo/pychestrate/webservice/webinterface/site_shell/`:
+`source/site/ccai/pychestrate/webservice/webinterface/site_shell/`:
 
 - `shell_document.py` — Jinja template that emits the shell HTML and
   imports the feature bundles registered for the current route.

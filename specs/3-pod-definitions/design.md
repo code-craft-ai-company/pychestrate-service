@@ -3,7 +3,7 @@
 ## Architecture
 
 Pod Definitions live at
-`source/site/automojo/pychestrate/webservice/pods/definitions/`. Two
+`source/site/ccai/pychestrate/webservice/pods/definitions/`. Two
 persistence tiers: a logical `pod_definition` row per project-scoped pod
 (metadata, current version pointer) and an append-only
 `pod_definition_version` row per version (full spec JSON). Validation runs
@@ -210,7 +210,7 @@ entity.pod.definition_validation_failed
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/pods/definitions/
+source/site/ccai/pychestrate/webservice/pods/definitions/
     __init__.py
     dtos.py                      -- PodSpec, PodDefinition, PodDefinitionVersion,
                                     ValidationReport, ValidationError, ValidationWarning
@@ -223,12 +223,12 @@ source/site/automojo/pychestrate/webservice/pods/definitions/
         pod_spec.schema.json
     metrics.py
 
-source/site/automojo/pychestrate/factories/pod_spec_validator/
+source/site/ccai/pychestrate/factories/pod_spec_validator/
     integrity.py                 -- PRECEDENCE=10
     member_kind.py               -- PRECEDENCE=20
     link_graph.py                -- PRECEDENCE=30
 
-source/site/automojo/pychestrate/extensions/pod_member_kinds/
+source/site/ccai/pychestrate/extensions/pod_member_kinds/
     linux_host.py
     windows_host.py
     network_switch.py

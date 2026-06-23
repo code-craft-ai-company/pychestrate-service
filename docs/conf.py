@@ -3,7 +3,7 @@ Sphinx configuration for the Pychestrate documentation site.
 
 The docs site renders the externally-stable plugin API surface
 catalog into per-entry pages. Pages are emitted at build time by the
-``automojo.pychestrate.webservice.extension.docs_ext`` Sphinx extension
+``ccai.pychestrate.webservice.extension.docs_ext`` Sphinx extension
 and committed alongside the rest of the docs tree on release.
 
 Run ``make -C docs html`` from the repository root to build.
@@ -19,13 +19,13 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "source", "packages"))
 
 
 project = "Pychestrate"
-author = "Automation Mojo LLC"
-copyright = "2025, Automation Mojo LLC"
+author = "Code Craft AI LLC"
+copyright = "2025, Code Craft AI LLC"
 release = "0.1.0"
 
 
 extensions = [
-    "automojo.pychestrate.webservice.extension.docs_ext",
+    "ccai.pychestrate.webservice.extension.docs_ext",
 ]
 
 

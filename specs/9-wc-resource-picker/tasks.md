@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-resource-picker/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-resource-picker/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-resource-picker.ts::PycResourcePicker` Custom Element with observed attributes `pool-id`, `capabilities`, `tags`, `include-unhealthy`, `multiple`, `min-select`, `max-select`, `autofocus-search`, `aria-label`.
 - [ ] T1.3 — Implement `transport/resource-transport.ts` fetching `/api/v1/pools/{pool_id}/summary.json` and `/resources`.
 - [ ] T1.4 — Implement `selection-model.ts` single-select mode with `toggle`, `replace`, `clear`, `fingerprint`.

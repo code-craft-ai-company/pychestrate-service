@@ -3,7 +3,7 @@
 ## Architecture
 
 Client Capability Advertisement lives at
-`source/site/automojo/pychestrate/webservice/clients/capabilities/`. It
+`source/site/ccai/pychestrate/webservice/clients/capabilities/`. It
 consumes `CapabilityAdvertisementFrame` messages from the transport
 (`3-client-agent-protocol`), validates each value against its
 extension-declared `CapabilityKind` schema, and writes the delta
@@ -104,7 +104,7 @@ class CapabilityKindExtension(ResourceExtension):
 ```
 
 Reference implementations (in-tree, under
-`source/site/automojo/pychestrate/extensions/capability_kinds/`):
+`source/site/ccai/pychestrate/extensions/capability_kinds/`):
 
 - `ToolchainCapability` (`capability_kind_name="toolchain"`) — value:
   `{"name": str, "version": str, "path": str}`.
@@ -134,7 +134,7 @@ entity.client.capability_rejected      { client_id, kind, reason }
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/capabilities/
+source/site/ccai/pychestrate/webservice/clients/capabilities/
     __init__.py
     dtos.py                      -- CapabilityAdvertisement, CapabilityRow,
                                     CapabilityPredicate, AdvertisementApplyResult
@@ -146,7 +146,7 @@ source/site/automojo/pychestrate/webservice/clients/capabilities/
     rest.py
     metrics.py
 
-source/site/automojo/pychestrate/extensions/capability_kinds/
+source/site/ccai/pychestrate/extensions/capability_kinds/
     toolchain.py
     pod_member_ownership.py
     concurrency.py

@@ -3,7 +3,7 @@
 ## Architecture
 
 The envelope subsystem is a small, pure-Python codec layer owned by
-`source/site/automojo/pychestrate/webservice/jobs/envelope/`. It sits
+`source/site/ccai/pychestrate/webservice/jobs/envelope/`. It sits
 at the seam between `5-job-dispatch` (which assembles the
 `DispatchRequest`) and the pod client (which receives the
 `SignedJobEnvelope` over `3-client-agent-protocol`). The codec is
@@ -209,7 +209,7 @@ class EnvelopeFieldExtension(ResourceExtension):
 ```
 
 Reference implementations shipped in-tree (under
-`source/site/automojo/extensions/pychestrate/envelope_fields/`):
+`source/site/ccai/extensions/pychestrate/envelope_fields/`):
 
 - `TestBaseBuildInfoField` — `field_name = "x-build-info"`; mirrors
   testbase's `BuildInfo` block (`branch`, `build`, `flavor`,
@@ -239,7 +239,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `jobs/envelope/__init__.py`
 - `jobs/envelope/schema.py` — `JobEnvelope`, `SignedJobEnvelope`,
@@ -258,7 +258,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/`:
 - `jobs/envelope/repository.py` — `JobEnvelopeRepository` (persistence).
 
 Extensions live under
-`source/site/automojo/extensions/pychestrate/envelope_fields/`.
+`source/site/ccai/extensions/pychestrate/envelope_fields/`.
 
 ## Key Flows
 

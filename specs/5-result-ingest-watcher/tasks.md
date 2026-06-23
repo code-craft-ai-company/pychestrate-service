@@ -37,7 +37,7 @@
       rows idempotently, and emits
       ``entity.result_tree.landed`` plus per-task and
       per-artifact events.)*
-- [~] T1.6 — Implement `TestBaseResultTreeParser` at `source/site/automojo/factories/pychestrate/result_tree_parser/testbase_v1.py` with `PRECEDENCE = 1000`; handles all testbase tree files and subdirs.
+- [~] T1.6 — Implement `TestBaseResultTreeParser` at `source/site/ccai/factories/pychestrate/result_tree_parser/testbase_v1.py` with `PRECEDENCE = 1000`; handles all testbase tree files and subdirs.
       *(In-package at
       ``ingest/result/factories/testbase_v1.py``;
       ``PRECEDENCE=1000`` preserved. Reads
@@ -45,7 +45,7 @@
       ``testrun_results_stream.jsos`` (terminal records, deduped
       on ``instance`` UUID), and walks every regular file as an
       artifact with classification by top-level subdirectory.)*
-- [~] T1.7 — Implement default `ArtifactClassifierExtension`s under `source/site/automojo/extensions/pychestrate/artifact_classifiers/` covering summary, progress-stream, taskings, tc-by-products, diagnostics, static, and labelled artifacts.
+- [~] T1.7 — Implement default `ArtifactClassifierExtension`s under `source/site/ccai/extensions/pychestrate/artifact_classifiers/` covering summary, progress-stream, taskings, tc-by-products, diagnostics, static, and labelled artifacts.
       *(M1 classifies inline in the testbase parser via the
       ``ARTIFACT_CLASSIFICATION_MAP``. Extracting the classifiers
       into a registry of ``ArtifactClassifierExtension`` packs

@@ -3,7 +3,7 @@
 ## Architecture
 
 `2-notification-hub` lives under
-`automojo.pychestrate.webservice.notifications`. It consumes every topic on
+`ccai.pychestrate.webservice.notifications`. It consumes every topic on
 `0-message-bus` via a wildcard subscriber, runs each event through a
 three-stage pipeline (match → render → send), and persists per-dispatch
 audit trail in `0-persistence`. The channel registry and template registry
@@ -113,7 +113,7 @@ Indexes: `notification_channels UNIQUE (scope_level, scope_id, name)`;
 ### Internal API
 
 ```python
-# source/site/automojo/pychestrate/webservice/notifications/service.py
+# source/site/ccai/pychestrate/webservice/notifications/service.py
 
 def register_channel(
     *,
@@ -154,7 +154,7 @@ def update_user_preferences(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/notifications/router.py
+# source/site/ccai/pychestrate/webservice/notifications/router.py
 
 def compute_routes(
     *,
@@ -179,7 +179,7 @@ def compute_routes(
     ...
 
 
-# source/site/automojo/pychestrate/webservice/notifications/dispatcher.py
+# source/site/ccai/pychestrate/webservice/notifications/dispatcher.py
 
 def dispatch(
     *,
@@ -206,7 +206,7 @@ def replay_from_dlq(
 ### Extension Surface
 
 - `factory: notification_channel`
-  (`source/site/automojo/pychestrate/webservice/notifications/factories.py`)
+  (`source/site/ccai/pychestrate/webservice/notifications/factories.py`)
 
 ```python
 class NotificationChannelProtocol(FactoryProtocolBase):
@@ -232,7 +232,7 @@ class NotificationChannelProtocol(FactoryProtocolBase):
 ```
 
 Reference impls shipped in-tree under
-`automojo/factories/pychestrate/notifications/`:
+`ccai/factories/pychestrate/notifications/`:
 `SmtpEmailChannel`, `SlackWebhookChannel`, `MsTeamsWebhookChannel`,
 `PagerDutyEventsV2Channel`, `GenericWebhookChannel`.
 
@@ -295,7 +295,7 @@ Topics: `entity.notification.dispatched`,
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/notifications/
+source/site/ccai/pychestrate/webservice/notifications/
     __init__.py
     entities.py         # NotificationChannel, NotificationRoutingRule,
                         # UserNotificationPreferences, DispatchEnvelope,
@@ -310,7 +310,7 @@ source/site/automojo/pychestrate/webservice/notifications/
     templates.py        # NotificationTemplateExtension + reference impls
     subscriber.py       # wildcard bus subscriber -> router -> dispatcher
     errors.py
-source/site/automojo/pychestrate/webservice/restapi/versions/v1/notifications.py
+source/site/ccai/pychestrate/webservice/restapi/versions/v1/notifications.py
 ```
 
 ## Key Flows

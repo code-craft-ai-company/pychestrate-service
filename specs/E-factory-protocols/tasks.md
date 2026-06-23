@@ -19,7 +19,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/protocols/`.
+  `source/site/ccai/pychestrate/webservice/extension/protocols/`.
 - [ ] T1.2 — Implement `FactoryProtocolCatalogEntry` dataclass in
   `entry.py`.
 - [ ] T1.3 — Implement `FactoryProtocolCatalog` in `catalog.py` with

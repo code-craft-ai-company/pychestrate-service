@@ -16,7 +16,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/resources/health/` per design.md.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/resources/health/` per design.md.
 - [ ] T1.2 — Alembic migration `0070_resource_health` creating `core.resource_health` with PK, INDEX `(next_probe_at, probe_name)`, partial INDEX `(deferred_quarantine) WHERE deferred_quarantine = TRUE`.
 - [ ] T1.3 — Implement `models.py` for `ResourceHealthRow`, `ProbeOutcome`, `ProbeResult`, `ProbeAspects`.
 - [ ] T1.4 — Implement `repository.py::ResourceHealthRepository` with scheduler query using `FOR UPDATE SKIP LOCKED`.
@@ -28,7 +28,7 @@
 ### M2 — Core Behavior
 
 - [ ] T2.1 — Declare `ResourceHealthProbeProtocol` (FactoryProtocolBase) and register through `E-factory-protocols`; extend the registry to key by `(protocol_name, kind_name)`.
-- [ ] T2.2 — Implement the six in-tree probes: `DevicePingProbe`, `DeviceTCPProbe`, `DeviceSSHProbe`, `SubnetDhcpProbe`, `IpAddressReachabilityProbe`, `LicenseSeatCountProbe` under `source/site/automojo/factories/pychestrate/resource_health_probe/`.
+- [ ] T2.2 — Implement the six in-tree probes: `DevicePingProbe`, `DeviceTCPProbe`, `DeviceSSHProbe`, `SubnetDhcpProbe`, `IpAddressReachabilityProbe`, `LicenseSeatCountProbe` under `source/site/ccai/factories/pychestrate/resource_health_probe/`.
 - [ ] T2.3 — Honor `ResourceKindExtension.default_probe_name` at startup for initial bindings; emit `pychestrate.resource.health.no_probe_for_kind` once per kind that lacks one.
 - [ ] T2.4 — Implement quarantine / heal state machine in `outcome_processor.py`; use `4-resource-inventory.transition_resource_state` exclusively.
 - [ ] T2.5 — Deferred quarantine: set `deferred_quarantine=TRUE` when quarantine would collide with an active reservation; emit `pychestrate.resource.health.quarantine_deferred`.

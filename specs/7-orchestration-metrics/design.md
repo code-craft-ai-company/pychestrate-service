@@ -138,12 +138,12 @@ def sanitize_label_value(
 Shares `MetricDefinitionExtension` (owned by `7-metrics-ingest`). In-tree
 subclasses shipped here:
 
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/lead_time.py` — `PipelineLeadTimeMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/stage_duration.py` — `PipelineStageDurationMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/result.py` — `PipelineResultMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/retry.py` — `PipelineRetryMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/cancel.py` — `PipelineCancelMetric`.
-- `source/site/automojo/extensions/pychestrate/metric_definition/orchestration/parallel.py` — `PipelineParallelEfficiencyMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/lead_time.py` — `PipelineLeadTimeMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/stage_duration.py` — `PipelineStageDurationMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/result.py` — `PipelineResultMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/retry.py` — `PipelineRetryMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/cancel.py` — `PipelineCancelMetric`.
+- `source/site/ccai/extensions/pychestrate/metric_definition/orchestration/parallel.py` — `PipelineParallelEfficiencyMetric`.
 
 ### Events Emitted
 
@@ -158,7 +158,7 @@ subclasses shipped here:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains/orchestration/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/metrics/domains/orchestration/`:
 
 - `__init__.py`
 - `resolver.py` — `OrchestrationMetricResolver`.
@@ -169,7 +169,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/metrics/domains
 - `value_types.py` — `StageInterval`, `PipelineRunTimeline`, event payload dataclasses.
 
 `MetricDefinitionExtension` subclasses under
-`source/site/automojo/extensions/pychestrate/metric_definition/orchestration/`.
+`source/site/ccai/extensions/pychestrate/metric_definition/orchestration/`.
 
 ## Key Flows
 

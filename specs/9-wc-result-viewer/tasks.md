@@ -10,7 +10,7 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Scaffold `source/site/automojo/pychestrate/webservice/webinterface/components/pyc-result-viewer/` with TypeScript build wiring.
+- [ ] T1.1 — Scaffold `source/site/ccai/pychestrate/webservice/webinterface/components/pyc-result-viewer/` with TypeScript build wiring.
 - [ ] T1.2 — Implement `pyc-result-viewer.ts::PycResultViewer` Custom Element with observed attributes `run-id`, `filter`, `expand-failures`, `virtualize-threshold`, `stream-mode`, `aria-label`.
 - [ ] T1.3 — Implement `result-transport.ts` fetching `testrun_summary.json` and rendering counters + progress bar.
 - [ ] T1.4 — Implement `result-tree.ts` with `upsert`, `children`, and outline projection.

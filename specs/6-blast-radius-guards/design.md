@@ -194,7 +194,7 @@ class GuardRuleExtension(ResourceExtension):
 ```
 
 Reference rules shipped in-tree under
-`source/site/automojo/extensions/pychestrate/guard_rule/`:
+`source/site/ccai/extensions/pychestrate/guard_rule/`:
 
 - `ProdDestroyRequiresTwoPersonRule` — `rule_id = "core.prod_destroy_requires_two_person"`, applies to `action == destroy` and env with tag `environment_class=prod`.
 - `FrozenEnvBlockRule` — `rule_id = "core.frozen_env_block"`, applies to all apply/destroy when env is `frozen`.
@@ -215,7 +215,7 @@ Reference rules shipped in-tree under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/infra/guards/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/infra/guards/`:
 
 - `__init__.py`
 - `engine.py` — `BlastRadiusGuards`.
@@ -228,7 +228,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/i
 - `errors.py` — `ReviewExpiredError`.
 - `rest/v1_routes.py`.
 
-In-tree rules under `source/site/automojo/extensions/pychestrate/guard_rule/`.
+In-tree rules under `source/site/ccai/extensions/pychestrate/guard_rule/`.
 
 ## Key Flows
 

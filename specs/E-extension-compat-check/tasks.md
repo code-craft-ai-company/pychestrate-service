@@ -17,7 +17,7 @@
 ### M1 — Skeleton
 
 - [ ] T1.1 — Create the package tree under
-  `source/site/automojo/pychestrate/webservice/extension/compat/`.
+  `source/site/ccai/pychestrate/webservice/extension/compat/`.
 - [ ] T1.2 — Implement `CompatRejection` dataclass.
 - [ ] T1.3 — Implement `CompatChecker.check_manifest_window` against
   a `packaging.version.Version` running service version.

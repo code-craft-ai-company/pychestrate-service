@@ -37,7 +37,7 @@ N/A for REST; the scope is a per-process object handed to extensions.
 ### Internal API
 
 Code under
-`source/site/automojo/pychestrate/webservice/extension/config/`.
+`source/site/ccai/pychestrate/webservice/extension/config/`.
 
 ```python
 # scope.py
@@ -102,7 +102,7 @@ def build_scope_for_extension(*, ext_name: str,
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/extension/config/
+source/site/ccai/pychestrate/webservice/extension/config/
     __init__.py
     scope.py              # ExtensionConfigScope
     factory.py            # build_scope_for_extension()

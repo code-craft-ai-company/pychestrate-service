@@ -200,7 +200,7 @@ class PipelineStepKindExtension(ResourceExtension):
 ```
 
 Reference kinds shipped in-tree under
-`source/site/automojo/extensions/pychestrate/pipeline_step/`:
+`source/site/ccai/extensions/pychestrate/pipeline_step/`:
 
 - `BuildStepKind` — `kind_name="build"`; produces a `build` Layer 5 job.
 - `TestStepKind` — `kind_name="test"`.
@@ -227,7 +227,7 @@ Built-ins do not require `uses:` syntax; extension kinds do.
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/pipelines/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/pipelines/`:
 
 - `__init__.py`
 - `service.py` — `PipelineService`.
@@ -243,10 +243,10 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/p
 - `rest/v1_routes.py` — REST endpoints.
 
 In-tree step-kind extensions live under
-`source/site/automojo/extensions/pychestrate/pipeline_step/`.
+`source/site/ccai/extensions/pychestrate/pipeline_step/`.
 
 Schema file shipped in-tree at
-`source/site/automojo/pychestrate/webservice/orchestration/pipelines/schemas/pipeline.schema.v1.json`.
+`source/site/ccai/pychestrate/webservice/orchestration/pipelines/schemas/pipeline.schema.v1.json`.
 
 ## Key Flows
 

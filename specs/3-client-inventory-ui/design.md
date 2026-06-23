@@ -3,7 +3,7 @@
 ## Architecture
 
 The Client Inventory UI backing service lives at
-`source/site/automojo/pychestrate/webservice/clients/inventory/`. It is
+`source/site/ccai/pychestrate/webservice/clients/inventory/`. It is
 composed of:
 
 - A REST aggregator that joins `client`, `pod_runtime_state`, and
@@ -15,7 +15,7 @@ composed of:
   `client_inventory_change_log` table + in-memory index), and serves
   `since`-parameterized reads.
 - A WebComponent bundle under
-  `source/site/automojo/pychestrate/webui/components/pcx-client-inventory/`
+  `source/site/ccai/pychestrate/webui/components/pcx-client-inventory/`
   — a framework-agnostic custom element that calls these two endpoints
   and renders the table, themed via `9-ui-design-tokens` CSS custom
   properties.
@@ -99,7 +99,7 @@ WebComponent:
     `theme-variant`.
   - events: `pcx-client-selected` (detail: `client_id`),
     `pcx-inventory-error`.
-  - served from `source/site/automojo/pychestrate/webui/components/
+  - served from `source/site/ccai/pychestrate/webui/components/
     pcx-client-inventory/`.
 
 ### Internal API
@@ -163,7 +163,7 @@ All of the following, translated to change-log rows:
 ## Component Breakdown
 
 ```
-source/site/automojo/pychestrate/webservice/clients/inventory/
+source/site/ccai/pychestrate/webservice/clients/inventory/
     __init__.py
     dtos.py
     service.py                 -- read_inventory, read_changes, log_inventory_change
@@ -175,7 +175,7 @@ source/site/automojo/pychestrate/webservice/clients/inventory/
     rest.py
     metrics.py
 
-source/site/automojo/pychestrate/webui/components/pcx-client-inventory/
+source/site/ccai/pychestrate/webui/components/pcx-client-inventory/
     index.js                   -- custom element registration
     pcx-client-inventory.js
     pcx-client-inventory.css

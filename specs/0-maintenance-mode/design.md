@@ -227,7 +227,7 @@ On `0-message-bus`:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 
 - `maintenance/__init__.py`
 - `maintenance/mode.py` — `MaintenanceMode` enum, `mode_precedence`.

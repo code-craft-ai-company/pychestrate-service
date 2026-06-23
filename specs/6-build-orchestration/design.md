@@ -220,9 +220,9 @@ class BuildCacheBackendProtocol(FactoryProtocolBase):
 ```
 
 Reference implementations under
-`source/site/automojo/factories/pychestrate/build/`:
+`source/site/ccai/factories/pychestrate/build/`:
 
-- `MakefileRunnerKind` — `PRECEDENCE = 1000`; executes a `make` invocation with `automojo-testbase`-compatible progress stream.
+- `MakefileRunnerKind` — `PRECEDENCE = 1000`; executes a `make` invocation with `codecraftai-testbase`-compatible progress stream.
 - `PoetryBuildRunnerKind` — `PRECEDENCE = 1000`; Python poetry builds.
 - `DockerBuildRunnerKind` — `PRECEDENCE = 1000`; `docker build`.
 - `FsBuildCacheBackend` — `PRECEDENCE = 1000`; local FS-backed cache (good for small sites).
@@ -243,7 +243,7 @@ Reference implementations under
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/build/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/orchestration/build/`:
 
 - `__init__.py`
 - `orchestrator.py` — `BuildOrchestrator`.
@@ -258,7 +258,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/orchestration/b
 - `errors.py` — `ReproducibilityError`, `CapabilityMismatchError`.
 - `rest/v1_routes.py`.
 
-Factories under `source/site/automojo/factories/pychestrate/build/`.
+Factories under `source/site/ccai/factories/pychestrate/build/`.
 
 ## Key Flows
 

@@ -10,10 +10,10 @@
 
 ### M1 — Skeleton
 
-- [ ] T1.1 — Create `source/site/automojo/pychestrate/webservice/orchestration/build/artifacts/` package per design.md.
+- [ ] T1.1 — Create `source/site/ccai/pychestrate/webservice/orchestration/build/artifacts/` package per design.md.
 - [ ] T1.2 — Add `0-persistence` migration for `build_artifact_manifest`, `build_artifact_entry_index`, `build_artifact_promotion_ledger`, `channel_head`.
 - [ ] T1.3 — Implement `synthesizer.py::synthesize_manifest` reading from `5-result-ingest-watcher`.
-- [ ] T1.4 — Implement `ContainerImageArtifactType` at `source/site/automojo/extensions/pychestrate/artifact_type/container_image.py`.
+- [ ] T1.4 — Implement `ContainerImageArtifactType` at `source/site/ccai/extensions/pychestrate/artifact_type/container_image.py`.
 - [ ] T1.5 — Implement `service.py::BuildArtifactsService.synthesize_manifest` and subscriber on `entity.build.run_completed`.
 - [ ] T1.6 — Register `GET /api/v1/projects/{id}/build-runs/{run_id}/artifact-manifest`.
 

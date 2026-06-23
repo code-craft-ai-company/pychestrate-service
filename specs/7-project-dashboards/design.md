@@ -232,10 +232,10 @@ class DashboardTileKindExtension(ResourceExtension):
 
 Reference implementations shipped in-tree:
 
-- `source/site/automojo/extensions/pychestrate/dashboard_tile_kind/metric_line.py` — `kind="metric_line"`, `webcomponent_tag="pychestrate-metric-line-tile"`.
-- `source/site/automojo/extensions/pychestrate/dashboard_tile_kind/metric_stat.py` — `kind="metric_stat"`.
-- `source/site/automojo/extensions/pychestrate/dashboard_tile_kind/slo_burn.py` — `kind="slo_burn"` (consumed by `7-slo-views`).
-- `source/site/automojo/extensions/pychestrate/dashboard_tile_kind/pipeline_health.py` — `kind="pipeline_health"`.
+- `source/site/ccai/extensions/pychestrate/dashboard_tile_kind/metric_line.py` — `kind="metric_line"`, `webcomponent_tag="pychestrate-metric-line-tile"`.
+- `source/site/ccai/extensions/pychestrate/dashboard_tile_kind/metric_stat.py` — `kind="metric_stat"`.
+- `source/site/ccai/extensions/pychestrate/dashboard_tile_kind/slo_burn.py` — `kind="slo_burn"` (consumed by `7-slo-views`).
+- `source/site/ccai/extensions/pychestrate/dashboard_tile_kind/pipeline_health.py` — `kind="pipeline_health"`.
 
 ### Events Emitted
 
@@ -249,7 +249,7 @@ Reference implementations shipped in-tree:
 
 ## Component Breakdown
 
-All paths rooted at `source/site/automojo/pychestrate/webservice/dashboards/`:
+All paths rooted at `source/site/ccai/pychestrate/webservice/dashboards/`:
 
 - `__init__.py`
 - `service.py` — `DashboardService`.
@@ -264,7 +264,7 @@ All paths rooted at `source/site/automojo/pychestrate/webservice/dashboards/`:
 - `rest/schemas.py` — pydantic-style schemas for request/response.
 
 Tile kind extensions under
-`source/site/automojo/extensions/pychestrate/dashboard_tile_kind/`.
+`source/site/ccai/extensions/pychestrate/dashboard_tile_kind/`.
 
 ## Key Flows
 
