@@ -1095,13 +1095,20 @@ def _resolve_authenticated_request(
         session[csrf.SESSION_KEY] = session_info.csrf_token
     session["username"] = session_info.username
 
+    # Use the CSRF token already stored in the session (set during
+    # login at line 731 or refreshed above at line 1095 for the
+    # legacy adapter).  The modern adapter leaves session_info.csrf_token
+    # empty on purpose -- the cookie holds the real value -- so reading
+    # session[csrf.SESSION_KEY] is always correct for both adapters.
+    resolved_csrf_token = session.get(csrf.SESSION_KEY, "")
+
     rtnval = _AuthResolution(
         redirect_response=None,
         session=session,
         db_session=db_session,
         user_id=session_info.user_id,
         username=session_info.username,
-        csrf_token=session_info.csrf_token,
+        csrf_token=resolved_csrf_token,
     )
     return rtnval
 

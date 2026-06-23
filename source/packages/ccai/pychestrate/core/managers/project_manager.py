@@ -1111,30 +1111,72 @@ class ProjectManager:
     def check_permission(self, project_id: int, user_id: str, permission: str) -> bool:
         """
         Check if user has permission on project.
-        
+
+        Accepts two kinds of ``permission`` values:
+
+        * **Role-level shortcuts** used by the legacy web UI routes:
+          ``'view'`` (any project member), ``'admin'`` (administrator or
+          owner), ``'owner'`` (owner only).
+        * **Granular permission strings** defined in :data:`ROLE_PERMISSIONS`
+          (e.g. ``'project.update'``, ``'build.trigger'``).
+
         :param project_id: The project's unique identifier
         :param user_id: The user's unique identifier
-        :param permission: The permission to check (e.g., 'project.update', 'build.trigger')
+        :param permission: The permission to check.
         :returns: True if user has permission, False otherwise
-        
+
         Validates: Requirements 14.4
         """
-        from ccai.pychestrate.core.orm import Project, ProjectMember
-        
+        from ccai.pychestrate.core.orm import ProjectMember
+
         # Check if user is a member
         member = self._db_session.query(ProjectMember).filter(
             ProjectMember.project_id == project_id,
             ProjectMember.user_id == user_id
         ).first()
-        
+
         if not member:
             return False
-        
-        # Get role permissions
-        role = ProjectRole(member.role)
+
+        role_str = member.role
+
+        # --- Role-level shortcuts (used by the web-UI routes) ----------------
+        if permission == "view":
+            # Any role may view.
+            rtnval = True
+            return rtnval
+
+        if permission == "developer":
+            # Developer, administrator, or owner.
+            rtnval = role_str in (
+                ProjectRole.DEVELOPER.value,
+                ProjectRole.ADMINISTRATOR.value,
+                ProjectRole.OWNER.value,
+            )
+            return rtnval
+
+        if permission == "admin":
+            # Administrator or owner.
+            rtnval = role_str in (
+                ProjectRole.ADMINISTRATOR.value,
+                ProjectRole.OWNER.value,
+            )
+            return rtnval
+
+        if permission == "owner":
+            # Owner only.
+            rtnval = role_str == ProjectRole.OWNER.value
+            return rtnval
+
+        # --- Granular permission string check ---------------------------------
+        try:
+            role = ProjectRole(role_str)
+        except ValueError:
+            return False
+
         role_permissions = ROLE_PERMISSIONS.get(role, set())
-        
-        return permission in role_permissions
+        rtnval = permission in role_permissions
+        return rtnval
 
     
     # =========================================================================

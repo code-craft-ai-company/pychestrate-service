@@ -125,7 +125,7 @@ def _resolve_health_status(*, status_str: str) -> Any:
         Resolve a string to the :class:`HealthStatus` enum value.
         Raises ValueError on unknown.
     """
-    from ccai.pychestrate.core.managers.resource_manager import (  # noqa: E402
+    from ccai.pychestrate.core.orm import (  # noqa: E402
         HealthStatus,
     )
     rtnval = HealthStatus(status_str)
@@ -147,9 +147,9 @@ def _build_health_check_config(
         Construct a :class:`HealthCheckConfig`. Lazy-imports.
     """
     from ccai.pychestrate.core.managers.health_monitor import (  # noqa: E402
-        HealthCheckConfig,
+        HealthCheckConfigRequest,
     )
-    rtnval = HealthCheckConfig(
+    rtnval = HealthCheckConfigRequest(
         resource_id=resource_id,
         probe_url=probe_url,
         probe_command=probe_command,
@@ -329,7 +329,7 @@ def handle_health_detail(request: Request) -> Response:
         config = health_monitor.get_health_check_config(resource_id)
 
         total_pages = _approximate_total_pages(
-            page=page, per_page=per_page, returned_count=len(history)
+            page=page, per_page=per_page, returned_count=len(history.transitions)
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -340,7 +340,7 @@ def handle_health_detail(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["resource"] = resource
-        context["history"] = history
+        context["history"] = history.transitions
         context["config"] = config
         context["page"] = page
         context["per_page"] = per_page
