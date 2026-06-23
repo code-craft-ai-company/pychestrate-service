@@ -53,18 +53,8 @@ from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import utc_now
 
-from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
-from ccai.pychestrate.webservice.jobs.run.state.enums import (
-    RunEvent,
-    RunState,
-)
-from ccai.pychestrate.webservice.jobs.run.state.errors import (
-    IllegalTransitionError,
-    RunNotFoundError,
-    TerminalStateError,
-)
-from ccai.pychestrate.webservice.jobs.run.state.machine import (
-    transition as transition_run_state,
+from ccai.pychestrate.webservice.jobs.run.state.advance import (
+    advance_to_terminal as _advance_to_terminal,
 )
 from ccai.pychestrate.webservice.orchestration.build import (
     repository as build_repository,
@@ -113,16 +103,6 @@ TERMINAL_OUTCOME_SUCCESS: str = "success"
 #: persists the row directly, bypassing the registered-type
 #: ``validate_payload`` path that ``synthesize_manifest`` enforces.
 GENERIC_ARTIFACT_TYPE: str = "build-output-file"
-
-#: Run-state events the completion walker uses to drive a build /
-#: provision run-state row from ``DISPATCHING`` toward a terminal
-#: state. The walker applies each event in order, skipping events
-#: the transition table rejects from the current state, until the
-#: row is terminal.
-_RUN_STATE_TERMINAL_EVENTS = (
-    RunEvent.RECEIPT_RECORDED,
-    RunEvent.FIRST_PROGRESS,
-)
 
 _LOGGER = logging.getLogger("pychestrate.ingest.result.completion")
 
@@ -198,109 +178,6 @@ def _artifact_files_from_manifest(
             rtnval.append(candidate)
 
     return rtnval
-
-
-def _advance_run_state_to_terminal(
-        *,
-        db_session: DbSession,
-        run_id: str,
-        succeeded: bool,
-        reason: str
-    ) -> Optional[str]:
-    """
-        Drive the run-state machine row for a build / provision run
-        to a terminal state.
-
-        A build / provision run-state row is parked at
-        ``DISPATCHING`` by the orchestrator's trigger path (the
-        dispatch-receipt path that advances test runs onward never
-        runs for an un-enrolled client). The transition table has
-        no direct ``DISPATCHING -> COMPLETED`` edge, so the walker
-        applies the intermediate canonical events
-        (``receipt_recorded`` -> ``DISPATCHED``,
-        ``first_progress`` -> ``RUNNING``) and then the terminal
-        ``completion_observed`` / ``failure_observed`` event.
-
-        The walk is tolerant: an event the table rejects from the
-        current state is skipped, and an already-terminal row is a
-        no-op. The domain run's terminal state -- not this row --
-        is the authoritative completion record, so a run-state row
-        the walker cannot reach terminal is logged, not raised.
-
-        :param db_session: Active SQLAlchemy session.
-        :param run_id: Run UUID (shared by domain run + run-state).
-        :param succeeded: Whether the run completed successfully.
-        :param reason: Audited transition reason.
-
-        :returns: The terminal run-state value, the last observed
-                  run-state value when terminal could not be
-                  reached, or ``None`` when no run-state row exists.
-    """
-    row = run_repo.find_run(db_session=db_session, run_id=run_id)
-    if row is None:
-        rtnval = None
-        return rtnval
-
-    if row.state in (RunState.COMPLETED, RunState.FAILED, RunState.CANCELLED):
-        rtnval = row.state.value
-        return rtnval
-
-    terminal_event = RunEvent.COMPLETION_OBSERVED
-    if succeeded is False:
-        terminal_event = RunEvent.FAILURE_OBSERVED
-
-    actor = "system:result-ingest"
-
-    # Walk the intermediate dispatch / progress events so the row
-    # advances out of DISPATCHING toward a state that has a direct
-    # edge to the terminal event.
-    for event in _RUN_STATE_TERMINAL_EVENTS:
-        try:
-            transition_run_state(
-                db_session=db_session,
-                run_id=run_id,
-                event=event,
-                actor=actor,
-                reason="result-ingest advance: {}".format(reason),
-            )
-        except (IllegalTransitionError, TerminalStateError):
-            # The row was already past this event, or this event is
-            # not legal from its current state -- both are fine, the
-            # walker just tries the next event.
-            continue
-        except RunNotFoundError:
-            rtnval = None
-            return rtnval
-
-    try:
-        snapshot = transition_run_state(
-            db_session=db_session,
-            run_id=run_id,
-            event=terminal_event,
-            actor=actor,
-            reason=reason,
-        )
-        rtnval = snapshot.state.value
-        return rtnval
-    except (IllegalTransitionError, TerminalStateError) as xcpt:
-        # The run-state row could not be driven terminal from where
-        # it sits. The domain run row IS terminal (the caller
-        # advanced it first), so this is a non-fatal divergence --
-        # log it for operator triage rather than failing the
-        # manifest ingest.
-        _LOGGER.warning(
-            "pychestrate.ingest.result.completion.run_state_not_terminal"
-            " run_id=%s event=%s err=%s",
-            run_id,
-            terminal_event.value,
-            xcpt,
-        )
-        current = run_repo.find_run(db_session=db_session, run_id=run_id)
-        if current is None:
-            rtnval = None
-            return rtnval
-        rtnval = current.state.value
-        return rtnval
 
 
 def _record_build_artifacts(
@@ -458,10 +335,11 @@ def complete_build_run(
         reason=reason,
     )
 
-    run_state = _advance_run_state_to_terminal(
+    run_state = _advance_to_terminal(
         db_session=db_session,
         run_id=run_id,
         succeeded=succeeded,
+        actor="system:result-ingest",
         reason=reason,
     )
 
@@ -565,10 +443,11 @@ def complete_provision_run(
         reason=reason,
     )
 
-    run_state = _advance_run_state_to_terminal(
+    run_state = _advance_to_terminal(
         db_session=db_session,
         run_id=run_id,
         succeeded=succeeded,
+        actor="system:result-ingest",
         reason=reason,
     )
 

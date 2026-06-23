@@ -86,8 +86,18 @@ from ccai.pychestrate.webservice.jobs.dispatch.receipt.errors import (
     ReceiptEnvelopeMismatchError,
 )
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
+from ccai.pychestrate.webservice.jobs.run.state.advance import (
+    advance_to_dispatched as _advance_to_dispatched,
+    advance_to_terminal as _advance_to_terminal,
+    note_progress as _note_progress,
+)
 from ccai.pychestrate.webservice.jobs.run.state.errors import (
+    IllegalTransitionError,
     RunNotFoundError,
+    TerminalStateError,
+)
+from ccai.pychestrate.webservice.jobs.run.state.machine import (
+    request_cancel as _request_cancel,
 )
 from ccai.pychestrate.webservice.jobs.run.state.models import Run
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
@@ -104,6 +114,11 @@ MTLS_CLIENT_CN_ENVIRON_KEY = "SSL_CLIENT_S_DN_CN"
 
 #: Permission key the operator-facing GET endpoints require.
 RUNS_READ_PERMISSION_KEY = "system:runs.read"
+
+#: Permission key required to cancel an in-flight run.  Maps to the
+#: project-scoped ``project:runs.cancel`` grant registered in
+#: ``security.rbac.extensions.project_roles``.
+RUNS_CANCEL_PERMISSION_KEY = "project:runs.cancel"
 
 #: Default + bounds for the page-size query param. Matches the
 #: OpenAPI ``PerPageParam`` schema (default 50, max 500).
@@ -722,6 +737,21 @@ def handle_dispatch_ack(request: Request) -> Response:
                 },
             )
 
+        try:
+            _advance_to_dispatched(
+                db_session=db_session,
+                run_id=run_id,
+                actor="system:dispatch-ack",
+                reason="dispatch-ack receipt recorded",
+            )
+        except Exception as xcpt:
+            _LOGGER.warning(
+                "pychestrate.runs.dispatch_ack.state_advance_error"
+                " run_id=%s err=%s",
+                run_id,
+                xcpt,
+            )
+
         _LOGGER.info(
             "pychestrate.runs.dispatch_ack run_id=%s client_cn=%s",
             run_id,
@@ -924,6 +954,21 @@ def handle_post_progress(request: Request) -> Response:
                 )
                 frames_accepted = 0  # unreachable
 
+            try:
+                _note_progress(
+                    db_session=db_session,
+                    run_id=run_id,
+                    actor="system:progress-ingest",
+                    reason="progress frame: kind={}".format(frame_kind),
+                )
+            except Exception as xcpt:
+                _LOGGER.warning(
+                    "pychestrate.runs.progress.state_advance_error"
+                    " run_id=%s err=%s",
+                    run_id,
+                    xcpt,
+                )
+
             _LOGGER.info(
                 "pychestrate.runs.progress run_id=%s client_cn=%s"
                 " frame_kind=%s frames=%d",
@@ -1045,6 +1090,21 @@ def handle_post_progress(request: Request) -> Response:
                 status=400,
                 detail=str(xcpt),
                 extensions={"run_id": run_id},
+            )
+
+        try:
+            _note_progress(
+                db_session=db_session,
+                run_id=run_id,
+                actor="system:progress-ingest",
+                reason="progress frame: kind=test",
+            )
+        except Exception as xcpt:
+            _LOGGER.warning(
+                "pychestrate.runs.progress.state_advance_error"
+                " run_id=%s err=%s",
+                run_id,
+                xcpt,
             )
 
         _LOGGER.info(
@@ -1266,6 +1326,28 @@ def handle_post_results_complete(request: Request) -> Response:
                 scan_status = "scan_deferred"
                 scan_detail = str(xcpt)
 
+            # Drive the run-state machine to a terminal state.
+            # Success is determined from the manifest's
+            # ``terminal_outcome`` field, mirroring how
+            # ingest.result.completion decides success for build /
+            # provision runs (terminal_outcome == "success" => True).
+            testbase_succeeded = terminal_outcome == result_completion.TERMINAL_OUTCOME_SUCCESS
+            try:
+                _advance_to_terminal(
+                    db_session=db_session,
+                    run_id=run_id,
+                    succeeded=testbase_succeeded,
+                    actor="system:result-ingest",
+                    reason="testbase result manifest: outcome={}".format(terminal_outcome),
+                )
+            except Exception as xcpt:
+                _LOGGER.warning(
+                    "pychestrate.runs.results_complete.state_advance_error"
+                    " run_id=%s err=%s",
+                    run_id,
+                    xcpt,
+                )
+
         _LOGGER.info(
             "pychestrate.runs.results_complete run_id=%s client_cn=%s"
             " format_tag=%s status=%s",
@@ -1285,6 +1367,153 @@ def handle_post_results_complete(request: Request) -> Response:
         if completion_summary is not None:
             body.update(completion_summary)
         rtnval: Response = JSONResponse(content=body, status_code=202)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/runs/{run_id}/cancel
+# ---------------------------------------------------------------------------
+
+
+def _require_runs_cancel_permission(*, request: Request, db_session: Any) -> None:
+    """
+        Require the calling principal to hold the cancel permission.
+
+        The permission key is ``project:runs.cancel``; it is granted
+        to the ``operator`` and ``admin`` project roles by the
+        built-in role definitions in
+        :mod:`security.rbac.extensions.project_roles`.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+
+        :returns: None.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+
+    now = datetime.now(timezone.utc)
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=RUNS_CANCEL_PERMISSION_KEY,
+        now=now,
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(RUNS_CANCEL_PERMISSION_KEY),
+            extensions={"required_permission": RUNS_CANCEL_PERMISSION_KEY},
+        )
+    return
+
+
+def handle_cancel_run(request: Request) -> Response:
+    """
+        ``POST /api/v1/runs/{run_id}/cancel`` -- request cancellation
+        of an in-flight run.
+
+        Requires the ``project:runs.cancel`` permission. The optional
+        ``reason`` field in the JSON body is recorded on the run and
+        included in the state-audit log for operator triage.
+
+        Idempotent for CANCEL_REQUESTED: the transition from any
+        cancel-family state that does NOT raise
+        :class:`IllegalTransitionError` or
+        :class:`TerminalStateError` proceeds normally; a run already
+        in a terminal state returns a 409 problem response so the
+        caller knows no cancel was needed.
+
+        :param request: Incoming webworks request.
+
+        :returns: 200 JSON with the run snapshot on success;
+                  409 problem+json when the run is terminal;
+                  404 problem+json when the run does not exist.
+    """
+    run_id = request.path_params.get("run_id", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_runs_cancel_permission(
+            request=request, db_session=db_session,
+        )
+
+        _require_run_exists(
+            request=request, db_session=db_session, run_id=run_id,
+        )
+
+        payload = {}
+        try:
+            candidate = request.json()
+            if isinstance(candidate, dict):
+                payload = candidate
+        except Exception:
+            pass
+
+        reason = payload.get("reason", None)
+        if not isinstance(reason, str) or len(reason) == 0:
+            reason = "cancel requested via REST"
+
+        principal = _resolve_auth_principal(request=request)
+        actor_id = "user:unknown"
+        if principal is not None:
+            user_id = getattr(principal, "user_id", None)
+            if user_id is not None:
+                actor_id = "user:{}".format(str(user_id))
+
+        try:
+            snapshot = _request_cancel(
+                db_session=db_session,
+                run_id=run_id,
+                actor=actor_id,
+                reason=reason,
+            )
+        except TerminalStateError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={
+                    "run_id": run_id,
+                    "reason": "run is already in a terminal state",
+                },
+            )
+            snapshot = None  # unreachable — _abort_problem raises.
+        except IllegalTransitionError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={
+                    "run_id": run_id,
+                    "reason": "cancel not permitted from current state",
+                },
+            )
+            snapshot = None  # unreachable.
+        except RunNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"run_id": run_id},
+            )
+            snapshot = None  # unreachable.
+
+        body = {
+            "run_id": snapshot.run_id,
+            "state": snapshot.state.value,
+            "prior_state": snapshot.prior_state.value if snapshot.prior_state is not None else None,
+            "entered_state_at": snapshot.entered_state_at.isoformat(),
+            "terminal_outcome": snapshot.terminal_outcome,
+        }
+        rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval
@@ -1321,6 +1550,9 @@ def register_runs_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{run_id}/results/complete", methods=["POST"],
     )(handle_post_results_complete)
+    app.attach_route(
+        base + "/{run_id}/cancel", methods=["POST"],
+    )(handle_cancel_run)
     return
 
 
@@ -1328,6 +1560,7 @@ __all__ = [
     "RUNS_PATH",
     "MTLS_CLIENT_CN_ENVIRON_KEY",
     "RUNS_READ_PERMISSION_KEY",
+    "RUNS_CANCEL_PERMISSION_KEY",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
     "SUPPORTED_PROGRESS_FRAME_KINDS",
@@ -1337,4 +1570,5 @@ __all__ = [
     "handle_dispatch_ack",
     "handle_post_progress",
     "handle_post_results_complete",
+    "handle_cancel_run",
 ]

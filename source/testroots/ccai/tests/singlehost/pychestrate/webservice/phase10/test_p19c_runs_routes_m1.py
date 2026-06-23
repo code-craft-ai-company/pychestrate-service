@@ -209,11 +209,12 @@ def _patch_check_permission(*, allowed: bool) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_runs_routes_attaches_five_endpoints():
+def test_register_runs_routes_attaches_six_endpoints():
     """
     **Feature: 5-run-state-machine PR p19c**
-    **Property: register_runs_routes attaches the five planned
-    method+path pairs from the OpenAPI spec.**
+    **Property: register_runs_routes attaches the six planned
+    method+path pairs from the OpenAPI spec (the five read/ingest
+    endpoints plus the operator cancel endpoint).**
     """
     app = _FakeApp()
     runs_routes.register_runs_routes(app=app, version_prefix="/api/v1")
@@ -223,6 +224,7 @@ def test_register_runs_routes_attaches_five_endpoints():
         ("/api/v1/runs/{run_id}/dispatch-ack", ("POST",)),
         ("/api/v1/runs/{run_id}/progress", ("POST",)),
         ("/api/v1/runs/{run_id}/results/complete", ("POST",)),
+        ("/api/v1/runs/{run_id}/cancel", ("POST",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)
