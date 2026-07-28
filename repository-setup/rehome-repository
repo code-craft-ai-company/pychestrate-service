@@ -183,20 +183,24 @@ def generate_directories():
 
 def generate_python_path():
 
-    folder_testbase_root = os.path.join(REPOSITORY_SOURCE_FOLDER, "testroots", "testbase")
+    # The list below names the folders THIS repository actually has. It is
+    # deliberately per-repository -- the layouts differ across the fleet and
+    # divergence here is expected, so keep it in step with `source/` rather
+    # than in step with another repo's copy of this script.
     folder_packages = os.path.join(REPOSITORY_SOURCE_FOLDER, "packages")
-    folder_service = os.path.join(REPOSITORY_SOURCE_FOLDER, "service")
+    # The deployable web service lives under `source/site` -- both the
+    # `app_pychestrate_main` entrypoint and `ccai.pychestrate.webservice`,
+    # which 174 test modules import. It was absent from the generated
+    # PYTHONPATH, so `ccai.pychestrate.webservice` did not resolve at all.
+    # `ccai` and `ccai.pychestrate` are namespace packages in both trees, so
+    # `source/packages` and `source/site` merge rather than shadow.
+    folder_site = os.path.join(REPOSITORY_SOURCE_FOLDER, "site")
     folder_testroots = os.path.join(REPOSITORY_SOURCE_FOLDER, "testroots")
-    folder_tests = os.path.join(REPOSITORY_SOURCE_FOLDER, "tests")
-    folder_tools = os.path.join(REPOSITORY_SOURCE_FOLDER, "tools")
 
     python_path_parts = [
-        folder_testbase_root,
         folder_packages,
-        folder_service,
+        folder_site,
         folder_testroots,
-        folder_tests,
-        folder_tools,
         VENV_SITEPACKAGES_FOLDER,
     ]
 
