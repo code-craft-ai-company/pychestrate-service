@@ -238,6 +238,27 @@ class _FakeHealthHistoryEntry:
         return
 
 
+class _FakeHealthTransitionList:
+    """
+        Stands in for :class:`HealthTransitionListResponse`.
+
+        The real ``HealthMonitor.get_health_history`` returns that dataclass,
+        not a bare list, and the route reads ``history.transitions`` from it.
+        Mirror the shape here so the double fails the same way the product
+        would.
+    """
+
+    def __init__(
+            self, *, transitions: List[_FakeHealthHistoryEntry],
+            total: Optional[int] = None, offset: int = 0, limit: int = 50
+        ) -> None:
+        self.transitions: List[_FakeHealthHistoryEntry] = transitions
+        self.total: int = len(transitions) if total is None else total
+        self.offset: int = offset
+        self.limit: int = limit
+        return
+
+
 class _FakeHealthCheckConfig:
     def __init__(
             self, *, resource_id: int, enabled: bool = True
@@ -285,7 +306,9 @@ class _FakeHealthMonitor:
 
     def __init__(self, db_session: Any) -> None:
         self.db_session: Any = db_session
-        self.history_response: List[_FakeHealthHistoryEntry] = []
+        self.history_response: _FakeHealthTransitionList = (
+            _FakeHealthTransitionList(transitions=[])
+        )
         self.config_response: Optional[_FakeHealthCheckConfig] = None
         self.run_check_response: bool = True
         self.run_check_raises: Optional[Exception] = None
@@ -299,7 +322,7 @@ class _FakeHealthMonitor:
 
     def get_health_history(
             self, resource_id: int, *, offset: int, limit: int
-        ) -> List[_FakeHealthHistoryEntry]:
+        ) -> _FakeHealthTransitionList:
         return self.history_response
 
     def get_health_check_config(
@@ -659,9 +682,9 @@ def test_handle_health_detail_renders_with_history_and_config():
         )
 
         def _seed_hm(instance: _FakeHealthMonitor) -> None:
-            instance.history_response = [
-                _FakeHealthHistoryEntry(entry_id=1)
-            ]
+            instance.history_response = _FakeHealthTransitionList(
+                transitions=[_FakeHealthHistoryEntry(entry_id=1)]
+            )
             instance.config_response = _FakeHealthCheckConfig(
                 resource_id=7
             )
