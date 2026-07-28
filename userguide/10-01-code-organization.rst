@@ -100,8 +100,11 @@ namespace alongside each other in the virtual environment like:
 
 'source/site' Folder
 --------------------
-The *site* folder contains a hierarchy of files and folders that are used to create a flask web application including both
-the graphical interface and REST API elements of a website or microservice.
+The *site* folder contains a hierarchy of files and folders that are used to create a ``ccai.webworks`` web application
+including both the graphical interface and REST API elements of a website or microservice.
+
+Flask and flask_restx are not installed in the production environment.  A module that imports either will fail at
+import time inside a running service.
 
 
 'source/site/\<namespace\>' Folder
@@ -131,7 +134,7 @@ templates, views, and other components that define the structure and behavior of
 
 'source/site/<namespace>/webinterface/blueprints' Folder
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The *blueprints* folder organizes the Flask application into modular components. Each blueprint represents a distinct
+The *blueprints* folder organizes the web application into modular components. Each blueprint represents a distinct
 feature or section of the web application, making the codebase easier to maintain and scale.
 
 'source/site/<namespace>/webinterface/blueprints/<blueprint-name>' Folder
@@ -155,7 +158,7 @@ For repositories that use 'testplus', the tests are organized based in the autom
     'source/testroots/<org-namespace>/tests/<automation-configuration>/<package-namespace>/<module-path>/<testroot-name>/<functionality>.py'
 
 The '<automation-configuration>' is that name of the automation configuration that the test is running under.  Automation configuraitons provide specific
-test resources and dependencies that are used by the test.  The '<org-namespace>' for all automation mojo repositories is 'ccai'.  The '<package-namespace>'
+test resources and dependencies that are used by the test.  The '<org-namespace>' for all Code Craft AI repositories is 'ccai'.  The '<package-namespace>'
 for a package is generally the second part of the package name.  For example, the 'codecraftai-interop' would use a package name like 'ccai.interop' for the
 package namespace and 'ccai.tests.interop' for the prefix for all of the packages tests. 
 
