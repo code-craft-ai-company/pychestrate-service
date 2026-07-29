@@ -630,7 +630,7 @@ requests = "^2.32.5"
 type = "git"
 url = "https://github.com/automationmojo/codecraftai-webworks.git"
 reference = "main"
-resolved_reference = "f3ac0eace53bc46257abf16d643951e6ee9eba56"
+resolved_reference = "703fab02f4130379566224132513c4dba01fe97b"
 
 [[package]]
 name = "codecraftai-xmodules"
