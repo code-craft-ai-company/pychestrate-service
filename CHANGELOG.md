@@ -14,6 +14,24 @@ bumped when the project crosses the preview-to-alpha threshold.
 
 ## [Unreleased]
 
+### Added
+
+- `GET /api/v1/envelope-signing-keys/jwks.json` — publishes the
+  job-envelope signing public keys as a standard RFC 7517 JWK Set
+  using the RFC 8037 `OKP`/`Ed25519` key type, served as
+  `application/jwk-set+json`. This closes the contract gap that forced
+  operators to install the verification key on each pod out of band
+  via `pychestrate-client install-signing-key`: `pychestrate-client`
+  refuses to run an envelope it cannot verify, but the service
+  previously published no JWKS. `keys[0]` is always the active signing
+  key; rotation grace-window keys follow in `kid` order. The response
+  is `Cache-Control: private, max-age=300, must-revalidate` with a
+  SHA-256 `ETag`, and honors `If-None-Match` with a `304`. Auth and
+  the not-provisioned `503` match the existing
+  `GET /api/v1/envelope-signing-keys` PEM endpoint, which stays as-is
+  — the two paths are two renderings of one key set. Recorded in
+  `specs/5-job-envelope` (Requirement 4) and the OpenAPI spec.
+
 ### Changed
 
 - **Breaking:** Renamed the PR p19g long-poll routes from the

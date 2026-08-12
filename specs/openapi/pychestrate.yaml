@@ -2140,6 +2140,82 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
+  /envelope-signing-keys/jwks.json:
+    get:
+      tags: [dispatch]
+      summary: Publish the envelope-signing public keys as an RFC 7517 JWK Set.
+      operationId: envelope_signing_keys_jwks
+      x-pychestrate-status: planned
+      description: |
+        The standards-shaped rendering of the same key material
+        `GET /envelope-signing-keys` returns: an RFC 7517 JWK Set
+        using the RFC 8037 `OKP` key type, so a pod client can feed
+        the document straight into an off-the-shelf JOSE library.
+        Prefer this endpoint for new consumers.
+
+        Key order is significant: the active signing key is always
+        `keys[0]` and rotation grace-window keys follow in `kid`
+        order (RFC 7517 §5 permits order to signal preference). A
+        client verifying a possibly-older envelope must still match
+        on `kid` rather than assume `keys[0]`.
+
+        Auth: identical to `GET /envelope-signing-keys` — any
+        authenticated principal (cookie session, API key, OR a
+        verified mTLS client certificate). The auth gate is evaluated
+        BEFORE the cache validator, so an anonymous request carrying
+        a matching `If-None-Match` gets 401, never a 304. The
+        endpoint returns 503 when no signing key has been
+        provisioned, rather than an empty key set.
+
+        Caching: the response is `private` (the endpoint is
+        auth-gated, so a shared cache must not serve a stored copy to
+        an anonymous caller), fresh for 300 seconds — matching the
+        `max_envelope_age` default so a cached key set never outlives
+        the envelopes it verifies — and must revalidate afterwards.
+        The strong `ETag` is the SHA-256 of the canonical JSON
+        rendering of the served document, so a rotation invalidates
+        every cached copy and all workers agree on the validator.
+      parameters:
+        - in: header
+          name: If-None-Match
+          required: false
+          description: |
+            Previously-received `ETag`. Answered with 304 when it
+            still matches, under the RFC 9110 §13.1.2 weak comparison
+            (the `W/` prefix is ignored and `*` matches any current
+            representation).
+          schema: { type: string }
+      responses:
+        '200':
+          description: The envelope-signing JWK Set.
+          headers:
+            Cache-Control:
+              description: Always `private, max-age=300, must-revalidate`.
+              schema: { type: string }
+            ETag:
+              description: |
+                Strong validator — the quoted SHA-256 hex digest of
+                the canonical JSON rendering of the document.
+              schema: { type: string }
+          content:
+            application/jwk-set+json:
+              schema: { $ref: '#/components/schemas/JsonWebKeySet' }
+        '304':
+          description: |
+            The caller's `If-None-Match` still matches; no body is
+            returned. `ETag` and `Cache-Control` are repeated so the
+            client can extend its cache entry.
+          headers:
+            Cache-Control:
+              description: Always `private, max-age=300, must-revalidate`.
+              schema: { type: string }
+            ETag:
+              description: The unchanged strong validator.
+              schema: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
   /runs/{run_id}/artifacts:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'
@@ -5179,6 +5255,52 @@ components:
         keys:
           type: array
           items: { $ref: '#/components/schemas/SigningKey' }
+
+    JsonWebKey:
+      type: object
+      description: |
+        One Ed25519 verification key as an RFC 7517 JWK using the
+        RFC 8037 `OKP` key type. Only the public half is ever
+        serialized — the private `d` member is never emitted.
+      required: [kty, crv, x, kid, use, alg]
+      properties:
+        kty:
+          type: string
+          description: CFRG octet key pair (RFC 8037 §2).
+          enum: [OKP]
+        crv:
+          type: string
+          enum: [Ed25519]
+        x:
+          type: string
+          description: |
+            The raw 32-byte public key in base64url with trailing
+            `=` padding stripped (RFC 7515 §2).
+        kid:
+          type: string
+          description: |
+            The identifier a signed envelope carries in its `key_id`
+            claim. Clients resolve an envelope's key by exact match.
+        use:
+          type: string
+          enum: [sig]
+        alg:
+          type: string
+          description: |
+            The JOSE signature algorithm (RFC 8037 §3.1). `EdDSA`,
+            not `Ed25519` — the curve travels in `crv`.
+          enum: [EdDSA]
+
+    JsonWebKeySet:
+      type: object
+      description: |
+        RFC 7517 JWK Set. `keys[0]` is always the active signing key;
+        rotation grace-window keys follow in `kid` order.
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          items: { $ref: '#/components/schemas/JsonWebKey' }
 
     AgentRollout:
       type: object

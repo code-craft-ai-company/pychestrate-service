@@ -12,6 +12,13 @@ startup via :func:`set_active_signing_key`; the JWKS-style verify set
 is populated via :func:`register_verify_key` (multiple public keys can
 be registered to support rotation).
 
+Two public-key renderings are produced for distribution to clients:
+:func:`active_signing_key_set` (Pychestrate-native, PEM +
+``active`` / ``retiring`` status) and :func:`active_signing_jwk_list`
+(RFC 7517 JWKs using the RFC 8037 ``OKP`` key type). Both read the
+same registry, so the two REST endpoints that serve them can never
+disagree about which keys are publishable.
+
 M1 scope: the signing key is loaded from an env var
 (``PYCHESTRATE_ENVELOPE_SIGNING_KEY``) in dev mode or supplied as raw
 bytes via :func:`set_active_signing_key`. M2 replaces the dev-mode
@@ -259,6 +266,22 @@ def generate_dev_signing_key(*, key_id: str) -> SigningKeyHandle:
 #: JWKS-style algorithm label published for every Ed25519 key.
 ED25519_ALGORITHM_NAME: str = "Ed25519"
 
+#: JWK ``kty`` member for CFRG octet key pairs (RFC 8037 section 2).
+OKP_JWK_KEY_TYPE: str = "OKP"
+
+#: JWK ``crv`` member naming the Ed25519 curve (RFC 8037 section 3.1).
+ED25519_JWK_CURVE_NAME: str = "Ed25519"
+
+#: JOSE ``alg`` identifier for Ed25519 signatures (RFC 8037 section
+#: 3.1). Note this is ``"EdDSA"`` and NOT ``"Ed25519"`` — the curve
+#: travels in ``crv`` while ``alg`` names the signature algorithm
+#: family.
+EDDSA_JOSE_ALGORITHM_NAME: str = "EdDSA"
+
+#: JWK ``use`` member marking a key as a signature-verification key
+#: (RFC 7517 section 4.2).
+JWK_SIGNATURE_PUBLIC_KEY_USE: str = "sig"
+
 
 def public_key_to_pem(*, public_key: Ed25519PublicKey) -> str:
     """
@@ -314,6 +337,84 @@ def active_signing_key_set() -> List[Dict[str, Any]]:
             "public_key_pem": public_key_to_pem(public_key=public_key),
             "status": status,
         }
+        rtnval.append(entry)
+    return rtnval
+
+
+def public_key_to_jwk(
+        *,
+        public_key: Ed25519PublicKey,
+        key_id: str
+    ) -> Dict[str, str]:
+    """
+        Serialize an Ed25519 public key as an RFC 7517 JWK using the
+        RFC 8037 OKP key type. Only the public half is serialized —
+        this function never touches private key material, so the
+        produced JWK carries no ``d`` member.
+
+        The ``x`` member is the raw 32-byte public key in base64url
+        with the trailing ``=`` padding stripped, per RFC 7515
+        section 2 ("Base64url Encoding").
+
+        :param public_key: The :class:`Ed25519PublicKey` to encode.
+        :param key_id: JWKS ``kid`` the signed envelope references.
+
+        :returns: Dict with ``kty``, ``crv``, ``x``, ``kid``, ``use``,
+                  and ``alg`` members.
+    """
+    raw_bytes = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    padded_text = base64.urlsafe_b64encode(raw_bytes).decode("ascii")
+    encoded_x = padded_text.rstrip("=")
+
+    rtnval = {
+        "kty": OKP_JWK_KEY_TYPE,
+        "crv": ED25519_JWK_CURVE_NAME,
+        "x": encoded_x,
+        "kid": key_id,
+        "use": JWK_SIGNATURE_PUBLIC_KEY_USE,
+        "alg": EDDSA_JOSE_ALGORITHM_NAME,
+    }
+    return rtnval
+
+
+def active_signing_jwk_list() -> List[Dict[str, str]]:
+    """
+        Build the RFC 7517 JWK list for the envelope-signing key set.
+
+        The active signing key is emitted FIRST and any rotation
+        grace-window verify keys follow in ``kid`` order. RFC 7517
+        section 5 allows key order to signal preference, so a client
+        that wants "the key envelopes are being signed with right
+        now" can take element zero without inspecting anything else.
+
+        The ordering is fully deterministic, which is what lets the
+        REST layer derive a stable ``ETag`` from the rendered
+        document.
+
+        :returns: List of JWK dicts. Empty when no signing key is
+                  installed.
+    """
+    handle = _ACTIVE_SIGNING_KEY
+    if handle is None:
+        rtnval: List[Dict[str, str]] = []
+        return rtnval
+
+    active_key_id = handle.key_id
+
+    active_jwk = public_key_to_jwk(
+        public_key=handle.public_key,
+        key_id=active_key_id,
+    )
+    rtnval = [active_jwk]
+
+    for key_id in sorted(_VERIFY_KEYS.keys()):
+        if key_id == active_key_id:
+            continue
+        public_key = _VERIFY_KEYS[key_id]
+        entry = public_key_to_jwk(public_key=public_key, key_id=key_id)
         rtnval.append(entry)
     return rtnval
 
