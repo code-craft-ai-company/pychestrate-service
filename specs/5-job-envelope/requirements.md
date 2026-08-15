@@ -111,6 +111,54 @@ as proof of authorization without a second round-trip.
    schema validation THEN the system SHALL raise `SemanticError` —
    never sign an envelope with a structurally invalid claim.
 
+### Requirement 4: Published Verification Key Set
+
+**User Story:** As a pod client agent author, I want to fetch the
+service's envelope-signing public key over the API, so that my client
+can verify signed envelopes without an operator installing the key out
+of band on every pod.
+
+**Acceptance Criteria (EARS):**
+
+1. WHEN an authenticated principal issues
+   `GET /api/v1/envelope-signing-keys/jwks.json` AND a signing key is
+   installed THEN the system SHALL return `200` with an RFC 7517 JWK
+   Set — `{"keys": [...]}` — served as
+   `application/jwk-set+json`, where each JWK carries `kty="OKP"`,
+   `crv="Ed25519"`, `alg="EdDSA"`, `use="sig"`, `kid` (matching the
+   signed envelope's `key_id`), and `x` (the raw 32-byte public key
+   in unpadded base64url per RFC 7515 §2).
+2. WHEN the JWK Set is rendered THEN the active signing key SHALL be
+   `keys[0]` and rotation grace-window keys SHALL follow in `kid`
+   order — RFC 7517 §5 order-as-preference — AND no JWK SHALL carry
+   a `d` member, because only public halves are ever published.
+3. IF the request carries no authenticated principal — no cookie
+   session, no API key, and no verified mTLS client certificate —
+   THEN the system SHALL return `401` and SHALL evaluate the auth
+   gate BEFORE any cache validator, so a matching `If-None-Match`
+   never yields a `304` that would confirm the document exists.
+4. IF no signing key has been provisioned THEN the system SHALL
+   return `503` rather than an empty key set, so callers can
+   distinguish "not configured yet" from "this service signs
+   nothing".
+5. WHEN the system serves the JWK Set THEN it SHALL emit
+   `Cache-Control: private, max-age=300, must-revalidate` — `private`
+   because the endpoint is auth-gated, `max-age=300` matching the
+   `max_envelope_age` default of Requirement 2 AC #3 so a cached key
+   set never outlives the envelopes it verifies — AND a strong
+   `ETag` holding the SHA-256 of the canonical JSON rendering of the
+   served document.
+6. WHEN a request presents `If-None-Match` matching the current
+   `ETag` under the RFC 9110 §13.1.2 weak comparison (including the
+   `*` wildcard) THEN the system SHALL return `304` with no body,
+   repeating `ETag` and `Cache-Control`; otherwise it SHALL return
+   the full document.
+7. WHERE a caller prefers the Pychestrate-native representation the
+   system SHALL continue to serve `GET /api/v1/envelope-signing-keys`
+   (PEM `SubjectPublicKeyInfo` + `active`/`retiring` status) under
+   the same auth gate and the same `503` behavior — the two paths are
+   two renderings of one key set, never two key sets.
+
 ## Property-Based Test Requirements
 
 ### Property 1: Signature Tampering Detected in Constant Time

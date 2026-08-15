@@ -126,6 +126,9 @@ from ccai.pychestrate.webservice.runs.restapi.v1.runs_routes import (
 from ccai.pychestrate.webservice.jobs.envelope.restapi.v1.signing_keys_routes import (
     register_signing_keys_routes,
 )
+from ccai.pychestrate.webservice.jobs.envelope.restapi.v1.jwks_routes import (
+    register_envelope_jwks_routes,
+)
 from ccai.pychestrate.webservice.jobs.envelope.startup import (
     install_envelope_signer_from_environment,
 )
@@ -504,6 +507,7 @@ def register_service_extensions() -> None:
     register_runs_routes(app=app, version_prefix="/api/v1")
     register_artifacts_routes(app=app, version_prefix="/api/v1")
     register_signing_keys_routes(app=app, version_prefix="/api/v1")
+    register_envelope_jwks_routes(app=app, version_prefix="/api/v1")
     register_runs_events_routes(app=app, version_prefix="/api/v1")
     register_test_catalog_routes(app=app, version_prefix="/api/v1")
     register_test_runs_routes(app=app, version_prefix="/api/v1")

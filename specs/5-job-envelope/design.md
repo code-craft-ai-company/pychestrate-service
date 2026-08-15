@@ -65,7 +65,108 @@ In-memory value objects (no DB row):
 
 ### Public API
 
-N/A — internal. Envelope bytes travel over `3-client-agent-protocol`.
+Envelope bytes themselves are internal — they travel over
+`3-client-agent-protocol` and are never fetched over REST. The one
+public surface this feature owns is **verification-key
+distribution**: a client that refuses to run an envelope it cannot
+verify needs a way to obtain the signing public key without an
+operator installing it out of band.
+
+Two representations of the same key material are published, both
+under the versioned REST prefix and both gated identically (see
+"Auth" below):
+
+| Path | Media type | Shape |
+|------|-----------|-------|
+| `GET /api/v1/envelope-signing-keys` | `application/json` | Pychestrate-native PEM key set |
+| `GET /api/v1/envelope-signing-keys/jwks.json` | `application/jwk-set+json` | RFC 7517 JWK Set |
+
+The JWKS form is the one to prefer for new consumers — it feeds
+straight into an off-the-shelf JOSE library. The PEM form predates it
+and stays for the enrollment-redeem bundle (see below) and for
+callers already parsing it.
+
+#### `GET /api/v1/envelope-signing-keys/jwks.json`
+
+An RFC 7517 JWK Set carrying the Ed25519 verification keys, encoded
+with the RFC 8037 `OKP` key type:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "OKP",
+      "crv": "Ed25519",
+      "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+      "kid": "pychestrate-prod-ed25519-2026-02",
+      "use": "sig",
+      "alg": "EdDSA"
+    }
+  ]
+}
+```
+
+- `x` is the raw 32-byte public key in base64url with padding
+  stripped (RFC 7515 §2). No `d` member is ever emitted — the
+  private key never leaves the signing process.
+- `alg` is `EdDSA`, not `Ed25519`; the curve travels in `crv`.
+- `kid` is the same identifier the signed envelope carries in
+  `key_id`, so a client resolves an envelope's key by exact `kid`
+  match.
+- **Key order is significant.** The active signing key is always
+  `keys[0]`; rotation grace-window keys follow in `kid` order
+  (RFC 7517 §5 permits order to signal preference). A client that
+  only wants "what is signing right now" can take `keys[0]`; a
+  client verifying a possibly-older envelope must still match on
+  `kid`.
+
+**Auth.** A signing *public* key is not a secret, but the endpoint is
+gated behind *any* authenticated principal — cookie session, API key,
+OR verified mTLS client certificate — to keep the unauthenticated
+info-leak surface minimal. A freshly-enrolled pod client already
+holds its mTLS identity, so the mTLS path covers the client's use
+case. Anonymous requests get `401`. The auth gate runs *before* the
+cache validator, so an anonymous request carrying a matching
+`If-None-Match` still gets `401` rather than a `304` that would
+confirm the document exists.
+
+**Not-provisioned.** When no signing key is installed the endpoint
+returns `503` rather than an empty `{"keys": []}`, so a caller can
+distinguish "not configured yet" from "this service signs nothing".
+
+**Caching semantics.**
+
+- `Cache-Control: private, max-age=300, must-revalidate`.
+  `private` because the endpoint is auth-gated — a shared proxy must
+  not hand a stored copy to an anonymous caller. `max-age=300`
+  matches the `max_envelope_age` default (Requirement 2 AC #3) so a
+  cached key set can never outlive the envelopes it verifies.
+  `must-revalidate` forbids serving stale, which bounds how long a
+  rotation stays invisible to a client.
+- `ETag` — a strong validator: the SHA-256 of the canonical JSON
+  rendering (sorted keys, no insignificant whitespace) of the served
+  document. Because the key ordering is deterministic, every worker
+  holding the same key set emits the same validator, so the tag
+  survives being served from more than one gunicorn worker.
+- `If-None-Match` is honored (weak comparison per RFC 9110 §13.1.2,
+  including the `*` wildcard) and answered with `304 Not Modified`
+  carrying no body and repeating `ETag` / `Cache-Control`. This is
+  what makes the once-per-60-s-per-`key_id` unknown-key refresh that
+  NFR-4 mandates cost a header exchange rather than a full document.
+
+A client that hits `unknown_key` SHOULD force revalidation (bypass
+`max-age`) rather than wait out its cache entry — the `ETag` makes
+that cheap.
+
+#### `GET /api/v1/envelope-signing-keys`
+
+The Pychestrate-native form, one entry per key with `key_id`,
+`algorithm` (`Ed25519`), `public_key_pem` (SubjectPublicKeyInfo), and
+`status` (`active` / `retiring`). Same auth gate, same `503`
+behavior. This same array is bundled into the
+`POST /api/v1/enrollment-tokens/redeem` response as
+`envelope_signing_keys` so the enrollment happy path needs zero extra
+calls.
 
 ### Internal API
 
@@ -256,6 +357,17 @@ All paths rooted at `source/site/ccai/pychestrate/webservice/`:
 - `jobs/envelope/hooks.py` — startup hook that loads signing key and
   field registry.
 - `jobs/envelope/repository.py` — `JobEnvelopeRepository` (persistence).
+- `jobs/envelope/restapi/v1/signing_keys_routes.py` — the
+  Pychestrate-native PEM key-set endpoint.
+- `jobs/envelope/restapi/v1/jwks_routes.py` — the RFC 7517 JWK Set
+  endpoint; owns the media type, `ETag` derivation, and the
+  `If-None-Match` revalidation path.
+
+Both route modules expose a `register_*_routes(*, app, version_prefix)`
+registrar that `app_pychestrate_main.register_service_extensions()`
+calls, per the repository's REST convention. Each declares its own
+mTLS-CN probe locally rather than importing one from a sibling route
+module — the house rule for per-feature route seams.
 
 Extensions live under
 `source/site/ccai/extensions/pychestrate/envelope_fields/`.
@@ -279,9 +391,17 @@ Extensions live under
 
 ### Flow 2 — Client-Side Verify on Receipt
 
+0. Client seeds its JWKS from the `envelope_signing_keys` block in
+   the enrollment-redeem response, or fetches
+   `GET /api/v1/envelope-signing-keys/jwks.json` over its mTLS
+   identity. Either way the key arrives over the wire — no operator
+   step installs it on the pod.
 1. Client receives `SignedJobEnvelope` bytes.
-2. Client JWKS resolver looks up `key_id`; miss → constant-time
-   `unknown_key`.
+2. Client JWKS resolver looks up `key_id` against `kid`; miss →
+   constant-time `unknown_key`, then at most one forced revalidation
+   of the JWKS endpoint per 60 s per `key_id` (NFR-4). The endpoint's
+   `ETag` makes that revalidation a header exchange when nothing
+   rotated.
 3. Client calls `verifier.verify(signed_envelope, jwks)`; signature
    check runs over the *full* payload regardless of mismatch position
    (constant-time).
@@ -339,6 +459,13 @@ raise EnvelopeClaimMissingError(err_msg) from None
 - RBAC: envelope *building* is gated at the `5-job-dispatch` layer;
   this feature trusts in-process callers. `verify` is side-effect free
   and needs no auth.
+- Key publication (`/envelope-signing-keys` and its `jwks.json`
+  sibling) serializes public halves only and never emits a JWK `d`
+  member. Both endpoints share one auth posture — any authenticated
+  principal — deliberately: publishing the same key material under two
+  different gates would be the bug. Because the responses are
+  auth-gated they are cached `private`, so an intermediary cannot
+  replay a stored copy to an anonymous caller.
 - Canonical schema uses `additionalProperties: false` throughout —
   unknown top-level or nested keys fail parse, preventing a
   compromised extension from smuggling out-of-schema data past the

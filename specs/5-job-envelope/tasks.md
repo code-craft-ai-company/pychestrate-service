@@ -56,6 +56,19 @@
       *(``JobEnvelopeError`` base + ``EnvelopeSchemaVersionError``,
       ``EnvelopeSerializationError``, ``EnvelopeSigningKeyMissingError``,
       ``EnvelopeClaimMissingError`` — the last is reserved for M2.)*
+- [x] T1.9 — Publish the verification key set over REST so clients stop needing an out-of-band key install (Requirement 4).
+      *(``jobs/envelope/restapi/v1/signing_keys_routes.py`` serves the
+      Pychestrate-native PEM set at ``GET
+      /api/v1/envelope-signing-keys``;
+      ``jobs/envelope/restapi/v1/jwks_routes.py`` serves the RFC 7517 /
+      RFC 8037 OKP JWK Set at ``GET
+      /api/v1/envelope-signing-keys/jwks.json`` with
+      ``application/jwk-set+json``, ``Cache-Control: private,
+      max-age=300, must-revalidate``, a SHA-256 ``ETag``, and
+      ``If-None-Match`` → ``304`` revalidation.
+      ``signer.public_key_to_jwk`` / ``signer.active_signing_jwk_list``
+      do the JWK encoding. Both registrars are wired from
+      ``app_pychestrate_main.register_service_extensions()``.)*
 
 ### M2 — Core Behavior
 
@@ -87,6 +100,10 @@
 - [ ] TT-4 — Extension-point test: in-tree `TestBaseBuildInfoField` plus a test-only `XInfraScopeField` registered at test setup; assert both claims appear under `extension_claims` and both are covered by the signature.
 - [ ] TT-5 — Negative test: two `EnvelopeFieldExtension` subclasses with the same `field_name` cause `ConfigurationError` at host load time.
 - [ ] TT-6 — Rotation test: rotate signing key mid-dispatch; assert in-flight envelopes continue to sign with the loaded key while new envelopes switch to the new `key_id` after `signing_key.rotated` arrives.
+- [x] TT-7 — Key-publication tests covering Requirement 4: JWK member set, unpadded base64url `x`, no `d` member, active-key-first ordering, `401` / `503` gates, media type, `Cache-Control` / `ETag`, `If-None-Match` → `304` (weak + wildcard), and a sign-then-verify round trip through the published key.
+      *(``source/testroots/ccai/tests/singlehost/pychestrate/webservice/
+      phase10/test_p19m_envelope_jwks_m1.py`` for the JWK Set surface;
+      ``test_p19k_envelope_signing_keys_m1.py`` for the PEM surface.)*
 
 ## Definition of Done
 
