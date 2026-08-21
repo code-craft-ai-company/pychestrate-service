@@ -70,6 +70,73 @@ def find_open_for_run(
     return rtnval
 
 
+def list_open_for_client(
+        *,
+        db_session: DbSession,
+        client_id: str
+    ) -> List[CancelRequest]:
+    """
+        Return every open (PENDING / TRANSMITTED / QUEUED_OFFLINE)
+        cancel request targeting ``client_id``, oldest first.
+
+        This is the read the pod-client heartbeat drain issues:
+        the open rows ARE the pull queue for the
+        :class:`jobs.cancel.heartbeattransport.HeartbeatCancelTransport`.
+        A row stays open — and is therefore re-delivered on every
+        heartbeat — until the client acknowledges it, which makes
+        delivery at-least-once over a channel that can drop a
+        response.
+
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: Target client UUID.
+
+        :returns: List of open cancel requests (possibly empty).
+    """
+    rows = (
+        db_session.query(CancelRequest)
+        .filter(CancelRequest.client_id == client_id)
+        .filter(CancelRequest.status.in_(
+            (CancelStatus.PENDING, CancelStatus.TRANSMITTED, CancelStatus.QUEUED_OFFLINE),
+        ))
+        .order_by(CancelRequest.requested_at.asc())
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
+def find_open_for_run_and_client(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        client_id: str
+    ) -> Optional[CancelRequest]:
+    """
+        Return the open cancel request for a ``(run_id, client_id)``
+        pair, or ``None``.
+
+        The client-facing cancel-ack path uses this rather than
+        :func:`get_request` so a pod can only ever close a cancel
+        request that was actually addressed to it.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+        :param client_id: Target client UUID.
+
+        :returns: The open :class:`CancelRequest` or None.
+    """
+    rtnval = (
+        db_session.query(CancelRequest)
+        .filter(CancelRequest.run_id == run_id)
+        .filter(CancelRequest.client_id == client_id)
+        .filter(CancelRequest.status.in_(
+            (CancelStatus.PENDING, CancelStatus.TRANSMITTED, CancelStatus.QUEUED_OFFLINE),
+        ))
+        .first()
+    )
+    return rtnval
+
+
 def get_request(
         *,
         db_session: DbSession,

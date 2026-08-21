@@ -1540,14 +1540,40 @@ paths:
       description: |
         Lightweight ping the pod-client calls between long-poll
         cycles to keep its registry row `last_seen` current.
-        Returns 204 unconditionally on a successful mTLS
-        handshake; rows missing from the registry are logged
-        server-side and still answered 204.
+        Rows missing from the registry are logged server-side and
+        still answered successfully.
+
+        The heartbeat doubles as the pod's cancel channel. The pod
+        has no inbound channel — nginx terminates mTLS in front of
+        the service and the pod never listens — so a cancel has to
+        be PULLED like the job envelope is. The dispatch long-poll
+        cannot carry it: the pod stops polling that endpoint for
+        the whole duration of a job, which is exactly when a cancel
+        matters. The heartbeat keeps ticking on its own thread while
+        a job runs, so it is the only client-bound channel that is
+        live during execution.
+
+        When one or more cancel requests are queued for the calling
+        client the server answers 200 with a `ClientHeartbeatAck`
+        body listing them; otherwise it answers 204 exactly as
+        before, so a client built before cancel support is
+        unaffected. Delivery is at-least-once: a queued cancel is
+        re-sent on every heartbeat until the pod reports a terminal
+        outcome of `cancelled` for the run (or the run reaches a
+        terminal state on its own), so the pod-side handler must be
+        idempotent.
       security:
         - pychestrate_mtls: []
       responses:
+        '200':
+          description: >-
+            Heartbeat recorded and one or more cancellations are
+            queued for this client.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientHeartbeatAck' }
         '204':
-          description: Heartbeat recorded.
+          description: Heartbeat recorded; nothing queued for this client.
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Unprocessable' }
@@ -5968,6 +5994,66 @@ components:
         transport_name:
           type: string
           description: Stable transport identifier (`http-long-poll`).
+
+    PendingCancellation:
+      type: object
+      description: |
+        One operator-requested cancellation waiting for the pod
+        client to collect. Delivered on the heartbeat response
+        because the pod has no inbound channel — see the
+        `clients_heartbeat` operation for why the dispatch long-poll
+        cannot carry this.
+
+        `request_id` identifies the `cancel_request` row the
+        operator's `POST /runs/{run_id}/cancel` opened. The pod does
+        not ack by id: it acks by reporting a terminal outcome of
+        `cancelled` for `run_id` through
+        `POST /runs/{run_id}/results/complete`, which is the only
+        acknowledgement that proves the job actually stopped.
+        Until then the entry is re-delivered on every heartbeat, so
+        the pod must treat a repeat — or a cancellation for a run it
+        does not recognize, or one that already finished — as a
+        harmless no-op.
+      required:
+        - request_id
+        - run_id
+        - project_id
+        - client_id
+        - reason
+        - requested_at
+        - transport_name
+      properties:
+        request_id: { type: string, format: uuid }
+        run_id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        reason:
+          type: string
+          description: Operator-supplied cancel reason, recorded for triage.
+        requested_at: { type: string, format: date-time }
+        transport_name:
+          type: string
+          description: >-
+            Stable transport identifier
+            (`client-heartbeat-cancel`).
+
+    ClientHeartbeatAck:
+      type: object
+      description: |
+        Server response to `GET /api/v1/clients/{client_id}/heartbeat`
+        when the client has work waiting. A heartbeat with nothing
+        queued answers 204 with no body instead, so this schema is
+        only ever seen alongside a non-empty `cancellations` array.
+      required:
+        - client_id
+        - cancellations
+      properties:
+        client_id: { type: string, format: uuid }
+        cancellations:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PendingCancellation' }
+
     ScopedSecret:
       type: object
       required: [name, value, expires_at, token_type]
@@ -6011,6 +6097,28 @@ components:
         - cancelled
         - dispatch_failed
         - dispatch_lost
+
+    RunFailureClassification:
+      type: string
+      description: |
+        Why a run ended the way it did, reported by the pod client
+        and never inferred server-side.
+
+        `TerminalOutcome` answers "did this run succeed" and is
+        deliberately coarse — it drives state transitions, so the
+        value set must stay small. That leaves `failure` covering
+        every way a job can go wrong. The pod can tell those apart
+        (a blown wall-clock cap, a binary that is not installed, a
+        job that ran and exited non-zero) and this field is where
+        that distinction is carried, so triage does not depend on
+        parsing prose out of `notes`.
+      enum:
+        - timeout
+        - executable_not_found
+        - nonzero_exit
+        - cancelled
+        - launch_error
+        - setup_error
 
     Run:
       type: object
@@ -6428,7 +6536,47 @@ components:
         notes: { type: string }
         extras:
           type: object
+          description: |
+            Client-supplied side-band members. Open by design, but
+            the members named here are a real contract the server
+            reads and validates — not free-form data.
           additionalProperties: true
+          properties:
+            failure_classification:
+              allOf:
+                - $ref: '#/components/schemas/RunFailureClassification'
+              description: >-
+                Why the run ended this way. Carried here rather than
+                as a top-level `ResultManifest` member because the
+                pod client reaches the service exclusively through
+                the generated REST client, whose `ResultManifest`
+                model has no such field but does carry `extras` as
+                an open map. A value outside the enum is dropped by
+                the server rather than stored, so the field stays
+                queryable.
+            files:
+              type: array
+              description: >-
+                One entry per file the client PUT to the shared
+                results backend. Lifted to the top-level `files` +
+                `artifact_count` members on the `result_manifest`
+                RunEvent.
+              items:
+                type: object
+                properties:
+                  relative_path: { type: string }
+                  size_bytes: { type: integer, minimum: 0 }
+                  sha256: { type: string }
+        failure_classification:
+          allOf:
+            - $ref: '#/components/schemas/RunFailureClassification'
+          description: >-
+            Server-lifted convenience member on the
+            `result_manifest` RunEvent: echoes
+            `extras.failure_classification` after validation, or
+            `null` when the client sent none. Not part of the client
+            POST body.
+          nullable: true
         artifact_count:
           type: integer
           minimum: 0

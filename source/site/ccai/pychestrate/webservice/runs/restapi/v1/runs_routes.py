@@ -70,6 +70,9 @@ from ccai.pychestrate.webservice.ingest.result.errors import (
     ResultIngestError,
     ResultTreeNotFoundError,
 )
+from ccai.pychestrate.webservice.ingest.result import (
+    classification as result_classification,
+)
 from ccai.pychestrate.webservice.ingest.result import scanner as result_scanner
 from ccai.pychestrate.webservice.ingest.result import (
     completion as result_completion,
@@ -82,6 +85,16 @@ from ccai.pychestrate.webservice.orchestration.build.errors import (
 )
 from ccai.pychestrate.webservice.orchestration.infra.runs.errors import (
     InfraRunNotFoundError,
+)
+from ccai.pychestrate.webservice.jobs.cancel.dispatcher import (
+    CancelDispatcher,
+)
+from ccai.pychestrate.webservice.jobs.cancel.errors import (
+    CancelDuplicateRequestError,
+)
+from ccai.pychestrate.webservice.jobs.cancel.heartbeattransport import (
+    HeartbeatCancelTransport,
+    acknowledge_client_cancellation,
 )
 from ccai.pychestrate.webservice.jobs.dispatch import repository as dispatch_repo
 from ccai.pychestrate.webservice.jobs.dispatch.receipt import (
@@ -98,6 +111,9 @@ from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
 from ccai.pychestrate.webservice.jobs.run.state.enums import (
     RunState,
     TERMINAL_STATES,
+)
+from ccai.pychestrate.webservice.jobs.run.state.advance import (
+    advance_to_cancelled as _advance_to_cancelled,
 )
 from ccai.pychestrate.webservice.jobs.run.state.advance import (
     advance_to_dispatched as _advance_to_dispatched,
@@ -134,6 +150,18 @@ RUNS_READ_PERMISSION_KEY = "system:runs.read"
 #: project-scoped ``project:runs.cancel`` grant registered in
 #: ``security.rbac.extensions.project_roles``.
 RUNS_CANCEL_PERMISSION_KEY = "project:runs.cancel"
+
+#: ``TerminalOutcome`` value a pod reports when an operator cancel
+#: stopped the run. Distinguished from ``failure`` at ingest so a
+#: cancelled run does not land in ``FAILED``.
+TERMINAL_OUTCOME_CANCELLED = "cancelled"
+
+#: Transport the cancel endpoint queues client-bound cancels on.
+#: Published as a module-level seam so tests can substitute the
+#: in-memory transport without reaching into the handler.
+ACTIVE_CANCEL_DISPATCHER: Optional[CancelDispatcher] = CancelDispatcher(
+    transport=HeartbeatCancelTransport(),
+)
 
 #: Default + bounds for the page-size query param. Matches the
 #: OpenAPI ``PerPageParam`` schema (default 50, max 500).
@@ -1569,6 +1597,12 @@ def _build_result_manifest_block(
     """
     files = result_completion.artifact_files_from_manifest(manifest=payload)
 
+    failure_classification = (
+        result_classification.failure_classification_from_manifest(
+            manifest=payload,
+        )
+    )
+
     rtnval: Dict[str, Any] = {
         "run_id": run_id,
         "client_id": payload.get("client_id", None),
@@ -1576,6 +1610,7 @@ def _build_result_manifest_block(
         "backend_key_prefix": payload.get("backend_key_prefix", None),
         "completed_at": payload.get("completed_at", None),
         "terminal_outcome": payload.get("terminal_outcome", None),
+        "failure_classification": failure_classification,
         "artifact_count": len(files),
         "files": files,
     }
@@ -1661,6 +1696,115 @@ def _emit_result_manifest_event(
         ),
     )
     db_session.commit()
+    return
+
+
+def _advance_run_state_from_outcome(
+        *,
+        db_session: Any,
+        run_id: str,
+        terminal_outcome: str,
+        reason: str
+    ) -> None:
+    """
+        Drive the run-state row terminal in the direction the
+        client's reported ``terminal_outcome`` actually points.
+
+        Three outcomes are distinguished rather than two.
+        ``success`` completes the run; ``cancelled`` cancels it; and
+        everything else fails it. Collapsing ``cancelled`` into the
+        failure branch -- which is what a plain
+        ``succeeded = outcome == "success"`` boolean does -- would
+        stamp ``TerminalOutcome.FAILURE`` on a run an operator
+        deliberately stopped, making a cancel indistinguishable from
+        a broken job in every downstream metric.
+
+        A state-advance failure is logged, not raised: the manifest
+        was ingested and the client is owed its 202 regardless of
+        whether the bookkeeping row could be walked forward.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the path.
+        :param terminal_outcome: The manifest's ``terminal_outcome``.
+        :param reason: Reason written to the state-audit row.
+
+        :returns: None.
+    """
+    actor = "system:result-ingest"
+
+    try:
+        if terminal_outcome == TERMINAL_OUTCOME_CANCELLED:
+            _advance_to_cancelled(
+                db_session=db_session,
+                run_id=run_id,
+                actor=actor,
+                reason=reason,
+            )
+        else:
+            succeeded = (
+                terminal_outcome == result_completion.TERMINAL_OUTCOME_SUCCESS
+            )
+            _advance_to_terminal(
+                db_session=db_session,
+                run_id=run_id,
+                succeeded=succeeded,
+                actor=actor,
+                reason=reason,
+            )
+    except Exception as xcpt:
+        _LOGGER.warning(
+            "pychestrate.runs.results_complete.state_advance_error"
+            " run_id=%s err=%s",
+            run_id,
+            xcpt,
+        )
+    return
+
+
+def _close_cancel_request_on_cancelled_result(
+        *,
+        db_session: Any,
+        run_id: str,
+        client_id: str,
+        terminal_outcome: str
+    ) -> None:
+    """
+        Close the open cancel request when the pod reports that it
+        actually stopped the run.
+
+        The cancel queue is drained by the client heartbeat and rows
+        stay open so an undelivered cancel is retried. A run
+        reporting ``cancelled`` is the pod confirming it received
+        the signal and acted on it, which is the only acknowledgement
+        worth recording -- and the thing that stops the retry.
+
+        Failures are logged, never raised: the completion itself has
+        already been ingested.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the path.
+        :param client_id: Reporting client's UUID.
+        :param terminal_outcome: The manifest's ``terminal_outcome``.
+
+        :returns: None.
+    """
+    if terminal_outcome != TERMINAL_OUTCOME_CANCELLED:
+        return
+
+    try:
+        acknowledge_client_cancellation(
+            db_session=db_session,
+            run_id=run_id,
+            client_id=client_id,
+        )
+    except Exception as xcpt:
+        _LOGGER.warning(
+            "pychestrate.runs.results_complete.cancel_ack_error"
+            " run_id=%s client_id=%s err=%s",
+            run_id,
+            client_id,
+            xcpt,
+        )
     return
 
 
@@ -1790,22 +1934,23 @@ def handle_post_results_complete(request: Request) -> Response:
             # ``terminal_outcome`` field, mirroring how
             # ingest.result.completion decides success for build /
             # provision runs (terminal_outcome == "success" => True).
-            testbase_succeeded = terminal_outcome == result_completion.TERMINAL_OUTCOME_SUCCESS
-            try:
-                _advance_to_terminal(
-                    db_session=db_session,
-                    run_id=run_id,
-                    succeeded=testbase_succeeded,
-                    actor="system:result-ingest",
-                    reason="testbase result manifest: outcome={}".format(terminal_outcome),
-                )
-            except Exception as xcpt:
-                _LOGGER.warning(
-                    "pychestrate.runs.results_complete.state_advance_error"
-                    " run_id=%s err=%s",
-                    run_id,
-                    xcpt,
-                )
+            _advance_run_state_from_outcome(
+                db_session=db_session,
+                run_id=run_id,
+                terminal_outcome=terminal_outcome,
+                reason="testbase result manifest: outcome={}".format(terminal_outcome),
+            )
+
+        # A run reporting ``cancelled`` is the pod confirming it
+        # received the operator's cancel and stopped the job, so the
+        # open cancel request can be closed and the heartbeat drain
+        # can stop re-delivering it.
+        _close_cancel_request_on_cancelled_result(
+            db_session=db_session,
+            run_id=run_id,
+            client_id=client_id_field,
+            terminal_outcome=terminal_outcome,
+        )
 
         # Publish the result_manifest live event so a subscribed
         # run-detail view renders the artifacts pane. Mirrors the
@@ -1894,6 +2039,147 @@ def _require_runs_cancel_permission(*, request: Request, db_session: Any) -> Non
             extensions={"required_permission": RUNS_CANCEL_PERMISSION_KEY},
         )
     return
+
+
+def set_active_cancel_dispatcher(
+        *, dispatcher: Optional[CancelDispatcher]
+    ) -> None:
+    """
+        Publish the :class:`CancelDispatcher` the cancel endpoint
+        queues client-bound cancels through.
+
+        :param dispatcher: Dispatcher instance (or ``None`` to
+                           disable client-bound cancel delivery).
+
+        :returns: None.
+    """
+    global ACTIVE_CANCEL_DISPATCHER
+    ACTIVE_CANCEL_DISPATCHER = dispatcher
+    return
+
+
+def _resolve_cancel_target_client(
+        *, db_session: Any, run_id: str
+    ) -> Optional[Tuple[str, str, str]]:
+    """
+        Resolve which pod client is holding a run, so the cancel can
+        be addressed to it.
+
+        The run row carries no client id -- the dispatch attempt
+        does. The most recent attempt is the one that put the job on
+        a pod, so that is the attempt whose client must be told to
+        stop.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+
+        :returns: A ``(client_id, pod_id, project_id)`` tuple, or
+                  ``None`` when the run was never dispatched.
+    """
+    attempts = dispatch_repo.list_attempts_for_run(
+        db_session=db_session, run_id=run_id,
+    )
+    if len(attempts) == 0:
+        rtnval = None
+        return rtnval
+
+    latest = attempts[-1]
+    client_id = str(latest.client_id)
+    pod_id = str(latest.pod_id)
+    project_id = str(latest.project_id)
+
+    rtnval = (client_id, pod_id, project_id)
+    return rtnval
+
+
+def _queue_client_cancel(
+        *, db_session: Any, run_id: str, reason: str, actor_id: str
+    ) -> Optional[str]:
+    """
+        Open a cancel request against the pod holding the run so the
+        client heartbeat can deliver it.
+
+        Without this the cancel is purely bookkeeping: the run row
+        reads ``cancel_requested`` while the pod keeps running the
+        job to completion, because nothing ever reaches the pod.
+
+        Every failure here is logged rather than raised. The state
+        transition the caller already performed is the authoritative
+        record of the operator's intent, and denying the operator a
+        200 because delivery could not be queued would tell them the
+        cancel did not happen when in fact it did.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID being cancelled.
+        :param reason: Operator-supplied cancel reason.
+        :param actor_id: Actor tag of the requesting principal.
+
+        :returns: The cancel-request UUID, or ``None`` when nothing
+                  was queued.
+    """
+    dispatcher = ACTIVE_CANCEL_DISPATCHER
+    if dispatcher is None:
+        _LOGGER.warning(
+            "pychestrate.runs.cancel.no_dispatcher run_id=%s", run_id,
+        )
+        rtnval = None
+        return rtnval
+
+    target = _resolve_cancel_target_client(
+        db_session=db_session, run_id=run_id,
+    )
+    if target is None:
+        _LOGGER.info(
+            "pychestrate.runs.cancel.not_dispatched run_id=%s", run_id,
+        )
+        rtnval = None
+        return rtnval
+
+    client_id, pod_id, project_id = target
+
+    try:
+        request_row = dispatcher.send_cancel_rpc(
+            db_session=db_session,
+            run_id=run_id,
+            project_id=project_id,
+            client_id=client_id,
+            requested_by=None,
+            reason=reason,
+        )
+    except CancelDuplicateRequestError as xcpt:
+        # A cancel is already queued for this run.  Re-cancelling is
+        # idempotent by design, so this is a normal outcome of an
+        # operator clicking twice, not an error.
+        _LOGGER.info(
+            "pychestrate.runs.cancel.already_queued run_id=%s detail=%s",
+            run_id,
+            xcpt,
+        )
+        rtnval = None
+        return rtnval
+    except Exception as xcpt:
+        _LOGGER.warning(
+            "pychestrate.runs.cancel.queue_error run_id=%s client_id=%s"
+            " err=%s",
+            run_id,
+            client_id,
+            xcpt,
+        )
+        rtnval = None
+        return rtnval
+
+    _LOGGER.info(
+        "pychestrate.runs.cancel.queued run_id=%s client_id=%s pod_id=%s"
+        " request_id=%s actor=%s",
+        run_id,
+        client_id,
+        pod_id,
+        str(request_row.request_id),
+        actor_id,
+    )
+
+    rtnval = str(request_row.request_id)
+    return rtnval
 
 
 def handle_cancel_run(request: Request) -> Response:
@@ -1986,12 +2272,20 @@ def handle_cancel_run(request: Request) -> Response:
             )
             snapshot = None  # unreachable.
 
+        cancel_request_id = _queue_client_cancel(
+            db_session=db_session,
+            run_id=run_id,
+            reason=reason,
+            actor_id=actor_id,
+        )
+
         body = {
             "run_id": snapshot.run_id,
             "state": snapshot.state.value,
             "prior_state": snapshot.prior_state.value if snapshot.prior_state is not None else None,
             "entered_state_at": snapshot.entered_state_at.isoformat(),
             "terminal_outcome": snapshot.terminal_outcome,
+            "cancel_request_id": cancel_request_id,
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:

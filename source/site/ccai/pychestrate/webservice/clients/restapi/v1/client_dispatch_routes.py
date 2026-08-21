@@ -19,8 +19,10 @@ PR p19g adds two pod-client-facing endpoints sitting on the
 * ``GET /api/v1/clients/{client_id}/heartbeat``
 
   Lightweight ping that records the client's liveness via the
-  existing :func:`clients.registry.service.record_heartbeat` seam
-  and returns 204.
+  existing :func:`clients.registry.service.record_heartbeat` seam.
+  Returns 204 when the client has nothing waiting, or 200 with a
+  ``ClientHeartbeatAck`` body when one or more cancellations are
+  queued for it (see below).
 
 The endpoints are mTLS-only -- there is no ``system:*`` permission
 gate. The presence of an nginx-verified client certificate plus a
@@ -37,6 +39,29 @@ PR p19h renames this module from ``agent_dispatch_routes`` to
 (``/api/v1/clients/...``) matches the canonical "client" naming
 used for the pod-side runtime. The pre-existing ``webservice/agents``
 package retains the older inventory + capability surface.
+
+Cancel delivery
+---------------
+
+The pod client has no inbound channel, so a cancel has to be
+PULLED like everything else the service sends it. Rather than add a
+third pull endpoint, the cancel signal rides on the heartbeat
+response: when :func:`jobs.cancel.heartbeattransport.drain_pending_cancellations`
+finds open cancel requests for the calling client the heartbeat
+answers 200 with a ``ClientHeartbeatAck`` body carrying them,
+instead of the usual 204.
+
+That choice is deliberate. The dispatch long-poll is NOT a viable
+carrier: the pod stops polling it for the entire duration of a job,
+which is exactly when a cancel matters. The heartbeat keeps ticking
+on its own thread while a job runs, so it is the only existing
+client-bound channel that is live during execution. Reusing it also
+keeps the client on the already-generated ``clients_heartbeat``
+REST-client operation — a new endpoint would need the codegen'd
+client regenerated before the pod could call it at all.
+
+A 204 still means "nothing for you", so a client that predates
+cancel support is unaffected.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -48,7 +73,7 @@ __version__ = "1.0.0"
 import logging
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
@@ -67,6 +92,9 @@ from ccai.pychestrate.webservice.clients.exceptions import (
     ClientNotFoundError,
 )
 from ccai.pychestrate.webservice.clients.registry import service as client_registry_service
+from ccai.pychestrate.webservice.jobs.cancel import (
+    heartbeattransport as cancel_heartbeat_transport,
+)
 from ccai.pychestrate.webservice.jobs.envelope.canonical import (
     envelope_to_dict,
 )
@@ -463,22 +491,73 @@ def handle_next_dispatch(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _collect_pending_cancellations(
+        *, db_session: Optional[Any], client_id: str
+    ) -> List[Dict[str, Any]]:
+    """
+        Drain the cancel queue for ``client_id``, tolerating a
+        drain failure.
+
+        Liveness is the heartbeat's primary job. A cancel-drain that
+        raises -- a schema drift, an unmigrated database, a session
+        object that is not a real session -- must not turn a healthy
+        pod's heartbeat into an error response, because that would
+        make the registry believe the pod died. The failure is logged
+        and the heartbeat answers as if nothing were queued; the next
+        heartbeat retries.
+
+        :param db_session: Request-scoped session, or None when the
+                           middleware bound none.
+        :param client_id: Calling client's UUID.
+
+        :returns: List of ``PendingCancellation`` dicts (possibly
+                  empty).
+    """
+    rtnval: List[Dict[str, Any]] = []
+
+    if db_session is None:
+        return rtnval
+
+    try:
+        rtnval = cancel_heartbeat_transport.drain_pending_cancellations(
+            db_session=db_session,
+            client_id=client_id,
+        )
+    except Exception as xcpt:
+        _LOGGER.warning(
+            "clients.heartbeat.cancel_drain_error client_id=%s err=%s",
+            client_id,
+            xcpt,
+        )
+        rtnval = []
+
+    return rtnval
+
+
 def handle_client_heartbeat(request: Request) -> Response:
     """
-        ``GET /api/v1/clients/{client_id}/heartbeat`` -- lightweight
-        liveness ping. Updates ``last_seen`` on the client row via
-        :func:`clients.registry.service.record_heartbeat` and
-        answers 204.
+        ``GET /api/v1/clients/{client_id}/heartbeat`` -- liveness
+        ping plus cancel delivery. Updates ``last_seen`` on the
+        client row via
+        :func:`clients.registry.service.record_heartbeat`, then
+        drains any cancel requests queued for the calling client.
 
-        Returns 204 even when the registry has no row for
+        Answers 204 when nothing is queued and 200 with a
+        ``ClientHeartbeatAck`` body when at least one cancellation
+        is waiting. Keeping 204 as the empty answer means a client
+        built before cancel support sees the endpoint it has always
+        seen.
+
+        Answers success even when the registry has no row for
         ``client_id`` (the cert match already proved the client
         enrolled; a missing row is a server-side bookkeeping issue
         we surface in logs rather than the client's UI).
 
         :param request: Incoming webworks request.
 
-        :returns: 204 on success; 401 / 403 / 422 problem responses
-                  on auth failure.
+        :returns: 204 when nothing is queued; 200 + JSON body when
+                  cancellations are pending; 401 / 403 / 422 problem
+                  responses on auth failure.
     """
     client_id = request.path_params.get("client_id", "")
     try:
@@ -506,7 +585,24 @@ def handle_client_heartbeat(request: Request) -> Response:
                     xcpt,
                 )
 
-        rtnval: Response = Response(status_code=204, body=b"")
+        cancellations = _collect_pending_cancellations(
+            db_session=db_session, client_id=client_id,
+        )
+
+        if len(cancellations) == 0:
+            rtnval: Response = Response(status_code=204, body=b"")
+            return rtnval
+
+        _LOGGER.info(
+            "clients.heartbeat.cancellations_delivered client_id=%s count=%d",
+            client_id,
+            len(cancellations),
+        )
+        body: Dict[str, Any] = {
+            "client_id": client_id,
+            "cancellations": cancellations,
+        }
+        rtnval = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval

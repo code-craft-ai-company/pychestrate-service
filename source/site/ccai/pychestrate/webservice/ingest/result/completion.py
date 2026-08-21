@@ -54,6 +54,9 @@ from sqlalchemy.orm import Session as DbSession
 from ccai.pychestrate.core.defaults import utc_now
 
 from ccai.pychestrate.webservice.jobs.run.state.advance import (
+    advance_to_cancelled as _advance_to_cancelled,
+)
+from ccai.pychestrate.webservice.jobs.run.state.advance import (
     advance_to_terminal as _advance_to_terminal,
 )
 from ccai.pychestrate.webservice.orchestration.build import (
@@ -95,6 +98,12 @@ PROVISION_FORMAT_TAG: str = "provision"
 #: a successful build / provision completion. Anything else is
 #: treated as a failure.
 TERMINAL_OUTCOME_SUCCESS: str = "success"
+
+#: ``TerminalOutcome`` value reported when an operator cancel stopped
+#: the run. Both :class:`BuildRunState` and :class:`InfraRunState`
+#: carry a ``CANCELLED`` member, so a cancelled build / provision run
+#: records as cancelled rather than being folded into ``FAILED``.
+TERMINAL_OUTCOME_CANCELLED: str = "cancelled"
 
 #: Artifact-type string stamped on every entry the build-completion
 #: path records. The uploaded files are registered as-is -- this PR
@@ -142,6 +151,65 @@ def _is_success_outcome(*, terminal_outcome: str) -> bool:
         :returns: True when the manifest reports a successful run.
     """
     rtnval = terminal_outcome == TERMINAL_OUTCOME_SUCCESS
+    return rtnval
+
+
+def _is_cancelled_outcome(*, terminal_outcome: str) -> bool:
+    """
+        Report whether the manifest says an operator cancel stopped
+        the run.
+
+        :param terminal_outcome: ``TerminalOutcome`` enum value.
+
+        :returns: True when the manifest reports a cancelled run.
+    """
+    rtnval = terminal_outcome == TERMINAL_OUTCOME_CANCELLED
+    return rtnval
+
+
+def _advance_run_state_from_outcome(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        terminal_outcome: str,
+        reason: str
+    ) -> Optional[str]:
+    """
+        Drive the run-state row terminal in the direction the
+        manifest's ``terminal_outcome`` points.
+
+        A cancelled run takes :func:`advance_to_cancelled` so it
+        lands in ``CANCELLED`` with ``TerminalOutcome.CANCELLED``;
+        anything else keeps the existing success / failure split.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+        :param terminal_outcome: ``TerminalOutcome`` enum value.
+        :param reason: Reason written to the state-audit row.
+
+        :returns: The resulting run-state value string, or ``None``
+                  when no run-state row exists.
+    """
+    actor = "system:result-ingest"
+
+    cancelled = _is_cancelled_outcome(terminal_outcome=terminal_outcome)
+    if cancelled is True:
+        rtnval = _advance_to_cancelled(
+            db_session=db_session,
+            run_id=run_id,
+            actor=actor,
+            reason=reason,
+        )
+        return rtnval
+
+    succeeded = _is_success_outcome(terminal_outcome=terminal_outcome)
+    rtnval = _advance_to_terminal(
+        db_session=db_session,
+        run_id=run_id,
+        succeeded=succeeded,
+        actor=actor,
+        reason=reason,
+    )
     return rtnval
 
 
@@ -307,9 +375,12 @@ def complete_build_run(
     project_id = str(build_run.project_id)
     terminal_outcome = str(manifest.get("terminal_outcome", ""))
     succeeded = _is_success_outcome(terminal_outcome=terminal_outcome)
+    cancelled = _is_cancelled_outcome(terminal_outcome=terminal_outcome)
 
     final_state = BuildRunState.COMPLETED
-    if succeeded is False:
+    if cancelled is True:
+        final_state = BuildRunState.CANCELLED
+    elif succeeded is False:
         final_state = BuildRunState.FAILED
 
     notes = str(manifest.get("notes", ""))
@@ -335,11 +406,10 @@ def complete_build_run(
         reason=reason,
     )
 
-    run_state = _advance_to_terminal(
+    run_state = _advance_run_state_from_outcome(
         db_session=db_session,
         run_id=run_id,
-        succeeded=succeeded,
-        actor="system:result-ingest",
+        terminal_outcome=terminal_outcome,
         reason=reason,
     )
 
@@ -408,9 +478,12 @@ def complete_provision_run(
 
     terminal_outcome = str(manifest.get("terminal_outcome", ""))
     succeeded = _is_success_outcome(terminal_outcome=terminal_outcome)
+    cancelled = _is_cancelled_outcome(terminal_outcome=terminal_outcome)
 
     final_state = InfraRunState.COMPLETED
-    if succeeded is False:
+    if cancelled is True:
+        final_state = InfraRunState.CANCELLED
+    elif succeeded is False:
         final_state = InfraRunState.FAILED
 
     files = artifact_files_from_manifest(manifest=manifest)
@@ -443,11 +516,10 @@ def complete_provision_run(
         reason=reason,
     )
 
-    run_state = _advance_to_terminal(
+    run_state = _advance_run_state_from_outcome(
         db_session=db_session,
         run_id=run_id,
-        succeeded=succeeded,
-        actor="system:result-ingest",
+        terminal_outcome=terminal_outcome,
         reason=reason,
     )
 
@@ -474,6 +546,7 @@ def complete_provision_run(
 __all__ = [
     "BUILD_FORMAT_TAG",
     "PROVISION_FORMAT_TAG",
+    "TERMINAL_OUTCOME_CANCELLED",
     "TERMINAL_OUTCOME_SUCCESS",
     "GENERIC_ARTIFACT_TYPE",
     "CompletionOutcome",
