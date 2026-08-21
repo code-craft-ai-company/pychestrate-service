@@ -32,6 +32,53 @@ bumped when the project crosses the preview-to-alpha threshold.
   — the two paths are two renderings of one key set. Recorded in
   `specs/5-job-envelope` (Requirement 4) and the OpenAPI spec.
 
+- `GET /api/v1/runs/{run_id}/artifacts/{artifact_path}` — downloads a
+  stored artifact. The run-detail UI had linked to this path since it
+  shipped, but no such route existed, so every artifact link 404'd.
+  Auth and permissions match reading the run itself; paths are
+  canonicalized and re-checked against the run's storage root so a
+  crafted `..` cannot escape it. Artifacts are untrusted job output, so
+  active content (HTML / SVG / XML / JS) is served
+  `application/octet-stream` with `Content-Disposition: attachment`,
+  and everything carries `X-Content-Type-Options: nosniff` — serving
+  job-authored HTML inline would be stored XSS on the operator origin.
+
+- `POST /api/v1/resources/{resource_id}/state` and
+  `POST /api/v1/projects/{project_id}/pods/{pod_id}/state/transitions`
+  — the resource lifecycle (`inventory.transition_state`) and the pod
+  lifecycle (`lifecycle_service.apply_transition`) both existed in the
+  service layer with no REST surface, so no operator could quarantine a
+  flaky machine, retire decommissioned hardware, or drain a pod from
+  any interface. The pod route allow-lists only the operator-initiated
+  event kinds (`drain`, `deregister`); the system-driven kinds
+  (`provision_*`, `client_lost`, `acquire`, `release`) cannot be forged
+  through it.
+
+- `PATCH /api/v1/projects/{project_id}/dashboards/{dashboard_id}` —
+  in-place dashboard update with optimistic concurrency. Without it the
+  dashboard editor could only POST to the collection, so every save
+  forked a new dashboard named `"… (edited)"`, and a second save of the
+  same name 409'd.
+
+- `system:pods.read` / `system:pods.write` / `system:clients.read` /
+  `system:clients.write` in the permission catalog, granted to the
+  system-admin role. The Fleet sidebar entries had gated on the two
+  read keys since they were written, but the keys were never declared,
+  so `me/navigation` filtered both entries out for every user including
+  a full administrator — roughly 69 KB of finished views reachable only
+  by typing the URL.
+
+- A `--pyc-*` design-token pack (`static/styles/pyc-tokens.css`, linked
+  from the shell document). 35 tokens were consumed across the shell
+  and bundles with no definition anywhere, so every consumer ran on
+  inline fallbacks and the content accent (`#388bff`) disagreed with
+  the chrome accent (`#2563eb`) on every page. The pack defines all 35
+  in light and dark using the same guard shape as the vendored
+  `mj` pack, so the two flip together.
+
+- Shell landing view for `/`, a not-found state for unmatched shell
+  routes, and a navigation provider for the command palette.
+
 ### Changed
 
 - **Breaking:** Renamed the PR p19g long-poll routes from the
@@ -48,6 +95,146 @@ bumped when the project crosses the preview-to-alpha threshold.
   to `register_client_dispatch_routes`. No redirect shim is provided
   — this is an alpha pre-stability rename. OpenAPI spec bumped to
   `0.0.5-preview` (PR p19h).
+
+- The admin Users and Roles pages now read and write the modern
+  identity and RBAC stores (`identity_users` + `auth_local_credentials`
+  + `rbac_*`) instead of the legacy `user` / `system_roles` tables.
+  Legacy rows are still mirrored on every write so the surfaces that
+  have not migrated off `UserManager` stay coherent. See **Fixed** for
+  what this repaired.
+
+- The Projects blueprint renders inside the site shell. It was the last
+  navigation destination serving a standalone document — its own
+  header, its own sidebar, its own Bootstrap/Vue stack, and no link
+  back to the rest of the product. `templates/projects/base.html` is
+  now a fragment styled from the shared design tokens, and all 60+
+  project routes are wrapped at registration. The per-project
+  navigation survives as an in-content column. The sidebar entry is
+  renamed "All Projects" so it no longer duplicates its group name.
+
+- Every list view distinguishes 401, 403, 404, and offline on load
+  failure instead of collapsing all four into "Failed to load X. Try
+  refreshing." — a user without permission was told to retry something
+  that could never succeed. The action handlers already did this; only
+  the read paths threw the status away.
+
+- `POST .../drift:check` states in its response that the check is
+  recorded but not dispatched, and the environments view says so in the
+  row. The endpoint has always persisted a `PENDING` row with no
+  Layer-5 handoff; the UI reported plain success for a check that would
+  never resolve.
+
+### Removed
+
+- The `public` blueprint (an empty `endpoints.py` and a Vue placeholder
+  with debug-colored regions), which was never registered or reachable,
+  and the palette search provider that queried `/api/v1/admin/search` —
+  an endpoint that does not exist anywhere in the service, so the
+  command palette could never return a result. The `xtest` bytecode
+  left behind by a deleted source tree is gone too, and `AGENTS.md` no
+  longer documents `/xtest` as a live convention.
+
+### Fixed
+
+- **Users created through the admin UI could not log in.** The create
+  form wrote only the legacy `user` table while the login flow
+  authenticates against `identity_users`, so the operator got "User
+  created successfully" and the user got "Invalid username or
+  password" forever. Only the setup wizard dual-wrote, which is why the
+  bootstrap admin worked and nobody else did.
+
+- **Role grants through the admin UI had no effect on access.** The
+  Roles pages wrote legacy `system_roles` and stored assignments as a
+  comma-joined string, while every access decision comes from the
+  `rbac_*` tables via `rbac_evaluator`. Granting a role reported
+  success and changed nothing. Relatedly, `rbac_role_permissions` rows
+  were schema-only — the evaluator consulted just the in-memory
+  catalog — so custom roles created through the UI could never have
+  granted anything; grants are now the union of catalog and database.
+
+- The run detail page could not show progress or artifacts. The
+  serializer hardcoded `progress_summary` to null, no publisher ever
+  emitted the `result*` event kind the artifact pane listens for, and
+  the artifact route did not exist (see **Added**). `started_at`,
+  `completed_at`, `dispatched_at`, `pod_id`, and `job_name` were
+  likewise hardcoded null, and `created_at` was read from
+  `entered_state_at`, so a run's creation time changed every time it
+  changed state.
+
+- Pagination, in five distinct forms: `url_for` silently dropped every
+  non-path keyword argument, so all pagination and filter links in the
+  admin and projects sections collapsed to page one and cleared active
+  filters; three fleet list views reset the page during refresh; the
+  resource-pools pager never set `total-pages`, the only attribute the
+  component reads; the legacy resource lists fabricated the page count;
+  and the admin secrets and scopes lists paginated server-side while
+  rendering no controls at all.
+
+- Backend failures rendered as reassuring empty states. Fleet, webhook,
+  and resource views returned `null` on any non-OK response and then
+  displayed "No active registration for this pod", "This pool has no
+  resource members", "No delivery attempts recorded" — a 403 and a
+  genuinely empty list were pixel-identical. Pod detail went further
+  and displayed a fabricated `DEFINED` state when the state fetch
+  failed, so a `FAILED` pod read as healthy.
+
+- Secrets rotate and delete failures were swallowed into `console.warn`.
+  Because a successful rotation only changes `updated_at`, a failed one
+  was indistinguishable from success — on the exact action an operator
+  performs after a credential compromise.
+
+- Several routes crashed outright: `/resources/allocations` 500'd as
+  soon as one allocation existed (the template referenced Flask's `g`,
+  which this stack never provides), the project releases list raised on
+  every request (wrong keyword argument into the manager), the status
+  filter dropdowns raised whenever used (raw strings passed where enums
+  were dereferenced), the watch edit form could never be submitted (a
+  required `<select>` whose options were never passed), and the project
+  calendar rendered an empty grid while discarding the events it had
+  fetched.
+
+- The setup wizard's success redirect pointed at `/config/login`, a
+  route that no longer exists, so the first screen a new administrator
+  saw after completing setup was an empty page at a dead URL. Login
+  dropped its `next` parameter (the form carried no hidden field), so
+  every sign-in landed on `/` — which itself rendered an empty main
+  region — defeating both deep links and session-expiry recovery.
+
+- Legacy admin pages loaded ~2.4 MB of Vue and Bootstrap-Vue that no
+  admin template used, and the login page requested three stylesheets
+  that no longer exist. Every shell page also shared one browser title
+  ("Pychestrate"), making tabs, history, and bookmarks
+  indistinguishable.
+
+### Security
+
+- The pods and clients REST surfaces enforced no permission at all —
+  every handler gated on session presence only, while their sibling
+  resource routes enforced `system:resources.read`. Any authenticated
+  user could read all pod and client data by typing the URL; the
+  feature had simply never been wired into RBAC on either end. All 17
+  handlers now enforce the new read/write keys.
+
+- Outbound webhook subscriptions created through the UI were signed
+  with an empty key: the service signs deliveries with the
+  subscription's `secret_ref`, and the create form never sent one, so
+  receivers had no way to verify a delivery came from Pychestrate. The
+  create route now generates a 32-byte secret when none is supplied and
+  returns it once, and the UI presents it as a copyable value with
+  save-it-now treatment.
+
+- The unified login form no longer echoes "Account is not active". That
+  check fires before password verification, so surfacing it confirmed
+  account existence to anyone submitting any password. The rate-limit
+  lockout message is still surfaced — its backoff is keyed on
+  `(login_name, source_ip)` and records failures for unknown usernames
+  too, so it is not an enumeration oracle.
+
+- The shell catch-all validated only the session cookie's signature and
+  never checked the session row, so a stale post-logout cookie still
+  received the full application shell while legacy routes correctly
+  rejected it. It now performs the same liveness check the blueprint
+  routes use.
 
 ## [0.0.3-preview] — 2026-05-17
 
