@@ -181,6 +181,32 @@ def _build_build_trigger_request(
     return rtnval
 
 
+def _resolve_job_status(*, value: Optional[str]) -> Any:
+    """
+        Resolve a ``status`` query-param string to the
+        :class:`JobStatus` enum member the manager's filter
+        expects (``list_builds`` dereferences ``status.value``,
+        so a raw string would crash the query). ``None`` / empty
+        / unknown values yield ``None`` (no filter).
+
+        :param value: Raw query-param value.
+
+        :returns: JobStatus member or ``None``.
+    """
+    if value is None:
+        return None
+    if len(value) == 0:
+        return None
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        JobStatus,
+    )
+    try:
+        rtnval = JobStatus(value)
+    except ValueError:
+        return None
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
@@ -221,14 +247,22 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
+    """
+        Compute the real page count from a list response's
+        ``total`` field.
+
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
+
+        :returns: Number of pages (at least 1).
+    """
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
 
 
 def _parse_json_or_default(
@@ -392,23 +426,23 @@ def handle_build_list(request: Request) -> Response:
         )
 
         build_manager = _build_build_manager(db_session=db_session)
-        builds = build_manager.list_builds(
+        builds_result = build_manager.list_builds(
             project_id=project_id,
             spec_id=spec_id,
-            status=status,
+            status=_resolve_job_status(value=status),
             offset=offset,
             limit=params["per_page"],
-        ).builds
+        )
+        builds = builds_result.builds
         specs = build_manager.list_specs(project_id, limit=100).specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=builds_result.total,
             per_page=params["per_page"],
-            returned_count=len(builds),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -464,18 +498,18 @@ def handle_build_spec_list(request: Request) -> Response:
         offset = (params["page"] - 1) * params["per_page"]
 
         build_manager = _build_build_manager(db_session=db_session)
-        specs = build_manager.list_specs(
+        specs_result = build_manager.list_specs(
             project_id, offset=offset, limit=params["per_page"]
-        ).specs
+        )
+        specs = specs_result.specs
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=specs_result.total,
             per_page=params["per_page"],
-            returned_count=len(specs),
         )
 
         flashes = flash.consume_flashes(session=auth.session)

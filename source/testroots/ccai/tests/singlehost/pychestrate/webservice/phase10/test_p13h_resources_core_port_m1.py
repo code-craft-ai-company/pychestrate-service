@@ -307,16 +307,18 @@ class _FakeResourceManager:
             limit=len(self.list_resources_response),
         )
 
-    def list_pools(self, user_id: str) -> Any:
+    def list_pools(
+            self, user_id: str, offset: int = 0, limit: int = 50
+        ) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             pools=self.list_pools_response,
             total=len(self.list_pools_response),
-            offset=0,
-            limit=len(self.list_pools_response),
+            offset=offset,
+            limit=limit,
         )
 
-    def list_tags(self) -> Any:
+    def list_tags(self, **kwargs: Any) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             tags=self.list_tags_response,
@@ -324,6 +326,24 @@ class _FakeResourceManager:
             offset=0,
             limit=len(self.list_tags_response),
         )
+
+    def count_resources_by_health_status(self) -> Dict[str, int]:
+        # Mirrors the manager's aggregate count query by bucketing
+        # the seeded list_resources_response.
+        counts: Dict[str, int] = {
+            "online": 0,
+            "offline": 0,
+            "degraded": 0,
+            "maintenance": 0,
+        }
+        for resource in self.list_resources_response:
+            status = getattr(resource, "health_status", None)
+            if status is None:
+                continue
+            status_value = getattr(status, "value", status)
+            if isinstance(status_value, str) and status_value in counts:
+                counts[status_value] = counts[status_value] + 1
+        return counts
 
     def get_resource(self, resource_id: int) -> Optional[_FakeResource]:
         return self.get_resource_response
@@ -364,13 +384,14 @@ class _FakeAllocationManager:
         self.db_session: Any = db_session
         self.list_allocations_response: List[Any] = []
         self.get_active_allocations_response: List[Any] = []
+        self.list_reservations_response: List[Any] = []
         self.checkout_response: Optional[_FakeAllocation] = None
         self.checkout_calls: List[Any] = []
         self.checkout_raises: Optional[Exception] = None
         _FakeAllocationManager.last_instance = self
         return
 
-    def list_allocations(self, *, status: str) -> Any:
+    def list_allocations(self, **kwargs: Any) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             allocations=self.list_allocations_response,
@@ -381,6 +402,15 @@ class _FakeAllocationManager:
 
     def get_active_allocations(self, resource_id: int) -> List[Any]:
         return self.get_active_allocations_response
+
+    def list_reservations(self, **kwargs: Any) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            reservations=self.list_reservations_response,
+            total=len(self.list_reservations_response),
+            offset=0,
+            limit=len(self.list_reservations_response),
+        )
 
     def checkout(self, request: Any, user_id: str) -> _FakeAllocation:
         self.checkout_calls.append((request, user_id))
@@ -400,13 +430,15 @@ class _FakeIPPoolManager:
         _FakeIPPoolManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> Any:
+    def list_pools(
+            self, user_id: str, offset: int = 0, limit: int = 50
+        ) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             pools=self.list_pools_response,
             total=len(self.list_pools_response),
-            offset=0,
-            limit=len(self.list_pools_response),
+            offset=offset,
+            limit=limit,
         )
 
 
@@ -862,37 +894,49 @@ def test_parse_metadata_json_or_default_handles_empty_and_valid():
     return
 
 
-def test_summarize_health_counts_buckets_by_status_value():
+def test_calculate_total_pages_uses_real_totals():
     """
     **Feature: E1 helpers T5.4**
-    **Property: Resources are bucketed into the four documented
-    health-status keys; missing / unknown statuses contribute
-    nothing; empty input yields all-zero buckets.**
+    **Property: total_pages is the ceiling of total/per_page,
+    with a floor of 1 so templates can always render a page
+    indicator.**
     """
-    resources = [
-        _FakeResource(resource_id=1, name="r1", health_status_value="online"),
-        _FakeResource(resource_id=2, name="r2", health_status_value="online"),
-        _FakeResource(
-            resource_id=3, name="r3", health_status_value="degraded"
-        ),
-        _FakeResource(
-            resource_id=4, name="r4", health_status_value="maintenance"
-        ),
-        _FakeResource(
-            resource_id=5, name="r5", health_status_value="unknown"
-        ),
-    ]
-    counts = resources_routes._summarize_health_counts(resources=resources)
-    testbase.assert_equal(counts["online"], 2)
-    testbase.assert_equal(counts["degraded"], 1)
-    testbase.assert_equal(counts["maintenance"], 1)
-    testbase.assert_equal(counts["offline"], 0)
-
-    counts = resources_routes._summarize_health_counts(resources=[])
     testbase.assert_equal(
-        counts,
-        {"online": 0, "offline": 0, "degraded": 0, "maintenance": 0},
+        resources_routes._calculate_total_pages(total=0, per_page=20), 1
     )
+    testbase.assert_equal(
+        resources_routes._calculate_total_pages(total=1, per_page=20), 1
+    )
+    testbase.assert_equal(
+        resources_routes._calculate_total_pages(total=20, per_page=20), 1
+    )
+    testbase.assert_equal(
+        resources_routes._calculate_total_pages(total=21, per_page=20), 2
+    )
+    testbase.assert_equal(
+        resources_routes._calculate_total_pages(total=200, per_page=20),
+        10,
+    )
+    return
+
+
+def test_build_page_window_clamps_to_page_range():
+    """
+    **Feature: E1 helpers T5.4**
+    **Property: The page window is a contiguous run around the
+    current page, clamped to [1, total_pages].**
+    """
+    window = resources_routes._build_page_window(page=1, total_pages=1)
+    testbase.assert_equal(window, [1])
+
+    window = resources_routes._build_page_window(page=1, total_pages=10)
+    testbase.assert_equal(window, [1, 2, 3])
+
+    window = resources_routes._build_page_window(page=5, total_pages=10)
+    testbase.assert_equal(window, [3, 4, 5, 6, 7])
+
+    window = resources_routes._build_page_window(page=10, total_pages=10)
+    testbase.assert_equal(window, [8, 9, 10])
     return
 
 
@@ -1051,6 +1095,7 @@ def test_handle_resource_list_passes_filters_through_to_manager():
         testbase.assert_equal(kwargs["limit"], 20)
         testbase.assert_equal(kwargs["pool_id"], 2)
         testbase.assert_equal(kwargs["tags"], ["t1", "t2"])
+        testbase.assert_equal(kwargs["search"], "boardA")
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["selected_pool_id"], 2)
         testbase.assert_equal(ctx["selected_resource_type"], "device")

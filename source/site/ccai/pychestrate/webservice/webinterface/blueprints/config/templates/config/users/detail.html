@@ -59,7 +59,7 @@
     <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-primary">
         <span class="material-icons">edit</span> Edit User
     </a>
-    {% if user.is_active %}
+    {% if user.is_active and user.id != current_user_id %}
     <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" style="display:inline;">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger" onclick="return confirm('Deactivate this user?')">

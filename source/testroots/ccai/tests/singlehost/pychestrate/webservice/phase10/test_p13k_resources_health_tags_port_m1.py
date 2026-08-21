@@ -291,7 +291,7 @@ class _FakeResourceManager:
     def get_resource(self, resource_id: int) -> Optional[_FakeResource]:
         return self.get_resource_response
 
-    def list_tags(self) -> Any:
+    def list_tags(self, **kwargs: Any) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             tags=self.list_tags_response,
@@ -299,6 +299,24 @@ class _FakeResourceManager:
             offset=0,
             limit=len(self.list_tags_response),
         )
+
+    def count_resources_by_health_status(self) -> Dict[str, int]:
+        # Mirrors the manager's aggregate count query by bucketing
+        # the seeded list_resources_response.
+        counts: Dict[str, int] = {
+            "online": 0,
+            "offline": 0,
+            "degraded": 0,
+            "maintenance": 0,
+        }
+        for resource in self.list_resources_response:
+            status = getattr(resource, "health_status", None)
+            if status is None:
+                continue
+            status_value = getattr(status, "value", status)
+            if isinstance(status_value, str) and status_value in counts:
+                counts[status_value] = counts[status_value] + 1
+        return counts
 
 
 class _FakeHealthMonitor:

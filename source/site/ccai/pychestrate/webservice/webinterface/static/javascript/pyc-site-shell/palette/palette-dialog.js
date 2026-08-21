@@ -304,6 +304,12 @@ class PaletteDialog {
   _on_dialog_keydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      // Escape here means "close the palette" only. Without
+      // stopPropagation the event continues to document-level
+      // listeners (the sidebar accordion, <mj-app-shell>'s
+      // overlay handling) which would also collapse the sidebar
+      // and steal the restored focus.
+      event.stopPropagation();
       this.close();
       return;
     }

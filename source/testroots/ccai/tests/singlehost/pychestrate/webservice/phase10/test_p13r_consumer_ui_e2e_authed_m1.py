@@ -348,3 +348,44 @@ def test_crud_roundtrip_create_and_list_global_variable():
     has_new_variable = var_name in list_response.text
     testbase.assert_equal(has_new_variable, True)
     return
+
+
+def test_authenticated_projects_dashboard_renders_inside_site_shell():
+    """
+    **Feature: consumer UI e2e tier-2 (projects shell wrap)**
+    **Property: GET /projects with a logged-in session renders
+    the site-shell document (single doctype, <pyc-site-shell>
+    host, shell-resolved <title>) with the projects page embedded
+    as a fragment -- and none of the retired standalone chrome
+    (own app header, Vue script stack).**
+    """
+    handle = ensure_app()
+    cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
+
+    response = drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="GET",
+        path="/projects",
+        cookies=cookies,
+    )
+    testbase.assert_equal(response.status_code, 200)
+    body = response.text
+
+    # Exactly one document: the shell's.
+    testbase.assert_equal(body.count("<!DOCTYPE html>"), 1)
+    testbase.assert_equal("<pyc-site-shell" in body, True)
+    testbase.assert_equal(
+        "<title>Projects · Pychestrate</title>" in body, True
+    )
+
+    # The projects page rides inside as a fragment.
+    testbase.assert_equal(
+        'class="projects-fragment"' in body, True
+    )
+    testbase.assert_equal("Projects Dashboard" in body, True)
+
+    # The retired standalone chrome is gone.
+    testbase.assert_equal('class="app-header"' in body, False)
+    testbase.assert_equal("vue.js" in body, False)
+    testbase.assert_equal("bootstrap-vue" in body, False)
+    return

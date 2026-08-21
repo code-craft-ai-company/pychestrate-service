@@ -12,6 +12,9 @@ Exposes the per-resource read operations from the resources domain
 Routes attached by :func:`register_resources_routes`:
 
 * ``GET /api/v1/resources/{resource_id}`` -- read one resource
+* ``POST /api/v1/resources/{resource_id}/state`` -- transition the
+  resource lifecycle state (quarantine / maintenance / available /
+  retire)
 * ``GET /api/v1/resources/{resource_id}/health`` -- current health
   record
 * ``GET /api/v1/resources/{resource_id}/usage-history`` -- the
@@ -53,6 +56,10 @@ from ccai.pychestrate.webservice.resources.inventory import (
 )
 from ccai.pychestrate.webservice.resources.inventory.errors import (
     ResourceNotFoundError,
+    ResourceStateTransitionError,
+)
+from ccai.pychestrate.webservice.resources.inventory.models import (
+    ResourceState,
 )
 from ccai.pychestrate.webservice.resources.usage_history import (
     service as usage_history_service,
@@ -63,6 +70,7 @@ from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 RESOURCES_PATH = "/resources"
 
 RESOURCES_READ_PERMISSION_KEY = "system:resources.read"
+RESOURCES_WRITE_PERMISSION_KEY = "system:resources.write"
 
 DEFAULT_TIMELINE_LIMIT = 200
 MIN_TIMELINE_LIMIT = 1
@@ -198,6 +206,64 @@ def _require_permission(
             extensions={"required_permission": permission_key},
         )
     rtnval = principal
+    return rtnval
+
+
+def _decode_json_object_or_abort(*, request: Request) -> Dict[str, Any]:
+    """
+        Decode the request body as a JSON object, aborting with
+        422 on missing / malformed / non-dict bodies.
+
+        :param request: Incoming webworks request.
+
+        :returns: Decoded dict.
+    """
+    try:
+        payload = request.json()
+    except Exception:
+        payload = None
+
+    if payload is None:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail="Request body must be JSON.",
+        )
+    if isinstance(payload, dict) is False:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail="Request body must be a JSON object.",
+        )
+
+    rtnval = payload
+    return rtnval
+
+
+def _require_string_field(
+        *,
+        request: Request,
+        body: Dict[str, Any],
+        field_name: str
+    ) -> str:
+    """
+        Pull a required non-empty string field from a JSON body.
+
+        :param request: Incoming webworks request.
+        :param body: Decoded JSON object body.
+        :param field_name: Required field name.
+
+        :returns: The field value.
+    """
+    value = body.get(field_name, None)
+    if not isinstance(value, str) or len(value) == 0:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail="Field '{}' is required.".format(field_name),
+            extensions={"missing_fields": [field_name]},
+        )
+    rtnval = value
     return rtnval
 
 
@@ -420,6 +486,101 @@ def handle_read_resource(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/v1/resources/{resource_id}/state
+# ---------------------------------------------------------------------------
+
+
+def handle_transition_resource_state(request: Request) -> Response:
+    """
+        ``POST /api/v1/resources/{resource_id}/state`` -- apply a
+        lifecycle state transition to a resource.
+
+        Body: ``state`` (required -- one of ``available``,
+        ``leased``, ``quarantined``, ``maintenance``, ``retired``),
+        ``reason`` (optional free-text, recorded on the
+        state-changed event).
+
+        Legal transitions are validated by the inventory service --
+        an impermissible move (e.g. un-retiring) returns ``409``.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the updated ``Resource``
+                  dict, or a problem response.
+    """
+    resource_id = request.path_params.get("resource_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=RESOURCES_WRITE_PERMISSION_KEY,
+        )
+
+        body = _decode_json_object_or_abort(request=request)
+        state_raw = _require_string_field(
+            request=request, body=body, field_name="state",
+        )
+        try:
+            new_state = ResourceState(state_raw.strip().lower())
+        except ValueError:
+            valid_states = [member.value for member in ResourceState]
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'state' must be one of: {}.".format(
+                    ", ".join(valid_states)
+                ),
+                extensions={"raw_value": state_raw},
+            )
+            new_state = ResourceState.AVAILABLE  # unreachable
+
+        reason = body.get("reason", "")
+        if isinstance(reason, str) is False:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'reason' must be a string.",
+            )
+
+        actor = "user:{}".format(principal.user_id)
+        try:
+            view = inventory_service.transition_state(
+                db_session=db_session,
+                resource_id=resource_id,
+                new_state=new_state,
+                actor=actor,
+                reason=reason,
+            )
+        except ResourceNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"resource_id": resource_id},
+            )
+            view = None  # unreachable
+        except ResourceStateTransitionError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={
+                    "resource_id": resource_id,
+                    "requested_state": new_state.value,
+                    "reason": "transition_not_permitted",
+                },
+            )
+            view = None  # unreachable
+
+        body_dict = _resource_view_to_dict(view=view)
+        rtnval: Response = JSONResponse(content=body_dict, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/resources/{resource_id}/health
 # ---------------------------------------------------------------------------
 
@@ -544,6 +705,9 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{resource_id}", methods=["GET"],
     )(handle_read_resource)
     app.attach_route(
+        base + "/{resource_id}/state", methods=["POST"],
+    )(handle_transition_resource_state)
+    app.attach_route(
         base + "/{resource_id}/health", methods=["GET"],
     )(handle_read_resource_health)
     app.attach_route(
@@ -551,7 +715,7 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
     )(handle_list_resource_usage_history)
 
     _LOGGER.info(
-        "pychestrate.resources.routes registered: 3 routes under %s",
+        "pychestrate.resources.routes registered: 4 routes under %s",
         base,
     )
     return
@@ -560,10 +724,12 @@ def register_resources_routes(*, app: Any, version_prefix: str) -> None:
 __all__ = [
     "RESOURCES_PATH",
     "RESOURCES_READ_PERMISSION_KEY",
+    "RESOURCES_WRITE_PERMISSION_KEY",
     "DEFAULT_TIMELINE_LIMIT",
     "MAX_TIMELINE_LIMIT",
     "register_resources_routes",
     "handle_read_resource",
+    "handle_transition_resource_state",
     "handle_read_resource_health",
     "handle_list_resource_usage_history",
 ]

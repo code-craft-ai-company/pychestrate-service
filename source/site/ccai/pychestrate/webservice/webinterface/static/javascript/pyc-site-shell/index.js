@@ -12,50 +12,270 @@ function build_empty_state() {
   return panel;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/flash-notices.js
+var FLASH_SELECTOR = "div.alert.alert-success, div.alert.alert-error, div.alert.alert-danger, div.alert.alert-warning, div.alert.alert-info";
+var CATEGORY_TO_SEVERITY = {
+  "alert-success": "success",
+  "alert-error": "error",
+  "alert-danger": "error",
+  "alert-warning": "warning",
+  "alert-info": "info"
+};
+function extract_flash_messages(nodes) {
+  const flashes = [];
+  const remaining_nodes = [];
+  for (const node of nodes) {
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      remaining_nodes.push(node);
+      continue;
+    }
+    const element = node;
+    if (element.matches(FLASH_SELECTOR) === true) {
+      flashes.push(_flash_from(element));
+      continue;
+    }
+    for (const found of Array.from(
+      element.querySelectorAll(FLASH_SELECTOR)
+    )) {
+      flashes.push(_flash_from(found));
+      found.remove();
+    }
+    remaining_nodes.push(element);
+  }
+  const rtnval = { flashes, remaining_nodes };
+  return rtnval;
+}
+function _flash_from(flash_element) {
+  const rtnval = {
+    severity: _severity_for(flash_element),
+    message: flash_element.textContent.trim()
+  };
+  return rtnval;
+}
+function build_flash_notice(flash) {
+  const notice = document.createElement("mj-alert");
+  notice.setAttribute("severity", flash.severity);
+  notice.setAttribute("dismissible", "");
+  notice.setAttribute("open", "");
+  notice.classList.add("pyc-site-shell__flash-notice");
+  const message = document.createElement("span");
+  message.classList.add("pyc-site-shell__flash-notice-message");
+  message.textContent = flash.message;
+  notice.appendChild(message);
+  notice.addEventListener("mj-alert-close", () => {
+    if (notice.parentNode !== null) {
+      notice.parentNode.removeChild(notice);
+    }
+  });
+  return notice;
+}
+function _severity_for(flash_element) {
+  for (const class_name of Array.from(flash_element.classList)) {
+    const severity = CATEGORY_TO_SEVERITY[class_name];
+    if (severity !== void 0) {
+      return severity;
+    }
+  }
+  return "info";
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/header.js
 var LOGOUT_PATH = "/logout";
+var NAV_TOGGLE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>';
 function build_header(options) {
   const app_bar = document.createElement("mj-app-bar");
   app_bar.setAttribute("slot", "app-bar");
   app_bar.setAttribute("sticky", "");
   app_bar.classList.add("pyc-site-shell__header");
+  if (typeof options.on_nav_toggle === "function") {
+    const nav_toggle = build_nav_toggle(
+      options.on_nav_toggle,
+      options.nav_open_initial === true
+    );
+    app_bar.appendChild(nav_toggle);
+  }
   const brand = document.createElement("span");
   brand.setAttribute("slot", "brand");
   brand.classList.add("pyc-site-shell__brand");
   brand.textContent = options.brand_label;
   app_bar.appendChild(brand);
+  if (typeof options.on_palette_hint_activate === "function") {
+    const hint = build_palette_hint(
+      options.palette_shortcut_label,
+      options.on_palette_hint_activate
+    );
+    app_bar.appendChild(hint);
+  }
   const actions = document.createElement("div");
   actions.setAttribute("slot", "actions");
   actions.setAttribute("role", "menu");
   actions.classList.add("pyc-site-shell__user-menu");
-  const display_name = options.user_display_name !== null ? options.user_display_name : "Account";
+  const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
   const name_label = document.createElement("span");
   name_label.classList.add("pyc-site-shell__user-menu-name");
   name_label.textContent = display_name;
   actions.appendChild(name_label);
-  const logout_form = document.createElement("form");
-  logout_form.method = "POST";
-  logout_form.action = LOGOUT_PATH;
-  logout_form.classList.add("pyc-site-shell__logout-form");
   const logout_button = document.createElement("mj-button");
-  logout_button.setAttribute("type", "submit");
+  logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
   logout_button.setAttribute("size", "sm");
   logout_button.setAttribute("role", "menuitem");
+  logout_button.classList.add("pyc-site-shell__logout-button");
   logout_button.textContent = "Sign out";
-  logout_form.appendChild(logout_button);
-  actions.appendChild(logout_form);
+  logout_button.addEventListener("click", (event) => {
+    event.preventDefault();
+    window.location.assign(LOGOUT_PATH);
+  });
+  actions.appendChild(logout_button);
   app_bar.appendChild(actions);
   return app_bar;
+}
+function build_nav_toggle(on_nav_toggle, nav_open_initial) {
+  const nav_toggle = document.createElement("button");
+  nav_toggle.type = "button";
+  nav_toggle.setAttribute("slot", "brand");
+  nav_toggle.classList.add("pyc-site-shell__nav-toggle");
+  nav_toggle.setAttribute("aria-label", "Toggle navigation sidebar");
+  nav_toggle.setAttribute("title", "Toggle navigation sidebar");
+  nav_toggle.setAttribute(
+    "aria-expanded",
+    nav_open_initial === true ? "true" : "false"
+  );
+  nav_toggle.innerHTML = NAV_TOGGLE_ICON_SVG;
+  nav_toggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    on_nav_toggle();
+  });
+  return nav_toggle;
+}
+function build_palette_hint(shortcut_label, on_activate) {
+  const resolved_label = typeof shortcut_label === "string" && shortcut_label.length > 0 ? shortcut_label : "Ctrl+K";
+  const hint = document.createElement("button");
+  hint.type = "button";
+  hint.setAttribute("slot", "brand");
+  hint.classList.add("pyc-site-shell__palette-hint");
+  hint.setAttribute(
+    "title",
+    "Open the command palette to search navigation (" + resolved_label + ")"
+  );
+  hint.setAttribute("aria-label", "Open the command palette");
+  hint.textContent = resolved_label;
+  hint.addEventListener("click", (event) => {
+    event.preventDefault();
+    on_activate();
+  });
+  return hint;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/home-view.js
+function build_home_view(options) {
+  const panel = document.createElement("section");
+  panel.classList.add("pyc-site-shell__home");
+  panel.setAttribute("aria-label", "Home");
+  const heading = document.createElement("h1");
+  heading.classList.add("pyc-site-shell__home-heading");
+  heading.textContent = options.brand_label;
+  panel.appendChild(heading);
+  const subtitle = document.createElement("p");
+  subtitle.classList.add("pyc-site-shell__home-subtitle");
+  subtitle.textContent = "Choose a destination to get started.";
+  panel.appendChild(subtitle);
+  const grid = build_nav_link_grid(options.visible_sidebar);
+  panel.appendChild(grid);
+  return panel;
+}
+function build_nav_link_grid(visible_sidebar) {
+  const grid = document.createElement("nav");
+  grid.classList.add("pyc-site-shell__nav-grid");
+  grid.setAttribute("aria-label", "Site sections");
+  if (visible_sidebar.ungrouped.length > 0) {
+    const card = build_nav_grid_card(null, visible_sidebar.ungrouped);
+    grid.appendChild(card);
+  }
+  for (const bucket of visible_sidebar.groups) {
+    const card = build_nav_grid_card(bucket.group.label, bucket.entries);
+    grid.appendChild(card);
+  }
+  return grid;
+}
+function build_nav_grid_card(group_label, entries) {
+  const card = document.createElement("section");
+  card.classList.add("pyc-site-shell__nav-grid-card");
+  if (group_label !== null) {
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-site-shell__nav-grid-card-heading");
+    heading.textContent = group_label;
+    card.appendChild(heading);
+  }
+  const list = document.createElement("ul");
+  list.classList.add("pyc-site-shell__nav-grid-list");
+  for (const entry of entries) {
+    const item = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = entry.route;
+    link.textContent = entry.label;
+    link.classList.add("pyc-site-shell__nav-grid-link");
+    item.appendChild(link);
+    list.appendChild(item);
+  }
+  card.appendChild(list);
+  return card;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/not-found-view.js
+function build_not_found_view(options) {
+  const panel = document.createElement("section");
+  panel.classList.add("pyc-site-shell__not-found");
+  panel.setAttribute("aria-label", "Page not found");
+  const heading = document.createElement("h1");
+  heading.classList.add("pyc-site-shell__not-found-heading");
+  heading.textContent = "Page not found";
+  panel.appendChild(heading);
+  const body = document.createElement("p");
+  body.classList.add("pyc-site-shell__not-found-body");
+  body.appendChild(
+    document.createTextNode("There is no page at ")
+  );
+  const path_code = document.createElement("code");
+  path_code.classList.add("pyc-site-shell__not-found-path");
+  path_code.textContent = options.path;
+  body.appendChild(path_code);
+  body.appendChild(document.createTextNode("."));
+  panel.appendChild(body);
+  const home_paragraph = document.createElement("p");
+  home_paragraph.classList.add("pyc-site-shell__not-found-home");
+  const home_link = document.createElement("a");
+  home_link.href = "/";
+  home_link.textContent = "Go to the home page";
+  home_link.classList.add("pyc-site-shell__not-found-home-link");
+  home_paragraph.appendChild(home_link);
+  panel.appendChild(home_paragraph);
+  const grid = build_nav_link_grid(options.visible_sidebar);
+  panel.appendChild(grid);
+  return panel;
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/degraded-banner.js
 var BANNER_MESSAGE = "Permissions could not be refreshed. Using the last known set. Some controls may behave incorrectly.";
 var DegradedBanner = class {
-  constructor(container) {
+  constructor(container, options = null) {
     this._container = container;
     this._element = null;
     this._dismissed = false;
+    this._message = BANNER_MESSAGE;
+    this._action_label = null;
+    this._on_action = null;
+    if (options !== null && typeof options === "object") {
+      if (typeof options.message === "string" && options.message.length > 0) {
+        this._message = options.message;
+      }
+      if (typeof options.action_label === "string" && options.action_label.length > 0) {
+        this._action_label = options.action_label;
+      }
+      if (typeof options.on_action === "function") {
+        this._on_action = options.on_action;
+      }
+    }
   }
   show() {
     if (this._dismissed === true) {
@@ -71,8 +291,23 @@ var DegradedBanner = class {
     banner.classList.add("pyc-site-shell__degraded-banner");
     const message = document.createElement("span");
     message.classList.add("pyc-site-shell__degraded-banner-message");
-    message.textContent = BANNER_MESSAGE;
+    message.textContent = this._message;
     banner.appendChild(message);
+    if (this._action_label !== null && this._on_action !== null) {
+      const action_button = document.createElement("mj-button");
+      action_button.setAttribute("slot", "actions");
+      action_button.setAttribute("type", "button");
+      action_button.setAttribute("variant", "tertiary");
+      action_button.setAttribute("size", "sm");
+      action_button.classList.add(
+        "pyc-site-shell__degraded-banner-action"
+      );
+      action_button.textContent = this._action_label;
+      action_button.addEventListener("click", () => {
+        this._on_action();
+      });
+      banner.appendChild(action_button);
+    }
     banner.addEventListener("mj-alert-close", () => {
       this._dismissed = true;
       this._element = null;
@@ -574,6 +809,7 @@ var PaletteDialog = class {
   _on_dialog_keydown(event) {
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       this.close();
       return;
     }
@@ -614,6 +850,126 @@ var PaletteDialog = class {
     return;
   }
 };
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/palette/navigation-provider.js
+var NAVIGATION_PROVIDER_ID = "shell.navigation";
+var NAVIGATION_PROVIDER_LABEL = "Navigation";
+var NAVIGATION_RESULT_LIMIT = 12;
+var SCORE_LABEL_PREFIX = 400;
+var SCORE_LABEL_SUBSTRING = 300;
+var SCORE_GROUP_SUBSTRING = 200;
+var SCORE_ROUTE_SUBSTRING = 150;
+var SCORE_LABEL_SUBSEQUENCE = 100;
+function register_navigation_palette_provider(palette, options) {
+  palette.registerProvider({
+    providerId: NAVIGATION_PROVIDER_ID,
+    label: NAVIGATION_PROVIDER_LABEL,
+    requiredPermissions: [],
+    query: async (query) => {
+      const visible_sidebar = options.get_visible_sidebar();
+      const candidates = _collect_candidates(visible_sidebar);
+      const results = _match_candidates(candidates, query);
+      return results;
+    }
+  });
+  return;
+}
+function _collect_candidates(visible_sidebar) {
+  const candidates = [];
+  candidates.push({
+    id: "shell.home",
+    label: "Home",
+    group_label: null,
+    route: "/"
+  });
+  for (const entry of visible_sidebar.ungrouped) {
+    candidates.push({
+      id: entry.entryId,
+      label: entry.label,
+      group_label: null,
+      route: entry.route
+    });
+  }
+  for (const bucket of visible_sidebar.groups) {
+    for (const entry of bucket.entries) {
+      candidates.push({
+        id: entry.entryId,
+        label: entry.label,
+        group_label: bucket.group.label,
+        route: entry.route
+      });
+    }
+  }
+  return candidates;
+}
+function _match_candidates(candidates, query) {
+  const normalized = typeof query === "string" ? query.trim().toLowerCase() : "";
+  if (normalized.length === 0) {
+    const rtnval = [];
+    return rtnval;
+  }
+  const scored = [];
+  for (const candidate of candidates) {
+    const score = _score_candidate(candidate, normalized);
+    if (score > 0) {
+      scored.push({ candidate, score });
+    }
+  }
+  scored.sort((left, right) => right.score - left.score);
+  const results = [];
+  for (const item of scored.slice(0, NAVIGATION_RESULT_LIMIT)) {
+    const candidate = item.candidate;
+    const description = candidate.group_label !== null ? candidate.group_label + " \u2014 " + candidate.route : candidate.route;
+    results.push({
+      id: candidate.id,
+      label: candidate.label,
+      description,
+      route: candidate.route
+    });
+  }
+  return results;
+}
+function _score_candidate(candidate, normalized_query) {
+  const label = candidate.label.toLowerCase();
+  const group_label = candidate.group_label !== null ? candidate.group_label.toLowerCase() : "";
+  const route = candidate.route.toLowerCase();
+  const tiebreak = Math.max(0, 50 - candidate.label.length);
+  if (label.startsWith(normalized_query) === true) {
+    const rtnval2 = SCORE_LABEL_PREFIX + tiebreak;
+    return rtnval2;
+  }
+  if (label.includes(normalized_query) === true) {
+    const rtnval2 = SCORE_LABEL_SUBSTRING + tiebreak;
+    return rtnval2;
+  }
+  if (group_label.length > 0 && group_label.includes(normalized_query) === true) {
+    const rtnval2 = SCORE_GROUP_SUBSTRING + tiebreak;
+    return rtnval2;
+  }
+  if (route.includes(normalized_query) === true) {
+    const rtnval2 = SCORE_ROUTE_SUBSTRING + tiebreak;
+    return rtnval2;
+  }
+  if (_is_subsequence(normalized_query, label) === true) {
+    const rtnval2 = SCORE_LABEL_SUBSEQUENCE + tiebreak;
+    return rtnval2;
+  }
+  const rtnval = 0;
+  return rtnval;
+}
+function _is_subsequence(needle, haystack) {
+  let needle_index = 0;
+  for (let haystack_index = 0; haystack_index < haystack.length; haystack_index = haystack_index + 1) {
+    if (needle_index >= needle.length) {
+      break;
+    }
+    if (haystack[haystack_index] === needle[needle_index]) {
+      needle_index = needle_index + 1;
+    }
+  }
+  const rtnval = needle_index >= needle.length;
+  return rtnval;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/permissions/permission-set.js
 var PermissionSet = class {
@@ -926,18 +1282,21 @@ function _extract_permission_keys(payload) {
 var ShellRouter = class _ShellRouter {
   _current;
   _callbacks;
-  _main_region_getter;
   /**
+   * Tracks the active route context for the shell. The
+   * pychestrate site is server-rendered: the sidebar and the
+   * command palette both perform full page loads, so this router
+   * intentionally has no `navigateTo` / pushState path -- it only
+   * parses the boot path and refreshes subscribers when the
+   * browser traverses history within the same document (back /
+   * forward with a bfcache restore).
+   *
    * @param initial_path - Path the shell booted on; typically
    *                       `window.location.pathname`.
-   * @param main_region_getter - Function returning the active
-   *                             `<main>` region (used for focus
-   *                             restoration).
    */
-  constructor(initial_path, main_region_getter) {
+  constructor(initial_path) {
     this._current = _ShellRouter.parse(initial_path);
     this._callbacks = [];
-    this._main_region_getter = main_region_getter;
     window.addEventListener("popstate", () => {
       const next_context = _ShellRouter.parse(window.location.pathname);
       const previous_context = this._current;
@@ -980,21 +1339,6 @@ var ShellRouter = class _ShellRouter {
     this._callbacks.push(callback);
     return;
   }
-  /**
-   * Drive a same-origin navigation by pushing on the history
-   * stack and re-rendering. Callers are responsible for any
-   * permission-cache refresh; this router does not own the
-   * permission model.
-   */
-  async navigateTo(route) {
-    const next_context = _ShellRouter.parse(route);
-    const previous_context = this._current;
-    window.history.pushState({}, "", route);
-    this._current = next_context;
-    await this._dispatch(next_context, previous_context);
-    this._restore_focus();
-    return;
-  }
   async _dispatch(next_context, previous_context) {
     for (const callback of this._callbacks) {
       try {
@@ -1005,28 +1349,6 @@ var ShellRouter = class _ShellRouter {
           { reason: String(reason) }
         );
       }
-    }
-    return;
-  }
-  _restore_focus() {
-    const main = this._main_region_getter();
-    if (main === null) {
-      return;
-    }
-    const heading = main.querySelector("h1");
-    if (heading !== null) {
-      if (heading.hasAttribute("tabindex") === false) {
-        heading.setAttribute("tabindex", "-1");
-      }
-      ;
-      heading.focus();
-      return;
-    }
-    const focusable = main.querySelector(
-      "a, button, input, select, textarea, [tabindex]"
-    );
-    if (focusable !== null) {
-      focusable.focus();
     }
     return;
   }
@@ -1513,14 +1835,12 @@ var DEFAULT_GROUP_ICON_SVGS = {
 var FALLBACK_GROUP_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" /></svg>';
 var SidebarRenderer = class {
   _container;
-  _on_navigate;
   _on_entry_clicked;
   _detach_keyboard;
   _detach_keydown;
   _open_button;
-  constructor(container, on_navigate, on_entry_clicked = null) {
+  constructor(container, on_entry_clicked = null) {
     this._container = container;
-    this._on_navigate = on_navigate;
     this._on_entry_clicked = on_entry_clicked;
     this._detach_keyboard = null;
     this._detach_keydown = null;
@@ -1706,10 +2026,14 @@ var SidebarRenderer = class {
     return;
   }
   /**
-   * Document-level Escape key closes the currently-open group and
-   * restores focus to its major button. No outside-click handler:
-   * the accordion is meant to stay open until the user picks a
-   * different major.
+   * Escape key closes the currently-open group and restores focus
+   * to its major button -- but only when the keystroke originated
+   * INSIDE the sidebar. The listener sits on the document (the
+   * sidebar container is re-built every render), so without the
+   * containment guard an Escape aimed at a modal or the command
+   * palette would also collapse the accordion and yank focus into
+   * the sidebar. No outside-click handler: the accordion is meant
+   * to stay open until the user picks a different major.
    */
   _attach_keydown() {
     const on_document_keydown = (event) => {
@@ -1717,6 +2041,13 @@ var SidebarRenderer = class {
         return;
       }
       if (this._open_button === null) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Node === false) {
+        return;
+      }
+      if (this._container.contains(target) === false) {
         return;
       }
       const button = this._open_button;
@@ -2052,6 +2383,9 @@ var ATTR_PERMISSIONS_ENDPOINT = "permissions-endpoint";
 var ATTR_NAVIGATION_ENDPOINT = "navigation-endpoint";
 var ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 var ATTR_BRAND_LABEL = "brand-label";
+var NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
+var NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
+var NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
 var PycSiteShell = class extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -2060,8 +2394,10 @@ var PycSiteShell = class extends HTMLElement {
   _sidebar_renderer;
   _main_region;
   _sidebar_region;
+  _notices_region;
   _palette_dialog;
   _degraded_banner;
+  _nav_degraded_banner;
   _session_toast;
   _global_keydown;
   _global_session_401;
@@ -2072,6 +2408,9 @@ var PycSiteShell = class extends HTMLElement {
   _palette_open_keydown_perf_now;
   _navigation_endpoint;
   _nav_manifest_loaded;
+  _nav_manifest_failed;
+  _nav_provider_registered;
+  _layout;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -2090,12 +2429,17 @@ var PycSiteShell = class extends HTMLElement {
     const nav_endpoint = this.getAttribute(ATTR_NAVIGATION_ENDPOINT);
     this._navigation_endpoint = nav_endpoint !== null && nav_endpoint.length > 0 ? nav_endpoint : DEFAULT_NAVIGATION_ENDPOINT;
     this._nav_manifest_loaded = false;
+    this._nav_manifest_failed = false;
+    this._nav_provider_registered = false;
+    this._layout = null;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
     this._sidebar_region = null;
+    this._notices_region = null;
     this._palette_dialog = null;
     this._degraded_banner = null;
+    this._nav_degraded_banner = null;
     this._session_toast = null;
     this._global_keydown = null;
     this._global_session_401 = null;
@@ -2204,11 +2548,26 @@ var PycSiteShell = class extends HTMLElement {
     this.replaceChildren();
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
-    layout.setAttribute("nav-open", "");
+    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
+    const nav_collapsed_preference = _read_nav_collapsed_preference();
+    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    if (nav_open_initial === true) {
+      layout.setAttribute("nav-open", "");
+    }
+    this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
-      user_display_name: null
+      user_display_name: null,
+      nav_open_initial,
+      on_nav_toggle: () => {
+        this._toggle_sidebar();
+      },
+      palette_shortcut_label: is_mac_platform === true ? "\u2318K" : "Ctrl+K",
+      on_palette_hint_activate: () => {
+        this.openPalette();
+      }
     });
     layout.appendChild(header);
     const sidebar = document.createElement("mj-side-nav");
@@ -2216,26 +2575,44 @@ var PycSiteShell = class extends HTMLElement {
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
+    const flash_extraction = extract_flash_messages(preserved_main_content);
+    const notices = document.createElement("div");
+    notices.setAttribute("slot", "main");
+    notices.classList.add("pyc-site-shell__notices");
+    for (const flash of flash_extraction.flashes) {
+      const notice = build_flash_notice(flash);
+      notices.appendChild(notice);
+    }
+    layout.appendChild(notices);
+    this._notices_region = notices;
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
     main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
-    for (const node of preserved_main_content) {
+    for (const node of flash_extraction.remaining_nodes) {
       main.appendChild(node);
     }
     layout.appendChild(main);
     this._main_region = main;
     this.appendChild(layout);
     this._degraded_banner = new DegradedBanner(main);
+    this._nav_degraded_banner = new DegradedBanner(
+      main,
+      {
+        message: NAV_BANNER_MESSAGE,
+        action_label: "Retry",
+        on_action: () => {
+          void this._retry_nav_manifest();
+        }
+      }
+    );
     this._session_toast = new SessionExpiredToast(main);
     this._palette_dialog = new PaletteDialog(
       this._palette_registry,
       {
         getPermissions: () => this._permission_cache.current(),
         navigate: (route) => {
-          if (this._router !== null) {
-            void this._router.navigateTo(route);
-          }
+          window.location.assign(route);
         },
         emit: (event_name, detail) => {
           this._emit(event_name, detail);
@@ -2259,12 +2636,20 @@ var PycSiteShell = class extends HTMLElement {
         }
       }
     );
-    this._router = new ShellRouter(initial_path, () => this._main_region);
+    this._router = new ShellRouter(initial_path);
+    if (this._nav_provider_registered === false) {
+      register_navigation_palette_provider(
+        this._palette_registry,
+        {
+          get_visible_sidebar: () => this._sidebar_registry.visible(
+            this._permission_cache.current()
+          )
+        }
+      );
+      this._nav_provider_registered = true;
+    }
     this._sidebar_renderer = new SidebarRenderer(
       sidebar,
-      (route) => {
-        void this._router?.navigateTo(route);
-      },
       (entry_route, entry_label) => {
         this._emit(
           "pyc-site-shell-sidebar-clicked",
@@ -2374,11 +2759,12 @@ var PycSiteShell = class extends HTMLElement {
    * Seeding the manifest is what makes the sidebar complete on
    * the bare ``/`` route (which loads no feature bundle at
    * all). Idempotent -- a second call is a no-op once the
-   * manifest has been applied. A fetch failure is non-fatal:
-   * the shell keeps whatever the registry already holds (the
-   * legacy per-bundle ``registerEntry`` calls still run for the
-   * current route's bundle) and the degraded path surfaces via
-   * the permissions cache.
+   * manifest has been applied, so the Retry control can call it
+   * again freely. A fetch failure is non-fatal but no longer
+   * silent: the shell shows the navigation degraded banner (with
+   * a Retry action) and ``_render_sidebar_and_empty_state``
+   * paints an explanatory state into the sidebar region while
+   * the registry has nothing to show.
    */
   async _load_nav_manifest() {
     if (this._nav_manifest_loaded === true) {
@@ -2388,6 +2774,31 @@ var PycSiteShell = class extends HTMLElement {
     if (result.ok === true && result.manifest !== null) {
       apply_nav_manifest(this._sidebar_registry, result.manifest);
       this._nav_manifest_loaded = true;
+      this._nav_manifest_failed = false;
+      if (this._nav_degraded_banner !== null) {
+        this._nav_degraded_banner.hide();
+      }
+    } else {
+      this._nav_manifest_failed = true;
+      if (this._nav_degraded_banner !== null) {
+        this._nav_degraded_banner.show();
+      }
+    }
+    return;
+  }
+  /**
+   * Retry handler for the navigation degraded banner and the
+   * sidebar failure state. Refetches the manifest; on success
+   * re-renders the sidebar, updates the document title, and
+   * paints the home / not-found landing state the failed boot
+   * could not produce.
+   */
+  async _retry_nav_manifest() {
+    await this._load_nav_manifest();
+    this._render_sidebar_and_empty_state();
+    if (this._nav_manifest_loaded === true) {
+      this._update_document_title();
+      this._schedule_landing_state_check();
     }
     return;
   }
@@ -2397,6 +2808,7 @@ var PycSiteShell = class extends HTMLElement {
       this._load_nav_manifest()
     ]);
     this._render_sidebar_and_empty_state();
+    this._update_document_title();
     this._ready = true;
     const ready_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     const tti_seconds = (ready_perf_now - this._boot_started_perf_now) / 1e3;
@@ -2411,6 +2823,154 @@ var PycSiteShell = class extends HTMLElement {
         degraded: this._permission_cache.degraded
       }
     );
+    this._schedule_landing_state_check();
+    return;
+  }
+  /**
+   * Schedule the home / not-found decision for the next frame.
+   * Bundles mount synchronously (at module load or during the
+   * ready-event dispatch), so by the time the frame callback
+   * runs, an empty main region deterministically means no bundle
+   * claimed the route.
+   */
+  _schedule_landing_state_check() {
+    const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+    schedule(() => {
+      this._apply_landing_state();
+    });
+    return;
+  }
+  /**
+   * Render the shell-owned landing state for routes no feature
+   * bundle (and no server-rendered fragment) claimed: the home
+   * view on the bare "/" route, the "Page not found" view on any
+   * other unclaimed route. Never fires while the nav manifest is
+   * unloaded (the degraded path owns that messaging), never
+   * clobbers a mounted bundle, and leaves the no-access empty
+   * state in place for zero-permission accounts. Pages served by
+   * the legacy blueprints either inline a fragment (preserved
+   * into the main region) or never load the shell document at
+   * all, so neither can trip this.
+   */
+  _apply_landing_state() {
+    if (this._main_region === null) {
+      return;
+    }
+    if (this._nav_manifest_loaded === false) {
+      return;
+    }
+    const perms = this._permission_cache.current();
+    const visible_entry_count = this._sidebar_registry.visibleEntryCount(
+      perms
+    );
+    if (visible_entry_count === 0) {
+      return;
+    }
+    const previous_landing = this._main_region.querySelectorAll(
+      ".pyc-site-shell__home, .pyc-site-shell__not-found"
+    );
+    if (_main_region_has_route_content(this._main_region) === true) {
+      for (const stale of Array.from(previous_landing)) {
+        stale.remove();
+      }
+      return;
+    }
+    for (const stale of Array.from(previous_landing)) {
+      stale.remove();
+    }
+    const path = this._router !== null ? this._router.current().path : window.location.pathname;
+    const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_label = brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate";
+    const visible_sidebar = this._sidebar_registry.visible(perms);
+    if (path === "/") {
+      const home_view = build_home_view({
+        brand_label,
+        visible_sidebar
+      });
+      this._main_region.appendChild(home_view);
+      this._emit("pyc-site-shell-home-rendered", {});
+    } else {
+      const not_found_view = build_not_found_view({
+        path,
+        visible_sidebar
+      });
+      this._main_region.appendChild(not_found_view);
+      document.title = "Page not found \xB7 " + brand_label;
+      this._emit(
+        "pyc-site-shell-not-found-rendered",
+        { path }
+      );
+    }
+    return;
+  }
+  /**
+   * Reflect the active navigation entry into the browser tab
+   * title as "<entry label> · <brand>", picked by longest route
+   * prefix so "/admin/feature-flags" wins over "/admin". When no
+   * entry matches, the server-rendered title is left untouched.
+   */
+  _update_document_title() {
+    if (this._nav_manifest_loaded === false) {
+      return;
+    }
+    const path = this._router !== null ? this._router.current().path : window.location.pathname;
+    const perms = this._permission_cache.current();
+    const visible_sidebar = this._sidebar_registry.visible(perms);
+    const all_entries = [];
+    for (const entry of visible_sidebar.ungrouped) {
+      all_entries.push(entry);
+    }
+    for (const bucket of visible_sidebar.groups) {
+      for (const entry of bucket.entries) {
+        all_entries.push(entry);
+      }
+    }
+    let best_entry = null;
+    for (const entry of all_entries) {
+      const route = entry.route;
+      const is_match = path === route || path.startsWith(route.endsWith("/") === true ? route : route + "/") === true;
+      if (is_match === false) {
+        continue;
+      }
+      if (best_entry === null || route.length > best_entry.route.length) {
+        best_entry = entry;
+      }
+    }
+    if (best_entry === null) {
+      return;
+    }
+    const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_label = brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate";
+    document.title = best_entry.label + " \xB7 " + brand_label;
+    return;
+  }
+  /**
+   * Toggle the sidebar nav track open / collapsed and persist
+   * the choice. <mj-app-shell> owns the actual collapse (the
+   * nav-open attribute drives its grid track width and its
+   * overlay behavior on narrow viewports).
+   */
+  _toggle_sidebar() {
+    const layout = this._layout;
+    if (layout === null) {
+      return;
+    }
+    const next_open = layout.hasAttribute("nav-open") === false;
+    if (next_open === true) {
+      layout.setAttribute("nav-open", "");
+    } else {
+      layout.removeAttribute("nav-open");
+    }
+    _write_nav_collapsed_preference(next_open === false);
+    const toggle_button = this.querySelector(
+      ".pyc-site-shell__nav-toggle"
+    );
+    if (toggle_button !== null) {
+      toggle_button.setAttribute(
+        "aria-expanded",
+        next_open === true ? "true" : "false"
+      );
+    }
     return;
   }
   _render_sidebar_and_empty_state() {
@@ -2423,6 +2983,12 @@ var PycSiteShell = class extends HTMLElement {
         perms,
         active_path
       );
+    }
+    if (this._nav_manifest_failed === true && this._nav_manifest_loaded === false && this._sidebar_region !== null && this._sidebar_registry.visibleEntryCount(perms) === 0) {
+      const failure_state = _build_sidebar_failure_state(() => {
+        void this._retry_nav_manifest();
+      });
+      this._sidebar_region.appendChild(failure_state);
     }
     const render_finished = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics.observeHistogram(
@@ -2494,6 +3060,80 @@ var PycSiteShell = class extends HTMLElement {
     return rtnval;
   }
 };
+var SHELL_CHROME_CLASSES = [
+  "pyc-site-shell__degraded-banner",
+  "pyc-site-shell__session-toast",
+  "pyc-site-shell__empty-state",
+  "pyc-site-shell__home",
+  "pyc-site-shell__not-found"
+];
+function _main_region_has_route_content(main_region) {
+  for (const node of Array.from(main_region.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (node.textContent.trim().length > 0) {
+        return true;
+      }
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      continue;
+    }
+    const element = node;
+    let is_shell_chrome = false;
+    for (const chrome_class of SHELL_CHROME_CLASSES) {
+      if (element.classList.contains(chrome_class) === true) {
+        is_shell_chrome = true;
+        break;
+      }
+    }
+    if (is_shell_chrome === false) {
+      return true;
+    }
+  }
+  return false;
+}
+function _build_sidebar_failure_state(on_retry) {
+  const panel = document.createElement("div");
+  panel.classList.add("pyc-site-shell__sidebar-failure");
+  panel.setAttribute("role", "status");
+  const message = document.createElement("p");
+  message.classList.add("pyc-site-shell__sidebar-failure-message");
+  message.textContent = "Navigation could not be loaded.";
+  panel.appendChild(message);
+  const retry_button = document.createElement("mj-button");
+  retry_button.setAttribute("type", "button");
+  retry_button.setAttribute("variant", "secondary");
+  retry_button.setAttribute("size", "sm");
+  retry_button.classList.add("pyc-site-shell__sidebar-failure-retry");
+  retry_button.textContent = "Retry";
+  retry_button.addEventListener("click", () => {
+    on_retry();
+  });
+  panel.appendChild(retry_button);
+  return panel;
+}
+function _read_nav_collapsed_preference() {
+  let rtnval = false;
+  try {
+    const stored = window.localStorage.getItem(
+      NAV_COLLAPSED_STORAGE_KEY
+    );
+    rtnval = stored === "true";
+  } catch (reason) {
+    rtnval = false;
+  }
+  return rtnval;
+}
+function _write_nav_collapsed_preference(collapsed) {
+  try {
+    window.localStorage.setItem(
+      NAV_COLLAPSED_STORAGE_KEY,
+      collapsed === true ? "true" : "false"
+    );
+  } catch (reason) {
+  }
+  return;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/index.entry.js
 var TAG_NAME = "pyc-site-shell";
@@ -2506,6 +3146,7 @@ export {
   DEFAULT_METRICS_ENDPOINT,
   DEFAULT_NAVIGATION_ENDPOINT,
   MetricsBeacon,
+  NAVIGATION_PROVIDER_ID,
   PaletteDialog,
   PaletteRegistry,
   PermissionCache,
@@ -2516,5 +3157,6 @@ export {
   apply_nav_manifest,
   attach_sidebar_keyboard,
   fetch_nav_manifest,
-  initialize_sidebar_roving_tabindex
+  initialize_sidebar_roving_tabindex,
+  register_navigation_palette_provider
 };

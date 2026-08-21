@@ -21,9 +21,17 @@ shell-wrapped fragments per ``9-site-shell`` PR4 strategy A:
                                                expiry timestamps)
                                                plus the mint form.
 * ``POST /admin/enrollment-tokens/mint``    -- issue a new token;
-                                               the secret is shown
-                                               exactly once via a
-                                               flash message.
+                                               the response renders
+                                               the page directly
+                                               with a one-time
+                                               result panel showing
+                                               the secret and the
+                                               exact
+                                               ``pychestrate-client``
+                                               enrollment commands
+                                               (the secret is never
+                                               written into the
+                                               flash cookie).
 * ``POST /admin/enrollment-tokens/{token_id}/revoke``
                                             -- revoke an active
                                                token.
@@ -44,6 +52,8 @@ __copyright__ = "Copyright 2026, Code Craft AI LLC"
 __credits__ = []
 __version__ = "1.0.0"
 
+
+import logging
 
 from typing import Any, Callable, Dict
 
@@ -66,6 +76,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
     _wrap_admin_handler_in_shell,
 )
+
+
+_module_logger = logging.getLogger(__name__)
 
 
 _ROUTE_TABLE = (
@@ -210,6 +223,78 @@ def _coerce_ttl_seconds(*, raw: Any) -> int:
     return rtnval
 
 
+def _resolve_service_base_url(*, request: Request) -> str:
+    """
+        Build this service's browser-facing base URL (scheme +
+        authority, no trailing slash) from the incoming request,
+        for the copy-paste ``pychestrate-client enroll
+        --service-url`` command. Prefers the ``Host`` header (it
+        carries the authority the browser actually used, including
+        any non-default port); falls back to the request's
+        host/port fields, then to a placeholder the operator must
+        fill in.
+
+        :param request: Incoming webworks request.
+
+        :returns: Base URL string (e.g. ``"https://pyc.example:8443"``).
+    """
+    scheme = getattr(request, "scheme", None)
+    if isinstance(scheme, str) is False or len(scheme) == 0:
+        scheme = "http"
+
+    host_header = None
+    headers = getattr(request, "headers", None)
+    if headers is not None:
+        try:
+            host_header = headers.get("host", None)
+        except Exception:
+            host_header = None
+
+    if host_header is not None and len(str(host_header)) > 0:
+        rtnval = "{}://{}".format(scheme, host_header)
+        return rtnval
+
+    host = getattr(request, "host", None)
+    if isinstance(host, str) is True and len(host) > 0:
+        port = getattr(request, "port", None)
+        if isinstance(port, int) is True and port not in (0, 80, 443):
+            rtnval = "{}://{}:{}".format(scheme, host, port)
+            return rtnval
+        rtnval = "{}://{}".format(scheme, host)
+        return rtnval
+
+    rtnval = "{}://<service-host>".format(scheme)
+    return rtnval
+
+
+def _describe_enrollment_failure(*, exc: Exception, action: str) -> str:
+    """
+        Build the operator-facing flash message for a failed
+        enrollment-token operation. :class:`ValueError` messages
+        are curated service validation text and surfaced by the
+        callers directly; this helper handles everything else by
+        logging server-side (with traceback) and returning a
+        generic message so raw internal exception text never
+        reaches the browser.
+
+        :param exc: The exception raised by the operation.
+        :param action: Present-participle action label (e.g.
+                       ``"minting"``) used in the message.
+
+        :returns: Flash message string.
+    """
+    _module_logger.exception(
+        "Unexpected %s while %s enrollment token.",
+        type(exc).__name__,
+        action,
+    )
+    rtnval = (
+        "Error {} token: an unexpected internal error occurred."
+        " The details have been logged."
+    ).format(action)
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -273,13 +358,17 @@ def handle_enrollment_token_list(request: Request) -> Response:
 def handle_enrollment_token_mint(request: Request) -> Response:
     """
         ``POST /admin/enrollment-tokens/mint`` -- issue a new
-        enrollment token and redirect back to the list. The minted
-        secret is surfaced exactly once via a success flash.
+        enrollment token. On success the page renders directly
+        (no redirect) with a one-time result panel carrying the
+        secret and the exact ``pychestrate-client`` commands; the
+        secret is never written into the flash cookie. Failures
+        redirect back to the list with an error flash.
         Admin-gated on ``system:resources.manage``.
 
         :param request: Incoming webworks request.
 
-        :returns: RedirectResponse to the token list.
+        :returns: HTMLResponse with the result panel on success,
+                  RedirectResponse to the token list on failure.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -356,24 +445,49 @@ def handle_enrollment_token_mint(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "config.enrollment_token_list"
                 ),
-                message="Error minting token: {}".format(str(exc)),
+                message=_describe_enrollment_failure(
+                    exc=exc, action="minting"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response
 
-        success_lines = [
-            "Token {} minted for pod '{}'.".format(
-                issued.token_id, pod_name
-            ),
-            "Secret (shown once): {}".format(issued.secret),
-        ]
-        response = _redirect_with_flash(
+        # Render the page directly (no redirect) with a one-time
+        # result panel. The secret must not ride in the flash
+        # cookie: a redirect would write it into the signed session
+        # cookie and squeeze it into a one-line alert, so the POST
+        # response itself is the single place the secret appears.
+        service_base_url = _resolve_service_base_url(request=request)
+        enroll_command = (
+            "pychestrate-client enroll --service-url {} --token {}"
+            " --name {}"
+        ).format(service_base_url, issued.secret, pod_name)
+
+        tokens = _service_list_tokens(db_session=db_session)
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
             session=auth.session,
-            url=_url_for_module.url_for(
-                "config.enrollment_token_list"
-            ),
-            message=" ".join(success_lines),
-            category=flash.CATEGORY_SUCCESS,
+            request_endpoint="config.enrollment_token_list",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["tokens"] = tokens
+        context["default_ttl_seconds"] = _DEFAULT_TTL_SECONDS
+        context["minted"] = {
+            "token_id": issued.token_id,
+            "pod_name": pod_name,
+            "secret": issued.secret,
+            "enroll_command": enroll_command,
+            "run_command": "pychestrate-client run",
+        }
+
+        response = _render(
+            template_name="config/enrollment/list.html",
+            context=context,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
         )
         return response
     finally:
@@ -442,13 +556,25 @@ def handle_enrollment_token_revoke(request: Request) -> Response:
                 token_id=token_id,
                 actor_user_id=auth.user_id,
             )
-        except Exception as exc:
+        except ValueError as exc:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "config.enrollment_token_list"
                 ),
                 message="Error revoking token: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "config.enrollment_token_list"
+                ),
+                message=_describe_enrollment_failure(
+                    exc=exc, action="revoking"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response

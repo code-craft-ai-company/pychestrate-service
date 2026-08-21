@@ -499,7 +499,8 @@ def test_drift_check_returns_202_on_happy_path():
     """
     **Feature: 6-drift-detection PR p20b**
     **Property: POST drift:check returns 202 with the DriftReport
-    shape on a valid trigger.**
+    shape on a valid trigger, plus the honesty fields stating the
+    run was recorded but dispatch is not available.**
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
@@ -526,4 +527,8 @@ def test_drift_check_returns_202_on_happy_path():
     body = _decode_body(response)
     testbase.assert_equal(body["run_id"], "drift-new")
     testbase.assert_equal(body["state"], "pending")
+    testbase.assert_equal(body["dispatch_available"], False)
+    testbase.assert_equal(
+        body["detail"], drift_routes.DRIFT_CHECK_RECORDED_DETAIL,
+    )
     return

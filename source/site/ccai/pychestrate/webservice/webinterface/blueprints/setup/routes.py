@@ -613,7 +613,7 @@ def handle_admin_submit(request: Request) -> Response:
     """
         ``POST /setup/admin`` -- validate, create the admin, mark
         setup complete, drop the unlock cookie, redirect to
-        ``/config/login``.
+        ``/login``.
 
         :param request: Webworks request.
 
@@ -739,7 +739,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
             admin_user_id_str,
         )
 
-        response = RedirectResponse(url="/config/login", status_code=303)
+        response = RedirectResponse(url="/login", status_code=303)
         _clear_unlock_cookie(response=response)
         return response
     finally:

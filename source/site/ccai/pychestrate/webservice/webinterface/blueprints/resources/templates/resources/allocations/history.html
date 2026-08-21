@@ -8,45 +8,55 @@
     <p>Historical record of resource allocations</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.allocation_history', page=p, per_page=per_page, resource_id=selected_resource_id, user_id=selected_user_id, start_date=(start_date or none), end_date=(end_date or none)) }}
+{%- endmacro %}
+
 <div class="filter-bar">
     <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        <select name="resource_id" class="form-control" style="width: 200px;">
+        <select name="resource_id" class="form-control" style="width: 200px;" aria-label="Filter by resource">
             <option value="">All Resources</option>
             {% for resource in resources %}
             <option value="{{ resource.id }}" {% if selected_resource_id == resource.id %}selected{% endif %}>{{ resource.name }}</option>
             {% endfor %}
         </select>
-        
-        <input type="date" name="start_date" class="form-control" value="{{ start_date }}" style="width: 150px;">
+
+        <input type="date" name="start_date" class="form-control" value="{{ start_date }}" style="width: 150px;" aria-label="Filter from date">
         <span>to</span>
-        <input type="date" name="end_date" class="form-control" value="{{ end_date }}" style="width: 150px;">
-        
+        <input type="date" name="end_date" class="form-control" value="{{ end_date }}" style="width: 150px;" aria-label="Filter to date">
+
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            <span class="material-icons" aria-hidden="true">filter_list</span> Filter
         </button>
-        
+
         <a href="{{ url_for('resources.allocation_history') }}" class="btn btn-secondary">Clear</a>
     </form>
-    
+
     <div style="margin-left: auto;">
         <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
-            <span class="material-icons">assignment</span> Active Allocations
+            <span class="material-icons" aria-hidden="true">assignment</span> Active Allocations
         </a>
     </div>
 </div>
 
+{% if resource_total > resources | length %}
+<p style="color: #6c757d; margin-top: -10px;">
+    Resource filter shows the first {{ resources | length }} of {{ resource_total }} resources.
+</p>
+{% endif %}
+
 <table class="data-table">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Resource</th>
-            <th>User</th>
-            <th>Job ID</th>
-            <th>Mode</th>
-            <th>Status</th>
-            <th>Checkout</th>
-            <th>Checkin</th>
-            <th>Duration</th>
+            <th scope="col">ID</th>
+            <th scope="col">Resource</th>
+            <th scope="col">User</th>
+            <th scope="col">Job ID</th>
+            <th scope="col">Mode</th>
+            <th scope="col">Status</th>
+            <th scope="col">Checkout</th>
+            <th scope="col">Checkin</th>
+            <th scope="col">Duration</th>
         </tr>
     </thead>
     <tbody>
@@ -84,29 +94,46 @@
         </tr>
         {% else %}
         <tr>
+            {% if filters_active %}
+            <td colspan="9" style="text-align: center; color: #6c757d;">
+                No allocation history matches the current filters.
+                <a href="{{ url_for('resources.allocation_history') }}">Clear filters</a>
+            </td>
+            {% else %}
             <td colspan="9" style="text-align: center; color: #6c757d;">No allocation history found</td>
+            {% endif %}
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 {% if total_pages > 1 %}
-<div class="pagination">
+<nav class="pagination" aria-label="Allocation history pages">
     {% if page > 1 %}
-    <a href="{{ url_for('resources.allocation_history', page=page-1, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">&laquo; Previous</a>
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
     {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
         {% if p == page %}
         <span class="active">{{ p }}</span>
         {% else %}
-        <a href="{{ url_for('resources.allocation_history', page=p, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">{{ p }}</a>
+        <a href="{{ page_url(p) }}">{{ p }}</a>
         {% endif %}
     {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('resources.allocation_history', page=page+1, resource_id=selected_resource_id, start_date=start_date, end_date=end_date) }}">Next &raquo;</a>
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
     {% endif %}
-</div>
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
 {% endif %}
 {% endblock %}

@@ -8,12 +8,28 @@
     <p>Resource tags for filtering and organization</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.tag_list', page=p, per_page=per_page, search=(search or none)) }}
+{%- endmacro %}
+
+<div class="filter-bar">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+        <input type="text" name="search" class="form-control" placeholder="Filter tags by name..."
+               aria-label="Filter tags by name"
+               value="{{ search }}" style="width: 220px;">
+        <button type="submit" class="btn btn-secondary">
+            <span class="material-icons" aria-hidden="true">filter_list</span> Filter
+        </button>
+        <a href="{{ url_for('resources.tag_list') }}" class="btn btn-secondary">Clear</a>
+    </form>
+</div>
+
 <table class="data-table">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Created</th>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Created</th>
         </tr>
     </thead>
     <tbody>
@@ -25,14 +41,51 @@
         </tr>
         {% else %}
         <tr>
+            {% if search %}
+            <td colspan="3" style="text-align: center; color: #6c757d;">
+                No tags match "{{ search }}".
+                <a href="{{ url_for('resources.tag_list') }}">Clear filter</a>
+            </td>
+            {% else %}
             <td colspan="3" style="text-align: center; color: #6c757d;">No tags found</td>
+            {% endif %}
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
+{% if total_pages > 1 %}
+<nav class="pagination" aria-label="Tag list pages">
+    {% if page > 1 %}
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
+    {% endif %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ page_url(p) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
+
 <p style="margin-top: 20px; color: #6c757d;">
-    Tags are created automatically when assigned to resources. 
+    Tags are created automatically when assigned to resources.
     <a href="{{ url_for('resources.resource_list') }}">Manage resources</a> to add or remove tags.
 </p>
 {% endblock %}

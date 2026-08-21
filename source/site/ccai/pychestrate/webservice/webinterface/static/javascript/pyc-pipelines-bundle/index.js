@@ -13,6 +13,10 @@ function build_pipelines_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/pipelines";
   return rtnval;
 }
+function build_pipeline_detail_link(project_id, pipeline_id) {
+  const rtnval = "/pipelines/" + encodeURIComponent(pipeline_id) + "?project_id=" + encodeURIComponent(project_id);
+  return rtnval;
+}
 function build_pipelines_validate_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/pipelines:validate";
   return rtnval;
@@ -95,16 +99,50 @@ function validate_message_for_status(status, valid) {
   const rtnval = "Failed to validate pipeline (HTTP " + String(status) + ").";
   return rtnval;
 }
+function list_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to pipelines.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the pipeline service \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load pipelines (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
 var PycPipelinesList = class extends HTMLElement {
   _pager;
   _state;
   _pipelines;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
   _root;
   _table_region;
   _form_status;
   _matrix_region;
+  _projects_notice_region;
   constructor() {
     super();
     this._state = {
@@ -113,16 +151,19 @@ var PycPipelinesList = class extends HTMLElement {
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._pipelines = [];
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
     this._root = null;
     this._table_region = null;
     this._pager = null;
     this._form_status = null;
     this._matrix_region = null;
+    this._projects_notice_region = null;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the
@@ -135,7 +176,8 @@ var PycPipelinesList = class extends HTMLElement {
       perPage: this._state.perPage,
       total: this._state.total,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -196,6 +238,12 @@ var PycPipelinesList = class extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-pipelines__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     root.appendChild(this._build_upsert_form());
     root.appendChild(this._build_matrix_panel());
     const table_region = document.createElement("div");
@@ -293,6 +341,11 @@ var PycPipelinesList = class extends HTMLElement {
     save_button.textContent = "Save";
     actions.appendChild(save_button);
     form.appendChild(actions);
+    const dispatch_note = document.createElement("p");
+    dispatch_note.classList.add("pyc-pipelines__dispatch-note");
+    dispatch_note.setAttribute("data-role", "dispatch-note");
+    dispatch_note.textContent = "Running pipelines from the service is not available yet \u2014 definitions can be created and validated.";
+    form.appendChild(dispatch_note);
     const status = document.createElement("div");
     status.classList.add("pyc-pipelines__form-status");
     status.setAttribute("data-role", "form-status");
@@ -369,17 +422,23 @@ var PycPipelinesList = class extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = this._extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.pipelines.projects_fetch_failed",
         { reason: String(reason) }
@@ -388,17 +447,70 @@ var PycPipelinesList = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-pipelines__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-pipelines__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-pipelines__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-pipelines__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -487,12 +599,14 @@ var PycPipelinesList = class extends HTMLElement {
     this._render_table_region();
     const url = build_pipelines_query_url(this._state);
     let page = null;
+    let fetch_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      fetch_status = response.status;
       if (response.ok === false) {
         throw new Error("pipelines fetch failed: HTTP " + String(response.status));
       }
@@ -503,14 +617,19 @@ var PycPipelinesList = class extends HTMLElement {
         "pychestrate.ui.pipelines.list_fetch_failed",
         { reason: String(reason) }
       );
+      if (fetch_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = fetch_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = fetch_status;
       this._render_table_region();
       return;
     }
@@ -529,6 +648,7 @@ var PycPipelinesList = class extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table_region();
     return;
   }
@@ -563,8 +683,20 @@ var PycPipelinesList = class extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-pipelines__status", "pyc-pipelines__status--error");
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load pipelines. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(this._state.errorStatus);
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-pipelines__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       this._render_pager();
       return;
     }
@@ -600,7 +732,10 @@ var PycPipelinesList = class extends HTMLElement {
         render: (pipeline) => {
           const link = document.createElement("a");
           link.classList.add("pyc-pipelines__pipeline-link");
-          link.setAttribute("href", "/pipelines/" + pipeline.pipeline_id);
+          link.setAttribute(
+            "href",
+            build_pipeline_detail_link(pipeline.project_id, pipeline.pipeline_id)
+          );
           link.textContent = short_id(pipeline.pipeline_id);
           link.title = pipeline.pipeline_id;
           return link;
@@ -1110,7 +1245,6 @@ var COLUMN_GAP = 80;
 var ROW_GAP = 24;
 var CANVAS_PADDING = 20;
 var PROJECTS_API_PATH2 = "/api/v1/projects";
-var PIPELINES_RESOLVER_PATH = "/api/v1/pipelines";
 function pipeline_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -1133,8 +1267,42 @@ function pipeline_id_from_path(path) {
   const rtnval = tail;
   return rtnval;
 }
+function project_id_from_search(search) {
+  if (typeof search !== "string" || search.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const params = new URLSearchParams(search);
+  const value = params.get("project_id");
+  if (value === null) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = value;
+  return rtnval;
+}
 function pipeline_detail_url(project_id, pipeline_id) {
   const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/pipelines/" + encodeURIComponent(pipeline_id);
+  return rtnval;
+}
+function detail_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to pipelines.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This pipeline was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the pipeline service \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load this pipeline (HTTP " + String(status) + "). Try refreshing.";
   return rtnval;
 }
 function compute_dag_columns(stages) {
@@ -1265,6 +1433,8 @@ var PycPipelineDetail = class extends HTMLElement {
   _pipeline;
   _loading;
   _errored;
+  _error_kind;
+  _error_status;
   _is_dag;
   _root;
   constructor() {
@@ -1274,16 +1444,18 @@ var PycPipelineDetail = class extends HTMLElement {
     this._pipeline = null;
     this._loading = false;
     this._errored = false;
+    this._error_kind = "";
+    this._error_status = 0;
     this._is_dag = true;
     this._root = null;
   }
   /**
-   * Observed attributes -- ``pipeline-id`` may be supplied
-   * explicitly by a host; otherwise it is read from the path on
-   * mount.
+   * Observed attributes -- ``pipeline-id`` and ``project-id`` may
+   * be supplied explicitly by a host; otherwise they are read
+   * from the URL on mount.
    */
   static get observedAttributes() {
-    const rtnval = ["pipeline-id"];
+    const rtnval = ["pipeline-id", "project-id"];
     return rtnval;
   }
   /**
@@ -1296,13 +1468,18 @@ var PycPipelineDetail = class extends HTMLElement {
       projectId: this._project_id,
       loading: this._loading,
       errored: this._errored,
+      errorKind: this._error_kind,
+      errorStatus: this._error_status,
       isDag: this._is_dag
     };
     return rtnval;
   }
   /**
-   * Lifecycle hook -- resolve the pipeline id, render the chrome,
-   * and fetch the snapshot.
+   * Lifecycle hook -- resolve the pipeline + project ids, render
+   * the chrome, and fetch the snapshot. The project id rides on
+   * the detail link's ``?project_id=`` query parameter because
+   * pipelines are only addressable through the project-scoped
+   * API.
    */
   connectedCallback() {
     const attr_id = this.getAttribute("pipeline-id");
@@ -1310,6 +1487,12 @@ var PycPipelineDetail = class extends HTMLElement {
       this._pipeline_id = attr_id;
     } else {
       this._pipeline_id = pipeline_id_from_path(window.location.pathname);
+    }
+    const attr_project = this.getAttribute("project-id");
+    if (attr_project !== null && attr_project.length > 0) {
+      this._project_id = attr_project;
+    } else {
+      this._project_id = project_id_from_search(window.location.search);
     }
     this._render_chrome();
     void this._load();
@@ -1327,16 +1510,26 @@ var PycPipelineDetail = class extends HTMLElement {
     if (this._pipeline_id.length === 0) {
       this._loading = false;
       this._errored = true;
+      this._error_kind = "invalid-id";
+      this._render_body();
+      return;
+    }
+    if (this._project_id.length === 0) {
+      this._loading = false;
+      this._errored = true;
+      this._error_kind = "missing-project";
       this._render_body();
       return;
     }
     this._loading = true;
     this._errored = false;
+    this._error_kind = "";
     this._render_body();
     const pipeline = await this._fetch_pipeline();
     if (pipeline === null) {
       this._loading = false;
       this._errored = true;
+      this._error_kind = "http";
       this._render_body();
       return;
     }
@@ -1348,28 +1541,33 @@ var PycPipelineDetail = class extends HTMLElement {
     return;
   }
   /**
-   * Fetch the pipeline-definition snapshot via the project-
-   * agnostic resolver path.
+   * Fetch the pipeline-definition snapshot from the project-
+   * scoped endpoint -- pipelines have no project-agnostic
+   * resolver, so the project id must already be known (threaded
+   * through the detail link's ``?project_id=`` query parameter).
    *
    * @returns The ``PipelineDefinition``, or ``null`` on failure.
    */
   async _fetch_pipeline() {
-    let url = PIPELINES_RESOLVER_PATH + "/" + encodeURIComponent(this._pipeline_id);
-    if (this._project_id.length > 0) {
-      url = pipeline_detail_url(this._project_id, this._pipeline_id);
-    }
+    const url = pipeline_detail_url(this._project_id, this._pipeline_id);
+    this._error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      this._error_status = response.status;
       if (response.ok === false) {
+        if (response.status === 401) {
+          announce_session_expired();
+        }
         throw new Error(
           "pipeline fetch failed: HTTP " + String(response.status)
         );
       }
       const body = await response.json();
+      this._error_status = 0;
       const rtnval = body;
       return rtnval;
     } catch (reason) {
@@ -1435,8 +1633,28 @@ var PycPipelineDetail = class extends HTMLElement {
         "pyc-pipeline-detail__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load this pipeline. Try refreshing.";
-      body.replaceChildren(error);
+      if (this._error_kind === "missing-project") {
+        error.textContent = "This link is missing its project context \u2014 open the pipeline from the Pipelines list.";
+      } else if (this._error_kind === "invalid-id") {
+        error.textContent = "This pipeline link is not valid \u2014 open the pipeline from the Pipelines list.";
+      } else {
+        error.textContent = detail_load_message_for_status(this._error_status);
+      }
+      const children = [error];
+      if (this._error_kind === "http") {
+        if (this._error_status === 0 || this._error_status >= 500) {
+          const retry = document.createElement("mj-button");
+          retry.classList.add("pyc-pipeline-detail__retry");
+          retry.setAttribute("type", "button");
+          retry.setAttribute("data-role", "detail-retry");
+          retry.textContent = "Retry";
+          retry.addEventListener("click", () => {
+            void this._load();
+          });
+          children.push(retry);
+        }
+      }
+      body.replaceChildren(...children);
       return;
     }
     const fragment = document.createDocumentFragment();
@@ -1841,6 +2059,8 @@ if (typeof window !== "undefined") {
 export {
   PycPipelineDetail,
   PycPipelinesList,
+  announce_session_expired,
+  build_pipeline_detail_link,
   build_pipelines_collection_url,
   build_pipelines_expand_matrix_url,
   build_pipelines_query_url,
@@ -1849,14 +2069,17 @@ export {
   compute_dag_columns,
   compute_dag_layout,
   define_pipelines_elements,
+  detail_load_message_for_status,
   ensure_pipelines_stylesheet,
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   mount_pipelines_view_if_active,
   parse_matrix_spec,
   pipeline_detail_url,
   pipeline_id_from_path,
+  project_id_from_search,
   register_pipelines_sidebar,
   short_id,
   validate_message_for_status

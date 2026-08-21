@@ -8,20 +8,24 @@
     <p>Organize resources into logical groups</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.pool_list', page=p, per_page=per_page) }}
+{%- endmacro %}
+
 <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
     <a href="{{ url_for('resources.pool_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create Pool
+        <span class="material-icons" aria-hidden="true">add</span> Create Pool
     </a>
 </div>
 
 <table class="data-table">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Resources</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Resources</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -40,16 +44,49 @@
                 {% if not pool.is_default %}
                 <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this pool? Resources will be moved to the default pool.')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?')">Delete</button>
                 </form>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" style="text-align: center; color: #6c757d;">No pools found</td>
+            <td colspan="5" style="text-align: center; color: #6c757d;">
+                No pools found.
+                <a href="{{ url_for('resources.pool_create') }}">Create one</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+
+{% if total_pages > 1 %}
+<nav class="pagination" aria-label="Pool list pages">
+    {% if page > 1 %}
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
+    {% endif %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ page_url(p) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}

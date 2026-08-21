@@ -192,6 +192,7 @@ def _row_to_view(*, row) -> TestCatalogEntryView:
         raw_metadata=dict(row.raw_metadata or {}),
         canonical_digest=row.canonical_digest,
         retired=bool(row.retired),
+        created_at=row.created_at,
         updated_at=row.updated_at,
     )
     return rtnval

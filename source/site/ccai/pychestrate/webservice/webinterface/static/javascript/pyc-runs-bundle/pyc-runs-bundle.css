@@ -161,6 +161,32 @@ pyc-runs-list {
     color: var(--pyc-runs-error-fg);
 }
 
+.pyc-runs-list__stamp {
+    align-self: center;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-runs-list__notice {
+    margin: 0;
+    padding: 0.5rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    border-radius: 0.375rem;
+    background-color: var(--pyc-runs-warn-surface);
+    color: var(--pyc-runs-warn-fg);
+}
+
+.pyc-runs-list__sort-note {
+    margin: 0.5rem 0 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-runs-fg-muted);
+}
+
+.pyc-runs-list__empty-actions {
+    padding-bottom: 2rem;
+    text-align: center;
+}
+
 .pyc-runs-list__status {
     margin: 0;
     padding: 2rem 0;
@@ -170,6 +196,10 @@ pyc-runs-list {
 
 .pyc-runs-list__status--error {
     color: var(--pyc-runs-error-fg);
+}
+
+.pyc-runs-list__status-link {
+    color: var(--pyc-runs-accent-on-surface);
 }
 
 .pyc-runs-list__pager {
@@ -249,6 +279,49 @@ pyc-run-detail {
 .pyc-run-detail__banner[data-tone="warn"] {
     background-color: var(--pyc-runs-warn-surface);
     color: var(--pyc-runs-warn-fg);
+}
+
+.pyc-run-detail__notice {
+    margin: 0;
+    padding: 0.5rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    border-radius: 0.375rem;
+    background-color: var(--pyc-runs-neutral-surface);
+    color: var(--pyc-runs-fg);
+}
+
+.pyc-run-detail__notice[data-tone="ok"] {
+    background-color: var(--pyc-runs-ok-surface);
+    color: var(--pyc-runs-ok-fg);
+}
+
+.pyc-run-detail__notice[data-tone="error"] {
+    background-color: var(--pyc-runs-error-surface);
+    color: var(--pyc-runs-error-fg);
+}
+
+.pyc-run-detail__cancel-button {
+    padding: 0.375rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-runs-error-fg);
+    background-color: var(--pyc-runs-surface);
+    border: 0.0625rem solid var(--pyc-runs-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-run-detail__cancel-button:hover {
+    background-color: var(--pyc-runs-error-surface);
+}
+
+.pyc-run-detail__cancel-button[disabled] {
+    color: var(--pyc-runs-fg-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pyc-run-detail__status-link {
+    color: var(--pyc-runs-accent-on-surface);
 }
 
 .pyc-run-detail__body {
@@ -388,6 +461,12 @@ pyc-run-detail {
 .pyc-run-detail__bar-fill {
     height: 100%;
     background-color: var(--pyc-runs-accent);
+}
+
+.pyc-run-detail__progress-phase {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-runs-fg-muted);
 }
 
 .pyc-run-detail__progress-notes {

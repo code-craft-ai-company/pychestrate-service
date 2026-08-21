@@ -29,7 +29,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Callable, Dict, List, Optional
+import logging
+
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
@@ -59,6 +61,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_scopes import (
     _resolve_secret_encryption_key,
 )
+
+
+_module_logger = logging.getLogger(__name__)
 
 
 _ROUTE_TABLE = (
@@ -194,6 +199,56 @@ def _coerce_optional_int(*, raw: Any) -> Optional[int]:
     return rtnval
 
 
+def _resolve_surfaceable_error_types() -> Tuple[type, ...]:
+    """
+        Return the exception types whose messages are curated,
+        operator-facing text safe to surface in a flash:
+        :class:`SecretManagerError` (and subclasses) plus
+        :class:`ValueError` (bad enum values / validation).
+        Lazy-imports so this module stays importable without the
+        secret-manager dependency set.
+
+        :returns: Tuple of exception types.
+    """
+    try:
+        from ccai.pychestrate.core.managers.secret_manager import (  # noqa: E402
+            SecretManagerError,
+        )
+        rtnval: Tuple[type, ...] = (SecretManagerError, ValueError)
+    except ImportError:
+        rtnval = (ValueError,)
+    return rtnval
+
+
+def _describe_secret_failure(*, exc: Exception, action: str) -> str:
+    """
+        Build the operator-facing flash message for a failed
+        secret operation. Curated manager / validation errors are
+        surfaced verbatim; anything else is logged server-side
+        (with traceback) and replaced by a generic message so raw
+        internal exception text never reaches the browser.
+
+        :param exc: The exception raised by the operation.
+        :param action: Present-participle action label (e.g.
+                       ``"creating"``) used in the message.
+
+        :returns: Flash message string.
+    """
+    surfaceable_types = _resolve_surfaceable_error_types()
+    if isinstance(exc, surfaceable_types) is True:
+        rtnval = "Error {} secret: {}".format(action, str(exc))
+        return rtnval
+
+    _module_logger.exception(
+        "Unexpected error while %s secret.", action
+    )
+    rtnval = (
+        "Error {} secret: an unexpected internal error occurred."
+        " The details have been logged."
+    ).format(action)
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -219,12 +274,15 @@ def handle_secret_list(request: Request) -> Response:
         )
 
         secret_manager = _build_secret_manager(db_session=db_session)
-        secrets = secret_manager.list_secrets(
+        list_response = secret_manager.list_secrets(
             scope_id=scope_id,
             user_id=auth.user_id,
             offset=offset,
             limit=params["per_page"],
-        ).secrets
+        )
+        secrets = list_response.secrets
+        total = list_response.total
+        total_pages = (total + params["per_page"] - 1) // params["per_page"]
         scopes = secret_manager.list_scopes(auth.user_id).scopes
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -239,6 +297,8 @@ def handle_secret_list(request: Request) -> Response:
         context["selected_scope_id"] = scope_id
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
+        context["total"] = total
+        context["total_pages"] = total_pages
         response = _render(
             template_name="config/secrets/list.html",
             context=context,
@@ -333,7 +393,9 @@ def handle_secret_create(request: Request) -> Response:
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating secret: {}".format(str(exc)),
+                message=_describe_secret_failure(
+                    exc=exc, action="creating"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -433,7 +495,9 @@ def handle_secret_edit(request: Request) -> Response:
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating secret: {}".format(str(exc)),
+                    message=_describe_secret_failure(
+                        exc=exc, action="updating"
+                    ),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -521,7 +585,9 @@ def handle_secret_delete(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.secret_list"),
-                message="Error deleting secret: {}".format(str(exc)),
+                message=_describe_secret_failure(
+                    exc=exc, action="deleting"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response

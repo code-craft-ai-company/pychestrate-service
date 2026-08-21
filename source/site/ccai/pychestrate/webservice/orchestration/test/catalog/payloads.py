@@ -60,6 +60,7 @@ class TestCatalogEntryView:
         :param raw_metadata: Importer passthrough.
         :param canonical_digest: SHA-256 of the canonical encoding.
         :param retired: Whether the entry has been retired.
+        :param created_at: First-import timestamp.
         :param updated_at: Last upsert timestamp.
     """
     entry_id: str
@@ -73,6 +74,7 @@ class TestCatalogEntryView:
     raw_metadata: Mapping[str, Any]
     canonical_digest: str
     retired: bool
+    created_at: datetime
     updated_at: datetime
 
 

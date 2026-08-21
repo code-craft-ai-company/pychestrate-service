@@ -15,28 +15,34 @@
             <div style="display: flex; align-items: center; gap: 20px; padding: 20px 0;">
                 {% set status = resource.health_status.value if resource.health_status.value else resource.health_status %}
                 {% if status == 'online' %}
-                <span class="material-icons health-online" style="font-size: 64px;">check_circle</span>
+                <span class="material-icons health-online" style="font-size: 64px;" aria-hidden="true">check_circle</span>
                 <div>
                     <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">Online</div>
                     <div style="color: #6c757d;">Resource is healthy and available for allocation</div>
                 </div>
                 {% elif status == 'offline' %}
-                <span class="material-icons health-offline" style="font-size: 64px;">cancel</span>
+                <span class="material-icons health-offline" style="font-size: 64px;" aria-hidden="true">cancel</span>
                 <div>
                     <div style="font-size: 1.5rem; font-weight: 600; color: #dc3545;">Offline</div>
                     <div style="color: #6c757d;">Resource is unavailable - allocations blocked</div>
                 </div>
                 {% elif status == 'degraded' %}
-                <span class="material-icons health-degraded" style="font-size: 64px;">warning</span>
+                <span class="material-icons health-degraded" style="font-size: 64px;" aria-hidden="true">warning</span>
                 <div>
                     <div style="font-size: 1.5rem; font-weight: 600; color: #ffc107;">Degraded</div>
                     <div style="color: #6c757d;">Resource is partially functional - allocations allowed</div>
                 </div>
-                {% else %}
-                <span class="material-icons health-maintenance" style="font-size: 64px;">build</span>
+                {% elif status == 'maintenance' %}
+                <span class="material-icons health-maintenance" style="font-size: 64px;" aria-hidden="true">build</span>
                 <div>
                     <div style="font-size: 1.5rem; font-weight: 600; color: #6c757d;">Maintenance</div>
                     <div style="color: #6c757d;">Resource is under maintenance - allocations blocked</div>
+                </div>
+                {% else %}
+                <span class="material-icons health-maintenance" style="font-size: 64px;" aria-hidden="true">help_outline</span>
+                <div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: #6c757d;">{{ status | capitalize }}</div>
+                    <div style="color: #6c757d;">Unrecognized health status</div>
                 </div>
                 {% endif %}
             </div>
@@ -47,7 +53,7 @@
             <div class="card-header">Health Check Configuration</div>
             <table class="data-table" style="margin-top: 0;">
                 <tr>
-                    <th style="width: 150px;">Enabled</th>
+                    <th scope="row" style="width: 150px;">Enabled</th>
                     <td>
                         {% if config.enabled %}
                         <span class="badge badge-success">Yes</span>
@@ -57,27 +63,27 @@
                     </td>
                 </tr>
                 <tr>
-                    <th>Probe URL</th>
+                    <th scope="row">Probe URL</th>
                     <td>{{ config.probe_url or '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Probe Command</th>
+                    <th scope="row">Probe Command</th>
                     <td><code>{{ config.probe_command or '-' }}</code></td>
                 </tr>
                 <tr>
-                    <th>Interval</th>
+                    <th scope="row">Interval</th>
                     <td>{{ config.interval_seconds }} seconds</td>
                 </tr>
                 <tr>
-                    <th>Timeout</th>
+                    <th scope="row">Timeout</th>
                     <td>{{ config.timeout_seconds }} seconds</td>
                 </tr>
                 <tr>
-                    <th>Failure Threshold</th>
+                    <th scope="row">Failure Threshold</th>
                     <td>{{ config.failure_threshold }} consecutive failures</td>
                 </tr>
                 <tr>
-                    <th>Success Threshold</th>
+                    <th scope="row">Success Threshold</th>
                     <td>{{ config.success_threshold }} consecutive successes</td>
                 </tr>
             </table>
@@ -90,11 +96,11 @@
             <table class="data-table" style="margin-top: 0;">
                 <thead>
                     <tr>
-                        <th>Timestamp</th>
-                        <th>From</th>
-                        <th>To</th>
-                        <th>Reason</th>
-                        <th>Triggered By</th>
+                        <th scope="col">Timestamp</th>
+                        <th scope="col">From</th>
+                        <th scope="col">To</th>
+                        <th scope="col">Reason</th>
+                        <th scope="col">Triggered By</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -131,23 +137,33 @@
             </table>
             
             {% if total_pages > 1 %}
-            <div class="pagination">
+            <nav class="pagination" aria-label="Health history pages">
                 {% if page > 1 %}
-                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page-1) }}">&laquo; Previous</a>
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page-1, per_page=per_page) }}">&laquo; Previous</a>
                 {% endif %}
-                
-                {% for p in range(1, total_pages + 1) %}
+
+                {% if page_window[0] > 1 %}
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=1, per_page=per_page) }}">1</a>
+                {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+                {% endif %}
+
+                {% for p in page_window %}
                     {% if p == page %}
                     <span class="active">{{ p }}</span>
                     {% else %}
-                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=p) }}">{{ p }}</a>
+                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=p, per_page=per_page) }}">{{ p }}</a>
                     {% endif %}
                 {% endfor %}
-                
-                {% if page < total_pages %}
-                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page+1) }}">Next &raquo;</a>
+
+                {% if page_window[-1] < total_pages %}
+                {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=total_pages, per_page=per_page) }}">{{ total_pages }}</a>
                 {% endif %}
-            </div>
+
+                {% if page < total_pages %}
+                <a href="{{ url_for('resources.health_detail', resource_id=resource.id, page=page+1, per_page=per_page) }}">Next &raquo;</a>
+                {% endif %}
+            </nav>
             {% endif %}
             {% else %}
             <p style="color: #6c757d; margin: 0;">No health transitions recorded</p>
@@ -178,7 +194,7 @@
                 </div>
                 
                 <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <span class="material-icons">update</span> Update Status
+                    <span class="material-icons" aria-hidden="true">update</span> Update Status
                 </button>
             </form>
         </div>
@@ -187,16 +203,16 @@
             <div class="card-header">Actions</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <a href="{{ url_for('resources.health_config', resource_id=resource.id) }}" class="btn btn-secondary">
-                    <span class="material-icons">settings</span> Configure Health Check
+                    <span class="material-icons" aria-hidden="true">settings</span> Configure Health Check
                 </a>
                 <form method="post" action="{{ url_for('resources.health_run_check', resource_id=resource.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-secondary" style="width: 100%;">
-                        <span class="material-icons">play_arrow</span> Run Health Check
+                        <span class="material-icons" aria-hidden="true">play_arrow</span> Run Health Check
                     </button>
                 </form>
                 <a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}" class="btn btn-secondary">
-                    <span class="material-icons">devices</span> View Resource
+                    <span class="material-icons" aria-hidden="true">devices</span> View Resource
                 </a>
             </div>
         </div>

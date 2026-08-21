@@ -10,23 +10,23 @@
 
 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
     <div class="stat-card">
-        <span class="material-icons health-online" style="font-size: 48px;">check_circle</span>
-        <div class="stat-value">{{ health_groups.online | length }}</div>
+        <span class="material-icons health-online" style="font-size: 48px;" aria-hidden="true">check_circle</span>
+        <div class="stat-value">{{ health_counts.online }}</div>
         <div class="stat-label">Online</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-degraded" style="font-size: 48px;">warning</span>
-        <div class="stat-value">{{ health_groups.degraded | length }}</div>
+        <span class="material-icons health-degraded" style="font-size: 48px;" aria-hidden="true">warning</span>
+        <div class="stat-value">{{ health_counts.degraded }}</div>
         <div class="stat-label">Degraded</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-maintenance" style="font-size: 48px;">build</span>
-        <div class="stat-value">{{ health_groups.maintenance | length }}</div>
+        <span class="material-icons health-maintenance" style="font-size: 48px;" aria-hidden="true">build</span>
+        <div class="stat-value">{{ health_counts.maintenance }}</div>
         <div class="stat-label">Maintenance</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-offline" style="font-size: 48px;">cancel</span>
-        <div class="stat-value">{{ health_groups.offline | length }}</div>
+        <span class="material-icons health-offline" style="font-size: 48px;" aria-hidden="true">cancel</span>
+        <div class="stat-value">{{ health_counts.offline }}</div>
         <div class="stat-label">Offline</div>
     </div>
 </div>
@@ -34,15 +34,15 @@
 {% if health_groups.offline %}
 <div class="card">
     <div class="card-header" style="color: #dc3545;">
-        <span class="material-icons" style="vertical-align: middle;">cancel</span> Offline Resources
+        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">cancel</span> Offline Resources
     </div>
     <table class="data-table" style="margin-top: 0;">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Pool</th>
-                <th>Actions</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -58,21 +58,24 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if health_counts.offline > health_groups.offline | length %}
+    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.offline | length }} of {{ health_counts.offline }} resources</p>
+    {% endif %}
 </div>
 {% endif %}
 
 {% if health_groups.degraded %}
 <div class="card">
     <div class="card-header" style="color: #ffc107;">
-        <span class="material-icons" style="vertical-align: middle;">warning</span> Degraded Resources
+        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">warning</span> Degraded Resources
     </div>
     <table class="data-table" style="margin-top: 0;">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Pool</th>
-                <th>Actions</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -88,21 +91,24 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if health_counts.degraded > health_groups.degraded | length %}
+    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.degraded | length }} of {{ health_counts.degraded }} resources</p>
+    {% endif %}
 </div>
 {% endif %}
 
 {% if health_groups.maintenance %}
 <div class="card">
     <div class="card-header" style="color: #6c757d;">
-        <span class="material-icons" style="vertical-align: middle;">build</span> Resources in Maintenance
+        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">build</span> Resources in Maintenance
     </div>
     <table class="data-table" style="margin-top: 0;">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Pool</th>
-                <th>Actions</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -118,22 +124,25 @@
             {% endfor %}
         </tbody>
     </table>
+    {% if health_counts.maintenance > health_groups.maintenance | length %}
+    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.maintenance | length }} of {{ health_counts.maintenance }} resources</p>
+    {% endif %}
 </div>
 {% endif %}
 
 <div class="card">
     <div class="card-header" style="color: #28a745;">
-        <span class="material-icons" style="vertical-align: middle;">check_circle</span> Online Resources ({{ health_groups.online | length }})
+        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">check_circle</span> Online Resources ({{ health_counts.online }})
     </div>
     {% if health_groups.online %}
     <table class="data-table" style="margin-top: 0;">
         <thead>
             <tr>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Pool</th>
-                <th>Capacity</th>
-                <th>Actions</th>
+                <th scope="col">Name</th>
+                <th scope="col">Type</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Capacity</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -150,8 +159,8 @@
             {% endfor %}
         </tbody>
     </table>
-    {% if health_groups.online | length > 20 %}
-    <p style="color: #6c757d; margin-top: 10px;">Showing 20 of {{ health_groups.online | length }} online resources</p>
+    {% if health_counts.online > 20 %}
+    <p style="color: #6c757d; margin-top: 10px;">Showing 20 of {{ health_counts.online }} online resources</p>
     {% endif %}
     {% else %}
     <p style="color: #6c757d; margin: 0;">No online resources</p>

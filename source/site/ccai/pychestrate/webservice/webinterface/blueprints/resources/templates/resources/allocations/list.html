@@ -8,43 +8,54 @@
     <p>Currently checked out resources</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.allocation_list', page=p, per_page=per_page, resource_id=selected_resource_id, user_id=selected_user_id, job_id=(selected_job_id or none)) }}
+{%- endmacro %}
+
 <div class="filter-bar">
     <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        <select name="resource_id" class="form-control" style="width: 200px;">
+        <select name="resource_id" class="form-control" style="width: 200px;" aria-label="Filter by resource">
             <option value="">All Resources</option>
             {% for resource in resources %}
             <option value="{{ resource.id }}" {% if selected_resource_id == resource.id %}selected{% endif %}>{{ resource.name }}</option>
             {% endfor %}
         </select>
-        
-        <input type="text" name="job_id" class="form-control" placeholder="Job ID" 
+
+        <input type="text" name="job_id" class="form-control" placeholder="Job ID"
+               aria-label="Filter by job ID"
                value="{{ selected_job_id }}" style="width: 150px;">
-        
+
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            <span class="material-icons" aria-hidden="true">filter_list</span> Filter
         </button>
-        
+
         <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">Clear</a>
     </form>
-    
+
     <div style="margin-left: auto;">
         <a href="{{ url_for('resources.allocation_history') }}" class="btn btn-secondary">
-            <span class="material-icons">history</span> View History
+            <span class="material-icons" aria-hidden="true">history</span> View History
         </a>
     </div>
 </div>
 
+{% if resource_total > resources | length %}
+<p style="color: #6c757d; margin-top: -10px;">
+    Resource filter shows the first {{ resources | length }} of {{ resource_total }} resources.
+</p>
+{% endif %}
+
 <table class="data-table">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Resource</th>
-            <th>User</th>
-            <th>Job ID</th>
-            <th>Mode</th>
-            <th>Checkout Time</th>
-            <th>Expected Checkin</th>
-            <th>Actions</th>
+            <th scope="col">ID</th>
+            <th scope="col">Resource</th>
+            <th scope="col">User</th>
+            <th scope="col">Job ID</th>
+            <th scope="col">Mode</th>
+            <th scope="col">Checkout Time</th>
+            <th scope="col">Expected Checkin</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -65,15 +76,17 @@
             <td>{{ alloc.checkout_time.strftime('%Y-%m-%d %H:%M') if alloc.checkout_time else '-' }}</td>
             <td>{{ alloc.expected_checkin.strftime('%Y-%m-%d %H:%M') if alloc.expected_checkin else '-' }}</td>
             <td>
-                {% if alloc.user_id == g.current_user_id %}
+                {% if alloc.user_id == current_user_id %}
                 <form action="{{ url_for('resources.allocation_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Check in this resource?')">Checkin</button>
                 </form>
                 {% else %}
-                <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('resources.allocation_force_checkin', allocation_id=alloc.id) }}" method="post" style="display:inline; white-space: nowrap;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <input type="hidden" name="reason" value="Administrative force checkin">
+                    <input type="text" name="reason" class="form-control" required
+                           placeholder="Reason" aria-label="Reason for force checkin"
+                           style="width: 140px; display: inline-block; padding: 4px 8px;">
                     <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Force check in this resource?')">Force Checkin</button>
                 </form>
                 {% endif %}
@@ -81,29 +94,46 @@
         </tr>
         {% else %}
         <tr>
+            {% if filters_active %}
+            <td colspan="8" style="text-align: center; color: #6c757d;">
+                No active allocations match the current filters.
+                <a href="{{ url_for('resources.allocation_list') }}">Clear filters</a>
+            </td>
+            {% else %}
             <td colspan="8" style="text-align: center; color: #6c757d;">No active allocations</td>
+            {% endif %}
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 {% if total_pages > 1 %}
-<div class="pagination">
+<nav class="pagination" aria-label="Allocation list pages">
     {% if page > 1 %}
-    <a href="{{ url_for('resources.allocation_list', page=page-1, resource_id=selected_resource_id, job_id=selected_job_id) }}">&laquo; Previous</a>
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
     {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
         {% if p == page %}
         <span class="active">{{ p }}</span>
         {% else %}
-        <a href="{{ url_for('resources.allocation_list', page=p, resource_id=selected_resource_id, job_id=selected_job_id) }}">{{ p }}</a>
+        <a href="{{ page_url(p) }}">{{ p }}</a>
         {% endif %}
     {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('resources.allocation_list', page=page+1, resource_id=selected_resource_id, job_id=selected_job_id) }}">Next &raquo;</a>
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
     {% endif %}
-</div>
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
 {% endif %}
 {% endblock %}

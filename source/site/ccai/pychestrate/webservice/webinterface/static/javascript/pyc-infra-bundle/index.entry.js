@@ -100,7 +100,7 @@ function classify_infra_route(path) {
     const rtnval2 = "provisioning-list";
     return rtnval2;
   }
-  if (working === GUARDS_ROUTE || working === GUARDS_ROUTE + "/") {
+  if (working === GUARDS_ROUTE || working.startsWith(GUARDS_ROUTE + "/") === true) {
     const rtnval2 = "guards";
     return rtnval2;
   }
@@ -198,11 +198,14 @@ import {
   environment_state_tone,
   drift_status_tone,
   drift_status_label,
+  drift_status_title,
   register_message_for_status,
   drift_check_message_for_status,
   parse_environment_attrs,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
+  announce_session_expired,
   ENVIRONMENT_STATES,
   DRIFT_STATES
 } from "./environments-view.js";
@@ -252,6 +255,7 @@ export {
   PycProvisioningDetail2 as PycProvisioningDetail,
   PycProvisioningList2 as PycProvisioningList,
   TERMINAL_PROVISIONING_STATES,
+  announce_session_expired,
   attach_message_for_status,
   build_drift_check_url,
   build_drift_status_url,
@@ -268,6 +272,7 @@ export {
   define_infra_elements,
   drift_check_message_for_status,
   drift_status_label,
+  drift_status_title,
   drift_status_tone,
   ensure_infra_stylesheet,
   environment_state_tone,
@@ -279,6 +284,7 @@ export {
   has_previous_page,
   is_terminal_provisioning_state,
   is_valid_run_id,
+  list_load_message_for_status,
   mount_infra_view_if_active,
   parse_actor_roles,
   parse_driver_inputs,

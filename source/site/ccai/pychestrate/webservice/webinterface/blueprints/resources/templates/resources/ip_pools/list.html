@@ -8,23 +8,27 @@
     <p>Manage IP address pools for dynamic allocation</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.ip_pool_list', page=p, per_page=per_page) }}
+{%- endmacro %}
+
 <div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
     <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create IP Pool
+        <span class="material-icons" aria-hidden="true">add</span> Create IP Pool
     </a>
 </div>
 
 <table class="data-table">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>CIDR</th>
-            <th>Version</th>
-            <th>Total</th>
-            <th>Available</th>
-            <th>Allocated</th>
-            <th>Reserved</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">CIDR</th>
+            <th scope="col">Version</th>
+            <th scope="col">Total</th>
+            <th scope="col">Available</th>
+            <th scope="col">Allocated</th>
+            <th scope="col">Reserved</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -47,15 +51,48 @@
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this IP pool?')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('{% if pool.allocated_count > 0 %}This pool has {{ pool.allocated_count }} active IP allocation(s) -- deletion will fail until they are checked in. {% endif %}Delete this IP pool?')">Delete</button>
                 </form>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="8" style="text-align: center; color: #6c757d;">No IP pools found</td>
+            <td colspan="8" style="text-align: center; color: #6c757d;">
+                No IP pools found.
+                <a href="{{ url_for('resources.ip_pool_create') }}">Create one</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+
+{% if total_pages > 1 %}
+<nav class="pagination" aria-label="IP pool list pages">
+    {% if page > 1 %}
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
+    {% endif %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% else %}
+        <a href="{{ page_url(p) }}">{{ p }}</a>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
+    {% endif %}
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
+{% endif %}
 {% endblock %}

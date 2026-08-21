@@ -64,7 +64,14 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No watches found</td>
+            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+                No watches yet.
+                {% if can_manage %}
+                <a href="{{ url_for('projects.watch_create', project_id=project.id) }}">Create your first watch</a>
+                {% else %}
+                Watches are repository event triggers set up by project developers.
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

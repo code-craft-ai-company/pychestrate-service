@@ -43,14 +43,17 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
 import logging
 import os
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
+
+from ccai.pychestrate.core.defaults import new_uuid
 
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
@@ -71,6 +74,9 @@ from ccai.pychestrate.webservice.ingest.result import scanner as result_scanner
 from ccai.pychestrate.webservice.ingest.result import (
     completion as result_completion,
 )
+from ccai.pychestrate.webservice.ingest.result.events import (
+    ResultEventTopics,
+)
 from ccai.pychestrate.webservice.orchestration.build.errors import (
     BuildRunNotFoundError,
 )
@@ -85,7 +91,14 @@ from ccai.pychestrate.webservice.jobs.dispatch.receipt.errors import (
     DuplicateRunReceiptError,
     ReceiptEnvelopeMismatchError,
 )
+from ccai.pychestrate.webservice.jobs.envelope import (
+    repository as envelope_repo,
+)
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
+from ccai.pychestrate.webservice.jobs.run.state.enums import (
+    RunState,
+    TERMINAL_STATES,
+)
 from ccai.pychestrate.webservice.jobs.run.state.advance import (
     advance_to_dispatched as _advance_to_dispatched,
     advance_to_terminal as _advance_to_terminal,
@@ -100,6 +113,8 @@ from ccai.pychestrate.webservice.jobs.run.state.machine import (
     request_cancel as _request_cancel,
 )
 from ccai.pychestrate.webservice.jobs.run.state.models import Run
+from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
+from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
@@ -392,36 +407,343 @@ def _enum_value_or_none(value: Any) -> Optional[str]:
     return rtnval
 
 
-def _run_to_dict(row: Run) -> Dict[str, Any]:
+def _load_latest_dispatch_attempt(
+        *,
+        db_session: Any,
+        run_id: str
+    ) -> Optional[Any]:
+    """
+        Return the most recent :class:`DispatchAttempt` row for the
+        run, or ``None`` when the run has never been dispatched.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+
+        :returns: The latest attempt row or None.
+    """
+    attempts = dispatch_repo.list_attempts_for_run(
+        db_session=db_session, run_id=run_id,
+    )
+    if len(attempts) == 0:
+        rtnval = None
+        return rtnval
+    rtnval = attempts[-1]
+    return rtnval
+
+
+def _load_envelope_job_fields(
+        *,
+        db_session: Any,
+        envelope_id: str
+    ) -> Tuple[Optional[str], Optional[str]]:
+    """
+        Resolve ``(job_id, job_name)`` from the archived dispatch
+        envelope. ``job_id`` is a first-class column on the
+        envelope archive row; ``job_name`` only exists inside the
+        canonical signed payload, so it is parsed out of the
+        archived ``canonical_payload_text`` JSON.
+
+        :param db_session: Active SQLAlchemy session.
+        :param envelope_id: Envelope UUID from the dispatch attempt.
+
+        :returns: ``(job_id, job_name)`` — either element is None
+                  when unrecoverable.
+    """
+    record = envelope_repo.get_envelope(
+        db_session=db_session, envelope_id=envelope_id,
+    )
+    if record is None:
+        rtnval = (None, None)
+        return rtnval
+
+    job_id: Optional[str] = None
+    if record.job_id is not None:
+        job_id = str(record.job_id)
+
+    job_name: Optional[str] = None
+    payload_text = getattr(record, "canonical_payload_text", None)
+    if isinstance(payload_text, str) and len(payload_text) > 0:
+        try:
+            canonical = json.loads(payload_text)
+        except ValueError:
+            canonical = None
+        if isinstance(canonical, dict):
+            candidate = canonical.get("job_name", None)
+            if isinstance(candidate, str) and len(candidate) > 0:
+                job_name = candidate
+
+    rtnval = (job_id, job_name)
+    return rtnval
+
+
+def _progress_summary_block(
+        *,
+        db_session: Any,
+        run_id: str
+    ) -> Optional[Dict[str, Any]]:
+    """
+        Build the OpenAPI ``ProgressSummary`` block for a run from
+        the ingested progress data.
+
+        Test runs roll up through the latest posted test summary
+        (``ingest_run_progress_summary``). Build / provision runs
+        have no test-shaped summary — their latest generalized
+        progress frame (``ingest_run_progress_frame``) is mapped
+        into the same block instead, carrying ``frame_kind`` /
+        ``phase`` / ``status`` alongside zeroed test counters.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+
+        :returns: A ``ProgressSummary``-shaped dict, or None when
+                  no progress has been ingested for the run.
+    """
+    summary = progress_service.get_summary(
+        db_session=db_session, run_id=run_id,
+    )
+    if summary is not None:
+        rtnval: Dict[str, Any] = {
+            "run_id": summary.run_id,
+            "client_id": summary.client_id,
+            "format_tag": summary.format_tag,
+            "tests_total": summary.tests_total,
+            "tests_passed": summary.tests_passed,
+            "tests_failed": summary.tests_failed,
+            "tests_skipped": summary.tests_skipped,
+            "tests_errored": summary.tests_errored,
+            "percent_complete": summary.percent_complete,
+            "notes": summary.notes,
+            "recorded_at": _iso_or_none(summary.recorded_at),
+        }
+        return rtnval
+
+    frame = progress_service.get_latest_frame(
+        db_session=db_session, run_id=run_id,
+    )
+    if frame is not None:
+        rtnval = {
+            "run_id": frame.run_id,
+            "client_id": frame.client_id,
+            "format_tag": frame.frame_kind,
+            "frame_kind": frame.frame_kind,
+            "phase": frame.phase,
+            "status": frame.status,
+            "tests_total": None,
+            "tests_passed": 0,
+            "tests_failed": 0,
+            "tests_skipped": 0,
+            "tests_errored": 0,
+            "percent_complete": frame.percent_complete,
+            "notes": frame.notes,
+            "recorded_at": _iso_or_none(frame.recorded_at),
+        }
+        return rtnval
+
+    rtnval = None
+    return rtnval
+
+
+def _load_result_manifest_block(
+        *,
+        db_session: Any,
+        run_id: str
+    ) -> Optional[Dict[str, Any]]:
+    """
+        Recall the run's latest recorded result-manifest block from
+        the durable event outbox.
+
+        ``POST /runs/{run_id}/results/complete`` writes a
+        ``MANIFEST_LANDED`` outbox row whose payload carries the
+        ``manifest`` block the SSE ``result_manifest`` RunEvent
+        streams. Recalling it here lets the single-run read model
+        serve the same block after the fact, so a run-detail page
+        opened on an already-completed run can render its
+        artifacts pane without having watched the live stream.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+
+        :returns: The manifest block dict, or None when the run
+                  has never posted results-complete.
+    """
+    outbox_row = run_repo.find_latest_outbox_row_for_topic(
+        db_session=db_session,
+        run_id=run_id,
+        topic=ResultEventTopics.MANIFEST_LANDED,
+    )
+    if outbox_row is None:
+        rtnval = None
+        return rtnval
+
+    payload = outbox_row.payload
+    if isinstance(payload, dict) is False:
+        rtnval = None
+        return rtnval
+
+    manifest = payload.get("manifest", None)
+    if isinstance(manifest, dict) is False:
+        rtnval = None
+        return rtnval
+
+    rtnval = manifest
+    return rtnval
+
+
+def _run_timing_block(
+        *,
+        db_session: Any,
+        row: Run
+    ) -> Dict[str, Optional[str]]:
+    """
+        Derive the run's lifecycle timestamps from the append-only
+        state-audit trail.
+
+        The ``Run`` row only keeps ``entered_state_at`` (mutated on
+        every transition), so the stable timestamps come from the
+        audit history:
+
+        * ``created_at`` — the first audit row's ``transitioned_at``
+          (the run entered its initial state at creation and the
+          row existed only milliseconds before its first
+          transition). A run that has never transitioned still has
+          ``entered_state_at`` == creation time, so that is the
+          fallback.
+        * ``dispatched_at`` — first transition into ``DISPATCHED``.
+        * ``started_at`` — first transition into ``RUNNING``.
+        * ``completed_at`` — first transition into a terminal
+          state; falls back to ``entered_state_at`` when the row is
+          terminal but predates audit coverage.
+
+        :param db_session: Active SQLAlchemy session.
+        :param row: Run ORM row.
+
+        :returns: Dict with ``created_at`` / ``dispatched_at`` /
+                  ``started_at`` / ``completed_at`` ISO strings or
+                  None.
+    """
+    audits = run_repo.list_state_audits(
+        db_session=db_session, run_id=str(row.run_id),
+    )
+
+    created_at: Optional[Any] = None
+    dispatched_at: Optional[Any] = None
+    started_at: Optional[Any] = None
+    completed_at: Optional[Any] = None
+
+    for audit in audits:
+        if created_at is None:
+            created_at = audit.transitioned_at
+        if dispatched_at is None and audit.to_state == RunState.DISPATCHED:
+            dispatched_at = audit.transitioned_at
+        if started_at is None and audit.to_state == RunState.RUNNING:
+            started_at = audit.transitioned_at
+        if completed_at is None and audit.to_state in TERMINAL_STATES:
+            completed_at = audit.transitioned_at
+
+    if created_at is None:
+        created_at = row.entered_state_at
+    if completed_at is None and row.state in TERMINAL_STATES:
+        completed_at = row.entered_state_at
+
+    rtnval: Dict[str, Optional[str]] = {
+        "created_at": _iso_or_none(created_at),
+        "dispatched_at": _iso_or_none(dispatched_at),
+        "started_at": _iso_or_none(started_at),
+        "completed_at": _iso_or_none(completed_at),
+    }
+    return rtnval
+
+
+def _run_to_dict(
+        *,
+        row: Run,
+        db_session: Any,
+        include_result_manifest: bool = False
+    ) -> Dict[str, Any]:
     """
         Serialize a :class:`Run` row to the OpenAPI ``Run`` schema.
 
-        The in-tree ``Run`` model carries a strict subset of the
-        OpenAPI schema's properties (see the divergence note in
-        the PR body). Missing fields are emitted as ``null``;
-        downstream extensions / future migrations will fill them
-        in once the model grows.
+        The ``Run`` row itself only carries the state-machine
+        columns; the rest of the schema is joined in from the
+        feature tables that own each fact:
+
+        * ``pod_id`` / ``client_id`` /
+          ``current_dispatch_attempt_id`` — latest
+          ``jobs_dispatch_attempt`` row.
+        * ``job_id`` / ``job_name`` — the archived dispatch
+          envelope the latest attempt transmitted.
+        * ``progress_summary`` — latest ingested progress summary
+          (test runs) or generalized progress frame (build /
+          provision runs).
+        * ``created_at`` / ``dispatched_at`` / ``started_at`` /
+          ``completed_at`` — derived from the append-only
+          state-audit trail (see :func:`_run_timing_block`).
+        * ``result_manifest`` — the latest recorded
+          result-manifest block, recalled from the durable event
+          outbox. Only loaded when ``include_result_manifest`` is
+          True (the single-run read); list pages keep it ``null``
+          so a 500-row page does not drag every manifest's file
+          index along.
+
+        Facts the data model does not record (``labels``) are
+        emitted empty.
 
         :param row: Run ORM row.
+        :param db_session: Active SQLAlchemy session used to join
+                           the feature tables.
+        :param include_result_manifest: Load the recorded result
+                                        manifest into the payload.
 
         :returns: JSON-friendly dict.
     """
+    run_id = str(row.run_id)
+
+    pod_id: Optional[str] = None
+    client_id: Optional[str] = None
+    current_attempt_id: Optional[str] = None
+    job_id: Optional[str] = None
+    job_name: Optional[str] = None
+
+    attempt = _load_latest_dispatch_attempt(
+        db_session=db_session, run_id=run_id,
+    )
+    if attempt is not None:
+        pod_id = str(attempt.pod_id)
+        client_id = str(attempt.client_id)
+        current_attempt_id = str(attempt.attempt_id)
+        job_id, job_name = _load_envelope_job_fields(
+            db_session=db_session,
+            envelope_id=str(attempt.envelope_id),
+        )
+
+    progress_summary = _progress_summary_block(
+        db_session=db_session, run_id=run_id,
+    )
+    timings = _run_timing_block(db_session=db_session, row=row)
+
+    result_manifest: Optional[Dict[str, Any]] = None
+    if include_result_manifest is True:
+        result_manifest = _load_result_manifest_block(
+            db_session=db_session, run_id=run_id,
+        )
+
     rtnval: Dict[str, Any] = {
-        "run_id": str(row.run_id),
+        "run_id": run_id,
         "project_id": str(row.project_id),
-        "pod_id": None,
-        "client_id": None,
-        "job_id": None,
-        "job_name": None,
+        "pod_id": pod_id,
+        "client_id": client_id,
+        "job_id": job_id,
+        "job_name": job_name,
         "job_type": str(row.job_type) if row.job_type is not None else "",
         "state": _enum_value_or_none(row.state),
         "terminal_outcome": _enum_value_or_none(row.terminal_outcome),
-        "current_dispatch_attempt_id": None,
-        "progress_summary": None,
-        "created_at": _iso_or_none(row.entered_state_at),
-        "dispatched_at": None,
-        "started_at": None,
-        "completed_at": None,
+        "current_dispatch_attempt_id": current_attempt_id,
+        "progress_summary": progress_summary,
+        "result_manifest": result_manifest,
+        "created_at": timings["created_at"],
+        "dispatched_at": timings["dispatched_at"],
+        "started_at": timings["started_at"],
+        "completed_at": timings["completed_at"],
         "labels": {},
     }
     return rtnval
@@ -541,7 +863,7 @@ def handle_list_runs(request: Request) -> Response:
 
         items: List[Dict[str, Any]] = []
         for row in rows:
-            items.append(_run_to_dict(row=row))
+            items.append(_run_to_dict(row=row, db_session=db_session))
 
         body = {
             "items": items,
@@ -590,7 +912,11 @@ def handle_read_run(request: Request) -> Response:
             )
             row = None  # unreachable
 
-        body = _run_to_dict(row=row)
+        body = _run_to_dict(
+            row=row,
+            db_session=db_session,
+            include_result_manifest=True,
+        )
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -1205,6 +1531,139 @@ def _handle_build_provision_completion(
     return rtnval
 
 
+#: Testbase result-tree well-known artifact paths and their
+#: OpenAPI ``ResultManifest`` defaults. Applied when a testbase
+#: manifest omits the explicit path fields so the UI's artifact
+#: links always resolve.
+_TESTBASE_ARTIFACT_PATH_DEFAULTS: Dict[str, str] = {
+    "summary_artifact_path": "testrun_summary.json",
+    "results_stream_artifact_path": "testrun_results_stream.jsos",
+    "results_artifact_path": "testrun_results.json",
+    "html_summary_artifact_path": "testsummary.html",
+}
+
+
+def _build_result_manifest_block(
+        *,
+        run_id: str,
+        format_tag: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+    """
+        Build the ``manifest`` block for the ``result_manifest``
+        RunEvent from a posted ``ResultManifest`` body.
+
+        The block echoes the manifest's identity fields, resolves
+        the well-known testbase artifact paths (applying the
+        OpenAPI defaults when the client omitted them), and lifts
+        the walked artifact-file index (``extras.files``) to a
+        top-level ``files`` array + ``artifact_count`` so the UI
+        can render the artifacts pane without digging into
+        ``extras``.
+
+        :param run_id: Run UUID from the path.
+        :param format_tag: The manifest's ``format_tag``.
+        :param payload: The decoded ``ResultManifest`` dict.
+
+        :returns: JSON-serializable manifest block.
+    """
+    files = result_completion.artifact_files_from_manifest(manifest=payload)
+
+    rtnval: Dict[str, Any] = {
+        "run_id": run_id,
+        "client_id": payload.get("client_id", None),
+        "format_tag": format_tag,
+        "backend_key_prefix": payload.get("backend_key_prefix", None),
+        "completed_at": payload.get("completed_at", None),
+        "terminal_outcome": payload.get("terminal_outcome", None),
+        "artifact_count": len(files),
+        "files": files,
+    }
+
+    for path_field, default_path in _TESTBASE_ARTIFACT_PATH_DEFAULTS.items():
+        candidate = payload.get(path_field, None)
+        if isinstance(candidate, str) and len(candidate) > 0:
+            rtnval[path_field] = candidate
+        elif format_tag == "testbase":
+            rtnval[path_field] = default_path
+
+    counter_fields = (
+        "tests_passed",
+        "tests_failed",
+        "tests_skipped",
+        "tests_errored",
+    )
+    for counter_field in counter_fields:
+        candidate = payload.get(counter_field, None)
+        if isinstance(candidate, int):
+            rtnval[counter_field] = candidate
+
+    notes = payload.get("notes", None)
+    if isinstance(notes, str) and len(notes) > 0:
+        rtnval["notes"] = notes
+
+    return rtnval
+
+
+def _emit_result_manifest_event(
+        *,
+        db_session: Any,
+        run_id: str,
+        project_id: str,
+        format_tag: str,
+        payload: Dict[str, Any]
+    ) -> None:
+    """
+        Publish the ``result_manifest`` live event for a completed
+        result upload.
+
+        Writes a durable ``runs_run_event_outbox`` row and buffers
+        the in-process bus event
+        (:attr:`ResultEventTopics.MANIFEST_LANDED`) for after-commit
+        delivery — the :class:`LiveRunBusBridge` forwards it onto
+        the run's SSE relay as a ``result_manifest`` RunEvent so
+        the run-detail artifacts pane renders.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID from the path.
+        :param project_id: Owning project UUID.
+        :param format_tag: The manifest's ``format_tag``.
+        :param payload: The decoded ``ResultManifest`` dict.
+
+        :returns: None.
+    """
+    now = datetime.now(timezone.utc)
+    manifest_block = _build_result_manifest_block(
+        run_id=run_id,
+        format_tag=format_tag,
+        payload=payload,
+    )
+    event_payload: Dict[str, Any] = {
+        "run_id": run_id,
+        "project_id": project_id,
+        "terminal_outcome": manifest_block["terminal_outcome"],
+        "received_at": now.isoformat(),
+        "manifest": manifest_block,
+    }
+    run_repo.append_outbox_row(
+        db_session=db_session,
+        run_id=run_id,
+        topic=ResultEventTopics.MANIFEST_LANDED,
+        payload=event_payload,
+        created_at=now,
+    )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=ResultEventTopics.MANIFEST_LANDED,
+            payload=event_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    return
+
+
 def handle_post_results_complete(request: Request) -> Response:
     """
         ``POST /api/v1/runs/{run_id}/results/complete`` -- pod
@@ -1237,7 +1696,7 @@ def handle_post_results_complete(request: Request) -> Response:
         client_cn = _require_mtls_client_cn(request=request)
         payload = _decode_json_object_or_abort(request=request)
         db_session = _require_session(request=request)
-        _require_run_exists(
+        run_row = _require_run_exists(
             request=request, db_session=db_session, run_id=run_id,
         )
 
@@ -1347,6 +1806,27 @@ def handle_post_results_complete(request: Request) -> Response:
                     run_id,
                     xcpt,
                 )
+
+        # Publish the result_manifest live event so a subscribed
+        # run-detail view renders the artifacts pane. Mirrors the
+        # state-advance calls above: a publish failure is logged
+        # but never denies the client its 202 — the manifest was
+        # ingested.
+        try:
+            _emit_result_manifest_event(
+                db_session=db_session,
+                run_id=run_id,
+                project_id=str(getattr(run_row, "project_id", "")),
+                format_tag=format_tag,
+                payload=payload,
+            )
+        except Exception as xcpt:
+            _LOGGER.warning(
+                "pychestrate.runs.results_complete.manifest_event_error"
+                " run_id=%s err=%s",
+                run_id,
+                xcpt,
+            )
 
         _LOGGER.info(
             "pychestrate.runs.results_complete run_id=%s client_cn=%s"

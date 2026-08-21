@@ -444,3 +444,23 @@ pyc-guards {
     font-family: var(--pyc-font-family-mono, monospace);
     word-break: break-all;
 }
+
+.pyc-infra__projects-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-infra-fg-muted);
+}
+
+.pyc-infra__projects-notice--error {
+    color: var(--pyc-infra-error-fg);
+}
+
+.pyc-infra__field-caption {
+    display: block;
+    margin: 0.25rem 0 0;
+    font-size: var(--pyc-font-size-small, 0.8125rem);
+    color: var(--pyc-infra-fg-muted);
+}

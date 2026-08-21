@@ -43,8 +43,10 @@
             <td>{{ member.joined_at.strftime('%Y-%m-%d %H:%M') }}</td>
             {% if can_manage %}
             <td>
-                <a href="{{ url_for('projects.member_edit', project_id=project.id, user_id=member.user_id) }}" class="btn btn-sm btn-secondary">Edit Role</a>
                 {% if member.role.value != 'owner' %}
+                <a href="{{ url_for('projects.member_edit', project_id=project.id, user_id=member.user_id) }}" class="btn btn-sm btn-secondary">Edit Role</a>
+                {% endif %}
+                {% if member.role.value != 'owner' and member.user_id|string != current_user_id|string %}
                 <form action="{{ url_for('projects.member_remove', project_id=project.id, user_id=member.user_id) }}" method="post" style="display:inline;">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Remove this member?')">Remove</button>

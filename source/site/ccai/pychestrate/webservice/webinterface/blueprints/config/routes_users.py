@@ -1,38 +1,43 @@
 """
 .. module:: webinterface.blueprints.config.routes_users
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: WebWorks-native consumer-facing UI for /config/users
-               (D2 slice -- user management).
+    :synopsis: WebWorks-native consumer-facing UI for /admin/users
+               (user management over the modern identity store).
 
 .. moduleauthor:: Code Craft AI LLC
 
 The user-management routes served under the config blueprint:
 
-* ``GET  /config/users``                      -- paginated list +
-                                                 search.
-* ``GET  /config/users/create``               -- new-user form.
-* ``POST /config/users/create``               -- create user.
-* ``GET  /config/users/{user_id}``            -- detail page.
-* ``GET  /config/users/{user_id}/edit``       -- edit form.
-* ``POST /config/users/{user_id}/edit``       -- update user.
-* ``POST /config/users/{user_id}/deactivate`` -- deactivate
-                                                 (soft delete).
+* ``GET  /admin/users``                      -- paginated list +
+                                                search.
+* ``GET  /admin/users/create``               -- new-user form.
+* ``POST /admin/users/create``               -- create user.
+* ``GET  /admin/users/{user_id}``            -- detail page.
+* ``GET  /admin/users/{user_id}/edit``       -- edit form.
+* ``POST /admin/users/{user_id}/edit``       -- update user.
+* ``POST /admin/users/{user_id}/deactivate`` -- deactivate
+                                                (soft delete).
+
+The handlers are backed by
+:mod:`webinterface.blueprints.config.identity_admin`, which reads
+and writes the modern identity store (``identity_users`` +
+``auth_local_credentials``) the login flow authenticates against,
+mirrors the legacy ``user`` row, and manages SYSTEM-scope
+``rbac_role_bindings`` -- the rows the RBAC evaluator actually
+consults. A user created here can log in, and a role granted here
+changes access.
 
 All handlers gate on ``_resolve_authenticated_request`` and POST
 handlers additionally enforce CSRF via
-:func:`auth_guard.enforce_csrf_or_redirect`. The user-management
-admin permission check (``users.manage``) lives at the manager
-layer; until the user-permission RBAC ports are complete we
-allow any authenticated user.
+:func:`auth_guard.enforce_csrf_or_redirect`.
 
 Test seam
 ---------
 
-``_build_user_manager`` and ``_build_user_create_request`` /
-``_build_user_update_request`` are module-level builders around
-the lazy imports so unit tests can patch them at the module
-binding without dragging the password-hashing source modules
-into the test process.
+The ``_svc_*`` module-level builders wrap the lazy service imports
+so unit tests can patch them at the module binding without
+dragging the password-hashing source modules into the test
+process.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -87,121 +92,185 @@ _ROUTE_TABLE = (
 
 
 # ---------------------------------------------------------------------------
-# Lazy-import builder seams (test-patchable)
+# Lazy-import service seams (test-patchable)
 # ---------------------------------------------------------------------------
 
 
-def _build_user_manager(*, db_session: Any) -> Any:
+def _svc_list_users(
+        *,
+        db_session: Any,
+        offset: int,
+        limit: int,
+        search: Optional[str]
+    ) -> Any:
     """
-        Construct a :class:`UserManager` against the supplied
-        SQLAlchemy session. Lazy-imports so the routes module
-        does not pull the manager (and its password-hashing
-        chain via SecurityManager) at import time.
+        List identity users. Lazy-imports the service so the routes
+        module does not pull the identity / hashing chain at import
+        time.
 
         :param db_session: Open SQLAlchemy session.
+        :param offset: Pagination offset.
+        :param limit: Page size.
+        :param search: Optional search substring.
 
-        :returns: UserManager instance.
+        :returns: An ``AdminUserListResult``.
     """
-    from ccai.pychestrate.core.managers.user_manager import (  # noqa: E402
-        UserManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
     )
-    rtnval = UserManager(db_session)
+    rtnval = identity_admin.list_identity_users(
+        db_session=db_session, offset=offset, limit=limit, search=search
+    )
     return rtnval
 
 
-def _build_user_create_request(
+def _svc_get_user(*, db_session: Any, user_id: str) -> Any:
+    """
+        Fetch one identity user view, or None.
+
+        :param db_session: Open SQLAlchemy session.
+        :param user_id: Identity user UUID string.
+
+        :returns: An ``AdminUserView`` or None.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.get_identity_user(
+        db_session=db_session, user_id=user_id
+    )
+    return rtnval
+
+
+def _svc_create_user(
         *,
+        db_session: Any,
         username: str,
         email: str,
         password: str,
         display_name: str,
         firstname: str,
         lastname: str,
-        role_ids: List[int]
-    ) -> Any:
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> str:
     """
-        Construct a :class:`UserCreateRequest` carrying the form
-        data. Lazy-imports the dataclass so tests can patch this
-        helper without importing the source.
+        Create a user in the modern identity store (with credentials,
+        legacy mirror, and role bindings).
+
+        :returns: The new user's UUID string.
     """
-    from ccai.pychestrate.core.managers.user_manager import (  # noqa: E402
-        UserCreateRequest,
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
     )
-    rtnval = UserCreateRequest(
+    rtnval = identity_admin.create_identity_user(
+        db_session=db_session,
         username=username,
         email=email,
         password=password,
         display_name=display_name,
         firstname=firstname,
         lastname=lastname,
-        role_ids=role_ids,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
     )
     return rtnval
 
 
-def _build_user_update_request(
+def _svc_update_user(
         *,
-        email: Optional[str],
-        display_name: Optional[str],
-        firstname: Optional[str],
-        lastname: Optional[str],
-        is_active: Optional[bool],
-        role_ids: Optional[List[int]]
-    ) -> Any:
+        db_session: Any,
+        user_id: str,
+        email: str,
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        is_active: bool,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> None:
     """
-        Construct a :class:`UserUpdateRequest` carrying the form
-        data. Lazy-imports the dataclass so tests can patch this
-        helper.
+        Update the identity row, mirror, and role bindings.
+
+        :returns: None.
     """
-    from ccai.pychestrate.core.managers.user_manager import (  # noqa: E402
-        UserUpdateRequest,
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
     )
-    rtnval = UserUpdateRequest(
+    identity_admin.update_identity_user(
+        db_session=db_session,
+        user_id=user_id,
         email=email,
         display_name=display_name,
         firstname=firstname,
         lastname=lastname,
         is_active=is_active,
-        role_ids=role_ids,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
     )
-    return rtnval
+    return
 
 
-def _query_system_roles(*, db_session: Any) -> List[Any]:
+def _svc_deactivate_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> None:
     """
-        Return every :class:`SystemRole` row. Used to populate
-        the role-checkbox list on the create/edit user pages.
-        Pulled out as a builder so tests can patch the DB call.
+        Deactivate the identity user (and mirror the status).
+
+        :returns: None.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    identity_admin.deactivate_identity_user(
+        db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
+    )
+    return
+
+
+def _svc_list_role_options(*, db_session: Any) -> List[Any]:
+    """
+        List the RBAC roles offered by the role picker on the user
+        forms, first ensuring every catalog-declared role has a
+        persisted row.
 
         :param db_session: Open SQLAlchemy session.
 
-        :returns: List of SystemRole ORM rows.
+        :returns: List of ``AdminRoleView``.
     """
-    from ccai.pychestrate.core.orm import SystemRole  # noqa: E402
-    rtnval = db_session.query(SystemRole).all()
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    identity_admin.ensure_catalog_roles_persisted(db_session=db_session)
+    rtnval = identity_admin.list_rbac_roles(db_session=db_session)
     return rtnval
 
 
-def _user_manager_exception_classes() -> Dict[str, type]:
+def _admin_exception_classes() -> Dict[str, type]:
     """
-        Return a dict mapping the names of UserManager exceptions
-        to their classes. Used by handlers to branch on the
-        exception type without hard-importing the classes at
-        module load time. Tests can patch this to substitute their
-        own exception classes.
+        Return a dict mapping the names of the identity-admin service
+        exceptions to their classes so handlers can branch on the
+        exception type without hard-importing the classes at module
+        load time. Tests patch this to substitute fakes.
 
-        :returns: ``{"ValidationError": cls, "DuplicateUserError":
-                  cls, "UserNotFoundError": cls}``
+        :returns: ``{"AdminValidationError": cls, "AdminDuplicateError":
+                  cls, "AdminNotFoundError": cls, "SelfLockoutError":
+                  cls}``
     """
-    from ccai.pychestrate.core.managers.user_manager import (  # noqa: E402
-        DuplicateUserError,
-        UserNotFoundError,
-        ValidationError,
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.identity_admin import (  # noqa: E402
+        AdminDuplicateError,
+        AdminNotFoundError,
+        AdminValidationError,
+        SelfLockoutError,
     )
     rtnval = {
-        "ValidationError": ValidationError,
-        "DuplicateUserError": DuplicateUserError,
-        "UserNotFoundError": UserNotFoundError,
+        "AdminValidationError": AdminValidationError,
+        "AdminDuplicateError": AdminDuplicateError,
+        "AdminNotFoundError": AdminNotFoundError,
+        "SelfLockoutError": SelfLockoutError,
     }
     return rtnval
 
@@ -211,23 +280,24 @@ def _user_manager_exception_classes() -> Dict[str, type]:
 # ---------------------------------------------------------------------------
 
 
-def _coerce_int_list(*, raw_values: List[str]) -> List[int]:
+def _clean_role_names(*, raw_values: List[str]) -> List[str]:
     """
-        Convert a list of form-submitted strings to a list of
-        ints, silently dropping non-numeric entries. The HTML
-        ``<input type="checkbox">`` always submits the string
-        ``value=`` attribute; the manager API requires int IDs.
+        Normalize the submitted role-name checkbox values: strip
+        whitespace and drop empties / duplicates while preserving
+        order.
 
         :param raw_values: List of submitted strings (may be empty).
 
-        :returns: List of ints (may be empty).
+        :returns: List of role names (may be empty).
     """
-    rtnval: List[int] = []
+    rtnval: List[str] = []
     for value in raw_values:
-        try:
-            rtnval.append(int(value))
-        except (TypeError, ValueError):
+        cleaned = str(value).strip()
+        if len(cleaned) == 0:
             continue
+        if cleaned in rtnval:
+            continue
+        rtnval.append(cleaned)
     return rtnval
 
 
@@ -276,8 +346,8 @@ def _parse_pagination_params(
 
 def handle_user_list(request: Request) -> Response:
     """
-        ``GET /config/users`` -- paginated list of users with an
-        optional ``?search=`` filter.
+        ``GET /admin/users`` -- paginated list of identity users with
+        an optional ``?search=`` filter.
 
         :param request: Incoming webworks request.
 
@@ -300,8 +370,8 @@ def handle_user_list(request: Request) -> Response:
         else:
             search_arg = search
 
-        user_manager = _build_user_manager(db_session=db_session)
-        result = user_manager.list_users(
+        result = _svc_list_users(
+            db_session=db_session,
             offset=offset,
             limit=params["per_page"],
             search=search_arg,
@@ -324,6 +394,7 @@ def handle_user_list(request: Request) -> Response:
         context["per_page"] = per_page
         context["total_pages"] = total_pages
         context["search"] = search
+        context["current_user_id"] = auth.user_id
 
         response = _render(
             template_name="config/users/list.html",
@@ -342,8 +413,9 @@ def handle_user_list(request: Request) -> Response:
 
 def handle_user_create(request: Request) -> Response:
     """
-        ``GET /config/users/create`` -- show the create-user form.
-        ``POST /config/users/create`` -- create the user.
+        ``GET /admin/users/create`` -- show the create-user form.
+        ``POST /admin/users/create`` -- create the user in the modern
+        identity store so the new account can actually log in.
 
         :param request: Incoming webworks request.
 
@@ -359,7 +431,7 @@ def handle_user_create(request: Request) -> Response:
         method = request.method.upper()
 
         if method == "GET":
-            roles = _query_system_roles(db_session=db_session)
+            roles = _svc_list_role_options(db_session=db_session)
             flashes = flash.consume_flashes(session=auth.session)
             context = _build_default_template_context(
                 session=auth.session,
@@ -400,24 +472,24 @@ def handle_user_create(request: Request) -> Response:
         display_name = str(single_form.get("display_name", "")).strip()
         firstname = str(single_form.get("firstname", "")).strip()
         lastname = str(single_form.get("lastname", "")).strip()
-        role_ids = _coerce_int_list(
-            raw_values=multi_form.get("role_ids", [])
+        role_names = _clean_role_names(
+            raw_values=multi_form.get("role_names", [])
         )
 
-        exc_classes = _user_manager_exception_classes()
-        user_manager = _build_user_manager(db_session=db_session)
+        exc_classes = _admin_exception_classes()
 
         try:
-            create_request = _build_user_create_request(
+            _svc_create_user(
+                db_session=db_session,
                 username=username,
                 email=email,
                 password=password,
                 display_name=display_name,
                 firstname=firstname,
                 lastname=lastname,
-                role_ids=role_ids,
+                role_names=role_names,
+                actor_user_id=auth.user_id,
             )
-            user_manager.create_user(create_request)
 
             response = _redirect_with_flash(
                 session=auth.session,
@@ -426,7 +498,7 @@ def handle_user_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except exc_classes["ValidationError"] as exc:
+        except exc_classes["AdminValidationError"] as exc:
             flash.add_flash(
                 session=auth.session,
                 message="Validation error: {}".format(
@@ -434,7 +506,7 @@ def handle_user_create(request: Request) -> Response:
                 ),
                 category=flash.CATEGORY_ERROR,
             )
-        except exc_classes["DuplicateUserError"] as exc:
+        except exc_classes["AdminDuplicateError"] as exc:
             flash.add_flash(
                 session=auth.session,
                 message="Duplicate error: {}".format(
@@ -450,7 +522,7 @@ def handle_user_create(request: Request) -> Response:
             )
 
         # Re-render the form with the submitted values + flashes.
-        roles = _query_system_roles(db_session=db_session)
+        roles = _svc_list_role_options(db_session=db_session)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -478,7 +550,7 @@ def handle_user_create(request: Request) -> Response:
 
 def handle_user_detail(request: Request) -> Response:
     """
-        ``GET /config/users/{user_id}`` -- detail page.
+        ``GET /admin/users/{user_id}`` -- detail page.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -487,8 +559,7 @@ def handle_user_detail(request: Request) -> Response:
     db_session = auth.db_session
     try:
         user_id = str(request.path_params.get("user_id", ""))
-        user_manager = _build_user_manager(db_session=db_session)
-        user = user_manager.get_user(user_id)
+        user = _svc_get_user(db_session=db_session, user_id=user_id)
 
         if user is None:
             response = _redirect_with_flash(
@@ -507,6 +578,7 @@ def handle_user_detail(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["user"] = user
+        context["current_user_id"] = auth.user_id
         response = _render(
             template_name="config/users/detail.html",
             context=context,
@@ -524,8 +596,12 @@ def handle_user_detail(request: Request) -> Response:
 
 def handle_user_edit(request: Request) -> Response:
     """
-        ``GET /config/users/{user_id}/edit`` -- edit form.
-        ``POST /config/users/{user_id}/edit`` -- apply update.
+        ``GET /admin/users/{user_id}/edit`` -- edit form.
+        ``POST /admin/users/{user_id}/edit`` -- apply update
+        (identity row + legacy mirror + SYSTEM-scope role bindings).
+
+        Server-side self-lockout guards refuse an admin deactivating
+        their own account or removing their own system-admin role.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -534,8 +610,8 @@ def handle_user_edit(request: Request) -> Response:
     db_session = auth.db_session
     try:
         user_id = str(request.path_params.get("user_id", ""))
-        user_manager = _build_user_manager(db_session=db_session)
         method = request.method.upper()
+        is_self = user_id == str(auth.user_id)
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -559,24 +635,36 @@ def handle_user_edit(request: Request) -> Response:
             firstname = str(single_form.get("firstname", "")).strip()
             lastname = str(single_form.get("lastname", "")).strip()
             is_active = single_form.get("is_active", "") == "on"
-            role_ids = _coerce_int_list(
-                raw_values=multi_form.get("role_ids", [])
+            role_names = _clean_role_names(
+                raw_values=multi_form.get("role_names", [])
             )
 
-            exc_classes = _user_manager_exception_classes()
+            if is_self is True:
+                # The self row hides the status + role controls, so
+                # the form posts neither. Preserve the current values
+                # server-side rather than treating absence as
+                # "deactivate + remove all roles".
+                current = _svc_get_user(
+                    db_session=db_session, user_id=user_id
+                )
+                if current is not None:
+                    is_active = current.is_active
+                    role_names = list(current.roles)
+
+            exc_classes = _admin_exception_classes()
 
             try:
-                update_request = _build_user_update_request(
-                    email=email if len(email) > 0 else None,
-                    display_name=(
-                        display_name if len(display_name) > 0 else None
-                    ),
+                _svc_update_user(
+                    db_session=db_session,
+                    user_id=user_id,
+                    email=email,
+                    display_name=display_name,
                     firstname=firstname,
                     lastname=lastname,
                     is_active=is_active,
-                    role_ids=role_ids,
+                    role_names=role_names,
+                    actor_user_id=auth.user_id,
                 )
-                user_manager.update_user(user_id, update_request)
                 response = _redirect_with_flash(
                     session=auth.session,
                     url=_url_for_module.url_for(
@@ -586,7 +674,21 @@ def handle_user_edit(request: Request) -> Response:
                     category=flash.CATEGORY_SUCCESS,
                 )
                 return response
-            except exc_classes["ValidationError"] as exc:
+            except exc_classes["AdminNotFoundError"]:
+                response = _redirect_with_flash(
+                    session=auth.session,
+                    url=_url_for_module.url_for("config.user_list"),
+                    message="User not found.",
+                    category=flash.CATEGORY_ERROR,
+                )
+                return response
+            except exc_classes["SelfLockoutError"] as exc:
+                flash.add_flash(
+                    session=auth.session,
+                    message=getattr(exc, "message", str(exc)),
+                    category=flash.CATEGORY_ERROR,
+                )
+            except exc_classes["AdminValidationError"] as exc:
                 flash.add_flash(
                     session=auth.session,
                     message="Validation error: {}".format(
@@ -594,7 +696,7 @@ def handle_user_edit(request: Request) -> Response:
                     ),
                     category=flash.CATEGORY_ERROR,
                 )
-            except exc_classes["DuplicateUserError"] as exc:
+            except exc_classes["AdminDuplicateError"] as exc:
                 flash.add_flash(
                     session=auth.session,
                     message="Duplicate error: {}".format(
@@ -610,7 +712,7 @@ def handle_user_edit(request: Request) -> Response:
                 )
 
         # GET, or POST that fell through after a recoverable error.
-        user = user_manager.get_user(user_id)
+        user = _svc_get_user(db_session=db_session, user_id=user_id)
         if user is None:
             response = _redirect_with_flash(
                 session=auth.session,
@@ -620,7 +722,7 @@ def handle_user_edit(request: Request) -> Response:
             )
             return response
 
-        roles = _query_system_roles(db_session=db_session)
+        roles = _svc_list_role_options(db_session=db_session)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -630,6 +732,8 @@ def handle_user_edit(request: Request) -> Response:
         )
         context["user"] = user
         context["roles"] = roles
+        context["current_user_id"] = auth.user_id
+        context["is_self"] = is_self
         response = _render(
             template_name="config/users/edit.html",
             context=context,
@@ -647,9 +751,10 @@ def handle_user_edit(request: Request) -> Response:
 
 def handle_user_deactivate(request: Request) -> Response:
     """
-        ``POST /config/users/{user_id}/deactivate`` -- deactivate
-        the user, redirect to the list with a success / error
-        flash.
+        ``POST /admin/users/{user_id}/deactivate`` -- deactivate the
+        identity user, redirect to the list with a success / error
+        flash. Refuses (server-side) when an admin targets their own
+        account.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -671,11 +776,14 @@ def handle_user_deactivate(request: Request) -> Response:
             )
             return csrf_redirect
 
-        user_manager = _build_user_manager(db_session=db_session)
-        exc_classes = _user_manager_exception_classes()
+        exc_classes = _admin_exception_classes()
 
         try:
-            user_manager.deactivate_user(user_id)
+            _svc_deactivate_user(
+                db_session=db_session,
+                user_id=user_id,
+                actor_user_id=auth.user_id,
+            )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
@@ -683,11 +791,19 @@ def handle_user_deactivate(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except exc_classes["UserNotFoundError"]:
+        except exc_classes["AdminNotFoundError"]:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except exc_classes["SelfLockoutError"] as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message=getattr(exc, "message", str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
             return response

@@ -3,6 +3,7 @@
 {% block title %}Variables - Pychestrate Configuration{% endblock %}
 
 {% block content %}
+{% import "config/_pagination.html" as pagination %}
 <div class="page-header">
     <h2>Global Variables</h2>
     <p>Manage system-wide configuration variables</p>
@@ -10,13 +11,13 @@
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="search" class="form-control" placeholder="Search variables..." 
+        <input type="text" name="search" class="form-control" placeholder="Search variables..."
                value="{{ search }}" style="width: 300px;">
         <button type="submit" class="btn btn-secondary">
             <span class="material-icons">search</span> Search
         </button>
     </form>
-    
+
     <a href="{{ url_for('config.variable_create') }}" class="btn btn-primary">
         <span class="material-icons">add</span> Create Variable
     </a>
@@ -38,11 +39,15 @@
         <tr>
             <td><a href="{{ url_for('config.variable_detail', name=variable.name) }}">{{ variable.name }}</a></td>
             <td><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                {{ variable.value }}
+            {# Values are masked by default -- they may hold credentials.
+               The reveal toggle swaps the mask for the real value per row. #}
+            <td style="max-width: 260px;">
+                <span data-role="variable-masked" style="letter-spacing: 2px; color: #6c757d;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+                <span data-role="variable-value" hidden style="display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">{{ variable.value }}</span>
+                <button type="button" class="btn btn-sm btn-secondary" data-role="variable-reveal" aria-label="Show value for {{ variable.name }}">Show</button>
             </td>
             <td>{{ variable.description or '-' }}</td>
-            <td>{{ variable.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{% if variable.updated_at %}{{ variable.updated_at.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>
                 <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
@@ -60,25 +65,42 @@
     </tbody>
 </table>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('config.variable_list', page=page-1, search=search) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('config.variable_list', page=p, search=search) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('config.variable_list', page=page+1, search=search) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ pagination.render('config.variable_list', page, total_pages,
+                     {'search': search, 'per_page': per_page}) }}
 
 <p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} variables</p>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Per-row reveal toggle for masked variable values.
+    document.addEventListener("click", function (event) {
+        var target = event.target;
+        if (target === null || typeof target.closest !== "function") {
+            return;
+        }
+        var button = target.closest("[data-role='variable-reveal']");
+        if (button === null) {
+            return;
+        }
+        var cell = button.closest("td");
+        if (cell === null) {
+            return;
+        }
+        var masked = cell.querySelector("[data-role='variable-masked']");
+        var revealed = cell.querySelector("[data-role='variable-value']");
+        if (masked === null || revealed === null) {
+            return;
+        }
+        if (revealed.hasAttribute("hidden")) {
+            revealed.removeAttribute("hidden");
+            masked.setAttribute("hidden", "");
+            button.textContent = "Hide";
+        } else {
+            revealed.setAttribute("hidden", "");
+            masked.removeAttribute("hidden");
+            button.textContent = "Show";
+        }
+    });
+</script>
 {% endblock %}

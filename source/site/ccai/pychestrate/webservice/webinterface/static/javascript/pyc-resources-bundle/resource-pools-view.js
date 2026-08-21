@@ -1,5 +1,8 @@
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
+const PROJECTS_API_PATH = "/api/v1/projects";
+const RESOURCE_POOLS_WRITE_PERMISSION = "system:resource_pools.write";
+const RESOURCES_WRITE_PERMISSION = "system:resources.write";
 function build_resource_pools_url(project_id, page, per_page) {
   const params = new URLSearchParams();
   params.set("project_id", project_id);
@@ -23,7 +26,7 @@ function short_id(value) {
 }
 function format_timestamp(value) {
   if (value === null || value === void 0 || value.length === 0) {
-    const rtnval2 = "\u2014";
+    const rtnval2 = "—";
     return rtnval2;
   }
   const parsed = new Date(value);
@@ -52,21 +55,158 @@ function parse_capability_tags(raw) {
   }
   return rtnval;
 }
-function has_next_page(state) {
-  const consumed = state.page * state.perPage;
-  const rtnval = consumed < state.total;
+function resource_state_tone(state) {
+  if (state === "available") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (state === "leased" || state === "maintenance") {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  if (state === "quarantined" || state === "retired") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  const rtnval = "neutral";
   return rtnval;
 }
-function has_previous_page(state) {
-  const rtnval = state.page > 1;
+function health_tone(outcome) {
+  if (outcome === "pass") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (outcome === "fail") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  const rtnval = "neutral";
   return rtnval;
+}
+function total_pages_for(total, per_page) {
+  if (typeof total !== "number" || typeof per_page !== "number" || per_page <= 0) {
+    const rtnval2 = 1;
+    return rtnval2;
+  }
+  const rtnval = Math.max(1, Math.ceil(total / per_page));
+  return rtnval;
+}
+function extract_projects(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const project_id = record.project_id;
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      continue;
+    }
+    const display = record.display_name;
+    const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+    rtnval.push({ project_id, display_name });
+  }
+  return rtnval;
+}
+async function read_problem(response) {
+  const rtnval = {
+    status: response.status,
+    detail: "",
+    reason: ""
+  };
+  let body = null;
+  try {
+    body = await response.json();
+  } catch (reason) {
+    body = null;
+  }
+  if (body !== null && typeof body === "object") {
+    if (typeof body.detail === "string") {
+      rtnval.detail = body.detail;
+    }
+    if (typeof body.reason === "string") {
+      rtnval.reason = body.reason;
+    }
+  }
+  return rtnval;
+}
+function shell_permission_cache() {
+  if (typeof window === "undefined") {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const handle = window.pychestrateShell;
+  if (handle === void 0 || handle === null) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  if (handle.permissions !== void 0 && handle.permissions !== null) {
+    const rtnval2 = handle.permissions;
+    return rtnval2;
+  }
+  const shell_element = handle.element;
+  if (shell_element === void 0 || shell_element === null) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const cache = shell_element.permissions;
+  if (cache === void 0 || cache === null) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const rtnval = cache;
+  return rtnval;
+}
+function shell_write_allowed(permission_key) {
+  const cache = shell_permission_cache();
+  if (cache === null) {
+    const rtnval2 = true;
+    return rtnval2;
+  }
+  if (cache.degraded === true) {
+    const rtnval2 = true;
+    return rtnval2;
+  }
+  let snapshot = null;
+  try {
+    snapshot = cache.current();
+  } catch (reason) {
+    snapshot = null;
+  }
+  if (snapshot === null || typeof snapshot.has !== "function") {
+    const rtnval2 = true;
+    return rtnval2;
+  }
+  const rtnval = snapshot.has(permission_key) === true;
+  return rtnval;
+}
+function on_shell_permissions_changed(listener) {
+  const cache = shell_permission_cache();
+  if (cache === null || typeof cache.onPermissionsChanged !== "function") {
+    return;
+  }
+  cache.onPermissionsChanged(listener);
+  return;
 }
 class PycResourcePools extends HTMLElement {
   _state;
   _pools;
+  _projects;
   _root;
+  _project_region;
+  _create_region;
   _table_region;
   _create_status;
+  _pager;
   constructor() {
     super();
     this._state = {
@@ -76,13 +216,19 @@ class PycResourcePools extends HTMLElement {
       total: 0,
       loading: false,
       errored: false,
-      needsProject: true
+      errorStatus: 0,
+      needsProject: true,
+      projectsState: "loading",
+      creating: false
     };
     this._pools = [];
+    this._projects = [];
     this._root = null;
+    this._project_region = null;
+    this._create_region = null;
     this._table_region = null;
-    this._pager = null;
     this._create_status = null;
+    this._pager = null;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the filter +
@@ -96,14 +242,17 @@ class PycResourcePools extends HTMLElement {
       total: this._state.total,
       loading: this._state.loading,
       errored: this._state.errored,
-      needsProject: this._state.needsProject
+      errorStatus: this._state.errorStatus,
+      needsProject: this._state.needsProject,
+      projectsState: this._state.projectsState,
+      creating: this._state.creating
     };
     return rtnval;
   }
   /**
-   * Lifecycle hook -- render the static chrome. A ``?project_id=``
-   * query parameter seeds an immediate fetch; otherwise the view
-   * shows a "pick a project" prompt.
+   * Lifecycle hook -- render the static chrome, then load the
+   * projects collection to seed the project selector. A
+   * ``?project_id=`` query parameter pre-selects that project.
    */
   connectedCallback() {
     const seeded = this._project_from_search();
@@ -111,11 +260,12 @@ class PycResourcePools extends HTMLElement {
       this._state.projectFilter = seeded;
     }
     this._render_chrome();
-    if (this._state.projectFilter.length > 0) {
-      void this._refresh();
-    } else {
-      this._render_table_region();
-    }
+    on_shell_permissions_changed(() => {
+      if (this.isConnected === true) {
+        this._render_create_region();
+      }
+    });
+    void this._load_projects();
     return;
   }
   _project_from_search() {
@@ -132,6 +282,69 @@ class PycResourcePools extends HTMLElement {
     const rtnval = value.trim();
     return rtnval;
   }
+  /**
+   * Fetch the projects collection and populate the project
+   * selector. Exposed so unit tests can await the bootstrap
+   * fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    this._state.projectsState = "loading";
+    this._render_project_region();
+    let outcome = "error";
+    let projects = [];
+    try {
+      const response = await fetch(PROJECTS_API_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        projects = extract_projects(body);
+        outcome = projects.length > 0 ? "loaded" : "empty";
+      } else if (response.status === 403) {
+        outcome = "forbidden";
+      } else {
+        outcome = "error";
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.resources.projects_fetch_failed",
+        { reason: String(reason) }
+      );
+      outcome = "error";
+    }
+    this._projects = projects;
+    this._state.projectsState = outcome;
+    if (outcome === "loaded") {
+      const seeded = this._state.projectFilter;
+      if (seeded.length > 0) {
+        const known = this._projects.some(
+          (project) => project.project_id === seeded
+        );
+        if (known === false) {
+          this._projects.unshift({
+            project_id: seeded,
+            display_name: seeded
+          });
+        }
+      } else {
+        this._state.projectFilter = this._projects[0].project_id;
+      }
+    }
+    this._render_project_region();
+    if (this._state.projectFilter.length > 0) {
+      await this._refresh();
+    } else {
+      this._state.needsProject = true;
+      this._render_table_region();
+    }
+    return;
+  }
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-resources");
@@ -141,35 +354,15 @@ class PycResourcePools extends HTMLElement {
     root.appendChild(heading);
     const subtitle = document.createElement("p");
     subtitle.classList.add("pyc-resources__subtitle");
-    subtitle.textContent = "Resource pools are project-scoped. Enter a project id to list its pools.";
+    subtitle.textContent = "Resource pools are project-scoped. Pick a project to list its pools.";
     root.appendChild(subtitle);
     const filters = document.createElement("div");
     filters.classList.add("pyc-resources__filters");
-    const project_label = document.createElement("label");
-    project_label.classList.add("pyc-resources__filter");
-    project_label.textContent = "Project";
-    const project_input = document.createElement("mj-text-field");
-    project_input.classList.add("pyc-resources__input");
-    project_input.setAttribute("type", "text");
-    project_input.setAttribute("placeholder", "project id");
-    project_input.setAttribute("data-role", "project-filter");
-    if (this._state.projectFilter.length > 0) {
-      project_input.value = this._state.projectFilter;
-    }
-    project_input.addEventListener("change", () => {
-      this._state.projectFilter = project_input.value.trim();
-      this._state.page = 1;
-      if (this._state.projectFilter.length > 0) {
-        void this._refresh();
-      } else {
-        this._state.needsProject = true;
-        this._pools = [];
-        this._state.total = 0;
-        this._render_table_region();
-      }
-    });
-    project_label.appendChild(project_input);
-    filters.appendChild(project_label);
+    const project_region = document.createElement("div");
+    project_region.classList.add("pyc-resources__project-region");
+    project_region.setAttribute("data-role", "project-region");
+    filters.appendChild(project_region);
+    this._project_region = project_region;
     const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-resources__button");
     refresh_button.setAttribute("type", "button");
@@ -182,36 +375,155 @@ class PycResourcePools extends HTMLElement {
     });
     filters.appendChild(refresh_button);
     root.appendChild(filters);
-    root.appendChild(this._build_create_form());
+    const create_region = document.createElement("div");
+    create_region.setAttribute("data-role", "create-region");
+    root.appendChild(create_region);
+    this._create_region = create_region;
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-resources__table-region");
     table_region.setAttribute("data-role", "table-region");
     root.appendChild(table_region);
     this._table_region = table_region;
     const pager = document.createElement("mj-pagination");
-
     pager.classList.add("pyc-resources__pager");
-
     pager.setAttribute("data-role", "pager");
-
     pager.setAttribute("page", String(this._state.page));
-
     pager.setAttribute("page-size", String(this._state.perPage));
-
     pager.setAttribute("total-items", String(this._state.total));
-
+    pager.setAttribute(
+      "total-pages",
+      String(total_pages_for(this._state.total, this._state.perPage))
+    );
     pager.addEventListener("mj-pagination-change", (event) => {
-
       this._state.page = event.detail.page;
-
       void this._refresh();
-
     });
-
     this._pager = pager;
     root.appendChild(pager);
     this._root = root;
     this.replaceChildren(root);
+    this._render_project_region();
+    this._render_create_region();
+    return;
+  }
+  /**
+   * Render the project selector region for the current
+   * ``projectsState`` -- an ``mj-select`` when the projects
+   * collection loaded, honest status messages (plus a manual
+   * project-id fallback where it can still help) otherwise.
+   */
+  _render_project_region() {
+    if (this._project_region === null) {
+      return;
+    }
+    const region = this._project_region;
+    const state = this._state.projectsState;
+    if (state === "loading") {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-resources__status");
+      loading.setAttribute("data-role", "projects-loading");
+      loading.textContent = "Loading projects…";
+      region.replaceChildren(loading);
+      return;
+    }
+    if (state === "loaded") {
+      const project_label = document.createElement("label");
+      project_label.classList.add("pyc-resources__filter");
+      project_label.textContent = "Project";
+      const project_select = document.createElement("mj-select");
+      project_select.classList.add("pyc-resources__select");
+      project_select.setAttribute("data-role", "project-select");
+      for (const project of this._projects) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
+        option.textContent = project.display_name;
+        project_select.appendChild(option);
+      }
+      if (this._state.projectFilter.length > 0) {
+        project_select.value = this._state.projectFilter;
+      }
+      project_select.addEventListener("change", () => {
+        this._state.projectFilter = project_select.value;
+        this._state.page = 1;
+        void this._refresh();
+      });
+      project_label.appendChild(project_select);
+      region.replaceChildren(project_label);
+      return;
+    }
+    const fragment = document.createDocumentFragment();
+    const message = document.createElement("p");
+    message.classList.add("pyc-resources__status");
+    if (state === "empty") {
+      message.setAttribute("data-role", "projects-empty");
+      message.textContent = "No projects are visible to your account.";
+      fragment.appendChild(message);
+    } else if (state === "forbidden") {
+      message.classList.add("pyc-resources__status--error");
+      message.setAttribute("data-role", "projects-forbidden");
+      message.textContent = "You do not have permission to list projects. Enter a project id directly.";
+      fragment.appendChild(message);
+    } else {
+      message.classList.add("pyc-resources__status--error");
+      message.setAttribute("data-role", "projects-error");
+      message.textContent = "Could not load the projects list.";
+      fragment.appendChild(message);
+      const retry = document.createElement("mj-button");
+      retry.classList.add("pyc-resources__button");
+      retry.setAttribute("type", "button");
+      retry.setAttribute("data-role", "projects-retry");
+      retry.textContent = "Retry";
+      retry.addEventListener("click", () => {
+        void this._load_projects();
+      });
+      fragment.appendChild(retry);
+    }
+    if (state === "forbidden" || state === "error") {
+      const project_label = document.createElement("label");
+      project_label.classList.add("pyc-resources__filter");
+      project_label.textContent = "Project";
+      const project_input = document.createElement("mj-text-field");
+      project_input.classList.add("pyc-resources__input");
+      project_input.setAttribute("type", "text");
+      project_input.setAttribute("placeholder", "project id");
+      project_input.setAttribute("data-role", "project-filter");
+      if (this._state.projectFilter.length > 0) {
+        project_input.value = this._state.projectFilter;
+      }
+      project_input.addEventListener("change", () => {
+        this._state.projectFilter = project_input.value.trim();
+        this._state.page = 1;
+        if (this._state.projectFilter.length > 0) {
+          void this._refresh();
+        } else {
+          this._state.needsProject = true;
+          this._pools = [];
+          this._state.total = 0;
+          this._render_table_region();
+        }
+      });
+      project_label.appendChild(project_input);
+      fragment.appendChild(project_label);
+    }
+    region.replaceChildren(fragment);
+    return;
+  }
+  /**
+   * Render (or hide) the create-pool form. The form only renders
+   * when the shell's permission cache does not affirmatively lack
+   * the resource-pools write key -- the server still enforces the
+   * permission on POST.
+   */
+  _render_create_region() {
+    if (this._create_region === null) {
+      return;
+    }
+    if (shell_write_allowed(RESOURCE_POOLS_WRITE_PERMISSION) === false) {
+      this._create_status = null;
+      this._create_region.replaceChildren();
+      return;
+    }
+    this._create_region.replaceChildren(this._build_create_form());
     return;
   }
   _build_create_form() {
@@ -264,6 +576,7 @@ class PycResourcePools extends HTMLElement {
     const status = document.createElement("p");
     status.classList.add("pyc-resources__form-status");
     status.setAttribute("data-role", "create-status");
+    status.setAttribute("role", "status");
     status.hidden = true;
     this._create_status = status;
     form.addEventListener("submit", (event) => {
@@ -271,17 +584,22 @@ class PycResourcePools extends HTMLElement {
       void this._submit_create(
         name_input.value.trim(),
         desc_input.value.trim(),
-        tags_input.value
+        tags_input.value,
+        submit,
+        [name_input, desc_input, tags_input]
       );
     });
     section.appendChild(form);
     section.appendChild(status);
     return section;
   }
-  async _submit_create(name, description, tags_raw) {
+  async _submit_create(name, description, tags_raw, submit_button, inputs) {
+    if (this._state.creating === true) {
+      return;
+    }
     if (this._state.projectFilter.length === 0) {
       this._show_create_status(
-        "Enter a project id before creating a pool.",
+        "Pick a project before creating a pool.",
         true
       );
       return;
@@ -301,6 +619,10 @@ class PycResourcePools extends HTMLElement {
     if (tags.length > 0) {
       body["capability_tags"] = tags;
     }
+    this._state.creating = true;
+    if (submit_button !== null && submit_button !== void 0) {
+      submit_button.setAttribute("disabled", "");
+    }
     try {
       const response = await fetch(RESOURCE_POOLS_API_PATH, {
         method: "POST",
@@ -312,10 +634,14 @@ class PycResourcePools extends HTMLElement {
         body: JSON.stringify(body)
       });
       if (response.ok === false) {
-        this._show_create_status(
-          "Create failed: HTTP " + String(response.status),
-          true
-        );
+        const problem = await read_problem(response);
+        let message = "Create failed (HTTP " + String(problem.status) + ").";
+        if (problem.status === 403) {
+          message = "You do not have permission to create resource pools.";
+        } else if (problem.detail.length > 0) {
+          message = "Create failed: " + problem.detail;
+        }
+        this._show_create_status(message, true);
         return;
       }
     } catch (reason) {
@@ -324,10 +650,20 @@ class PycResourcePools extends HTMLElement {
         { reason: String(reason) }
       );
       this._show_create_status(
-        "Create failed -- see the console for detail.",
+        "Create failed -- network error. Try again.",
         true
       );
       return;
+    } finally {
+      this._state.creating = false;
+      if (submit_button !== null && submit_button !== void 0) {
+        submit_button.removeAttribute("disabled");
+      }
+    }
+    if (Array.isArray(inputs) === true) {
+      for (const input of inputs) {
+        input.value = "";
+      }
     }
     this._show_create_status("Pool created.", false);
     this._state.page = 1;
@@ -364,6 +700,7 @@ class PycResourcePools extends HTMLElement {
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table_region();
     const url = build_resource_pools_url(
       this._state.projectFilter,
@@ -378,9 +715,11 @@ class PycResourcePools extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
-        throw new Error(
-          "resource-pools fetch failed: HTTP " + String(response.status)
-        );
+        this._state.loading = false;
+        this._state.errored = true;
+        this._state.errorStatus = response.status;
+        this._render_table_region();
+        return;
       }
       const body = await response.json();
       page = body;
@@ -391,12 +730,14 @@ class PycResourcePools extends HTMLElement {
       );
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
@@ -406,6 +747,12 @@ class PycResourcePools extends HTMLElement {
       this._state.page = page.meta.page;
     } else {
       this._state.total = page.items.length;
+    }
+    const last_page = total_pages_for(this._state.total, this._state.perPage);
+    if (this._pools.length === 0 && this._state.total > 0 && this._state.page > last_page) {
+      this._state.page = last_page;
+      await this._refresh();
+      return;
     }
     this._state.loading = false;
     this._state.errored = false;
@@ -421,7 +768,8 @@ class PycResourcePools extends HTMLElement {
       const prompt = document.createElement("p");
       prompt.classList.add("pyc-resources__status");
       prompt.setAttribute("data-role", "needs-project");
-      prompt.textContent = "Enter a project id above to list its resource pools.";
+      prompt.setAttribute("role", "status");
+      prompt.textContent = "Pick a project above to list its resource pools.";
       region.replaceChildren(prompt);
       this._render_pager();
       return;
@@ -430,20 +778,42 @@ class PycResourcePools extends HTMLElement {
       const loading = document.createElement("p");
       loading.classList.add("pyc-resources__status");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading resource pools\u2026";
+      loading.setAttribute("role", "status");
+      loading.textContent = "Loading resource pools…";
       region.replaceChildren(loading);
       this._render_pager();
       return;
     }
     if (this._state.errored === true) {
+      const fragment = document.createDocumentFragment();
       const error = document.createElement("p");
       error.classList.add(
         "pyc-resources__status",
         "pyc-resources__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load resource pools. Try refreshing.";
-      region.replaceChildren(error);
+      error.setAttribute("role", "status");
+      const status = this._state.errorStatus;
+      if (status === 403) {
+        error.textContent = "You do not have permission to view resource pools.";
+      } else if (status === 0) {
+        error.textContent = "Network error while loading resource pools.";
+      } else {
+        error.textContent = "Failed to load resource pools (HTTP " + String(status) + ").";
+      }
+      fragment.appendChild(error);
+      if (status !== 403) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-resources__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "error-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        fragment.appendChild(retry);
+      }
+      region.replaceChildren(fragment);
       this._render_pager();
       return;
     }
@@ -451,6 +821,7 @@ class PycResourcePools extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-resources__status");
       empty.setAttribute("data-role", "empty-state");
+      empty.setAttribute("role", "status");
       empty.textContent = "No resource pools in this project";
       region.replaceChildren(empty);
       this._render_pager();
@@ -487,7 +858,7 @@ class PycResourcePools extends HTMLElement {
         label: "Name",
         width: "16rem",
         render: (pool) => {
-          const rtnval = pool.name !== null && pool.name.length > 0 ? pool.name : "\u2014";
+          const rtnval = pool.name !== null && pool.name.length > 0 ? pool.name : "—";
           return rtnval;
         }
       },
@@ -499,7 +870,7 @@ class PycResourcePools extends HTMLElement {
         render: (pool) => {
           const tags = Array.isArray(pool.capability_tags) === true ? pool.capability_tags : [];
           if (tags.length === 0) {
-            const rtnval2 = "\u2014";
+            const rtnval2 = "—";
             return rtnval2;
           }
           const fragment = document.createDocumentFragment();
@@ -523,29 +894,32 @@ class PycResourcePools extends HTMLElement {
     return table;
   }
   _render_pager() {
-
-    if (this._pager === null || this._pager === undefined) {
-
+    if (this._pager === null || this._pager === void 0) {
       return;
-
     }
-
     this._pager.setAttribute("page", String(this._state.page));
-
     this._pager.setAttribute("page-size", String(this._state.perPage));
-
     this._pager.setAttribute("total-items", String(this._state.total));
-
+    this._pager.setAttribute(
+      "total-pages",
+      String(total_pages_for(this._state.total, this._state.perPage))
+    );
     return;
-
   }
 }
 export {
   PycResourcePools,
+  RESOURCE_POOLS_WRITE_PERMISSION,
+  RESOURCES_WRITE_PERMISSION,
   build_resource_pools_url,
+  extract_projects,
   format_timestamp,
-  has_next_page,
-  has_previous_page,
+  health_tone,
+  on_shell_permissions_changed,
   parse_capability_tags,
-  short_id
+  read_problem,
+  resource_state_tone,
+  shell_write_allowed,
+  short_id,
+  total_pages_for
 };

@@ -1,65 +1,426 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/palette/admin-search-provider.js
-var PROVIDER_ID = "admin.search";
-var PROVIDER_LABEL = "Admin";
-var PROVIDER_TIMEOUT_MS = 3e3;
-var PROVIDER_REQUIRED_PERMISSIONS = ["system:ui.admin.view"];
-var SEARCH_ENDPOINT = "/api/v1/admin/search";
-async function _admin_search(query) {
-  const trimmed = query.trim();
-  if (trimmed.length === 0) {
-    const rtnval = [];
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
+var FLAGS_PATH = "/api/v1/flags";
+var FLAG_STATE_ENABLED = "enabled";
+var FLAG_STATE_DISABLED = "disabled";
+var FLAG_STATE_RETIRED = "retired";
+function build_flag_url(flag_key) {
+  const rtnval = FLAGS_PATH + "/" + encodeURIComponent(flag_key);
+  return rtnval;
+}
+function flag_state_tone(state) {
+  if (typeof state !== "string") {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
+  const lowered = state.toLowerCase();
+  if (lowered === FLAG_STATE_ENABLED) {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  if (lowered === FLAG_STATE_DISABLED) {
+    const rtnval2 = "neutral";
+    return rtnval2;
+  }
+  if (lowered === FLAG_STATE_RETIRED) {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  const rtnval = "warn";
+  return rtnval;
+}
+function next_flag_state(state) {
+  if (typeof state === "string" && state.toLowerCase() === FLAG_STATE_ENABLED) {
+    const rtnval2 = FLAG_STATE_DISABLED;
+    return rtnval2;
+  }
+  const rtnval = FLAG_STATE_ENABLED;
+  return rtnval;
+}
+function load_failure_message(status, subject) {
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to view " + subject + ".";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Could not reach the service while loading " + subject + ". Check your connection and try refreshing.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + subject + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function toggle_message_for_status(status) {
+  if (status === 200) {
+    const rtnval2 = "Flag state updated.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "The flag was modified concurrently \u2014 refresh.";
+    return rtnval2;
+  }
+  if (status === 422) {
+    const rtnval2 = "The flag-state update was rejected.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to manage flags.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to update flag (HTTP " + String(status) + ").";
+  return rtnval;
+}
+var PycFeatureFlags = class extends HTMLElement {
+  _entries;
+  _loading;
+  _errored;
+  _error_status;
+  _filter_text;
+  _table_region;
+  _status_region;
+  constructor() {
+    super();
+    this._entries = [];
+    this._loading = false;
+    this._errored = false;
+    this._error_status = 0;
+    this._filter_text = "";
+    this._table_region = null;
+    this._status_region = null;
+  }
+  /**
+   * Diagnostic accessor used by unit tests to read the loading
+   * flag without scraping the DOM.
+   */
+  get loading() {
+    const rtnval = this._loading;
     return rtnval;
   }
-  const url = SEARCH_ENDPOINT + "?q=" + encodeURIComponent(trimmed);
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" }
-  });
-  if (response.ok === false) {
-    throw new Error("admin_search_unavailable_" + String(response.status));
+  /**
+   * Diagnostic accessor used by unit tests to read the errored
+   * flag without scraping the DOM.
+   */
+  get errored() {
+    const rtnval = this._errored;
+    return rtnval;
   }
-  const payload = await response.json();
-  const results = [];
-  if (Array.isArray(payload) === true) {
-    _coerce_into(payload, results);
-  } else if (payload !== null && typeof payload === "object" && Array.isArray(payload.results) === true) {
-    const items = payload.results;
-    _coerce_into(items, results);
+  /**
+   * Lifecycle hook -- render the static chrome and kick off the
+   * flags fetch when the element is inserted.
+   */
+  connectedCallback() {
+    this._render_chrome();
+    void this._refresh();
+    return;
   }
-  return results;
-}
-function _coerce_into(items, out) {
-  for (const item of items) {
-    if (item === null || typeof item !== "object") {
-      continue;
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-admin");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-admin__heading");
+    heading.textContent = "Feature Flags";
+    root.appendChild(heading);
+    const lede = document.createElement("p");
+    lede.classList.add("pyc-admin__lede");
+    lede.textContent = "Toggle a flag's state. Retired flags are read-only.";
+    root.appendChild(lede);
+    const controls = document.createElement("div");
+    controls.classList.add("pyc-admin__controls");
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-admin__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._refresh();
+    });
+    controls.appendChild(refresh_button);
+    const filter_input = document.createElement("input");
+    filter_input.classList.add("pyc-admin__filter");
+    filter_input.setAttribute("type", "search");
+    filter_input.setAttribute("data-role", "flag-filter");
+    filter_input.setAttribute("placeholder", "Filter by flag key\u2026");
+    filter_input.setAttribute("aria-label", "Filter feature flags by key");
+    filter_input.addEventListener("input", () => {
+      this._filter_text = filter_input.value;
+      this._render_table();
+    });
+    controls.appendChild(filter_input);
+    root.appendChild(controls);
+    const status_region = document.createElement("div");
+    status_region.setAttribute("data-role", "status-region");
+    root.appendChild(status_region);
+    this._status_region = status_region;
+    const table_region = document.createElement("div");
+    table_region.setAttribute("data-role", "table-region");
+    root.appendChild(table_region);
+    this._table_region = table_region;
+    this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the flags list and re-render. Exposed so unit tests
+   * can await a fetch cycle.
+   */
+  async refresh() {
+    await this._refresh();
+    return;
+  }
+  async _refresh() {
+    this._loading = true;
+    this._errored = false;
+    this._error_status = 0;
+    this._render_table();
+    let entries = null;
+    try {
+      const response = await fetch(FLAGS_PATH, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        this._error_status = response.status;
+        throw new Error(
+          "flags fetch failed: HTTP " + String(response.status)
+        );
+      }
+      const body = await response.json();
+      if (Array.isArray(body) === true) {
+        entries = body;
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.admin.flags_fetch_failed",
+        { reason: String(reason) }
+      );
     }
-    const obj = item;
-    const id = obj.id;
-    const label = obj.label;
-    if (typeof id !== "string" || typeof label !== "string") {
-      continue;
+    if (entries === null) {
+      this._loading = false;
+      this._errored = true;
+      this._render_table();
+      return;
     }
-    const result = {
-      id,
-      label,
-      description: typeof obj.description === "string" ? obj.description : null,
-      route: typeof obj.route === "string" ? obj.route : null
+    this._entries = entries;
+    this._loading = false;
+    this._errored = false;
+    this._render_table();
+    return;
+  }
+  _render_table() {
+    if (this._table_region === null) {
+      return;
+    }
+    const region = this._table_region;
+    if (this._loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-admin__notice");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading feature flags\u2026";
+      region.replaceChildren(loading);
+      return;
+    }
+    if (this._errored === true) {
+      const error = document.createElement("p");
+      error.classList.add(
+        "pyc-admin__notice",
+        "pyc-admin__notice--error"
+      );
+      error.setAttribute("data-role", "error-state");
+      error.textContent = load_failure_message(
+        this._error_status,
+        "feature flags"
+      );
+      region.replaceChildren(error);
+      return;
+    }
+    if (this._entries.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-admin__notice");
+      empty.setAttribute("data-role", "empty-state");
+      empty.textContent = "No feature flags registered.";
+      region.replaceChildren(empty);
+      return;
+    }
+    const filter_text = this._filter_text.trim().toLowerCase();
+    let visible = this._entries;
+    if (filter_text.length > 0) {
+      visible = this._entries.filter((entry) => {
+        if (typeof entry.flag_key !== "string") {
+          return false;
+        }
+        return entry.flag_key.toLowerCase().includes(filter_text);
+      });
+    }
+    if (visible.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-admin__notice");
+      empty.setAttribute("data-role", "filter-empty-state");
+      empty.textContent = "No feature flags match \u201C" + this._filter_text.trim() + "\u201D.";
+      region.replaceChildren(empty);
+      return;
+    }
+    const ordered = visible.slice();
+    ordered.sort(
+      (left, right) => {
+        if (left.flag_key < right.flag_key) {
+          return -1;
+        }
+        if (left.flag_key > right.flag_key) {
+          return 1;
+        }
+        return 0;
+      }
+    );
+    const self = this;
+    const table = document.createElement("mj-data-table");
+    table.classList.add("pyc-admin__table");
+    table.setAttribute("sortable", "");
+    table.setAttribute("resizable", "");
+    table.rowClass = "pyc-admin__row";
+    table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
+    table.columns = [
+      {
+        key: "flag_key",
+        label: "Flag Key",
+        width: "20rem",
+        render: (entry) => {
+          const key_cell = document.createElement("span");
+          key_cell.classList.add("pyc-admin__mono");
+          key_cell.textContent = entry.flag_key ?? "\u2014";
+          if (typeof entry.flag_key === "string") {
+            key_cell.setAttribute("title", entry.flag_key);
+          }
+          return key_cell;
+        }
+      },
+      {
+        key: "flag_kind",
+        label: "Kind",
+        width: "10rem",
+        render: (entry) => entry.flag_kind ?? "\u2014"
+      },
+      {
+        key: "current_version",
+        label: "Version",
+        width: "8rem",
+        render: (entry) => String(entry.current_version)
+      },
+      {
+        key: "state",
+        label: "State",
+        width: "10rem",
+        render: (entry) => {
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-admin__badge");
+          state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
+          state_badge.textContent = entry.state ?? "\u2014";
+          return state_badge;
+        }
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "10rem",
+        sortable: false,
+        render: (entry) => self._build_toggle(entry)
+      }
+    ];
+    table.rows = ordered;
+    region.replaceChildren(table);
+    return;
+  }
+  _build_toggle(entry) {
+    const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
+    const toggle = document.createElement("mj-button");
+    toggle.classList.add("pyc-admin__toggle");
+    toggle.setAttribute("type", "button");
+    toggle.setAttribute("data-role", "toggle");
+    const target = next_flag_state(entry.state);
+    toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
+    if (is_retired === true) {
+      toggle.toggleAttribute("disabled", true);
+    }
+    toggle.addEventListener("click", () => {
+      const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
+      if (window.confirm(question) === false) {
+        return;
+      }
+      toggle.toggleAttribute("disabled", true);
+      void this._on_toggle(entry, toggle);
+    });
+    return toggle;
+  }
+  async _on_toggle(entry, toggle) {
+    const target = next_flag_state(entry.state);
+    const outcome = await this.toggleFlag(entry.flag_key, target);
+    toggle.toggleAttribute("disabled", false);
+    this._show_status(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    if (outcome.ok === true) {
+      await this._refresh();
+    }
+    return;
+  }
+  /**
+   * PATCH a flag's state. Exposed so unit tests can invoke a
+   * toggle without a real click event.
+   *
+   * @param flag_key The flag to update.
+   * @param target_state The desired flag-state value.
+   *
+   * @returns The toggle outcome.
+   */
+  async toggleFlag(flag_key, target_state) {
+    const payload = { state: target_state };
+    let status = 0;
+    try {
+      const response = await fetch(build_flag_url(flag_key), {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      status = response.status;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.admin.flag_toggle_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        flagKey: flag_key,
+        message: "Failed to reach the feature-flags service."
+      };
+      return rtnval2;
+    }
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      flagKey: flag_key,
+      message: toggle_message_for_status(status)
     };
-    out.push(result);
+    return rtnval;
   }
-  return;
-}
-function register_admin_palette_provider(palette) {
-  palette.registerProvider({
-    providerId: PROVIDER_ID,
-    label: PROVIDER_LABEL,
-    requiredPermissions: PROVIDER_REQUIRED_PERMISSIONS,
-    timeoutMs: PROVIDER_TIMEOUT_MS,
-    query: _admin_search
-  });
-  return;
-}
+  _show_status(message, tone) {
+    if (this._status_region === null) {
+      return;
+    }
+    const notice = document.createElement("p");
+    notice.classList.add("pyc-admin__notice");
+    if (tone === "error") {
+      notice.classList.add("pyc-admin__notice--error");
+    }
+    notice.setAttribute("data-role", "toggle-status");
+    notice.textContent = message;
+    this._status_region.replaceChildren(notice);
+    return;
+  }
+};
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/system-health-view.js
 var SYSTEM_HEALTH_PATH = "/api/v1/system/health";
@@ -86,12 +447,14 @@ function health_status_tone(status) {
 }
 async function fetch_system_health() {
   let document_body = null;
+  let http_status = 0;
   try {
     const response = await fetch(SYSTEM_HEALTH_PATH, {
       method: "GET",
       credentials: "same-origin",
       headers: { Accept: "application/json" }
     });
+    http_status = response.status;
     if (response.ok === true) {
       const body = await response.json();
       const parsed = body;
@@ -105,19 +468,21 @@ async function fetch_system_health() {
       { reason: String(reason) }
     );
   }
-  const rtnval = document_body;
+  const rtnval = { document_body, http_status };
   return rtnval;
 }
 var PycSystemHealth = class extends HTMLElement {
   _document;
   _loading;
   _errored;
+  _error_status;
   _body_region;
   constructor() {
     super();
     this._document = null;
     this._loading = false;
     this._errored = false;
+    this._error_status = 0;
     this._body_region = null;
   }
   /**
@@ -183,16 +548,18 @@ var PycSystemHealth = class extends HTMLElement {
   async _refresh() {
     this._loading = true;
     this._errored = false;
+    this._error_status = 0;
     this._render_body();
-    const document_body = await fetch_system_health();
-    if (document_body === null) {
+    const outcome = await fetch_system_health();
+    if (outcome.document_body === null) {
       this._loading = false;
       this._errored = true;
+      this._error_status = outcome.http_status;
       this._document = null;
       this._render_body();
       return;
     }
-    this._document = document_body;
+    this._document = outcome.document_body;
     this._loading = false;
     this._errored = false;
     this._render_body();
@@ -218,7 +585,10 @@ var PycSystemHealth = class extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load system health. Try refreshing.";
+      error.textContent = load_failure_message(
+        this._error_status,
+        "system health"
+      );
       region.replaceChildren(error);
       return;
     }
@@ -323,363 +693,6 @@ var PycSystemHealth = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
-var FLAGS_PATH = "/api/v1/flags";
-var FLAG_STATE_ENABLED = "enabled";
-var FLAG_STATE_DISABLED = "disabled";
-var FLAG_STATE_RETIRED = "retired";
-function build_flag_url(flag_key) {
-  const rtnval = FLAGS_PATH + "/" + encodeURIComponent(flag_key);
-  return rtnval;
-}
-function flag_state_tone(state) {
-  if (typeof state !== "string") {
-    const rtnval2 = "neutral";
-    return rtnval2;
-  }
-  const lowered = state.toLowerCase();
-  if (lowered === FLAG_STATE_ENABLED) {
-    const rtnval2 = "ok";
-    return rtnval2;
-  }
-  if (lowered === FLAG_STATE_DISABLED) {
-    const rtnval2 = "neutral";
-    return rtnval2;
-  }
-  if (lowered === FLAG_STATE_RETIRED) {
-    const rtnval2 = "error";
-    return rtnval2;
-  }
-  const rtnval = "warn";
-  return rtnval;
-}
-function next_flag_state(state) {
-  if (typeof state === "string" && state.toLowerCase() === FLAG_STATE_ENABLED) {
-    const rtnval2 = FLAG_STATE_DISABLED;
-    return rtnval2;
-  }
-  const rtnval = FLAG_STATE_ENABLED;
-  return rtnval;
-}
-function toggle_message_for_status(status) {
-  if (status === 200) {
-    const rtnval2 = "Flag state updated.";
-    return rtnval2;
-  }
-  if (status === 409) {
-    const rtnval2 = "The flag was modified concurrently \u2014 refresh.";
-    return rtnval2;
-  }
-  if (status === 422) {
-    const rtnval2 = "The flag-state update was rejected.";
-    return rtnval2;
-  }
-  if (status === 403) {
-    const rtnval2 = "You do not have permission to manage flags.";
-    return rtnval2;
-  }
-  const rtnval = "Failed to update flag (HTTP " + String(status) + ").";
-  return rtnval;
-}
-var PycFeatureFlags = class extends HTMLElement {
-  _entries;
-  _loading;
-  _errored;
-  _table_region;
-  _status_region;
-  constructor() {
-    super();
-    this._entries = [];
-    this._loading = false;
-    this._errored = false;
-    this._table_region = null;
-    this._status_region = null;
-  }
-  /**
-   * Diagnostic accessor used by unit tests to read the loading
-   * flag without scraping the DOM.
-   */
-  get loading() {
-    const rtnval = this._loading;
-    return rtnval;
-  }
-  /**
-   * Diagnostic accessor used by unit tests to read the errored
-   * flag without scraping the DOM.
-   */
-  get errored() {
-    const rtnval = this._errored;
-    return rtnval;
-  }
-  /**
-   * Lifecycle hook -- render the static chrome and kick off the
-   * flags fetch when the element is inserted.
-   */
-  connectedCallback() {
-    this._render_chrome();
-    void this._refresh();
-    return;
-  }
-  _render_chrome() {
-    const root = document.createElement("section");
-    root.classList.add("pyc-admin");
-    const heading = document.createElement("h1");
-    heading.classList.add("pyc-admin__heading");
-    heading.textContent = "Feature Flags";
-    root.appendChild(heading);
-    const lede = document.createElement("p");
-    lede.classList.add("pyc-admin__lede");
-    lede.textContent = "Toggle a flag's state. Retired flags are read-only.";
-    root.appendChild(lede);
-    const controls = document.createElement("div");
-    controls.classList.add("pyc-admin__controls");
-    const refresh_button = document.createElement("mj-button");
-    refresh_button.classList.add("pyc-admin__button");
-    refresh_button.setAttribute("type", "button");
-    refresh_button.setAttribute("data-role", "refresh");
-    refresh_button.textContent = "Refresh";
-    refresh_button.addEventListener("click", () => {
-      void this._refresh();
-    });
-    controls.appendChild(refresh_button);
-    root.appendChild(controls);
-    const status_region = document.createElement("div");
-    status_region.setAttribute("data-role", "status-region");
-    root.appendChild(status_region);
-    this._status_region = status_region;
-    const table_region = document.createElement("div");
-    table_region.setAttribute("data-role", "table-region");
-    root.appendChild(table_region);
-    this._table_region = table_region;
-    this.replaceChildren(root);
-    return;
-  }
-  /**
-   * Fetch the flags list and re-render. Exposed so unit tests
-   * can await a fetch cycle.
-   */
-  async refresh() {
-    await this._refresh();
-    return;
-  }
-  async _refresh() {
-    this._loading = true;
-    this._errored = false;
-    this._render_table();
-    let entries = null;
-    try {
-      const response = await fetch(FLAGS_PATH, {
-        method: "GET",
-        credentials: "same-origin",
-        headers: { Accept: "application/json" }
-      });
-      if (response.ok === false) {
-        throw new Error(
-          "flags fetch failed: HTTP " + String(response.status)
-        );
-      }
-      const body = await response.json();
-      if (Array.isArray(body) === true) {
-        entries = body;
-      }
-    } catch (reason) {
-      console.warn(
-        "pychestrate.ui.admin.flags_fetch_failed",
-        { reason: String(reason) }
-      );
-    }
-    if (entries === null) {
-      this._loading = false;
-      this._errored = true;
-      this._render_table();
-      return;
-    }
-    this._entries = entries;
-    this._loading = false;
-    this._errored = false;
-    this._render_table();
-    return;
-  }
-  _render_table() {
-    if (this._table_region === null) {
-      return;
-    }
-    const region = this._table_region;
-    if (this._loading === true) {
-      const loading = document.createElement("p");
-      loading.classList.add("pyc-admin__notice");
-      loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading feature flags\u2026";
-      region.replaceChildren(loading);
-      return;
-    }
-    if (this._errored === true) {
-      const error = document.createElement("p");
-      error.classList.add(
-        "pyc-admin__notice",
-        "pyc-admin__notice--error"
-      );
-      error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load feature flags. Try refreshing.";
-      region.replaceChildren(error);
-      return;
-    }
-    if (this._entries.length === 0) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-admin__notice");
-      empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No feature flags registered.";
-      region.replaceChildren(empty);
-      return;
-    }
-    const ordered = this._entries.slice();
-    ordered.sort(
-      (left, right) => {
-        if (left.flag_key < right.flag_key) {
-          return -1;
-        }
-        if (left.flag_key > right.flag_key) {
-          return 1;
-        }
-        return 0;
-      }
-    );
-    const self = this;
-    const table = document.createElement("mj-data-table");
-    table.classList.add("pyc-admin__table");
-    table.setAttribute("sortable", "");
-    table.setAttribute("resizable", "");
-    table.rowClass = "pyc-admin__row";
-    table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
-    table.columns = [
-      { key: "flag_key", label: "Flag Key", width: "20rem" },
-      {
-        key: "flag_kind",
-        label: "Kind",
-        width: "10rem",
-        render: (entry) => entry.flag_kind ?? "\u2014"
-      },
-      {
-        key: "current_version",
-        label: "Version",
-        width: "8rem",
-        render: (entry) => String(entry.current_version)
-      },
-      {
-        key: "state",
-        label: "State",
-        width: "10rem",
-        render: (entry) => {
-          const state_badge = document.createElement("mj-chip");
-          state_badge.classList.add("pyc-admin__badge");
-          state_badge.setAttribute("data-tone", flag_state_tone(entry.state));
-          state_badge.textContent = entry.state ?? "\u2014";
-          return state_badge;
-        }
-      },
-      {
-        key: "actions",
-        label: "Actions",
-        width: "10rem",
-        sortable: false,
-        render: (entry) => self._build_toggle(entry)
-      }
-    ];
-    table.rows = ordered;
-    region.replaceChildren(table);
-    return;
-  }
-  _build_toggle(entry) {
-    const is_retired = typeof entry.state === "string" && entry.state.toLowerCase() === FLAG_STATE_RETIRED;
-    const toggle = document.createElement("mj-button");
-    toggle.classList.add("pyc-admin__toggle");
-    toggle.setAttribute("type", "button");
-    toggle.setAttribute("data-role", "toggle");
-    const target = next_flag_state(entry.state);
-    toggle.textContent = target === FLAG_STATE_ENABLED ? "Enable" : "Disable";
-    if (is_retired === true) {
-      toggle.toggleAttribute("disabled", true);
-    }
-    toggle.addEventListener("click", () => {
-      toggle.toggleAttribute("disabled", true);
-      void this._on_toggle(entry, toggle);
-    });
-    return toggle;
-  }
-  async _on_toggle(entry, toggle) {
-    const target = next_flag_state(entry.state);
-    const outcome = await this.toggleFlag(entry.flag_key, target);
-    toggle.toggleAttribute("disabled", false);
-    this._show_status(
-      outcome.message,
-      outcome.ok === true ? "ok" : "error"
-    );
-    if (outcome.ok === true) {
-      await this._refresh();
-    }
-    return;
-  }
-  /**
-   * PATCH a flag's state. Exposed so unit tests can invoke a
-   * toggle without a real click event.
-   *
-   * @param flag_key The flag to update.
-   * @param target_state The desired flag-state value.
-   *
-   * @returns The toggle outcome.
-   */
-  async toggleFlag(flag_key, target_state) {
-    const payload = { state: target_state };
-    let status = 0;
-    try {
-      const response = await fetch(build_flag_url(flag_key), {
-        method: "PATCH",
-        credentials: "same-origin",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(payload)
-      });
-      status = response.status;
-    } catch (reason) {
-      console.warn(
-        "pychestrate.ui.admin.flag_toggle_failed",
-        { reason: String(reason) }
-      );
-      const rtnval2 = {
-        ok: false,
-        status: 0,
-        flagKey: flag_key,
-        message: "Failed to reach the feature-flags service."
-      };
-      return rtnval2;
-    }
-    const ok = status === 200;
-    const rtnval = {
-      ok,
-      status,
-      flagKey: flag_key,
-      message: toggle_message_for_status(status)
-    };
-    return rtnval;
-  }
-  _show_status(message, tone) {
-    if (this._status_region === null) {
-      return;
-    }
-    const notice = document.createElement("p");
-    notice.classList.add("pyc-admin__notice");
-    if (tone === "error") {
-      notice.classList.add("pyc-admin__notice--error");
-    }
-    notice.setAttribute("data-role", "toggle-status");
-    notice.textContent = message;
-    this._status_region.replaceChildren(notice);
-    return;
-  }
-};
-
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/extension-registry-view.js
 var EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
@@ -743,6 +756,7 @@ var PycExtensionRegistry = class extends HTMLElement {
   _mountState;
   _loading;
   _errored;
+  _error_status;
   _table_region;
   _detail_region;
   constructor() {
@@ -751,6 +765,7 @@ var PycExtensionRegistry = class extends HTMLElement {
     this._mountState = "";
     this._loading = false;
     this._errored = false;
+    this._error_status = 0;
     this._table_region = null;
     this._detail_region = null;
   }
@@ -824,6 +839,7 @@ var PycExtensionRegistry = class extends HTMLElement {
   async _refresh() {
     this._loading = true;
     this._errored = false;
+    this._error_status = 0;
     this._render_table();
     let listing = null;
     try {
@@ -833,6 +849,7 @@ var PycExtensionRegistry = class extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        this._error_status = response.status;
         throw new Error(
           "ext manifest fetch failed: HTTP " + String(response.status)
         );
@@ -881,7 +898,10 @@ var PycExtensionRegistry = class extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load the extension registry. Try refreshing.";
+      error.textContent = load_failure_message(
+        this._error_status,
+        "the extension registry"
+      );
       region.replaceChildren(error);
       return;
     }
@@ -927,21 +947,6 @@ var PycExtensionRegistry = class extends HTMLElement {
         }
       },
       {
-        key: "health",
-        label: "Health",
-        width: "10rem",
-        render: (_extension) => {
-          const health_badge = document.createElement("mj-chip");
-          health_badge.classList.add("pyc-admin__badge");
-          health_badge.setAttribute(
-            "data-tone",
-            mount_state_tone(self._mountState)
-          );
-          health_badge.textContent = self._mountState.length > 0 ? self._mountState : "unknown";
-          return health_badge;
-        }
-      },
-      {
         key: "actions",
         label: "Actions",
         width: "10rem",
@@ -960,7 +965,21 @@ var PycExtensionRegistry = class extends HTMLElement {
       }
     ];
     table.rows = this._extensions;
-    region.replaceChildren(table);
+    const registry_status = document.createElement("p");
+    registry_status.classList.add("pyc-admin__lede");
+    registry_status.setAttribute("data-role", "registry-status");
+    registry_status.appendChild(
+      document.createTextNode("Registry status: ")
+    );
+    const status_badge = document.createElement("mj-chip");
+    status_badge.classList.add("pyc-admin__badge");
+    status_badge.setAttribute(
+      "data-tone",
+      mount_state_tone(this._mountState)
+    );
+    status_badge.textContent = this._mountState.length > 0 ? this._mountState : "unknown";
+    registry_status.appendChild(status_badge);
+    region.replaceChildren(registry_status, table);
     return;
   }
   _render_detail(extension) {
@@ -1034,6 +1053,7 @@ var PycAdminOverview = class extends HTMLElement {
   _extensionsErrored;
   _health_region;
   _flags_region;
+  _flags_status_region;
   _ext_region;
   constructor() {
     super();
@@ -1046,6 +1066,7 @@ var PycAdminOverview = class extends HTMLElement {
     this._extensionsErrored = false;
     this._health_region = null;
     this._flags_region = null;
+    this._flags_status_region = null;
     this._ext_region = null;
   }
   /**
@@ -1105,6 +1126,13 @@ var PycAdminOverview = class extends HTMLElement {
     flags_heading.classList.add("pyc-admin__subheading");
     flags_heading.textContent = "Feature Flags";
     root.appendChild(flags_heading);
+    const flags_status_region = document.createElement("div");
+    flags_status_region.setAttribute(
+      "data-role",
+      "flags-status-region"
+    );
+    root.appendChild(flags_status_region);
+    this._flags_status_region = flags_status_region;
     const flags_region = document.createElement("div");
     flags_region.setAttribute("data-role", "flags-region");
     root.appendChild(flags_region);
@@ -1138,13 +1166,13 @@ var PycAdminOverview = class extends HTMLElement {
   }
   async _load_health() {
     this._healthErrored = false;
-    const document_body = await fetch_system_health();
-    if (document_body === null) {
+    const outcome = await fetch_system_health();
+    if (outcome.document_body === null) {
       this._healthErrored = true;
       this._health = null;
       return;
     }
-    this._health = document_body;
+    this._health = outcome.document_body;
     return;
   }
   async _load_flags() {
@@ -1423,6 +1451,10 @@ var PycAdminOverview = class extends HTMLElement {
       toggle.toggleAttribute("disabled", true);
     }
     toggle.addEventListener("click", () => {
+      const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
+      if (window.confirm(question) === false) {
+        return;
+      }
       toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
@@ -1430,9 +1462,13 @@ var PycAdminOverview = class extends HTMLElement {
   }
   async _on_toggle(entry, toggle) {
     const target = next_flag_state(entry.state);
-    const ok = await this.toggleFlag(entry.flag_key, target);
+    const outcome = await this.toggleFlag(entry.flag_key, target);
     toggle.toggleAttribute("disabled", false);
-    if (ok === true) {
+    this._show_flags_status(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    if (outcome.ok === true) {
       await this._load_flags();
       this._render_flags();
     }
@@ -1445,10 +1481,12 @@ var PycAdminOverview = class extends HTMLElement {
    * @param flag_key The flag to update.
    * @param target_state The desired flag-state value.
    *
-   * @returns ``true`` when the PATCH succeeded.
+   * @returns The toggle outcome (``ok`` / ``status`` /
+   *          ``flagKey`` / ``message``), mirroring the full
+   *          feature-flags view.
    */
   async toggleFlag(flag_key, target_state) {
-    let ok = false;
+    let status = 0;
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -1459,15 +1497,42 @@ var PycAdminOverview = class extends HTMLElement {
         },
         body: JSON.stringify({ state: target_state })
       });
-      ok = response.status === 200;
+      status = response.status;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.overview_flag_toggle_failed",
         { reason: String(reason) }
       );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        flagKey: flag_key,
+        message: "Failed to reach the feature-flags service."
+      };
+      return rtnval2;
     }
-    const rtnval = ok;
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      flagKey: flag_key,
+      message: toggle_message_for_status(status)
+    };
     return rtnval;
+  }
+  _show_flags_status(message, tone) {
+    if (this._flags_status_region === null) {
+      return;
+    }
+    const notice = document.createElement("p");
+    notice.classList.add("pyc-admin__notice");
+    if (tone === "error") {
+      notice.classList.add("pyc-admin__notice--error");
+    }
+    notice.setAttribute("data-role", "flags-toggle-status");
+    notice.textContent = message;
+    this._flags_status_region.replaceChildren(notice);
+    return;
   }
 };
 
@@ -1700,10 +1765,7 @@ function mount_admin_view_if_active() {
   main.replaceChildren(view);
   return;
 }
-function _register_against(handle) {
-  if (handle.palette !== void 0 && handle.palette !== null) {
-    register_admin_palette_provider(handle.palette);
-  }
+function _register_against() {
   mount_admin_view_if_active();
   return;
 }
@@ -1712,7 +1774,7 @@ function _boot() {
   const target = window;
   const handle = target.pychestrateShell;
   if (handle !== void 0 && handle.sidebar !== void 0) {
-    _register_against(handle);
+    _register_against();
     return;
   }
   let registered = false;
@@ -1723,7 +1785,7 @@ function _boot() {
     const current = target.pychestrateShell;
     if (current !== void 0 && current.sidebar !== void 0) {
       registered = true;
-      _register_against(current);
+      _register_against();
       return true;
     }
     return false;

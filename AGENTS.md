@@ -35,9 +35,10 @@ AI based testing should run only the 'singlehost' tests tests with:
 When running tests you should create an output folder in order to be able to capture all the test run artifacts in an isolated folder.
 
 ## XTest Pages
-For testing controls, create a 'xtest' leaf that is accessible in debug and development environments. The base '/xtest' path has links
-to all the control test pages.  The control test pages contain fixed, no backend required JSON data that is used to test individual
-controls. For example 'xtest/build-info-card'
+The '/xtest' control-test surface has been removed from the tree (the `webinterface/blueprints/xtest/` source was deleted; do not
+recreate it from stale bytecode). If a control-test surface is reintroduced, follow the pattern the removed one used: register it
+only when `_resolve_runtime_environment()` reports a debug/development environment, serve fixed no-backend JSON fixtures, and link
+every control test page from the base '/xtest' index.
 
 
 ## Implementation

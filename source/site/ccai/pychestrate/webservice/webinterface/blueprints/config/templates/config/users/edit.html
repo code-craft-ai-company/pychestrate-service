@@ -42,20 +42,30 @@
                    value="{{ user.lastname }}">
         </div>
         
+        {% if is_self %}
+        <div class="form-group">
+            <p class="form-text">
+                You are editing your own account. The status and role
+                controls are unavailable here so you cannot lock
+                yourself out -- ask another administrator to change
+                them.
+            </p>
+        </div>
+        {% else %}
         <div class="form-group">
             <label>
                 <input type="checkbox" name="is_active" {% if user.is_active %}checked{% endif %}>
                 Active
             </label>
         </div>
-        
+
         {% if roles %}
         <div class="form-group">
             <label>Roles</label>
             {% for role in roles %}
             <div style="margin: 5px 0;">
                 <label style="font-weight: normal;">
-                    <input type="checkbox" name="role_ids" value="{{ role.id }}"
+                    <input type="checkbox" name="role_names" value="{{ role.name }}"
                            {% if role.name in user.roles %}checked{% endif %}>
                     {{ role.name }}
                     {% if role.description %}<span style="color: #6c757d;"> - {{ role.description }}</span>{% endif %}
@@ -63,6 +73,7 @@
             </div>
             {% endfor %}
         </div>
+        {% endif %}
         {% endif %}
         
         <div style="display: flex; gap: 10px;">

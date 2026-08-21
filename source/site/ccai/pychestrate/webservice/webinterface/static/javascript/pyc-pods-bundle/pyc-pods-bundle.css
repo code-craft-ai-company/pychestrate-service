@@ -357,3 +357,156 @@ pyc-client-detail {
     gap: 0.25rem;
     margin-top: 0.5rem;
 }
+
+/* ---- fleet legend + freshness stamps ---- */
+
+.pyc-pods-list__legend {
+    margin: 0;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-fleet-fg-muted);
+}
+
+.pyc-pods-list__stamp,
+.pyc-clients-list__stamp,
+.pyc-pod-detail__stamp,
+.pyc-client-detail__stamp {
+    align-self: center;
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-fleet-fg-muted);
+}
+
+/* ---- projects-load notices ---- */
+
+.pyc-pods-list__projects-notice,
+.pyc-clients-list__projects-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-fleet-fg-muted);
+}
+
+.pyc-pods-list__projects-notice--error,
+.pyc-clients-list__projects-notice--error {
+    color: var(--pyc-fleet-error-fg);
+}
+
+/* ---- detail toolbars + action buttons ---- */
+
+.pyc-pod-detail__toolbar,
+.pyc-client-detail__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.pyc-pod-detail__button,
+.pyc-client-detail__button {
+    padding: 0.375rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-fleet-accent-on-surface);
+    background-color: var(--pyc-fleet-surface);
+    border: 0.0625rem solid var(--pyc-fleet-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.pyc-pod-detail__button:hover,
+.pyc-client-detail__button:hover {
+    background-color: var(--pyc-fleet-surface-hover);
+}
+
+.pyc-pod-detail__button:disabled,
+.pyc-pod-detail__button[disabled],
+.pyc-client-detail__button:disabled,
+.pyc-client-detail__button[disabled] {
+    color: var(--pyc-fleet-fg-muted);
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.pyc-pod-detail__actions,
+.pyc-client-detail__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.pyc-clients-list__row-action {
+    padding: 0.25rem 0.625rem;
+}
+
+/* Inline retry buttons inside status paragraphs. */
+.pyc-pods-list__status mj-button,
+.pyc-pod-detail__status mj-button,
+.pyc-clients-list__status mj-button,
+.pyc-client-detail__status mj-button {
+    margin-left: 0.5rem;
+}
+
+.pyc-pod-detail__status--inline {
+    padding: 0.25rem 0;
+    text-align: left;
+}
+
+/* ---- action-outcome toasts ---- */
+
+.pyc-clients-list__toast-region,
+.pyc-pod-detail__toast-region,
+.pyc-client-detail__toast-region {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.pyc-clients-list__toast,
+.pyc-pod-detail__toast,
+.pyc-client-detail__toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    border-radius: 0.375rem;
+    background-color: var(--pyc-fleet-neutral-surface);
+    color: var(--pyc-fleet-fg);
+}
+
+.pyc-clients-list__toast[data-tone="ok"],
+.pyc-pod-detail__toast[data-tone="ok"],
+.pyc-client-detail__toast[data-tone="ok"] {
+    background-color: var(--pyc-fleet-ok-surface);
+    color: var(--pyc-fleet-ok-fg);
+}
+
+.pyc-clients-list__toast[data-tone="error"],
+.pyc-pod-detail__toast[data-tone="error"],
+.pyc-client-detail__toast[data-tone="error"] {
+    background-color: var(--pyc-fleet-error-surface);
+    color: var(--pyc-fleet-error-fg);
+}
+
+.pyc-clients-list__toast-dismiss,
+.pyc-pod-detail__toast-dismiss,
+.pyc-client-detail__toast-dismiss {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: var(--pyc-font-size-body, 1rem);
+}
+
+/* ---- client-detail pod link ---- */
+
+.pyc-client-detail__pod-link {
+    color: var(--pyc-fleet-accent-on-surface);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.pyc-client-detail__pod-link:hover {
+    text-decoration: underline;
+}

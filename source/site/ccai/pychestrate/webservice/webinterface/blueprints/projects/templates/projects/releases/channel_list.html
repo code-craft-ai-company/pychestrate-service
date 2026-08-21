@@ -25,7 +25,6 @@
             <th>Current Release</th>
             <th>Enabled</th>
             <th>Last Published</th>
-            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -47,13 +46,12 @@
                 {% endif %}
             </td>
             <td>{{ channel.last_published_at.strftime('%Y-%m-%d %H:%M') if channel.last_published_at else 'Never' }}</td>
-            <td>
-                <a href="#" class="btn btn-sm btn-secondary">View History</a>
-            </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" style="text-align: center; color: #6c757d;">No release channels found</td>
+            <td colspan="4" style="text-align: center; color: #6c757d; padding: 40px;">
+                No release channels yet. Channels are configured via the API.
+            </td>
         </tr>
         {% endfor %}
     </tbody>

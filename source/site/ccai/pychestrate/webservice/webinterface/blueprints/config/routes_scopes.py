@@ -11,6 +11,8 @@ The secret-scope routes served under the config blueprint:
 * ``GET  /config/scopes``                       -- list.
 * ``GET  /config/scopes/create``                -- create form.
 * ``POST /config/scopes/create``                -- create scope.
+* ``GET  /config/scopes/{scope_id}/edit``       -- edit form.
+* ``POST /config/scopes/{scope_id}/edit``       -- update description.
 * ``POST /config/scopes/{scope_id}/delete``     -- delete.
 
 The :class:`SecretManager` constructor takes a SQLAlchemy
@@ -27,9 +29,10 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
 import os
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
@@ -58,9 +61,13 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 
 
+_module_logger = logging.getLogger(__name__)
+
+
 _ROUTE_TABLE = (
     ("config.scope_list", "/scopes", ("GET",)),
     ("config.scope_create", "/scopes/create", ("GET", "POST")),
+    ("config.scope_edit", "/scopes/{scope_id}/edit", ("GET", "POST")),
     ("config.scope_delete", "/scopes/{scope_id}/delete", ("POST",)),
 )
 
@@ -160,6 +167,37 @@ def _build_scope_create_request(
     return rtnval
 
 
+def _update_scope_description(
+        *, db_session: Any, scope_id: int, description: str
+    ) -> None:
+    """
+        Persist a new description for an existing scope.
+        :class:`SecretManager` exposes no scope-update API, so
+        this seam updates the ORM row directly (name stays
+        immutable). Test-patchable.
+
+        :param db_session: Open SQLAlchemy session.
+        :param scope_id: Target scope id.
+        :param description: New description text.
+
+        :returns: None.
+        :raises: ValueError when the scope does not exist.
+    """
+    from ccai.pychestrate.core.orm import SecretScope  # noqa: E402
+
+    scope_row = (
+        db_session.query(SecretScope)
+        .filter(SecretScope.id == scope_id)
+        .first()
+    )
+    if scope_row is None:
+        raise ValueError("Scope not found: {}".format(scope_id))
+
+    scope_row.description = description
+    db_session.commit()
+    return
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
@@ -202,6 +240,55 @@ def _coerce_scope_id(*, raw: Any) -> Optional[int]:
     return rtnval
 
 
+def _resolve_surfaceable_error_types() -> Tuple[type, ...]:
+    """
+        Return the exception types whose messages are curated,
+        operator-facing text safe to surface in a flash:
+        :class:`SecretManagerError` (and subclasses) plus
+        :class:`ValueError`. Lazy-imports so this module stays
+        importable without the secret-manager dependency set.
+
+        :returns: Tuple of exception types.
+    """
+    try:
+        from ccai.pychestrate.core.managers.secret_manager import (  # noqa: E402
+            SecretManagerError,
+        )
+        rtnval: Tuple[type, ...] = (SecretManagerError, ValueError)
+    except ImportError:
+        rtnval = (ValueError,)
+    return rtnval
+
+
+def _describe_scope_failure(*, exc: Exception, action: str) -> str:
+    """
+        Build the operator-facing flash message for a failed
+        scope operation. Curated manager / validation errors are
+        surfaced verbatim; anything else is logged server-side
+        (with traceback) and replaced by a generic message so raw
+        internal exception text never reaches the browser.
+
+        :param exc: The exception raised by the operation.
+        :param action: Present-participle action label (e.g.
+                       ``"creating"``) used in the message.
+
+        :returns: Flash message string.
+    """
+    surfaceable_types = _resolve_surfaceable_error_types()
+    if isinstance(exc, surfaceable_types) is True:
+        rtnval = "Error {} scope: {}".format(action, str(exc))
+        return rtnval
+
+    _module_logger.exception(
+        "Unexpected error while %s scope.", action
+    )
+    rtnval = (
+        "Error {} scope: an unexpected internal error occurred."
+        " The details have been logged."
+    ).format(action)
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -221,11 +308,14 @@ def handle_scope_list(request: Request) -> Response:
         offset = (params["page"] - 1) * params["per_page"]
 
         secret_manager = _build_secret_manager(db_session=db_session)
-        scopes = secret_manager.list_scopes(
+        list_response = secret_manager.list_scopes(
             auth.user_id,
             offset=offset,
             limit=params["per_page"],
-        ).scopes
+        )
+        scopes = list_response.scopes
+        total = list_response.total
+        total_pages = (total + params["per_page"] - 1) // params["per_page"]
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -237,6 +327,8 @@ def handle_scope_list(request: Request) -> Response:
         context["scopes"] = scopes
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
+        context["total"] = total
+        context["total_pages"] = total_pages
         response = _render(
             template_name="config/secrets/scope_list.html",
             context=context,
@@ -318,7 +410,9 @@ def handle_scope_create(request: Request) -> Response:
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating scope: {}".format(str(exc)),
+                message=_describe_scope_failure(
+                    exc=exc, action="creating"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -335,6 +429,117 @@ def handle_scope_create(request: Request) -> Response:
             template_name="config/secrets/scope_create.html",
             context=context,
             status_code=400,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_scope_edit(request: Request) -> Response:
+    """
+        ``GET /admin/scopes/{scope_id}/edit`` /
+        ``POST /admin/scopes/{scope_id}/edit`` -- edit a scope's
+        description. The scope name is immutable (secrets
+        reference scopes by name), so the form only offers the
+        description.
+
+        :param request: Incoming webworks request.
+
+        :returns: HTMLResponse with the edit form on GET / failed
+                  POST, RedirectResponse to the scope list on a
+                  successful POST or missing scope.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        scope_id = _coerce_scope_id(
+            raw=request.path_params.get("scope_id", None)
+        )
+        if scope_id is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.scope_list"),
+                message="Scope not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        secret_manager = _build_secret_manager(db_session=db_session)
+        method = request.method.upper()
+
+        if method == "POST":
+            single_form = _parse_form_or_empty(request=request)
+
+            csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+                form=single_form,
+                session=auth.session,
+                fallback_url=_url_for_module.url_for(
+                    "config.scope_edit", scope_id=scope_id
+                ),
+            )
+            if csrf_redirect is not None:
+                _attach_session_to_response(
+                    response=csrf_redirect, session=auth.session
+                )
+                return csrf_redirect
+
+            description = str(
+                single_form.get("description", "")
+            ).strip()
+
+            try:
+                _update_scope_description(
+                    db_session=db_session,
+                    scope_id=scope_id,
+                    description=description,
+                )
+                response = _redirect_with_flash(
+                    session=auth.session,
+                    url=_url_for_module.url_for("config.scope_list"),
+                    message="Scope updated successfully.",
+                    category=flash.CATEGORY_SUCCESS,
+                )
+                return response
+            except Exception as exc:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_scope_failure(
+                        exc=exc, action="updating"
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
+
+        # GET, or POST that fell through.
+        scope = secret_manager.get_scope(scope_id)
+        if scope is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.scope_list"),
+                message="Scope not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="config.scope_edit",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["scope"] = scope
+        response = _render(
+            template_name="config/secrets/scope_edit.html",
+            context=context,
         )
         _attach_session_to_response(
             response=response, session=auth.session
@@ -397,7 +602,9 @@ def handle_scope_delete(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.scope_list"),
-                message="Error deleting scope: {}".format(str(exc)),
+                message=_describe_scope_failure(
+                    exc=exc, action="deleting"
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -416,6 +623,7 @@ def handle_scope_delete(request: Request) -> Response:
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.scope_list": handle_scope_list,
     "config.scope_create": handle_scope_create,
+    "config.scope_edit": handle_scope_edit,
     "config.scope_delete": handle_scope_delete,
 }
 
@@ -440,5 +648,6 @@ __all__ = [
     "register_scopes_routes",
     "handle_scope_list",
     "handle_scope_create",
+    "handle_scope_edit",
     "handle_scope_delete",
 ]

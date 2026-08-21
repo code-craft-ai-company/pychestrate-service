@@ -78,9 +78,9 @@
     {% endif %}
 </div>
 
-{% if recent_runs %}
 <div class="card" style="margin-top: 20px;">
     <div class="card-header">Recent Runs</div>
+    {% if recent_runs %}
     <table class="data-table" style="margin-top: 0;">
         <thead>
             <tr>
@@ -107,6 +107,8 @@
             {% endfor %}
         </tbody>
     </table>
+    {% else %}
+    <p style="color: #6c757d; text-align: center; padding: 20px;">No runs recorded.</p>
+    {% endif %}
 </div>
-{% endif %}
 {% endblock %}

@@ -4,15 +4,15 @@
 
 {% block content %}
 <div style="text-align: center; padding: 60px 20px;">
-    <span class="material-icons" style="font-size: 96px; color: #ffc107;">lock</span>
+    <span class="material-icons" style="font-size: 96px; color: #ffc107;" aria-hidden="true">lock</span>
     <h2 style="margin: 20px 0 10px; color: #1a1a2e;">Access Denied</h2>
     <p style="color: #6c757d; margin-bottom: 30px;">You don't have permission to access this page.</p>
     <div style="display: flex; gap: 10px; justify-content: center;">
         <a href="{{ url_for('resources.dashboard') }}" class="btn btn-primary">
-            <span class="material-icons">home</span> Go to Dashboard
+            <span class="material-icons" aria-hidden="true">home</span> Go to Dashboard
         </a>
         <a href="javascript:history.back()" class="btn btn-secondary">
-            <span class="material-icons">arrow_back</span> Go Back
+            <span class="material-icons" aria-hidden="true">arrow_back</span> Go Back
         </a>
     </div>
 </div>

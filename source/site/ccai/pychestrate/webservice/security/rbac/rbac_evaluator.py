@@ -19,6 +19,13 @@ evaluator collects the set of groups the user belongs to via
 ``identity_group_memberships`` and evaluates GROUP-kind bindings with
 matching ``principal_id``.
 
+Role grants come from two sources, merged per binding: the in-memory
+catalog (``RoleExtension`` packs keyed by role name — built-in and
+extension roles) and ``rbac_role_permissions`` rows keyed by role id
+(custom roles created through the admin Roles UI). A role unknown to
+the catalog therefore still grants the permissions stored on its DB
+rows.
+
 Deny beats allow across every binding source (direct user, group,
 organization inheritance, project). Every positive and negative decision
 goes through the process-local LRU cache in :mod:`cache`; callers that
@@ -35,7 +42,7 @@ import os
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -55,6 +62,7 @@ from ccai.pychestrate.webservice.security.rbac.models import (
     PrincipalKind,
     RbacRole,
     RbacRoleBinding,
+    RbacRolePermission,
 )
 
 
@@ -257,6 +265,46 @@ def _collect_applicable_bindings(
     return rtnval
 
 
+def _load_db_grants_for_bindings(
+        *,
+        db_session: DbSession,
+        bindings: List[Tuple[RbacRoleBinding, str]]
+    ) -> Dict[str, Tuple[RbacRolePermission, ...]]:
+    """
+        Load the ``rbac_role_permissions`` rows for every role that
+        appears in ``bindings``, keyed by role-id string. These rows
+        carry the grants of custom roles created through the admin
+        Roles UI; built-in / extension roles keep their grants in the
+        in-memory catalog and typically have no rows here.
+
+        :param db_session: Active SQLAlchemy session.
+        :param bindings: The applicable (binding, role_name) tuples.
+
+        :returns: Mapping of role-id string to the role's grant rows.
+    """
+    rtnval: Dict[str, Tuple[RbacRolePermission, ...]] = {}
+
+    role_ids: List = []
+    for binding, _role_name in bindings:
+        if binding.role_id not in role_ids:
+            role_ids.append(binding.role_id)
+
+    if len(role_ids) == 0:
+        return rtnval
+
+    rows = (
+        db_session.query(RbacRolePermission)
+        .filter(RbacRolePermission.role_id.in_(role_ids))
+        .all()
+    )
+    for row in rows:
+        key = str(row.role_id)
+        existing = rtnval.get(key, ())
+        rtnval[key] = existing + (row,)
+
+    return rtnval
+
+
 def _role_grant_key(*, parsed: _ParsedKey) -> str:
     """
         Return the canonical permission-key string a role preset is
@@ -282,26 +330,38 @@ def _decide_from_bindings(
         bindings: List[Tuple[RbacRoleBinding, str]],
         catalog: CatalogSnapshot,
         parsed: _ParsedKey,
-        permission_key: str
+        permission_key: str,
+        db_grants: Optional[Dict[str, Tuple[RbacRolePermission, ...]]] = None
     ) -> AuthzDecision:
     """
         Collapse a list of binding rows into an :class:`AuthzDecision`.
-        Deny beats allow.
+        Deny beats allow. Each binding contributes the union of its
+        role's catalog grants (keyed by role name) and its DB-stored
+        grants (``rbac_role_permissions`` rows keyed by role id, the
+        custom-role case).
 
         :param bindings: List of (binding, role_name) tuples.
         :param catalog: Loaded catalog snapshot.
         :param parsed: Parsed permission key.
         :param permission_key: The original key string for error messages.
+        :param db_grants: Optional mapping of role-id string to grant
+                          rows loaded via
+                          :func:`_load_db_grants_for_bindings`.
 
         :returns: :class:`AuthzDecision`.
     """
     role_preset_key = _role_grant_key(parsed=parsed)
 
+    if db_grants is None:
+        db_grants = {}
+
     allow_hit = False
     deny_hit = False
 
-    for _binding, role_name in bindings:
-        grants = catalog.roles.get(role_name, ())
+    for binding, role_name in bindings:
+        catalog_grants = catalog.roles.get(role_name, ())
+        row_grants = db_grants.get(str(binding.role_id), ())
+        grants = tuple(catalog_grants) + tuple(row_grants)
         for grant in grants:
             grant_key = grant.permission_key
             if grant_key != permission_key and grant_key != role_preset_key:
@@ -387,11 +447,15 @@ def check_permission(
     bindings = _collect_applicable_bindings(
         db_session=db_session, principal=principal, parsed=parsed,
     )
+    db_grants = _load_db_grants_for_bindings(
+        db_session=db_session, bindings=bindings,
+    )
     decision = _decide_from_bindings(
         bindings=bindings,
         catalog=catalog,
         parsed=parsed,
         permission_key=permission_key,
+        db_grants=db_grants,
     )
     cache.cache_put(
         principal_id=principal.user_id,

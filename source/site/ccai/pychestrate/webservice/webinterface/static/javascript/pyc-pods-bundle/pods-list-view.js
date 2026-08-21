@@ -23,7 +23,7 @@ function short_id(pod_id) {
 }
 function format_timestamp(value) {
   if (value === null || value === void 0 || value.length === 0) {
-    const rtnval2 = "\u2014";
+    const rtnval2 = "—";
     return rtnval2;
   }
   const parsed = new Date(value);
@@ -32,6 +32,14 @@ function format_timestamp(value) {
     return rtnval2;
   }
   const rtnval = parsed.toLocaleString();
+  return rtnval;
+}
+function format_clock_time(date) {
+  const rtnval = date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  });
   return rtnval;
 }
 function member_count(spec) {
@@ -56,12 +64,144 @@ function has_previous_page(state) {
   const rtnval = state.page > 1;
   return rtnval;
 }
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
+function pods_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired — sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to pods.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found — it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the service — check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load pods (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+/**
+ * Normalise a projects-list response body into option records.
+ * Accepts both a bare array and an ``{items}`` page envelope so
+ * callers tolerate either shape.
+ *
+ * @param body Parsed JSON response body.
+ *
+ * @returns A list of ``{project_id, display_name}`` records.
+ */
+function extract_projects(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const project_id = record.project_id;
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      continue;
+    }
+    const display = record.display_name;
+    const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+    rtnval.push({ project_id, display_name });
+  }
+  return rtnval;
+}
+/**
+ * Fetch the projects collection. A 401 announces the shared
+ * ``pyc-session-401`` event so the shell can surface the expired
+ * session.
+ *
+ * @returns ``{ok, status, projects}`` -- ``projects`` is empty on
+ *          any failure; ``status`` is 0 on a network error.
+ */
+async function load_projects() {
+  let status = 0;
+  let ok = false;
+  let projects = [];
+  try {
+    const response = await fetch(PROJECTS_API_PATH, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    status = response.status;
+    ok = response.ok;
+    if (ok === true) {
+      const body = await response.json();
+      projects = extract_projects(body);
+    }
+  } catch (reason) {
+    console.warn(
+      "pychestrate.ui.fleet.projects_fetch_failed",
+      { reason: String(reason) }
+    );
+  }
+  if (status === 401) {
+    announce_session_expired();
+  }
+  const rtnval = { ok, status, projects };
+  return rtnval;
+}
+/**
+ * Build a ``project_id -> display_name`` lookup from project
+ * option records.
+ *
+ * @param projects Records from :func:`extract_projects`.
+ *
+ * @returns A plain-object lookup map.
+ */
+function project_display_map(projects) {
+  const rtnval = {};
+  if (Array.isArray(projects) === false) {
+    return rtnval;
+  }
+  for (const project of projects) {
+    if (project === null || typeof project !== "object") {
+      continue;
+    }
+    if (typeof project.project_id !== "string" || project.project_id.length === 0) {
+      continue;
+    }
+    rtnval[project.project_id] = project.display_name;
+  }
+  return rtnval;
+}
 class PycPodsList extends HTMLElement {
   _pager;
   _state;
   _pods;
+  _projects;
+  _projectsAvailable;
+  _projectsNoticeKind;
   _root;
   _table_region;
+  _projects_notice_region;
+  _stamp_region;
   constructor() {
     super();
     this._state = {
@@ -71,11 +211,17 @@ class PycPodsList extends HTMLElement {
       total: 0,
       loading: false,
       errored: false,
+      errorStatus: 0,
       needsProject: true
     };
     this._pods = [];
+    this._projects = [];
+    this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
     this._root = null;
     this._table_region = null;
+    this._projects_notice_region = null;
+    this._stamp_region = null;
     this._pager = null;
   }
   /**
@@ -90,15 +236,15 @@ class PycPodsList extends HTMLElement {
       total: this._state.total,
       loading: this._state.loading,
       errored: this._state.errored,
+      errorStatus: this._state.errorStatus,
       needsProject: this._state.needsProject
     };
     return rtnval;
   }
   /**
-   * Lifecycle hook -- render the static chrome. The pods list
-   * cannot fetch without a project id, so a project filter
-   * supplied via ``?project_id=`` seeds an immediate fetch;
-   * otherwise the view shows a "pick a project" prompt.
+   * Lifecycle hook -- render the static chrome, then load the
+   * projects collection to drive the project picker. A project
+   * supplied via ``?project_id=`` seeds the selection.
    */
   connectedCallback() {
     const seeded = this._project_from_search();
@@ -106,11 +252,7 @@ class PycPodsList extends HTMLElement {
       this._state.projectFilter = seeded;
     }
     this._render_chrome();
-    if (this._state.projectFilter.length > 0) {
-      void this._refresh();
-    } else {
-      this._render_table_region();
-    }
+    void this._load_projects();
     return;
   }
   /**
@@ -142,18 +284,34 @@ class PycPodsList extends HTMLElement {
     root.appendChild(heading);
     const subtitle = document.createElement("p");
     subtitle.classList.add("pyc-pods-list__subtitle");
-    subtitle.textContent = "Pod definitions are project-scoped. Enter a project id to list its pods.";
+    subtitle.textContent = "Pod definitions are project-scoped. Pick a project to list its pods.";
     root.appendChild(subtitle);
+    const legend = document.createElement("p");
+    legend.classList.add("pyc-pods-list__legend");
+    legend.setAttribute("data-role", "fleet-legend");
+    legend.textContent = "A pod is a project-scoped definition of a group of test-target members (the machines and services the spec declares). A client is the enrolled runtime that registers to back a pod.";
+    root.appendChild(legend);
     const filters = document.createElement("div");
     filters.classList.add("pyc-pods-list__filters");
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-pods-list__filter");
     project_label.textContent = "Project";
+    const project_select = document.createElement("mj-select");
+    project_select.classList.add("pyc-pods-list__select");
+    project_select.setAttribute("data-role", "project-select");
+    project_select.hidden = true;
+    project_select.addEventListener("change", () => {
+      this._state.projectFilter = project_select.value;
+      this._state.page = 1;
+      void this._refresh();
+    });
+    project_label.appendChild(project_select);
     const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-pods-list__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
     project_input.setAttribute("data-role", "project-filter");
+    project_input.hidden = true;
     if (this._state.projectFilter.length > 0) {
       project_input.value = this._state.projectFilter;
     }
@@ -182,36 +340,165 @@ class PycPodsList extends HTMLElement {
       }
     });
     filters.appendChild(refresh_button);
+    const stamp = document.createElement("span");
+    stamp.classList.add("pyc-pods-list__stamp");
+    stamp.setAttribute("data-role", "last-updated");
+    filters.appendChild(stamp);
+    this._stamp_region = stamp;
     root.appendChild(filters);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-pods-list__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-pods-list__table-region");
     table_region.setAttribute("data-role", "table-region");
     root.appendChild(table_region);
     this._table_region = table_region;
     const pager = document.createElement("mj-pagination");
-
     pager.classList.add("pyc-pods-list__pager");
-
     pager.setAttribute("data-role", "pager");
-
     pager.setAttribute("page", String(this._state.page));
-
     pager.setAttribute("page-size", String(this._state.perPage));
-
     pager.setAttribute("total-items", String(this._state.total));
-
     pager.addEventListener("mj-pagination-change", (event) => {
-
+      // The pods collection is fetched whole and paginated
+      // client-side, so a page change only re-slices -- it must
+      // not trigger a refetch (which used to reset to page 1).
       this._state.page = event.detail.page;
-
-      void this._refresh();
-
+      this._render_table_region();
     });
-
     this._pager = pager;
     root.appendChild(pager);
     this._root = root;
     this.replaceChildren(root);
+    return;
+  }
+  /**
+   * Fetch the projects collection and populate the picker.
+   * Exposed so unit tests can await the bootstrap fetch cycle.
+   */
+  async loadProjects() {
+    await this._load_projects();
+    return;
+  }
+  async _load_projects() {
+    const outcome = await load_projects();
+    if (outcome.ok === true && outcome.projects.length > 0) {
+      this._projects = outcome.projects;
+      this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
+      if (this._state.projectFilter.length === 0) {
+        this._state.projectFilter = outcome.projects[0].project_id;
+      }
+    } else {
+      this._projects = [];
+      this._projectsAvailable = false;
+      if (outcome.ok === true) {
+        this._projectsNoticeKind = "empty";
+      } else if (outcome.status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+    }
+    this._render_project_control();
+    this._render_projects_notice();
+    if (this._state.projectFilter.length > 0) {
+      await this._refresh();
+    } else {
+      this._render_table_region();
+    }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * picker degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-pods-list__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-pods-list__projects-notice--error");
+      region.textContent = "You don't have permission to list projects — enter a project id directly.";
+      return;
+    }
+    region.classList.add("pyc-pods-list__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-pods-list__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
+    return;
+  }
+  /**
+   * Render the project picker or, when no projects collection is
+   * available, swap to the manual text input. A seeded project id
+   * that is not in the collection is kept as an extra option so a
+   * deep link never silently changes projects.
+   */
+  _render_project_control() {
+    if (this._root === null) {
+      return;
+    }
+    const select = this._root.querySelector('[data-role="project-select"]');
+    const input = this._root.querySelector('[data-role="project-filter"]');
+    if (select instanceof HTMLElement === false || input instanceof HTMLElement === false) {
+      return;
+    }
+    const select_el = select;
+    const input_el = input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      let seeded_known = false;
+      for (const project of this._projects) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
+        option.textContent = project.display_name;
+        if (project.project_id === this._state.projectFilter) {
+          seeded_known = true;
+        }
+        select_el.appendChild(option);
+      }
+      if (seeded_known === false && this._state.projectFilter.length > 0) {
+        const extra = document.createElement("mj-option");
+        extra.setAttribute("value", this._state.projectFilter);
+        extra.textContent = this._state.projectFilter;
+        select_el.appendChild(extra);
+      }
+      select_el.value = this._state.projectFilter;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+      if (this._state.projectFilter.length > 0) {
+        input_el.value = this._state.projectFilter;
+      }
+    }
     return;
   }
   /**
@@ -231,44 +518,59 @@ class PycPodsList extends HTMLElement {
     this._state.needsProject = false;
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table_region();
     const url = build_pod_definitions_url(this._state.projectFilter);
     let pods = null;
+    let status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
-      if (response.ok === false) {
-        throw new Error(
-          "pods fetch failed: HTTP " + String(response.status)
-        );
+      status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        pods = body;
       }
-      const body = await response.json();
-      pods = body;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.pods.list_fetch_failed",
         { reason: String(reason) }
       );
-      this._state.loading = false;
-      this._state.errored = true;
-      this._render_table_region();
-      return;
+    }
+    if (status === 401) {
+      announce_session_expired();
     }
     if (pods === null || Array.isArray(pods) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = status;
       this._render_table_region();
       return;
     }
     this._pods = pods;
     this._state.total = pods.length;
-    this._state.page = 1;
+    const max_page = Math.max(
+      1,
+      Math.ceil(pods.length / this._state.perPage)
+    );
+    if (this._state.page > max_page) {
+      this._state.page = max_page;
+    }
     this._state.loading = false;
     this._state.errored = false;
+    this._state.errorStatus = 0;
+    this._render_stamp();
     this._render_table_region();
+    return;
+  }
+  _render_stamp() {
+    if (this._stamp_region === null) {
+      return;
+    }
+    this._stamp_region.textContent = "as of " + format_clock_time(new Date());
     return;
   }
   _page_slice() {
@@ -286,7 +588,7 @@ class PycPodsList extends HTMLElement {
       const prompt = document.createElement("p");
       prompt.classList.add("pyc-pods-list__status");
       prompt.setAttribute("data-role", "needs-project");
-      prompt.textContent = "Enter a project id above to list its pods.";
+      prompt.textContent = "Pick a project above to list its pods.";
       region.replaceChildren(prompt);
       this._render_pager();
       return;
@@ -295,7 +597,7 @@ class PycPodsList extends HTMLElement {
       const loading = document.createElement("p");
       loading.classList.add("pyc-pods-list__status");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading pods\u2026";
+      loading.textContent = "Loading pods…";
       region.replaceChildren(loading);
       this._render_pager();
       return;
@@ -307,7 +609,20 @@ class PycPodsList extends HTMLElement {
         "pyc-pods-list__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load pods. Try refreshing.";
+      const message = document.createElement("span");
+      message.textContent = pods_load_message_for_status(
+        this._state.errorStatus
+      );
+      error.appendChild(message);
+      const retry = document.createElement("mj-button");
+      retry.classList.add("pyc-pods-list__button");
+      retry.setAttribute("type", "button");
+      retry.setAttribute("data-role", "error-retry");
+      retry.textContent = "Retry";
+      retry.addEventListener("click", () => {
+        void this._refresh();
+      });
+      error.appendChild(retry);
       region.replaceChildren(error);
       this._render_pager();
       return;
@@ -352,7 +667,7 @@ class PycPodsList extends HTMLElement {
         key: "pod_name",
         label: "Name",
         width: "16rem",
-        render: (pod) => pod.pod_name !== null && pod.pod_name.length > 0 ? pod.pod_name : "\u2014"
+        render: (pod) => pod.pod_name !== null && pod.pod_name.length > 0 ? pod.pod_name : "—"
       },
       {
         key: "current_version",
@@ -378,30 +693,28 @@ class PycPodsList extends HTMLElement {
     return table;
   }
   _render_pager() {
-
     if (this._pager === null || this._pager === undefined) {
-
       return;
-
     }
-
     this._pager.setAttribute("page", String(this._state.page));
-
     this._pager.setAttribute("page-size", String(this._state.perPage));
-
     this._pager.setAttribute("total-items", String(this._state.total));
-
     return;
-
   }
 }
 export {
   PycPodsList,
+  announce_session_expired,
   build_pod_definition_url,
   build_pod_definitions_url,
+  extract_projects,
+  format_clock_time,
   format_timestamp,
   has_next_page,
   has_previous_page,
+  load_projects,
   member_count,
+  pods_load_message_for_status,
+  project_display_map,
   short_id
 };

@@ -214,6 +214,24 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:resource_pools.write",
             effect=PermissionEffect.ALLOW,
         ),
+        # Fleet pods + clients REST surface grants for the admin
+        # role (pods controller + clients-admin controller).
+        PermissionGrant(
+            permission_key="system:pods.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:pods.write",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:clients.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:clients.write",
+            effect=PermissionEffect.ALLOW,
+        ),
         # 8-webhooks-in / 8-webhooks-out PR p21a: operator-facing
         # webhooks REST surface grants for the admin role.
         PermissionGrant(

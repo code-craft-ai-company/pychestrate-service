@@ -65,6 +65,7 @@ __version__ = "1.0.0"
 
 
 import json
+import logging
 
 from typing import Any, Callable, Dict, List, Optional
 
@@ -95,6 +96,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 
 
 RESOURCES_PATH = "/resources"
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources")
 
 
 _ROUTE_TABLE = (
@@ -366,34 +370,179 @@ def _parse_metadata_json_or_default(
     return parsed
 
 
-def _summarize_health_counts(*, resources: List[Any]) -> Dict[str, int]:
+def _calculate_total_pages(*, total: int, per_page: int) -> int:
     """
-        Count resources by ``health_status``. Mirrors the legacy
-        dashboard's per-status summary cards.
+        Compute the real page count from a manager's total row
+        count. Always at least 1 so templates can render a page
+        indicator unconditionally.
 
-        :param resources: List of ResourceResponse objects with a
-                          ``health_status`` (enum or string)
-                          attribute.
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
 
-        :returns: Dict with keys 'online', 'offline', 'degraded',
-                  'maintenance' -- always present so the template
-                  can index unconditionally.
+        :returns: Number of pages (>= 1).
     """
-    rtnval = {
-        "online": 0,
-        "offline": 0,
-        "degraded": 0,
-        "maintenance": 0,
-    }
-    for resource in resources:
-        status = getattr(resource, "health_status", None)
-        if status is None:
-            continue
-        # Enum values have ``.value``; plain strings don't.
-        status_value = getattr(status, "value", status)
-        if isinstance(status_value, str) and status_value in rtnval:
-            rtnval[status_value] = rtnval[status_value] + 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
     return rtnval
+
+
+def _build_page_window(
+        *, page: int, total_pages: int, width: int = 2
+    ) -> List[int]:
+    """
+        Build the run of page numbers to render around the
+        current page (first/last/prev/next are rendered
+        separately by the pagination template block).
+
+        :param page: Current page (1-based).
+        :param total_pages: Real page count.
+        :param width: Pages shown on each side of the current page.
+
+        :returns: Contiguous list of page numbers.
+    """
+    start = page - width
+    if start < 1:
+        start = 1
+    end = page + width
+    if end > total_pages:
+        end = total_pages
+    rtnval = list(range(start, end + 1))
+    return rtnval
+
+
+def _describe_resource_manager_error(*, exc: Exception) -> Optional[str]:
+    """
+        Map a typed ResourceManager error to its deliberate,
+        user-facing message. Returns None when ``exc`` is not one
+        of the typed errors -- callers then log the exception and
+        flash a generic sentence instead of the raw exception
+        text. Lazy-imports so this module stays importable when
+        the manager package is absent (test runtimes patch the
+        manager builders).
+
+        :param exc: The exception raised by a ResourceManager call.
+
+        :returns: Specific user-facing message, or None.
+    """
+    try:
+        from ccai.pychestrate.core.managers.resource_manager import (  # noqa: E402
+            DuplicateResourceError,
+            PoolHasResourcesError,
+            PoolNotFoundError,
+            ResourceHasAllocationsError,
+            ResourceNotFoundError,
+            ResourceValidationError,
+            TagNotFoundError,
+        )
+    except ImportError:
+        return None
+
+    typed_errors = (
+        DuplicateResourceError,
+        PoolHasResourcesError,
+        PoolNotFoundError,
+        ResourceHasAllocationsError,
+        ResourceNotFoundError,
+        ResourceValidationError,
+        TagNotFoundError,
+    )
+    if isinstance(exc, typed_errors):
+        rtnval = exc.message
+        return rtnval
+    return None
+
+
+def _describe_allocation_error(*, exc: Exception) -> Optional[str]:
+    """
+        Map a typed AllocationManager error to a specific,
+        user-facing message. ``ResourceUnavailableError`` includes
+        who currently holds the resource and until when (from the
+        ``current_allocation`` payload); capacity / conflict /
+        lock errors get actionable guidance. Returns None when
+        ``exc`` is not a typed allocation error.
+
+        :param exc: The exception raised by an AllocationManager
+                    call.
+
+        :returns: Specific user-facing message, or None.
+    """
+    try:
+        from ccai.pychestrate.core.managers.allocation_manager import (  # noqa: E402
+            AllocationError,
+            CapacityExceededError,
+            ConcurrentModificationError,
+            LockTimeoutError,
+            ReservationConflictError,
+            ResourceUnavailableError,
+        )
+    except ImportError:
+        return None
+
+    if isinstance(exc, ResourceUnavailableError):
+        msg_parts = ["{}.".format(exc.message)]
+        current = exc.current_allocation
+        if current is not None:
+            if current.username is not None:
+                holder = current.username
+            else:
+                holder = "user {}".format(current.user_id)
+            msg_parts.append(
+                "Held by {} (allocation #{}).".format(holder, current.id)
+            )
+            if current.expected_checkin is not None:
+                msg_parts.append(
+                    "Expected checkin: {}.".format(
+                        current.expected_checkin.strftime("%Y-%m-%d %H:%M")
+                    )
+                )
+            else:
+                msg_parts.append("No expected checkin time is set.")
+        rtnval = " ".join(msg_parts)
+        return rtnval
+
+    if isinstance(exc, CapacityExceededError):
+        msg_parts = ["{}.".format(exc.message)]
+        if exc.capacity is not None and exc.current_allocations is not None:
+            msg_parts.append(
+                "{} of {} allocation slots are in use.".format(
+                    exc.current_allocations, exc.capacity
+                )
+            )
+        msg_parts.append("Check in an allocation to free capacity.")
+        rtnval = " ".join(msg_parts)
+        return rtnval
+
+    if isinstance(exc, ReservationConflictError):
+        msg_parts = ["{}.".format(exc.message)]
+        for conflict in exc.conflicting_reservations[:3]:
+            msg_parts.append(
+                "Reservation #{} holds {} to {}.".format(
+                    conflict.id,
+                    conflict.start_time.strftime("%Y-%m-%d %H:%M"),
+                    conflict.end_time.strftime("%Y-%m-%d %H:%M"),
+                )
+            )
+        rtnval = " ".join(msg_parts)
+        return rtnval
+
+    if isinstance(exc, LockTimeoutError):
+        rtnval = "{}. Please try again.".format(exc.message)
+        return rtnval
+
+    if isinstance(exc, ConcurrentModificationError):
+        rtnval = (
+            "{}. Refresh the page and try again.".format(exc.message)
+        )
+        return rtnval
+
+    if isinstance(exc, AllocationError):
+        # Remaining typed errors (offline, not-found, not-owner,
+        # invalid-window, no-matching-resource) carry deliberate
+        # user-appropriate messages.
+        rtnval = exc.message
+        return rtnval
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -418,19 +567,23 @@ def handle_dashboard(request: Request) -> Response:
         )
         ip_pool_manager = _build_ip_pool_manager(db_session=db_session)
 
-        # Manager list_* methods return ``*ListResponse`` dataclasses
-        # whose ``.<entity>`` attribute is the actual list. Pull
-        # the list out at the call site so callers get something
-        # iterable (templates render ``{% for x in items %}``)
-        # and ``len(...)`` works.
-        resources = resource_manager.list_resources(limit=1000).resources
-        pools = resource_manager.list_pools(auth.user_id).pools
-        ip_pools = ip_pool_manager.list_pools(auth.user_id).pools
-        active_allocations = allocation_manager.list_allocations(
-            status="active"
-        ).allocations
+        # The summary cards use the managers' real totals -- the
+        # ``*ListResponse`` dataclasses carry a ``total`` computed
+        # by a count query, and the health cards come from a
+        # dedicated aggregate query -- so the dashboard never
+        # undercounts past a fetch limit.
+        resource_count = resource_manager.list_resources(limit=1).total
+        pool_count = resource_manager.list_pools(
+            auth.user_id, limit=1
+        ).total
+        ip_pool_count = ip_pool_manager.list_pools(
+            auth.user_id, limit=1
+        ).total
+        active_allocation_count = allocation_manager.list_allocations(
+            status="active", limit=1
+        ).total
 
-        health_counts = _summarize_health_counts(resources=resources)
+        health_counts = resource_manager.count_resources_by_health_status()
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -439,10 +592,10 @@ def handle_dashboard(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
-        context["resource_count"] = len(resources)
-        context["pool_count"] = len(pools)
-        context["ip_pool_count"] = len(ip_pools)
-        context["active_allocation_count"] = len(active_allocations)
+        context["resource_count"] = resource_count
+        context["pool_count"] = pool_count
+        context["ip_pool_count"] = ip_pool_count
+        context["active_allocation_count"] = active_allocation_count
         context["health_counts"] = health_counts
 
         response = _render(
@@ -514,22 +667,32 @@ def handle_resource_list(request: Request) -> Response:
                 filter_kwargs["health_status"] = resolved_status
         if len(tag_query) > 0:
             filter_kwargs["tags"] = tag_query
+        if len(search) > 0:
+            filter_kwargs["search"] = search
 
         resource_manager = _build_resource_manager(db_session=db_session)
-        resources = resource_manager.list_resources(
+        resources_response = resource_manager.list_resources(
             **filter_kwargs
-        ).resources
+        )
+        resources = resources_response.resources
         pools = resource_manager.list_pools(auth.user_id).pools
         all_tags = resource_manager.list_tags().tags
 
-        # Total-pages approximation: the legacy handler used
-        # ``page+1`` when the page is full to indicate "more
-        # pages may exist". Preserved here for template
-        # compatibility.
-        if len(resources) < params["per_page"]:
-            total_pages = 1 if params["page"] == 1 else params["page"]
-        else:
-            total_pages = params["page"] + 1
+        total_pages = _calculate_total_pages(
+            total=resources_response.total,
+            per_page=params["per_page"],
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
+
+        filters_active = (
+            pool_id is not None
+            or resource_type_str is not None
+            or health_status_str is not None
+            or len(tag_query) > 0
+            or len(search) > 0
+        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -539,11 +702,14 @@ def handle_resource_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["resources"] = resources
+        context["resource_total"] = resources_response.total
         context["pools"] = pools
         context["all_tags"] = all_tags
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["page_window"] = page_window
+        context["filters_active"] = filters_active
         context["selected_pool_id"] = pool_id
         context["selected_resource_type"] = resource_type_str
         context["selected_health_status"] = health_status_str
@@ -704,9 +870,16 @@ def handle_resource_create(request: Request) -> Response:
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
+            message = _describe_resource_manager_error(exc=exc)
+            if message is None:
+                _LOGGER.exception("Unexpected error creating resource")
+                message = (
+                    "An unexpected error occurred while creating the"
+                    " resource. The problem has been logged."
+                )
             flash.add_flash(
                 session=auth.session,
-                message="Error creating resource: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -765,6 +938,9 @@ def handle_resource_detail(request: Request) -> Response:
         active_allocations = allocation_manager.get_active_allocations(
             resource_id
         )
+        upcoming_reservations = allocation_manager.list_reservations(
+            resource_id=resource_id, status="pending", limit=20
+        ).reservations
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -775,6 +951,7 @@ def handle_resource_detail(request: Request) -> Response:
         )
         context["resource"] = resource
         context["active_allocations"] = active_allocations
+        context["upcoming_reservations"] = upcoming_reservations
         response = _render(
             template_name="resources/resources/detail.html",
             context=context,
@@ -835,10 +1012,12 @@ def handle_resource_edit(request: Request) -> Response:
             return response
 
         method = request.method.upper()
+        form_view: Optional[MultiFormView] = None
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
             multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -860,9 +1039,6 @@ def handle_resource_edit(request: Request) -> Response:
             capacity = _coerce_int(
                 raw=single_form.get("capacity", None)
             )
-            health_status_str = (
-                single_form.get("health_status", "") or ""
-            ).strip()
             tags = list(multi_form.get("tags", []))
             metadata_str = str(single_form.get("metadata", "")).strip()
 
@@ -870,13 +1046,9 @@ def handle_resource_edit(request: Request) -> Response:
                 metadata = _parse_metadata_json_or_default(
                     raw=metadata_str, default=None
                 )
-                health_status = _resolve_health_status_or_none(
-                    health_status_str=(
-                        health_status_str
-                        if len(health_status_str) > 0
-                        else None
-                    ),
-                )
+                # Health status is deliberately NOT editable here:
+                # status changes must go through the health page,
+                # which records a reason in the audit trail.
                 update_request = _build_resource_update_request(
                     description=(
                         description if len(description) > 0 else None
@@ -884,7 +1056,7 @@ def handle_resource_edit(request: Request) -> Response:
                     metadata=metadata,
                     tags=tags if len(tags) > 0 else None,
                     capacity=capacity,
-                    health_status=health_status,
+                    health_status=None,
                 )
                 resource_manager.update_resource(
                     resource_id, update_request, auth.user_id
@@ -906,15 +1078,25 @@ def handle_resource_edit(request: Request) -> Response:
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
+                message = _describe_resource_manager_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception(
+                        "Unexpected error updating resource %s",
+                        resource_id,
+                    )
+                    message = (
+                        "An unexpected error occurred while updating"
+                        " the resource. The problem has been logged."
+                    )
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating resource: {}".format(
-                        str(exc)
-                    ),
+                    message=message,
                     category=flash.CATEGORY_ERROR,
                 )
 
-        # GET, or POST that fell through. Re-render the edit form.
+        # GET, or POST that fell through. Re-render the edit form
+        # -- with the submitted values (``form_data``) when a POST
+        # failed, so typed input is never reverted to the DB state.
         pools = resource_manager.list_pools(auth.user_id).pools
         all_tags = resource_manager.list_tags().tags
 
@@ -928,6 +1110,7 @@ def handle_resource_edit(request: Request) -> Response:
         context["resource"] = resource
         context["pools"] = pools
         context["all_tags"] = all_tags
+        context["form_data"] = form_view
         response = _render(
             template_name="resources/resources/edit.html",
             context=context,
@@ -1001,10 +1184,19 @@ def handle_resource_delete(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_resource_manager_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error deleting resource %s", resource_id
+                )
+                message = (
+                    "An unexpected error occurred while deleting the"
+                    " resource. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
-                message="Error deleting resource: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1089,15 +1281,23 @@ def handle_resource_checkout(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_allocation_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error checking out resource %s",
+                    resource_id,
+                )
+                message = (
+                    "An unexpected error occurred while checking out"
+                    " the resource. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.resource_detail",
                     resource_id=resource_id,
                 ),
-                message="Error checking out resource: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

@@ -58,16 +58,16 @@
         <div class="card-header">Quick Actions</div>
         <div style="display: flex; flex-direction: column; gap: 10px;">
             <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
-                <span class="material-icons">add</span> Create Resource
+                <span class="material-icons" aria-hidden="true">add</span> Create Resource
             </a>
             <a href="{{ url_for('resources.pool_create') }}" class="btn btn-secondary">
-                <span class="material-icons">create_new_folder</span> Create Resource Pool
+                <span class="material-icons" aria-hidden="true">create_new_folder</span> Create Resource Pool
             </a>
             <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-secondary">
-                <span class="material-icons">add_circle</span> Create IP Pool
+                <span class="material-icons" aria-hidden="true">add_circle</span> Create IP Pool
             </a>
             <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-secondary">
-                <span class="material-icons">event</span> Create Reservation
+                <span class="material-icons" aria-hidden="true">event</span> Create Reservation
             </a>
         </div>
     </div>
@@ -76,16 +76,16 @@
         <div class="card-header">Navigation</div>
         <div style="display: flex; flex-direction: column; gap: 10px;">
             <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">
-                <span class="material-icons">devices</span> View All Resources
+                <span class="material-icons" aria-hidden="true">devices</span> View All Resources
             </a>
             <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
-                <span class="material-icons">assignment</span> View Active Allocations
+                <span class="material-icons" aria-hidden="true">assignment</span> View Active Allocations
             </a>
             <a href="{{ url_for('resources.health_dashboard') }}" class="btn btn-secondary">
-                <span class="material-icons">monitor_heart</span> Health Dashboard
+                <span class="material-icons" aria-hidden="true">monitor_heart</span> Health Dashboard
             </a>
             <a href="{{ url_for('config.dashboard') }}" class="btn btn-secondary">
-                <span class="material-icons">settings</span> System Configuration
+                <span class="material-icons" aria-hidden="true">settings</span> System Configuration
             </a>
         </div>
     </div>

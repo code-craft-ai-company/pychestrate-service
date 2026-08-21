@@ -27,7 +27,7 @@
         <div class="form-group">
             <label for="name">Repository Name</label>
             <input type="text" id="name" name="name" class="form-control"
-                   value="{{ repository.name }}">
+                   value="{{ form_data.name if form_data else repository.name }}">
         </div>
         
         <div class="form-group">
@@ -39,7 +39,7 @@
         <div class="form-group">
             <label for="credential_secret_ref">Credential Secret Reference</label>
             <input type="text" id="credential_secret_ref" name="credential_secret_ref" class="form-control"
-                   value="{{ repository.credential_secret_ref or '' }}"
+                   value="{{ form_data.credential_secret_ref if form_data else (repository.credential_secret_ref or '') }}"
                    placeholder="scope/secret-name">
             <div class="form-text">Reference to a secret containing credentials</div>
         </div>
@@ -47,12 +47,12 @@
         <div class="form-group">
             <label for="default_branch">Default Branch</label>
             <input type="text" id="default_branch" name="default_branch" class="form-control"
-                   value="{{ repository.default_branch }}">
+                   value="{{ form_data.default_branch if form_data else repository.default_branch }}">
         </div>
         
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" class="form-control" rows="2">{{ repository.description }}</textarea>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else repository.description }}</textarea>
         </div>
         
         <div style="display: flex; gap: 10px; margin-top: 30px;">

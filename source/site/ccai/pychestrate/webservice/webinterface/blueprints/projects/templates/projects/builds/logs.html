@@ -3,6 +3,9 @@
 {% block title %}Build #{{ build.id }} Logs - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block extra_css %}
+{% if build.status.value == 'running' %}
+<meta http-equiv="refresh" content="10">
+{% endif %}
 <style>
     .log-container {
         background: #1a1a2e;
@@ -63,7 +66,7 @@
     <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
         <span>Execution Logs{% if selected_step %} - {{ selected_step }}{% endif %}</span>
         {% if build.status.value == 'running' %}
-        <span class="badge badge-info">Live</span>
+        <span class="badge badge-info">Auto-refreshes every 10s while running</span>
         {% endif %}
     </div>
     <div class="log-container">{% if logs %}{{ logs }}{% else %}No logs available{% endif %}</div>

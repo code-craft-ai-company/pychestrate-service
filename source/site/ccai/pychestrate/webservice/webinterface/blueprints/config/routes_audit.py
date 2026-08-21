@@ -9,8 +9,10 @@
 The audit-log viewer route served under the config blueprint:
 
 * ``GET /config/audit-logs`` -- paginated audit log viewer with
-                                ``?event_type=`` / ``?user_id=``
-                                / ``?start_date=`` /
+                                ``?event_type=`` / ``?username=``
+                                (resolved to a user id
+                                server-side) / ``?user_id=`` /
+                                ``?start_date=`` /
                                 ``?end_date=`` filters. Date
                                 strings are ISO-8601 (the
                                 template's ``<input
@@ -136,6 +138,35 @@ def _resolve_all_audit_event_types() -> List[str]:
     return rtnval
 
 
+def _resolve_user_id_for_username(
+        *, db_session: Any, username: str
+    ) -> Optional[str]:
+    """
+        Resolve a login name to its user id via the modern
+        ``identity_users`` table so the audit page can filter by
+        the usernames it displays. Lazy-imports; test-patchable.
+
+        :param db_session: Open SQLAlchemy session.
+        :param username: Login name to resolve.
+
+        :returns: The user-id string, or ``None`` when no user has
+                  that login name.
+    """
+    from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
+        IdentityUser,
+    )
+
+    user_row = (
+        db_session.query(IdentityUser)
+        .filter(IdentityUser.login_name == username)
+        .first()
+    )
+    if user_row is None:
+        return None
+    rtnval = str(user_row.user_id)
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
@@ -224,12 +255,28 @@ def handle_audit_log_list(request: Request) -> Response:
         filter_user_id = (
             request.query_params.get("user_id", None) or None
         )
+        filter_username = (
+            request.query_params.get("username", None) or None
+        )
         start_date_str = (
             request.query_params.get("start_date", None) or None
         )
         end_date_str = (
             request.query_params.get("end_date", None) or None
         )
+
+        # The filter form takes a username (the table shows
+        # usernames); resolve it to the user id the audit table
+        # stores. A raw ?user_id= keeps working for saved links.
+        username_unmatched = False
+        if filter_username is not None:
+            resolved_user_id = _resolve_user_id_for_username(
+                db_session=db_session, username=filter_username
+            )
+            if resolved_user_id is None:
+                username_unmatched = True
+            else:
+                filter_user_id = resolved_user_id
 
         start_date = _parse_iso_datetime_or_none(raw=start_date_str)
         end_date = _parse_iso_datetime_or_none(raw=end_date_str)
@@ -238,18 +285,30 @@ def handle_audit_log_list(request: Request) -> Response:
             event_type_str=selected_event_type
         )
 
-        query = _build_audit_log_query(
-            event_types=event_types,
-            user_id=filter_user_id,
-            start_date=start_date,
-            end_date=end_date,
-            offset=offset,
-            limit=params["per_page"],
-        )
+        if username_unmatched is True:
+            # No user has that login name -- render an empty page
+            # (with a notice) rather than silently showing
+            # unfiltered results.
+            entries = []
+            total = 0
+        else:
+            query = _build_audit_log_query(
+                event_types=event_types,
+                user_id=filter_user_id,
+                start_date=start_date,
+                end_date=end_date,
+                offset=offset,
+                limit=params["per_page"],
+            )
 
-        audit_logger = _build_audit_logger(db_session=db_session)
-        result = audit_logger.query_logs(query)
-        entries = _audit_log_response_to_entries(response=result)
+            audit_logger = _build_audit_logger(db_session=db_session)
+            result = audit_logger.query_logs(query)
+            entries = _audit_log_response_to_entries(response=result)
+            total = getattr(result, "total", None)
+            if total is None:
+                total = len(entries)
+
+        total_pages = (total + params["per_page"] - 1) // params["per_page"]
         all_event_types = _resolve_all_audit_event_types()
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -263,10 +322,14 @@ def handle_audit_log_list(request: Request) -> Response:
         context["all_event_types"] = all_event_types
         context["selected_event_type"] = selected_event_type
         context["filter_user_id"] = filter_user_id
+        context["filter_username"] = filter_username
+        context["username_unmatched"] = username_unmatched
         context["start_date"] = start_date_str
         context["end_date"] = end_date_str
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
+        context["total"] = total
+        context["total_pages"] = total_pages
 
         response = _render(
             template_name="config/audit/list.html",

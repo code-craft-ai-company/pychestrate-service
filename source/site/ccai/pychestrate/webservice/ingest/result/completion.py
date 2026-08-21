@@ -145,7 +145,7 @@ def _is_success_outcome(*, terminal_outcome: str) -> bool:
     return rtnval
 
 
-def _artifact_files_from_manifest(
+def artifact_files_from_manifest(
         *,
         manifest: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
@@ -315,7 +315,7 @@ def complete_build_run(
     notes = str(manifest.get("notes", ""))
     reason = "build result manifest: outcome={}".format(terminal_outcome)
 
-    files = _artifact_files_from_manifest(manifest=manifest)
+    files = artifact_files_from_manifest(manifest=manifest)
 
     # Record artifacts BEFORE flipping the build run terminal so the
     # artifact read endpoint is consistent the moment the run shows
@@ -413,7 +413,7 @@ def complete_provision_run(
     if succeeded is False:
         final_state = InfraRunState.FAILED
 
-    files = _artifact_files_from_manifest(manifest=manifest)
+    files = artifact_files_from_manifest(manifest=manifest)
     backend_key_prefix = str(manifest.get("backend_key_prefix", ""))
 
     reason_lines = [
@@ -477,6 +477,7 @@ __all__ = [
     "TERMINAL_OUTCOME_SUCCESS",
     "GENERIC_ARTIFACT_TYPE",
     "CompletionOutcome",
+    "artifact_files_from_manifest",
     "complete_build_run",
     "complete_provision_run",
 ]

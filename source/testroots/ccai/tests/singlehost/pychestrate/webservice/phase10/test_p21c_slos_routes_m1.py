@@ -40,6 +40,7 @@ from ccai.pychestrate.webservice.api.problem_json import (
 )
 from ccai.pychestrate.webservice.metrics.slos.errors import (
     SLOConflictError,
+    SLOKindUnknownError,
     SLONotFoundError,
 )
 from ccai.pychestrate.webservice.metrics.slos.service import (
@@ -318,7 +319,8 @@ def test_list_returns_page_envelope_on_happy_path():
     """
     **Feature: 7-slo-views PR p21c**
     **Property: GET slos returns an {items, meta} page with
-    Slo-shaped items.**
+    Slo-shaped items, each carrying an embedded status block
+    (the same shape the detail read embeds).**
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
@@ -329,6 +331,11 @@ def test_list_returns_page_envelope_on_happy_path():
     )
     list_mock = list_patch.activate()
     list_mock.configure(side_effect=lambda **kwargs: [_make_slo_view()])
+    status_patch = create_module_patch(
+        slos_routes.slos_service, "compute_status",
+    )
+    status_mock = status_patch.activate()
+    status_mock.configure(side_effect=lambda **kwargs: _make_slo_status())
     try:
         request = _FakeRequest(
             path="/api/v1/projects/proj-1/slos",
@@ -339,6 +346,7 @@ def test_list_returns_page_envelope_on_happy_path():
         )
         response = slos_routes.handle_list_slos(request)
     finally:
+        status_patch.deactivate()
         list_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
@@ -346,7 +354,111 @@ def test_list_returns_page_envelope_on_happy_path():
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
     testbase.assert_equal(body["items"][0]["slo_id"], "slo-1")
+    testbase.assert_equal(
+        body["items"][0]["status"]["achieved_ratio"], 0.995,
+    )
+    testbase.assert_equal(body["items"][0]["status"]["breaching"], False)
     testbase.assert_equal(body["meta"]["total"], 1)
+    return
+
+
+def test_list_embeds_null_status_when_kind_unknown():
+    """
+    **Feature: 7-slo-views PR p21c**
+    **Property: GET slos serializes status: null for an item
+    whose kind is no longer registered instead of failing the
+    whole page.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(
+        project=_FakeProject(project_id="proj-1"),
+    )
+    list_patch = create_module_patch(
+        slos_routes.slos_service, "list_slos_for_project",
+    )
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: [_make_slo_view()])
+    status_patch = create_module_patch(
+        slos_routes.slos_service, "compute_status",
+    )
+    status_mock = status_patch.activate()
+
+    def _raise(**kwargs):
+        raise SLOKindUnknownError("kind gone")
+
+    status_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/slos",
+            path_params={"project_id": "proj-1"},
+            query={"page": "1", "per_page": "10"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = slos_routes.handle_list_slos(request)
+    finally:
+        status_patch.deactivate()
+        list_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(len(body["items"]), 1)
+    testbase.assert_equal(body["items"][0]["status"], None)
+    return
+
+
+def test_list_status_computation_is_bounded_per_page():
+    """
+    **Feature: 7-slo-views PR p21c**
+    **Property: the list computes status for at most
+    MAX_LIST_STATUS_ITEMS items per page; items past the bound
+    carry status: null.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(
+        project=_FakeProject(project_id="proj-1"),
+    )
+    views = [
+        _make_slo_view(slo_id="slo-1"),
+        _make_slo_view(slo_id="slo-2", name="second"),
+    ]
+    list_patch = create_module_patch(
+        slos_routes.slos_service, "list_slos_for_project",
+    )
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: views)
+    status_patch = create_module_patch(
+        slos_routes.slos_service, "compute_status",
+    )
+    status_mock = status_patch.activate()
+    status_mock.configure(
+        side_effect=lambda **kwargs: _make_slo_status(
+            slo_id=kwargs["slo_id"],
+        ),
+    )
+    saved_bound = slos_routes.MAX_LIST_STATUS_ITEMS
+    slos_routes.MAX_LIST_STATUS_ITEMS = 1
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/slos",
+            path_params={"project_id": "proj-1"},
+            query={"page": "1", "per_page": "10"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = slos_routes.handle_list_slos(request)
+    finally:
+        slos_routes.MAX_LIST_STATUS_ITEMS = saved_bound
+        status_patch.deactivate()
+        list_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(len(body["items"]), 2)
+    testbase.assert_equal(body["items"][0]["status"]["slo_id"], "slo-1")
+    testbase.assert_equal(body["items"][1]["status"], None)
     return
 
 

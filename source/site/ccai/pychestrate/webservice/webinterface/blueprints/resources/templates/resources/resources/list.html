@@ -8,19 +8,24 @@
     <p>Manage trackable assets for allocation</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.resource_list', page=p, per_page=per_page, pool_id=selected_pool_id, resource_type=(selected_resource_type or none), health_status=(selected_health_status or none), search=(search or none)) }}{% for t in selected_tags %}&tags={{ t | urlencode }}{% endfor %}
+{%- endmacro %}
+
 <div class="filter-bar">
     <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        <input type="text" name="search" class="form-control" placeholder="Search resources..." 
+        <input type="text" name="search" class="form-control" placeholder="Search resources..."
+               aria-label="Search resources by name or description"
                value="{{ search }}" style="width: 200px;">
-        
-        <select name="pool_id" class="form-control" style="width: 150px;">
+
+        <select name="pool_id" class="form-control" style="width: 150px;" aria-label="Filter by pool">
             <option value="">All Pools</option>
             {% for pool in pools %}
             <option value="{{ pool.id }}" {% if selected_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
             {% endfor %}
         </select>
-        
-        <select name="resource_type" class="form-control" style="width: 150px;">
+
+        <select name="resource_type" class="form-control" style="width: 150px;" aria-label="Filter by resource type">
             <option value="">All Types</option>
             <option value="device" {% if selected_resource_type == 'device' %}selected{% endif %}>Device</option>
             <option value="ip_address" {% if selected_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
@@ -28,25 +33,33 @@
             <option value="credential" {% if selected_resource_type == 'credential' %}selected{% endif %}>Credential</option>
             <option value="generic" {% if selected_resource_type == 'generic' %}selected{% endif %}>Generic</option>
         </select>
-        
-        <select name="health_status" class="form-control" style="width: 150px;">
+
+        <select name="health_status" class="form-control" style="width: 150px;" aria-label="Filter by health status">
             <option value="">All Status</option>
             <option value="online" {% if selected_health_status == 'online' %}selected{% endif %}>Online</option>
             <option value="offline" {% if selected_health_status == 'offline' %}selected{% endif %}>Offline</option>
             <option value="degraded" {% if selected_health_status == 'degraded' %}selected{% endif %}>Degraded</option>
             <option value="maintenance" {% if selected_health_status == 'maintenance' %}selected{% endif %}>Maintenance</option>
         </select>
-        
+
+        {% if all_tags %}
+        <select name="tags" multiple class="form-control" style="width: 150px; height: 38px;" aria-label="Filter by tags (hold Ctrl or Cmd to select multiple)" title="Hold Ctrl/Cmd to select multiple tags">
+            {% for tag in all_tags %}
+            <option value="{{ tag.name }}" {% if tag.name in selected_tags %}selected{% endif %}>{{ tag.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            <span class="material-icons" aria-hidden="true">filter_list</span> Filter
         </button>
-        
+
         <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Clear</a>
     </form>
-    
+
     <div style="margin-left: auto;">
         <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
-            <span class="material-icons">add</span> Create Resource
+            <span class="material-icons" aria-hidden="true">add</span> Create Resource
         </a>
     </div>
 </div>
@@ -54,13 +67,13 @@
 <table class="data-table">
     <thead>
         <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Pool</th>
-            <th>Health</th>
-            <th>Capacity</th>
-            <th>Tags</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Pool</th>
+            <th scope="col">Health</th>
+            <th scope="col">Capacity</th>
+            <th scope="col">Tags</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -77,8 +90,10 @@
                 <span class="badge badge-danger">Offline</span>
                 {% elif status == 'degraded' %}
                 <span class="badge badge-warning">Degraded</span>
-                {% else %}
+                {% elif status == 'maintenance' %}
                 <span class="badge badge-secondary">Maintenance</span>
+                {% else %}
+                <span class="badge badge-secondary">{{ status | capitalize }}</span>
                 {% endif %}
             </td>
             <td>{{ resource.current_allocations }}/{{ resource.capacity }}</td>
@@ -100,29 +115,49 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No resources found</td>
+            {% if filters_active %}
+            <td colspan="7" style="text-align: center; color: #6c757d;">
+                No resources match the current filters.
+                <a href="{{ url_for('resources.resource_list') }}">Clear filters</a>
+            </td>
+            {% else %}
+            <td colspan="7" style="text-align: center; color: #6c757d;">
+                No resources found.
+                <a href="{{ url_for('resources.resource_create') }}">Create one</a>
+            </td>
+            {% endif %}
         </tr>
         {% endfor %}
     </tbody>
 </table>
 
 {% if total_pages > 1 %}
-<div class="pagination">
+<nav class="pagination" aria-label="Resource list pages">
     {% if page > 1 %}
-    <a href="{{ url_for('resources.resource_list', page=page-1, pool_id=selected_pool_id, resource_type=selected_resource_type, health_status=selected_health_status, search=search) }}">&laquo; Previous</a>
+    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
     {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
+
+    {% if page_window[0] > 1 %}
+    <a href="{{ page_url(1) }}">1</a>
+    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+    {% endif %}
+
+    {% for p in page_window %}
         {% if p == page %}
         <span class="active">{{ p }}</span>
         {% else %}
-        <a href="{{ url_for('resources.resource_list', page=p, pool_id=selected_pool_id, resource_type=selected_resource_type, health_status=selected_health_status, search=search) }}">{{ p }}</a>
+        <a href="{{ page_url(p) }}">{{ p }}</a>
         {% endif %}
     {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('resources.resource_list', page=page+1, pool_id=selected_pool_id, resource_type=selected_resource_type, health_status=selected_health_status, search=search) }}">Next &raquo;</a>
+
+    {% if page_window[-1] < total_pages %}
+    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
     {% endif %}
-</div>
+
+    {% if page < total_pages %}
+    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+    {% endif %}
+</nav>
 {% endif %}
 {% endblock %}

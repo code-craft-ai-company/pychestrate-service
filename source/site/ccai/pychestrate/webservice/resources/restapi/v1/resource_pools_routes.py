@@ -67,6 +67,12 @@ from ccai.pychestrate.webservice.resources.checkout.errors import (
 from ccai.pychestrate.webservice.resources.checkout.models import (
     ReservationMode,
 )
+from ccai.pychestrate.webservice.resources.health import (
+    repository as health_repository,
+)
+from ccai.pychestrate.webservice.resources.inventory import (
+    repository as inventory_repository,
+)
 from ccai.pychestrate.webservice.resources.pools import (
     service as pools_service,
 )
@@ -422,19 +428,46 @@ def _pool_view_to_dict(view: Any) -> Dict[str, Any]:
     return rtnval
 
 
-def _member_row_to_dict(row: Any) -> Dict[str, Any]:
+def _member_row_to_dict(
+        row: Any,
+        resource_row: Any = None,
+        health_row: Any = None
+    ) -> Dict[str, Any]:
     """
-        Serialize a :class:`ResourcePoolMember` ORM row.
+        Serialize a :class:`ResourcePoolMember` ORM row, enriched
+        with fields from the joined inventory resource and its
+        health record when they are supplied.
 
         :param row: Pool-membership ORM row.
+        :param resource_row: Matching inventory ``Resource`` row or
+                             ``None`` when unavailable.
+        :param health_row: Matching ``ResourceHealth`` row or
+                           ``None`` when the resource has never
+                           been probed.
 
         :returns: JSON-friendly dict.
     """
+    resource_name = None
+    resource_kind = None
+    resource_state = None
+    if resource_row is not None:
+        resource_name = resource_row.display_name
+        resource_kind = resource_row.kind
+        resource_state = _enum_value_or_str(resource_row.state)
+
+    resource_health = None
+    if health_row is not None:
+        resource_health = _enum_value_or_str(health_row.last_outcome)
+
     rtnval: Dict[str, Any] = {
         "membership_id": str(row.membership_id),
         "pool_id": str(row.pool_id),
         "resource_id": str(row.resource_id),
         "added_at": _iso_or_none(row.added_at),
+        "resource_name": resource_name,
+        "resource_kind": resource_kind,
+        "resource_state": resource_state,
+        "resource_health": resource_health,
     }
     return rtnval
 
@@ -720,7 +753,20 @@ def handle_list_pool_resources(request: Request) -> Response:
         )
         items: List[Dict[str, Any]] = []
         for row in member_rows:
-            items.append(_member_row_to_dict(row=row))
+            member_resource_id = str(row.resource_id)
+            resource_row = inventory_repository.find_by_id(
+                db_session=db_session, resource_id=member_resource_id,
+            )
+            health_row = health_repository.find_by_resource(
+                db_session=db_session, resource_id=member_resource_id,
+            )
+            items.append(
+                _member_row_to_dict(
+                    row=row,
+                    resource_row=resource_row,
+                    health_row=health_row,
+                )
+            )
 
         body = {
             "items": items,
@@ -778,7 +824,15 @@ def handle_add_pool_resource(request: Request) -> Response:
             )
             row = None  # unreachable
 
-        body_dict = _member_row_to_dict(row=row)
+        resource_row = inventory_repository.find_by_id(
+            db_session=db_session, resource_id=resource_id,
+        )
+        health_row = health_repository.find_by_resource(
+            db_session=db_session, resource_id=resource_id,
+        )
+        body_dict = _member_row_to_dict(
+            row=row, resource_row=resource_row, health_row=health_row,
+        )
         rtnval: Response = JSONResponse(content=body_dict, status_code=201)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response

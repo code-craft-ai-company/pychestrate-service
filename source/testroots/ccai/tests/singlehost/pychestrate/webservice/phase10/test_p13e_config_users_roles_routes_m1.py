@@ -1,34 +1,41 @@
 """
 .. module:: test_p13e_config_users_roles_routes_m1
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: Tests for the D2 slice of the config blueprint
-               port (users + roles).
+    :synopsis: Tests for the users + roles slices of the config
+               blueprint, ported to the modern identity + RBAC
+               stores.
 
 .. moduleauthor:: Code Craft AI LLC
 
-PR D2 ports the user-management (5 routes) and role-management
-(4 routes) surfaces of the legacy flask config blueprint to
-webworks. These tests cover:
+The users / roles admin pages are backed by
+:mod:`webinterface.blueprints.config.identity_admin`, which reads
+and writes the modern identity store (``identity_users`` +
+``auth_local_credentials``) and the modern RBAC store
+(``rbac_roles`` / ``rbac_role_permissions`` /
+``rbac_role_bindings``). These tests cover:
 
 * ``register_users_routes`` / ``register_roles_routes`` --
   route attachment matrix + url_for endpoint registration.
 * user list -- pagination + search.
 * user create -- GET form, POST happy path, POST validation /
-  duplicate / generic error paths, CSRF rejection.
+  duplicate paths, CSRF rejection.
 * user detail -- happy + 404.
-* user edit -- GET form, POST happy path, POST validation,
-  CSRF rejection.
-* user deactivate -- happy + 404 + generic-error paths.
-* role list / detail / edit / create -- including the
-  is_system refusal path.
-* MultiFormView + _parse_form_multi + _redirect_with_flash
-  helpers from routes.py.
-* _resolve_authenticated_request -- anonymous / expired /
-  authenticated paths.
+* user edit -- GET form, POST happy path, self-lockout guard,
+  self-edit control preservation.
+* user deactivate -- happy + 404 + self-lockout paths.
+* role list / detail / create / edit / delete -- including the
+  built-in-role refusal, the empty-permission-set confirmation,
+  and the delete consequence flash.
+* END-TO-END TRUTH: a user created through the route handler can
+  authenticate through ``local_flow.verify_local_credentials``,
+  and a role granted through the route handler flips
+  ``rbac_evaluator.check_permission`` -- for both catalog roles
+  and custom (DB-grant) roles.
 
-All SecurityManager / UserManager / ORM lookups are patched at
-the routes-module bindings so the test suite never imports the
-werkzeug-using sources.
+The handler unit tests patch the ``_svc_*`` service seams at the
+routes-module bindings so they never import the identity /
+password-hashing sources. The truth tests run the real service
+against an in-memory Phase-1 database.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -178,7 +185,7 @@ class _FakeSessionInfo:
 class _FakeSecurityManager:
     """
         Returns a configured SessionInfo on validate_token. Used
-        by all D2 tests to get past the auth gate.
+        by all tests to get past the auth gate.
     """
 
     last_instance: Optional["_FakeSecurityManager"] = None
@@ -219,7 +226,7 @@ class _StubJinjaEnvironment:
         return self.last_template
 
 
-class _FakeUserResponse:
+class _FakeUserView:
     def __init__(
             self, *, user_id: str = "u-1", username: str = "alice",
             email: str = "alice@example.com",
@@ -239,124 +246,99 @@ class _FakeUserResponse:
         return
 
 
-class _FakeListResponse:
+class _FakeListResult:
     def __init__(self, *, users: List[Any], total: int) -> None:
         self.users: List[Any] = users
         self.total: int = total
         return
 
 
-class _FakeUserManager:
-    """
-        Configurable fake replacing UserManager for the user
-        handlers' tests. Each test seeds the responses or
-        exception-instances it wants the handler to receive.
-    """
-
-    last_instance: Optional["_FakeUserManager"] = None
-
-    def __init__(self, db_session: Any) -> None:
-        self.db_session: Any = db_session
-        self.list_users_response: Optional[_FakeListResponse] = None
-        self.get_user_response: Optional[_FakeUserResponse] = None
-        self.list_users_calls: List[Dict[str, Any]] = []
-        self.get_user_calls: List[str] = []
-        self.create_user_calls: List[Any] = []
-        self.update_user_calls: List[Any] = []
-        self.deactivate_user_calls: List[str] = []
-        self.create_user_raises: Optional[Exception] = None
-        self.update_user_raises: Optional[Exception] = None
-        self.deactivate_user_raises: Optional[Exception] = None
-        _FakeUserManager.last_instance = self
-        return
-
-    def list_users(
-            self, *, offset: int, limit: int, search: Optional[str]
-        ) -> _FakeListResponse:
-        self.list_users_calls.append(
-            {"offset": offset, "limit": limit, "search": search}
-        )
-        if self.list_users_response is None:
-            return _FakeListResponse(users=[], total=0)
-        return self.list_users_response
-
-    def get_user(self, user_id: str) -> Optional[_FakeUserResponse]:
-        self.get_user_calls.append(user_id)
-        return self.get_user_response
-
-    def create_user(self, request: Any) -> _FakeUserResponse:
-        self.create_user_calls.append(request)
-        if self.create_user_raises is not None:
-            raise self.create_user_raises
-        return _FakeUserResponse(user_id="u-new", username=request.username)
-
-    def update_user(self, user_id: str, request: Any) -> _FakeUserResponse:
-        self.update_user_calls.append((user_id, request))
-        if self.update_user_raises is not None:
-            raise self.update_user_raises
-        return _FakeUserResponse(user_id=user_id)
-
-    def deactivate_user(self, user_id: str) -> None:
-        self.deactivate_user_calls.append(user_id)
-        if self.deactivate_user_raises is not None:
-            raise self.deactivate_user_raises
-        return
-
-
-class _FakeValidationError(Exception):
-    def __init__(self, message: str) -> None:
-        self.message: str = message
-        super().__init__(message)
-        return
-
-
-class _FakeDuplicateUserError(Exception):
-    def __init__(self, message: str) -> None:
-        self.message: str = message
-        super().__init__(message)
-        return
-
-
-class _FakeUserNotFoundError(Exception):
-    def __init__(self, message: str = "User not found") -> None:
-        self.message: str = message
-        super().__init__(message)
-        return
-
-
-_FAKE_USER_EXCEPTION_CLASSES: Dict[str, type] = {
-    "ValidationError": _FakeValidationError,
-    "DuplicateUserError": _FakeDuplicateUserError,
-    "UserNotFoundError": _FakeUserNotFoundError,
-}
-
-
-class _FakeRole:
+class _FakePermView:
     def __init__(
-            self, *, role_id: int, name: str,
+            self, *, key: str, description: str = ""
+        ) -> None:
+        self.id: str = key
+        self.name: str = key
+        self.description: str = description
+        return
+
+
+class _FakeRoleView:
+    def __init__(
+            self, *, role_id: str, name: str,
             description: str = "",
             is_system: bool = False,
-            permissions: Optional[List[Any]] = None
+            permissions: Optional[List[Any]] = None,
+            binding_count: int = 0
         ) -> None:
-        self.id: int = role_id
+        self.id: str = role_id
         self.name: str = name
         self.description: str = description
         self.is_system: bool = is_system
         self.permissions: List[Any] = (
             permissions if permissions is not None else []
         )
+        self.binding_count: int = binding_count
         return
 
 
-class _FakePermission:
-    def __init__(
-            self, *, permission_id: int, name: str,
-            description: str = ""
-        ) -> None:
-        self.id: int = permission_id
-        self.name: str = name
-        self.description: str = description
+class _FakeAdminValidationError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+        super().__init__(message)
         return
+
+
+class _FakeAdminDuplicateError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+        super().__init__(message)
+        return
+
+
+class _FakeAdminNotFoundError(Exception):
+    def __init__(self, message: str = "User not found") -> None:
+        self.message: str = message
+        super().__init__(message)
+        return
+
+
+class _FakeSelfLockoutError(Exception):
+    def __init__(self, message: str = "You cannot deactivate your own account.") -> None:
+        self.message: str = message
+        super().__init__(message)
+        return
+
+
+class _FakeBuiltinRoleProtectedError(Exception):
+    def __init__(self, message: str = "Built-in role.") -> None:
+        self.message: str = message
+        super().__init__(message)
+        return
+
+
+class _FakeLastAdminRoleError(Exception):
+    def __init__(self, message: str = "Last admin role.") -> None:
+        self.message: str = message
+        super().__init__(message)
+        return
+
+
+_FAKE_USER_EXCEPTION_CLASSES: Dict[str, type] = {
+    "AdminValidationError": _FakeAdminValidationError,
+    "AdminDuplicateError": _FakeAdminDuplicateError,
+    "AdminNotFoundError": _FakeAdminNotFoundError,
+    "SelfLockoutError": _FakeSelfLockoutError,
+}
+
+
+_FAKE_ROLE_EXCEPTION_CLASSES: Dict[str, type] = {
+    "AdminValidationError": _FakeAdminValidationError,
+    "AdminDuplicateError": _FakeAdminDuplicateError,
+    "AdminNotFoundError": _FakeAdminNotFoundError,
+    "BuiltinRoleProtectedError": _FakeBuiltinRoleProtectedError,
+    "LastAdminRoleError": _FakeLastAdminRoleError,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -388,7 +370,6 @@ def _reset_global_state() -> None:
     SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = None
     SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = None
     _FakeSecurityManager.last_instance = None
-    _FakeUserManager.last_instance = None
     return
 
 
@@ -427,95 +408,41 @@ def _patch_security_manager(
     return patch
 
 
-def _patch_user_manager(
-        *, configure: Optional[Callable[[_FakeUserManager], None]] = None
+def _patch_seam(
+        *, module: Any, seam_name: str, side_effect: Callable
     ) -> Any:
     """
-        Patch the UserManager builder on routes_users.
+        Patch one ``_svc_*`` seam (or exception-class provider) on a
+        routes module, returning the activated patch.
     """
-    def _builder(*, db_session: Any) -> _FakeUserManager:
-        instance = _FakeUserManager(db_session)
-        if configure is not None:
-            configure(instance)
-        return instance
-
-    patch = create_module_patch(
-        config_routes_users, "_build_user_manager"
-    )
+    patch = create_module_patch(module, seam_name)
     mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_user_create_request_factory() -> Any:
-    """
-        Patch _build_user_create_request so it returns a
-        SimpleNamespace-like object the FakeUserManager can
-        inspect without the test importing the source dataclass.
-    """
-    class _NS:
-        def __init__(self, **kwargs: Any) -> None:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-            return
-
-    def _builder(**kwargs: Any) -> _NS:
-        return _NS(**kwargs)
-
-    patch = create_module_patch(
-        config_routes_users, "_build_user_create_request"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_user_update_request_factory() -> Any:
-    class _NS:
-        def __init__(self, **kwargs: Any) -> None:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-            return
-
-    def _builder(**kwargs: Any) -> _NS:
-        return _NS(**kwargs)
-
-    patch = create_module_patch(
-        config_routes_users, "_build_user_update_request"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
+    mock.configure(side_effect=side_effect)
     return patch
 
 
 def _patch_user_exception_classes() -> Any:
-    """
-        Patch _user_manager_exception_classes so the handler
-        branches on our fake exception types.
-    """
     def _classes() -> Dict[str, type]:
-        return _FAKE_USER_EXCEPTION_CLASSES
+        return dict(_FAKE_USER_EXCEPTION_CLASSES)
 
-    patch = create_module_patch(
-        config_routes_users, "_user_manager_exception_classes"
+    rtnval = _patch_seam(
+        module=config_routes_users,
+        seam_name="_admin_exception_classes",
+        side_effect=_classes,
     )
-    mock = patch.activate()
-    mock.configure(side_effect=_classes)
-    return patch
+    return rtnval
 
 
-def _patch_query_system_roles(
-        *, roles: Optional[List[Any]] = None
-    ) -> Any:
-    def _query(*, db_session: Any) -> List[Any]:
-        return roles if roles is not None else []
+def _patch_role_exception_classes() -> Any:
+    def _classes() -> Dict[str, type]:
+        return dict(_FAKE_ROLE_EXCEPTION_CLASSES)
 
-    patch = create_module_patch(
-        config_routes_users, "_query_system_roles"
+    rtnval = _patch_seam(
+        module=config_routes_roles,
+        seam_name="_roles_exception_classes",
+        side_effect=_classes,
     )
-    mock = patch.activate()
-    mock.configure(side_effect=_query)
-    return patch
+    return rtnval
 
 
 def _build_authenticated_cookie() -> str:
@@ -533,12 +460,14 @@ def _build_authenticated_cookie() -> str:
 def _register_url_for_endpoints() -> None:
     """
         Pre-register the endpoint URL patterns the handlers'
-        url_for() calls reference. Tests only need this when they
-        don't call register_users_routes() / register_roles_routes()
-        themselves.
+        url_for() calls reference.
     """
     app = _FakeApp()
     config_routes.register_config_routes(app=app)
+    users_app = _FakeApp()
+    config_routes_users.register_users_routes(app=users_app)
+    roles_app = _FakeApp()
+    config_routes_roles.register_roles_routes(app=roles_app)
     return
 
 
@@ -576,8 +505,9 @@ def test_register_users_routes_attaches_documented_routes():
 def test_register_roles_routes_attaches_documented_routes():
     """
     **Feature: webworks config roles port T2.2 (D2)**
-    **Property: register_roles_routes attaches the four role-
-    management routes at /admin/roles*.**
+    **Property: register_roles_routes attaches the five role-
+    management routes at /admin/roles* including the delete
+    route.**
     """
     _reset_global_state()
     try:
@@ -591,6 +521,7 @@ def test_register_roles_routes_attaches_documented_routes():
             ("/admin/roles/create", ("GET", "POST")),
             ("/admin/roles/{role_id}", ("GET",)),
             ("/admin/roles/{role_id}/edit", ("GET", "POST")),
+            ("/admin/roles/{role_id}/delete", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -607,8 +538,8 @@ def test_resolve_authenticated_request_redirects_anonymous():
     """
     **Feature: D2 helpers T2.3**
     **Property: A request with no session cookie returns an
-    _AuthResolution carrying a 302 redirect to /login --
-    no DB session is opened.**
+    _AuthResolution carrying a redirect to /login -- no DB
+    session is opened.**
     """
     _reset_global_state()
     try:
@@ -660,6 +591,7 @@ def test_resolve_authenticated_request_redirects_when_token_invalid():
     finally:
         if sm_patch is not None:
             sm_patch.deactivate()
+        _restore_ambient_pepper()
         _reset_global_state()
     return
 
@@ -703,6 +635,7 @@ def test_resolve_authenticated_request_returns_open_session_on_happy_path():
     finally:
         if sm_patch is not None:
             sm_patch.deactivate()
+        _restore_ambient_pepper()
         _reset_global_state()
     return
 
@@ -715,16 +648,18 @@ def test_resolve_authenticated_request_returns_open_session_on_happy_path():
 def test_parse_form_multi_returns_lists_per_key():
     """
     **Feature: D2 helpers T2.4 (multi-value form)**
-    **Property: A body with repeated ``role_ids=1&role_ids=2``
-    yields ``{"role_ids": ["1", "2"]}`` -- preserving the
+    **Property: A body with repeated ``role_names=a&role_names=b``
+    yields ``{"role_names": ["a", "b"]}`` -- preserving the
     multi-checkbox shape webworks Request.form() loses.**
     """
     request = _FakeRequest(
         method="POST",
-        body=b"role_ids=1&role_ids=2&name=alice",
+        body=b"role_names=system-admin&role_names=auditor&name=alice",
     )
     parsed = config_routes._parse_form_multi(request=request)
-    testbase.assert_equal(parsed["role_ids"], ["1", "2"])
+    testbase.assert_equal(
+        parsed["role_names"], ["system-admin", "auditor"]
+    )
     testbase.assert_equal(parsed["name"], ["alice"])
     return
 
@@ -749,13 +684,13 @@ def test_multi_form_view_getlist_returns_list_or_empty():
     MultiDict.getlist.**
     """
     view = config_routes.MultiFormView(
-        data={"role_ids": ["1", "2"], "name": ["alice"]}
+        data={"role_names": ["a", "b"], "name": ["alice"]}
     )
-    testbase.assert_equal(view.getlist("role_ids"), ["1", "2"])
+    testbase.assert_equal(view.getlist("role_names"), ["a", "b"])
     testbase.assert_equal(view.getlist("missing"), [])
     testbase.assert_equal(view.get("name"), "alice")
     testbase.assert_equal(view.get("missing", "default"), "default")
-    testbase.assert_equal("role_ids" in view, True)
+    testbase.assert_equal("role_names" in view, True)
     testbase.assert_equal("missing" in view, False)
     return
 
@@ -769,12 +704,12 @@ def test_handle_user_list_renders_with_pagination_and_search():
     """
     **Feature: webworks config users port T2.5**
     **Property: GET /admin/users renders config/users/list.html
-    with the paginated UserManager output, computed total_pages,
-    and the search query passed through.**
+    with the paginated identity-store output, computed
+    total_pages, and the search query passed through.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
+    svc_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -783,15 +718,23 @@ def test_handle_user_list_renders_with_pagination_and_search():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
 
-        users = [_FakeUserResponse(user_id="u-1", username="alice")]
+        users = [_FakeUserView(user_id="u-1", username="alice")]
+        list_calls: List[Dict[str, Any]] = []
 
-        def _seed(instance: _FakeUserManager) -> None:
-            instance.list_users_response = _FakeListResponse(
-                users=users, total=42
+        def _list(
+                *, db_session: Any, offset: int, limit: int,
+                search: Optional[str]
+            ) -> _FakeListResult:
+            list_calls.append(
+                {"offset": offset, "limit": limit, "search": search}
             )
-            return
+            return _FakeListResult(users=users, total=42)
 
-        um_patch = _patch_user_manager(configure=_seed)
+        svc_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_list_users",
+            side_effect=_list,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -813,17 +756,17 @@ def test_handle_user_list_renders_with_pagination_and_search():
         testbase.assert_equal(ctx["per_page"], 10)
         testbase.assert_equal(ctx["total_pages"], 5)  # ceil(42/10)
         testbase.assert_equal(ctx["search"], "ali")
+        testbase.assert_equal(ctx["current_user_id"], "u-admin")
         testbase.assert_equal(db_session.close_count, 1)
 
-        # UserManager called with offset=10 (page 2 - 1 * 10), limit=10,
-        # search="ali".
-        um_call = _FakeUserManager.last_instance.list_users_calls[0]
-        testbase.assert_equal(um_call["offset"], 10)
-        testbase.assert_equal(um_call["limit"], 10)
-        testbase.assert_equal(um_call["search"], "ali")
+        # Service called with offset=10 ((page 2 - 1) * 10),
+        # limit=10, search="ali".
+        testbase.assert_equal(list_calls[0]["offset"], 10)
+        testbase.assert_equal(list_calls[0]["limit"], 10)
+        testbase.assert_equal(list_calls[0]["search"], "ali")
     finally:
-        if um_patch is not None:
-            um_patch.deactivate()
+        if svc_patch is not None:
+            svc_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -845,9 +788,9 @@ def test_handle_user_list_redirects_anonymous():
         response = config_routes_users.handle_user_list(request)
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/login"
-        )
+        location = response.headers["Location"]
+        starts_with_login = location.startswith("/login")
+        testbase.assert_equal(starts_with_login, True)
     finally:
         _reset_global_state()
     return
@@ -862,11 +805,11 @@ def test_handle_user_create_get_renders_form_with_roles():
     """
     **Feature: webworks config users port T2.6**
     **Property: GET /admin/users/create renders the create form
-    with the current SystemRole list.**
+    with the current RBAC role options.**
     """
     _reset_global_state()
     sm_patch = None
-    qsr_patch = None
+    roles_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -874,10 +817,18 @@ def test_handle_user_create_get_renders_form_with_roles():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
         roles = [
-            _FakeRole(role_id=1, name="admin"),
-            _FakeRole(role_id=2, name="viewer"),
+            _FakeRoleView(role_id="r-1", name="system-admin", is_system=True),
+            _FakeRoleView(role_id="r-2", name="viewer"),
         ]
-        qsr_patch = _patch_query_system_roles(roles=roles)
+
+        def _list_roles(*, db_session: Any) -> List[Any]:
+            return roles
+
+        roles_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_list_role_options",
+            side_effect=_list_roles,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -894,8 +845,8 @@ def test_handle_user_create_get_renders_form_with_roles():
         testbase.assert_equal(ctx["roles"], roles)
         testbase.assert_equal(ctx["form_data"], None)
     finally:
-        if qsr_patch is not None:
-            qsr_patch.deactivate()
+        if roles_patch is not None:
+            roles_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -905,13 +856,13 @@ def test_handle_user_create_get_renders_form_with_roles():
 def test_handle_user_create_post_happy_path_redirects_to_list():
     """
     **Feature: webworks config users port T2.6**
-    **Property: A valid POST creates the user via UserManager
-    and redirects to /admin/users with a success flash.**
+    **Property: A valid POST creates the user via the identity-
+    admin service (role names + acting admin id included) and
+    redirects to /admin/users with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
-    cr_patch = None
+    create_patch = None
     exc_patch = None
     try:
         _install_stub_environment()
@@ -919,16 +870,26 @@ def test_handle_user_create_post_happy_path_redirects_to_list():
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        um_patch = _patch_user_manager()
-        cr_patch = _patch_user_create_request_factory()
         exc_patch = _patch_user_exception_classes()
+
+        create_calls: List[Dict[str, Any]] = []
+
+        def _create(**kwargs: Any) -> str:
+            create_calls.append(kwargs)
+            return "u-new"
+
+        create_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_create_user",
+            side_effect=_create,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = (
             b"csrf_token=csrf-fresh&username=newbie&email=n@example.com"
             b"&password=Sup3rS3cr3t!&display_name=Newbie"
             b"&firstname=New&lastname=Bie"
-            b"&role_ids=1&role_ids=2"
+            b"&role_names=system-admin&role_names=viewer"
         )
         request = _FakeRequest(
             method="POST",
@@ -943,16 +904,16 @@ def test_handle_user_create_post_happy_path_redirects_to_list():
         testbase.assert_equal(
             response.headers["Location"], "/admin/users"
         )
-        # UserManager.create_user invoked with the submitted values
-        # carried on the namespace returned by the patched factory.
-        um = _FakeUserManager.last_instance
-        testbase.assert_equal(len(um.create_user_calls), 1)
-        ar = um.create_user_calls[0]
-        testbase.assert_equal(ar.username, "newbie")
-        testbase.assert_equal(ar.email, "n@example.com")
-        testbase.assert_equal(ar.role_ids, [1, 2])
+        testbase.assert_equal(len(create_calls), 1)
+        call = create_calls[0]
+        testbase.assert_equal(call["username"], "newbie")
+        testbase.assert_equal(call["email"], "n@example.com")
+        testbase.assert_equal(
+            call["role_names"], ["system-admin", "viewer"]
+        )
+        testbase.assert_equal(call["actor_user_id"], "u-admin")
     finally:
-        for p in (exc_patch, cr_patch, um_patch, sm_patch):
+        for p in (create_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -963,21 +924,29 @@ def test_handle_user_create_post_csrf_mismatch_redirects():
     """
     **Feature: webworks config users port T2.6**
     **Property: A POST with a missing / mismatched csrf_token
-    bounces back to the create page without invoking the
-    UserManager.**
+    bounces back without invoking the create service.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
-    qsr_patch = None
+    create_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        um_patch = _patch_user_manager()
-        qsr_patch = _patch_query_system_roles(roles=[])
+
+        create_calls: List[Dict[str, Any]] = []
+
+        def _create(**kwargs: Any) -> str:
+            create_calls.append(kwargs)
+            return "u-new"
+
+        create_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_create_user",
+            side_effect=_create,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = (
@@ -993,12 +962,9 @@ def test_handle_user_create_post_csrf_mismatch_redirects():
 
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
-        # No user was created. The handler short-circuited before
-        # constructing the UserManager (so last_instance is None
-        # because no manager was ever built).
-        testbase.assert_equal(_FakeUserManager.last_instance, None)
+        testbase.assert_equal(create_calls, [])
     finally:
-        for p in (qsr_patch, um_patch, sm_patch):
+        for p in (create_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1008,33 +974,40 @@ def test_handle_user_create_post_csrf_mismatch_redirects():
 def test_handle_user_create_post_validation_error_re_renders_with_flash():
     """
     **Feature: webworks config users port T2.6**
-    **Property: When create_user raises ValidationError the form
-    re-renders (status 400) with an error-category flash carrying
-    the exception message.**
+    **Property: When the create service raises the validation
+    error the form re-renders (status 400) with an error-category
+    flash carrying the exception message.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
-    cr_patch = None
+    create_patch = None
     exc_patch = None
-    qsr_patch = None
+    roles_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeUserManager) -> None:
-            instance.create_user_raises = _FakeValidationError(
-                "Username is too short"
-            )
-            return
-
-        um_patch = _patch_user_manager(configure=_seed)
-        cr_patch = _patch_user_create_request_factory()
         exc_patch = _patch_user_exception_classes()
-        qsr_patch = _patch_query_system_roles(roles=[])
+
+        def _create(**kwargs: Any) -> str:
+            raise _FakeAdminValidationError("Username is too short")
+
+        create_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_create_user",
+            side_effect=_create,
+        )
+
+        def _list_roles(*, db_session: Any) -> List[Any]:
+            return []
+
+        roles_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_list_role_options",
+            side_effect=_list_roles,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = (
@@ -1055,7 +1028,7 @@ def test_handle_user_create_post_validation_error_re_renders_with_flash():
         contains = "Username is too short" in message
         testbase.assert_equal(contains, True)
     finally:
-        for p in (qsr_patch, exc_patch, cr_patch, um_patch, sm_patch):
+        for p in (roles_patch, create_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1075,7 +1048,7 @@ def test_handle_user_detail_renders_when_user_found():
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
+    get_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -1083,13 +1056,16 @@ def test_handle_user_detail_renders_when_user_found():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
 
-        user = _FakeUserResponse(user_id="u-42", username="alice")
+        user = _FakeUserView(user_id="u-42", username="alice")
 
-        def _seed(instance: _FakeUserManager) -> None:
-            instance.get_user_response = user
-            return
+        def _get(*, db_session: Any, user_id: str) -> Optional[Any]:
+            return user
 
-        um_patch = _patch_user_manager(configure=_seed)
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=_get,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1105,8 +1081,8 @@ def test_handle_user_detail_renders_when_user_found():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["user"], user)
     finally:
-        if um_patch is not None:
-            um_patch.deactivate()
+        if get_patch is not None:
+            get_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -1116,19 +1092,27 @@ def test_handle_user_detail_renders_when_user_found():
 def test_handle_user_detail_redirects_when_user_missing():
     """
     **Feature: webworks config users port T2.7**
-    **Property: A user_id not found by the manager redirects to
+    **Property: A user_id the service cannot resolve redirects to
     /admin/users with an error flash.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
+    get_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        um_patch = _patch_user_manager()  # get_user_response stays None
+
+        def _get(*, db_session: Any, user_id: str) -> Optional[Any]:
+            return None
+
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=_get,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1143,8 +1127,8 @@ def test_handle_user_detail_redirects_when_user_missing():
             response.headers["Location"], "/admin/users"
         )
     finally:
-        if um_patch is not None:
-            um_patch.deactivate()
+        if get_patch is not None:
+            get_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -1159,13 +1143,13 @@ def test_handle_user_detail_redirects_when_user_missing():
 def test_handle_user_edit_post_happy_path_redirects_to_detail():
     """
     **Feature: webworks config users port T2.8**
-    **Property: A valid edit POST calls update_user and
-    redirects to /admin/users/{user_id} with a success flash.**
+    **Property: A valid edit POST calls the update service with
+    the submitted role names + status and redirects to
+    /admin/users/{user_id} with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
-    upd_patch = None
+    update_patch = None
     exc_patch = None
     try:
         _install_stub_environment()
@@ -1173,15 +1157,25 @@ def test_handle_user_edit_post_happy_path_redirects_to_detail():
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        um_patch = _patch_user_manager()
-        upd_patch = _patch_user_update_request_factory()
         exc_patch = _patch_user_exception_classes()
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_update_user",
+            side_effect=_update,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = (
             b"csrf_token=csrf-fresh&email=new@example.com"
             b"&display_name=Updated&firstname=New&lastname=Name"
-            b"&is_active=on&role_ids=1"
+            b"&is_active=on&role_names=viewer"
         )
         request = _FakeRequest(
             method="POST",
@@ -1197,15 +1191,15 @@ def test_handle_user_edit_post_happy_path_redirects_to_detail():
         testbase.assert_equal(
             response.headers["Location"], "/admin/users/u-7"
         )
-        um = _FakeUserManager.last_instance
-        testbase.assert_equal(len(um.update_user_calls), 1)
-        target_id, ar = um.update_user_calls[0]
-        testbase.assert_equal(target_id, "u-7")
-        testbase.assert_equal(ar.email, "new@example.com")
-        testbase.assert_equal(ar.is_active, True)
-        testbase.assert_equal(ar.role_ids, [1])
+        testbase.assert_equal(len(update_calls), 1)
+        call = update_calls[0]
+        testbase.assert_equal(call["user_id"], "u-7")
+        testbase.assert_equal(call["email"], "new@example.com")
+        testbase.assert_equal(call["is_active"], True)
+        testbase.assert_equal(call["role_names"], ["viewer"])
+        testbase.assert_equal(call["actor_user_id"], "u-admin")
     finally:
-        for p in (exc_patch, upd_patch, um_patch, sm_patch):
+        for p in (update_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1215,28 +1209,40 @@ def test_handle_user_edit_post_happy_path_redirects_to_detail():
 def test_handle_user_edit_get_renders_form_when_user_found():
     """
     **Feature: webworks config users port T2.8**
-    **Property: GET on edit renders the edit template with
-    the resolved user + roles.**
+    **Property: GET on edit renders the edit template with the
+    resolved user + role options and is_self=False for another
+    user's row.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
-    qsr_patch = None
+    get_patch = None
+    roles_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        user = _FakeUserResponse(user_id="u-1", username="alice")
+        user = _FakeUserView(user_id="u-1", username="alice")
 
-        def _seed(instance: _FakeUserManager) -> None:
-            instance.get_user_response = user
-            return
+        def _get(*, db_session: Any, user_id: str) -> Optional[Any]:
+            return user
 
-        um_patch = _patch_user_manager(configure=_seed)
-        roles = [_FakeRole(role_id=1, name="admin")]
-        qsr_patch = _patch_query_system_roles(roles=roles)
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=_get,
+        )
+        roles = [_FakeRoleView(role_id="r-1", name="system-admin")]
+
+        def _list_roles(*, db_session: Any) -> List[Any]:
+            return roles
+
+        roles_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_list_role_options",
+            side_effect=_list_roles,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1252,8 +1258,167 @@ def test_handle_user_edit_get_renders_form_when_user_found():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["user"], user)
         testbase.assert_equal(ctx["roles"], roles)
+        testbase.assert_equal(ctx["is_self"], False)
     finally:
-        for p in (qsr_patch, um_patch, sm_patch):
+        for p in (roles_patch, get_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_user_edit_self_post_preserves_status_and_roles():
+    """
+    **Feature: self-lockout guard T2.8b**
+    **Property: When an admin edits their own row the hidden
+    status/role controls post nothing -- the handler preserves
+    the CURRENT is_active + role set server-side instead of
+    interpreting absence as "deactivate + strip roles".**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    update_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_user_exception_classes()
+
+        self_user = _FakeUserView(
+            user_id="u-admin", username="admin",
+            is_active=True, roles=["system-admin"],
+        )
+
+        def _get(*, db_session: Any, user_id: str) -> Optional[Any]:
+            return self_user
+
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=_get,
+        )
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_update_user",
+            side_effect=_update,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        # The self form omits is_active + role_names entirely.
+        body = (
+            b"csrf_token=csrf-fresh&email=admin@example.com"
+            b"&display_name=Admin&firstname=&lastname="
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"user_id": "u-admin"},
+        )
+        response = config_routes_users.handle_user_edit(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(len(update_calls), 1)
+        call = update_calls[0]
+        testbase.assert_equal(call["is_active"], True)
+        testbase.assert_equal(call["role_names"], ["system-admin"])
+    finally:
+        for p in (update_patch, get_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_user_edit_post_self_lockout_re_renders_with_flash():
+    """
+    **Feature: self-lockout guard T2.8c**
+    **Property: When the update service raises SelfLockoutError
+    the edit form re-renders with the guard's message as an
+    error flash instead of reporting success.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    update_patch = None
+    exc_patch = None
+    roles_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_user_exception_classes()
+
+        user = _FakeUserView(user_id="u-7", username="bob")
+
+        def _get(*, db_session: Any, user_id: str) -> Optional[Any]:
+            return user
+
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=_get,
+        )
+
+        def _update(**kwargs: Any) -> None:
+            raise _FakeSelfLockoutError(
+                "You cannot remove your own 'system-admin' role."
+            )
+
+        update_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_update_user",
+            side_effect=_update,
+        )
+
+        def _list_roles(*, db_session: Any) -> List[Any]:
+            return []
+
+        roles_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_list_role_options",
+            side_effect=_list_roles,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&email=b@example.com"
+            b"&display_name=Bob&is_active=on"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"user_id": "u-7"},
+        )
+        response = config_routes_users.handle_user_edit(request)
+
+        is_html = isinstance(response, HTMLResponse)
+        testbase.assert_equal(is_html, True)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(len(ctx["flashes"]), 1)
+        category, message = ctx["flashes"][0]
+        testbase.assert_equal(category, "error")
+        contains = "system-admin" in message
+        testbase.assert_equal(contains, True)
+    finally:
+        for p in (
+            roles_patch, update_patch, get_patch, exc_patch, sm_patch,
+        ):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1268,12 +1433,13 @@ def test_handle_user_edit_get_renders_form_when_user_found():
 def test_handle_user_deactivate_happy_path_redirects_to_list():
     """
     **Feature: webworks config users port T2.9**
-    **Property: A valid deactivate POST calls deactivate_user
-    and redirects to /admin/users with a success flash.**
+    **Property: A valid deactivate POST calls the deactivate
+    service with the acting admin id and redirects to
+    /admin/users with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
+    deact_patch = None
     exc_patch = None
     try:
         _install_stub_environment()
@@ -1281,8 +1447,19 @@ def test_handle_user_deactivate_happy_path_redirects_to_list():
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        um_patch = _patch_user_manager()
         exc_patch = _patch_user_exception_classes()
+
+        deact_calls: List[Dict[str, Any]] = []
+
+        def _deactivate(**kwargs: Any) -> None:
+            deact_calls.append(kwargs)
+            return
+
+        deact_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_deactivate_user",
+            side_effect=_deactivate,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh"
@@ -1299,10 +1476,11 @@ def test_handle_user_deactivate_happy_path_redirects_to_list():
         testbase.assert_equal(
             response.headers["Location"], "/admin/users"
         )
-        um = _FakeUserManager.last_instance
-        testbase.assert_equal(um.deactivate_user_calls, ["u-7"])
+        testbase.assert_equal(len(deact_calls), 1)
+        testbase.assert_equal(deact_calls[0]["user_id"], "u-7")
+        testbase.assert_equal(deact_calls[0]["actor_user_id"], "u-admin")
     finally:
-        for p in (exc_patch, um_patch, sm_patch):
+        for p in (deact_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1312,12 +1490,12 @@ def test_handle_user_deactivate_happy_path_redirects_to_list():
 def test_handle_user_deactivate_user_not_found_flashes_error():
     """
     **Feature: webworks config users port T2.9**
-    **Property: deactivate_user raising UserNotFoundError yields
-    a 303 redirect with an error-category "User not found" flash.**
+    **Property: The deactivate service raising the not-found
+    error yields a redirect with a "User not found" flash.**
     """
     _reset_global_state()
     sm_patch = None
-    um_patch = None
+    deact_patch = None
     exc_patch = None
     try:
         _install_stub_environment()
@@ -1325,15 +1503,16 @@ def test_handle_user_deactivate_user_not_found_flashes_error():
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-
-        def _seed(instance: _FakeUserManager) -> None:
-            instance.deactivate_user_raises = _FakeUserNotFoundError(
-                "User u-ghost not found"
-            )
-            return
-
-        um_patch = _patch_user_manager(configure=_seed)
         exc_patch = _patch_user_exception_classes()
+
+        def _deactivate(**kwargs: Any) -> None:
+            raise _FakeAdminNotFoundError("User u-ghost not found")
+
+        deact_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_deactivate_user",
+            side_effect=_deactivate,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh"
@@ -1351,7 +1530,63 @@ def test_handle_user_deactivate_user_not_found_flashes_error():
             response.headers["Location"], "/admin/users"
         )
     finally:
-        for p in (exc_patch, um_patch, sm_patch):
+        for p in (deact_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_user_deactivate_self_lockout_flashes_error():
+    """
+    **Feature: self-lockout guard T2.9b**
+    **Property: The deactivate service raising SelfLockoutError
+    yields a redirect carrying the guard message as an error
+    flash -- no success is reported.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    deact_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_user_exception_classes()
+
+        def _deactivate(**kwargs: Any) -> None:
+            raise _FakeSelfLockoutError(
+                "You cannot deactivate your own account."
+            )
+
+        deact_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_deactivate_user",
+            side_effect=_deactivate,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"user_id": "u-admin"},
+        )
+        response = config_routes_users.handle_user_deactivate(request)
+
+        # The guard produced a redirect back to the list (error
+        # flash), not an exception and not a success redirect from
+        # a completed deactivation.
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/users"
+        )
+    finally:
+        for p in (deact_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1363,136 +1598,15 @@ def test_handle_user_deactivate_user_not_found_flashes_error():
 # ===========================================================================
 
 
-def _patch_query_all_system_roles(*, roles: List[Any]) -> Any:
-    def _q(*, db_session: Any) -> List[Any]:
-        return roles
-
-    patch = create_module_patch(
-        config_routes_roles, "_query_all_system_roles"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_q)
-    return patch
-
-
-def _patch_query_system_role_by_id(
-        *, role: Optional[_FakeRole]
-    ) -> Any:
-    def _q(*, db_session: Any, role_id: int) -> Optional[_FakeRole]:
-        return role
-
-    patch = create_module_patch(
-        config_routes_roles, "_query_system_role_by_id"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_q)
-    return patch
-
-
-def _patch_query_system_role_by_name(
-        *, role: Optional[_FakeRole]
-    ) -> Any:
-    def _q(*, db_session: Any, name: str) -> Optional[_FakeRole]:
-        return role
-
-    patch = create_module_patch(
-        config_routes_roles, "_query_system_role_by_name"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_q)
-    return patch
-
-
-def _patch_query_all_permissions(*, permissions: List[Any]) -> Any:
-    def _q(*, db_session: Any) -> List[Any]:
-        return permissions
-
-    patch = create_module_patch(
-        config_routes_roles, "_query_all_permissions"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_q)
-    return patch
-
-
-def _patch_query_permissions_by_ids(
-        *, permissions: List[Any]
-    ) -> Any:
-    def _q(
-            *, db_session: Any, permission_ids: List[int]
-        ) -> List[Any]:
-        return permissions
-
-    patch = create_module_patch(
-        config_routes_roles, "_query_permissions_by_ids"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_q)
-    return patch
-
-
-def _patch_build_system_role(*, role_factory: Callable[..., Any]) -> Any:
-    patch = create_module_patch(
-        config_routes_roles, "_build_system_role"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=role_factory)
-    return patch
-
-
-def _patch_add_and_commit() -> Any:
-    captured: List[Any] = []
-
-    def _ac(*, db_session: Any, instance: Any) -> None:
-        captured.append(instance)
-        return
-
-    patch = create_module_patch(
-        config_routes_roles, "_add_and_commit"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_ac)
-    patch.captured = captured
-    return patch
-
-
-def _patch_commit() -> Any:
-    captured: List[bool] = []
-
-    def _c(*, db_session: Any) -> None:
-        captured.append(True)
-        return
-
-    patch = create_module_patch(
-        config_routes_roles, "_commit"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_c)
-    patch.captured = captured
-    return patch
-
-
-def _patch_rollback() -> Any:
-    def _r(*, db_session: Any) -> None:
-        return
-
-    patch = create_module_patch(
-        config_routes_roles, "_rollback"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_r)
-    return patch
-
-
 def test_handle_role_list_renders_with_roles():
     """
     **Feature: webworks config roles port T2.10**
     **Property: GET /admin/roles renders config/roles/list.html
-    with every SystemRole row.**
+    with every RBAC role view.**
     """
     _reset_global_state()
     sm_patch = None
-    qr_patch = None
+    list_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -1500,10 +1614,21 @@ def test_handle_role_list_renders_with_roles():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
         roles = [
-            _FakeRole(role_id=1, name="admin", is_system=True),
-            _FakeRole(role_id=2, name="viewer"),
+            _FakeRoleView(
+                role_id="r-1", name="system-admin", is_system=True,
+                binding_count=2,
+            ),
+            _FakeRoleView(role_id="r-2", name="viewer"),
         ]
-        qr_patch = _patch_query_all_system_roles(roles=roles)
+
+        def _list(*, db_session: Any) -> List[Any]:
+            return roles
+
+        list_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_list_roles",
+            side_effect=_list,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1515,8 +1640,8 @@ def test_handle_role_list_renders_with_roles():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["roles"], roles)
     finally:
-        if qr_patch is not None:
-            qr_patch.deactivate()
+        if list_patch is not None:
+            list_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -1526,44 +1651,39 @@ def test_handle_role_list_renders_with_roles():
 def test_handle_role_create_post_happy_path_persists_and_redirects():
     """
     **Feature: webworks config roles port T2.11**
-    **Property: A valid POST builds + commits a SystemRole and
-    redirects to /admin/roles with a success flash.**
+    **Property: A valid POST calls the create service with the
+    submitted permission keys and redirects to /admin/roles with
+    a success flash.**
     """
     _reset_global_state()
     sm_patch = None
-    by_name_patch = None
-    perm_patch = None
-    perm_by_ids_patch = None
-    build_patch = None
-    add_patch = None
+    create_patch = None
+    exc_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        by_name_patch = _patch_query_system_role_by_name(role=None)
-        perm_patch = _patch_query_all_permissions(permissions=[])
-        perm_by_ids_patch = _patch_query_permissions_by_ids(
-            permissions=[_FakePermission(permission_id=11, name="users.read")]
+        exc_patch = _patch_role_exception_classes()
+
+        create_calls: List[Dict[str, Any]] = []
+
+        def _create(**kwargs: Any) -> str:
+            create_calls.append(kwargs)
+            return "r-new"
+
+        create_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_create_role",
+            side_effect=_create,
         )
-        captured_roles: List[Any] = []
-
-        def _build(*, name: str, description: str, is_system: bool = False):
-            built = _FakeRole(
-                role_id=99, name=name, description=description,
-                is_system=is_system,
-            )
-            captured_roles.append(built)
-            return built
-
-        build_patch = _patch_build_system_role(role_factory=_build)
-        add_patch = _patch_add_and_commit()
 
         cookie_value = _build_authenticated_cookie()
         body = (
             b"csrf_token=csrf-fresh&name=editor&description=Edit+stuff"
-            b"&permission_ids=11"
+            b"&permission_keys=system:users.read"
+            b"&permission_keys=system:users.write"
         )
         request = _FakeRequest(
             method="POST",
@@ -1577,17 +1697,15 @@ def test_handle_role_create_post_happy_path_persists_and_redirects():
         testbase.assert_equal(
             response.headers["Location"], "/admin/roles"
         )
-        # Built role + permissions assigned + persisted.
-        testbase.assert_equal(len(captured_roles), 1)
-        built = captured_roles[0]
-        testbase.assert_equal(built.name, "editor")
-        testbase.assert_equal(len(built.permissions), 1)
-        testbase.assert_equal(len(add_patch.captured), 1)
+        testbase.assert_equal(len(create_calls), 1)
+        call = create_calls[0]
+        testbase.assert_equal(call["name"], "editor")
+        testbase.assert_equal(
+            call["permission_keys"],
+            ["system:users.read", "system:users.write"],
+        )
     finally:
-        for p in (
-            add_patch, build_patch, perm_by_ids_patch,
-            perm_patch, by_name_patch, sm_patch,
-        ):
+        for p in (create_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1597,23 +1715,42 @@ def test_handle_role_create_post_happy_path_persists_and_redirects():
 def test_handle_role_create_post_duplicate_name_re_renders_with_flash():
     """
     **Feature: webworks config roles port T2.11**
-    **Property: When _query_system_role_by_name returns an
-    existing role, the handler re-renders the create form (400)
-    with a "Role already exists" flash.**
+    **Property: When the create service raises the duplicate
+    error, the handler re-renders the create form (400) with a
+    "Role already exists" flash.**
     """
     _reset_global_state()
     sm_patch = None
-    by_name_patch = None
-    perm_patch = None
+    create_patch = None
+    perms_patch = None
+    exc_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        existing = _FakeRole(role_id=5, name="editor")
-        by_name_patch = _patch_query_system_role_by_name(role=existing)
-        perm_patch = _patch_query_all_permissions(permissions=[])
+        exc_patch = _patch_role_exception_classes()
+
+        def _create(**kwargs: Any) -> str:
+            raise _FakeAdminDuplicateError(
+                'Role "editor" already exists.'
+            )
+
+        create_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_create_role",
+            side_effect=_create,
+        )
+
+        def _perms() -> List[Any]:
+            return []
+
+        perms_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_list_catalog_permissions",
+            side_effect=_perms,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh&name=editor&description=dup"
@@ -1632,7 +1769,7 @@ def test_handle_role_create_post_duplicate_name_re_renders_with_flash():
         contains = "already exists" in message
         testbase.assert_equal(contains, True)
     finally:
-        for p in (perm_patch, by_name_patch, sm_patch):
+        for p in (perms_patch, create_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1647,20 +1784,28 @@ def test_handle_role_detail_renders_when_role_found():
     """
     _reset_global_state()
     sm_patch = None
-    role_patch = None
+    get_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        role = _FakeRole(role_id=7, name="editor")
-        role_patch = _patch_query_system_role_by_id(role=role)
+        role = _FakeRoleView(role_id="r-7", name="editor")
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
             cookies={cookie_session.COOKIE_NAME: cookie_value},
-            path_params={"role_id": "7"},
+            path_params={"role_id": "r-7"},
         )
         response = config_routes_roles.handle_role_detail(request)
 
@@ -1668,8 +1813,8 @@ def test_handle_role_detail_renders_when_role_found():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["role"], role)
     finally:
-        if role_patch is not None:
-            role_patch.deactivate()
+        if get_patch is not None:
+            get_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
@@ -1684,19 +1829,27 @@ def test_handle_role_detail_redirects_when_role_missing():
     """
     _reset_global_state()
     sm_patch = None
-    role_patch = None
+    get_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        role_patch = _patch_query_system_role_by_id(role=None)
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return None
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
             cookies={cookie_session.COOKIE_NAME: cookie_value},
-            path_params={"role_id": "99"},
+            path_params={"role_id": "r-99"},
         )
         response = config_routes_roles.handle_role_detail(request)
 
@@ -1706,36 +1859,56 @@ def test_handle_role_detail_redirects_when_role_missing():
             response.headers["Location"], "/admin/roles"
         )
     finally:
-        if role_patch is not None:
-            role_patch.deactivate()
+        if get_patch is not None:
+            get_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()
     return
 
 
-def test_handle_role_edit_post_refuses_system_role():
+def test_handle_role_edit_post_refuses_builtin_role():
     """
     **Feature: webworks config roles port T2.13**
     **Property: An edit POST against a role with is_system=True
-    redirects to /admin/roles/{role_id} with a "System roles
-    cannot be modified" error flash and does NOT call commit.**
+    redirects to /admin/roles/{role_id} with a "Built-in roles
+    cannot be modified" error flash and does NOT call the update
+    service.**
     """
     _reset_global_state()
     sm_patch = None
-    role_patch = None
-    commit_patch = None
-    perm_patch = None
+    get_patch = None
+    update_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        role = _FakeRole(role_id=1, name="admin", is_system=True)
-        role_patch = _patch_query_system_role_by_id(role=role)
-        commit_patch = _patch_commit()
-        perm_patch = _patch_query_all_permissions(permissions=[])
+        role = _FakeRoleView(
+            role_id="r-1", name="system-admin", is_system=True
+        )
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_update_role",
+            side_effect=_update,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = b"csrf_token=csrf-fresh&description=tampered"
@@ -1743,19 +1916,18 @@ def test_handle_role_edit_post_refuses_system_role():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"role_id": "1"},
+            path_params={"role_id": "r-1"},
         )
         response = config_routes_roles.handle_role_edit(request)
 
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/admin/roles/1"
+            response.headers["Location"], "/admin/roles/r-1"
         )
-        # No commit happened.
-        testbase.assert_equal(commit_patch.captured, [])
+        testbase.assert_equal(update_calls, [])
     finally:
-        for p in (perm_patch, commit_patch, role_patch, sm_patch):
+        for p in (update_patch, get_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1765,58 +1937,779 @@ def test_handle_role_edit_post_refuses_system_role():
 def test_handle_role_edit_post_happy_path_commits_and_redirects():
     """
     **Feature: webworks config roles port T2.13**
-    **Property: A valid edit POST mutates the role + permissions
-    and commits, then redirects to /admin/roles/{role_id} with
-    a success flash.**
+    **Property: A valid edit POST calls the update service with
+    the submitted permission keys, then redirects to
+    /admin/roles/{role_id} with a success flash.**
     """
     _reset_global_state()
     sm_patch = None
-    role_patch = None
-    perm_patch = None
-    perm_by_ids_patch = None
-    commit_patch = None
+    get_patch = None
+    update_patch = None
+    exc_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
-        role = _FakeRole(role_id=2, name="editor", is_system=False)
-        role_patch = _patch_query_system_role_by_id(role=role)
-        perm_patch = _patch_query_all_permissions(permissions=[])
-        new_perms = [_FakePermission(permission_id=11, name="users.read")]
-        perm_by_ids_patch = _patch_query_permissions_by_ids(
-            permissions=new_perms
+        exc_patch = _patch_role_exception_classes()
+        role = _FakeRoleView(
+            role_id="r-2", name="editor", is_system=False
         )
-        commit_patch = _patch_commit()
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_update_role",
+            side_effect=_update,
+        )
 
         cookie_value = _build_authenticated_cookie()
         body = (
             b"csrf_token=csrf-fresh&description=Updated+desc"
-            b"&permission_ids=11"
+            b"&permission_keys=system:users.read"
         )
         request = _FakeRequest(
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"role_id": "2"},
+            path_params={"role_id": "r-2"},
         )
         response = config_routes_roles.handle_role_edit(request)
 
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
-            response.headers["Location"], "/admin/roles/2"
+            response.headers["Location"], "/admin/roles/r-2"
         )
-        testbase.assert_equal(role.description, "Updated desc")
-        testbase.assert_equal(role.permissions, new_perms)
-        testbase.assert_equal(commit_patch.captured, [True])
+        testbase.assert_equal(len(update_calls), 1)
+        call = update_calls[0]
+        testbase.assert_equal(call["role_id"], "r-2")
+        testbase.assert_equal(call["description"], "Updated desc")
+        testbase.assert_equal(
+            call["permission_keys"], ["system:users.read"]
+        )
     finally:
-        for p in (
-            commit_patch, perm_by_ids_patch, perm_patch,
-            role_patch, sm_patch,
-        ):
+        for p in (update_patch, get_patch, exc_patch, sm_patch):
             if p is not None:
                 p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_role_edit_post_empty_permissions_requires_confirmation():
+    """
+    **Feature: silent-wipe guard T2.13b**
+    **Property: A POST with no permission boxes ticked and no
+    confirm_remove_all acknowledgement does NOT call the update
+    service and re-renders with an explanatory error flash.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    update_patch = None
+    perms_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        role = _FakeRoleView(
+            role_id="r-2", name="editor", is_system=False,
+            permissions=[_FakePermView(key="system:users.read")],
+        )
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_update_role",
+            side_effect=_update,
+        )
+
+        def _perms() -> List[Any]:
+            return [_FakePermView(key="system:users.read")]
+
+        perms_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_list_catalog_permissions",
+            side_effect=_perms,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh&description=still+editor"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"role_id": "r-2"},
+        )
+        response = config_routes_roles.handle_role_edit(request)
+
+        is_html = isinstance(response, HTMLResponse)
+        testbase.assert_equal(is_html, True)
+        testbase.assert_equal(update_calls, [])
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(len(ctx["flashes"]), 1)
+        category, message = ctx["flashes"][0]
+        testbase.assert_equal(category, "error")
+        contains = "remove all permissions" in message
+        testbase.assert_equal(contains, True)
+    finally:
+        for p in (perms_patch, update_patch, get_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_role_edit_post_empty_permissions_with_confirmation_updates():
+    """
+    **Feature: silent-wipe guard T2.13c**
+    **Property: A POST with no permission boxes ticked but WITH
+    confirm_remove_all=on calls the update service with an empty
+    key list.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    update_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_role_exception_classes()
+        role = _FakeRoleView(
+            role_id="r-2", name="editor", is_system=False
+        )
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_update_role",
+            side_effect=_update,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&description=stripped"
+            b"&confirm_remove_all=on"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"role_id": "r-2"},
+        )
+        response = config_routes_roles.handle_role_edit(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(len(update_calls), 1)
+        testbase.assert_equal(update_calls[0]["permission_keys"], [])
+    finally:
+        for p in (update_patch, get_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_role_delete_happy_path_reports_consequence():
+    """
+    **Feature: role delete T2.14**
+    **Property: A valid delete POST calls the delete service and
+    redirects to /admin/roles with a flash naming the role and
+    the number of users who lost it.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    delete_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_role_exception_classes()
+        role = _FakeRoleView(
+            role_id="r-2", name="editor", is_system=False,
+            binding_count=3,
+        )
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        delete_calls: List[Dict[str, Any]] = []
+
+        def _delete(**kwargs: Any) -> int:
+            delete_calls.append(kwargs)
+            return 3
+
+        delete_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_delete_role",
+            side_effect=_delete,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"role_id": "r-2"},
+        )
+        response = config_routes_roles.handle_role_delete(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/roles"
+        )
+        testbase.assert_equal(len(delete_calls), 1)
+        testbase.assert_equal(delete_calls[0]["role_id"], "r-2")
+    finally:
+        for p in (delete_patch, get_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_role_delete_builtin_refused():
+    """
+    **Feature: role delete T2.14b**
+    **Property: The delete service raising
+    BuiltinRoleProtectedError yields a redirect to the role
+    detail page with the protection message -- no success.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    delete_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_role_exception_classes()
+        role = _FakeRoleView(
+            role_id="r-1", name="system-admin", is_system=True
+        )
+
+        def _get(*, db_session: Any, role_id: str) -> Optional[Any]:
+            return role
+
+        get_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_get_role",
+            side_effect=_get,
+        )
+
+        def _delete(**kwargs: Any) -> int:
+            raise _FakeBuiltinRoleProtectedError(
+                'Role "system-admin" is a built-in role and cannot '
+                "be deleted."
+            )
+
+        delete_patch = _patch_seam(
+            module=config_routes_roles,
+            seam_name="_svc_delete_role",
+            side_effect=_delete,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"role_id": "r-1"},
+        )
+        response = config_routes_roles.handle_role_delete(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/roles/r-1"
+        )
+    finally:
+        for p in (delete_patch, get_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+# ===========================================================================
+# END-TO-END TRUTH TESTS -- the success messages must be true.
+#
+# These run the REAL identity_admin service against an in-memory
+# Phase-1 database (only the auth gate + templates are stubbed):
+#
+# 1. A user created through handle_user_create can authenticate
+#    through local_flow.verify_local_credentials.
+# 2. A catalog role granted through handle_user_edit flips
+#    rbac_evaluator.check_permission to allowed.
+# 3. A CUSTOM role created through handle_role_create (grants
+#    stored as rbac_role_permissions rows) also flips
+#    rbac_evaluator.check_permission once bound.
+# ===========================================================================
+
+
+#: Ambient pepper captured by :func:`_setup_real_stack` so the
+#: truth tests can restore it on the way out. ``False`` means "no
+#: truth test has run"; ``None`` means "no pepper was active".
+_AMBIENT_PEPPER_STASH: Any = False
+
+
+def _restore_ambient_pepper() -> None:
+    """
+        Restore the pepper that was active before
+        :func:`_setup_real_stack` replaced it. A no-op when no
+        truth test has run in this process.
+    """
+    global _AMBIENT_PEPPER_STASH
+    if _AMBIENT_PEPPER_STASH is False:
+        return
+
+    from ccai.pychestrate.webservice.security.auth.pepper_loader import (
+        reset_active_pepper_for_testing,
+        set_active_pepper,
+    )
+
+    reset_active_pepper_for_testing()
+    if _AMBIENT_PEPPER_STASH is not None:
+        set_active_pepper(pepper=_AMBIENT_PEPPER_STASH)
+    _AMBIENT_PEPPER_STASH = False
+    return
+
+
+def _setup_real_stack() -> Any:
+    """
+        Bootstrap the Phase-1 runtime for a truth test: extension
+        registry (hashers, catalog packs), pepper, backoff reset,
+        and an in-memory database. Returns the engine.
+    """
+    from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+    from ccai.pychestrate.webservice.security.auth import local_flow
+    from ccai.pychestrate.webservice.security.auth.pepper_loader import (
+        get_active_pepper,
+        reset_active_pepper_for_testing,
+        set_active_pepper,
+    )
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+        build_in_memory_session,
+        reset_phase1_runtime,
+    )
+
+    # Stash whatever pepper is active so the truth test can put
+    # it back afterwards. Clearing the pepper permanently would
+    # poison later modules in a shared-process suite run: the
+    # e2e harness seeds its users under the ambient pepper and
+    # only installs its own constant when none is active, so a
+    # clear here makes every later e2e login verify against the
+    # wrong pepper (8 e2e failures in the full phase10 run).
+    global _AMBIENT_PEPPER_STASH
+    try:
+        _AMBIENT_PEPPER_STASH = get_active_pepper()
+    except Exception:
+        _AMBIENT_PEPPER_STASH = None
+
+    reset_phase1_runtime()
+    reset_active_pepper_for_testing()
+    set_active_pepper(pepper=SecretBytes(b"p13e-truth-test-pepper"))
+    local_flow.reset_backoff_for_testing()
+
+    engine, session = build_in_memory_session()
+    session.close()
+    rtnval = engine
+    return rtnval
+
+
+def _install_engine_session_factory(*, engine: Any) -> None:
+    """
+        Point SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY at the
+        in-memory engine so the handlers open real sessions.
+    """
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+        session_for,
+    )
+
+    def factory() -> Any:
+        return session_for(engine=engine)
+
+    SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = factory
+    return
+
+
+def test_truth_user_created_via_route_can_log_in():
+    """
+    **Feature: END-TO-END TRUTH (users)**
+    **Property: POST /admin/users/create writes the modern
+    identity store -- the created user authenticates through
+    local_flow.verify_local_credentials with the submitted
+    password. The success message is TRUE.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        engine = _setup_real_stack()
+        _install_engine_session_factory(engine=engine)
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&username=worker&email=worker@example.com"
+            b"&password=CorrectHorse9!Battery&display_name=Worker"
+            b"&firstname=Wor&lastname=Ker"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+        )
+        response = config_routes_users.handle_user_create(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/users"
+        )
+
+        # THE TRUTH CHECK: the freshly created user can log in
+        # through the real local credential flow.
+        from ccai.pychestrate.webservice.security.auth import local_flow
+        from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+            session_for,
+        )
+
+        verify_session = session_for(engine=engine)
+        try:
+            result = local_flow.verify_local_credentials(
+                login_name="worker",
+                password="CorrectHorse9!Battery",
+                mfa_code=None,
+                source_ip="127.0.0.1",
+                db_session=verify_session,
+            )
+            has_user_id = len(result.user_id) > 0
+            testbase.assert_equal(has_user_id, True)
+
+            # The identity row is the one the route created.
+            from ccai.pychestrate.webservice.identity.users.models import (
+                IdentityUser,
+            )
+            row = (
+                verify_session.query(IdentityUser)
+                .filter(IdentityUser.login_name == "worker")
+                .first()
+            )
+            testbase.assert_equal(str(row.user_id), result.user_id)
+
+            # The user also appears on the real list + detail reads
+            # (the legacy-name join tolerates the absent legacy
+            # table in this schema).
+            from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+                identity_admin,
+            )
+            listing = identity_admin.list_identity_users(
+                db_session=verify_session,
+                offset=0,
+                limit=20,
+                search=None,
+            )
+            listed_logins = [entry.username for entry in listing.users]
+            testbase.assert_equal("worker" in listed_logins, True)
+
+            detail = identity_admin.get_identity_user(
+                db_session=verify_session,
+                user_id=result.user_id,
+            )
+            testbase.assert_equal(detail.username, "worker")
+            testbase.assert_equal(detail.is_active, True)
+        finally:
+            verify_session.close()
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _restore_ambient_pepper()
+        _reset_global_state()
+    return
+
+
+def test_truth_role_granted_via_route_changes_rbac_decision():
+    """
+    **Feature: END-TO-END TRUTH (roles)**
+    **Property: Granting system-admin through POST
+    /admin/users/{id}/edit creates a real SYSTEM-scope
+    RbacRoleBinding -- rbac_evaluator.check_permission flips from
+    denied to allowed for the target user.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        engine = _setup_real_stack()
+        _install_engine_session_factory(engine=engine)
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        from datetime import datetime, timezone
+
+        from ccai.pychestrate.webservice.security.auth.models import (
+            AuthProviderKind,
+        )
+        from ccai.pychestrate.webservice.security.auth.session_service import (
+            AuthPrincipal,
+        )
+        from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+        from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+            identity_admin,
+        )
+        from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+            session_for,
+        )
+
+        # Seed the target user through the real service.
+        create_session = session_for(engine=engine)
+        try:
+            user_id = identity_admin.create_identity_user(
+                db_session=create_session,
+                username="grantee",
+                email="grantee@example.com",
+                password="CorrectHorse9!Battery",
+                display_name="Grantee",
+                firstname="",
+                lastname="",
+                role_names=[],
+                actor_user_id=None,
+            )
+        finally:
+            create_session.close()
+
+        principal = AuthPrincipal(
+            user_id=user_id,
+            session_id="truth-session",
+            provider_kind=AuthProviderKind.LOCAL,
+            provider_name="local",
+        )
+
+        # BEFORE: no binding, permission denied.
+        before_session = session_for(engine=engine)
+        try:
+            before = rbac_evaluator.check_permission(
+                db_session=before_session,
+                principal=principal,
+                permission_key="system:users.write",
+                now=datetime.now(timezone.utc),
+            )
+            testbase.assert_equal(before.allowed, False)
+        finally:
+            before_session.close()
+
+        # Grant system-admin through the route handler.
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&email=grantee@example.com"
+            b"&display_name=Grantee&firstname=&lastname="
+            b"&is_active=on&role_names=system-admin"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"user_id": user_id},
+        )
+        response = config_routes_users.handle_user_edit(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+
+        # AFTER: the evaluator answers True. The success message
+        # is TRUE.
+        after_session = session_for(engine=engine)
+        try:
+            after = rbac_evaluator.check_permission(
+                db_session=after_session,
+                principal=principal,
+                permission_key="system:users.write",
+                now=datetime.now(timezone.utc),
+            )
+            testbase.assert_equal(after.allowed, True)
+            testbase.assert_equal(after.reason, "binding_allow")
+        finally:
+            after_session.close()
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _restore_ambient_pepper()
+        _reset_global_state()
+    return
+
+
+def test_truth_custom_role_created_via_route_grants_access():
+    """
+    **Feature: END-TO-END TRUTH (custom roles)**
+    **Property: A custom role created through POST
+    /admin/roles/create stores its grants as
+    rbac_role_permissions rows, and once bound to a user the
+    evaluator honours those DB grants -- check_permission flips
+    to allowed for exactly the granted key.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        engine = _setup_real_stack()
+        _install_engine_session_factory(engine=engine)
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        from datetime import datetime, timezone
+
+        from ccai.pychestrate.webservice.security.auth.models import (
+            AuthProviderKind,
+        )
+        from ccai.pychestrate.webservice.security.auth.session_service import (
+            AuthPrincipal,
+        )
+        from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+        from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+            identity_admin,
+        )
+        from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+            session_for,
+        )
+
+        # Create the custom role through the route handler.
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&name=support-auditor"
+            b"&description=Read+audit+records"
+            b"&permission_keys=system:audit.read"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+        )
+        response = config_routes_roles.handle_role_create(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/roles"
+        )
+
+        # Seed a user and bind the custom role via the service.
+        work_session = session_for(engine=engine)
+        try:
+            user_id = identity_admin.create_identity_user(
+                db_session=work_session,
+                username="auditee",
+                email="auditee@example.com",
+                password="CorrectHorse9!Battery",
+                display_name="Auditee",
+                firstname="",
+                lastname="",
+                role_names=["support-auditor"],
+                actor_user_id=None,
+            )
+        finally:
+            work_session.close()
+
+        principal = AuthPrincipal(
+            user_id=user_id,
+            session_id="truth-session",
+            provider_kind=AuthProviderKind.LOCAL,
+            provider_name="local",
+        )
+
+        check_session = session_for(engine=engine)
+        try:
+            granted = rbac_evaluator.check_permission(
+                db_session=check_session,
+                principal=principal,
+                permission_key="system:audit.read",
+                now=datetime.now(timezone.utc),
+            )
+            testbase.assert_equal(granted.allowed, True)
+
+            # A key the custom role does NOT grant stays denied.
+            not_granted = rbac_evaluator.check_permission(
+                db_session=check_session,
+                principal=principal,
+                permission_key="system:users.write",
+                now=datetime.now(timezone.utc),
+            )
+            testbase.assert_equal(not_granted.allowed, False)
+        finally:
+            check_session.close()
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _restore_ambient_pepper()
         _reset_global_state()
     return

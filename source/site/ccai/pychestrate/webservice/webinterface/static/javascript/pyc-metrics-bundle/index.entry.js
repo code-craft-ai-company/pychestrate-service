@@ -254,7 +254,9 @@ import {
   format_duration,
   compute_bar_fractions,
   short_metric_id,
-  extract_projects
+  extract_projects,
+  list_load_message_for_status,
+  announce_session_expired
 } from "./test-metrics-view.js";
 import { PycTimeseriesExplorer as PycTimeseriesExplorer2 } from "./timeseries-view.js";
 import {
@@ -347,6 +349,7 @@ export {
   build_slos_collection_url,
   build_test_metrics_url,
   build_tile,
+  announce_session_expired,
   build_timeseries_url,
   classify_metrics_route,
   comparison_label,
@@ -370,6 +373,7 @@ export {
   format_window,
   generate_tile_id,
   is_dashboard_edit_path,
+  list_load_message_for_status,
   mount_metrics_view_if_active,
   move_tile_down,
   move_tile_up,

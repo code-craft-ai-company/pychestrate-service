@@ -27,33 +27,33 @@
         <div class="form-group">
             <label for="gateway">Gateway</label>
             <input type="text" id="gateway" name="gateway" class="form-control"
-                   value="{{ pool.gateway or '' }}"
+                   value="{% if form_data %}{{ form_data.get('gateway', '') }}{% else %}{{ pool.gateway or '' }}{% endif %}"
                    placeholder="192.168.1.1">
         </div>
-        
+
         <div class="form-group">
             <label for="dns_servers">DNS Servers</label>
             <input type="text" id="dns_servers" name="dns_servers" class="form-control"
-                   value="{{ pool.dns_servers | join(', ') if pool.dns_servers else '' }}"
+                   value="{% if form_data %}{{ form_data.get('dns_servers', '') }}{% else %}{{ pool.dns_servers | join(', ') if pool.dns_servers else '' }}{% endif %}"
                    placeholder="8.8.8.8, 8.8.4.4">
             <p class="form-text">Comma-separated list of DNS server addresses</p>
         </div>
-        
+
         <div class="form-group">
             <label for="reserved_ips">Reserved IPs</label>
             <textarea id="reserved_ips" name="reserved_ips" class="form-control" rows="3"
-                      placeholder="192.168.1.1, 192.168.1.2">{{ pool.reserved_ips | join(', ') if pool.reserved_ips else '' }}</textarea>
+                      placeholder="192.168.1.1, 192.168.1.2">{% if form_data %}{{ form_data.get('reserved_ips', '') }}{% else %}{{ pool.reserved_ips | join(', ') if pool.reserved_ips else '' }}{% endif %}</textarea>
             <p class="form-text">Comma-separated list of IPs to exclude from allocation</p>
         </div>
-        
+
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" class="form-control" rows="3">{{ pool.description or '' }}</textarea>
+            <textarea id="description" name="description" class="form-control" rows="3">{% if form_data %}{{ form_data.get('description', '') }}{% else %}{{ pool.description or '' }}{% endif %}</textarea>
         </div>
         
         <div style="display: flex; gap: 10px;">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                <span class="material-icons" aria-hidden="true">save</span> Save Changes
             </button>
             <a href="{{ url_for('resources.ip_pool_detail', pool_id=pool.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

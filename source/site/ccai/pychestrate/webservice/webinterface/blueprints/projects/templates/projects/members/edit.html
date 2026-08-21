@@ -23,8 +23,8 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
         <div class="form-group">
-            <label>User</label>
-            <input type="text" class="form-control" value="{{ member.username }} ({{ member.display_name }})" disabled>
+            <label for="member_user">User</label>
+            <input type="text" id="member_user" class="form-control" value="{{ member.username }} ({{ member.display_name }})" disabled>
         </div>
         
         <div class="form-group">

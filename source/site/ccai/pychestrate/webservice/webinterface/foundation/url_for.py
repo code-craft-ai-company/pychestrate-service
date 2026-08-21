@@ -40,6 +40,13 @@ substituting -- so a registered pattern of
 ``/config/users/u-1`` for ``url_for('config.user_detail',
 user_id='u-1')``.
 
+Kwargs that do not match a path placeholder are appended as a
+URL-encoded query string (matching flask's ``url_for``
+behavior) -- so ``url_for('config.users_list', page=2)`` on a
+placeholder-free pattern returns ``/admin/users?page=2``.
+Kwargs whose value is ``None`` are skipped, and insertion
+order is preserved.
+
 Missing kwargs raise KeyError so a typo in a template surfaces
 loudly rather than producing a half-substituted URL.
 """
@@ -51,8 +58,9 @@ __version__ = "1.0.0"
 
 
 import re
+import urllib.parse
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 import jinja2
 
@@ -90,14 +98,20 @@ def register_endpoint(*, endpoint: str, pattern: str) -> None:
 def url_for(endpoint: str, **kwargs: Any) -> str:
     """
         Build a URL from a registered endpoint name + caller-
-        supplied path-param kwargs. Matches the
+        supplied kwargs. Matches the
         ``url_for(endpoint, **values)`` shape the templates were
-        written against.
+        written against: kwargs matching path-param placeholders
+        are substituted into the path, and every remaining kwarg
+        is appended as a URL-encoded query string. Kwargs whose
+        value is ``None`` are skipped; insertion order is
+        preserved.
 
         :param endpoint: Registered endpoint name.
-        :param kwargs: Path-param substitutions.
+        :param kwargs: Path-param substitutions + query-string
+                       parameters.
 
-        :returns: Substituted URL string.
+        :returns: Substituted URL string, with a query string
+                  when non-placeholder kwargs were passed.
         :raises: KeyError on unknown endpoint or missing
                  path-param kwarg.
     """
@@ -109,6 +123,8 @@ def url_for(endpoint: str, **kwargs: Any) -> str:
         )
 
     pattern = _endpoint_registry[endpoint]
+
+    placeholder_names = set(_PLACEHOLDER_PATTERN.findall(pattern))
 
     def _substitute(match: "re.Match[str]") -> str:
         name = match.group(1)
@@ -122,6 +138,22 @@ def url_for(endpoint: str, **kwargs: Any) -> str:
         return rtnval
 
     rtnval = _PLACEHOLDER_PATTERN.sub(_substitute, pattern)
+
+    query_items: List[Tuple[str, str]] = []
+    for name, value in kwargs.items():
+        if name in placeholder_names:
+            continue
+        if value is None:
+            continue
+        query_items.append((name, str(value)))
+
+    if len(query_items) > 0:
+        query_string = urllib.parse.urlencode(query_items)
+        if "?" in rtnval:
+            rtnval = rtnval + "&" + query_string
+        else:
+            rtnval = rtnval + "?" + query_string
+
     return rtnval
 
 

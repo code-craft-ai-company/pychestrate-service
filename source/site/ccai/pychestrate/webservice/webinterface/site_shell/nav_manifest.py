@@ -137,14 +137,23 @@ NAV_GROUPS: List[NavGroup] = [
 
 
 # The authoritative entry list. Each entry mirrors the descriptor
-# the corresponding feature bundle historically registered. The
-# permission keys are the same ``system:<feature>.read`` keys the
-# bundles used (verified against the in-tree permission catalog).
+# the corresponding feature bundle historically registered.
+#
+# INVARIANT: every key named in ``required_permissions`` (here and
+# in NAV_GROUPS) MUST be declared in the in-tree permission
+# catalog (:mod:`security.rbac.extensions.core_permissions`). An
+# entry that requires an undeclared key can never be held by any
+# principal, so the entry -- and, once its siblings are filtered,
+# its whole group -- silently disappears for every user. Where an
+# entry's route is backed by a REST surface, the keys should match
+# what that surface actually enforces.
 NAV_ENTRIES: List[NavEntry] = [
     # ---- Projects ------------------------------------------------
+    # Labeled "All Projects" so the entry reads distinctly from
+    # its owning group (both were previously "Projects").
     NavEntry(
         entry_id="projects.dashboard",
-        label="Projects",
+        label="All Projects",
         route="/projects",
         group_id=GROUP_PROJECTS,
         required_permissions=["system:projects.read"],
@@ -219,7 +228,15 @@ NAV_ENTRIES: List[NavEntry] = [
         label="Dashboards",
         route="/dashboards",
         group_id=GROUP_INSIGHTS,
-        required_permissions=["system:metrics.read"],
+        # The dashboards REST surface enforces
+        # ``system:dashboards.read`` (dashboards_routes) and the
+        # rendered dashboards query metric timeseries, which
+        # enforce ``system:metrics.read``, so the entry requires
+        # both.
+        required_permissions=[
+            "system:metrics.read",
+            "system:dashboards.read",
+        ],
     ),
     NavEntry(
         entry_id="insights.slos",
@@ -255,7 +272,15 @@ NAV_ENTRIES: List[NavEntry] = [
         label="Resources",
         route="/resource-pools",
         group_id=GROUP_FLEET,
-        required_permissions=["system:resources.read"],
+        # The /resource-pools surface enforces
+        # ``system:resource_pools.read`` (resource_pools_routes)
+        # and the per-resource views it links into enforce
+        # ``system:resources.read`` (resources_routes), so the
+        # entry requires both.
+        required_permissions=[
+            "system:resources.read",
+            "system:resource_pools.read",
+        ],
     ),
     # ---- Operations ----------------------------------------------
     NavEntry(
@@ -324,6 +349,16 @@ NAV_ENTRIES: List[NavEntry] = [
         required_permissions=["system:rbac.read"],
     ),
     NavEntry(
+        entry_id="admin.variables",
+        label="Variables",
+        route="/admin/variables",
+        group_id=GROUP_ADMIN,
+        # There is no ``system:variables.*`` key in the catalog;
+        # like Feature Flags, the page is gated by the admin UX
+        # signal (the group requires it too).
+        required_permissions=["system:ui.admin.view"],
+    ),
+    NavEntry(
         entry_id="admin.scopes",
         label="Secret Scopes",
         route="/admin/scopes",
@@ -332,7 +367,10 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="admin.secrets",
-        label="Secrets",
+        # Labeled "(legacy)" to distinguish this entry from the
+        # modern ``system.secrets`` entry at /secrets, which
+        # otherwise renders with the identical "Secrets" label.
+        label="Secrets (legacy)",
         route="/admin/secrets",
         group_id=GROUP_ADMIN,
         required_permissions=["system:secrets.read"],
@@ -356,6 +394,12 @@ NAV_ENTRIES: List[NavEntry] = [
         label="Enrollment Tokens",
         route="/admin/enrollment-tokens",
         group_id=GROUP_ADMIN,
+        # ``system:resources.manage`` looks unrelated to
+        # enrollment, but it is the key the enrollment admin page
+        # deliberately guards its routes with (see
+        # ``_ADMIN_PERMISSION`` in
+        # webinterface/blueprints/config/routes_enrollment.py), so
+        # the nav gate matches the page's actual enforcement.
         required_permissions=["system:resources.manage"],
     ),
 ]

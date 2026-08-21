@@ -30,8 +30,8 @@
                 {% for permission in permissions %}
                 <div style="margin: 5px 0;">
                     <label style="font-weight: normal;">
-                        <input type="checkbox" name="permission_ids" value="{{ permission.id }}"
-                               {% if permission.id in current_permission_ids %}checked{% endif %}>
+                        <input type="checkbox" name="permission_keys" value="{{ permission.id }}"
+                               {% if permission.id in current_permission_keys %}checked{% endif %}>
                         {{ permission.name }}
                         {% if permission.description %}<span style="color: #6c757d;"> - {{ permission.description }}</span>{% endif %}
                     </label>
@@ -40,6 +40,17 @@
             </div>
         </div>
         {% endif %}
+
+        <div class="form-group">
+            <label style="font-weight: normal;">
+                <input type="checkbox" name="confirm_remove_all">
+                I intend to remove all permissions from this role
+            </label>
+            <p class="form-text">
+                Required only when saving with no permissions selected --
+                it prevents accidentally wiping the role's grants.
+            </p>
+        </div>
         
         <div style="display: flex; gap: 10px;">
             <button type="submit" class="btn btn-primary">

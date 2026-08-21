@@ -13,6 +13,9 @@ Covers the result-manifest ingest endpoint added in PR p19c:
 * 202 on the happy path.
 * 409 when the result tree has not been written to the
   configured backend yet.
+* The ``result_manifest`` live event publishes on the 202 path
+  (outbox row + bus event) carrying the artifact-path defaults
+  and the lifted ``extras.files`` index.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -61,6 +64,7 @@ class _FakeRequest:
 class _FakeRun:
     def __init__(self) -> None:
         self.run_id: str = "run-1"
+        self.project_id: str = "proj-1"
         return
 
 
@@ -224,4 +228,155 @@ def test_results_complete_returns_409_when_tree_missing():
     testbase.assert_equal(response.status_code, 409)
     body = _decode_body(response)
     testbase.assert_equal(body["backend_key_prefix"], "runs/run-1/")
+    return
+
+
+# ---------------------------------------------------------------------------
+# result_manifest live event
+# ---------------------------------------------------------------------------
+
+
+class _FakeCommitSession:
+    def __init__(self) -> None:
+        self.commits: int = 0
+        return
+
+    def commit(self) -> None:
+        self.commits += 1
+        return
+
+
+def test_build_result_manifest_block_applies_testbase_defaults_and_lifts_files():
+    """
+    **Feature: run-detail data path**
+    **Property: the manifest block applies the OpenAPI testbase
+    artifact-path defaults when the client omitted them and lifts
+    extras.files to a top-level files array + artifact_count.**
+    """
+    payload: Dict[str, Any] = dict(_MANIFEST_BODY)
+    payload["tests_passed"] = 40
+    payload["tests_failed"] = 2
+    payload["extras"] = {
+        "files": [
+            {"relative_path": "testrun_summary.json", "size_bytes": 512, "sha256": "aa"},
+            {"relative_path": "artifacts/console.log", "size_bytes": 2048, "sha256": "bb"},
+        ],
+    }
+
+    block = runs_routes._build_result_manifest_block(
+        run_id="run-1",
+        format_tag="testbase",
+        payload=payload,
+    )
+
+    testbase.assert_equal(block["run_id"], "run-1")
+    testbase.assert_equal(block["format_tag"], "testbase")
+    testbase.assert_equal(block["terminal_outcome"], "success")
+    testbase.assert_equal(block["summary_artifact_path"], "testrun_summary.json")
+    testbase.assert_equal(
+        block["results_stream_artifact_path"], "testrun_results_stream.jsos",
+    )
+    testbase.assert_equal(block["results_artifact_path"], "testrun_results.json")
+    testbase.assert_equal(block["html_summary_artifact_path"], "testsummary.html")
+    testbase.assert_equal(block["artifact_count"], 2)
+    testbase.assert_equal(len(block["files"]), 2)
+    testbase.assert_equal(block["files"][1]["relative_path"], "artifacts/console.log")
+    testbase.assert_equal(block["tests_passed"], 40)
+    testbase.assert_equal(block["tests_failed"], 2)
+    return
+
+
+def test_build_result_manifest_block_omits_defaults_for_build_manifest():
+    """
+    **Feature: run-detail data path**
+    **Property: a build-format manifest gets no testbase path
+    defaults -- only explicitly posted path fields survive.**
+    """
+    payload: Dict[str, Any] = dict(_MANIFEST_BODY)
+    payload["format_tag"] = "build"
+
+    block = runs_routes._build_result_manifest_block(
+        run_id="run-1",
+        format_tag="build",
+        payload=payload,
+    )
+
+    testbase.assert_true("summary_artifact_path" not in block)
+    testbase.assert_true("html_summary_artifact_path" not in block)
+    testbase.assert_equal(block["artifact_count"], 0)
+    testbase.assert_equal(block["files"], [])
+    return
+
+
+def test_results_complete_publishes_result_manifest_event():
+    """
+    **Feature: run-detail data path**
+    **Property: the 202 path writes a durable outbox row and
+    buffers a bus event on the MANIFEST_LANDED topic, then
+    commits so the after-commit hook can deliver -- the SSE
+    bridge turns this into the result_manifest RunEvent the
+    run-detail artifacts pane renders from.**
+    """
+    from ccai.pychestrate.webservice.ingest.result.events import (
+        ResultEventTopics,
+    )
+
+    outbox_rows: List[Dict[str, Any]] = []
+    bus_events: List[Any] = []
+
+    def capture_outbox(**kwargs: Any) -> Any:
+        outbox_rows.append(kwargs)
+        return None
+
+    def capture_enqueue(**kwargs: Any) -> None:
+        bus_events.append(kwargs["event"])
+        return
+
+    session = _FakeCommitSession()
+
+    run_patch = _patch_find_run(exists=True)
+    scan_patch = create_module_patch(runs_routes.result_scanner, "scan_once")
+    scan_mock = scan_patch.activate()
+    scan_mock.configure(side_effect=lambda **kwargs: _FakeOutcome())
+    outbox_patch = create_module_patch(runs_routes.run_repo, "append_outbox_row")
+    outbox_mock = outbox_patch.activate()
+    outbox_mock.configure(side_effect=capture_outbox)
+    enqueue_patch = create_module_patch(runs_routes, "enqueue_event")
+    enqueue_mock = enqueue_patch.activate()
+    enqueue_mock.configure(side_effect=capture_enqueue)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/results/complete",
+            path_params={"run_id": "run-1"},
+            body=dict(_MANIFEST_BODY),
+            db_session=session,
+            mtls_client_cn="pod-client-cert",
+        )
+        response = runs_routes.handle_post_results_complete(request)
+    finally:
+        enqueue_patch.deactivate()
+        outbox_patch.deactivate()
+        scan_patch.deactivate()
+        run_patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 202)
+
+    testbase.assert_equal(len(outbox_rows), 1)
+    testbase.assert_equal(
+        outbox_rows[0]["topic"], ResultEventTopics.MANIFEST_LANDED,
+    )
+    testbase.assert_equal(outbox_rows[0]["run_id"], "run-1")
+
+    testbase.assert_equal(len(bus_events), 1)
+    event = bus_events[0]
+    testbase.assert_equal(event.topic, ResultEventTopics.MANIFEST_LANDED)
+    testbase.assert_equal(event.payload["run_id"], "run-1")
+    testbase.assert_equal(event.payload["project_id"], "proj-1")
+    testbase.assert_equal(event.payload["terminal_outcome"], "success")
+    manifest = event.payload["manifest"]
+    testbase.assert_equal(
+        manifest["html_summary_artifact_path"], "testsummary.html",
+    )
+
+    testbase.assert_true(session.commits >= 1)
     return

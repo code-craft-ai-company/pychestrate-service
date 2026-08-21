@@ -66,6 +66,23 @@
 @USER@ ALL=(root) NOPASSWD: /usr/bin/openssl x509 -in /etc/nginx/ssl/client-ca.crt -noout -fingerprint -sha256
 @USER@ ALL=(root) NOPASSWD: /usr/bin/openssl x509 -in /etc/nginx/ssl/client-ca.crt -noout -subject -enddate
 
+# TLS server-cert renewal (driven by ``deployment/renew-cert.sh``).
+#
+# ``tailscale cert`` mints a fresh tailnet HTTPS cert pair into
+# /tmp (root-owned when run under sudo), the two ``install``
+# calls place it where the nginx site config expects it (key is
+# 0640 root:www-data so the nginx workers can read it), and the
+# scoped ``rm`` cleans the root-owned staging files.  The
+# hostname is fixed to this deploy's canonical public hostname,
+# so the rule cannot be repurposed to mint certs for other
+# tailnet nodes.  ``nginx -t`` + ``systemctl reload nginx`` are
+# already covered above.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/tailscale cert --cert-file /tmp/pychestrate.crt --key-file /tmp/pychestrate.key @PUBLIC_HOSTNAME@
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.crt /etc/nginx/ssl/pychestrate.crt
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0640 -o root -g www-data /tmp/pychestrate.key /etc/nginx/ssl/pychestrate.key
+@USER@ ALL=(root) NOPASSWD: /usr/bin/rm -f /tmp/pychestrate.crt /tmp/pychestrate.key
+@USER@ ALL=(root) NOPASSWD: /usr/bin/openssl x509 -in /etc/nginx/ssl/pychestrate.crt -noout -subject -enddate
+
 # systemd unit install (single ``install`` covers mv + chown + chmod).
 @USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 

@@ -37,7 +37,7 @@
     </form>
     
     <a href="{{ url_for('projects.test_spec_list', project_id=project.id) }}" class="btn btn-secondary">
-        <span class="material-icons">settings</span> Manage Specs
+        <span class="material-icons">settings</span> View Specs
     </a>
 </div>
 
@@ -83,7 +83,9 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="10" style="text-align: center; color: #6c757d;">No test jobs found</td>
+            <td colspan="10" style="text-align: center; color: #6c757d; padding: 40px;">
+                No test jobs yet. Test jobs appear here when a test specification runs; they are triggered by watches, pipelines, or the API.
+            </td>
         </tr>
         {% endfor %}
     </tbody>

@@ -28,4 +28,5 @@ class WebhookInEventTopics:
     REPLAY_IGNORED: str = "entity.webhook.replay_ignored"
     FAILED: str = "entity.webhook.failed"
     CONFIGURED: str = "entity.webhook.configured"
+    CONFIGURATION_ENABLED: str = "entity.webhook.configuration_enabled"
     CONFIGURATION_DISABLED: str = "entity.webhook.configuration_disabled"

@@ -9,7 +9,7 @@ The production webservice runs on ``ccai.webworks`` (see
 :mod:`app_pychestrate_main`). This module provides the
 webworks-native ``pods`` controller.
 
-Thirteen routes spread across four logical groupings under
+Fourteen routes spread across four logical groupings under
 ``/api/v1/projects/{project_id}/...``:
 
 * **Pod definitions** (versioned spec storage)
@@ -20,6 +20,9 @@ Thirteen routes spread across four logical groupings under
 * **Pod lifecycle** (state machine + history)
     * ``GET  /pods/{pod_id}/state``
     * ``GET  /pods/{pod_id}/state/history``
+    * ``POST /pods/{pod_id}/state/transitions``
+      (operator-initiated lifecycle events; ``drain`` /
+      ``deregister`` only)
 
 * **Pod registration** (per-client claim records + topology)
     * ``GET  /pods/{pod_id}/registration``
@@ -46,6 +49,11 @@ no collision is possible with project-level routes that live at
 ``/projects/{project_id}`` (depth 3) or ``/projects/{project_id}
 /<other>``.
 
+All routes are operator/UI facing and enforce RBAC: reads
+require ``system:pods.read``; creates, template materialization,
+lifecycle transitions, and run-scoped variable mutations require
+``system:pods.write``.
+
 Error responses are RFC 7807 problem documents per the
 convention in :mod:`api.problem_json_webworks`.
 """
@@ -56,6 +64,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ccai.errors.exceptions import SemanticError
@@ -82,9 +91,12 @@ from ccai.pychestrate.webservice.pods.exceptions import (
     PodDefinitionAlreadyExistsError,
     PodDefinitionNotFoundError,
     PodSpecValidationError,
+    PodStateTransitionError,
     PodTemplateNotFoundError,
 )
 from ccai.pychestrate.webservice.pods.lifecycle_service import (
+    LifecycleEventKind,
+    apply_transition,
     read_state,
     read_state_history,
 )
@@ -100,12 +112,25 @@ from ccai.pychestrate.webservice.pods.topology_service import (
     compose_topology,
     topology_as_dict,
 )
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 PROJECTS_PATH = "/projects"
 
+PODS_READ_PERMISSION_KEY = "system:pods.read"
+PODS_WRITE_PERMISSION_KEY = "system:pods.write"
+
 DEFAULT_HISTORY_OFFSET = 0
 DEFAULT_HISTORY_LIMIT = 100
+
+# Lifecycle events an operator may apply through the REST surface.
+# The remaining event kinds (provision_*, registered, acquire,
+# release, client_lost, client_recovered) are system-driven and
+# must not be forgeable from the UI.
+OPERATOR_TRANSITION_EVENT_KINDS = (
+    LifecycleEventKind.DRAIN,
+    LifecycleEventKind.DEREGISTER,
+)
 
 
 class _ProblemAbort(Exception):
@@ -162,6 +187,60 @@ def _require_session(request: Request) -> Any:
             detail="Request-scoped db_session not configured",
         )
     rtnval = db_session
+    return rtnval
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session
+        middleware, or ``None`` when the request is anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        permission_key: str
+    ) -> Any:
+    """
+        Require the calling principal to hold ``permission_key``.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param permission_key: Required ``system:*`` permission key.
+
+        :returns: The :class:`AuthPrincipal`.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+
+    now = datetime.now(timezone.utc)
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=now,
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(permission_key),
+            extensions={"required_permission": permission_key},
+        )
+    rtnval = principal
     return rtnval
 
 
@@ -286,6 +365,32 @@ def _definition_to_dict(definition: Any, version: Any) -> dict:
     return rtnval
 
 
+def _state_row_to_dict(row: Any) -> dict:
+    """
+        Render a :class:`PodRuntimeState` row as the REST response
+        dict shared by the state read and transition handlers.
+
+        :param row: ORM PodRuntimeState row.
+
+        :returns: JSON-friendly dict.
+    """
+    rtnval = {
+        "pod_id": str(row.pod_id),
+        "state": row.state.value,
+        "previous_state": (
+            row.previous_state.value
+            if row.previous_state is not None else None
+        ),
+        "last_transition_at": (
+            row.last_transition_at.isoformat()
+            if row.last_transition_at is not None else None
+        ),
+        "last_transition_event": row.last_transition_event,
+        "transition_cursor": int(row.transition_cursor or 0),
+    }
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers — pod definitions
 # ---------------------------------------------------------------------------
@@ -305,6 +410,11 @@ def handle_create_pod_definition(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         pod_name = payload.get("pod_name", "")
@@ -373,6 +483,11 @@ def handle_list_pod_definitions(request: Request) -> Response:
     project_id = request.path_params.get("project_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
         definitions = list_pod_definitions(
             db_session=db_session, project_id=project_id
         )
@@ -405,6 +520,11 @@ def handle_read_pod_definition(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
 
         try:
             definition = read_pod_definition(
@@ -452,6 +572,11 @@ def handle_read_pod_state(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
 
         try:
             row = read_state(db_session=db_session, pod_id=pod_id)
@@ -465,20 +590,87 @@ def handle_read_pod_state(request: Request) -> Response:
                 ),
             )
 
-        body = {
-            "pod_id": str(row.pod_id),
-            "state": row.state.value,
-            "previous_state": (
-                row.previous_state.value
-                if row.previous_state is not None else None
-            ),
-            "last_transition_at": (
-                row.last_transition_at.isoformat()
-                if row.last_transition_at is not None else None
-            ),
-            "last_transition_event": row.last_transition_event,
-            "transition_cursor": int(row.transition_cursor or 0),
-        }
+        body = _state_row_to_dict(row)
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+
+    return rtnval
+
+
+def handle_apply_pod_transition(request: Request) -> Response:
+    """
+        ``POST /api/v1/projects/{project_id}/pods/{pod_id}/state/transitions``
+        — apply an operator-initiated lifecycle event to a pod.
+        Only ``drain`` and ``deregister`` are accepted; the other
+        lifecycle events are system-driven and cannot be forged
+        through the REST surface.
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the updated state dict,
+                  or problem response on failure.
+    """
+    project_id = request.path_params.get("project_id", "")
+    pod_id = request.path_params.get("pod_id", "")
+    try:
+        payload = _decode_json_or_abort(request=request)
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
+        actor = _resolve_actor_user_id(request=request)
+
+        event_kind = payload.get("event_kind", "")
+        if event_kind not in OPERATOR_TRANSITION_EVENT_KINDS:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="Unsupported operator event_kind: {!r}".format(
+                    event_kind
+                ),
+                extensions=_project_extensions(
+                    project_id=project_id,
+                    pod_id=pod_id,
+                    requested_event_kind=event_kind,
+                    allowed_event_kinds=list(
+                        OPERATOR_TRANSITION_EVENT_KINDS
+                    ),
+                ),
+            )
+
+        try:
+            row = apply_transition(
+                db_session=db_session,
+                pod_id=pod_id,
+                event_kind=event_kind,
+                event_payload=payload.get("payload", None),
+                actor=actor,
+            )
+        except PodDefinitionNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions=_project_extensions(
+                    project_id=project_id, pod_id=pod_id
+                ),
+            )
+        except PodStateTransitionError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions=_project_extensions(
+                    project_id=project_id,
+                    pod_id=pod_id,
+                    requested_event_kind=event_kind,
+                ),
+            )
+
+        body = _state_row_to_dict(row)
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -499,6 +691,11 @@ def handle_read_pod_state_history(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
         offset = _parse_int_query_or_abort(
             request=request, name="offset", default=DEFAULT_HISTORY_OFFSET
         )
@@ -552,6 +749,11 @@ def handle_read_pod_registration(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
         row = read_active_registration(db_session=db_session, pod_id=pod_id)
         if row is None:
             _abort_problem(
@@ -597,6 +799,11 @@ def handle_list_pod_registrations(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
         rows = list_registration_history(
             db_session=db_session, pod_id=pod_id
         )
@@ -638,6 +845,11 @@ def handle_read_pod_topology(request: Request) -> Response:
     pod_id = request.path_params.get("pod_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
 
         try:
             graph = compose_topology(
@@ -680,6 +892,11 @@ def handle_create_pod_template(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -727,6 +944,11 @@ def handle_list_pod_templates(request: Request) -> Response:
     project_id = request.path_params.get("project_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_READ_PERMISSION_KEY,
+        )
         rows = list_pod_templates(
             db_session=db_session, project_id=project_id
         )
@@ -762,6 +984,11 @@ def handle_materialize_pod_template(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -828,6 +1055,11 @@ def handle_set_scoped_variable(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
         pod_id = _require_query_pod_id(request=request)
 
@@ -882,6 +1114,11 @@ def handle_delete_scoped_variable(request: Request) -> Response:
     name = request.path_params.get("name", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=PODS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
         pod_id = _require_query_pod_id(request=request)
 
@@ -942,6 +1179,10 @@ def register_pods_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{project_id}/pods/{pod_id}/state/history", methods=["GET"]
     )(handle_read_pod_state_history)
+    app.attach_route(
+        base + "/{project_id}/pods/{pod_id}/state/transitions",
+        methods=["POST"],
+    )(handle_apply_pod_transition)
 
     # Registration + topology
     app.attach_route(
@@ -981,13 +1222,17 @@ def register_pods_routes(*, app: Any, version_prefix: str) -> None:
 
 __all__ = [
     "PROJECTS_PATH",
+    "PODS_READ_PERMISSION_KEY",
+    "PODS_WRITE_PERMISSION_KEY",
     "DEFAULT_HISTORY_OFFSET",
     "DEFAULT_HISTORY_LIMIT",
+    "OPERATOR_TRANSITION_EVENT_KINDS",
     "register_pods_routes",
     "handle_create_pod_definition",
     "handle_list_pod_definitions",
     "handle_read_pod_definition",
     "handle_read_pod_state",
+    "handle_apply_pod_transition",
     "handle_read_pod_state_history",
     "handle_read_pod_registration",
     "handle_list_pod_registrations",

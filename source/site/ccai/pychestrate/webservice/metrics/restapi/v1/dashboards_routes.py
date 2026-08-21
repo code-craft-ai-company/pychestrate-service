@@ -8,9 +8,10 @@
 Implements the project-dashboard operations from
 ``specs/openapi/pychestrate.yaml``:
 
-* ``GET  /api/v1/projects/{project_id}/dashboards``
-* ``POST /api/v1/projects/{project_id}/dashboards``
-* ``GET  /api/v1/projects/{project_id}/dashboards/{dashboard_id}``
+* ``GET   /api/v1/projects/{project_id}/dashboards``
+* ``POST  /api/v1/projects/{project_id}/dashboards``
+* ``GET   /api/v1/projects/{project_id}/dashboards/{dashboard_id}``
+* ``PATCH /api/v1/projects/{project_id}/dashboards/{dashboard_id}``
 
 Each handler follows the shape of
 ``orchestration.build.restapi.v1.build_runs_routes`` and delegates
@@ -594,6 +595,174 @@ def handle_read_dashboard(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/v1/projects/{project_id}/dashboards/{dashboard_id}
+# ---------------------------------------------------------------------------
+
+
+def handle_update_dashboard(request: Request) -> Response:
+    """
+        ``PATCH /api/v1/projects/{project_id}/dashboards/{dashboard_id}``
+
+        Updates a dashboard in place. Only the supplied fields
+        change; a supplied ``tiles`` array replaces the whole
+        tile set. An optional ``expected_version`` field enables
+        optimistic concurrency -- a stale version responds 409.
+        Delegates to
+        :func:`metrics.dashboards.service.update_dashboard`.
+        Permission-gated like create
+        (``system:dashboards.write``).
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the updated
+                  ``Dashboard`` shape, or a problem response.
+    """
+    project_id = request.path_params.get("project_id", "")
+    dashboard_id = request.path_params.get("dashboard_id", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=DASHBOARDS_WRITE_PERMISSION_KEY,
+        )
+        _require_project_exists(
+            request=request,
+            db_session=db_session,
+            project_id=project_id,
+        )
+
+        try:
+            existing = dashboards_service.get_dashboard(
+                db_session=db_session,
+                dashboard_id=dashboard_id,
+            )
+        except DashboardNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"dashboard_id": dashboard_id},
+            )
+            existing = None  # unreachable
+
+        if str(existing.project_id) != str(project_id):
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Dashboard does not belong to this project.",
+                extensions={
+                    "project_id": project_id,
+                    "dashboard_id": dashboard_id,
+                },
+            )
+
+        body = _decode_json_object_or_abort(request=request)
+
+        name = body.get("name", None)
+        if name is not None:
+            if not isinstance(name, str) or len(name) == 0:
+                _abort_problem(
+                    request=request,
+                    status=422,
+                    detail="Field 'name' must be a non-empty string.",
+                )
+
+        description = body.get("description", None)
+        if description is not None and isinstance(description, str) is False:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'description' must be a string.",
+            )
+
+        grid_columns_max = body.get("grid_columns_max", None)
+        if grid_columns_max is not None:
+            if isinstance(grid_columns_max, bool) or not isinstance(
+                grid_columns_max, int
+            ):
+                _abort_problem(
+                    request=request,
+                    status=422,
+                    detail="Field 'grid_columns_max' must be an integer.",
+                )
+
+        expected_version = body.get("expected_version", None)
+        if expected_version is not None:
+            if isinstance(expected_version, bool) or not isinstance(
+                expected_version, int
+            ):
+                _abort_problem(
+                    request=request,
+                    status=422,
+                    detail="Field 'expected_version' must be an integer.",
+                )
+
+        tile_instances: Optional[List[Any]] = None
+        raw_tiles = body.get("tiles", None)
+        if raw_tiles is not None:
+            tile_instances = _parse_tile_instances(
+                request=request,
+                raw_tiles=raw_tiles,
+            )
+
+        try:
+            view = dashboards_service.update_dashboard(
+                db_session=db_session,
+                dashboard_id=dashboard_id,
+                name=name,
+                description=description,
+                grid_columns_max=grid_columns_max,
+                tiles=tile_instances,
+                expected_version=expected_version,
+            )
+        except DashboardNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"dashboard_id": dashboard_id},
+            )
+            view = None  # unreachable
+        except DashboardConflictError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={"dashboard_id": dashboard_id},
+            )
+            view = None  # unreachable
+        except TileKindUnknownError as xcpt:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+            )
+            view = None  # unreachable
+        except TileConfigInvalidError as xcpt:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+            )
+            view = None  # unreachable
+
+        _LOGGER.info(
+            "pychestrate.dashboards.update project_id=%s dashboard_id=%s"
+            " version=%s",
+            project_id,
+            str(view.dashboard_id),
+            int(view.version),
+        )
+
+        body_dict = _dashboard_view_to_dict(view=view)
+        rtnval: Response = JSONResponse(content=body_dict, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -619,6 +788,9 @@ def register_dashboards_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + DASHBOARDS_PATH_SUFFIX + "/{dashboard_id}", methods=["GET"],
     )(handle_read_dashboard)
+    app.attach_route(
+        base + DASHBOARDS_PATH_SUFFIX + "/{dashboard_id}", methods=["PATCH"],
+    )(handle_update_dashboard)
     return
 
 
@@ -630,4 +802,5 @@ __all__ = [
     "handle_list_dashboards",
     "handle_create_dashboard",
     "handle_read_dashboard",
+    "handle_update_dashboard",
 ]

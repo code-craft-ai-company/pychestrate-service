@@ -57,14 +57,12 @@ const FALLBACK_GROUP_ICON_SVG =
 
 class SidebarRenderer {
   _container;
-  _on_navigate;
   _on_entry_clicked;
   _detach_keyboard;
   _detach_keydown;
   _open_button;
-  constructor(container, on_navigate, on_entry_clicked = null) {
+  constructor(container, on_entry_clicked = null) {
     this._container = container;
-    this._on_navigate = on_navigate;
     this._on_entry_clicked = on_entry_clicked;
     this._detach_keyboard = null;
     this._detach_keydown = null;
@@ -250,10 +248,14 @@ class SidebarRenderer {
     return;
   }
   /**
-   * Document-level Escape key closes the currently-open group and
-   * restores focus to its major button. No outside-click handler:
-   * the accordion is meant to stay open until the user picks a
-   * different major.
+   * Escape key closes the currently-open group and restores focus
+   * to its major button -- but only when the keystroke originated
+   * INSIDE the sidebar. The listener sits on the document (the
+   * sidebar container is re-built every render), so without the
+   * containment guard an Escape aimed at a modal or the command
+   * palette would also collapse the accordion and yank focus into
+   * the sidebar. No outside-click handler: the accordion is meant
+   * to stay open until the user picks a different major.
    */
   _attach_keydown() {
     const on_document_keydown = (event) => {
@@ -261,6 +263,13 @@ class SidebarRenderer {
         return;
       }
       if (this._open_button === null) {
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Node === false) {
+        return;
+      }
+      if (this._container.contains(target) === false) {
         return;
       }
       const button = this._open_button;

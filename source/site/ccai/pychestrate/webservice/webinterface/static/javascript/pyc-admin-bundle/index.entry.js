@@ -1,4 +1,3 @@
-import { register_admin_palette_provider } from "./palette/admin-search-provider.js";
 import { PycAdminOverview } from "./admin-overview-view.js";
 import { PycFeatureFlags } from "./feature-flags-view.js";
 import { PycExtensionRegistry } from "./extension-registry-view.js";
@@ -231,10 +230,13 @@ function mount_admin_view_if_active() {
   main.replaceChildren(view);
   return;
 }
-function _register_against(handle) {
-  if (handle.palette !== void 0 && handle.palette !== null) {
-    register_admin_palette_provider(handle.palette);
-  }
+function _register_against() {
+  // The admin palette provider was removed: it queried
+  // /api/v1/admin/search, an endpoint that does not exist, so it
+  // could never return results. Admin navigation search is now
+  // covered by the shell's own navigation provider
+  // (pyc-site-shell/palette/navigation-provider.js), which
+  // fuzzy-matches the nav manifest's admin entries.
   mount_admin_view_if_active();
   return;
 }
@@ -243,7 +245,7 @@ function _boot() {
   const target = window;
   const handle = target.pychestrateShell;
   if (handle !== void 0 && handle.sidebar !== void 0) {
-    _register_against(handle);
+    _register_against();
     return;
   }
   let registered = false;
@@ -254,7 +256,7 @@ function _boot() {
     const current = target.pychestrateShell;
     if (current !== void 0 && current.sidebar !== void 0) {
       registered = true;
-      _register_against(current);
+      _register_against();
       return true;
     }
     return false;

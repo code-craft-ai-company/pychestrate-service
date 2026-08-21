@@ -1,9 +1,18 @@
 import { build_empty_state } from "./chrome/empty-state.js";
+import {
+  build_flash_notice,
+  extract_flash_messages
+} from "./chrome/flash-notices.js";
 import { build_header } from "./chrome/header.js";
+import { build_home_view } from "./chrome/home-view.js";
+import { build_not_found_view } from "./chrome/not-found-view.js";
 import { DegradedBanner } from "./chrome/degraded-banner.js";
 import { SessionExpiredToast } from "./chrome/session-toast.js";
 import { PaletteRegistry } from "./palette/palette-registry.js";
 import { PaletteDialog } from "./palette/palette-dialog.js";
+import {
+  register_navigation_palette_provider
+} from "./palette/navigation-provider.js";
 import {
   DEFAULT_PERMISSIONS_ENDPOINT,
   PermissionCache
@@ -25,6 +34,9 @@ const ATTR_PERMISSIONS_ENDPOINT = "permissions-endpoint";
 const ATTR_NAVIGATION_ENDPOINT = "navigation-endpoint";
 const ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 const ATTR_BRAND_LABEL = "brand-label";
+const NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
+const NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
+const NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
 class PycSiteShell extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -33,8 +45,10 @@ class PycSiteShell extends HTMLElement {
   _sidebar_renderer;
   _main_region;
   _sidebar_region;
+  _notices_region;
   _palette_dialog;
   _degraded_banner;
+  _nav_degraded_banner;
   _session_toast;
   _global_keydown;
   _global_session_401;
@@ -45,6 +59,9 @@ class PycSiteShell extends HTMLElement {
   _palette_open_keydown_perf_now;
   _navigation_endpoint;
   _nav_manifest_loaded;
+  _nav_manifest_failed;
+  _nav_provider_registered;
+  _layout;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -63,12 +80,17 @@ class PycSiteShell extends HTMLElement {
     const nav_endpoint = this.getAttribute(ATTR_NAVIGATION_ENDPOINT);
     this._navigation_endpoint = nav_endpoint !== null && nav_endpoint.length > 0 ? nav_endpoint : DEFAULT_NAVIGATION_ENDPOINT;
     this._nav_manifest_loaded = false;
+    this._nav_manifest_failed = false;
+    this._nav_provider_registered = false;
+    this._layout = null;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
     this._sidebar_region = null;
+    this._notices_region = null;
     this._palette_dialog = null;
     this._degraded_banner = null;
+    this._nav_degraded_banner = null;
     this._session_toast = null;
     this._global_keydown = null;
     this._global_session_401 = null;
@@ -190,13 +212,31 @@ class PycSiteShell extends HTMLElement {
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
     // <mj-app-shell> collapses the nav track to width 0 unless the
-    // host carries nav-open. Without this attribute the sidebar
-    // groups render into a 0-width column and disappear visually.
-    layout.setAttribute("nav-open", "");
+    // host carries nav-open. On wide viewports the sidebar starts
+    // open unless the user previously collapsed it (persisted in
+    // localStorage); on narrow viewports <mj-app-shell>'s own
+    // ResizeObserver switches to nav-mode="overlay" and the nav
+    // stays closed until the header toggle opens it.
+    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
+    const nav_collapsed_preference = _read_nav_collapsed_preference();
+    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    if (nav_open_initial === true) {
+      layout.setAttribute("nav-open", "");
+    }
+    this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
-      user_display_name: null
+      user_display_name: null,
+      nav_open_initial,
+      on_nav_toggle: () => {
+        this._toggle_sidebar();
+      },
+      palette_shortcut_label: is_mac_platform === true ? "⌘K" : "Ctrl+K",
+      on_palette_hint_activate: () => {
+        this.openPalette();
+      }
     });
     layout.appendChild(header);
     const sidebar = document.createElement("mj-side-nav");
@@ -204,28 +244,59 @@ class PycSiteShell extends HTMLElement {
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
+    // Lift pending server-rendered flash messages out of the
+    // preserved fragment BEFORE any feature bundle can mount:
+    // bundles replace the main region's children wholesale, which
+    // would destroy the flashes unread. The lifted notices live in
+    // a shell-owned region slotted beside <main> (same "main" grid
+    // area, stacked above it) that bundle replaceChildren calls
+    // never touch. Because the originals are moved out of the
+    // fragment, legacy pages whose fragment stays mounted cannot
+    // render the same flash twice.
+    const flash_extraction = extract_flash_messages(preserved_main_content);
+    const notices = document.createElement("div");
+    notices.setAttribute("slot", "main");
+    notices.classList.add("pyc-site-shell__notices");
+    for (const flash of flash_extraction.flashes) {
+      const notice = build_flash_notice(flash);
+      notices.appendChild(notice);
+    }
+    layout.appendChild(notices);
+    this._notices_region = notices;
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
     main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
-    // Re-attach any server-rendered fragment captured above so the
-    // route's page survives the skeleton rebuild.
-    for (const node of preserved_main_content) {
+    // Re-attach the server-rendered fragment captured above (minus
+    // the lifted flashes) so the route's page survives the
+    // skeleton rebuild.
+    for (const node of flash_extraction.remaining_nodes) {
       main.appendChild(node);
     }
     layout.appendChild(main);
     this._main_region = main;
     this.appendChild(layout);
     this._degraded_banner = new DegradedBanner(main);
+    this._nav_degraded_banner = new DegradedBanner(
+      main,
+      {
+        message: NAV_BANNER_MESSAGE,
+        action_label: "Retry",
+        on_action: () => {
+          void this._retry_nav_manifest();
+        }
+      }
+    );
     this._session_toast = new SessionExpiredToast(main);
     this._palette_dialog = new PaletteDialog(
       this._palette_registry,
       {
         getPermissions: () => this._permission_cache.current(),
         navigate: (route) => {
-          if (this._router !== null) {
-            void this._router.navigateTo(route);
-          }
+          // The pychestrate site is server-rendered: navigating
+          // means a full page load, exactly like the sidebar's
+          // <a href> entries. The router keeps no pushState path.
+          window.location.assign(route);
         },
         emit: (event_name, detail) => {
           this._emit(event_name, detail);
@@ -249,12 +320,23 @@ class PycSiteShell extends HTMLElement {
         }
       }
     );
-    this._router = new ShellRouter(initial_path, () => this._main_region);
+    this._router = new ShellRouter(initial_path);
+    if (this._nav_provider_registered === false) {
+      // The shell's own palette provider -- registered for every
+      // user so the palette can always resolve navigation queries
+      // even when no feature bundle contributes a provider.
+      register_navigation_palette_provider(
+        this._palette_registry,
+        {
+          get_visible_sidebar: () => this._sidebar_registry.visible(
+            this._permission_cache.current()
+          )
+        }
+      );
+      this._nav_provider_registered = true;
+    }
     this._sidebar_renderer = new SidebarRenderer(
       sidebar,
-      (route) => {
-        void this._router?.navigateTo(route);
-      },
       (entry_route, entry_label) => {
         this._emit(
           "pyc-site-shell-sidebar-clicked",
@@ -364,11 +446,12 @@ class PycSiteShell extends HTMLElement {
    * Seeding the manifest is what makes the sidebar complete on
    * the bare ``/`` route (which loads no feature bundle at
    * all). Idempotent -- a second call is a no-op once the
-   * manifest has been applied. A fetch failure is non-fatal:
-   * the shell keeps whatever the registry already holds (the
-   * legacy per-bundle ``registerEntry`` calls still run for the
-   * current route's bundle) and the degraded path surfaces via
-   * the permissions cache.
+   * manifest has been applied, so the Retry control can call it
+   * again freely. A fetch failure is non-fatal but no longer
+   * silent: the shell shows the navigation degraded banner (with
+   * a Retry action) and ``_render_sidebar_and_empty_state``
+   * paints an explanatory state into the sidebar region while
+   * the registry has nothing to show.
    */
   async _load_nav_manifest() {
     if (this._nav_manifest_loaded === true) {
@@ -378,6 +461,31 @@ class PycSiteShell extends HTMLElement {
     if (result.ok === true && result.manifest !== null) {
       apply_nav_manifest(this._sidebar_registry, result.manifest);
       this._nav_manifest_loaded = true;
+      this._nav_manifest_failed = false;
+      if (this._nav_degraded_banner !== null) {
+        this._nav_degraded_banner.hide();
+      }
+    } else {
+      this._nav_manifest_failed = true;
+      if (this._nav_degraded_banner !== null) {
+        this._nav_degraded_banner.show();
+      }
+    }
+    return;
+  }
+  /**
+   * Retry handler for the navigation degraded banner and the
+   * sidebar failure state. Refetches the manifest; on success
+   * re-renders the sidebar, updates the document title, and
+   * paints the home / not-found landing state the failed boot
+   * could not produce.
+   */
+  async _retry_nav_manifest() {
+    await this._load_nav_manifest();
+    this._render_sidebar_and_empty_state();
+    if (this._nav_manifest_loaded === true) {
+      this._update_document_title();
+      this._schedule_landing_state_check();
     }
     return;
   }
@@ -387,6 +495,7 @@ class PycSiteShell extends HTMLElement {
       this._load_nav_manifest()
     ]);
     this._render_sidebar_and_empty_state();
+    this._update_document_title();
     this._ready = true;
     const ready_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     const tti_seconds = (ready_perf_now - this._boot_started_perf_now) / 1e3;
@@ -401,6 +510,160 @@ class PycSiteShell extends HTMLElement {
         degraded: this._permission_cache.degraded
       }
     );
+    // Feature bundles waiting on the ready event mount into the
+    // main region synchronously during the _emit above, so the
+    // scheduled check below observes the final claim state.
+    this._schedule_landing_state_check();
+    return;
+  }
+  /**
+   * Schedule the home / not-found decision for the next frame.
+   * Bundles mount synchronously (at module load or during the
+   * ready-event dispatch), so by the time the frame callback
+   * runs, an empty main region deterministically means no bundle
+   * claimed the route.
+   */
+  _schedule_landing_state_check() {
+    const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+    schedule(() => {
+      this._apply_landing_state();
+    });
+    return;
+  }
+  /**
+   * Render the shell-owned landing state for routes no feature
+   * bundle (and no server-rendered fragment) claimed: the home
+   * view on the bare "/" route, the "Page not found" view on any
+   * other unclaimed route. Never fires while the nav manifest is
+   * unloaded (the degraded path owns that messaging), never
+   * clobbers a mounted bundle, and leaves the no-access empty
+   * state in place for zero-permission accounts. Pages served by
+   * the legacy blueprints either inline a fragment (preserved
+   * into the main region) or never load the shell document at
+   * all, so neither can trip this.
+   */
+  _apply_landing_state() {
+    if (this._main_region === null) {
+      return;
+    }
+    if (this._nav_manifest_loaded === false) {
+      return;
+    }
+    const perms = this._permission_cache.current();
+    const visible_entry_count = this._sidebar_registry.visibleEntryCount(
+      perms
+    );
+    if (visible_entry_count === 0) {
+      return;
+    }
+    const previous_landing = this._main_region.querySelectorAll(
+      ".pyc-site-shell__home, .pyc-site-shell__not-found"
+    );
+    if (_main_region_has_route_content(this._main_region) === true) {
+      for (const stale of Array.from(previous_landing)) {
+        stale.remove();
+      }
+      return;
+    }
+    for (const stale of Array.from(previous_landing)) {
+      stale.remove();
+    }
+    const path = this._router !== null ? this._router.current().path : window.location.pathname;
+    const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_label = brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate";
+    const visible_sidebar = this._sidebar_registry.visible(perms);
+    if (path === "/") {
+      const home_view = build_home_view({
+        brand_label,
+        visible_sidebar
+      });
+      this._main_region.appendChild(home_view);
+      this._emit("pyc-site-shell-home-rendered", {});
+    } else {
+      const not_found_view = build_not_found_view({
+        path,
+        visible_sidebar
+      });
+      this._main_region.appendChild(not_found_view);
+      // A longest-prefix nav match (e.g. "/admin" for
+      // "/admin/unknown") would have claimed the tab title even
+      // though no page rendered; name the actual state instead.
+      document.title = "Page not found · " + brand_label;
+      this._emit(
+        "pyc-site-shell-not-found-rendered",
+        { path }
+      );
+    }
+    return;
+  }
+  /**
+   * Reflect the active navigation entry into the browser tab
+   * title as "<entry label> · <brand>", picked by longest route
+   * prefix so "/admin/feature-flags" wins over "/admin". When no
+   * entry matches, the server-rendered title is left untouched.
+   */
+  _update_document_title() {
+    if (this._nav_manifest_loaded === false) {
+      return;
+    }
+    const path = this._router !== null ? this._router.current().path : window.location.pathname;
+    const perms = this._permission_cache.current();
+    const visible_sidebar = this._sidebar_registry.visible(perms);
+    const all_entries = [];
+    for (const entry of visible_sidebar.ungrouped) {
+      all_entries.push(entry);
+    }
+    for (const bucket of visible_sidebar.groups) {
+      for (const entry of bucket.entries) {
+        all_entries.push(entry);
+      }
+    }
+    let best_entry = null;
+    for (const entry of all_entries) {
+      const route = entry.route;
+      const is_match = path === route || path.startsWith(route.endsWith("/") === true ? route : route + "/") === true;
+      if (is_match === false) {
+        continue;
+      }
+      if (best_entry === null || route.length > best_entry.route.length) {
+        best_entry = entry;
+      }
+    }
+    if (best_entry === null) {
+      return;
+    }
+    const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_label = brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate";
+    document.title = best_entry.label + " · " + brand_label;
+    return;
+  }
+  /**
+   * Toggle the sidebar nav track open / collapsed and persist
+   * the choice. <mj-app-shell> owns the actual collapse (the
+   * nav-open attribute drives its grid track width and its
+   * overlay behavior on narrow viewports).
+   */
+  _toggle_sidebar() {
+    const layout = this._layout;
+    if (layout === null) {
+      return;
+    }
+    const next_open = layout.hasAttribute("nav-open") === false;
+    if (next_open === true) {
+      layout.setAttribute("nav-open", "");
+    } else {
+      layout.removeAttribute("nav-open");
+    }
+    _write_nav_collapsed_preference(next_open === false);
+    const toggle_button = this.querySelector(
+      ".pyc-site-shell__nav-toggle"
+    );
+    if (toggle_button !== null) {
+      toggle_button.setAttribute(
+        "aria-expanded",
+        next_open === true ? "true" : "false"
+      );
+    }
     return;
   }
   _render_sidebar_and_empty_state() {
@@ -413,6 +676,18 @@ class PycSiteShell extends HTMLElement {
         perms,
         active_path
       );
+    }
+    // When the navigation manifest could not be fetched and the
+    // registry holds nothing to show, the sidebar region would
+    // render as silent blank chrome. Paint an explanatory state
+    // with a retry control instead. render() above wipes the
+    // container each pass, so this re-appends every render while
+    // the failure persists and disappears once a retry succeeds.
+    if (this._nav_manifest_failed === true && this._nav_manifest_loaded === false && this._sidebar_region !== null && this._sidebar_registry.visibleEntryCount(perms) === 0) {
+      const failure_state = _build_sidebar_failure_state(() => {
+        void this._retry_nav_manifest();
+      });
+      this._sidebar_region.appendChild(failure_state);
     }
     const render_finished = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics.observeHistogram(
@@ -494,6 +769,96 @@ class PycSiteShell extends HTMLElement {
     const rtnval = this._permission_cache.current();
     return rtnval;
   }
+}
+/*
+ * Shell-owned chrome elements the landing-state check must not
+ * count as route content when deciding whether a bundle claimed
+ * the main region.
+ */
+const SHELL_CHROME_CLASSES = [
+  "pyc-site-shell__degraded-banner",
+  "pyc-site-shell__session-toast",
+  "pyc-site-shell__empty-state",
+  "pyc-site-shell__home",
+  "pyc-site-shell__not-found"
+];
+function _main_region_has_route_content(main_region) {
+  for (const node of Array.from(main_region.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (node.textContent.trim().length > 0) {
+        return true;
+      }
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      continue;
+    }
+    const element = node;
+    let is_shell_chrome = false;
+    for (const chrome_class of SHELL_CHROME_CLASSES) {
+      if (element.classList.contains(chrome_class) === true) {
+        is_shell_chrome = true;
+        break;
+      }
+    }
+    if (is_shell_chrome === false) {
+      return true;
+    }
+  }
+  return false;
+}
+/*
+ * Explanatory sidebar state for a failed navigation-manifest
+ * fetch. Message plus a retry control -- shown instead of a
+ * silently empty nav region.
+ */
+function _build_sidebar_failure_state(on_retry) {
+  const panel = document.createElement("div");
+  panel.classList.add("pyc-site-shell__sidebar-failure");
+  panel.setAttribute("role", "status");
+  const message = document.createElement("p");
+  message.classList.add("pyc-site-shell__sidebar-failure-message");
+  message.textContent = "Navigation could not be loaded.";
+  panel.appendChild(message);
+  const retry_button = document.createElement("mj-button");
+  retry_button.setAttribute("type", "button");
+  retry_button.setAttribute("variant", "secondary");
+  retry_button.setAttribute("size", "sm");
+  retry_button.classList.add("pyc-site-shell__sidebar-failure-retry");
+  retry_button.textContent = "Retry";
+  retry_button.addEventListener("click", () => {
+    on_retry();
+  });
+  panel.appendChild(retry_button);
+  return panel;
+}
+/*
+ * Sidebar collapse preference. Wrapped in try/catch because
+ * localStorage access throws in some privacy modes; the shell
+ * just falls back to the default (open) in that case.
+ */
+function _read_nav_collapsed_preference() {
+  let rtnval = false;
+  try {
+    const stored = window.localStorage.getItem(
+      NAV_COLLAPSED_STORAGE_KEY
+    );
+    rtnval = stored === "true";
+  } catch (reason) {
+    rtnval = false;
+  }
+  return rtnval;
+}
+function _write_nav_collapsed_preference(collapsed) {
+  try {
+    window.localStorage.setItem(
+      NAV_COLLAPSED_STORAGE_KEY,
+      collapsed === true ? "true" : "false"
+    );
+  } catch (reason) {
+    // Preference persistence is best-effort only.
+  }
+  return;
 }
 export {
   PycSiteShell

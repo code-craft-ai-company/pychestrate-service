@@ -3,6 +3,7 @@
 {% block title %}Audit Logs - Pychestrate Configuration{% endblock %}
 
 {% block content %}
+{% import "config/_pagination.html" as pagination %}
 <div class="page-header">
     <h2>Audit Logs</h2>
     <p>Review security events and system activity</p>
@@ -21,25 +22,25 @@
                 {% endfor %}
             </select>
         </div>
-        
+
         <div>
-            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">User ID</label>
-            <input type="text" name="user_id" class="form-control" placeholder="User ID" 
-                   value="{{ filter_user_id or '' }}" style="width: 150px;">
+            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Username</label>
+            <input type="text" name="username" class="form-control" placeholder="Username"
+                   value="{{ filter_username or '' }}" style="width: 150px;">
         </div>
-        
+
         <div>
             <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Start Date</label>
-            <input type="datetime-local" name="start_date" class="form-control" 
+            <input type="datetime-local" name="start_date" class="form-control"
                    value="{{ start_date or '' }}" style="width: 200px;">
         </div>
-        
+
         <div>
             <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">End Date</label>
-            <input type="datetime-local" name="end_date" class="form-control" 
+            <input type="datetime-local" name="end_date" class="form-control"
                    value="{{ end_date or '' }}" style="width: 200px;">
         </div>
-        
+
         <div>
             <button type="submit" class="btn btn-secondary">
                 <span class="material-icons">filter_list</span> Filter
@@ -48,6 +49,12 @@
         </div>
     </form>
 </div>
+
+{% if username_unmatched %}
+<div class="alert alert-warning">
+    No user has the username "{{ filter_username }}" &mdash; showing no entries.
+</div>
+{% endif %}
 
 <table class="data-table">
     <thead>
@@ -63,14 +70,17 @@
     <tbody>
         {% for log in logs %}
         <tr>
-            <td>{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <td>{% if log.timestamp %}{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}&mdash;{% endif %}</td>
             <td><span class="badge badge-info">{{ log.event_type.value }}</span></td>
             <td>{{ log.username or log.user_id or '-' }}</td>
             <td>{{ log.target_username or log.target_user_id or '-' }}</td>
             <td>{{ log.client_ip or '-' }}</td>
-            <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <td style="max-width: 300px;">
                 {% if log.details %}
-                {{ log.details | tojson }}
+                <details>
+                    <summary style="cursor: pointer; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.details | tojson | truncate(60) }}</summary>
+                    <pre style="margin: 8px 0 0; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 0.8rem; max-width: 480px; overflow-x: auto; white-space: pre-wrap; word-break: break-word;">{{ log.details | tojson(indent=2) }}</pre>
+                </details>
                 {% else %}
                 -
                 {% endif %}
@@ -84,15 +94,13 @@
     </tbody>
 </table>
 
-<div class="pagination" style="margin-top: 20px;">
-    {% if page > 1 %}
-    <a href="{{ url_for('config.audit_log_list', page=page-1, event_type=selected_event_type, user_id=filter_user_id, start_date=start_date, end_date=end_date) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    <span style="padding: 8px 12px;">Page {{ page }}</span>
-    
-    {% if logs | length == per_page %}
-    <a href="{{ url_for('config.audit_log_list', page=page+1, event_type=selected_event_type, user_id=filter_user_id, start_date=start_date, end_date=end_date) }}">Next &raquo;</a>
-    {% endif %}
-</div>
+{{ pagination.render('config.audit_log_list', page, total_pages,
+                     {'event_type': selected_event_type,
+                      'username': filter_username,
+                      'user_id': filter_user_id if not filter_username else None,
+                      'start_date': start_date,
+                      'end_date': end_date,
+                      'per_page': per_page}) }}
+
+<p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} entries</p>
 {% endblock %}

@@ -10,6 +10,10 @@ import {
 import { PaletteRegistry } from "./palette/palette-registry.js";
 import { PaletteDialog } from "./palette/palette-dialog.js";
 import {
+  NAVIGATION_PROVIDER_ID,
+  register_navigation_palette_provider
+} from "./palette/navigation-provider.js";
+import {
   attach_sidebar_keyboard,
   initialize_sidebar_roving_tabindex
 } from "./sidebar/sidebar-keyboard.js";
@@ -28,6 +32,7 @@ export {
   DEFAULT_METRICS_ENDPOINT,
   DEFAULT_NAVIGATION_ENDPOINT,
   MetricsBeacon,
+  NAVIGATION_PROVIDER_ID,
   PaletteDialog,
   PaletteRegistry,
   PermissionCache,
@@ -38,5 +43,6 @@ export {
   apply_nav_manifest,
   attach_sidebar_keyboard,
   fetch_nav_manifest,
-  initialize_sidebar_roving_tabindex
+  initialize_sidebar_roving_tabindex,
+  register_navigation_palette_provider
 };

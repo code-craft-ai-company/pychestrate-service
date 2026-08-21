@@ -71,10 +71,17 @@ function publish_message_for_status(status) {
   const rtnval = "Failed to publish release (HTTP " + String(status) + ").";
   return rtnval;
 }
+const RELEASE_TOAST_STACK_LIMIT = 4;
 class PycReleaseChannels extends HTMLElement {
   _entries;
   _loading;
   _errored;
+  /**
+   * The channel_id whose published-release detail is currently
+   * shown, or ``""``. Refreshes re-fetch it instead of leaving
+   * a stale panel behind.
+   */
+  _detailChannelId;
   _root;
   _table_region;
   _publish_region;
@@ -85,6 +92,7 @@ class PycReleaseChannels extends HTMLElement {
     this._entries = [];
     this._loading = false;
     this._errored = false;
+    this._detailChannelId = "";
     this._root = null;
     this._table_region = null;
     this._publish_region = null;
@@ -220,6 +228,27 @@ class PycReleaseChannels extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._render_table_region();
+    await this._refresh_open_detail();
+    return;
+  }
+  /**
+   * Re-fetch the open detail panel (if any) so it never shows a
+   * stale entry after a list refresh. When the entry can no
+   * longer be read the panel clears instead of lingering.
+   */
+  async _refresh_open_detail() {
+    if (this._detailChannelId.length === 0) {
+      return;
+    }
+    const detail = await this.loadReleaseChannel(this._detailChannelId);
+    if (detail === null) {
+      this._detailChannelId = "";
+      if (this._detail_region !== null) {
+        this._detail_region.replaceChildren();
+      }
+      return;
+    }
+    this._render_detail(detail);
     return;
   }
   _render_table_region() {
@@ -343,6 +372,7 @@ class PycReleaseChannels extends HTMLElement {
   async _on_show_release(entry, button) {
     const detail = await this.loadReleaseChannel(entry.channel_id);
     button.toggleAttribute("disabled", false);
+    this._detailChannelId = entry.channel_id;
     this._render_detail(detail);
     return;
   }
@@ -499,6 +529,14 @@ class PycReleaseChannels extends HTMLElement {
     submit.setAttribute("data-role", "publish-submit");
     submit.textContent = "Publish Release";
     form.appendChild(submit);
+    // The rollout fraction is not an input: the release service
+    // derives the initial fraction from the channel's rollout
+    // policy, and promote / rollback are not available yet.
+    const rollout_note = document.createElement("p");
+    rollout_note.classList.add("pyc-ops__note");
+    rollout_note.setAttribute("data-role", "publish-rollout-note");
+    rollout_note.textContent = "The rollout starts at the channel policy's initial fraction. Promote and rollback controls arrive with the next release-service milestone.";
+    form.appendChild(rollout_note);
     const status = document.createElement("p");
     status.classList.add("pyc-ops__form-status");
     status.setAttribute("data-role", "publish-status");
@@ -526,6 +564,14 @@ class PycReleaseChannels extends HTMLElement {
     const artifact_sha256 = sha_input.value.trim();
     if (component.length === 0 || version.length === 0 || artifact_uri.length === 0) {
       status.textContent = "Component, version and artifact URI are required.";
+      return;
+    }
+    if (typeof channel !== "string" || channel.length === 0) {
+      status.textContent = "Select a release channel.";
+      return;
+    }
+    if (RELEASE_CHANNEL_VALUES.includes(channel) === false) {
+      status.textContent = "The channel must be one of: " + RELEASE_CHANNEL_VALUES.join(", ") + ".";
       return;
     }
     if (artifact_sha256.length !== 64) {
@@ -622,18 +668,6 @@ class PycReleaseChannels extends HTMLElement {
     return rtnval;
   }
   /**
-   * Append a plain-text ``<td>`` to a table row.
-   *
-   * @param row The row to append the cell to.
-   * @param text The cell text content.
-   */
-  _append_text_cell(row, text) {
-    const cell = document.createElement("td");
-    cell.textContent = text;
-    row.appendChild(cell);
-    return;
-  }
-  /**
    * Build a labelled text input, append it to the supplied form,
    * and return the input element.
    *
@@ -658,7 +692,10 @@ class PycReleaseChannels extends HTMLElement {
     return input;
   }
   /**
-   * Render a dismissible toast in the toast region.
+   * Render a dismissible toast in the toast region. Toasts stack
+   * (newest last) instead of replacing one another so an earlier
+   * outcome is not silently destroyed; the stack is capped at
+   * ``RELEASE_TOAST_STACK_LIMIT``.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
@@ -683,7 +720,10 @@ class PycReleaseChannels extends HTMLElement {
       toast.remove();
     });
     toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    while (this._toast_region.children.length >= RELEASE_TOAST_STACK_LIMIT) {
+      this._toast_region.removeChild(this._toast_region.firstElementChild);
+    }
+    this._toast_region.appendChild(toast);
     return;
   }
 }

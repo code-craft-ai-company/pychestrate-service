@@ -246,13 +246,15 @@ class _FakeResourceManager:
         _FakeResourceManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> Any:
+    def list_pools(
+            self, user_id: str, offset: int = 0, limit: int = 50
+        ) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             pools=self.list_pools_response,
             total=len(self.list_pools_response),
-            offset=0,
-            limit=len(self.list_pools_response),
+            offset=offset,
+            limit=limit,
         )
 
     def get_pool(self, pool_id: int) -> Optional[_FakePool]:
@@ -335,13 +337,15 @@ class _FakeIPPoolManager:
         _FakeIPPoolManager.last_instance = self
         return
 
-    def list_pools(self, user_id: str) -> Any:
+    def list_pools(
+            self, user_id: str, offset: int = 0, limit: int = 50
+        ) -> Any:
         from types import SimpleNamespace
         return SimpleNamespace(
             pools=self.list_pools_response,
             total=len(self.list_pools_response),
-            offset=0,
-            limit=len(self.list_pools_response),
+            offset=offset,
+            limit=limit,
         )
 
     def get_pool(self, pool_id: int) -> Optional[_FakeIPPool]:
@@ -889,8 +893,13 @@ def test_handle_pool_create_post_manager_error_re_renders_with_flash():
         testbase.assert_equal(len(ctx["flashes"]), 1)
         category, message = ctx["flashes"][0]
         testbase.assert_equal(category, "error")
-        contains = "duplicate" in message
-        testbase.assert_equal(contains, True)
+        # Untyped manager errors flash a generic sentence and never
+        # leak the raw exception text (typed errors get specific
+        # messages via _describe_resource_manager_error).
+        contains_generic = "unexpected error" in message.lower()
+        testbase.assert_equal(contains_generic, True)
+        leaks_raw_text = "duplicate pool name" in message
+        testbase.assert_equal(leaks_raw_text, False)
     finally:
         for p in (cr_patch, rm_patch, sm_patch):
             if p is not None:
@@ -938,7 +947,7 @@ def test_handle_pool_detail_renders_with_pool_and_resources():
         rm = _FakeResourceManager.last_instance
         testbase.assert_equal(
             rm.list_resources_calls[0],
-            {"pool_id": 7, "limit": 100},
+            {"pool_id": 7, "offset": 0, "limit": 20},
         )
     finally:
         for p in (rm_patch, sm_patch):

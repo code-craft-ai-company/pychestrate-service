@@ -11,6 +11,9 @@ M1 ships:
 * :func:`disable_webhook` — flips ``enabled = False``,
   stamps ``disabled_at``, idempotent + emits
   CONFIGURATION_DISABLED.
+* :func:`enable_webhook` — flips ``enabled = True``, clears
+  ``disabled_at``, idempotent + emits
+  CONFIGURATION_ENABLED.
 
 The replay endpoint and the rotate-secret PATCH path land in
 M2.
@@ -222,6 +225,52 @@ def disable_webhook(
         db_session=db_session,
         event=EntityEvent(
             topic=WebhookInEventTopics.CONFIGURATION_DISABLED,
+            payload={
+                "webhook_id": str(row.webhook_id),
+                "project_id": str(row.project_id),
+                "actor_id": actor_id,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _row_to_view(row=row)
+    return rtnval
+
+
+def enable_webhook(
+        *,
+        db_session: DbSession,
+        webhook_id: str,
+        actor_id: Optional[str] = None
+    ) -> WebhookConfigurationView:
+    """
+        Flip ``enabled = True`` and clear ``disabled_at``.
+        Idempotent + emits
+        :data:`WebhookInEventTopics.CONFIGURATION_ENABLED`
+        on the first transition.
+
+        :param db_session: Active SQLAlchemy session.
+        :param webhook_id: Configuration to enable.
+        :param actor_id: Optional acting-user id for the event.
+
+        :returns: The refreshed configuration read-model.
+
+        :raises: WebhookConfigurationNotFoundError on miss.
+    """
+    row = _require_configuration(
+        db_session=db_session, webhook_id=webhook_id,
+    )
+    if row.enabled is True:
+        rtnval = _row_to_view(row=row)
+        return rtnval
+    row.enabled = True
+    row.disabled_at = None
+    db_session.flush()
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=WebhookInEventTopics.CONFIGURATION_ENABLED,
             payload={
                 "webhook_id": str(row.webhook_id),
                 "project_id": str(row.project_id),

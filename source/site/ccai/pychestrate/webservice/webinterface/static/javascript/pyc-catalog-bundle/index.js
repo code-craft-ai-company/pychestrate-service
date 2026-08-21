@@ -51,6 +51,38 @@ function has_previous_page(state) {
   const rtnval = state.page > 1;
   return rtnval;
 }
+function list_load_message_for_status(status, what) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to " + what + ".";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the server \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + what + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
 function trigger_message_for_status(status) {
   if (status === 202 || status === 200 || status === 201) {
     const rtnval2 = "Run triggered.";
@@ -76,6 +108,8 @@ var PycTestCatalog = class extends HTMLElement {
   _entries;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _root;
   _table_region;
   _import_region;
@@ -89,11 +123,14 @@ var PycTestCatalog = class extends HTMLElement {
       total: 0,
       includeRetired: false,
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._entries = [];
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._root = null;
     this._table_region = null;
     this._pager = null;
@@ -112,7 +149,8 @@ var PycTestCatalog = class extends HTMLElement {
       total: this._state.total,
       includeRetired: this._state.includeRetired,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -197,6 +235,12 @@ var PycTestCatalog = class extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-catalog__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const import_region = document.createElement("div");
     import_region.classList.add("pyc-catalog__import-region");
     import_region.setAttribute("data-role", "import-region");
@@ -243,17 +287,23 @@ var PycTestCatalog = class extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = this._extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.catalog.projects_fetch_failed",
         { reason: String(reason) }
@@ -262,17 +312,70 @@ var PycTestCatalog = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-catalog__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-catalog__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-catalog__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-catalog__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -361,20 +464,24 @@ var PycTestCatalog = class extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table_region();
     const url = build_catalog_query_url(this._state);
     let page = null;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      error_status = response.status;
       if (response.ok === false) {
         throw new Error(
           "catalog fetch failed: HTTP " + String(response.status)
         );
       }
+      error_status = 0;
       const body = await response.json();
       page = body;
     } catch (reason) {
@@ -382,14 +489,19 @@ var PycTestCatalog = class extends HTMLElement {
         "pychestrate.ui.catalog.list_fetch_failed",
         { reason: String(reason) }
       );
+      if (error_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = error_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
@@ -444,8 +556,23 @@ var PycTestCatalog = class extends HTMLElement {
         "pyc-catalog__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load the catalog. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "the test catalog"
+      );
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-catalog__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       this._render_pager();
       return;
     }
@@ -952,6 +1079,7 @@ if (typeof window !== "undefined") {
 }
 export {
   PycTestCatalog,
+  announce_session_expired,
   build_catalog_import_url,
   build_catalog_query_url,
   build_test_runs_url,
@@ -961,6 +1089,7 @@ export {
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   mount_catalog_view_if_active,
   register_catalog_sidebar,
   selection_summary,

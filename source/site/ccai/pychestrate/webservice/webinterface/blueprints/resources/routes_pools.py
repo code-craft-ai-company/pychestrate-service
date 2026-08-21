@@ -29,6 +29,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -56,7 +58,13 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
+    _describe_resource_manager_error,
 )
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources.pools")
 
 
 _ROUTE_TABLE = (
@@ -127,6 +135,32 @@ def _coerce_int(*, raw: Any) -> Optional[int]:
     return rtnval
 
 
+def _coerce_int_with_default(*, raw: Any, default: int) -> int:
+    parsed = _coerce_int(raw=raw)
+    if parsed is None:
+        return default
+    return parsed
+
+
+def _parse_pagination_params(
+        *, request: Request,
+        default_per_page: int = 20
+    ) -> Dict[str, Any]:
+    page = _coerce_int_with_default(
+        raw=request.query_params.get("page", None), default=1
+    )
+    if page < 1:
+        page = 1
+    per_page = _coerce_int_with_default(
+        raw=request.query_params.get("per_page", None),
+        default=default_per_page,
+    )
+    if per_page < 1:
+        per_page = default_per_page
+    rtnval = {"page": page, "per_page": per_page}
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -142,8 +176,22 @@ def handle_pool_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+
         resource_manager = _build_resource_manager(db_session=db_session)
-        pools = resource_manager.list_pools(auth.user_id).pools
+        pools_response = resource_manager.list_pools(
+            auth.user_id, offset=offset, limit=params["per_page"]
+        )
+        pools = pools_response.pools
+
+        total_pages = _calculate_total_pages(
+            total=pools_response.total,
+            per_page=params["per_page"],
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -153,6 +201,10 @@ def handle_pool_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["pools"] = pools
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+        context["total_pages"] = total_pages
+        context["page_window"] = page_window
         response = _render(
             template_name="resources/pools/list.html",
             context=context,
@@ -253,9 +305,16 @@ def handle_pool_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_resource_manager_error(exc=exc)
+            if message is None:
+                _LOGGER.exception("Unexpected error creating pool")
+                message = (
+                    "An unexpected error occurred while creating the"
+                    " pool. The problem has been logged."
+                )
             flash.add_flash(
                 session=auth.session,
-                message="Error creating pool: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -317,9 +376,21 @@ def handle_pool_detail(request: Request) -> Response:
             )
             return response
 
-        resources = resource_manager.list_resources(
-            pool_id=pool_id, limit=100
-        ).resources
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+
+        resources_response = resource_manager.list_resources(
+            pool_id=pool_id, offset=offset, limit=params["per_page"]
+        )
+        resources = resources_response.resources
+
+        total_pages = _calculate_total_pages(
+            total=resources_response.total,
+            per_page=params["per_page"],
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -330,6 +401,11 @@ def handle_pool_detail(request: Request) -> Response:
         )
         context["pool"] = pool
         context["resources"] = resources
+        context["resource_total"] = resources_response.total
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+        context["total_pages"] = total_pages
+        context["page_window"] = page_window
         response = _render(
             template_name="resources/pools/detail.html",
             context=context,
@@ -401,10 +477,19 @@ def handle_pool_delete(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_resource_manager_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error deleting pool %s", pool_id
+                )
+                message = (
+                    "An unexpected error occurred while deleting the"
+                    " pool. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.pool_list"),
-                message="Error deleting pool: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

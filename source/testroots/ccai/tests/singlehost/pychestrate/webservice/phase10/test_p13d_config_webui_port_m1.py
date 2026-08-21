@@ -103,6 +103,7 @@ class _FakeRequest:
         form_raises: bool = False,
         query_mapping: Optional[Dict[str, str]] = None,
         header_mapping: Optional[Dict[str, str]] = None,
+        method: str = "GET",
     ) -> None:
         self.cookies: Dict[str, str] = cookies if cookies is not None else {}
         self._form: Dict[str, Any] = form if form is not None else {}
@@ -111,6 +112,7 @@ class _FakeRequest:
             mapping=query_mapping
         )
         self.headers: _FakeHeaders = _FakeHeaders(mapping=header_mapping)
+        self.method: str = method
         return
 
     def form(self) -> Dict[str, Any]:
@@ -646,6 +648,327 @@ def test_handle_login_submit_honors_next_query_param_on_success():
     return
 
 
+def test_handle_login_form_threads_validated_next_into_context():
+    """
+    **Feature: unified login next-threading (audit fix)**
+    **Property: GET /login?next=/runs passes the validated target
+    into the template context as ``next_target`` so the form can
+    carry it in a hidden field. An unsafe candidate (absolute
+    URL) is rejected and the context carries an empty string.**
+    """
+    _reset_global_state()
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+
+        request = _FakeRequest(query_mapping={"next": "/runs"})
+        config_routes.handle_login_form(request)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["next_target"], "/runs")
+
+        request = _FakeRequest(
+            query_mapping={"next": "https://evil.example/x"}
+        )
+        config_routes.handle_login_form(request)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["next_target"], "")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_handle_login_submit_prefers_form_next_over_query():
+    """
+    **Feature: unified login next-threading (audit fix)**
+    **Property: The POST handler reads ``next`` from the form
+    body (the hidden field the login form carries) before falling
+    back to the query string, so the target survives the form
+    round-trip even when the browser drops the query string.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    ar_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        app = _FakeApp()
+        config_routes.register_config_routes(app=app)
+
+        def _build_with_response(db_session_arg: Any) -> _FakeSecurityManager:
+            instance = _FakeSecurityManager(db_session_arg)
+            instance.authenticate_response = _FakeAuthResponse(
+                user_id="u-1",
+                username="admin",
+                token="tok",
+                csrf_token="csrf",
+            )
+            return instance
+
+        sm_patch = _patch_security_manager(side_effect=_build_with_response)
+        ar_patch = _patch_auth_request_factory()
+
+        request = _FakeRequest(
+            form={
+                "username": "admin",
+                "password": "pw",
+                "next": "/runs",
+            },
+            query_mapping={"next": "/somewhere-else"},
+        )
+        response = config_routes.handle_login_submit(request)
+
+        testbase.assert_equal(response.status_code, 303)
+        testbase.assert_equal(response.headers["Location"], "/runs")
+    finally:
+        if ar_patch is not None:
+            ar_patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_login_submit_rejects_unsafe_form_next():
+    """
+    **Feature: unified login next-threading (audit fix)**
+    **Property: An unsafe ``next`` in the form body (absolute
+    URL) is rejected by the same-origin validator and the
+    redirect falls back to ``/``.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    ar_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        app = _FakeApp()
+        config_routes.register_config_routes(app=app)
+
+        def _build_with_response(db_session_arg: Any) -> _FakeSecurityManager:
+            instance = _FakeSecurityManager(db_session_arg)
+            instance.authenticate_response = _FakeAuthResponse(
+                user_id="u-1",
+                username="admin",
+                token="tok",
+                csrf_token="csrf",
+            )
+            return instance
+
+        sm_patch = _patch_security_manager(side_effect=_build_with_response)
+        ar_patch = _patch_auth_request_factory()
+
+        request = _FakeRequest(
+            form={
+                "username": "admin",
+                "password": "pw",
+                "next": "https://evil.example/phish",
+            },
+        )
+        response = config_routes.handle_login_submit(request)
+
+        testbase.assert_equal(response.status_code, 303)
+        testbase.assert_equal(response.headers["Location"], "/")
+    finally:
+        if ar_patch is not None:
+            ar_patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_login_submit_queues_no_welcome_flash_on_success():
+    """
+    **Feature: login flash hygiene (audit fix)**
+    **Property: A successful login queues NO flash on the session
+    cookie written with the redirect. The shell document the
+    browser lands on never drains the flash queue, so a queued
+    greeting would surface minutes later on an unrelated legacy
+    page instead.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    ar_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        app = _FakeApp()
+        config_routes.register_config_routes(app=app)
+
+        def _build_with_response(db_session_arg: Any) -> _FakeSecurityManager:
+            instance = _FakeSecurityManager(db_session_arg)
+            instance.authenticate_response = _FakeAuthResponse(
+                user_id="u-1",
+                username="admin",
+                token="tok",
+                csrf_token="csrf",
+            )
+            return instance
+
+        sm_patch = _patch_security_manager(side_effect=_build_with_response)
+        ar_patch = _patch_auth_request_factory()
+
+        request = _FakeRequest(
+            form={"username": "admin", "password": "pw"},
+        )
+        response = config_routes.handle_login_submit(request)
+
+        testbase.assert_equal(response.status_code, 303)
+        morsel = response._cookies[cookie_session.COOKIE_NAME]
+        payload = cookie_session.verify_session_payload(
+            cookie_value=morsel.value,
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+        testbase.assert_equal(payload is not None, True)
+        flash_queue = payload.get(flash.SESSION_KEY, [])
+        testbase.assert_equal(flash_queue, [])
+    finally:
+        if ar_patch is not None:
+            ar_patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_login_submit_surfaces_lockout_and_flattens_inactive():
+    """
+    **Feature: login failure messaging (audit fix)**
+    **Property: The rate-limit lockout message is surfaced
+    verbatim (it is keyed by (login_name, source_ip) and fires
+    for unknown usernames too, so it is not an enumeration
+    oracle). The inactive-account message flattens to the
+    generic "Invalid username or password." text because the
+    inactive check fires before password verification and would
+    otherwise confirm account existence to anyone submitting any
+    password for that username.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+        auth_adapter,
+    )
+
+    message_expectations = (
+        (
+            "Too many recent failures; try again later",
+            "Too many recent failures; try again later",
+        ),
+        (
+            "Account is not active",
+            "Invalid username or password.",
+        ),
+    )
+
+    for raised_message, expected_message in message_expectations:
+        _reset_global_state()
+        sm_patch = None
+        ar_patch = None
+        try:
+            env = _install_stub_environment()
+            _install_ui_cookie_secret()
+            db_session = _FakeDbSession()
+            _install_db_session_factory(db_session=db_session)
+
+            def _build_with_adapter_error(
+                    db_session_arg: Any
+                ) -> _FakeSecurityManager:
+                instance = _FakeSecurityManager(db_session_arg)
+
+                def _raise_adapter_error(request: Any) -> Any:
+                    raise auth_adapter.AuthenticationError(
+                        raised_message
+                    )
+
+                instance.authenticate = _raise_adapter_error
+                return instance
+
+            sm_patch = _patch_security_manager(
+                side_effect=_build_with_adapter_error
+            )
+            ar_patch = _patch_auth_request_factory()
+
+            request = _FakeRequest(
+                form={"username": "admin", "password": "pw"},
+            )
+            response = config_routes.handle_login_submit(request)
+
+            testbase.assert_equal(response.status_code, 401)
+            ctx = env.last_template.render_calls[0]
+            testbase.assert_equal(len(ctx["flashes"]), 1)
+            testbase.assert_equal(ctx["flashes"][0][0], "error")
+            testbase.assert_equal(
+                ctx["flashes"][0][1], expected_message
+            )
+        finally:
+            if ar_patch is not None:
+                ar_patch.deactivate()
+            if sm_patch is not None:
+                sm_patch.deactivate()
+            _reset_global_state()
+    return
+
+
+def test_handle_login_submit_keeps_generic_message_for_bad_credentials():
+    """
+    **Feature: login failure messaging (audit fix)**
+    **Property: An adapter AuthenticationError carrying the
+    bad-credentials message still flattens to the generic
+    "Invalid username or password." flash so unknown usernames
+    stay indistinguishable from wrong passwords.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+        auth_adapter,
+    )
+
+    _reset_global_state()
+    sm_patch = None
+    ar_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        db_session = _FakeDbSession()
+        _install_db_session_factory(db_session=db_session)
+
+        def _build_with_adapter_error(
+                db_session_arg: Any
+            ) -> _FakeSecurityManager:
+            instance = _FakeSecurityManager(db_session_arg)
+
+            def _raise_adapter_error(request: Any) -> Any:
+                raise auth_adapter.AuthenticationError(
+                    "Invalid credentials"
+                )
+
+            instance.authenticate = _raise_adapter_error
+            return instance
+
+        sm_patch = _patch_security_manager(
+            side_effect=_build_with_adapter_error
+        )
+        ar_patch = _patch_auth_request_factory()
+
+        request = _FakeRequest(
+            form={"username": "admin", "password": "wrong"},
+        )
+        response = config_routes.handle_login_submit(request)
+
+        testbase.assert_equal(response.status_code, 401)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(len(ctx["flashes"]), 1)
+        testbase.assert_equal(
+            ctx["flashes"][0][1], "Invalid username or password."
+        )
+    finally:
+        if ar_patch is not None:
+            ar_patch.deactivate()
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
 def test_handle_login_submit_returns_401_when_authenticate_raises():
     """
     **Feature: webworks config blueprint port T1.3 (D1)**
@@ -699,7 +1022,8 @@ def test_handle_login_submit_returns_401_when_authenticate_raises():
 def test_handle_logout_calls_security_manager_logout_and_redirects_to_login():
     """
     **Feature: webworks config blueprint port T1.4 (D1)**
-    **Property: With a session token in the cookie, logout calls
+    **Property: A POST with a session token in the cookie and a
+    matching CSRF token in the form calls
     SecurityManager.logout(token) and returns a 303 redirect to
     /login. A "logged out" flash rides on the redirect.**
     """
@@ -720,11 +1044,14 @@ def test_handle_logout_calls_security_manager_logout_and_redirects_to_login():
                 "user_id": "u-1",
                 "username": "admin",
                 "session_token": "tok-abc",
+                csrf.SESSION_KEY: "csrf-tok-1",
             },
             secret=_TEST_UI_COOKIE_SECRET,
         )
         request = _FakeRequest(
             cookies={cookie_session.COOKIE_NAME: cookie_value},
+            form={"csrf_token": "csrf-tok-1"},
+            method="POST",
         )
         response = config_routes.handle_logout(request)
 
@@ -774,6 +1101,112 @@ def test_handle_logout_redirects_without_security_manager_call_when_no_token():
         testbase.assert_equal(response.status_code, 303)
         # No SecurityManager was constructed.
         testbase.assert_equal(_FakeSecurityManager.last_instance, None)
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_logout_post_without_csrf_token_is_rejected():
+    """
+    **Feature: logout CSRF protection (audit fix)**
+    **Property: A POST /logout without a valid CSRF token does
+    NOT log the session out -- SecurityManager.logout is never
+    called and the handler redirects away (302) with the session
+    cookie's auth keys intact.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        db_session = _FakeDbSession()
+        _install_db_session_factory(db_session=db_session)
+        app = _FakeApp()
+        config_routes.register_config_routes(app=app)
+
+        sm_patch = _patch_security_manager()
+
+        cookie_value = cookie_session.sign_session_payload(
+            payload={
+                "user_id": "u-1",
+                "username": "admin",
+                "session_token": "tok-abc",
+                csrf.SESSION_KEY: "csrf-tok-1",
+            },
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            form={},
+            method="POST",
+        )
+        response = config_routes.handle_logout(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(response.status_code, 302)
+        # No logout happened.
+        testbase.assert_equal(_FakeSecurityManager.last_instance, None)
+        # The re-written cookie still carries the auth keys.
+        morsel = response._cookies[cookie_session.COOKIE_NAME]
+        payload = cookie_session.verify_session_payload(
+            cookie_value=morsel.value,
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+        testbase.assert_equal(payload is not None, True)
+        testbase.assert_equal(payload.get("user_id", ""), "u-1")
+        testbase.assert_equal(
+            payload.get("session_token", ""), "tok-abc"
+        )
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_logout_get_stays_available_without_csrf():
+    """
+    **Feature: logout CSRF protection (audit fix)**
+    **Property: GET /logout -- the convenience entrypoint sidebar
+    links bind to -- still logs out without a CSRF token. Only
+    the POST path is CSRF-gated.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        db_session = _FakeDbSession()
+        _install_db_session_factory(db_session=db_session)
+        app = _FakeApp()
+        config_routes.register_config_routes(app=app)
+
+        sm_patch = _patch_security_manager()
+
+        cookie_value = cookie_session.sign_session_payload(
+            payload={
+                "user_id": "u-1",
+                "username": "admin",
+                "session_token": "tok-abc",
+                csrf.SESSION_KEY: "csrf-tok-1",
+            },
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            method="GET",
+        )
+        response = config_routes.handle_logout(request)
+
+        testbase.assert_equal(response.status_code, 303)
+        testbase.assert_equal(
+            response.headers["Location"], "/login"
+        )
+        instance = _FakeSecurityManager.last_instance
+        testbase.assert_equal(instance.logout_calls, ["tok-abc"])
     finally:
         if sm_patch is not None:
             sm_patch.deactivate()
@@ -1182,6 +1615,146 @@ def test_url_for_drops_converter_qualifier_in_placeholder():
             "config.role_detail", role_id=99
         )
         testbase.assert_equal(rtnval, "/admin/roles/99")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_pure_path_substitution_has_no_query_string():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: When every kwarg matches a path placeholder, the
+    returned URL is the substituted path only -- no stray ``?``
+    is appended.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="config.user_detail",
+            pattern="/admin/users/{user_id}",
+        )
+        rtnval = url_for_module.url_for(
+            "config.user_detail", user_id="u-42"
+        )
+        testbase.assert_equal(rtnval, "/admin/users/u-42")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_appends_extra_kwargs_as_query_string():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: Kwargs that match no path placeholder are
+    appended as a query string in insertion order -- pagination
+    and filter links keep their parameters instead of collapsing
+    to the bare URL.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="config.users_list",
+            pattern="/admin/users",
+        )
+        rtnval = url_for_module.url_for(
+            "config.users_list", page=2, search="alice"
+        )
+        testbase.assert_equal(rtnval, "/admin/users?page=2&search=alice")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_skips_none_valued_kwargs_in_query_string():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: A kwarg whose value is ``None`` is omitted from
+    the query string entirely -- optional filters a template
+    passes unconditionally never render as ``param=None``.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="config.audit_list",
+            pattern="/admin/audit",
+        )
+        rtnval = url_for_module.url_for(
+            "config.audit_list", page=3, event_type=None, user_id=None
+        )
+        testbase.assert_equal(rtnval, "/admin/audit?page=3")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_returns_bare_url_when_all_extra_kwargs_are_none():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: When every non-placeholder kwarg is ``None``,
+    no ``?`` is appended -- the bare URL comes back exactly as
+    registered.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="config.audit_list",
+            pattern="/admin/audit",
+        )
+        rtnval = url_for_module.url_for(
+            "config.audit_list", event_type=None, user_id=None
+        )
+        testbase.assert_equal(rtnval, "/admin/audit")
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_url_encodes_query_string_values():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: Query-string values with spaces and reserved
+    characters are URL-encoded -- a search term like
+    ``a b&c=d`` round-trips as a single parameter value.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="config.users_list",
+            pattern="/admin/users",
+        )
+        rtnval = url_for_module.url_for(
+            "config.users_list", search="a b&c=d"
+        )
+        testbase.assert_equal(
+            rtnval, "/admin/users?search=a+b%26c%3Dd"
+        )
+    finally:
+        _reset_global_state()
+    return
+
+
+def test_url_for_mixes_path_placeholders_and_query_string_kwargs():
+    """
+    **Feature: D1 url_for shim T1.8**
+    **Property: A call mixing placeholder kwargs and extra
+    kwargs substitutes the path params and appends only the
+    extras as the query string.**
+    """
+    _reset_global_state()
+    try:
+        url_for_module.register_endpoint(
+            endpoint="projects.tests_list",
+            pattern="/projects/{project_id}/tests",
+        )
+        rtnval = url_for_module.url_for(
+            "projects.tests_list",
+            project_id="p-7",
+            status="failed",
+            page=4,
+        )
+        testbase.assert_equal(
+            rtnval, "/projects/p-7/tests?status=failed&page=4"
+        )
     finally:
         _reset_global_state()
     return

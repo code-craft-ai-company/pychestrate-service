@@ -13,7 +13,8 @@ The shell document is intentionally tiny. It carries:
   attributes initialized from the request.
 * One ``<script type="module" src=".../<name>/index.js">`` per
   bundle returned by :func:`bundles_for`.
-* The shell stylesheet (one ``<link>`` tag).
+* The stylesheet ``<link>`` tags: the mj token/base sheets, the
+  ``--pyc-*`` design-token pack, and the shell stylesheet.
 
 The Custom Element itself owns header, sidebar, main, and empty-
 state rendering. Server-side this module is pure plumbing -- pick

@@ -35,6 +35,18 @@ function next_flag_state(state) {
   const rtnval = FLAG_STATE_ENABLED;
   return rtnval;
 }
+function load_failure_message(status, subject) {
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to view " + subject + ".";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Could not reach the service while loading " + subject + ". Check your connection and try refreshing.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + subject + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
 function toggle_message_for_status(status) {
   if (status === 200) {
     const rtnval2 = "Flag state updated.";
@@ -59,6 +71,8 @@ class PycFeatureFlags extends HTMLElement {
   _entries;
   _loading;
   _errored;
+  _error_status;
+  _filter_text;
   _table_region;
   _status_region;
   constructor() {
@@ -66,6 +80,8 @@ class PycFeatureFlags extends HTMLElement {
     this._entries = [];
     this._loading = false;
     this._errored = false;
+    this._error_status = 0;
+    this._filter_text = "";
     this._table_region = null;
     this._status_region = null;
   }
@@ -116,6 +132,17 @@ class PycFeatureFlags extends HTMLElement {
       void this._refresh();
     });
     controls.appendChild(refresh_button);
+    const filter_input = document.createElement("input");
+    filter_input.classList.add("pyc-admin__filter");
+    filter_input.setAttribute("type", "search");
+    filter_input.setAttribute("data-role", "flag-filter");
+    filter_input.setAttribute("placeholder", "Filter by flag key…");
+    filter_input.setAttribute("aria-label", "Filter feature flags by key");
+    filter_input.addEventListener("input", () => {
+      this._filter_text = filter_input.value;
+      this._render_table();
+    });
+    controls.appendChild(filter_input);
     root.appendChild(controls);
     const status_region = document.createElement("div");
     status_region.setAttribute("data-role", "status-region");
@@ -139,6 +166,7 @@ class PycFeatureFlags extends HTMLElement {
   async _refresh() {
     this._loading = true;
     this._errored = false;
+    this._error_status = 0;
     this._render_table();
     let entries = null;
     try {
@@ -148,6 +176,7 @@ class PycFeatureFlags extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        this._error_status = response.status;
         throw new Error(
           "flags fetch failed: HTTP " + String(response.status)
         );
@@ -194,7 +223,10 @@ class PycFeatureFlags extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load feature flags. Try refreshing.";
+      error.textContent = load_failure_message(
+        this._error_status,
+        "feature flags"
+      );
       region.replaceChildren(error);
       return;
     }
@@ -206,7 +238,25 @@ class PycFeatureFlags extends HTMLElement {
       region.replaceChildren(empty);
       return;
     }
-    const ordered = this._entries.slice();
+    const filter_text = this._filter_text.trim().toLowerCase();
+    let visible = this._entries;
+    if (filter_text.length > 0) {
+      visible = this._entries.filter((entry) => {
+        if (typeof entry.flag_key !== "string") {
+          return false;
+        }
+        return entry.flag_key.toLowerCase().includes(filter_text);
+      });
+    }
+    if (visible.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-admin__notice");
+      empty.setAttribute("data-role", "filter-empty-state");
+      empty.textContent = "No feature flags match \u201C" + this._filter_text.trim() + "\u201D.";
+      region.replaceChildren(empty);
+      return;
+    }
+    const ordered = visible.slice();
     ordered.sort(
       (left, right) => {
         if (left.flag_key < right.flag_key) {
@@ -226,7 +276,20 @@ class PycFeatureFlags extends HTMLElement {
     table.rowClass = "pyc-admin__row";
     table.rowAttrs = (entry) => ({ "data-flag-key": entry.flag_key });
     table.columns = [
-      { key: "flag_key", label: "Flag Key", width: "20rem" },
+      {
+        key: "flag_key",
+        label: "Flag Key",
+        width: "20rem",
+        render: (entry) => {
+          const key_cell = document.createElement("span");
+          key_cell.classList.add("pyc-admin__mono");
+          key_cell.textContent = entry.flag_key ?? "\u2014";
+          if (typeof entry.flag_key === "string") {
+            key_cell.setAttribute("title", entry.flag_key);
+          }
+          return key_cell;
+        }
+      },
       {
         key: "flag_kind",
         label: "Kind",
@@ -275,6 +338,10 @@ class PycFeatureFlags extends HTMLElement {
       toggle.toggleAttribute("disabled", true);
     }
     toggle.addEventListener("click", () => {
+      const question = "Set flag \"" + String(entry.flag_key) + "\" to " + target + "?";
+      if (window.confirm(question) === false) {
+        return;
+      }
       toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
@@ -361,6 +428,7 @@ export {
   PycFeatureFlags,
   build_flag_url,
   flag_state_tone,
+  load_failure_message,
   next_flag_state,
   toggle_message_for_status
 };

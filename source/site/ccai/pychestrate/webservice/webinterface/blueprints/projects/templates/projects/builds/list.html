@@ -82,7 +82,10 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="9" style="text-align: center; color: #6c757d;">No builds found</td>
+            <td colspan="9" style="text-align: center; color: #6c757d; padding: 40px;">
+                No builds yet.
+                <a href="{{ url_for('projects.build_spec_list', project_id=project.id) }}">Run a build specification</a> to start one.
+            </td>
         </tr>
         {% endfor %}
     </tbody>

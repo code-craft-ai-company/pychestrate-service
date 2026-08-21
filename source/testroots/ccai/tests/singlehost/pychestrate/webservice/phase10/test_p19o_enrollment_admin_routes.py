@@ -18,7 +18,8 @@ Tests cover:
   list template with the token rows; permission-denied path
   redirects to the dashboard.
 * ``handle_enrollment_token_mint`` -- happy path mints a token
-  and redirects to the list with the secret surfaced in a flash;
+  and renders the page directly with a one-time result panel
+  (secret + client commands; never flashed into the cookie);
   missing-field path flashes an error.
 * ``handle_enrollment_token_revoke`` -- happy path revokes and
   redirects to the list.
@@ -507,22 +508,27 @@ def test_handle_enrollment_token_list_redirects_anonymous():
 # ===========================================================================
 
 
-def test_handle_enrollment_token_mint_happy_path_redirects():
+def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
     """
-    **Feature: enrollment-admin (p19o)**
+    **Feature: enrollment-admin (p19o) + admin UX fix**
     **Property: POST /admin/enrollment-tokens/mint with valid
     project_id + pod_name mints a token via the service and
-    redirects to the list; the secret rides on a flash.**
+    renders the list page directly with a one-time ``minted``
+    result panel carrying the secret and the exact
+    pychestrate-client commands. The secret is NOT queued on a
+    flash (it must never enter the cookie).**
     """
     _reset_global_state()
     sm_patch = None
     issue_patch = None
+    list_patch = None
     try:
-        _install_stub_environment()
+        env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
+        list_patch = _patch_service_list(tokens=[])
 
         issued_calls: List[Dict[str, Any]] = []
 
@@ -554,13 +560,37 @@ def test_handle_enrollment_token_mint_happy_path_redirects():
         )
 
         is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(is_redirect, False)
+        testbase.assert_equal(response.status_code, 200)
         testbase.assert_equal(len(issued_calls), 1)
         testbase.assert_equal(issued_calls[0]["project_id"], "proj-1")
         testbase.assert_equal(issued_calls[0]["pod_name"], "pod-1")
         testbase.assert_equal(issued_calls[0]["ttl_seconds"], 7200)
+
+        testbase.assert_equal(
+            env.template_lookups, ["config/enrollment/list.html"]
+        )
+        ctx = env.last_template.render_calls[0]
+        minted = ctx["minted"]
+        testbase.assert_equal(minted["token_id"], "tok-new")
+        testbase.assert_equal(minted["pod_name"], "pod-1")
+        testbase.assert_equal(minted["secret"], "s3cr3t-value")
+        enroll_ok = (
+            minted["enroll_command"].startswith(
+                "pychestrate-client enroll --service-url "
+            )
+            and "--token s3cr3t-value" in minted["enroll_command"]
+            and "--name pod-1" in minted["enroll_command"]
+        )
+        testbase.assert_equal(enroll_ok, True)
+        testbase.assert_equal(
+            minted["run_command"], "pychestrate-client run"
+        )
+        # No flash carries the secret -- the flash queue stays
+        # empty on the mint response.
+        testbase.assert_equal(ctx["flashes"], [])
     finally:
-        for p in (issue_patch, sm_patch):
+        for p in (list_patch, issue_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()

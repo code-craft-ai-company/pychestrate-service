@@ -1,11 +1,47 @@
-import { PycResourcePools } from "./resource-pools-view.js";
-import { PycPoolDetail, pool_id_from_path } from "./pool-detail-view.js";
+import {
+  PycResourcePools,
+  RESOURCE_POOLS_WRITE_PERMISSION,
+  RESOURCES_WRITE_PERMISSION,
+  build_resource_pools_url,
+  extract_projects,
+  format_timestamp,
+  health_tone,
+  parse_capability_tags,
+  read_problem,
+  resource_state_tone,
+  shell_write_allowed,
+  short_id,
+  total_pages_for
+} from "./resource-pools-view.js";
+import {
+  ACTIVE_RESERVATION_STATES,
+  PycPoolDetail,
+  build_pool_member_url,
+  build_pool_reservations_url,
+  build_pool_resources_url,
+  build_pool_url,
+  build_reservation_url,
+  is_active_reservation,
+  is_valid_uuid,
+  member_display_label,
+  pool_id_from_path,
+  project_id_from_search,
+  reservation_tone,
+  reserve_failure_message,
+  section_error_message
+} from "./pool-detail-view.js";
 import {
   PycResourceDetail,
-  resource_id_from_path
+  STATE_ACTIONS,
+  build_resource_health_url,
+  build_resource_state_url,
+  build_resource_url,
+  build_resource_usage_url,
+  legal_state_actions,
+  pool_id_from_search,
+  resource_id_from_path,
+  usage_event_tone
 } from "./resource-detail-view.js";
-const FLEET_GROUP_ID = "fleet";
-const RESOURCES_READ_PERMISSION = "system:resources.read";
 const RESOURCE_POOLS_ROUTE = "/resource-pools";
 const RESOURCE_POOLS_TAG = "pyc-resource-pools";
 const POOL_DETAIL_TAG = "pyc-pool-detail";
@@ -24,22 +60,6 @@ function ensure_resources_stylesheet() {
   link.href = RESOURCES_STYLESHEET_HREF;
   link.setAttribute("data-pyc-bundle", "pyc-resources-bundle");
   document.head.appendChild(link);
-  return;
-}
-const RESOURCES_ENTRY = {
-  entryId: "fleet.resources",
-  label: "Resources",
-  route: RESOURCE_POOLS_ROUTE,
-  requiredPermissions: [RESOURCES_READ_PERMISSION],
-  group: FLEET_GROUP_ID
-};
-function register_resources_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: FLEET_GROUP_ID,
-    label: "Fleet",
-    requiredPermissions: [RESOURCES_READ_PERMISSION]
-  });
-  sidebar.registerEntry(RESOURCES_ENTRY);
   return;
 }
 function define_resources_elements() {
@@ -67,8 +87,8 @@ function classify_resources_route(path) {
   if (query_index >= 0) {
     working = working.slice(0, query_index);
   }
-  if (working === RESOURCE_POOLS_ROUTE || working === RESOURCE_POOLS_ROUTE + "/") {
-    const rtnval2 = "pools-list";
+  if (working !== RESOURCE_POOLS_ROUTE && working.startsWith(RESOURCE_POOLS_ROUTE + "/") === false) {
+    const rtnval2 = "none";
     return rtnval2;
   }
   const resource_id = resource_id_from_path(working);
@@ -81,7 +101,10 @@ function classify_resources_route(path) {
     const rtnval2 = "pool-detail";
     return rtnval2;
   }
-  const rtnval = "none";
+  // Anything else under the prefix (the bare list route, a
+  // trailing slash, or /resource-pools/resources without an id)
+  // falls back to the pools list instead of rendering blank.
+  const rtnval = "pools-list";
   return rtnval;
 }
 function tag_for_resources_route(route) {
@@ -155,72 +178,51 @@ function _boot() {
   });
   return;
 }
-import { PycResourcePools as PycResourcePools2 } from "./resource-pools-view.js";
-import {
-  build_resource_pools_url,
-  parse_capability_tags,
-  short_id,
-  format_timestamp,
-  has_next_page,
-  has_previous_page
-} from "./resource-pools-view.js";
-import { PycPoolDetail as PycPoolDetail2 } from "./pool-detail-view.js";
-import {
-  pool_id_from_path as pool_id_from_path2,
-  project_id_from_search,
-  is_valid_uuid,
-  is_active_reservation,
-  reservation_tone,
-  build_pool_url,
-  build_pool_resources_url,
-  build_pool_reservations_url,
-  build_reservation_url,
-  ACTIVE_RESERVATION_STATES
-} from "./pool-detail-view.js";
-import { PycResourceDetail as PycResourceDetail2 } from "./resource-detail-view.js";
-import {
-  resource_id_from_path as resource_id_from_path2,
-  health_tone,
-  resource_state_tone,
-  usage_event_tone,
-  build_resource_url,
-  build_resource_health_url,
-  build_resource_usage_url
-} from "./resource-detail-view.js";
 if (typeof window !== "undefined") {
   _boot();
 }
 export {
   ACTIVE_RESERVATION_STATES,
-  PycPoolDetail2 as PycPoolDetail,
-  PycResourceDetail2 as PycResourceDetail,
-  PycResourcePools2 as PycResourcePools,
+  PycPoolDetail,
+  PycResourceDetail,
+  PycResourcePools,
+  RESOURCE_POOLS_WRITE_PERMISSION,
+  RESOURCES_WRITE_PERMISSION,
+  STATE_ACTIONS,
+  build_pool_member_url,
   build_pool_reservations_url,
   build_pool_resources_url,
   build_pool_url,
   build_reservation_url,
   build_resource_health_url,
   build_resource_pools_url,
+  build_resource_state_url,
   build_resource_url,
   build_resource_usage_url,
   classify_resources_route,
   define_resources_elements,
   ensure_resources_stylesheet,
+  extract_projects,
   format_timestamp,
   health_tone,
   is_active_reservation,
   is_valid_uuid,
+  legal_state_actions,
+  member_display_label,
   mount_resources_view_if_active,
   parse_capability_tags,
-  pool_id_from_path2 as pool_id_from_path,
-  has_next_page as pools_has_next_page,
-  has_previous_page as pools_has_previous_page,
+  pool_id_from_path,
+  pool_id_from_search,
   project_id_from_search,
-  register_resources_sidebar,
+  read_problem,
   reservation_tone,
-  resource_id_from_path2 as resource_id_from_path,
+  reserve_failure_message,
+  resource_id_from_path,
   resource_state_tone,
+  section_error_message,
+  shell_write_allowed,
   short_id,
   tag_for_resources_route,
+  total_pages_for,
   usage_event_tone
 };

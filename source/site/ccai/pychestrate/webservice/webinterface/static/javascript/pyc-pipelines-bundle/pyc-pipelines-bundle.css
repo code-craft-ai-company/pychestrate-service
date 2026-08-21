@@ -268,6 +268,38 @@ pyc-pipeline-detail {
     color: var(--pyc-pipelines-error-fg);
 }
 
+.pyc-pipelines__projects-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-pipelines-fg-muted);
+}
+
+.pyc-pipelines__projects-notice--error {
+    color: var(--pyc-pipelines-error-fg);
+}
+
+.pyc-pipelines__dispatch-note {
+    margin: 0.5rem 0 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-pipelines-fg-muted);
+}
+
+.pyc-pipelines__table-region > .pyc-pipelines__button,
+.pyc-pipeline-detail__retry {
+    display: block;
+    margin: 0 auto;
+    padding: 0.375rem 0.875rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-pipelines-accent-on-surface);
+    background-color: var(--pyc-pipelines-surface);
+    border: 0.0625rem solid var(--pyc-pipelines-border);
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
 .pyc-pipelines__pager {
     display: flex;
     align-items: center;

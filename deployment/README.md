@@ -92,6 +92,36 @@ grade PKI would: (a) integrate Vault / Step CA / equivalent;
 (b) rotate / renew certs on a schedule; (c) check revocation
 via OCSP or CRL. All three are out of scope for the alpha.
 
+## `renew-cert.sh` — HTTPS server-cert renewal
+
+The nginx front terminates HTTPS with a Tailscale-issued cert
+(`/etc/nginx/ssl/pychestrate.crt` / `.key`), valid for **90
+days**. When it lapses, the `:80 → https` redirect makes the
+whole site unreachable for browsers, so renewal is
+operationally load-bearing.
+
+```bash
+deployment/renew-cert.sh            # defaults match the alpha host
+```
+
+The script mints a fresh cert on the host via `tailscale cert`,
+installs the pair with the right ownership/modes, validates and
+reloads nginx (zero downtime), and prints the old + new expiry.
+Every privileged call is `sudo -n` against the scoped rules in
+`sudoers.d/pychestrate-deploy.template` (the TLS-renewal block),
+so it is fully non-interactive once
+`install-deploy-sudoers.sh` has been run — re-run that installer
+once after pulling this change to pick the new rules up
+(it prompts for the remote sudo password one time).
+
+Renewal is idempotent; put it on a monthly cron / systemd timer
+(well inside the 90-day validity) to never hit an expiry again:
+
+```
+# workstation or host crontab
+17 4 1 * * /path/to/pychestrate-service/deployment/renew-cert.sh >> ~/pychestrate-cert-renew.log 2>&1
+```
+
 ## `deploy-alpha-to-host.sh`
 
 Driver script that runs from your workstation and provisions a

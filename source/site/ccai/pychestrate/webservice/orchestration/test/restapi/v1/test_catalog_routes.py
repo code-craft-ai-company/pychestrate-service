@@ -361,7 +361,17 @@ def _entry_view_to_dict(view: Any) -> Dict[str, Any]:
 
         :returns: JSON-friendly dict.
     """
+    # ``created_at`` is the first-import timestamp and stays
+    # stable across re-imports; ``updated_at`` moves on every
+    # upsert. Older view snapshots may predate the created_at
+    # field, so fall back to updated_at rather than emitting
+    # null.
     updated_at_iso = _iso_or_none(getattr(view, "updated_at", None))
+    created_at_raw = getattr(view, "created_at", None)
+    if created_at_raw is not None:
+        created_at_iso = _iso_or_none(created_at_raw)
+    else:
+        created_at_iso = updated_at_iso
     rtnval: Dict[str, Any] = {
         "entry_id": str(view.entry_id),
         "project_id": str(view.project_id),
@@ -374,7 +384,7 @@ def _entry_view_to_dict(view: Any) -> Dict[str, Any]:
         "raw_metadata": dict(view.raw_metadata or {}),
         "canonical_digest": view.canonical_digest,
         "retired": bool(view.retired),
-        "created_at": updated_at_iso,
+        "created_at": created_at_iso,
         "updated_at": updated_at_iso,
     }
     return rtnval

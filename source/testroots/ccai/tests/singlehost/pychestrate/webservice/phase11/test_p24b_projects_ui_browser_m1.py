@@ -6,11 +6,13 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The ``/projects/*`` pages are **not** part of the mj-* shell.
-They render their own standalone HTML document (dark header +
-sidebar + main content area via ``projects/base.html``) and use
-standard ``<form method="post">`` patterns with CSRF hidden
-fields.
+The ``/projects/*`` pages render server-side fragments
+(``projects/base.html``) that the blueprint's shell wrapper
+embeds inside the ``<pyc-site-shell>`` document, so they share
+the unified header / sidebar with the rest of the site. The
+page bodies remain standard server-rendered
+``<form method="post">`` patterns with CSRF hidden fields, which
+is what these tests drive.
 
 These tests drive the full create-then-use-then-clean-up
 lifecycle entirely through the legacy UI so that sub-entity
@@ -136,9 +138,11 @@ def _login(*, context: BrowserContext) -> Page:
     page.fill("input[name='password']", password)
     page.click("button[type='submit']")
 
-    # Wait until the URL has left /login -- the projects pages use
-    # a dark-header standalone document (no pyc-site-shell), so we
-    # wait on the URL bar rather than a custom element.
+    # Wait until the URL has left /login. The projects pages now
+    # render inside the pyc-site-shell document, but the
+    # server-rendered fragment is present from the first paint, so
+    # waiting on the URL bar (rather than a custom element) stays
+    # the most robust signal.
     page.wait_for_function(
         "() => !window.location.pathname.endsWith('/login')",
         timeout=NAVIGATION_TIMEOUT_MS,
@@ -176,14 +180,21 @@ def _unique(*, prefix: str) -> str:
 
 def _read_flash_text(*, page: Page) -> str:
     """
-        Collect all ``<div class="alert ...">`` text from the
-        current page into a single string for assertion.
+        Collect all flash-message text from the current page into
+        a single string for assertion. Covers both shapes: the
+        server-rendered inline ``<div class="alert ...">`` (shown
+        when the site shell has not booted) and the shell-lifted
+        ``<mj-alert class="pyc-site-shell__flash-notice">`` notice
+        the shell moves flashes into so bundle mounts cannot
+        destroy them.
 
         :param page: Current Playwright page.
 
         :returns: Combined flash text (empty string when none).
     """
-    locator = page.locator("div.alert")
+    locator = page.locator(
+        "div.alert, mj-alert.pyc-site-shell__flash-notice"
+    )
     count = locator.count()
     if count == 0:
         return ""

@@ -75,6 +75,9 @@ from ccai.pychestrate.webservice.webhooks_out.service import (
 from ccai.pychestrate.webservice.webhooks_in.configuration_service import (
     WebhookConfigurationView,
 )
+from ccai.pychestrate.webservice.webhooks_in.errors import (
+    WebhookConfigurationNotFoundError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -290,10 +293,10 @@ def _make_delivery_view(
 # ---------------------------------------------------------------------------
 
 
-def test_register_webhooks_in_routes_attaches_four_endpoints():
+def test_register_webhooks_in_routes_attaches_five_endpoints():
     """
     **Feature: 8-webhooks-in PR p21a**
-    **Property: register_webhooks_in_routes attaches the four
+    **Property: register_webhooks_in_routes attaches the five
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -303,6 +306,7 @@ def test_register_webhooks_in_routes_attaches_four_endpoints():
     expected_pairs = (
         ("/api/v1/webhooks/in/integrations", ("GET",)),
         ("/api/v1/webhooks/in/integrations", ("POST",)),
+        ("/api/v1/webhooks/in/integrations/{webhook_id}", ("PATCH",)),
         ("/api/v1/webhooks/in/deliveries", ("GET",)),
         ("/api/v1/webhooks/in/{provider}/{hook_name}", ("POST",)),
     )
@@ -311,10 +315,10 @@ def test_register_webhooks_in_routes_attaches_four_endpoints():
     return
 
 
-def test_register_webhooks_out_routes_attaches_six_endpoints():
+def test_register_webhooks_out_routes_attaches_seven_endpoints():
     """
     **Feature: 8-webhooks-out PR p21a**
-    **Property: register_webhooks_out_routes attaches the six
+    **Property: register_webhooks_out_routes attaches the seven
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -325,6 +329,7 @@ def test_register_webhooks_out_routes_attaches_six_endpoints():
         ("/api/v1/webhooks/out/subscriptions", ("GET",)),
         ("/api/v1/webhooks/out/subscriptions", ("POST",)),
         ("/api/v1/webhooks/out/subscriptions/{subscription_id}", ("GET",)),
+        ("/api/v1/webhooks/out/subscriptions/{subscription_id}", ("PATCH",)),
         ("/api/v1/webhooks/out/subscriptions/{subscription_id}", ("DELETE",)),
         (
             "/api/v1/webhooks/out/subscriptions/{subscription_id}/deliveries",
@@ -850,6 +855,241 @@ def test_create_subscription_happy_path():
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
     testbase.assert_equal(body["subscription_id"], "sub-1")
+    return
+
+
+def test_create_subscription_generates_signing_secret_when_absent():
+    """
+    **Feature: 8-webhooks-out**
+    **Property: POST subscriptions with no secret_ref generates a
+    signing secret, stores it as the target's secret_ref, and
+    returns it exactly once as ``signing_secret`` on the 201
+    response.**
+    """
+    perm_patch = _patch_out_permission(allowed=True)
+    create_patch = create_module_patch(
+        webhooks_out_routes.out_service, "register_target",
+    )
+    create_mock = create_patch.activate()
+    captured_kwargs: Dict[str, Any] = {}
+
+    def _capture(**kwargs: Any) -> Any:
+        captured_kwargs.update(kwargs)
+        rtnval = _make_target_view()
+        return rtnval
+
+    create_mock.configure(side_effect=_capture)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/out/subscriptions",
+            body={
+                "project_id": "proj-1",
+                "name": "ops-subscriber",
+                "url": "https://example.test/hook",
+            },
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_out_routes.handle_create_subscription(request)
+    finally:
+        create_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 201)
+    body = _decode_body(response)
+    testbase.assert_true("signing_secret" in body)
+    testbase.assert_equal(body["signing_secret"], captured_kwargs["secret_ref"])
+    testbase.assert_equal(len(body["signing_secret"]), 64)
+    return
+
+
+def test_create_subscription_does_not_echo_supplied_secret_ref():
+    """
+    **Feature: 8-webhooks-out**
+    **Property: POST subscriptions with a caller-supplied
+    secret_ref never returns a ``signing_secret`` member -- an
+    operator-managed secret is never echoed back.**
+    """
+    perm_patch = _patch_out_permission(allowed=True)
+    create_patch = create_module_patch(
+        webhooks_out_routes.out_service, "register_target",
+    )
+    create_mock = create_patch.activate()
+    create_mock.configure(side_effect=lambda **kwargs: _make_target_view())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/out/subscriptions",
+            body={
+                "project_id": "proj-1",
+                "name": "ops-subscriber",
+                "url": "https://example.test/hook",
+                "secret_ref": "operator-supplied",
+            },
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_out_routes.handle_create_subscription(request)
+    finally:
+        create_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 201)
+    body = _decode_body(response)
+    testbase.assert_true("signing_secret" not in body)
+    return
+
+
+def test_update_subscription_enables_and_disables():
+    """
+    **Feature: 8-webhooks-out**
+    **Property: PATCH subscription routes ``enabled`` to the
+    matching service call and returns 200 with the subscription.**
+    """
+    perm_patch = _patch_out_permission(allowed=True)
+    enable_patch = create_module_patch(
+        webhooks_out_routes.out_service, "enable_target",
+    )
+    enable_mock = enable_patch.activate()
+    enable_mock.configure(side_effect=lambda **kwargs: _make_target_view())
+    disable_patch = create_module_patch(
+        webhooks_out_routes.out_service, "disable_target",
+    )
+    disable_mock = disable_patch.activate()
+    disable_mock.configure(side_effect=lambda **kwargs: _make_target_view())
+    try:
+        enable_request = _FakeRequest(
+            path="/api/v1/webhooks/out/subscriptions/sub-1",
+            path_params={"subscription_id": "sub-1"},
+            body={"enabled": True},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        enable_response = webhooks_out_routes.handle_update_subscription(
+            enable_request
+        )
+        disable_request = _FakeRequest(
+            path="/api/v1/webhooks/out/subscriptions/sub-1",
+            path_params={"subscription_id": "sub-1"},
+            body={"enabled": False},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        disable_response = webhooks_out_routes.handle_update_subscription(
+            disable_request
+        )
+    finally:
+        disable_patch.deactivate()
+        enable_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(enable_response.status_code, 200)
+    testbase.assert_equal(disable_response.status_code, 200)
+    enable_body = _decode_body(enable_response)
+    testbase.assert_equal(enable_body["subscription_id"], "sub-1")
+    return
+
+
+def test_update_subscription_422s_without_enabled():
+    """
+    **Feature: 8-webhooks-out**
+    **Property: PATCH subscription 422s when ``enabled`` is
+    missing or not a boolean.**
+    """
+    perm_patch = _patch_out_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/out/subscriptions/sub-1",
+            path_params={"subscription_id": "sub-1"},
+            body={"enabled": "yes"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_out_routes.handle_update_subscription(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_VALIDATION_FAILED)
+    return
+
+
+def test_update_integration_enables_and_disables():
+    """
+    **Feature: 8-webhooks-in**
+    **Property: PATCH integration routes ``enabled`` to the
+    matching configuration-service call and returns 200 with the
+    integration.**
+    """
+    perm_patch = _patch_in_permission(allowed=True)
+    enable_patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "enable_webhook",
+    )
+    enable_mock = enable_patch.activate()
+    enable_mock.configure(side_effect=lambda **kwargs: _make_config_view())
+    disable_patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "disable_webhook",
+    )
+    disable_mock = disable_patch.activate()
+    disable_mock.configure(side_effect=lambda **kwargs: _make_config_view())
+    try:
+        enable_request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations/wh-1",
+            path_params={"webhook_id": "wh-1"},
+            body={"enabled": True},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        enable_response = webhooks_in_routes.handle_update_integration(
+            enable_request
+        )
+        disable_request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations/wh-1",
+            path_params={"webhook_id": "wh-1"},
+            body={"enabled": False},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        disable_response = webhooks_in_routes.handle_update_integration(
+            disable_request
+        )
+    finally:
+        disable_patch.deactivate()
+        enable_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(enable_response.status_code, 200)
+    testbase.assert_equal(disable_response.status_code, 200)
+    enable_body = _decode_body(enable_response)
+    testbase.assert_equal(enable_body["webhook_id"], "wh-1")
+    return
+
+
+def test_update_integration_404s_when_missing():
+    """
+    **Feature: 8-webhooks-in**
+    **Property: PATCH integration 404s on an unknown webhook_id.**
+    """
+    perm_patch = _patch_in_permission(allowed=True)
+    disable_patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "disable_webhook",
+    )
+    disable_mock = disable_patch.activate()
+
+    def _raise(**kwargs: Any) -> Any:
+        raise WebhookConfigurationNotFoundError("nope")
+
+    disable_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations/wh-x",
+            path_params={"webhook_id": "wh-x"},
+            body={"enabled": False},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_in_routes.handle_update_integration(request)
+    finally:
+        disable_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
     return
 
 

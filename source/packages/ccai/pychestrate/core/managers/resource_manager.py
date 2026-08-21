@@ -661,11 +661,12 @@ class ResourceManager:
         health_status: str = None,
         available_only: bool = False,
         offset: int = 0,
-        limit: int = 50
+        limit: int = 50,
+        search: str = None
     ) -> ResourceListResponse:
         """
         List resources with filtering and pagination.
-        
+
         :param pool_id: Optional pool ID to filter by
         :param resource_type: Optional resource type to filter by
         :param tags: Optional list of tags to filter by (resources must have all tags)
@@ -673,25 +674,38 @@ class ResourceManager:
         :param available_only: If True, only return resources with available capacity
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
+        :param search: Optional substring to match against resource name or description
         :returns: ResourceListResponse with paginated resource list
-        
+
         Validates: Requirements 1.5
         """
+        from sqlalchemy import or_
+
         from ccai.pychestrate.core.orm import Resource, Tag
-        
+
         query = self._db_session.query(Resource)
-        
+
         # Apply pool filter
         if pool_id is not None:
             query = query.filter(Resource.pool_id == pool_id)
-        
+
         # Apply resource type filter
         if resource_type is not None:
             query = query.filter(Resource.resource_type == resource_type)
-        
+
         # Apply health status filter
         if health_status is not None:
             query = query.filter(Resource.health_status == health_status)
+
+        # Apply search filter (case-insensitive substring on name or description)
+        if search:
+            like_pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Resource.name.ilike(like_pattern),
+                    Resource.description.ilike(like_pattern)
+                )
+            )
         
         # Apply tag filter (resources must have all specified tags)
         if tags:
@@ -725,7 +739,38 @@ class ResourceManager:
             offset=offset,
             limit=limit
         )
-    
+
+    def count_resources_by_health_status(self) -> Dict[str, int]:
+        """
+        Count resources grouped by health status using a single aggregate query.
+
+        :returns: Dictionary mapping health status value to resource count.
+                  The four documented statuses ('online', 'offline', 'degraded',
+                  'maintenance') are always present (zero when absent); any other
+                  status values found in the database are included as-is.
+        """
+        from sqlalchemy import func
+
+        from ccai.pychestrate.core.orm import Resource
+
+        counts: Dict[str, int] = {
+            'online': 0,
+            'offline': 0,
+            'degraded': 0,
+            'maintenance': 0
+        }
+
+        rows = self._db_session.query(
+            Resource.health_status, func.count(Resource.id)
+        ).group_by(Resource.health_status).all()
+
+        for status_value, status_count in rows:
+            if status_value is None:
+                continue
+            counts[status_value] = status_count
+
+        return counts
+
     # =========================================================================
     # Pool Management
     # =========================================================================
@@ -1082,18 +1127,23 @@ class ResourceManager:
                 }
             )
     
-    def list_tags(self, offset: int = 0, limit: int = 50) -> TagListResponse:
+    def list_tags(self, offset: int = 0, limit: int = 50, search: str = None) -> TagListResponse:
         """
         List all tags.
-        
+
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
+        :param search: Optional substring to match against the tag name
         :returns: TagListResponse with paginated tag list
         """
         from ccai.pychestrate.core.orm import Tag
-        
+
         query = self._db_session.query(Tag)
-        
+
+        # Apply search filter (case-insensitive substring on name)
+        if search:
+            query = query.filter(Tag.name.ilike(f"%{search}%"))
+
         # Get total count before pagination
         total = query.count()
         

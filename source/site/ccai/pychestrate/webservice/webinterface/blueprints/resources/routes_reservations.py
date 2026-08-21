@@ -33,6 +33,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -61,7 +63,20 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
+    _describe_allocation_error,
 )
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources.reservations")
+
+
+# Upper bound for the resource-selector source list. When more
+# resources exist than this, the templates render a visible
+# "Showing first N of M" note plus pool/type filters so any
+# resource stays reachable.
+_RESOURCE_SELECTOR_LIMIT = 1000
 
 
 _ROUTE_TABLE = (
@@ -206,16 +221,6 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
-
-
 def _find_reservation_by_id(
         *, allocation_manager: Any, reservation_id: int
     ) -> Optional[Any]:
@@ -275,19 +280,30 @@ def handle_reservation_list(request: Request) -> Response:
         )
         resource_manager = _build_resource_manager(db_session=db_session)
 
-        reservations = allocation_manager.list_reservations(
+        reservations_response = allocation_manager.list_reservations(
             resource_id=resource_id,
             start_after=start_after,
             end_before=end_before,
             offset=offset,
             limit=params["per_page"],
-        ).reservations
-        resources = resource_manager.list_resources(limit=100).resources
+        )
+        reservations = reservations_response.reservations
+        resources_response = resource_manager.list_resources(
+            limit=_RESOURCE_SELECTOR_LIMIT
+        )
+        resources = resources_response.resources
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _calculate_total_pages(
+            total=reservations_response.total,
             per_page=params["per_page"],
-            returned_count=len(reservations),
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
+        filters_active = (
+            resource_id is not None
+            or start_after is not None
+            or end_before is not None
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -299,9 +315,12 @@ def handle_reservation_list(request: Request) -> Response:
         )
         context["reservations"] = reservations
         context["resources"] = resources
+        context["resource_total"] = resources_response.total
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["page_window"] = page_window
+        context["filters_active"] = filters_active
         context["selected_resource_id"] = resource_id
         context["start_after"] = start_after_str
         context["end_before"] = end_before_str
@@ -326,12 +345,31 @@ def _render_reservation_create_form(
         auth: Any,
         resource_manager: Any,
         form_data: Optional[MultiFormView],
+        selector_pool_id: Optional[int] = None,
+        selector_resource_type: Optional[str] = None,
         status_code: int = 200
     ) -> HTMLResponse:
     """
-        Helper for both GET and POST-error re-render paths.
+        Helper for both GET and POST-error re-render paths. The
+        resource selector honors optional pool / type filters and
+        reports the true total so the template can show a
+        "Showing first N of M" note when the list is truncated --
+        every resource stays reachable by refining the filters.
     """
-    resources = resource_manager.list_resources(limit=100).resources
+    selector_kwargs: Dict[str, Any] = {
+        "limit": _RESOURCE_SELECTOR_LIMIT,
+    }
+    if selector_pool_id is not None:
+        selector_kwargs["pool_id"] = selector_pool_id
+    if selector_resource_type is not None:
+        selector_kwargs["resource_type"] = selector_resource_type
+
+    resources_response = resource_manager.list_resources(
+        **selector_kwargs
+    )
+    resources = resources_response.resources
+    pools = resource_manager.list_pools(auth.user_id).pools
+
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
         session=auth.session,
@@ -340,6 +378,10 @@ def _render_reservation_create_form(
         csrf_token=auth.csrf_token,
     )
     context["resources"] = resources
+    context["resource_total"] = resources_response.total
+    context["pools"] = pools
+    context["selector_pool_id"] = selector_pool_id
+    context["selector_resource_type"] = selector_resource_type
     context["form_data"] = form_data
     response = _render(
         template_name="resources/reservations/create.html",
@@ -369,11 +411,23 @@ def handle_reservation_create(request: Request) -> Response:
         )
         resource_manager = _build_resource_manager(db_session=db_session)
 
+        # Optional resource-selector filters carried on the query
+        # string (the form posts back to the same URL so they
+        # survive a POST-error re-render).
+        selector_pool_id = _coerce_int(
+            raw=request.query_params.get("pool_id", None)
+        )
+        selector_resource_type = (
+            request.query_params.get("resource_type", None) or None
+        )
+
         if method == "GET":
             response = _render_reservation_create_form(
                 auth=auth,
                 resource_manager=resource_manager,
                 form_data=None,
+                selector_pool_id=selector_pool_id,
+                selector_resource_type=selector_resource_type,
             )
             return response
 
@@ -417,6 +471,8 @@ def handle_reservation_create(request: Request) -> Response:
                 auth=auth,
                 resource_manager=resource_manager,
                 form_data=form_view,
+                selector_pool_id=selector_pool_id,
+                selector_resource_type=selector_resource_type,
                 status_code=400,
             )
             return response
@@ -431,6 +487,8 @@ def handle_reservation_create(request: Request) -> Response:
                 auth=auth,
                 resource_manager=resource_manager,
                 form_data=form_view,
+                selector_pool_id=selector_pool_id,
+                selector_resource_type=selector_resource_type,
                 status_code=400,
             )
             return response
@@ -462,11 +520,18 @@ def handle_reservation_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_allocation_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error creating reservation"
+                )
+                message = (
+                    "An unexpected error occurred while creating the"
+                    " reservation. The problem has been logged."
+                )
             flash.add_flash(
                 session=auth.session,
-                message="Error creating reservation: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -474,6 +539,8 @@ def handle_reservation_create(request: Request) -> Response:
             auth=auth,
             resource_manager=resource_manager,
             form_data=form_view,
+            selector_pool_id=selector_pool_id,
+            selector_resource_type=selector_resource_type,
             status_code=400,
         )
         return response
@@ -593,9 +660,12 @@ def handle_reservation_edit(request: Request) -> Response:
             return response
 
         method = request.method.upper()
+        form_view: Optional[MultiFormView] = None
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
+            multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -636,15 +706,26 @@ def handle_reservation_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
+                message = _describe_allocation_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception(
+                        "Unexpected error updating reservation %s",
+                        reservation_id,
+                    )
+                    message = (
+                        "An unexpected error occurred while updating"
+                        " the reservation. The problem has been"
+                        " logged."
+                    )
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating reservation: {}".format(
-                        str(exc)
-                    ),
+                    message=message,
                     category=flash.CATEGORY_ERROR,
                 )
 
-        # GET, or POST that fell through.
+        # GET, or POST that fell through -- re-render with the
+        # submitted values (``form_data``) when a POST failed so
+        # typed input is never reverted to the stored window.
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -653,6 +734,7 @@ def handle_reservation_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["reservation"] = reservation
+        context["form_data"] = form_view
         response = _render(
             template_name="resources/reservations/edit.html",
             context=context,
@@ -724,14 +806,22 @@ def handle_reservation_cancel(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_allocation_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error cancelling reservation %s",
+                    reservation_id,
+                )
+                message = (
+                    "An unexpected error occurred while cancelling"
+                    " the reservation. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
-                message="Error cancelling reservation: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

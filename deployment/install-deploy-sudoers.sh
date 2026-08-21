@@ -33,11 +33,16 @@ set -euo pipefail
 
 REMOTE_HOST="tc-app-server.local"
 REMOTE_USER="myron"
+# Canonical public hostname baked into the tailscale-cert rule --
+# must match the --public-hostname the deploy runs with, so the
+# rule cannot be repurposed to mint certs for other tailnet nodes.
+PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --host=*) REMOTE_HOST="${1#*=}" ;;
         --user=*) REMOTE_USER="${1#*=}" ;;
+        --public-hostname=*) PUBLIC_HOSTNAME="${1#*=}" ;;
         --help|-h)
             sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
             exit 0
@@ -75,9 +80,11 @@ if ! ssh -o ConnectTimeout=8 -o BatchMode=yes "${REMOTE_TARGET}" "true" 2>/dev/n
     exit 3
 fi
 
-# Render locally with @USER@ substitution.
+# Render locally with @USER@ + @PUBLIC_HOSTNAME@ substitution.
 RENDERED="$(mktemp)"
-sed -e "s|@USER@|${REMOTE_USER}|g" "${TEMPLATE}" > "${RENDERED}"
+sed -e "s|@USER@|${REMOTE_USER}|g" \
+    -e "s|@PUBLIC_HOSTNAME@|${PUBLIC_HOSTNAME}|g" \
+    "${TEMPLATE}" > "${RENDERED}"
 
 # Validate locally if visudo is available.  ``visudo -c -f``
 # parses without modifying.  Some macs may not have visudo on

@@ -1,13 +1,63 @@
 import { PycPodsList } from "./pods-list-view.js";
-import { PycPodDetail, pod_id_from_path } from "./pod-detail-view.js";
+import {
+  announce_session_expired,
+  build_pod_definitions_url,
+  build_pod_definition_url,
+  extract_projects,
+  format_clock_time,
+  load_projects,
+  member_count,
+  pods_load_message_for_status,
+  project_display_map,
+  short_id,
+  format_timestamp,
+  has_next_page,
+  has_previous_page
+} from "./pods-list-view.js";
+import { PycPodDetail } from "./pod-detail-view.js";
+import {
+  pod_id_from_path,
+  project_id_from_search,
+  is_valid_pod_id,
+  is_transient_pod_state,
+  is_terminal_pod_state,
+  pod_state_tone,
+  build_pod_state_url,
+  build_pod_state_history_url,
+  build_pod_transitions_url,
+  build_pod_registration_url,
+  build_pod_registrations_url,
+  detail_load_message_for_status,
+  runtime_section_message_for_status,
+  transition_message_for_status,
+  POD_STATES,
+  TERMINAL_POD_STATES,
+  TRANSIENT_POD_STATES
+} from "./pod-detail-view.js";
 import { PycClientsList } from "./clients-list-view.js";
 import {
-  PycClientDetail,
-  client_id_from_path
+  build_clients_query_url,
+  build_client_detail_url,
+  build_client_revoke_url,
+  capability_tags,
+  clients_load_message_for_status,
+  perform_client_revoke,
+  revoke_message_for_status,
+  status_tone,
+  liveness_tone,
+  short_id as client_short_id,
+  format_timestamp as client_format_timestamp,
+  has_next_page as clients_has_next_page,
+  has_previous_page as clients_has_previous_page,
+  CLIENT_STATUSES,
+  LIVENESS_STATES
+} from "./clients-list-view.js";
+import { PycClientDetail } from "./client-detail-view.js";
+import {
+  client_detail_message_for_status,
+  client_id_from_path,
+  is_valid_client_id
 } from "./client-detail-view.js";
-const FLEET_GROUP_ID = "fleet";
-const PODS_READ_PERMISSION = "system:pods.read";
-const CLIENTS_READ_PERMISSION = "system:clients.read";
 const PODS_ROUTE = "/pods";
 const CLIENTS_ROUTE = "/clients";
 const PODS_LIST_TAG = "pyc-pods-list";
@@ -28,30 +78,6 @@ function ensure_pods_stylesheet() {
   link.href = PODS_STYLESHEET_HREF;
   link.setAttribute("data-pyc-bundle", "pyc-pods-bundle");
   document.head.appendChild(link);
-  return;
-}
-const PODS_ENTRY = {
-  entryId: "fleet.pods",
-  label: "Pods",
-  route: PODS_ROUTE,
-  requiredPermissions: [PODS_READ_PERMISSION],
-  group: FLEET_GROUP_ID
-};
-const CLIENTS_ENTRY = {
-  entryId: "fleet.clients",
-  label: "Clients",
-  route: CLIENTS_ROUTE,
-  requiredPermissions: [CLIENTS_READ_PERMISSION],
-  group: FLEET_GROUP_ID
-};
-function register_pods_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: FLEET_GROUP_ID,
-    label: "Fleet",
-    requiredPermissions: [PODS_READ_PERMISSION]
-  });
-  sidebar.registerEntry(PODS_ENTRY);
-  sidebar.registerEntry(CLIENTS_ENTRY);
   return;
 }
 function define_pods_elements() {
@@ -151,76 +177,43 @@ function mount_pods_view_if_active() {
   main.replaceChildren(view);
   return;
 }
-function _register_against(handle) {
-  mount_pods_view_if_active();
-  return;
-}
 function _boot() {
   define_pods_elements();
   const target = window;
   const handle = target.pychestrateShell;
   if (handle !== void 0 && handle.sidebar !== void 0) {
-    _register_against(handle);
+    mount_pods_view_if_active();
     return;
   }
-  queueMicrotask(() => {
-    const retry = target.pychestrateShell;
-    if (retry !== void 0 && retry.sidebar !== void 0) {
-      _register_against(retry);
-      return;
+  let registered = false;
+  const try_register = () => {
+    if (registered === true) {
+      return true;
     }
-    console.warn(
-      "pychestrate.ui.pods.bundle_no_shell_handle",
-      {
-        reason: "window.pychestrateShell missing after microtask retry"
-      }
-    );
+    const current = target.pychestrateShell;
+    if (current !== void 0 && current.sidebar !== void 0) {
+      registered = true;
+      mount_pods_view_if_active();
+      return true;
+    }
+    return false;
+  };
+  queueMicrotask(() => {
+    try_register();
   });
+  if (typeof window.addEventListener === "function") {
+    const on_shell_ready = () => {
+      if (try_register() === true) {
+        window.removeEventListener(
+          "pyc-site-shell-ready",
+          on_shell_ready
+        );
+      }
+    };
+    window.addEventListener("pyc-site-shell-ready", on_shell_ready);
+  }
   return;
 }
-import { PycPodsList as PycPodsList2 } from "./pods-list-view.js";
-import {
-  build_pod_definitions_url,
-  build_pod_definition_url,
-  member_count,
-  short_id,
-  format_timestamp,
-  has_next_page,
-  has_previous_page
-} from "./pods-list-view.js";
-import { PycPodDetail as PycPodDetail2 } from "./pod-detail-view.js";
-import {
-  pod_id_from_path as pod_id_from_path2,
-  project_id_from_search,
-  is_valid_pod_id,
-  is_transient_pod_state,
-  pod_state_tone,
-  build_pod_state_url,
-  build_pod_state_history_url,
-  build_pod_registration_url,
-  build_pod_registrations_url,
-  POD_STATES,
-  TRANSIENT_POD_STATES
-} from "./pod-detail-view.js";
-import { PycClientsList as PycClientsList2 } from "./clients-list-view.js";
-import {
-  build_clients_query_url,
-  build_client_detail_url,
-  capability_tags,
-  status_tone,
-  liveness_tone,
-  short_id as short_id2,
-  format_timestamp as format_timestamp2,
-  has_next_page as has_next_page2,
-  has_previous_page as has_previous_page2,
-  CLIENT_STATUSES,
-  LIVENESS_STATES
-} from "./clients-list-view.js";
-import { PycClientDetail as PycClientDetail2 } from "./client-detail-view.js";
-import {
-  client_id_from_path as client_id_from_path2,
-  is_valid_client_id
-} from "./client-detail-view.js";
 if (typeof window !== "undefined") {
   _boot();
 }
@@ -228,12 +221,15 @@ export {
   CLIENT_STATUSES,
   LIVENESS_STATES,
   POD_STATES,
-  PycClientDetail2 as PycClientDetail,
-  PycClientsList2 as PycClientsList,
-  PycPodDetail2 as PycPodDetail,
-  PycPodsList2 as PycPodsList,
+  PycClientDetail,
+  PycClientsList,
+  PycPodDetail,
+  PycPodsList,
+  TERMINAL_POD_STATES,
   TRANSIENT_POD_STATES,
+  announce_session_expired,
   build_client_detail_url,
+  build_client_revoke_url,
   build_clients_query_url,
   build_pod_definition_url,
   build_pod_definitions_url,
@@ -241,29 +237,42 @@ export {
   build_pod_registrations_url,
   build_pod_state_history_url,
   build_pod_state_url,
+  build_pod_transitions_url,
   capability_tags,
   classify_pods_route,
-  format_timestamp2 as client_format_timestamp,
-  client_id_from_path2 as client_id_from_path,
-  short_id2 as client_short_id,
-  has_next_page2 as clients_has_next_page,
-  has_previous_page2 as clients_has_previous_page,
+  client_detail_message_for_status,
+  client_format_timestamp,
+  client_id_from_path,
+  client_short_id,
+  clients_has_next_page,
+  clients_has_previous_page,
+  clients_load_message_for_status,
   define_pods_elements,
+  detail_load_message_for_status,
   ensure_pods_stylesheet,
+  extract_projects,
+  format_clock_time,
+  is_terminal_pod_state,
   is_transient_pod_state,
   is_valid_client_id,
   is_valid_pod_id,
   liveness_tone,
+  load_projects,
   member_count,
   mount_pods_view_if_active,
+  perform_client_revoke,
   format_timestamp as pod_format_timestamp,
-  pod_id_from_path2 as pod_id_from_path,
+  pod_id_from_path,
   short_id as pod_short_id,
   pod_state_tone,
   has_next_page as pods_has_next_page,
   has_previous_page as pods_has_previous_page,
+  pods_load_message_for_status,
+  project_display_map,
   project_id_from_search,
-  register_pods_sidebar,
+  revoke_message_for_status,
+  runtime_section_message_for_status,
   status_tone,
-  tag_for_pods_route
+  tag_for_pods_route,
+  transition_message_for_status
 };

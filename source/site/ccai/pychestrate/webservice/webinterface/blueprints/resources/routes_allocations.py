@@ -42,6 +42,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
@@ -69,7 +71,19 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
+    _describe_allocation_error,
 )
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources.allocations")
+
+
+# Upper bound for the resource-filter dropdown source list. When
+# more resources exist than this, the templates render a visible
+# "Showing first N of M" note instead of silently truncating.
+_RESOURCE_SELECTOR_LIMIT = 1000
 
 
 _ROUTE_TABLE = (
@@ -185,22 +199,6 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    """
-        Mirror the legacy "no total count, approximate total
-        pages" pagination shape: when the current page is full,
-        report ``page+1`` to enable a Next link; otherwise stop
-        at ``page``.
-    """
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
-
-
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -245,15 +243,26 @@ def handle_allocation_list(request: Request) -> Response:
             db_session=db_session
         )
         resource_manager = _build_resource_manager(db_session=db_session)
-        allocations = allocation_manager.list_allocations(
+        allocations_response = allocation_manager.list_allocations(
             **filter_kwargs
-        ).allocations
-        resources = resource_manager.list_resources(limit=100).resources
+        )
+        allocations = allocations_response.allocations
+        resources_response = resource_manager.list_resources(
+            limit=_RESOURCE_SELECTOR_LIMIT
+        )
+        resources = resources_response.resources
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _calculate_total_pages(
+            total=allocations_response.total,
             per_page=params["per_page"],
-            returned_count=len(allocations),
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
+        filters_active = (
+            resource_id is not None
+            or user_id is not None
+            or len(job_id) > 0
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -263,11 +272,15 @@ def handle_allocation_list(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context["current_user_id"] = auth.user_id
         context["allocations"] = allocations
         context["resources"] = resources
+        context["resource_total"] = resources_response.total
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["page_window"] = page_window
+        context["filters_active"] = filters_active
         context["selected_resource_id"] = resource_id
         context["selected_user_id"] = user_id
         context["selected_job_id"] = job_id
@@ -322,20 +335,32 @@ def handle_allocation_history(request: Request) -> Response:
         )
         resource_manager = _build_resource_manager(db_session=db_session)
 
-        allocations = allocation_manager.get_allocation_history(
+        allocations_response = allocation_manager.get_allocation_history(
             resource_id=resource_id,
             user_id=user_id,
             start_date=start_date,
             end_date=end_date,
             offset=offset,
             limit=params["per_page"],
-        ).allocations
-        resources = resource_manager.list_resources(limit=100).resources
+        )
+        allocations = allocations_response.allocations
+        resources_response = resource_manager.list_resources(
+            limit=_RESOURCE_SELECTOR_LIMIT
+        )
+        resources = resources_response.resources
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _calculate_total_pages(
+            total=allocations_response.total,
             per_page=params["per_page"],
-            returned_count=len(allocations),
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
+        filters_active = (
+            resource_id is not None
+            or user_id is not None
+            or start_date is not None
+            or end_date is not None
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -347,9 +372,12 @@ def handle_allocation_history(request: Request) -> Response:
         )
         context["allocations"] = allocations
         context["resources"] = resources
+        context["resource_total"] = resources_response.total
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["page_window"] = page_window
+        context["filters_active"] = filters_active
         context["selected_resource_id"] = resource_id
         context["selected_user_id"] = user_id
         context["start_date"] = start_date_str
@@ -416,6 +444,7 @@ def handle_allocation_detail(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context["current_user_id"] = auth.user_id
         context["allocation"] = allocation
         response = _render(
             template_name="resources/allocations/detail.html",
@@ -488,14 +517,22 @@ def handle_allocation_checkin(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_allocation_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error checking in allocation %s",
+                    allocation_id,
+                )
+                message = (
+                    "An unexpected error occurred while checking in"
+                    " the resource. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
-                message="Error checking in resource: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -578,14 +615,22 @@ def handle_allocation_force_checkin(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_allocation_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error force checking in allocation %s",
+                    allocation_id,
+                )
+                message = (
+                    "An unexpected error occurred while force checking"
+                    " in the resource. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
-                message="Error force checking in resource: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

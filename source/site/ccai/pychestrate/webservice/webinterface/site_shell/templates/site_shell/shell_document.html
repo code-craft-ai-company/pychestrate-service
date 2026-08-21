@@ -9,6 +9,13 @@
          <mj-*> custom element. Loaded BEFORE the pyc-* bundles so
          the components are available when the bundles run. -->
     <link rel="stylesheet" href="/mj/styles/tokens.css">
+    <!-- Pychestrate design tokens: defines every --pyc-* custom
+         property the shell and bundles consume, with light + dark
+         palettes that flip on the same data-theme / OS-preference
+         guards as the mj tokens above. Loaded AFTER /mj/styles/
+         tokens.css so the cascade between the packs stays
+         deterministic. -->
+    <link rel="stylesheet" href="/static/styles/pyc-tokens.css">
     <link rel="stylesheet" href="/mj/styles/base.css">
     <script type="module" src="/static/javascript/pyc-mj-lib/index.js"></script>
     <link rel="stylesheet" href="/static/javascript/pyc-site-shell/pyc-site-shell.css">

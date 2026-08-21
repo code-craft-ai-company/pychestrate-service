@@ -12,7 +12,20 @@ result tree to the shared results backend. This module mints
 short-lived presigned PUT URLs server-side so object-store
 credentials never leave the server.
 
-Two operations are hosted here:
+Three operations are hosted here:
+
+* ``GET /api/v1/runs/{run_id}/artifacts/{artifact_path}`` (tag: artifacts)
+
+  Operator-facing artifact download. Streams one stored artifact
+  file from the run's allocated result tree on the shared results
+  backend. Requires the same cookie-session / API-key auth +
+  ``system:runs.read`` permission as reading the run itself. The
+  relative path is strictly canonicalized (no traversal, no
+  absolute paths) and double-checked against the allocated prefix
+  before any byte is read. Artifacts are untrusted job output, so
+  active content (HTML / SVG / XML / scripts) is never served with
+  a renderable content type — see
+  :func:`_artifact_content_headers` for the policy.
 
 * ``POST /api/v1/runs/{run_id}/artifacts:presign`` (tag: results)
 
@@ -32,12 +45,13 @@ Two operations are hosted here:
   is the auth contract for this endpoint -- a forged or expired URL
   is rejected with 403, so no object-store credential is needed.
 
-Both operations are mTLS-gated -- the presence of an
-nginx-verified client certificate (forwarded as
+The two upload-path operations are mTLS-gated -- the presence of
+an nginx-verified client certificate (forwarded as
 ``SSL_CLIENT_S_DN_CN``) is required. Until nginx is wired for
 ``ssl_verify_client on`` every call short-circuits to 401, exactly
 as the sibling ingest endpoints in
-:mod:`runs.restapi.v1.runs_routes` do.
+:mod:`runs.restapi.v1.runs_routes` do. The download operation is
+operator-facing and uses session / API-key auth instead.
 
 Error responses are RFC 7807 problem documents per the convention
 in :mod:`api.problem_json_webworks`.
@@ -53,10 +67,14 @@ import logging
 import os
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
-from ccai.webworks.routing.response import JSONResponse, Response
+from ccai.webworks.routing.response import (
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
@@ -76,6 +94,7 @@ from ccai.pychestrate.webservice.jobs.results.errors import (
 )
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
 from ccai.pychestrate.webservice.jobs.run.state.enums import RunState
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 RUNS_PATH = "/runs"
@@ -84,6 +103,43 @@ RUNS_PATH = "/runs"
 #: common-name after a successful mTLS handshake. Mirrors the seam
 #: documented on :mod:`runs.restapi.v1.runs_routes`.
 MTLS_CLIENT_CN_ENVIRON_KEY = "SSL_CLIENT_S_DN_CN"
+
+#: Permission key the operator-facing artifact download requires.
+#: Identical to the runs read endpoints -- downloading a run's
+#: artifacts is a read of the run.
+RUNS_READ_PERMISSION_KEY = "system:runs.read"
+
+#: Chunk size the artifact download generator reads / yields.
+ARTIFACT_STREAM_CHUNK_BYTES: int = 64 * 1024
+
+#: Extensions of artifact files that are safe to render inline in
+#: a browser, mapped to their content type. Everything NOT in this
+#: map is served as ``application/octet-stream`` with
+#: ``Content-Disposition: attachment``.
+#:
+#: Active content is deliberately absent: artifacts are untrusted
+#: job output uploaded by pod clients, so serving ``.html`` /
+#: ``.svg`` / ``.xml`` / ``.js`` with a renderable content type
+#: from the service origin would let a malicious job script run in
+#: an operator's authenticated session (stored XSS). Those files
+#: are downloadable, never renderable, and every response carries
+#: ``X-Content-Type-Options: nosniff`` so the browser cannot
+#: second-guess the declared type.
+_INLINE_SAFE_CONTENT_TYPES: Dict[str, str] = {
+    ".txt": "text/plain; charset=utf-8",
+    ".log": "text/plain; charset=utf-8",
+    ".jsos": "text/plain; charset=utf-8",
+    ".json": "application/json",
+    ".yaml": "text/plain; charset=utf-8",
+    ".yml": "text/plain; charset=utf-8",
+    ".csv": "text/plain; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+}
 
 #: Env var the deploy can stage with the HMAC secret used to sign
 #: local-fs upload URLs. When unset the bootstrap publishes a
@@ -289,6 +345,56 @@ def _resolve_mtls_client_cn(request: Request) -> Optional[str]:
 
     rtnval = None
     return rtnval
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached to the request by the
+        session middleware, or ``None`` when the request is
+        anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_runs_read_permission(*, request: Request, db_session: Any) -> None:
+    """
+        Require the calling principal to hold ``system:runs.read``.
+        Mirrors the guard on the runs read endpoints -- downloading
+        a run's artifacts is a read of the run.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+
+        :returns: None.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+
+    now = datetime.now(timezone.utc)
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=RUNS_READ_PERMISSION_KEY,
+        now=now,
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(RUNS_READ_PERMISSION_KEY),
+            extensions={"required_permission": RUNS_READ_PERMISSION_KEY},
+        )
+    return
 
 
 def _require_mtls_client_cn(request: Request) -> str:
@@ -854,6 +960,193 @@ def _write_local_artifact(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/runs/{run_id}/artifacts/{artifact_path}
+# ---------------------------------------------------------------------------
+
+
+def _artifact_content_headers(*, relative_path: str) -> Tuple[str, Dict[str, str]]:
+    """
+        Resolve the response content type + safety headers for one
+        artifact download.
+
+        Artifacts are untrusted job output uploaded by pod clients.
+        Only the extensions in :data:`_INLINE_SAFE_CONTENT_TYPES`
+        render inline; anything else -- including HTML, SVG, XML,
+        and scripts -- is forced to
+        ``application/octet-stream`` + ``Content-Disposition:
+        attachment`` so the browser downloads instead of executing
+        it in the service origin. Every response carries
+        ``X-Content-Type-Options: nosniff``.
+
+        :param relative_path: Canonicalized relative artifact path.
+
+        :returns: ``(content_type, extra_headers)``.
+    """
+    basename = relative_path.rsplit("/", 1)[-1]
+    dot_index = basename.rfind(".")
+    extension = ""
+    if dot_index >= 0:
+        extension = basename[dot_index:].lower()
+
+    headers: Dict[str, str] = {
+        "X-Content-Type-Options": "nosniff",
+    }
+
+    inline_type = _INLINE_SAFE_CONTENT_TYPES.get(extension, None)
+    if inline_type is not None:
+        content_type = inline_type
+        headers["Content-Disposition"] = "inline; filename=\"{}\"".format(
+            basename.replace("\"", ""),
+        )
+    else:
+        content_type = "application/octet-stream"
+        headers["Content-Disposition"] = "attachment; filename=\"{}\"".format(
+            basename.replace("\"", ""),
+        )
+
+    rtnval = (content_type, headers)
+    return rtnval
+
+
+def _stream_file_chunks(*, file_path: str) -> Iterator[bytes]:
+    """
+        Yield the file's bytes in
+        :data:`ARTIFACT_STREAM_CHUNK_BYTES` chunks.
+
+        :param file_path: Absolute path of the file to stream.
+
+        :returns: Iterator of byte chunks.
+    """
+    with open(file_path, "rb") as handle:
+        while True:
+            chunk = handle.read(ARTIFACT_STREAM_CHUNK_BYTES)
+            if len(chunk) == 0:
+                break
+            yield chunk
+    return
+
+
+def handle_get_artifact(request: Request) -> Response:
+    """
+        ``GET /api/v1/runs/{run_id}/artifacts/{artifact_path}`` --
+        stream one stored artifact from the run's result tree.
+
+        Operator-facing: requires the same cookie-session /
+        API-key auth + ``system:runs.read`` permission as reading
+        the run itself. The relative path from the URL is strictly
+        canonicalized (rejecting traversal segments, absolute
+        paths, and drive separators) and the resolved filesystem
+        destination is re-checked against the run's allocated
+        ``backend_key_prefix`` before any byte is read.
+
+        :param request: Incoming webworks request.
+
+        :returns: 200 streaming the artifact bytes; 400 / 401 /
+                  403 / 404 / 503 problem responses on failure.
+    """
+    run_id = request.path_params.get("run_id", "")
+    raw_path = request.path_params.get("artifact_path", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_runs_read_permission(
+            request=request, db_session=db_session,
+        )
+
+        backend = ACTIVE_SHARED_RESULTS_BACKEND
+        if backend is None:
+            _abort_problem(
+                request=request,
+                status=503,
+                detail=(
+                    "Shared results backend is not configured on this"
+                    " service instance."
+                ),
+            )
+
+        _require_run_exists(
+            request=request, db_session=db_session, run_id=run_id,
+        )
+
+        try:
+            relative_path = presign.canonicalize_relative_path(raw=raw_path)
+        except ArtifactPathInvalidError as xcpt:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail=str(xcpt),
+                extensions={"run_id": run_id},
+            )
+            relative_path = ""  # unreachable -- _abort_problem raises.
+
+        try:
+            allocation = backend.resolve(
+                db_session=db_session, run_id=run_id,
+            )
+        except AllocationNotFoundError:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Run has no allocated result tree.",
+                extensions={"run_id": run_id},
+            )
+            allocation = None  # unreachable
+
+        prefix_abs = os.path.abspath(allocation.backend_key_prefix)
+        destination = os.path.abspath(
+            os.path.join(prefix_abs, relative_path),
+        )
+        common = os.path.commonpath([prefix_abs, destination])
+        if common != prefix_abs:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="Resolved artifact path escapes the run result tree.",
+                extensions={
+                    "run_id": run_id,
+                    "artifact_path": relative_path,
+                },
+            )
+
+        if os.path.isfile(destination) is False:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Artifact not found in the run result tree.",
+                extensions={
+                    "run_id": run_id,
+                    "artifact_path": relative_path,
+                },
+            )
+
+        size_bytes = os.path.getsize(destination)
+        content_type, extra_headers = _artifact_content_headers(
+            relative_path=relative_path,
+        )
+        headers: Dict[str, str] = {
+            "Content-Length": str(size_bytes),
+        }
+        headers.update(extra_headers)
+
+        _LOGGER.info(
+            "pychestrate.runs.artifacts.download run_id=%s path=%s bytes=%d",
+            run_id,
+            relative_path,
+            size_bytes,
+        )
+
+        stream = _stream_file_chunks(file_path=destination)
+        rtnval: Response = StreamingResponse(
+            content=stream,
+            status_code=200,
+            headers=headers,
+            media_type=content_type,
+        )
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -878,6 +1171,10 @@ def register_artifacts_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{run_id}/artifacts/" + presign.LOCAL_UPLOAD_PATH_SEGMENT,
         methods=["PUT"],
     )(handle_local_upload)
+    app.attach_route(
+        base + "/{run_id}/artifacts/{artifact_path:path}",
+        methods=["GET"],
+    )(handle_get_artifact)
     return
 
 
@@ -885,8 +1182,10 @@ __all__ = [
     "RUNS_PATH",
     "MTLS_CLIENT_CN_ENVIRON_KEY",
     "ENV_PRESIGN_SIGNING_SECRET",
+    "RUNS_READ_PERMISSION_KEY",
     "UPLOAD_ACCEPTING_STATES",
     "MAX_LOCAL_UPLOAD_BYTES",
+    "ARTIFACT_STREAM_CHUNK_BYTES",
     "ACTIVE_PRESIGN_SIGNING_SECRET",
     "ACTIVE_SHARED_RESULTS_BACKEND",
     "set_presign_signing_secret",
@@ -894,5 +1193,6 @@ __all__ = [
     "resolve_presign_signing_secret_from_environment",
     "handle_presign_artifacts",
     "handle_local_upload",
+    "handle_get_artifact",
     "register_artifacts_routes",
 ]

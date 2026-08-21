@@ -27,7 +27,6 @@
             <th>Enabled</th>
             <th>Next Run</th>
             <th>Last Run</th>
-            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -45,13 +44,12 @@
             </td>
             <td>{{ schedule.next_run_at.strftime('%Y-%m-%d %H:%M') if schedule.next_run_at else 'N/A' }}</td>
             <td>{{ schedule.last_run_at.strftime('%Y-%m-%d %H:%M') if schedule.last_run_at else 'Never' }}</td>
-            <td>
-                <a href="#" class="btn btn-sm btn-secondary">View</a>
-            </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No release schedules found</td>
+            <td colspan="6" style="text-align: center; color: #6c757d; padding: 40px;">
+                No release schedules yet. Schedules are configured via the API.
+            </td>
         </tr>
         {% endfor %}
     </tbody>

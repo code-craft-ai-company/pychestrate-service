@@ -1,3 +1,4 @@
+import { load_failure_message } from "./feature-flags-view.js";
 const EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
   const buckets = /* @__PURE__ */ new Map();
@@ -60,6 +61,7 @@ class PycExtensionRegistry extends HTMLElement {
   _mountState;
   _loading;
   _errored;
+  _error_status;
   _table_region;
   _detail_region;
   constructor() {
@@ -68,6 +70,7 @@ class PycExtensionRegistry extends HTMLElement {
     this._mountState = "";
     this._loading = false;
     this._errored = false;
+    this._error_status = 0;
     this._table_region = null;
     this._detail_region = null;
   }
@@ -141,6 +144,7 @@ class PycExtensionRegistry extends HTMLElement {
   async _refresh() {
     this._loading = true;
     this._errored = false;
+    this._error_status = 0;
     this._render_table();
     let listing = null;
     try {
@@ -150,6 +154,7 @@ class PycExtensionRegistry extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        this._error_status = response.status;
         throw new Error(
           "ext manifest fetch failed: HTTP " + String(response.status)
         );
@@ -198,7 +203,10 @@ class PycExtensionRegistry extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load the extension registry. Try refreshing.";
+      error.textContent = load_failure_message(
+        this._error_status,
+        "the extension registry"
+      );
       region.replaceChildren(error);
       return;
     }
@@ -244,21 +252,6 @@ class PycExtensionRegistry extends HTMLElement {
         }
       },
       {
-        key: "health",
-        label: "Health",
-        width: "10rem",
-        render: (_extension) => {
-          const health_badge = document.createElement("mj-chip");
-          health_badge.classList.add("pyc-admin__badge");
-          health_badge.setAttribute(
-            "data-tone",
-            mount_state_tone(self._mountState)
-          );
-          health_badge.textContent = self._mountState.length > 0 ? self._mountState : "unknown";
-          return health_badge;
-        }
-      },
-      {
         key: "actions",
         label: "Actions",
         width: "10rem",
@@ -277,7 +270,23 @@ class PycExtensionRegistry extends HTMLElement {
       }
     ];
     table.rows = this._extensions;
-    region.replaceChildren(table);
+    // The dynamic-mount state is one listing-wide value, so it
+    // renders once here instead of repeating in a per-row column.
+    const registry_status = document.createElement("p");
+    registry_status.classList.add("pyc-admin__lede");
+    registry_status.setAttribute("data-role", "registry-status");
+    registry_status.appendChild(
+      document.createTextNode("Registry status: ")
+    );
+    const status_badge = document.createElement("mj-chip");
+    status_badge.classList.add("pyc-admin__badge");
+    status_badge.setAttribute(
+      "data-tone",
+      mount_state_tone(this._mountState)
+    );
+    status_badge.textContent = this._mountState.length > 0 ? this._mountState : "unknown";
+    registry_status.appendChild(status_badge);
+    region.replaceChildren(registry_status, table);
     return;
   }
   _render_detail(extension) {

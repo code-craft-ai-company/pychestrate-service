@@ -38,12 +38,55 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
 )
 
 
 _ROUTE_TABLE = (
     ("resources.tag_list", "/tags", ("GET",)),
 )
+
+
+# ---------------------------------------------------------------------------
+# Local helpers
+# ---------------------------------------------------------------------------
+
+
+def _coerce_int(*, raw: Any) -> Optional[int]:
+    if raw is None:
+        return None
+    try:
+        rtnval = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return rtnval
+
+
+def _coerce_int_with_default(*, raw: Any, default: int) -> int:
+    parsed = _coerce_int(raw=raw)
+    if parsed is None:
+        return default
+    return parsed
+
+
+def _parse_pagination_params(
+        *, request: Request,
+        default_per_page: int = 20
+    ) -> Dict[str, Any]:
+    page = _coerce_int_with_default(
+        raw=request.query_params.get("page", None), default=1
+    )
+    if page < 1:
+        page = 1
+    per_page = _coerce_int_with_default(
+        raw=request.query_params.get("per_page", None),
+        default=default_per_page,
+    )
+    if per_page < 1:
+        per_page = default_per_page
+    rtnval = {"page": page, "per_page": per_page}
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +112,8 @@ def _build_resource_manager(*, db_session: Any) -> Any:
 
 def handle_tag_list(request: Request) -> Response:
     """
-        ``GET /resources/tags`` -- list of every known tag.
+        ``GET /resources/tags`` -- paginated tag list with an
+        optional ``?search=`` name filter.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -77,8 +121,28 @@ def handle_tag_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+        search = (request.query_params.get("search", "") or "").strip()
+
+        list_kwargs: Dict[str, Any] = {
+            "offset": offset,
+            "limit": params["per_page"],
+        }
+        if len(search) > 0:
+            list_kwargs["search"] = search
+
         resource_manager = _build_resource_manager(db_session=db_session)
-        tags = resource_manager.list_tags().tags
+        tags_response = resource_manager.list_tags(**list_kwargs)
+        tags = tags_response.tags
+
+        total_pages = _calculate_total_pages(
+            total=tags_response.total,
+            per_page=params["per_page"],
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -88,6 +152,11 @@ def handle_tag_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["tags"] = tags
+        context["search"] = search
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+        context["total_pages"] = total_pages
+        context["page_window"] = page_window
         response = _render(
             template_name="resources/tags/list.html",
             context=context,

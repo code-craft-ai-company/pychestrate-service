@@ -252,13 +252,15 @@ def test_runs_list_state_filter_is_an_mj_select(browser: Browser):
     return
 
 
-def test_runs_list_project_filter_is_an_mj_text_field(browser: Browser):
+def test_runs_list_project_filter_is_an_mj_component(browser: Browser):
     """
     **Feature: site-shell-mj-migration**
-    **Property: The project filter on /runs is an
-    <mj-text-field> (not a native <input>) -- complements the
-    state filter check; together they prove both select + text
-    form-control substitutions shipped.**
+    **Property: The project filter on /runs is an mj-* form
+    control (not a native <input>/<select>) -- the primary
+    control is an <mj-select> picker fed from /api/v1/projects,
+    and its degraded-mode fallback is an <mj-text-field> manual
+    id input. Complements the state filter check; together they
+    prove the select + text form-control substitutions shipped.**
     """
     login_name, password = _resolve_admin_credentials()
 
@@ -269,13 +271,20 @@ def test_runs_list_project_filter_is_an_mj_text_field(browser: Browser):
 
         page.goto(BASE_URL + "/runs")
         page.wait_for_selector(
-            "[data-role='project-filter']", timeout=NAVIGATION_TIMEOUT_MS
+            "[data-role='project-filter']",
+            timeout=NAVIGATION_TIMEOUT_MS,
+            state="attached",
         )
 
-        tag_name = page.locator(
+        picker_tag_name = page.locator(
             "[data-role='project-filter']"
         ).first.evaluate("(el) => el.tagName.toLowerCase()")
-        testbase.assert_equal(tag_name, "mj-text-field")
+        testbase.assert_equal(picker_tag_name, "mj-select")
+
+        fallback_tag_name = page.locator(
+            "[data-role='project-filter-input']"
+        ).first.evaluate("(el) => el.tagName.toLowerCase()")
+        testbase.assert_equal(fallback_tag_name, "mj-text-field")
     finally:
         context.close()
     return
