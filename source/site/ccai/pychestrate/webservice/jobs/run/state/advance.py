@@ -70,6 +70,20 @@ _TERMINAL_WALK_EVENTS = (
 )
 
 
+#: Intermediate events applied before ``CANCEL_COMPLETED`` so a run
+#: the pod cancelled can reach CANCELLED from wherever its state row
+#: happens to sit. The pod can stop a job faster than the cancel
+#: bookkeeping settles, so the row may still read DISPATCHING when
+#: the cancelled result arrives -- the walk carries it forward
+#: through the dispatch + cancel-request edges to get there.
+_CANCELLED_WALK_EVENTS = (
+    RunEvent.RECEIPT_RECORDED,
+    RunEvent.FIRST_PROGRESS,
+    RunEvent.CANCEL_REQUESTED,
+    RunEvent.CANCEL_ACK_RECEIVED,
+)
+
+
 def advance_to_dispatched(
         *,
         db_session: DbSession,
@@ -328,8 +342,102 @@ def advance_to_terminal(
         return rtnval
 
 
+def advance_to_cancelled(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        actor: str,
+        reason: str
+    ) -> Optional[str]:
+    """
+        Drive the run-state row to :attr:`RunState.CANCELLED`.
+
+        A cancelled run is NOT a failed run. Routing it through
+        :func:`advance_to_terminal` with ``succeeded=False`` would
+        land it in ``FAILED`` and stamp ``TerminalOutcome.FAILURE``,
+        which erases the difference between "an operator stopped
+        this" and "this broke" for every dashboard, alert, and
+        flake-rate calculation downstream. This helper applies
+        :attr:`RunEvent.CANCEL_COMPLETED` instead, so the row reaches
+        ``CANCELLED`` and carries ``TerminalOutcome.CANCELLED``.
+
+        Tolerant and idempotent on the same terms as
+        :func:`advance_to_terminal`: intermediate events the
+        transition table rejects are skipped, an already-terminal row
+        returns its current state, and a missing row returns
+        ``None``.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+        :param actor: Actor tag written to the state-audit row.
+        :param reason: Human-readable reason written to the audit row.
+
+        :returns: The terminal run-state value string, the last
+                  observed run-state value string when CANCELLED
+                  could not be reached, or ``None`` when no run-state
+                  row exists.
+    """
+    for event in _CANCELLED_WALK_EVENTS:
+        try:
+            _transition(
+                db_session=db_session,
+                run_id=run_id,
+                event=event,
+                actor=actor,
+                reason="advance-to-cancelled: {}".format(reason),
+            )
+        except TerminalStateError:
+            # Already terminal -- stop walking; the CANCEL_COMPLETED
+            # attempt below reports the state the row settled in.
+            break
+        except IllegalTransitionError:
+            continue
+        except RunNotFoundError:
+            rtnval = None
+            return rtnval
+
+    try:
+        snapshot = _transition(
+            db_session=db_session,
+            run_id=run_id,
+            event=RunEvent.CANCEL_COMPLETED,
+            actor=actor,
+            reason=reason,
+        )
+        rtnval = snapshot.state.value
+        return rtnval
+    except TerminalStateError:
+        current = run_repo.find_run(db_session=db_session, run_id=run_id)
+        if current is None:
+            rtnval = None
+            return rtnval
+        rtnval = current.state.value
+        return rtnval
+    except IllegalTransitionError as xcpt:
+        err_lines = [
+            "pychestrate.jobs.run.state.advance: run_state_not_cancelled",
+        ]
+        err_lines.append("RUN_ID: {}".format(run_id))
+        err_lines.append(
+            "TERMINAL_EVENT: {}".format(RunEvent.CANCEL_COMPLETED.value),
+        )
+        err_lines.append("REASON: {}".format(str(xcpt)))
+        err_msg = os.linesep.join(err_lines)
+        _LOGGER.warning(err_msg)
+        current = run_repo.find_run(db_session=db_session, run_id=run_id)
+        if current is None:
+            rtnval = None
+            return rtnval
+        rtnval = current.state.value
+        return rtnval
+    except RunNotFoundError:
+        rtnval = None
+        return rtnval
+
+
 __all__ = [
     "advance_to_dispatched",
     "note_progress",
+    "advance_to_cancelled",
     "advance_to_terminal",
 ]
