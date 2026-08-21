@@ -6,7 +6,7 @@
 .. moduleauthor:: Code Craft AI LLC
 
 The pods port has the largest single-controller surface in the
-migration -- 13 routes across four logical groupings, six
+migration -- 14 routes across four logical groupings, six
 service modules patched independently, and the most exception
 types after the enrollment port. Tests cover the route matrix,
 the 503 sweep on every handler, the per-grouping happy paths,
@@ -33,8 +33,10 @@ from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_JSON_MEDIA_TYPE,
     PROBLEM_TYPE_BAD_REQUEST,
     PROBLEM_TYPE_CONFLICT,
+    PROBLEM_TYPE_FORBIDDEN,
     PROBLEM_TYPE_NOT_FOUND,
     PROBLEM_TYPE_SERVICE_UNAVAILABLE,
+    PROBLEM_TYPE_UNAUTHENTICATED,
 )
 from ccai.pychestrate.webservice.pods.exceptions import (
     MaterializationError,
@@ -42,6 +44,7 @@ from ccai.pychestrate.webservice.pods.exceptions import (
     PodDefinitionAlreadyExistsError,
     PodDefinitionNotFoundError,
     PodSpecValidationError,
+    PodStateTransitionError,
     PodTemplateNotFoundError,
 )
 from ccai.pychestrate.webservice.pods.restapi.v1 import pods_routes
@@ -73,6 +76,7 @@ class _FakeRequest:
         body_raises: bool = False,
         db_session: Optional[Any] = None,
         actor_user_id: Optional[str] = None,
+        auth_principal: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
@@ -81,6 +85,7 @@ class _FakeRequest:
         self._body_raises: bool = body_raises
         self.db_session: Optional[Any] = db_session
         self.actor_user_id: Optional[str] = actor_user_id
+        self.auth_principal: Optional[Any] = auth_principal
         return
 
     def json(self) -> Any:
@@ -298,16 +303,63 @@ def _patch_routes_attr(*, name: str, value: Any) -> Any:
     return patch
 
 
+class _FakePrincipal:
+    def __init__(self, *, user_id: str = "user-1") -> None:
+        self.user_id: str = user_id
+        return
+
+
+class _FakeDecision:
+    def __init__(self, *, allowed: bool, reason: str = "") -> None:
+        self.allowed: bool = allowed
+        self.reason: str = reason
+        return
+
+
+def _patch_check_permission(*, allowed: bool) -> Any:
+    patch = create_module_patch(
+        pods_routes.rbac_evaluator, "check_permission",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: _FakeDecision(allowed=allowed))
+    return patch
+
+
+def _invoke_with_permission(
+        *,
+        handler: Callable[[Any], Any],
+        request: Any,
+        allowed: bool = True
+    ) -> Any:
+    """
+        Invoke a route handler with rbac_evaluator.check_permission
+        patched to a fixed decision for the duration of the call.
+
+        :param handler: The pods_routes handler to invoke.
+        :param request: The fake request to pass through.
+        :param allowed: Decision the patched evaluator returns.
+
+        :returns: The handler's response.
+    """
+    perm_patch = _patch_check_permission(allowed=allowed)
+    try:
+        rtnval = handler(request)
+    finally:
+        perm_patch.deactivate()
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
 
 
-def test_register_pods_routes_attaches_thirteen_routes_across_four_groupings():
+def test_register_pods_routes_attaches_fourteen_routes_across_four_groupings():
     """
     **Feature: 3-pods T1.1 (webworks routes)**
-    **Property: register_pods_routes attaches the same thirteen
-    method+path pairs the flask_restx controller exposed.**
+    **Property: register_pods_routes attaches the thirteen
+    method+path pairs the flask_restx controller exposed plus the
+    operator transition route.**
     """
     app = _FakeApp()
     pods_routes.register_pods_routes(app=app, version_prefix="/api/v1")
@@ -320,6 +372,7 @@ def test_register_pods_routes_attaches_thirteen_routes_across_four_groupings():
         # Lifecycle
         ("/api/v1/projects/{project_id}/pods/{pod_id}/state", ("GET",)),
         ("/api/v1/projects/{project_id}/pods/{pod_id}/state/history", ("GET",)),
+        ("/api/v1/projects/{project_id}/pods/{pod_id}/state/transitions", ("POST",)),
         # Registration + topology
         ("/api/v1/projects/{project_id}/pods/{pod_id}/registration", ("GET",)),
         ("/api/v1/projects/{project_id}/pods/{pod_id}/registrations", ("GET",)),
@@ -355,7 +408,7 @@ def test_503_sweep_on_every_pods_handler():
     """
     **Feature: 3-pods T1.1 (webworks routes)**
     **Property: Every pods handler returns 503 problem+json on
-    missing session. One pass over all 13 routes' handlers.**
+    missing session. One pass over all 14 routes' handlers.**
     """
     handlers_with_setup: List[Callable[[], Any]] = [
         # definitions
@@ -393,6 +446,14 @@ def test_503_sweep_on_every_pods_handler():
             _FakeRequest(
                 path="/api/v1/projects/p-1/pods/pod-1/state/history",
                 path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=None,
+            )
+        ),
+        lambda: pods_routes.handle_apply_pod_transition(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                body={"event_kind": "drain"},
                 db_session=None,
             )
         ),
@@ -472,6 +533,194 @@ def test_503_sweep_on_every_pods_handler():
 
 
 # ---------------------------------------------------------------------------
+# RBAC sweep across every handler
+# ---------------------------------------------------------------------------
+
+
+def test_401_sweep_on_every_pods_handler_without_principal():
+    """
+    **Feature: 3-pods (RBAC gating)**
+    **Property: Every pods handler returns 401 problem+json when a
+    session is bound but no AuthPrincipal is attached. One pass
+    over all 14 routes' handlers.**
+    """
+    handlers_with_setup: List[Callable[[], Any]] = [
+        # definitions
+        lambda: pods_routes.handle_create_pod_definition(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-definitions",
+                path_params={"project_id": "p-1"},
+                body={"pod_name": "pod-x", "spec": {}},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_list_pod_definitions(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-definitions",
+                path_params={"project_id": "p-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_read_pod_definition(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-definitions/pod-1",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        # lifecycle
+        lambda: pods_routes.handle_read_pod_state(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/state",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_read_pod_state_history(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/state/history",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_apply_pod_transition(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                body={"event_kind": "drain"},
+                db_session=object(),
+            )
+        ),
+        # registration + topology
+        lambda: pods_routes.handle_read_pod_registration(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/registration",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_list_pod_registrations(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/registrations",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_read_pod_topology(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pods/pod-1/topology",
+                path_params={"project_id": "p-1", "pod_id": "pod-1"},
+                db_session=object(),
+            )
+        ),
+        # templates
+        lambda: pods_routes.handle_create_pod_template(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-templates",
+                path_params={"project_id": "p-1"},
+                body={
+                    "name": "tmpl", "template_kind": "static",
+                    "source_json": {},
+                },
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_list_pod_templates(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-templates",
+                path_params={"project_id": "p-1"},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_materialize_pod_template(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/pod-templates/t-1:materialize",
+                path_params={"project_id": "p-1", "template_id": "t-1"},
+                body={},
+                db_session=object(),
+            )
+        ),
+        # variables
+        lambda: pods_routes.handle_set_scoped_variable(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/runs/r-1/variables/var-x",
+                path_params={"run_id": "r-1", "name": "var-x"},
+                body={"value": 1},
+                db_session=object(),
+            )
+        ),
+        lambda: pods_routes.handle_delete_scoped_variable(
+            _FakeRequest(
+                path="/api/v1/projects/p-1/runs/r-1/variables/var-x",
+                path_params={"run_id": "r-1", "name": "var-x"},
+                db_session=object(),
+            )
+        ),
+    ]
+
+    for invoke in handlers_with_setup:
+        response = invoke()
+        testbase.assert_equal(response.status_code, 401)
+        body = _decode_body(response)
+        testbase.assert_equal(body["type"], PROBLEM_TYPE_UNAUTHENTICATED)
+    return
+
+
+def test_read_handler_returns_403_with_pods_read_key_when_denied():
+    """
+    **Feature: 3-pods (RBAC gating)**
+    **Property: A GET handler returns 403 problem+json carrying
+    system:pods.read as required_permission when the principal
+    lacks the read key.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/projects/p-1/pod-definitions",
+        path_params={"project_id": "p-1"},
+        db_session=object(),
+        auth_principal=_FakePrincipal(),
+    )
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_list_pod_definitions,
+        request=request,
+        allowed=False,
+    )
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_FORBIDDEN)
+    testbase.assert_equal(
+        body["required_permission"], "system:pods.read",
+    )
+    return
+
+
+def test_write_handler_returns_403_with_pods_write_key_when_denied():
+    """
+    **Feature: 3-pods (RBAC gating)**
+    **Property: A mutating handler returns 403 problem+json
+    carrying system:pods.write as required_permission when the
+    principal lacks the write key.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/projects/p-1/pod-definitions",
+        path_params={"project_id": "p-1"},
+        db_session=object(),
+        auth_principal=_FakePrincipal(),
+        body={"pod_name": "pod-x", "spec": {}},
+    )
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_create_pod_definition,
+        request=request,
+        allowed=False,
+    )
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        body["required_permission"], "system:pods.write",
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
 # Pod definitions: create
 # ---------------------------------------------------------------------------
 
@@ -501,9 +750,13 @@ def test_handle_create_pod_definition_returns_201_with_actor_propagation():
             path_params={"project_id": "p-1"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             body={"pod_name": "pod-x", "spec": {"image": "x"}},
         )
-        response = pods_routes.handle_create_pod_definition(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_create_pod_definition,
+            request=request,
+        )
     finally:
         version_patch.deactivate()
         create_patch.deactivate()
@@ -530,9 +783,13 @@ def test_handle_create_pod_definition_returns_409_with_pod_name_extension():
             path="/api/v1/projects/p-1/pod-definitions",
             path_params={"project_id": "p-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"pod_name": "dup-pod", "spec": {}},
         )
-        response = pods_routes.handle_create_pod_definition(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_create_pod_definition,
+            request=request,
+        )
     finally:
         create_patch.deactivate()
 
@@ -558,9 +815,13 @@ def test_handle_create_pod_definition_returns_400_on_pod_spec_validation_error()
             path="/api/v1/projects/p-1/pod-definitions",
             path_params={"project_id": "p-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"pod_name": "pod-x", "spec": {}},
         )
-        response = pods_routes.handle_create_pod_definition(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_create_pod_definition,
+            request=request,
+        )
     finally:
         create_patch.deactivate()
 
@@ -585,9 +846,13 @@ def test_handle_create_pod_definition_returns_400_on_member_kind_not_registered(
             path="/api/v1/projects/p-1/pod-definitions",
             path_params={"project_id": "p-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"pod_name": "pod-x", "spec": {}},
         )
-        response = pods_routes.handle_create_pod_definition(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_create_pod_definition,
+            request=request,
+        )
     finally:
         create_patch.deactivate()
 
@@ -622,8 +887,12 @@ def test_handle_list_pod_definitions_returns_serialized_rows():
             path="/api/v1/projects/p-1/pod-definitions",
             path_params={"project_id": "p-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_list_pod_definitions(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_list_pod_definitions,
+            request=request,
+        )
     finally:
         version_patch.deactivate()
         list_patch.deactivate()
@@ -650,8 +919,12 @@ def test_handle_read_pod_definition_returns_404_with_extensions():
             path="/api/v1/projects/p-1/pod-definitions/pod-missing",
             path_params={"project_id": "p-1", "pod_id": "pod-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_definition(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_definition,
+            request=request,
+        )
     finally:
         read_patch.deactivate()
 
@@ -682,8 +955,12 @@ def test_handle_read_pod_state_returns_serialized_state():
             path="/api/v1/projects/p-1/pods/pod-1/state",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_state(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_state,
+            request=request,
+        )
     finally:
         state_patch.deactivate()
 
@@ -717,9 +994,13 @@ def test_handle_read_pod_state_history_propagates_pagination_with_400_on_bad_int
             path="/api/v1/projects/p-1/pods/pod-1/state/history",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             query={"offset": "5", "limit": "20"},
         )
-        response = pods_routes.handle_read_pod_state_history(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_state_history,
+            request=request,
+        )
         testbase.assert_equal(response.status_code, 200)
         testbase.assert_equal(captured["offset"], 5)
         testbase.assert_equal(captured["limit"], 20)
@@ -731,9 +1012,13 @@ def test_handle_read_pod_state_history_propagates_pagination_with_400_on_bad_int
         path="/api/v1/projects/p-1/pods/pod-1/state/history",
         path_params={"project_id": "p-1", "pod_id": "pod-1"},
         db_session=object(),
+        auth_principal=_FakePrincipal(),
         query={"offset": "abc"},
     )
-    response_bad = pods_routes.handle_read_pod_state_history(request_bad)
+    response_bad = _invoke_with_permission(
+        handler=pods_routes.handle_read_pod_state_history,
+        request=request_bad,
+    )
     testbase.assert_equal(response_bad.status_code, 400)
     body_bad = _decode_body(response_bad)
     testbase.assert_equal(body_bad["offset"], "abc")
@@ -760,13 +1045,208 @@ def test_handle_read_pod_state_history_uses_documented_defaults():
             path="/api/v1/projects/p-1/pods/pod-1/state/history",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        pods_routes.handle_read_pod_state_history(request)
+        _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_state_history,
+            request=request,
+        )
     finally:
         hist_patch.deactivate()
 
     testbase.assert_equal(captured["offset"], pods_routes.DEFAULT_HISTORY_OFFSET)
     testbase.assert_equal(captured["limit"], pods_routes.DEFAULT_HISTORY_LIMIT)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle: operator transitions
+# ---------------------------------------------------------------------------
+
+
+def test_handle_apply_pod_transition_returns_200_with_actor_propagation():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: A supported operator event returns 200 with the
+    updated state dict; event_kind, payload, and actor propagate
+    to apply_transition.**
+    """
+    captured: Dict[str, Any] = {}
+
+    def fake_apply(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _FakeStateRow(state="DRAINING", previous_state="READY")
+
+    apply_patch = _patch_routes_attr(
+        name="apply_transition", value=fake_apply
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+            path_params={"project_id": "p-1", "pod_id": "pod-1"},
+            db_session=object(),
+            actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
+            body={"event_kind": "drain", "payload": {"note": "ops"}},
+        )
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_apply_pod_transition,
+            request=request,
+        )
+    finally:
+        apply_patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(body["state"], "DRAINING")
+    testbase.assert_equal(body["previous_state"], "READY")
+    testbase.assert_equal(captured["event_kind"], "drain")
+    testbase.assert_equal(captured["event_payload"], {"note": "ops"})
+    testbase.assert_equal(captured["actor"], "user-42")
+    return
+
+
+def test_handle_apply_pod_transition_returns_400_on_unsupported_event_kind():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: A system-only or unknown event_kind returns 400
+    problem+json carrying the requested kind and the operator
+    allow-list as extension members -- system events cannot be
+    forged through the REST surface.**
+    """
+    for bad_kind in ("provision_completed", "client_lost", "bogus", ""):
+        request = _FakeRequest(
+            path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+            path_params={"project_id": "p-1", "pod_id": "pod-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"event_kind": bad_kind},
+        )
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_apply_pod_transition,
+            request=request,
+        )
+        testbase.assert_equal(response.status_code, 400)
+        body = _decode_body(response)
+        testbase.assert_equal(body["type"], PROBLEM_TYPE_BAD_REQUEST)
+        testbase.assert_equal(body["requested_event_kind"], bad_kind)
+        testbase.assert_equal(
+            body["allowed_event_kinds"], ["drain", "deregister"],
+        )
+    return
+
+
+def test_handle_apply_pod_transition_returns_404_when_state_not_initialized():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: PodDefinitionNotFoundError from apply_transition →
+    404 problem+json with project_id + pod_id extensions.**
+    """
+    apply_patch = _patch_routes_attr(
+        name="apply_transition",
+        value=_raises(PodDefinitionNotFoundError("missing")),
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/p-1/pods/pod-missing/state/transitions",
+            path_params={"project_id": "p-1", "pod_id": "pod-missing"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"event_kind": "drain"},
+        )
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_apply_pod_transition,
+            request=request,
+        )
+    finally:
+        apply_patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 404)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
+    testbase.assert_equal(body["pod_id"], "pod-missing")
+    testbase.assert_equal(body["project_id"], "p-1")
+    return
+
+
+def test_handle_apply_pod_transition_returns_409_on_illegal_transition():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: PodStateTransitionError → 409 problem+json with
+    the requested event kind as an extension member.**
+    """
+    apply_patch = _patch_routes_attr(
+        name="apply_transition",
+        value=_raises(PodStateTransitionError("not permitted")),
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+            path_params={"project_id": "p-1", "pod_id": "pod-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"event_kind": "deregister"},
+        )
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_apply_pod_transition,
+            request=request,
+        )
+    finally:
+        apply_patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 409)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_CONFLICT)
+    testbase.assert_equal(body["requested_event_kind"], "deregister")
+    return
+
+
+def test_handle_apply_pod_transition_returns_403_with_pods_write_key_when_denied():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: The transition handler is write-gated -- a denied
+    principal gets 403 problem+json carrying system:pods.write.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+        path_params={"project_id": "p-1", "pod_id": "pod-1"},
+        db_session=object(),
+        auth_principal=_FakePrincipal(),
+        body={"event_kind": "drain"},
+    )
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_apply_pod_transition,
+        request=request,
+        allowed=False,
+    )
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_FORBIDDEN)
+    testbase.assert_equal(
+        body["required_permission"], "system:pods.write",
+    )
+    return
+
+
+def test_handle_apply_pod_transition_returns_400_on_undecodable_body():
+    """
+    **Feature: 3-pods (operator lifecycle transitions)**
+    **Property: A malformed JSON body returns 400 problem+json.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/projects/p-1/pods/pod-1/state/transitions",
+        path_params={"project_id": "p-1", "pod_id": "pod-1"},
+        db_session=object(),
+        auth_principal=_FakePrincipal(),
+        body_raises=True,
+    )
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_apply_pod_transition,
+        request=request,
+    )
+    testbase.assert_equal(response.status_code, 400)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_BAD_REQUEST)
     return
 
 
@@ -790,8 +1270,12 @@ def test_handle_read_pod_registration_returns_404_when_no_active_row():
             path="/api/v1/projects/p-1/pods/pod-1/registration",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_registration(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_registration,
+            request=request,
+        )
     finally:
         reg_patch.deactivate()
 
@@ -817,8 +1301,12 @@ def test_handle_read_pod_registration_returns_serialized_row():
             path="/api/v1/projects/p-1/pods/pod-1/registration",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_registration(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_registration,
+            request=request,
+        )
     finally:
         reg_patch.deactivate()
 
@@ -848,8 +1336,12 @@ def test_handle_list_pod_registrations_returns_history():
             path="/api/v1/projects/p-1/pods/pod-1/registrations",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_list_pod_registrations(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_list_pod_registrations,
+            request=request,
+        )
     finally:
         hist_patch.deactivate()
 
@@ -875,8 +1367,12 @@ def test_handle_read_pod_topology_returns_404_with_extensions():
             path="/api/v1/projects/p-1/pods/pod-1/topology",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_topology(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_topology,
+            request=request,
+        )
     finally:
         topo_patch.deactivate()
 
@@ -904,8 +1400,12 @@ def test_handle_read_pod_topology_returns_dict_via_topology_as_dict():
             path="/api/v1/projects/p-1/pods/pod-1/topology",
             path_params={"project_id": "p-1", "pod_id": "pod-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_read_pod_topology(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_read_pod_topology,
+            request=request,
+        )
     finally:
         as_dict_patch.deactivate()
         topo_patch.deactivate()
@@ -942,13 +1442,17 @@ def test_handle_create_pod_template_returns_201_with_actor():
             path_params={"project_id": "p-1"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             body={
                 "name": "tmpl",
                 "template_kind": "static",
                 "source_json": {"x": 1},
             },
         )
-        response = pods_routes.handle_create_pod_template(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_create_pod_template,
+            request=request,
+        )
     finally:
         create_patch.deactivate()
 
@@ -973,8 +1477,12 @@ def test_handle_list_pod_templates_returns_summaries():
             path="/api/v1/projects/p-1/pod-templates",
             path_params={"project_id": "p-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
-        response = pods_routes.handle_list_pod_templates(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_list_pod_templates,
+            request=request,
+        )
     finally:
         list_patch.deactivate()
 
@@ -1003,9 +1511,13 @@ def test_handle_materialize_pod_template_returns_202_on_success():
             path="/api/v1/projects/p-1/pod-templates/t-1:materialize",
             path_params={"project_id": "p-1", "template_id": "t-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"parameters": {"size": 3}},
         )
-        response = pods_routes.handle_materialize_pod_template(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_materialize_pod_template,
+            request=request,
+        )
     finally:
         mat_patch.deactivate()
 
@@ -1031,9 +1543,13 @@ def test_handle_materialize_returns_404_on_template_not_found():
             path="/api/v1/projects/p-1/pod-templates/t-missing:materialize",
             path_params={"project_id": "p-1", "template_id": "t-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={},
         )
-        response = pods_routes.handle_materialize_pod_template(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_materialize_pod_template,
+            request=request,
+        )
     finally:
         mat_patch.deactivate()
 
@@ -1059,9 +1575,13 @@ def test_handle_materialize_returns_409_on_materialization_error():
             path="/api/v1/projects/p-1/pod-templates/t-1:materialize",
             path_params={"project_id": "p-1", "template_id": "t-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={},
         )
-        response = pods_routes.handle_materialize_pod_template(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_materialize_pod_template,
+            request=request,
+        )
     finally:
         mat_patch.deactivate()
 
@@ -1086,9 +1606,13 @@ def test_handle_set_scoped_variable_requires_pod_id_query_param():
         path="/api/v1/projects/p-1/runs/r-1/variables/var-x",
         path_params={"run_id": "r-1", "name": "var-x"},
         db_session=object(),
+        auth_principal=_FakePrincipal(),
         body={"value": 1},
     )
-    response = pods_routes.handle_set_scoped_variable(request)
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_set_scoped_variable,
+        request=request,
+    )
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_BAD_REQUEST)
@@ -1119,10 +1643,14 @@ def test_handle_set_scoped_variable_returns_serialized_row_on_success():
             path_params={"run_id": "r-1", "name": "var-x"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             query={"pod_id": "pod-1"},
             body={"value": 1, "locked": True},
         )
-        response = pods_routes.handle_set_scoped_variable(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_set_scoped_variable,
+            request=request,
+        )
     finally:
         set_patch.deactivate()
 
@@ -1150,10 +1678,14 @@ def test_handle_set_scoped_variable_returns_400_on_semantic_error():
             path="/api/v1/projects/p-1/runs/r-1/variables/var-x",
             path_params={"run_id": "r-1", "name": "var-x"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             query={"pod_id": "pod-1"},
             body={"value": 1},
         )
-        response = pods_routes.handle_set_scoped_variable(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_set_scoped_variable,
+            request=request,
+        )
     finally:
         set_patch.deactivate()
 
@@ -1186,9 +1718,13 @@ def test_handle_delete_scoped_variable_returns_204_on_success():
             path_params={"run_id": "r-1", "name": "var-x"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             query={"pod_id": "pod-1"},
         )
-        response = pods_routes.handle_delete_scoped_variable(request)
+        response = _invoke_with_permission(
+            handler=pods_routes.handle_delete_scoped_variable,
+            request=request,
+        )
     finally:
         del_patch.deactivate()
 
@@ -1209,8 +1745,12 @@ def test_handle_delete_scoped_variable_requires_pod_id_query_param():
         path="/api/v1/projects/p-1/runs/r-1/variables/var-x",
         path_params={"run_id": "r-1", "name": "var-x"},
         db_session=object(),
+        auth_principal=_FakePrincipal(),
     )
-    response = pods_routes.handle_delete_scoped_variable(request)
+    response = _invoke_with_permission(
+        handler=pods_routes.handle_delete_scoped_variable,
+        request=request,
+    )
     testbase.assert_equal(response.status_code, 400)
     return
 

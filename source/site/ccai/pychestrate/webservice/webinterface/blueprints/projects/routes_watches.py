@@ -145,6 +145,14 @@ def _build_repository_manager(*, db_session: Any) -> Any:
     return rtnval
 
 
+def _build_build_manager(*, db_session: Any) -> Any:
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        BuildManager,
+    )
+    rtnval = BuildManager(db_session)
+    return rtnval
+
+
 def _build_watch_manager(*, db_session: Any) -> Any:
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchManager,
@@ -387,14 +395,39 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
+    """
+        Compute the real page count from a list response's
+        ``total`` field.
+
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
+
+        :returns: Number of pages (at least 1).
+    """
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
+
+
+def _list_project_build_specs(
+        *, db_session: Any, project_id: int
+    ) -> List[Any]:
+    """
+        Fetch the project's build specs for the create / edit
+        form's ``action_spec_id`` selector.
+
+        :param db_session: Open SQLAlchemy session.
+        :param project_id: Target project id.
+
+        :returns: List of build spec response rows.
+    """
+    build_manager = _build_build_manager(db_session=db_session)
+    rtnval = build_manager.list_specs(project_id, limit=100).specs
+    return rtnval
 
 
 def _resolve_view_authorized_project(
@@ -573,7 +606,8 @@ def _render_watch_edit_form(
         watch: Any,
         status_code: int = 200,
         repositories: Optional[List[Any]] = None,
-        build_specs: Optional[List[Any]] = None
+        build_specs: Optional[List[Any]] = None,
+        form_data: Optional[MultiFormView] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -584,6 +618,7 @@ def _render_watch_edit_form(
     )
     context["project"] = project
     context["watch"] = watch
+    context["form_data"] = form_data
     context["event_types"] = _enumerate_trigger_source_values()
     context["action_types"] = _enumerate_watch_action_values()
     context["repositories"] = (
@@ -632,18 +667,18 @@ def handle_watch_list(request: Request) -> Response:
         offset = (params["page"] - 1) * params["per_page"]
 
         watch_manager = _build_watch_manager(db_session=db_session)
-        watches = watch_manager.list_watches(
+        watches_result = watch_manager.list_watches(
             project_id, offset=offset, limit=params["per_page"]
-        ).watches
+        )
+        watches = watches_result.watches
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=watches_result.total,
             per_page=params["per_page"],
-            returned_count=len(watches),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -782,6 +817,9 @@ def handle_watch_create(request: Request) -> Response:
         repositories = repository_manager.list_repositories(
             project_id, limit=100
         ).repositories
+        build_specs = _list_project_build_specs(
+            db_session=db_session, project_id=project_id
+        )
 
         method = request.method.upper()
         if method == "GET":
@@ -790,6 +828,7 @@ def handle_watch_create(request: Request) -> Response:
                 project=project,
                 repositories=repositories,
                 form_data=None,
+                build_specs=build_specs,
             )
 
         # POST
@@ -849,6 +888,7 @@ def handle_watch_create(request: Request) -> Response:
                 repositories=repositories,
                 form_data=form_view,
                 status_code=400,
+                build_specs=build_specs,
             )
 
         watch_manager = _build_watch_manager(db_session=db_session)
@@ -891,6 +931,7 @@ def handle_watch_create(request: Request) -> Response:
                 repositories=repositories,
                 form_data=form_view,
                 status_code=400,
+                build_specs=build_specs,
             )
     finally:
         try:
@@ -938,12 +979,27 @@ def handle_watch_edit(request: Request) -> Response:
 
         method = request.method.upper()
         if method == "GET":
+            repository_manager = _build_repository_manager(
+                db_session=db_session
+            )
+            repositories = repository_manager.list_repositories(
+                project_id, limit=100
+            ).repositories
+            build_specs = _list_project_build_specs(
+                db_session=db_session, project_id=project_id
+            )
             return _render_watch_edit_form(
-                auth=auth, project=project, watch=watch
+                auth=auth,
+                project=project,
+                watch=watch,
+                repositories=repositories,
+                build_specs=build_specs,
             )
 
         # POST
         single_form = _parse_form_or_empty(request=request)
+        multi_form = _parse_form_multi(request=request)
+        form_view = MultiFormView(data=multi_form)
         csrf_redirect = auth_guard.enforce_csrf_or_redirect(
             form=single_form,
             session=auth.session,
@@ -1028,9 +1084,23 @@ def handle_watch_edit(request: Request) -> Response:
                 message="Error updating watch: {}".format(str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
+            repository_manager = _build_repository_manager(
+                db_session=db_session
+            )
+            repositories = repository_manager.list_repositories(
+                project_id, limit=100
+            ).repositories
+            build_specs = _list_project_build_specs(
+                db_session=db_session, project_id=project_id
+            )
             return _render_watch_edit_form(
-                auth=auth, project=project, watch=watch,
+                auth=auth,
+                project=project,
+                watch=watch,
                 status_code=400,
+                repositories=repositories,
+                build_specs=build_specs,
+                form_data=form_view,
             )
     finally:
         try:

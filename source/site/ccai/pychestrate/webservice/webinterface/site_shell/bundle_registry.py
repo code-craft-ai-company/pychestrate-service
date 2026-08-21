@@ -151,7 +151,7 @@ def install_default_bundles() -> None:
         * ``pyc-site-shell`` -- prefix ``""`` -- shell itself,
           loaded on every shell-served path.
         * ``pyc-admin-bundle`` -- prefix ``/admin`` -- admin
-          sidebar registration plus the shell-native admin Web
+          bundle provides the shell-native admin Web
           Component views: ``<pyc-admin-overview>`` (the ``/admin``
           landing page composing system-health, feature-flags and
           an extension-registry summary), ``<pyc-feature-flags>``
@@ -161,21 +161,21 @@ def install_default_bundles() -> None:
           (users / roles / secrets / audit / enrollment) keep
           working shell-wrapped. Loaded only on ``/admin/*`` paths.
         * ``pyc-runs-bundle`` -- prefix ``/runs`` -- runs list
-          sidebar registration plus the ``<pyc-runs-list>`` view,
+          bundle provides the ``<pyc-runs-list>`` view,
           loaded only on ``/runs`` and ``/runs/*`` paths.
         * ``pyc-catalog-bundle`` -- prefix ``/test-catalog`` --
-          test-catalog sidebar registration plus the
+          test-catalog bundle provides the
           ``<pyc-test-catalog>`` view (catalog table, import action,
           per-entry trigger-run action), loaded only on
           ``/test-catalog`` and ``/test-catalog/*`` paths.
         * ``pyc-builds-bundle`` -- prefix ``/builds`` -- builds
-          sidebar registration plus the ``<pyc-builds-list>`` and
+          bundle provides the ``<pyc-builds-list>`` and
           ``<pyc-build-detail>`` views (builds table, trigger-build
           action, build detail with artifacts), loaded only on
           ``/builds`` and ``/builds/*`` paths.
         * ``pyc-infra-bundle`` -- prefixes ``/environments`` and
           ``/provisioning-runs`` -- infrastructure / provisioning
-          sidebar registration plus the ``<pyc-environments>``,
+          bundle provides the ``<pyc-environments>``,
           ``<pyc-provisioning-list>`` and
           ``<pyc-provisioning-detail>`` views (environments table
           with drift status, provisioning-runs table, trigger
@@ -184,7 +184,7 @@ def install_default_bundles() -> None:
           their sub-paths.
         * ``pyc-metrics-bundle`` -- prefixes ``/test-metrics``,
           ``/timeseries`` and ``/dashboards`` -- metrics &
-          dashboards sidebar registration plus the
+          dashboards bundle provides the
           ``<pyc-test-metrics>``, ``<pyc-timeseries-explorer>``,
           ``<pyc-dashboards-list>`` and ``<pyc-dashboard-detail>``
           views (test-result rollup, timeseries explorer with an
@@ -192,13 +192,13 @@ def install_default_bundles() -> None:
           tiles), loaded only on those prefixes and their
           sub-paths.
         * ``pyc-secrets-bundle`` -- prefix ``/secrets`` -- secrets
-          sidebar registration plus the ``<pyc-secrets>`` view
+          bundle provides the ``<pyc-secrets>`` view
           (scope-aware Org / Project / User secret-metadata table,
           create form, per-secret reveal / rotate / delete
           actions), loaded only on ``/secrets`` and ``/secrets/*``
           paths.
         * ``pyc-pipelines-bundle`` -- prefix ``/pipelines`` --
-          pipelines sidebar registration plus the
+          pipelines bundle provides the
           ``<pyc-pipelines-list>`` and ``<pyc-pipeline-detail>``
           views (pipeline-definition table, create / upsert form,
           DAG-validate action, matrix-expand preview, pipeline
@@ -214,7 +214,7 @@ def install_default_bundles() -> None:
           with liveness, client detail with capabilities), loaded
           only on ``/pods``, ``/clients`` and their sub-paths.
         * ``pyc-resources-bundle`` -- prefix ``/resource-pools`` --
-          resources sidebar registration plus the
+          resources bundle provides the
           ``<pyc-resource-pools>``, ``<pyc-pool-detail>`` and
           ``<pyc-resource-detail>`` views (resource-pools table with
           capability tags and member counts, pool detail with
@@ -233,8 +233,8 @@ def install_default_bundles() -> None:
           prefix ``/slos`` -- the ``<pyc-slos>`` view (per-project
           SLO table, create form, per-SLO burn-rate status).
         * ``pyc-ops-bundle`` -- prefixes ``/webhooks`` and
-          ``/release-channels`` -- operations sidebar registration
-          plus the ``<pyc-webhooks>`` view (tabbed inbound /
+          ``/release-channels`` -- operations bundle provides
+          the ``<pyc-webhooks>`` view (tabbed inbound /
           outbound webhook integrations, subscriptions, deliveries,
           test-event action) and the ``<pyc-release-channels>``
           view (release-channels table, publish form, per-channel

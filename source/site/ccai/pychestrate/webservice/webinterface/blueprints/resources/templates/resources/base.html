@@ -372,40 +372,40 @@
     <nav class="sidebar">
         <ul class="sidebar-nav">
             <li class="sidebar-section">Dashboard</li>
-            <li><a href="{{ url_for('resources.dashboard') }}" class="{% if request_endpoint == 'resources.dashboard' %}active{% endif %}">
-                <span class="material-icons">dashboard</span> Dashboard
+            <li><a href="{{ url_for('resources.dashboard') }}" class="{% if request_endpoint in ('resources.dashboard', 'resources.dashboard_root') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">dashboard</span> Dashboard
             </a></li>
-            
+
             <li class="sidebar-section">Resources</li>
-            <li><a href="{{ url_for('resources.resource_list') }}" class="{% if 'resource' in request_endpoint and 'pool' not in request_endpoint %}active{% endif %}">
-                <span class="material-icons">devices</span> Resources
+            <li><a href="{{ url_for('resources.resource_list') }}" class="{% if request_endpoint.startswith('resources.resource_') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">devices</span> Resources
             </a></li>
-            <li><a href="{{ url_for('resources.pool_list') }}" class="{% if request_endpoint == 'resources.pool_list' or request_endpoint == 'resources.pool_detail' %}active{% endif %}">
-                <span class="material-icons">folder</span> Resource Pools
+            <li><a href="{{ url_for('resources.pool_list') }}" class="{% if request_endpoint.startswith('resources.pool_') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">folder</span> Resource Pools
             </a></li>
-            <li><a href="{{ url_for('resources.tag_list') }}" class="{% if 'tag' in request_endpoint %}active{% endif %}">
-                <span class="material-icons">label</span> Tags
+            <li><a href="{{ url_for('resources.tag_list') }}" class="{% if request_endpoint == 'resources.tag_list' %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">label</span> Tags
             </a></li>
-            
+
             <li class="sidebar-section">IP Management</li>
-            <li><a href="{{ url_for('resources.ip_pool_list') }}" class="{% if 'ip_pool' in request_endpoint %}active{% endif %}">
-                <span class="material-icons">lan</span> IP Pools
+            <li><a href="{{ url_for('resources.ip_pool_list') }}" class="{% if request_endpoint.startswith('resources.ip_pool_') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">lan</span> IP Pools
             </a></li>
-            
+
             <li class="sidebar-section">Allocations</li>
-            <li><a href="{{ url_for('resources.allocation_list') }}" class="{% if 'allocation' in request_endpoint and 'history' not in request_endpoint %}active{% endif %}">
-                <span class="material-icons">assignment</span> Active Allocations
+            <li><a href="{{ url_for('resources.allocation_list') }}" class="{% if request_endpoint in ('resources.allocation_list', 'resources.allocation_detail') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">assignment</span> Active Allocations
             </a></li>
-            <li><a href="{{ url_for('resources.allocation_history') }}" class="{% if 'allocation_history' in request_endpoint %}active{% endif %}">
-                <span class="material-icons">history</span> Allocation History
+            <li><a href="{{ url_for('resources.allocation_history') }}" class="{% if request_endpoint == 'resources.allocation_history' %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">history</span> Allocation History
             </a></li>
-            <li><a href="{{ url_for('resources.reservation_list') }}" class="{% if 'reservation' in request_endpoint %}active{% endif %}">
-                <span class="material-icons">event</span> Reservations
+            <li><a href="{{ url_for('resources.reservation_list') }}" class="{% if request_endpoint.startswith('resources.reservation_') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">event</span> Reservations
             </a></li>
-            
+
             <li class="sidebar-section">Monitoring</li>
-            <li><a href="{{ url_for('resources.health_dashboard') }}" class="{% if 'health' in request_endpoint %}active{% endif %}">
-                <span class="material-icons">monitor_heart</span> Health Status
+            <li><a href="{{ url_for('resources.health_dashboard') }}" class="{% if request_endpoint.startswith('resources.health_') %}active{% endif %}">
+                <span class="material-icons" aria-hidden="true">monitor_heart</span> Health Status
             </a></li>
         </ul>
     </nav>

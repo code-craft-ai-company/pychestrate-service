@@ -1,3 +1,4 @@
+import { load_failure_message } from "./feature-flags-view.js";
 const SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
   if (typeof status !== "string") {
@@ -22,12 +23,14 @@ function health_status_tone(status) {
 }
 async function fetch_system_health() {
   let document_body = null;
+  let http_status = 0;
   try {
     const response = await fetch(SYSTEM_HEALTH_PATH, {
       method: "GET",
       credentials: "same-origin",
       headers: { Accept: "application/json" }
     });
+    http_status = response.status;
     if (response.ok === true) {
       const body = await response.json();
       const parsed = body;
@@ -41,19 +44,21 @@ async function fetch_system_health() {
       { reason: String(reason) }
     );
   }
-  const rtnval = document_body;
+  const rtnval = { document_body, http_status };
   return rtnval;
 }
 class PycSystemHealth extends HTMLElement {
   _document;
   _loading;
   _errored;
+  _error_status;
   _body_region;
   constructor() {
     super();
     this._document = null;
     this._loading = false;
     this._errored = false;
+    this._error_status = 0;
     this._body_region = null;
   }
   /**
@@ -119,16 +124,18 @@ class PycSystemHealth extends HTMLElement {
   async _refresh() {
     this._loading = true;
     this._errored = false;
+    this._error_status = 0;
     this._render_body();
-    const document_body = await fetch_system_health();
-    if (document_body === null) {
+    const outcome = await fetch_system_health();
+    if (outcome.document_body === null) {
       this._loading = false;
       this._errored = true;
+      this._error_status = outcome.http_status;
       this._document = null;
       this._render_body();
       return;
     }
-    this._document = document_body;
+    this._document = outcome.document_body;
     this._loading = false;
     this._errored = false;
     this._render_body();
@@ -154,7 +161,10 @@ class PycSystemHealth extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load system health. Try refreshing.";
+      error.textContent = load_failure_message(
+        this._error_status,
+        "system health"
+      );
       region.replaceChildren(error);
       return;
     }

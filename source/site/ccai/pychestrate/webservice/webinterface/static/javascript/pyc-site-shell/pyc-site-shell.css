@@ -145,6 +145,65 @@ pyc-site-shell:not(:defined)::before {
  * non-conflicting tweaks for slotted content here.
  */
 
+/*
+ * Sidebar collapse toggle and the command-palette hint chip.
+ * Both live in the app bar's brand slot; both inherit the header
+ * foreground through currentColor.
+ */
+.pyc-site-shell__nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0.25rem;
+    margin-right: 0.5rem;
+    border: none;
+    border-radius: 0.375rem;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+}
+
+.pyc-site-shell__nav-toggle svg {
+    width: 100%;
+    height: 100%;
+}
+
+.pyc-site-shell__nav-toggle:hover {
+    background-color: var(--pyc-site-shell-surface-hover);
+}
+
+.pyc-site-shell__nav-toggle:focus-visible {
+    outline: var(--pyc-site-shell-focus-ring);
+    outline-offset: -2px;
+}
+
+.pyc-site-shell__palette-hint {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.75rem;
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--pyc-site-shell-divider);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: inherit;
+    opacity: 0.7;
+    font-family: inherit;
+    font-size: var(--pyc-site-shell-font-size-meta);
+    cursor: pointer;
+}
+
+.pyc-site-shell__palette-hint:hover {
+    opacity: 1;
+    background-color: var(--pyc-site-shell-surface-hover);
+}
+
+.pyc-site-shell__palette-hint:focus-visible {
+    outline: var(--pyc-site-shell-focus-ring);
+    outline-offset: -2px;
+}
+
 .pyc-site-shell__user-menu {
     display: flex;
     align-items: center;
@@ -155,7 +214,7 @@ pyc-site-shell:not(:defined)::before {
     opacity: 0.85;
 }
 
-.pyc-site-shell__logout-form {
+.pyc-site-shell__logout-button {
     margin: 0;
     display: inline-flex;
 }
@@ -294,6 +353,27 @@ pyc-site-shell:not(:defined)::before {
     min-width: 0;
 }
 
+/*
+ * Shell-owned notice region: server flash messages lifted out of
+ * the route fragment at boot so bundle mounts cannot destroy them
+ * unread. Slotted into the same "main" grid area, stacked above
+ * the main region; hidden entirely when it holds nothing.
+ */
+.pyc-site-shell__notices {
+    padding: var(--mj-space-6, 1.5rem) var(--mj-space-6, 1.5rem) 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pyc-site-shell__notices:empty {
+    display: none;
+}
+
+.pyc-site-shell__flash-notice-message {
+    font-size: var(--pyc-site-shell-font-size-small);
+}
+
 .pyc-site-shell__empty-state {
     max-width: 32rem;
     margin: 4rem auto;
@@ -302,6 +382,107 @@ pyc-site-shell:not(:defined)::before {
 
 .pyc-site-shell__empty-state-heading {
     margin-top: 0;
+}
+
+/*
+ * Shell-owned landing views: the home view on the bare "/" route
+ * and the "Page not found" view on unclaimed routes. Both share
+ * the navigation link grid.
+ */
+.pyc-site-shell__home,
+.pyc-site-shell__not-found {
+    max-width: 56rem;
+    margin: 0 auto;
+}
+
+.pyc-site-shell__home-heading,
+.pyc-site-shell__not-found-heading {
+    margin: 0 0 0.5rem 0;
+}
+
+.pyc-site-shell__home-subtitle,
+.pyc-site-shell__not-found-body {
+    margin: 0 0 1.5rem 0;
+    color: var(--pyc-site-shell-on-surface-muted);
+}
+
+.pyc-site-shell__not-found-path {
+    font-size: var(--pyc-site-shell-font-size-small);
+    color: var(--pyc-site-shell-fg);
+}
+
+.pyc-site-shell__not-found-home {
+    margin: 0 0 1.5rem 0;
+}
+
+.pyc-site-shell__not-found-home-link {
+    color: var(--pyc-site-shell-sidebar-fg-active);
+    font-weight: 600;
+}
+
+.pyc-site-shell__nav-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 1rem;
+}
+
+.pyc-site-shell__nav-grid-card {
+    background-color: var(--pyc-site-shell-surface-elevated);
+    color: var(--pyc-site-shell-on-surface-elevated);
+    border: 1px solid var(--pyc-site-shell-border);
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.pyc-site-shell__nav-grid-card-heading {
+    margin: 0 0 0.5rem 0;
+    font-size: var(--pyc-site-shell-font-size-meta);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--pyc-site-shell-on-surface-muted);
+}
+
+.pyc-site-shell__nav-grid-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.pyc-site-shell__nav-grid-link {
+    display: block;
+    padding: 0.25rem 0.375rem;
+    border-radius: 0.25rem;
+    color: inherit;
+    text-decoration: none;
+    font-size: var(--pyc-site-shell-font-size-small);
+}
+
+.pyc-site-shell__nav-grid-link:hover {
+    background-color: var(--pyc-site-shell-surface-hover);
+    color: var(--pyc-site-shell-sidebar-fg-active);
+}
+
+.pyc-site-shell__nav-grid-link:focus-visible {
+    outline: var(--pyc-site-shell-focus-ring);
+    outline-offset: -2px;
+}
+
+/*
+ * Sidebar failure state -- shown in the nav region when the
+ * navigation manifest could not be fetched and the registry has
+ * nothing to render.
+ */
+.pyc-site-shell__sidebar-failure {
+    padding: 0.75rem;
+}
+
+.pyc-site-shell__sidebar-failure-message {
+    margin: 0 0 0.5rem 0;
+    font-size: var(--pyc-site-shell-font-size-small);
+    color: var(--pyc-site-shell-sidebar-fg-muted);
 }
 
 /*

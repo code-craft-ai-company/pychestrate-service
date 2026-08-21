@@ -46,6 +46,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -74,7 +76,12 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
 )
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources.ip_pools")
 
 
 def _build_ip_pool_manager(*, db_session: Any) -> Any:
@@ -225,6 +232,85 @@ def _coerce_int_with_default(*, raw: Any, default: int) -> int:
     return parsed
 
 
+def _parse_pagination_params(
+        *, request: Request,
+        default_per_page: int = 20
+    ) -> Dict[str, Any]:
+    page = _coerce_int_with_default(
+        raw=request.query_params.get("page", None), default=1
+    )
+    if page < 1:
+        page = 1
+    per_page = _coerce_int_with_default(
+        raw=request.query_params.get("per_page", None),
+        default=default_per_page,
+    )
+    if per_page < 1:
+        per_page = default_per_page
+    rtnval = {"page": page, "per_page": per_page}
+    return rtnval
+
+
+def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
+    """
+        Map a typed IPPoolManager error to its deliberate,
+        user-facing message. Returns None when ``exc`` is not one
+        of the typed errors -- callers then log the exception and
+        flash a generic sentence instead of the raw exception
+        text. Lazy-imports so this module stays importable when
+        the manager package is absent (test runtimes patch the
+        manager builders).
+
+        :param exc: The exception raised by an IPPoolManager call.
+
+        :returns: Specific user-facing message, or None.
+    """
+    try:
+        from ccai.pychestrate.core.managers.ip_pool_manager import (  # noqa: E402
+            CIDROverlapError,
+            DuplicateIPPoolError,
+            IPAllocationNotFoundError,
+            IPNotAvailableError,
+            IPNotInPoolError,
+            IPPoolExhaustedError,
+            IPPoolHasAllocationsError,
+            IPPoolNotFoundError,
+            IPPoolValidationError,
+            IPReservedError,
+            NotIPAllocationOwnerError,
+        )
+    except ImportError:
+        return None
+
+    if isinstance(exc, CIDROverlapError):
+        msg_parts = ["{}.".format(exc.message)]
+        if len(exc.overlapping_pools) > 0:
+            msg_parts.append(
+                "Overlapping pools: {}.".format(
+                    ", ".join(exc.overlapping_pools)
+                )
+            )
+        rtnval = " ".join(msg_parts)
+        return rtnval
+
+    typed_errors = (
+        DuplicateIPPoolError,
+        IPAllocationNotFoundError,
+        IPNotAvailableError,
+        IPNotInPoolError,
+        IPPoolExhaustedError,
+        IPPoolHasAllocationsError,
+        IPPoolNotFoundError,
+        IPPoolValidationError,
+        IPReservedError,
+        NotIPAllocationOwnerError,
+    )
+    if isinstance(exc, typed_errors):
+        rtnval = exc.message
+        return rtnval
+    return None
+
+
 def _parse_csv_string(*, raw: str) -> List[str]:
     """
         Split a comma-separated string into a list of trimmed
@@ -262,8 +348,22 @@ def handle_ip_pool_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
+        params = _parse_pagination_params(request=request)
+        offset = (params["page"] - 1) * params["per_page"]
+
         ip_pool_manager = _build_ip_pool_manager(db_session=db_session)
-        pools = ip_pool_manager.list_pools(auth.user_id).pools
+        pools_response = ip_pool_manager.list_pools(
+            auth.user_id, offset=offset, limit=params["per_page"]
+        )
+        pools = pools_response.pools
+
+        total_pages = _calculate_total_pages(
+            total=pools_response.total,
+            per_page=params["per_page"],
+        )
+        page_window = _build_page_window(
+            page=params["page"], total_pages=total_pages
+        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -273,6 +373,10 @@ def handle_ip_pool_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["pools"] = pools
+        context["page"] = params["page"]
+        context["per_page"] = params["per_page"]
+        context["total_pages"] = total_pages
+        context["page_window"] = page_window
         response = _render(
             template_name="resources/ip_pools/list.html",
             context=context,
@@ -386,9 +490,16 @@ def handle_ip_pool_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_ip_pool_error(exc=exc)
+            if message is None:
+                _LOGGER.exception("Unexpected error creating IP pool")
+                message = (
+                    "An unexpected error occurred while creating the"
+                    " IP pool. The problem has been logged."
+                )
             flash.add_flash(
                 session=auth.session,
-                message="Error creating IP pool: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -536,9 +647,12 @@ def handle_ip_pool_edit(request: Request) -> Response:
             return response
 
         method = request.method.upper()
+        form_view: Optional[MultiFormView] = None
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
+            multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -601,15 +715,25 @@ def handle_ip_pool_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
+                message = _describe_ip_pool_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception(
+                        "Unexpected error updating IP pool %s",
+                        pool_id,
+                    )
+                    message = (
+                        "An unexpected error occurred while updating"
+                        " the IP pool. The problem has been logged."
+                    )
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating IP pool: {}".format(
-                        str(exc)
-                    ),
+                    message=message,
                     category=flash.CATEGORY_ERROR,
                 )
 
-        # GET, or POST that fell through.
+        # GET, or POST that fell through -- re-render with the
+        # submitted values (``form_data``) when a POST failed so
+        # typed input is never reverted to the stored pool state.
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -618,6 +742,7 @@ def handle_ip_pool_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["pool"] = pool
+        context["form_data"] = form_view
         response = _render(
             template_name="resources/ip_pools/edit.html",
             context=context,
@@ -696,12 +821,21 @@ def handle_ip_pool_delete(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_ip_pool_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error deleting IP pool %s", pool_id
+                )
+                message = (
+                    "An unexpected error occurred while deleting the"
+                    " IP pool. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.ip_pool_list"
                 ),
-                message="Error deleting IP pool: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -802,12 +936,22 @@ def handle_ip_pool_checkout(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_ip_pool_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error checking out IP from pool %s",
+                    pool_id,
+                )
+                message = (
+                    "An unexpected error occurred while checking out"
+                    " the IP. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.ip_pool_detail", pool_id=pool_id
                 ),
-                message="Error checking out IP: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -906,10 +1050,20 @@ def handle_ip_pool_checkin(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_ip_pool_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error checking in IP for pool %s",
+                    pool_id,
+                )
+                message = (
+                    "An unexpected error occurred while checking in"
+                    " the IP. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=redirect_url,
-                message="Error checking in IP: {}".format(str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

@@ -20,77 +20,78 @@
     <p>Modify watch configuration</p>
 </div>
 
+{% set primary_action = watch.actions[0] if watch.actions else none %}
 <div class="card">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+
         <div class="form-group">
             <label for="name">Name</label>
-            <input type="text" id="name" name="name" class="form-control" required 
-                   value="{{ watch.name }}">
+            <input type="text" id="name" name="name" class="form-control" required
+                   value="{{ form_data.name if form_data else watch.name }}">
         </div>
-        
+
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" class="form-control" rows="2">{{ watch.description or '' }}</textarea>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else (watch.description or '') }}</textarea>
         </div>
-        
+
         <div class="form-group">
             <label for="repository_id">Repository</label>
             <select id="repository_id" name="repository_id" class="form-control" required>
                 {% for repo in repositories %}
-                <option value="{{ repo.id }}" {% if watch.repository_id == repo.id %}selected{% endif %}>
+                <option value="{{ repo.id }}" {% if (form_data and form_data.repository_id == repo.id|string) or (not form_data and watch.source_id == repo.id) %}selected{% endif %}>
                     {{ repo.name }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="event_type">Event Type</label>
             <select id="event_type" name="event_type" class="form-control" required>
                 {% for event_type in event_types %}
-                <option value="{{ event_type }}" {% if watch.event_type.value == event_type %}selected{% endif %}>
+                <option value="{{ event_type }}" {% if (form_data and form_data.event_type == event_type) or (not form_data and watch.trigger_source.value == event_type) %}selected{% endif %}>
                     {{ event_type }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="branch_pattern">Branch Pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
-                   value="{{ watch.branch_pattern or '' }}"
+                   value="{{ form_data.branch_pattern if form_data else (watch.conditions.branch_pattern or '') }}"
                    placeholder="e.g., main, feature/*, release-*">
             <span class="form-text">Use * as wildcard. Leave empty to match all branches.</span>
         </div>
-        
+
         <div class="form-group">
             <label for="action_type">Action Type</label>
             <select id="action_type" name="action_type" class="form-control" required>
                 {% for action_type in action_types %}
-                <option value="{{ action_type }}" {% if watch.action_type.value == action_type %}selected{% endif %}>
+                <option value="{{ action_type }}" {% if (form_data and form_data.action_type == action_type) or (not form_data and primary_action and primary_action.action.value == action_type) %}selected{% endif %}>
                     {{ action_type }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="action_spec_id">Build Specification (for build actions)</label>
             <select id="action_spec_id" name="action_spec_id" class="form-control">
                 <option value="">Select a build spec</option>
                 {% for spec in build_specs %}
-                <option value="{{ spec.id }}" {% if watch.action_spec_id == spec.id %}selected{% endif %}>
+                <option value="{{ spec.id }}" {% if (form_data and form_data.action_spec_id == spec.id|string) or (not form_data and primary_action and primary_action.target_id == spec.id) %}selected{% endif %}>
                     {{ spec.name }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label>
-                <input type="checkbox" name="enabled" value="true" {% if watch.enabled %}checked{% endif %}>
+                <input type="checkbox" name="enabled" value="true" {% if (form_data and form_data.enabled) or (not form_data and watch.enabled) %}checked{% endif %}>
                 Enabled
             </label>
         </div>

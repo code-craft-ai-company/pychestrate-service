@@ -1,18 +1,21 @@
 class ShellRouter {
   _current;
   _callbacks;
-  _main_region_getter;
   /**
+   * Tracks the active route context for the shell. The
+   * pychestrate site is server-rendered: the sidebar and the
+   * command palette both perform full page loads, so this router
+   * intentionally has no `navigateTo` / pushState path -- it only
+   * parses the boot path and refreshes subscribers when the
+   * browser traverses history within the same document (back /
+   * forward with a bfcache restore).
+   *
    * @param initial_path - Path the shell booted on; typically
    *                       `window.location.pathname`.
-   * @param main_region_getter - Function returning the active
-   *                             `<main>` region (used for focus
-   *                             restoration).
    */
-  constructor(initial_path, main_region_getter) {
+  constructor(initial_path) {
     this._current = ShellRouter.parse(initial_path);
     this._callbacks = [];
-    this._main_region_getter = main_region_getter;
     window.addEventListener("popstate", () => {
       const next_context = ShellRouter.parse(window.location.pathname);
       const previous_context = this._current;
@@ -55,21 +58,6 @@ class ShellRouter {
     this._callbacks.push(callback);
     return;
   }
-  /**
-   * Drive a same-origin navigation by pushing on the history
-   * stack and re-rendering. Callers are responsible for any
-   * permission-cache refresh; this router does not own the
-   * permission model.
-   */
-  async navigateTo(route) {
-    const next_context = ShellRouter.parse(route);
-    const previous_context = this._current;
-    window.history.pushState({}, "", route);
-    this._current = next_context;
-    await this._dispatch(next_context, previous_context);
-    this._restore_focus();
-    return;
-  }
   async _dispatch(next_context, previous_context) {
     for (const callback of this._callbacks) {
       try {
@@ -80,28 +68,6 @@ class ShellRouter {
           { reason: String(reason) }
         );
       }
-    }
-    return;
-  }
-  _restore_focus() {
-    const main = this._main_region_getter();
-    if (main === null) {
-      return;
-    }
-    const heading = main.querySelector("h1");
-    if (heading !== null) {
-      if (heading.hasAttribute("tabindex") === false) {
-        heading.setAttribute("tabindex", "-1");
-      }
-      ;
-      heading.focus();
-      return;
-    }
-    const focusable = main.querySelector(
-      "a, button, input, select, textarea, [tabindex]"
-    );
-    if (focusable !== null) {
-      focusable.focus();
     }
     return;
   }

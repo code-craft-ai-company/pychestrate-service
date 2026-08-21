@@ -1640,6 +1640,50 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/PodStateTransition' }
+  /projects/{project_id}/pods/{pod_id}/state/transitions:
+    parameters:
+      - $ref: '#/components/parameters/ProjectIdParam'
+      - $ref: '#/components/parameters/PodIdParam'
+    post:
+      tags: [pods]
+      summary: Apply an operator-initiated lifecycle event to a pod.
+      operationId: pods_apply_state_transition
+      description: |
+        Applies one operator-initiated lifecycle event to the
+        pod's state machine and returns the updated state row.
+        Only `drain` (READY / IN_USE -> DRAINING) and
+        `deregister` (DRAINING / FAILED -> RELEASED) are accepted
+        -- the remaining lifecycle events are system-driven and
+        cannot be forged through the REST surface. An event that
+        is not legal from the pod's current state returns `409`.
+        Permission-gated by `system:pods.write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_kind]
+              properties:
+                event_kind:
+                  type: string
+                  enum: [drain, deregister]
+                payload:
+                  type: object
+                  additionalProperties: true
+                  nullable: true
+      responses:
+        '200':
+          description: Updated pod state.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PodState' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /projects/{project_id}/pods/{pod_id}/registration:
     parameters:
       - $ref: '#/components/parameters/ProjectIdParam'
@@ -2248,16 +2292,42 @@ paths:
         schema: { type: string }
     get:
       tags: [artifacts]
-      summary: Read metadata for one artifact entry.
+      summary: Download one stored artifact from the run's result tree.
       operationId: artifacts_get_entry
       x-pychestrate-status: planned
+      description: |
+        Streams the stored artifact bytes from the run's allocated
+        result tree on the shared results backend. Requires the
+        same session / API-key auth + `system:runs.read`
+        permission as reading the run itself.
+
+        The `artifact_path` is strictly canonicalized before use:
+        absolute paths, `..` traversal segments, and drive /
+        scheme separators are rejected with 400, and the resolved
+        location is re-verified to sit inside the run's allocated
+        prefix.
+
+        Artifacts are untrusted job output uploaded by pod
+        clients, so the server never serves active content with a
+        renderable type: HTML, SVG, XML, and scripts come back as
+        `application/octet-stream` with
+        `Content-Disposition: attachment`, and every response
+        carries `X-Content-Type-Options: nosniff`. Only a small
+        allow-list of inert types (plain text, JSON, common
+        images, PDF) renders inline.
       responses:
         '200':
-          description: Artifact entry.
+          description: Artifact bytes.
           content:
-            application/json:
-              schema: { $ref: '#/components/schemas/ArtifactEntry' }
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
   /runs/{run_id}/artifacts:presign:
     parameters:
@@ -2963,6 +3033,35 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [dashboards]
+      summary: Update a dashboard in place.
+      operationId: dashboards_update
+      x-pychestrate-status: planned
+      description: |
+        Updates a dashboard in place -- only the supplied fields
+        change. A supplied `tiles` array replaces the whole tile
+        set (per-tile validation applies). Renaming to a name
+        already used in the project returns `409`. An optional
+        `expected_version` field enables optimistic concurrency:
+        a stale version returns `409`. Permission-gated like
+        create (`system:dashboards.write`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DashboardUpdateRequest' }
+      responses:
+        '200':
+          description: Dashboard updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Dashboard' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /projects/{project_id}/metric-alerts:
     parameters:
@@ -3225,13 +3324,18 @@ paths:
         schedule's checker -- an environment with no drift
         schedule returns `409`. The Layer-5 dispatch handoff is
         M2 work -- until then a triggered drift run remains queued
-        in `PENDING`.
+        in `PENDING`. The 202 body is explicit about this: it
+        carries `dispatch_available: false` plus a `detail`
+        message stating the check was recorded but automatic
+        processing is not yet available.
       responses:
         '202':
-          description: Drift check accepted (queued; dispatch is M2).
+          description: >-
+            Drift check recorded (persisted in PENDING; automatic
+            processing is not available in this release).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/DriftReport' }
+              schema: { $ref: '#/components/schemas/DriftCheckAccepted' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -3568,6 +3672,43 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /resources/{resource_id}/state:
+    parameters:
+      - in: path
+        name: resource_id
+        required: true
+        schema: { type: string, format: uuid }
+        description: Resource identifier.
+    post:
+      tags: [resources]
+      summary: Transition a resource's lifecycle state.
+      operationId: resources_transition_state
+      x-pychestrate-status: planned
+      description: |
+        Applies a lifecycle state transition (quarantine, move to
+        maintenance, mark available, retire, ...). Legal transitions
+        are validated by the inventory service -- an impermissible
+        move (retired is terminal; un-retiring requires a fresh
+        registration) returns `409` with a
+        `reason: transition_not_permitted` extension. Idempotent on
+        same-state moves.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResourceStateTransitionRequest' }
+      responses:
+        '200':
+          description: Updated resource.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Resource' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /resources/{resource_id}/health:
     parameters:
@@ -4058,6 +4199,36 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
+  /webhooks/in/integrations/{webhook_id}:
+    parameters:
+      - in: path
+        name: webhook_id
+        required: true
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [webhooks]
+      summary: Enable or disable an inbound webhook integration.
+      operationId: webhooks_in_update_integration
+      description: |
+        The only mutable field is `enabled` -- provider / hook /
+        secret are immutable in M1 (the rotate-secret path lands
+        in M2). Idempotent in both directions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookInIntegrationUpdate' }
+      responses:
+        '200':
+          description: Integration updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInIntegration' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
   /webhooks/in/deliveries:
     get:
       tags: [webhooks]
@@ -4112,6 +4283,13 @@ paths:
       tags: [webhooks]
       summary: Register an outbound webhook subscription.
       operationId: webhooks_out_create_subscription
+      description: |
+        When the request supplies no `secret_ref`, the service
+        generates an HMAC signing secret for the subscription and
+        returns it ONCE as `signing_secret` on the 201 response.
+        It is never readable again through the API -- receivers
+        use it to verify the `X-Pychestrate-Signature` header on
+        deliveries.
       requestBody:
         required: true
         content:
@@ -4122,7 +4300,7 @@ paths:
           description: Subscription registered.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+              schema: { $ref: '#/components/schemas/WebhookOutSubscriptionCreated' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -4147,6 +4325,29 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [webhooks]
+      summary: Enable or disable an outbound webhook subscription.
+      operationId: webhooks_out_update_subscription
+      description: |
+        The only mutable field is `enabled` -- name / URL / topic
+        filters are immutable in M1 (recreate the subscription to
+        change them). Idempotent in both directions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookOutSubscriptionUpdate' }
+      responses:
+        '200':
+          description: Subscription updated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookOutSubscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
     delete:
       tags: [webhooks]
       summary: Disable an outbound webhook subscription.
@@ -5817,13 +6018,34 @@ components:
       properties:
         run_id: { type: string, format: uuid }
         project_id: { type: string, format: uuid }
-        pod_id: { type: string, format: uuid }
+        pod_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Pod the run's latest dispatch attempt targeted. `null`
+            until the run has been dispatched at least once.
         client_id:
           type: string
           format: uuid
           nullable: true
-        job_id: { type: string, format: uuid }
-        job_name: { type: string }
+          description: >-
+            Client the run's latest dispatch attempt targeted.
+            `null` until the run has been dispatched at least once.
+        job_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: >-
+            Job id from the archived dispatch envelope. `null`
+            until the run has been dispatched.
+        job_name:
+          type: string
+          nullable: true
+          description: >-
+            Human-readable job name from the archived dispatch
+            envelope's canonical payload. `null` until the run has
+            been dispatched.
         job_type: { type: string }
         state: { $ref: '#/components/schemas/RunState' }
         terminal_outcome:
@@ -5836,19 +6058,39 @@ components:
         progress_summary:
           nullable: true
           $ref: '#/components/schemas/ProgressSummary'
-        created_at: { type: string, format: date-time }
+        result_manifest:
+          nullable: true
+          $ref: '#/components/schemas/ResultManifest'
+          description: >-
+            The run's latest recorded result manifest -- the same
+            block the `result_manifest` SSE RunEvent streams
+            (artifact paths, lifted `files` / `artifact_count`,
+            test counters). Populated only on the single-run read
+            (`GET /runs/{run_id}`) once the pod client has posted
+            `results/complete`; always `null` in list responses.
+        created_at:
+          type: string
+          format: date-time
+          description: >-
+            Stable creation timestamp derived from the run's
+            state-audit trail (first audit row, or the row's
+            `entered_state_at` while the run has never
+            transitioned).
         dispatched_at:
           type: string
           format: date-time
           nullable: true
+          description: First transition into `dispatched`.
         started_at:
           type: string
           format: date-time
           nullable: true
+          description: First transition into `running`.
         completed_at:
           type: string
           format: date-time
           nullable: true
+          description: First transition into a terminal state.
         labels:
           type: object
           additionalProperties: { type: string }
@@ -5871,6 +6113,12 @@ components:
         One event emitted on the `/runs/{run_id}/events` SSE stream.
         The SSE `event:` field carries the event type tag; the SSE
         `data:` field carries this JSON object.
+
+        A `result_manifest` event is published when the pod client
+        posts `POST /runs/{run_id}/results/complete`; its
+        `manifest` member echoes the posted `ResultManifest` with
+        the testbase artifact-path defaults applied and the
+        uploaded-file index lifted to `files` / `artifact_count`.
       required: [run_id, event_type, sequence, occurred_at]
       properties:
         run_id: { type: string, format: uuid }
@@ -5953,6 +6201,13 @@ components:
         Roll-up the client agent emits at intervals. Matches the
         testbase `ForwardingInfo` shape; see
         `ingest.progress.schema.ProgressSummary`.
+
+        For a `build` / `provision` run the server maps the run's
+        latest generalized progress frame into this shape instead:
+        `format_tag` / `frame_kind` carry the frame kind, `phase` /
+        `status` describe the current step, the per-test counters
+        are zero, and `percent_complete` / `notes` come from the
+        frame.
       required: [run_id, client_id, format_tag, tests_passed, tests_failed, tests_skipped, tests_errored, recorded_at]
       properties:
         run_id: { type: string, format: uuid }
@@ -5960,6 +6215,24 @@ components:
         format_tag:
           type: string
           description: Parser tag (`testbase` for the in-tree default).
+        frame_kind:
+          type: string
+          nullable: true
+          description: >-
+            Present when the summary was derived from a `build` /
+            `provision` progress frame.
+        phase:
+          type: string
+          nullable: true
+          description: >-
+            Current phase / step name from a `build` / `provision`
+            progress frame.
+        status:
+          type: string
+          nullable: true
+          description: >-
+            Status of the current phase / step from a `build` /
+            `provision` progress frame.
         tests_total:
           type: integer
           nullable: true
@@ -6156,6 +6429,27 @@ components:
         extras:
           type: object
           additionalProperties: true
+        artifact_count:
+          type: integer
+          minimum: 0
+          description: >-
+            Server-lifted convenience member on the
+            `result_manifest` RunEvent: count of the uploaded
+            artifact files the manifest's `extras.files` index
+            recorded. Not part of the client POST body.
+        files:
+          type: array
+          description: >-
+            Server-lifted convenience member on the
+            `result_manifest` RunEvent: the walked artifact-file
+            index from `extras.files`, one entry per uploaded file.
+            Not part of the client POST body.
+          items:
+            type: object
+            properties:
+              relative_path: { type: string }
+              size_bytes: { type: integer, minimum: 0 }
+              sha256: { type: string }
 
     # ----------------------------------------------------------------
     # artifacts
@@ -7318,6 +7612,29 @@ components:
     # metrics / dashboards / metric_alerts (7-* PR p20f)
     # ----------------------------------------------------------------
 
+    DriftCheckAccepted:
+      description: >-
+        The 202 body of `POST .../drift:check` -- the recorded
+        drift run plus honesty fields stating that automatic
+        processing (the Layer-5 dispatch handoff) is not
+        available in this release, so the run will remain
+        PENDING.
+      allOf:
+        - $ref: '#/components/schemas/DriftReport'
+        - type: object
+          required: [dispatch_available, detail]
+          properties:
+            dispatch_available:
+              type: boolean
+              description: >-
+                Always `false` in this release -- the recorded
+                run is not handed to a processor.
+            detail:
+              type: string
+              description: >-
+                Human-readable statement that the check was
+                recorded but will not progress automatically.
+
     MetricCatalogEntry:
       type: object
       description: One registered metric definition.
@@ -7493,6 +7810,26 @@ components:
           type: array
           items: { $ref: '#/components/schemas/DashboardTile' }
 
+    DashboardUpdateRequest:
+      type: object
+      description: >-
+        In-place dashboard update. Every field is optional --
+        omitted fields keep their persisted value. A supplied
+        `tiles` array replaces the whole tile set.
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        grid_columns_max: { type: integer, minimum: 1 }
+        tiles:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardTile' }
+        expected_version:
+          type: integer
+          minimum: 1
+          description: >-
+            Optimistic-concurrency guard -- when supplied it must
+            match the persisted version or the update returns 409.
+
     DashboardPage:
       type: object
       required: [items, meta]
@@ -7610,7 +7947,11 @@ components:
       type: object
       description: |
         Resource-to-pool membership row. Matches
-        `resources.pools.models.ResourcePoolMember`.
+        `resources.pools.models.ResourcePoolMember`, enriched with
+        read-only fields joined from the member's inventory
+        `Resource` row and its current health record so pool-member
+        listings can render a meaningful table without N follow-up
+        resource reads.
       required:
         - membership_id
         - pool_id
@@ -7620,6 +7961,32 @@ components:
         pool_id: { type: string, format: uuid }
         resource_id: { type: string, format: uuid }
         added_at: { type: string, format: date-time }
+        resource_name:
+          type: string
+          nullable: true
+          description: |
+            Display name of the joined inventory resource; `null`
+            when the resource row is unavailable.
+        resource_kind:
+          type: string
+          nullable: true
+          description: |
+            Kind identifier of the joined inventory resource;
+            `null` when the resource row is unavailable.
+        resource_state:
+          type: string
+          enum: [available, leased, quarantined, maintenance, retired]
+          nullable: true
+          description: |
+            Lifecycle state of the joined inventory resource;
+            `null` when the resource row is unavailable.
+        resource_health:
+          type: string
+          nullable: true
+          description: |
+            `last_outcome` of the resource's current health record
+            (e.g. `pass` / `fail`); `null` when the resource has
+            never been probed.
 
     ResourcePoolMemberPage:
       type: object
@@ -7668,6 +8035,20 @@ components:
           additionalProperties: true
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    ResourceStateTransitionRequest:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [available, leased, quarantined, maintenance, retired]
+          description: Target lifecycle state.
+        reason:
+          type: string
+          description: |
+            Optional operator-supplied reason, recorded on the
+            `entity.resource.state_changed` event payload.
 
     ResourceHealth:
       type: object
@@ -8027,11 +8408,18 @@ components:
 
     SloPage:
       type: object
+      description: >-
+        Page of SLO definitions. Each item embeds a `status`
+        block (the same shape the detail read embeds) so list
+        consumers can show burn-rate health without a per-item
+        fetch; `status` is `null` for items past the server's
+        per-page computation bound or whose kind is no longer
+        registered.
       required: [items, meta]
       properties:
         items:
           type: array
-          items: { $ref: '#/components/schemas/Slo' }
+          items: { $ref: '#/components/schemas/SloWithStatus' }
         meta: { $ref: '#/components/schemas/PageMeta' }
 
     # ----------------------------------------------------------------
@@ -8161,6 +8549,15 @@ components:
         mtls_required: { type: boolean, default: false }
         description: { type: string }
 
+    WebhookInIntegrationUpdate:
+      type: object
+      description: >-
+        Mutable inbound-integration fields. M1 supports toggling
+        `enabled` only.
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
     WebhookInIntegrationPage:
       type: object
       required: [items, meta]
@@ -8227,6 +8624,32 @@ components:
         custom_headers:
           type: object
           additionalProperties: { type: string }
+
+    WebhookOutSubscriptionCreated:
+      description: >-
+        The create response. When the service generated the
+        signing secret (no `secret_ref` supplied), the secret is
+        present ONCE as `signing_secret` and is never readable
+        again through the API.
+      allOf:
+        - $ref: '#/components/schemas/WebhookOutSubscription'
+        - type: object
+          properties:
+            signing_secret:
+              type: string
+              description: >-
+                Generated HMAC signing secret; shown only on this
+                response. Receivers verify the
+                `X-Pychestrate-Signature` header with it.
+
+    WebhookOutSubscriptionUpdate:
+      type: object
+      description: >-
+        Mutable outbound-subscription fields. M1 supports toggling
+        `enabled` only.
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
 
     WebhookOutSubscriptionPage:
       type: object

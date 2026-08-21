@@ -106,6 +106,32 @@ def _build_project_manager(*, db_session: Any) -> Any:
     return rtnval
 
 
+def _resolve_release_status(*, value: Optional[str]) -> Any:
+    """
+        Resolve a ``status`` query-param string to the
+        :class:`ReleaseStatus` enum member the manager's filter
+        expects (``list_releases`` dereferences ``status.value``,
+        so a raw string would crash the query). ``None`` / empty
+        / unknown values yield ``None`` (no filter).
+
+        :param value: Raw query-param value.
+
+        :returns: ReleaseStatus member or ``None``.
+    """
+    if value is None:
+        return None
+    if len(value) == 0:
+        return None
+    from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
+        ReleaseStatus,
+    )
+    try:
+        rtnval = ReleaseStatus(value)
+    except ValueError:
+        return None
+    return rtnval
+
+
 def _build_release_manager(*, db_session: Any) -> Any:
     from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
         ReleaseManager,
@@ -154,14 +180,22 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
+    """
+        Compute the real page count from a list response's
+        ``total`` field.
+
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
+
+        :returns: Number of pages (at least 1).
+    """
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
 
 
 def _resolve_view_authorized_project(
@@ -284,30 +318,30 @@ def handle_release_list(request: Request) -> Response:
         status = (
             request.query_params.get("status", None) or None
         )
-        channel = (
-            request.query_params.get("channel", None) or None
+        channel_id = _coerce_int(
+            raw=request.query_params.get("channel_id", None)
         )
 
         release_manager = _build_release_manager(
             db_session=db_session
         )
-        releases = release_manager.list_releases(
+        releases_result = release_manager.list_releases(
             project_id=project_id,
-            status=status,
-            channel=channel,
+            status=_resolve_release_status(value=status),
+            channel_id=channel_id,
             offset=offset,
             limit=params["per_page"],
-        ).releases
+        )
+        releases = releases_result.releases
         channels = release_manager.list_channels(project_id).channels
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=releases_result.total,
             per_page=params["per_page"],
-            returned_count=len(releases),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -325,7 +359,7 @@ def handle_release_list(request: Request) -> Response:
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
         context["selected_status"] = status
-        context["selected_channel"] = channel
+        context["selected_channel_id"] = channel_id
 
         response = _render(
             template_name="projects/releases/list.html",
@@ -437,18 +471,18 @@ def handle_pipeline_list(request: Request) -> Response:
         release_manager = _build_release_manager(
             db_session=db_session
         )
-        pipelines = release_manager.list_pipelines(
+        pipelines_result = release_manager.list_pipelines(
             project_id, offset=offset, limit=params["per_page"]
-        ).pipelines
+        )
+        pipelines = pipelines_result.pipelines
         can_manage = _can_manage(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
         )
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=pipelines_result.total,
             per_page=params["per_page"],
-            returned_count=len(pipelines),
         )
 
         flashes = flash.consume_flashes(session=auth.session)

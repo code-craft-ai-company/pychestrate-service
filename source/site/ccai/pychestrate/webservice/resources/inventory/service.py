@@ -190,12 +190,15 @@ def transition_state(
         db_session: DbSession,
         resource_id: str,
         new_state: ResourceState,
-        actor: str = "system:test"
+        actor: str = "system:test",
+        reason: str = ""
     ) -> ResourceView:
     """
         Apply a permitted state transition. Idempotent on
         same-state moves; raises
-        :class:`ResourceStateTransitionError` otherwise.
+        :class:`ResourceStateTransitionError` otherwise. The
+        optional ``reason`` is recorded on the state-changed
+        event payload.
     """
     row = repository.find_by_id(db_session=db_session, resource_id=resource_id)
     if row is None:
@@ -231,6 +234,7 @@ def transition_state(
                 "from_state": from_state.value,
                 "to_state": new_state.value,
                 "actor": actor,
+                "reason": reason,
             },
             source_event_id=new_uuid(),
         ),

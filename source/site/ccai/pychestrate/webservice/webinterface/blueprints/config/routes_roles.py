@@ -1,29 +1,40 @@
 """
 .. module:: webinterface.blueprints.config.routes_roles
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: WebWorks-native consumer-facing UI for /config/roles
-               (D2 slice -- role management).
+    :synopsis: WebWorks-native consumer-facing UI for /admin/roles
+               (role management over the modern RBAC store).
 
 .. moduleauthor:: Code Craft AI LLC
 
 The role-management routes served under the config blueprint:
 
-* ``GET  /config/roles``                   -- list roles.
-* ``GET  /config/roles/create``            -- new-role form.
-* ``POST /config/roles/create``            -- create role.
-* ``GET  /config/roles/{role_id}``         -- detail page.
-* ``GET  /config/roles/{role_id}/edit``    -- edit form.
-* ``POST /config/roles/{role_id}/edit``    -- update role.
+* ``GET  /admin/roles``                    -- list roles.
+* ``GET  /admin/roles/create``             -- new-role form.
+* ``POST /admin/roles/create``             -- create role.
+* ``GET  /admin/roles/{role_id}``          -- detail page.
+* ``GET  /admin/roles/{role_id}/edit``     -- edit form.
+* ``POST /admin/roles/{role_id}/edit``     -- update role.
+* ``POST /admin/roles/{role_id}/delete``   -- delete role.
 
-System roles (``role.is_system == True``) cannot be modified --
-the edit handler short-circuits with an error flash and the list
-template hides the Edit button.
+The handlers are backed by
+:mod:`webinterface.blueprints.config.identity_admin`, which
+operates on the modern :class:`RbacRole` /
+:class:`RbacRolePermission` / :class:`RbacRoleBinding` tables --
+the store ``rbac_evaluator.check_permission`` evaluates. Custom
+roles created here grant real access once bound; built-in /
+extension roles (grants defined in the in-memory catalog) are
+shown read-only and refuse edit / delete with an explanatory
+message.
 
-Handlers work with the :class:`SystemRole` and
-:class:`Permission` ORM classes via small builder helpers so
-unit tests can patch them at the module level without importing
-the source ORM (which transitively pulls sqlalchemy and the
-password-hashing chain).
+Removing every permission from a role requires the explicit
+``confirm_remove_all`` form acknowledgement so a submit with no
+boxes ticked cannot silently wipe a role's grants.
+
+Test seam
+---------
+
+The ``_svc_*`` module-level builders wrap the lazy service imports
+so unit tests can patch them at the module binding.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -66,135 +77,155 @@ _ROUTE_TABLE = (
     ("config.role_create", "/roles/create", ("GET", "POST")),
     ("config.role_detail", "/roles/{role_id}", ("GET",)),
     ("config.role_edit", "/roles/{role_id}/edit", ("GET", "POST")),
+    ("config.role_delete", "/roles/{role_id}/delete", ("POST",)),
 )
 
 
 # ---------------------------------------------------------------------------
-# Lazy-import builder seams (test-patchable)
+# Lazy-import service seams (test-patchable)
 # ---------------------------------------------------------------------------
 
 
-def _query_all_system_roles(*, db_session: Any) -> List[Any]:
+def _svc_list_roles(*, db_session: Any) -> List[Any]:
     """
-        Return every :class:`SystemRole` row.
+        List every RBAC role (with permissions + binding counts),
+        first ensuring every catalog-declared role has a persisted
+        row so the page shows the complete role set.
 
         :param db_session: Open SQLAlchemy session.
 
-        :returns: List of SystemRole ORM rows.
+        :returns: List of ``AdminRoleView``.
     """
-    from ccai.pychestrate.core.orm import SystemRole  # noqa: E402
-    rtnval = db_session.query(SystemRole).all()
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    identity_admin.ensure_catalog_roles_persisted(db_session=db_session)
+    rtnval = identity_admin.list_rbac_roles(db_session=db_session)
     return rtnval
 
 
-def _query_system_role_by_id(
-        *, db_session: Any, role_id: int
-    ) -> Optional[Any]:
+def _svc_get_role(*, db_session: Any, role_id: str) -> Optional[Any]:
     """
-        Return the :class:`SystemRole` with the supplied id, or
-        ``None``.
+        Fetch one role view, or None.
 
         :param db_session: Open SQLAlchemy session.
-        :param role_id: Integer role id.
+        :param role_id: Role UUID string.
 
-        :returns: SystemRole or None.
+        :returns: An ``AdminRoleView`` or None.
     """
-    from ccai.pychestrate.core.orm import SystemRole  # noqa: E402
-    rtnval = (
-        db_session.query(SystemRole)
-        .filter(SystemRole.id == role_id)
-        .first()
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.get_rbac_role(
+        db_session=db_session, role_id=role_id
     )
     return rtnval
 
 
-def _query_system_role_by_name(
-        *, db_session: Any, name: str
-    ) -> Optional[Any]:
+def _svc_create_role(
+        *,
+        db_session: Any,
+        name: str,
+        description: str,
+        permission_keys: List[str]
+    ) -> str:
     """
-        Return the :class:`SystemRole` with the supplied name, or
-        ``None``. Used by the create handler to detect dupes.
+        Create a custom RBAC role carrying the selected catalog
+        permission keys.
 
-        :param db_session: Open SQLAlchemy session.
-        :param name: Role name.
-
-        :returns: SystemRole or None.
+        :returns: The new role's UUID string.
     """
-    from ccai.pychestrate.core.orm import SystemRole  # noqa: E402
-    rtnval = (
-        db_session.query(SystemRole)
-        .filter(SystemRole.name == name)
-        .first()
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.create_rbac_role(
+        db_session=db_session,
+        name=name,
+        description=description,
+        permission_keys=permission_keys,
     )
     return rtnval
 
 
-def _query_permissions_by_ids(
-        *, db_session: Any, permission_ids: List[int]
-    ) -> List[Any]:
+def _svc_update_role(
+        *,
+        db_session: Any,
+        role_id: str,
+        description: str,
+        permission_keys: List[str]
+    ) -> None:
     """
-        Return the :class:`Permission` rows whose ids are in
-        ``permission_ids``. Returns an empty list when the input
-        is empty (avoids the "IN ()" dialect quirk).
+        Update a custom role's description + permission relation.
+
+        :returns: None.
     """
-    if permission_ids is None or len(permission_ids) == 0:
-        return []
-    from ccai.pychestrate.core.orm import Permission  # noqa: E402
-    rtnval = (
-        db_session.query(Permission)
-        .filter(Permission.id.in_(permission_ids))
-        .all()
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
     )
-    return rtnval
-
-
-def _query_all_permissions(*, db_session: Any) -> List[Any]:
-    """
-        Return every :class:`Permission` row.
-    """
-    from ccai.pychestrate.core.orm import Permission  # noqa: E402
-    rtnval = db_session.query(Permission).all()
-    return rtnval
-
-
-def _build_system_role(
-        *, name: str, description: str, is_system: bool = False
-    ) -> Any:
-    """
-        Construct a :class:`SystemRole` ORM row (not yet added to
-        the session). Lazy imports the class so tests can patch.
-    """
-    from ccai.pychestrate.core.orm import SystemRole  # noqa: E402
-    rtnval = SystemRole(
-        name=name, description=description, is_system=is_system
+    identity_admin.update_rbac_role(
+        db_session=db_session,
+        role_id=role_id,
+        description=description,
+        permission_keys=permission_keys,
     )
-    return rtnval
-
-
-def _add_and_commit(*, db_session: Any, instance: Any) -> None:
-    """
-        ``db_session.add(instance); db_session.commit()`` extracted
-        so tests can patch the persistence step.
-    """
-    db_session.add(instance)
-    db_session.commit()
     return
 
 
-def _commit(*, db_session: Any) -> None:
+def _svc_delete_role(*, db_session: Any, role_id: str) -> int:
     """
-        ``db_session.commit()`` extracted so tests can patch.
+        Delete a custom role (with its permission rows + bindings).
+
+        :returns: Number of bindings that were removed.
     """
-    db_session.commit()
-    return
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.delete_rbac_role(
+        db_session=db_session, role_id=role_id
+    )
+    return rtnval
 
 
-def _rollback(*, db_session: Any) -> None:
+def _svc_list_catalog_permissions() -> List[Any]:
     """
-        ``db_session.rollback()`` extracted so tests can patch.
+        List the valid (catalog-registered) system permission keys
+        for the role forms.
+
+        :returns: List of ``AdminPermissionView``.
     """
-    db_session.rollback()
-    return
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.list_catalog_permissions()
+    return rtnval
+
+
+def _roles_exception_classes() -> Dict[str, type]:
+    """
+        Return a dict mapping the names of the identity-admin service
+        exceptions the role handlers branch on to their classes.
+        Tests patch this to substitute fakes.
+
+        :returns: ``{"AdminValidationError": cls, "AdminDuplicateError":
+                  cls, "AdminNotFoundError": cls,
+                  "BuiltinRoleProtectedError": cls,
+                  "LastAdminRoleError": cls}``
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.identity_admin import (  # noqa: E402
+        AdminDuplicateError,
+        AdminNotFoundError,
+        AdminValidationError,
+        BuiltinRoleProtectedError,
+        LastAdminRoleError,
+    )
+    rtnval = {
+        "AdminValidationError": AdminValidationError,
+        "AdminDuplicateError": AdminDuplicateError,
+        "AdminNotFoundError": AdminNotFoundError,
+        "BuiltinRoleProtectedError": BuiltinRoleProtectedError,
+        "LastAdminRoleError": LastAdminRoleError,
+    }
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -202,32 +233,24 @@ def _rollback(*, db_session: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _coerce_int_list(*, raw_values: List[str]) -> List[int]:
+def _clean_permission_keys(*, raw_values: List[str]) -> List[str]:
     """
-        Convert form-string list to int list, dropping
-        non-numeric entries.
+        Normalize the submitted permission-key checkbox values: strip
+        whitespace and drop empties / duplicates while preserving
+        order.
+
+        :param raw_values: List of submitted strings (may be empty).
+
+        :returns: List of permission keys (may be empty).
     """
-    rtnval: List[int] = []
+    rtnval: List[str] = []
     for value in raw_values:
-        try:
-            rtnval.append(int(value))
-        except (TypeError, ValueError):
+        cleaned = str(value).strip()
+        if len(cleaned) == 0:
             continue
-    return rtnval
-
-
-def _coerce_role_id(*, raw: Any) -> Optional[int]:
-    """
-        Convert a path-param role id to int. Returns None on
-        unparsable input -- the caller treats that as a 404
-        equivalent.
-    """
-    if raw is None:
-        return None
-    try:
-        rtnval = int(raw)
-    except (TypeError, ValueError):
-        return None
+        if cleaned in rtnval:
+            continue
+        rtnval.append(cleaned)
     return rtnval
 
 
@@ -238,7 +261,7 @@ def _coerce_role_id(*, raw: Any) -> Optional[int]:
 
 def handle_role_list(request: Request) -> Response:
     """
-        ``GET /config/roles`` -- list every role.
+        ``GET /admin/roles`` -- list every RBAC role.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -246,7 +269,7 @@ def handle_role_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        roles = _query_all_system_roles(db_session=db_session)
+        roles = _svc_list_roles(db_session=db_session)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -272,8 +295,8 @@ def handle_role_list(request: Request) -> Response:
 
 def handle_role_create(request: Request) -> Response:
     """
-        ``GET /config/roles/create`` -- show the create-role form.
-        ``POST /config/roles/create`` -- create the role.
+        ``GET /admin/roles/create`` -- show the create-role form.
+        ``POST /admin/roles/create`` -- create a custom RBAC role.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -284,7 +307,7 @@ def handle_role_create(request: Request) -> Response:
         method = request.method.upper()
 
         if method == "GET":
-            permissions = _query_all_permissions(db_session=db_session)
+            permissions = _svc_list_catalog_permissions()
             flashes = flash.consume_flashes(session=auth.session)
             context = _build_default_template_context(
                 session=auth.session,
@@ -321,61 +344,48 @@ def handle_role_create(request: Request) -> Response:
 
         name = str(single_form.get("name", "")).strip()
         description = str(single_form.get("description", "")).strip()
-        permission_ids = _coerce_int_list(
-            raw_values=multi_form.get("permission_ids", [])
+        permission_keys = _clean_permission_keys(
+            raw_values=multi_form.get("permission_keys", [])
         )
 
-        validation_error_msg: Optional[str] = None
-        if len(name) == 0:
-            validation_error_msg = "Role name is required."
-        else:
-            existing = _query_system_role_by_name(
-                db_session=db_session, name=name
-            )
-            if existing is not None:
-                validation_error_msg = (
-                    'Role "{}" already exists.'.format(name)
-                )
+        exc_classes = _roles_exception_classes()
 
-        if validation_error_msg is not None:
+        try:
+            _svc_create_role(
+                db_session=db_session,
+                name=name,
+                description=description,
+                permission_keys=permission_keys,
+            )
+
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message='Role "{}" created successfully.'.format(name),
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except exc_classes["AdminValidationError"] as exc:
             flash.add_flash(
                 session=auth.session,
-                message=validation_error_msg,
+                message=getattr(exc, "message", str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
-        else:
-            try:
-                role = _build_system_role(
-                    name=name, description=description, is_system=False
-                )
-                if len(permission_ids) > 0:
-                    permissions = _query_permissions_by_ids(
-                        db_session=db_session,
-                        permission_ids=permission_ids,
-                    )
-                    role.permissions = permissions
-                _add_and_commit(db_session=db_session, instance=role)
-
-                response = _redirect_with_flash(
-                    session=auth.session,
-                    url=_url_for_module.url_for("config.role_list"),
-                    message='Role "{}" created successfully.'.format(name),
-                    category=flash.CATEGORY_SUCCESS,
-                )
-                return response
-            except Exception as exc:
-                try:
-                    _rollback(db_session=db_session)
-                except Exception:
-                    pass
-                flash.add_flash(
-                    session=auth.session,
-                    message="Error creating role: {}".format(str(exc)),
-                    category=flash.CATEGORY_ERROR,
-                )
+        except exc_classes["AdminDuplicateError"] as exc:
+            flash.add_flash(
+                session=auth.session,
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+        except Exception as exc:
+            flash.add_flash(
+                session=auth.session,
+                message="Error creating role: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
 
         # Re-render the form with the submitted values.
-        permissions = _query_all_permissions(db_session=db_session)
+        permissions = _svc_list_catalog_permissions()
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -403,7 +413,8 @@ def handle_role_create(request: Request) -> Response:
 
 def handle_role_detail(request: Request) -> Response:
     """
-        ``GET /config/roles/{role_id}`` -- detail page.
+        ``GET /admin/roles/{role_id}`` -- detail page with the
+        role's permission keys and live binding count.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -411,21 +422,8 @@ def handle_role_detail(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        role_id = _coerce_role_id(
-            raw=request.path_params.get("role_id", None)
-        )
-        if role_id is None:
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=_url_for_module.url_for("config.role_list"),
-                message="Role not found.",
-                category=flash.CATEGORY_ERROR,
-            )
-            return response
-
-        role = _query_system_role_by_id(
-            db_session=db_session, role_id=role_id
-        )
+        role_id = str(request.path_params.get("role_id", ""))
+        role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
             response = _redirect_with_flash(
                 session=auth.session,
@@ -460,9 +458,13 @@ def handle_role_detail(request: Request) -> Response:
 
 def handle_role_edit(request: Request) -> Response:
     """
-        ``GET /config/roles/{role_id}/edit`` -- edit form.
-        ``POST /config/roles/{role_id}/edit`` -- apply update.
-        System roles refuse the update with an error flash.
+        ``GET /admin/roles/{role_id}/edit`` -- edit form.
+        ``POST /admin/roles/{role_id}/edit`` -- apply update.
+
+        Built-in / extension roles refuse the update with an error
+        flash. Submitting an empty permission set requires the
+        ``confirm_remove_all`` acknowledgement checkbox so a role's
+        grants cannot be silently wiped.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -470,21 +472,8 @@ def handle_role_edit(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        role_id = _coerce_role_id(
-            raw=request.path_params.get("role_id", None)
-        )
-        if role_id is None:
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=_url_for_module.url_for("config.role_list"),
-                message="Role not found.",
-                category=flash.CATEGORY_ERROR,
-            )
-            return response
-
-        role = _query_system_role_by_id(
-            db_session=db_session, role_id=role_id
-        )
+        role_id = str(request.path_params.get("role_id", ""))
+        role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
             response = _redirect_with_flash(
                 session=auth.session,
@@ -519,57 +508,90 @@ def handle_role_edit(request: Request) -> Response:
                     url=_url_for_module.url_for(
                         "config.role_detail", role_id=role_id
                     ),
-                    message="System roles cannot be modified.",
+                    message=(
+                        "Built-in roles cannot be modified. Their "
+                        "permissions are defined by the system."
+                    ),
                     category=flash.CATEGORY_ERROR,
                 )
                 return response
 
-            try:
-                description = str(
-                    single_form.get("description", "")
-                ).strip()
-                permission_ids = _coerce_int_list(
-                    raw_values=multi_form.get("permission_ids", [])
-                )
+            description = str(single_form.get("description", "")).strip()
+            permission_keys = _clean_permission_keys(
+                raw_values=multi_form.get("permission_keys", [])
+            )
+            confirm_remove_all = (
+                str(single_form.get("confirm_remove_all", "")) == "on"
+            )
 
-                role.description = description
-                if len(permission_ids) > 0:
-                    permissions = _query_permissions_by_ids(
-                        db_session=db_session,
-                        permission_ids=permission_ids,
-                    )
-                    role.permissions = permissions
-                else:
-                    role.permissions = []
-
-                _commit(db_session=db_session)
-
-                response = _redirect_with_flash(
-                    session=auth.session,
-                    url=_url_for_module.url_for(
-                        "config.role_detail", role_id=role_id
-                    ),
-                    message="Role updated successfully.",
-                    category=flash.CATEGORY_SUCCESS,
-                )
-                return response
-            except Exception as exc:
-                try:
-                    _rollback(db_session=db_session)
-                except Exception:
-                    pass
+            if len(permission_keys) == 0 and confirm_remove_all is False:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating role: {}".format(str(exc)),
+                    message=(
+                        "No permissions are selected. Tick "
+                        '"I intend to remove all permissions from '
+                        'this role" to confirm, or select the '
+                        "permissions the role should keep."
+                    ),
                     category=flash.CATEGORY_ERROR,
                 )
+            else:
+                exc_classes = _roles_exception_classes()
+                try:
+                    _svc_update_role(
+                        db_session=db_session,
+                        role_id=role_id,
+                        description=description,
+                        permission_keys=permission_keys,
+                    )
+
+                    response = _redirect_with_flash(
+                        session=auth.session,
+                        url=_url_for_module.url_for(
+                            "config.role_detail", role_id=role_id
+                        ),
+                        message="Role updated successfully.",
+                        category=flash.CATEGORY_SUCCESS,
+                    )
+                    return response
+                except exc_classes["BuiltinRoleProtectedError"] as exc:
+                    response = _redirect_with_flash(
+                        session=auth.session,
+                        url=_url_for_module.url_for(
+                            "config.role_detail", role_id=role_id
+                        ),
+                        message=getattr(exc, "message", str(exc)),
+                        category=flash.CATEGORY_ERROR,
+                    )
+                    return response
+                except exc_classes["AdminValidationError"] as exc:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=getattr(exc, "message", str(exc)),
+                        category=flash.CATEGORY_ERROR,
+                    )
+                except Exception as exc:
+                    flash.add_flash(
+                        session=auth.session,
+                        message="Error updating role: {}".format(str(exc)),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         # GET, or POST that fell through after a recoverable error.
-        permissions = _query_all_permissions(db_session=db_session)
-        current_permission_ids: List[int] = []
-        if getattr(role, "permissions", None) is not None:
-            for p in role.permissions:
-                current_permission_ids.append(p.id)
+        role = _svc_get_role(db_session=db_session, role_id=role_id)
+        if role is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message="Role not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        permissions = _svc_list_catalog_permissions()
+        current_permission_keys: List[str] = []
+        for entry in role.permissions:
+            current_permission_keys.append(entry.id)
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -580,7 +602,7 @@ def handle_role_edit(request: Request) -> Response:
         )
         context["role"] = role
         context["permissions"] = permissions
-        context["current_permission_ids"] = current_permission_ids
+        context["current_permission_keys"] = current_permission_keys
         response = _render(
             template_name="config/roles/edit.html",
             context=context,
@@ -589,6 +611,109 @@ def handle_role_edit(request: Request) -> Response:
             response=response, session=auth.session
         )
         return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_role_delete(request: Request) -> Response:
+    """
+        ``POST /admin/roles/{role_id}/delete`` -- delete a custom
+        role and every binding referencing it, redirect to the list
+        with a flash reporting how many users lost the role.
+        Built-in roles and the last role granting the admin UI are
+        refused.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        role_id = str(request.path_params.get("role_id", ""))
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.role_list"),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        role = _svc_get_role(db_session=db_session, role_id=role_id)
+        if role is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message="Role not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        role_name = role.name
+        exc_classes = _roles_exception_classes()
+
+        try:
+            removed_count = _svc_delete_role(
+                db_session=db_session, role_id=role_id
+            )
+            if removed_count == 1:
+                consequence = "1 user lost this role."
+            else:
+                consequence = "{} users lost this role.".format(
+                    removed_count
+                )
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message='Role "{}" deleted. {}'.format(
+                    role_name, consequence
+                ),
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except exc_classes["AdminNotFoundError"]:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message="Role not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except exc_classes["BuiltinRoleProtectedError"] as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "config.role_detail", role_id=role_id
+                ),
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except exc_classes["LastAdminRoleError"] as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "config.role_detail", role_id=role_id
+                ),
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.role_list"),
+                message="Error deleting role: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
     finally:
         try:
             db_session.close()
@@ -606,6 +731,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.role_create": handle_role_create,
     "config.role_detail": handle_role_detail,
     "config.role_edit": handle_role_edit,
+    "config.role_delete": handle_role_delete,
 }
 
 
@@ -631,4 +757,5 @@ __all__ = [
     "handle_role_create",
     "handle_role_detail",
     "handle_role_edit",
+    "handle_role_delete",
 ]

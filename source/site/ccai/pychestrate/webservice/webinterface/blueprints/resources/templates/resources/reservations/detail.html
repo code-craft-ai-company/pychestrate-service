@@ -14,31 +14,31 @@
             <div class="card-header">Reservation Information</div>
             <table class="data-table" style="margin-top: 0;">
                 <tr>
-                    <th style="width: 150px;">ID</th>
+                    <th scope="row" style="width: 150px;">ID</th>
                     <td>{{ reservation.id }}</td>
                 </tr>
                 <tr>
-                    <th>Resource</th>
+                    <th scope="row">Resource</th>
                     <td><a href="{{ url_for('resources.resource_detail', resource_id=reservation.resource_id) }}">{{ reservation.resource_name }}</a></td>
                 </tr>
                 <tr>
-                    <th>User</th>
+                    <th scope="row">User</th>
                     <td>{{ reservation.username }}</td>
                 </tr>
                 <tr>
-                    <th>Job ID</th>
+                    <th scope="row">Job ID</th>
                     <td>{{ reservation.job_id or '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Start Time</th>
+                    <th scope="row">Start Time</th>
                     <td>{{ reservation.start_time.strftime('%Y-%m-%d %H:%M:%S') if reservation.start_time else '-' }}</td>
                 </tr>
                 <tr>
-                    <th>End Time</th>
+                    <th scope="row">End Time</th>
                     <td>{{ reservation.end_time.strftime('%Y-%m-%d %H:%M:%S') if reservation.end_time else '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Mode</th>
+                    <th scope="row">Mode</th>
                     <td>
                         {% set mode = reservation.mode.value if reservation.mode.value else reservation.mode %}
                         {% if mode == 'exclusive' %}
@@ -49,7 +49,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <th>Status</th>
+                    <th scope="row">Status</th>
                     <td>
                         {% if reservation.status == 'pending' %}
                         <span class="badge badge-warning">Pending</span>
@@ -65,7 +65,7 @@
                     </td>
                 </tr>
                 <tr>
-                    <th>Created</th>
+                    <th scope="row">Created</th>
                     <td>{{ reservation.created_at.strftime('%Y-%m-%d %H:%M:%S') if reservation.created_at else '-' }}</td>
                 </tr>
             </table>
@@ -78,12 +78,12 @@
             <div class="card-header">Actions</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <a href="{{ url_for('resources.reservation_edit', reservation_id=reservation.id) }}" class="btn btn-secondary">
-                    <span class="material-icons">edit</span> Edit Reservation
+                    <span class="material-icons" aria-hidden="true">edit</span> Edit Reservation
                 </a>
                 <form action="{{ url_for('resources.reservation_cancel', reservation_id=reservation.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Cancel this reservation?')">
-                        <span class="material-icons">cancel</span> Cancel Reservation
+                        <span class="material-icons" aria-hidden="true">cancel</span> Cancel Reservation
                     </button>
                 </form>
             </div>
@@ -94,10 +94,10 @@
             <div class="card-header">Navigation</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <a href="{{ url_for('resources.resource_detail', resource_id=reservation.resource_id) }}" class="btn btn-secondary">
-                    <span class="material-icons">devices</span> View Resource
+                    <span class="material-icons" aria-hidden="true">devices</span> View Resource
                 </a>
                 <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">
-                    <span class="material-icons">event</span> All Reservations
+                    <span class="material-icons" aria-hidden="true">event</span> All Reservations
                 </a>
             </div>
         </div>

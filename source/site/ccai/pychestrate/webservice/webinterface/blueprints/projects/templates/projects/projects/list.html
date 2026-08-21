@@ -10,7 +10,8 @@
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="search" class="form-control" placeholder="Search projects..." 
+        <input type="text" name="search" class="form-control" placeholder="Search projects..."
+               aria-label="Search projects"
                value="{{ search }}" style="width: 300px;">
         <button type="submit" class="btn btn-secondary">
             <span class="material-icons">search</span> Search
@@ -63,19 +64,19 @@
 {% if total_pages > 1 %}
 <div class="pagination">
     {% if page > 1 %}
-    <a href="{{ url_for('projects.project_list', page=page-1, search=search) }}">&laquo; Previous</a>
+    <a href="{{ url_for('projects.project_list', page=page-1, search=search or none) }}">&laquo; Previous</a>
     {% endif %}
     
     {% for p in range(1, total_pages + 1) %}
         {% if p == page %}
         <span class="active">{{ p }}</span>
         {% else %}
-        <a href="{{ url_for('projects.project_list', page=p, search=search) }}">{{ p }}</a>
+        <a href="{{ url_for('projects.project_list', page=p, search=search or none) }}">{{ p }}</a>
         {% endif %}
     {% endfor %}
     
     {% if page < total_pages %}
-    <a href="{{ url_for('projects.project_list', page=page+1, search=search) }}">Next &raquo;</a>
+    <a href="{{ url_for('projects.project_list', page=page+1, search=search or none) }}">Next &raquo;</a>
     {% endif %}
 </div>
 {% endif %}

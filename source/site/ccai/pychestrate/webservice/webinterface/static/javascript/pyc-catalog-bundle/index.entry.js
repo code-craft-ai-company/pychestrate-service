@@ -121,13 +121,16 @@ import {
   format_timestamp,
   has_next_page,
   has_previous_page,
-  trigger_message_for_status
+  trigger_message_for_status,
+  list_load_message_for_status,
+  announce_session_expired
 } from "./catalog-view.js";
 if (typeof window !== "undefined") {
   _boot();
 }
 export {
   PycTestCatalog2 as PycTestCatalog,
+  announce_session_expired,
   build_catalog_import_url,
   build_catalog_query_url,
   build_test_runs_url,
@@ -137,6 +140,7 @@ export {
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   mount_catalog_view_if_active,
   register_catalog_sidebar,
   selection_summary,

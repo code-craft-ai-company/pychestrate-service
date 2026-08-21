@@ -32,6 +32,9 @@ from typing import List
 
 from ccai import testbase
 
+from ccai.pychestrate.webservice.security.rbac.extensions.core_permissions import (
+    CorePermissionExtension,
+)
 from ccai.pychestrate.webservice.webinterface.site_shell.nav_manifest import (
     NAV_ENTRIES,
     NAV_GROUPS,
@@ -166,6 +169,28 @@ def test_group_with_no_visible_entries_is_dropped():
     ]
     testbase.assert_equal(len(admin_groups), 1)
     testbase.assert_true(len(admin_groups[0]["entries"]) > 0)
+    return
+
+
+def test_every_manifest_permission_key_is_declared_in_the_catalog():
+    """
+    **Feature: site-shell central nav manifest**
+    **Property: Every permission key any group or entry requires
+    is declared by the core permission pack. A key that exists
+    nowhere in the catalog can never be held by any principal, so
+    the entry requiring it is invisible to every user forever --
+    this is the regression for the fleet.pods / fleet.clients
+    entries that referenced undeclared system:pods.read /
+    system:clients.read keys.**
+    """
+    declared = set(CorePermissionExtension.permission_keys)
+
+    missing = []
+    for key in _all_manifest_permission_keys():
+        if key not in declared:
+            missing.append(key)
+
+    testbase.assert_equal(missing, [])
     return
 
 

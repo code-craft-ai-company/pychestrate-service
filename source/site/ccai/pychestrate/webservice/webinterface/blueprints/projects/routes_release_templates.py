@@ -183,23 +183,22 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
     """
-        Compute an approximate ``total_pages`` for paginator UI.
+        Compute the real page count from a list response's
+        ``total`` field.
 
-        :param page: Current 1-based page.
+        :param total: Total matching rows reported by the manager.
         :param per_page: Page size.
-        :param returned_count: Rows on the current page.
 
-        :returns: Approximate total pages.
+        :returns: Number of pages (at least 1).
     """
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
 
 
 def _parse_json_object_or_none(
@@ -396,10 +395,9 @@ def handle_release_template_list(request: Request) -> Response:
         except Exception:
             can_manage = False
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=result.total,
             per_page=params["per_page"],
-            returned_count=len(templates),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -780,8 +778,15 @@ def handle_release_template_edit(request: Request) -> Response:
 
         method = request.method.upper()
 
+        # Populated on a POST that falls through to the re-render
+        # so the form shows the submitted values rather than the
+        # stale database copy.
+        form_view: Optional[MultiFormView] = None
+
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
+            multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -871,6 +876,7 @@ def handle_release_template_edit(request: Request) -> Response:
         )
         context["project"] = project
         context["template"] = template
+        context["form_data"] = form_view
         context["default_pipeline_json"] = (
             json.dumps(template.default_pipeline, indent=2)
             if template.default_pipeline is not None else ""
@@ -886,6 +892,7 @@ def handle_release_template_edit(request: Request) -> Response:
         response = _render(
             template_name="projects/release_templates/edit.html",
             context=context,
+            status_code=400 if form_view is not None else 200,
         )
         _attach_session_to_response(
             response=response, session=auth.session

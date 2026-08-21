@@ -19,3 +19,4 @@ class ResultEventTopics:
     TREE_LANDED = "entity.result_tree.landed"
     ARTIFACT_INGESTED = "entity.artifact.ingested"
     TASK_RESULT_INGESTED = "entity.task_result.ingested"
+    MANIFEST_LANDED = "entity.result_manifest.landed"

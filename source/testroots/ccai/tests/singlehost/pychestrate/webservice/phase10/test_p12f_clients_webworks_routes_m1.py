@@ -32,8 +32,10 @@ from ccai.webworks.routing.response import JSONResponse
 from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_JSON_MEDIA_TYPE,
     PROBLEM_TYPE_BAD_REQUEST,
+    PROBLEM_TYPE_FORBIDDEN,
     PROBLEM_TYPE_NOT_FOUND,
     PROBLEM_TYPE_SERVICE_UNAVAILABLE,
+    PROBLEM_TYPE_UNAUTHENTICATED,
 )
 from ccai.pychestrate.webservice.clients.enums import (
     ClientStatus,
@@ -76,6 +78,7 @@ class _FakeRequest:
         body_raises: bool = False,
         db_session: Optional[Any] = None,
         actor_user_id: Optional[str] = None,
+        auth_principal: Optional[Any] = None,
     ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = path_params if path_params is not None else {}
@@ -84,6 +87,7 @@ class _FakeRequest:
         self._body_raises: bool = body_raises
         self.db_session: Optional[Any] = db_session
         self.actor_user_id: Optional[str] = actor_user_id
+        self.auth_principal: Optional[Any] = auth_principal
         return
 
     def json(self) -> Any:
@@ -140,6 +144,28 @@ class _FakeView:
         self.revision_token: str = "rev-1"
         self.attributes: Dict[str, Any] = attributes if attributes is not None else {}
         return
+
+
+class _FakePrincipal:
+    def __init__(self, *, user_id: str = "user-1") -> None:
+        self.user_id: str = user_id
+        return
+
+
+class _FakeDecision:
+    def __init__(self, *, allowed: bool, reason: str = "") -> None:
+        self.allowed: bool = allowed
+        self.reason: str = reason
+        return
+
+
+def _patch_check_permission(*, allowed: bool) -> Any:
+    patch = create_module_patch(
+        clients_routes.rbac_evaluator, "check_permission",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: _FakeDecision(allowed=allowed))
+    return patch
 
 
 def _decode_body(response: Any) -> Any:
@@ -244,6 +270,100 @@ def test_handle_update_attributes_returns_503_when_session_missing():
 
 
 # ---------------------------------------------------------------------------
+# RBAC sweep
+# ---------------------------------------------------------------------------
+
+
+def test_handle_list_returns_401_when_no_principal():
+    """
+    **Feature: 3-client-registry (RBAC gating)**
+    **Property: GET /clients returns 401 problem+json when no
+    AuthPrincipal is bound to the request.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/clients",
+        db_session=object(),
+        auth_principal=None,
+    )
+    response = clients_routes.handle_list_clients(request)
+    testbase.assert_equal(response.status_code, 401)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_UNAUTHENTICATED)
+    return
+
+
+def test_handle_list_returns_403_when_read_permission_denied():
+    """
+    **Feature: 3-client-registry (RBAC gating)**
+    **Property: GET /clients returns 403 problem+json carrying
+    system:clients.read as required_permission when the principal
+    lacks the read key.**
+    """
+    perm_patch = _patch_check_permission(allowed=False)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = clients_routes.handle_list_clients(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_FORBIDDEN)
+    testbase.assert_equal(
+        body["required_permission"], "system:clients.read",
+    )
+    return
+
+
+def test_handle_revoke_returns_403_when_write_permission_denied():
+    """
+    **Feature: 3-client-registry (RBAC gating)**
+    **Property: POST /clients/{id}/revoke returns 403 problem+json
+    carrying system:clients.write as required_permission when the
+    principal lacks the write key.**
+    """
+    perm_patch = _patch_check_permission(allowed=False)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/c-1/revoke",
+            path_params={"client_id": "c-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"reason": "ROTATED"},
+        )
+        response = clients_routes.handle_revoke_client(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        body["required_permission"], "system:clients.write",
+    )
+    return
+
+
+def test_handle_update_attributes_returns_401_when_no_principal():
+    """
+    **Feature: 3-client-registry (RBAC gating)**
+    **Property: PUT /clients/{id}/attributes returns 401 when no
+    AuthPrincipal is bound to the request.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/clients/c-1/attributes",
+        path_params={"client_id": "c-1"},
+        db_session=object(),
+        auth_principal=None,
+        body={"updates": []},
+    )
+    response = clients_routes.handle_update_client_attributes(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+# ---------------------------------------------------------------------------
 # handle_list_clients
 # ---------------------------------------------------------------------------
 
@@ -263,10 +383,16 @@ def test_handle_list_returns_serialized_views_with_no_filters():
         return views
 
     patch = _patch_routes_attr(name="list_clients", value=fake_list)
+    perm_patch = _patch_check_permission(allowed=True)
     try:
-        request = _FakeRequest(path="/api/v1/clients", db_session=object())
+        request = _FakeRequest(
+            path="/api/v1/clients",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
         response = clients_routes.handle_list_clients(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
@@ -291,10 +417,12 @@ def test_handle_list_propagates_all_three_filters():
         return []
 
     patch = _patch_routes_attr(name="list_clients", value=fake_list)
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients",
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             query={
                 "project_id": "p-7",
                 "status": "ACTIVE",
@@ -303,6 +431,7 @@ def test_handle_list_propagates_all_three_filters():
         )
         clients_routes.handle_list_clients(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(captured["project_id"], "p-7")
@@ -319,12 +448,17 @@ def test_handle_list_returns_400_with_requested_status_extension_on_unknown_stat
     the flask controller's specific extension key (not a generic
     ``status``).**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients",
-        db_session=object(),
-        query={"status": "GARBAGE"},
-    )
-    response = clients_routes.handle_list_clients(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            query={"status": "GARBAGE"},
+        )
+        response = clients_routes.handle_list_clients(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_BAD_REQUEST)
@@ -339,12 +473,17 @@ def test_handle_list_returns_400_with_requested_liveness_state_extension():
     +json carrying ``requested_liveness_state`` as the extension
     key.**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients",
-        db_session=object(),
-        query={"liveness_state": "GARBAGE"},
-    )
-    response = clients_routes.handle_list_clients(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            query={"liveness_state": "GARBAGE"},
+        )
+        response = clients_routes.handle_list_clients(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["requested_liveness_state"], "GARBAGE")
@@ -366,14 +505,17 @@ def test_handle_read_returns_view_on_match():
     patch = _patch_routes_attr(
         name="get_client", value=lambda **kwargs: view,
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-1",
             path_params={"client_id": "c-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
         response = clients_routes.handle_read_client(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
@@ -392,14 +534,17 @@ def test_handle_read_returns_404_with_client_id_extension():
     patch = _patch_routes_attr(
         name="get_client", value=_raises(ClientNotFoundError("missing")),
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-missing",
             path_params={"client_id": "c-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
         )
         response = clients_routes.handle_read_client(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 404)
@@ -428,16 +573,19 @@ def test_handle_revoke_returns_200_with_actor_propagation():
         return None
 
     patch = _patch_routes_attr(name="revoke_client", value=fake_revoke)
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-1/revoke",
             path_params={"client_id": "c-1"},
             db_session=object(),
             actor_user_id="user-42",
+            auth_principal=_FakePrincipal(),
             body={"reason": "ROTATED", "note": "scheduled rotation"},
         )
         response = clients_routes.handle_revoke_client(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
@@ -457,13 +605,18 @@ def test_handle_revoke_returns_400_on_unknown_reason():
     which the handler converts to 400 problem+json with the
     client_id extension.**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients/c-1/revoke",
-        path_params={"client_id": "c-1"},
-        db_session=object(),
-        body={"reason": "GARBAGE"},
-    )
-    response = clients_routes.handle_revoke_client(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/c-1/revoke",
+            path_params={"client_id": "c-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"reason": "GARBAGE"},
+        )
+        response = clients_routes.handle_revoke_client(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["client_id"], "c-1")
@@ -480,15 +633,18 @@ def test_handle_revoke_returns_404_on_unknown_client():
         name="revoke_client",
         value=_raises(ClientNotFoundError("missing")),
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-missing/revoke",
             path_params={"client_id": "c-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"reason": "ROTATED"},
         )
         response = clients_routes.handle_revoke_client(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 404)
@@ -532,11 +688,13 @@ def test_handle_update_attributes_returns_200_with_kinds_written():
         return ["toolchain", "concurrency"]
 
     patch = _patch_routes_attr(name="update_attributes", value=fake_update)
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-1/attributes",
             path_params={"client_id": "c-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={
                 "expected_revision_token": "rev-7",
                 "updates": [
@@ -547,6 +705,7 @@ def test_handle_update_attributes_returns_200_with_kinds_written():
         )
         response = clients_routes.handle_update_client_attributes(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 200)
@@ -565,13 +724,18 @@ def test_handle_update_attributes_returns_400_when_updates_is_not_a_list():
     **Property: ``updates`` field that is not a list returns 400
     problem+json with the client_id extension.**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients/c-1/attributes",
-        path_params={"client_id": "c-1"},
-        db_session=object(),
-        body={"updates": "wrong shape"},
-    )
-    response = clients_routes.handle_update_client_attributes(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/c-1/attributes",
+            path_params={"client_id": "c-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"updates": "wrong shape"},
+        )
+        response = clients_routes.handle_update_client_attributes(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
     testbase.assert_equal(body["client_id"], "c-1")
@@ -583,13 +747,18 @@ def test_handle_update_attributes_returns_400_on_empty_kind():
     **Feature: 3-client-registry T1.1 (webworks routes)**
     **Property: An update entry with an empty ``kind`` returns 400.**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients/c-1/attributes",
-        path_params={"client_id": "c-1"},
-        db_session=object(),
-        body={"updates": [{"kind": "", "value": "x"}]},
-    )
-    response = clients_routes.handle_update_client_attributes(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/c-1/attributes",
+            path_params={"client_id": "c-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"updates": [{"kind": "", "value": "x"}]},
+        )
+        response = clients_routes.handle_update_client_attributes(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     return
 
@@ -599,13 +768,18 @@ def test_handle_update_attributes_returns_400_when_entry_is_not_an_object():
     **Feature: 3-client-registry T1.1 (webworks routes)**
     **Property: A non-object update entry returns 400.**
     """
-    request = _FakeRequest(
-        path="/api/v1/clients/c-1/attributes",
-        path_params={"client_id": "c-1"},
-        db_session=object(),
-        body={"updates": ["just-a-string"]},
-    )
-    response = clients_routes.handle_update_client_attributes(request)
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/c-1/attributes",
+            path_params={"client_id": "c-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"updates": ["just-a-string"]},
+        )
+        response = clients_routes.handle_update_client_attributes(request)
+    finally:
+        perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 400)
     return
 
@@ -620,15 +794,18 @@ def test_handle_update_attributes_returns_400_on_unknown_attribute_kind():
         name="update_attributes",
         value=_raises(UnknownAttributeKindError("unknown kind")),
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-1/attributes",
             path_params={"client_id": "c-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"updates": [{"kind": "fake_kind", "value": 1}]},
         )
         response = clients_routes.handle_update_client_attributes(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 400)
@@ -644,15 +821,18 @@ def test_handle_update_attributes_returns_400_on_invalid_attribute_value():
         name="update_attributes",
         value=_raises(InvalidAttributeValueError("bad value")),
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-1/attributes",
             path_params={"client_id": "c-1"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"updates": [{"kind": "concurrency", "value": "x"}]},
         )
         response = clients_routes.handle_update_client_attributes(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 400)
@@ -669,15 +849,18 @@ def test_handle_update_attributes_returns_404_on_unknown_client():
         name="update_attributes",
         value=_raises(ClientNotFoundError("missing")),
     )
+    perm_patch = _patch_check_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/clients/c-missing/attributes",
             path_params={"client_id": "c-missing"},
             db_session=object(),
+            auth_principal=_FakePrincipal(),
             body={"updates": [{"kind": "k", "value": 1}]},
         )
         response = clients_routes.handle_update_client_attributes(request)
     finally:
+        perm_patch.deactivate()
         patch.deactivate()
 
     testbase.assert_equal(response.status_code, 404)

@@ -14,7 +14,7 @@
             <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">folder</span>
             Your Projects
         </div>
-        <div style="font-size: 2rem; font-weight: 600; color: #1a1a2e;">{{ projects|length }}</div>
+        <div style="font-size: 2rem; font-weight: 600; color: var(--pyc-color-on-surface, #1a1a2e);">{{ projects|length }}</div>
         <p style="color: #6c757d; margin: 5px 0 0;">Projects you have access to</p>
     </div>
 </div>
@@ -61,6 +61,64 @@
         No projects yet. <a href="{{ url_for('projects.project_create') }}">Create your first project</a>
     </p>
     {% endif %}
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+    <div class="card">
+        <div class="card-header">Recent Builds</div>
+        {% if recent_builds %}
+        <table class="data-table" style="margin-top: 0;">
+            <tbody>
+                {% for build in recent_builds %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('projects.build_detail', project_id=build.project_id, build_id=build.id) }}">
+                            #{{ build.id }}
+                        </a>
+                    </td>
+                    <td>{{ build.spec_name }}</td>
+                    <td>
+                        <span class="badge badge-{% if build.status.value == 'succeeded' %}success{% elif build.status.value == 'failed' %}danger{% elif build.status.value == 'running' %}info{% else %}secondary{% endif %}">
+                            {{ build.status.value }}
+                        </span>
+                    </td>
+                    <td>{{ build.created_at.strftime('%Y-%m-%d %H:%M') if build.created_at else '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #6c757d; text-align: center; padding: 20px;">No builds yet. Builds appear here when a build specification runs in one of your projects.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header">Recent Tests</div>
+        {% if recent_tests %}
+        <table class="data-table" style="margin-top: 0;">
+            <tbody>
+                {% for test in recent_tests %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('projects.test_job_detail', project_id=test.project_id, job_id=test.id) }}">
+                            #{{ test.id }}
+                        </a>
+                    </td>
+                    <td>{{ test.spec_name }}</td>
+                    <td>
+                        <span class="badge badge-{% if test.status.value == 'succeeded' %}success{% elif test.status.value == 'failed' %}danger{% elif test.status.value == 'running' %}info{% else %}secondary{% endif %}">
+                            {{ test.status.value }}
+                        </span>
+                    </td>
+                    <td>{{ test.created_at.strftime('%Y-%m-%d %H:%M') if test.created_at else '' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #6c757d; text-align: center; padding: 20px;">No tests yet. Test jobs appear here when a test specification runs in one of your projects.</p>
+        {% endif %}
+    </div>
 </div>
 
 <a href="{{ url_for('projects.project_list') }}" class="btn btn-secondary">

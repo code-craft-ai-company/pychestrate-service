@@ -15,7 +15,7 @@
 
 <div class="page-header">
     <h2>Infrastructure Specifications</h2>
-    <p>Manage infrastructure configurations</p>
+    <p>Infrastructure configurations (read-only; managed via API)</p>
 </div>
 
 <table class="data-table">
@@ -49,7 +49,9 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No infrastructure specifications found</td>
+            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+                No infrastructure specifications yet. Infrastructure specifications are managed via the API.
+            </td>
         </tr>
         {% endfor %}
     </tbody>

@@ -36,6 +36,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -62,7 +64,12 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _build_page_window,
+    _calculate_total_pages,
 )
+
+
+_LOGGER = logging.getLogger("pychestrate.ui.resources.health")
 
 
 _ROUTE_TABLE = (
@@ -213,14 +220,39 @@ def _group_resources_by_health_status(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _describe_health_monitor_error(*, exc: Exception) -> Optional[str]:
+    """
+        Map a typed HealthMonitor error to its deliberate,
+        user-facing message. Returns None when ``exc`` is not one
+        of the typed errors -- callers then log the exception and
+        flash a generic sentence instead of the raw exception
+        text. Lazy-imports so this module stays importable when
+        the manager package is absent (test runtimes patch the
+        manager builders).
+
+        :param exc: The exception raised by a HealthMonitor call.
+
+        :returns: Specific user-facing message, or None.
+    """
+    try:
+        from ccai.pychestrate.core.managers.health_monitor import (  # noqa: E402
+            HealthCheckConfigNotFoundError,
+            HealthMonitorError,
+        )
+    except ImportError:
+        return None
+
+    if isinstance(exc, HealthCheckConfigNotFoundError):
+        rtnval = (
+            "{}. Configure a health check for this resource"
+            " first.".format(exc.message)
+        )
+        return rtnval
+
+    if isinstance(exc, HealthMonitorError):
+        rtnval = exc.message
+        return rtnval
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -239,13 +271,19 @@ def handle_health_dashboard(request: Request) -> Response:
     db_session = auth.db_session
     try:
         resource_manager = _build_resource_manager(db_session=db_session)
-        # health_monitor isn't needed for the dashboard but the
-        # legacy handler builds one. Skip in the port -- nothing
-        # uses it.
+        # The stat cards use a dedicated aggregate count query so
+        # they stay honest past the grouped-table fetch limit; the
+        # per-status tables below are bounded and the template
+        # shows a "Showing N of M" note when a group is truncated.
+        health_counts = resource_manager.count_resources_by_health_status()
         resources = resource_manager.list_resources(limit=1000).resources
         health_groups = _group_resources_by_health_status(
             resources=resources
         )
+
+        total_count = 0
+        for status_count in health_counts.values():
+            total_count = total_count + status_count
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -255,7 +293,8 @@ def handle_health_dashboard(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["health_groups"] = health_groups
-        context["total_count"] = len(resources)
+        context["health_counts"] = health_counts
+        context["total_count"] = total_count
 
         response = _render(
             template_name="resources/health/dashboard.html",
@@ -328,8 +367,11 @@ def handle_health_detail(request: Request) -> Response:
         )
         config = health_monitor.get_health_check_config(resource_id)
 
-        total_pages = _approximate_total_pages(
-            page=page, per_page=per_page, returned_count=len(history.transitions)
+        total_pages = _calculate_total_pages(
+            total=history.total, per_page=per_page
+        )
+        page_window = _build_page_window(
+            page=page, total_pages=total_pages
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -345,6 +387,7 @@ def handle_health_detail(request: Request) -> Response:
         context["page"] = page
         context["per_page"] = per_page
         context["total_pages"] = total_pages
+        context["page_window"] = page_window
 
         response = _render(
             template_name="resources/health/detail.html",
@@ -479,11 +522,21 @@ def handle_health_config(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
+                message = _describe_health_monitor_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception(
+                        "Unexpected error saving health check config"
+                        " for resource %s",
+                        resource_id,
+                    )
+                    message = (
+                        "An unexpected error occurred while saving"
+                        " the configuration. The problem has been"
+                        " logged."
+                    )
                 flash.add_flash(
                     session=auth.session,
-                    message="Error saving configuration: {}".format(
-                        str(exc)
-                    ),
+                    message=message,
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -585,14 +638,23 @@ def handle_health_update(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_health_monitor_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error updating health status for"
+                    " resource %s",
+                    resource_id,
+                )
+                message = (
+                    "An unexpected error occurred while updating the"
+                    " health status. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.health_detail", resource_id=resource_id
                 ),
-                message="Error updating health status: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -655,13 +717,27 @@ def handle_health_run_check(request: Request) -> Response:
 
         health_monitor = _build_health_monitor(db_session=db_session)
         try:
+            # run_health_check returns a HealthCheckResult -- the
+            # outcome is the ``healthy`` flag, and ``error_message``
+            # carries the probe failure reason when present.
             result = health_monitor.run_health_check(resource_id)
-            if result is True:
-                message = "Health check passed."
+            if result.healthy is True:
+                msg_parts = ["Health check passed."]
                 category = flash.CATEGORY_SUCCESS
             else:
-                message = "Health check failed."
+                msg_parts = ["Health check failed."]
+                if result.error_message is not None:
+                    msg_parts.append(
+                        "Reason: {}.".format(result.error_message)
+                    )
                 category = flash.CATEGORY_WARNING
+            if result.status_changed is True:
+                msg_parts.append(
+                    "Status changed from {} to {}.".format(
+                        result.old_status, result.new_status
+                    )
+                )
+            message = " ".join(msg_parts)
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
@@ -672,14 +748,23 @@ def handle_health_run_check(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            message = _describe_health_monitor_error(exc=exc)
+            if message is None:
+                _LOGGER.exception(
+                    "Unexpected error running health check for"
+                    " resource %s",
+                    resource_id,
+                )
+                message = (
+                    "An unexpected error occurred while running the"
+                    " health check. The problem has been logged."
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.health_detail", resource_id=resource_id
                 ),
-                message="Error running health check: {}".format(
-                    str(exc)
-                ),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response

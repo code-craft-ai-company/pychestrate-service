@@ -345,3 +345,16 @@ pyc-slos {
     line-height: 1;
     cursor: pointer;
 }
+
+.pyc-metrics__projects-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-metrics-fg-muted);
+}
+
+.pyc-metrics__projects-notice--error {
+    color: var(--pyc-metrics-error-fg);
+}

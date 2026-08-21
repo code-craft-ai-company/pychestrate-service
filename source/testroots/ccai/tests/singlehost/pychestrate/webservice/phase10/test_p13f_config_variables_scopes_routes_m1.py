@@ -332,12 +332,18 @@ class _FakeSecretManager:
         self.db_session: Any = db_session
         self.list_scopes_response: List[_FakeScope] = []
         self.list_scopes_calls: List[Dict[str, Any]] = []
+        self.get_scope_response: Optional[_FakeScope] = None
+        self.get_scope_calls: List[int] = []
         self.create_scope_calls: List[Any] = []
         self.delete_scope_calls: List[Any] = []
         self.create_scope_raises: Optional[Exception] = None
         self.delete_scope_raises: Optional[Exception] = None
         _FakeSecretManager.last_instance = self
         return
+
+    def get_scope(self, scope_id: int) -> Optional[_FakeScope]:
+        self.get_scope_calls.append(scope_id)
+        return self.get_scope_response
 
     def list_scopes(
             self, user_id: str, *, offset: int = 0, limit: int = 50
@@ -569,7 +575,7 @@ def test_register_variables_routes_attaches_documented_routes():
 def test_register_scopes_routes_attaches_documented_routes():
     """
     **Feature: webworks config scopes port T3.2 (D3)**
-    **Property: register_scopes_routes attaches the three scope
+    **Property: register_scopes_routes attaches the four scope
     routes at /admin/scopes*.**
     """
     _reset_global_state()
@@ -582,6 +588,7 @@ def test_register_scopes_routes_attaches_documented_routes():
         expected = {
             ("/admin/scopes", ("GET",)),
             ("/admin/scopes/create", ("GET", "POST")),
+            ("/admin/scopes/{scope_id}/edit", ("GET", "POST")),
             ("/admin/scopes/{scope_id}/delete", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
@@ -1291,8 +1298,9 @@ def test_handle_scope_create_post_happy_path_redirects_to_list():
 def test_handle_scope_create_post_manager_error_re_renders():
     """
     **Feature: webworks config scopes port T3.11**
-    **Property: secret_manager.create_scope raising yields a
-    400 re-render with an error flash.**
+    **Property: secret_manager.create_scope raising a curated
+    (surfaceable) error yields a 400 re-render with an error
+    flash carrying the curated message.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1306,7 +1314,7 @@ def test_handle_scope_create_post_manager_error_re_renders():
         sm_patch = _patch_security_manager()
 
         def _seed(instance: _FakeSecretManager) -> None:
-            instance.create_scope_raises = RuntimeError(
+            instance.create_scope_raises = ValueError(
                 "duplicate scope name"
             )
             return
@@ -1462,6 +1470,274 @@ def test_handle_scope_delete_manager_error_flashes_error():
         )
     finally:
         for p in (secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_scope_list_passes_pagination_totals():
+    """
+    **Feature: admin UX -- scope list pagination**
+    **Property: GET /admin/scopes passes total + total_pages
+    into the template context so the list can render windowed
+    pagination controls.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        scopes = [
+            _FakeScope(scope_id=n, name="scope-{}".format(n))
+            for n in range(1, 8)
+        ]
+
+        def _seed(instance: _FakeSecretManager) -> None:
+            instance.list_scopes_response = scopes
+            return
+
+        secret_patch = _patch_secret_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            query_mapping={"page": "2", "per_page": "3"},
+        )
+        response = config_routes_scopes.handle_scope_list(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        ctx = env.last_template.render_calls[0]
+        # The fake reports total == len(list_scopes_response).
+        testbase.assert_equal(ctx["total"], 7)
+        testbase.assert_equal(ctx["total_pages"], 3)
+        testbase.assert_equal(ctx["page"], 2)
+        testbase.assert_equal(ctx["per_page"], 3)
+    finally:
+        for p in (secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def _patch_update_scope_description(
+        *, raises: Optional[Exception] = None
+    ) -> Any:
+    """
+        Patch the ``_update_scope_description`` ORM seam in
+        ``routes_scopes``. Returns ``(patch, recorded_calls)`` so
+        callers can assert on the seam's inputs.
+    """
+    recorded_calls: List[Dict[str, Any]] = []
+
+    def _update(
+            *, db_session: Any, scope_id: int, description: str
+        ) -> None:
+        recorded_calls.append({
+            "scope_id": scope_id, "description": description,
+        })
+        if raises is not None:
+            raise raises
+        return
+
+    patch = create_module_patch(
+        config_routes_scopes, "_update_scope_description"
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=_update)
+    rtnval = (patch, recorded_calls)
+    return rtnval
+
+
+def test_handle_scope_edit_get_renders_form():
+    """
+    **Feature: admin UX -- scope edit route**
+    **Property: GET /admin/scopes/{scope_id}/edit renders the
+    scope_edit template with the scope from get_scope.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        scope = _FakeScope(
+            scope_id=3, name="prod", description="Production"
+        )
+
+        def _seed(instance: _FakeSecretManager) -> None:
+            instance.get_scope_response = scope
+            return
+
+        secret_patch = _patch_secret_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"scope_id": "3"},
+        )
+        response = config_routes_scopes.handle_scope_edit(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        testbase.assert_equal(
+            env.template_lookups, ["config/secrets/scope_edit.html"]
+        )
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["scope"], scope)
+        sm = _FakeSecretManager.last_instance
+        testbase.assert_equal(sm.get_scope_calls, [3])
+    finally:
+        for p in (secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_scope_edit_get_redirects_when_scope_missing():
+    """
+    **Feature: admin UX -- scope edit route**
+    **Property: get_scope returning None yields a redirect to
+    /admin/scopes with an error flash.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        secret_patch = _patch_secret_manager()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"scope_id": "99"},
+        )
+        response = config_routes_scopes.handle_scope_edit(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/scopes"
+        )
+    finally:
+        for p in (secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_scope_edit_post_happy_path_updates_description():
+    """
+    **Feature: admin UX -- scope edit route**
+    **Property: A valid edit POST calls the
+    _update_scope_description seam with the submitted
+    description and redirects to /admin/scopes with a success
+    flash.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    upd_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        secret_patch = _patch_secret_manager()
+        upd_patch, recorded_calls = _patch_update_scope_description()
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh&description=Updated+text"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"scope_id": "3"},
+        )
+        response = config_routes_scopes.handle_scope_edit(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/admin/scopes"
+        )
+        testbase.assert_equal(
+            recorded_calls,
+            [{"scope_id": 3, "description": "Updated text"}],
+        )
+    finally:
+        for p in (upd_patch, secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_scope_edit_post_unexpected_error_masks_message():
+    """
+    **Feature: admin UX -- typed error flashes**
+    **Property: A non-curated (unexpected) exception from the
+    update seam re-renders the form with a GENERIC error flash
+    -- the raw exception text never reaches the browser.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    upd_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        scope = _FakeScope(scope_id=3, name="prod")
+
+        def _seed(instance: _FakeSecretManager) -> None:
+            instance.get_scope_response = scope
+            return
+
+        secret_patch = _patch_secret_manager(configure=_seed)
+        upd_patch, _ = _patch_update_scope_description(
+            raises=RuntimeError(
+                "IntegrityError: secret_scopes_pkey violated"
+            )
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = b"csrf_token=csrf-fresh&description=x"
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"scope_id": "3"},
+        )
+        response = config_routes_scopes.handle_scope_edit(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(len(ctx["flashes"]), 1)
+        category, message = ctx["flashes"][0]
+        testbase.assert_equal(category, "error")
+        raw_leaked = "IntegrityError" in message
+        testbase.assert_equal(raw_leaked, False)
+        generic_present = "unexpected internal error" in message
+        testbase.assert_equal(generic_present, True)
+    finally:
+        for p in (upd_patch, secret_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()

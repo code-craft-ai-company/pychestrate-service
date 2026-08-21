@@ -8,17 +8,21 @@
     <p>Resource pool details and contents</p>
 </div>
 
+{% macro page_url(p) -%}
+{{ url_for('resources.pool_detail', pool_id=pool.id, page=p, per_page=per_page) }}
+{%- endmacro %}
+
 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
     <div>
         <div class="card">
             <div class="card-header">Pool Information</div>
             <table class="data-table" style="margin-top: 0;">
                 <tr>
-                    <th style="width: 150px;">ID</th>
+                    <th scope="row" style="width: 150px;">ID</th>
                     <td>{{ pool.id }}</td>
                 </tr>
                 <tr>
-                    <th>Name</th>
+                    <th scope="row">Name</th>
                     <td>
                         {{ pool.name }}
                         {% if pool.is_default %}
@@ -27,34 +31,37 @@
                     </td>
                 </tr>
                 <tr>
-                    <th>Description</th>
+                    <th scope="row">Description</th>
                     <td>{{ pool.description or '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Resource Count</th>
+                    <th scope="row">Resource Count</th>
                     <td>{{ pool.resource_count }}</td>
                 </tr>
                 <tr>
-                    <th>Created</th>
+                    <th scope="row">Created</th>
                     <td>{{ pool.created_at.strftime('%Y-%m-%d %H:%M:%S') if pool.created_at else '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Created By</th>
+                    <th scope="row">Created By</th>
                     <td>{{ pool.created_by or '-' }}</td>
                 </tr>
             </table>
         </div>
-        
+
         <div class="card">
             <div class="card-header">Resources in Pool</div>
             {% if resources %}
+            {% if resource_total > resources | length %}
+            <p style="color: #6c757d; margin-top: 0;">Showing {{ resources | length }} of {{ resource_total }} resources</p>
+            {% endif %}
             <table class="data-table" style="margin-top: 0;">
                 <thead>
                     <tr>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Health</th>
-                        <th>Capacity</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Health</th>
+                        <th scope="col">Capacity</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -70,8 +77,10 @@
                             <span class="badge badge-danger">Offline</span>
                             {% elif status == 'degraded' %}
                             <span class="badge badge-warning">Degraded</span>
-                            {% else %}
+                            {% elif status == 'maintenance' %}
                             <span class="badge badge-secondary">Maintenance</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ status | capitalize }}</span>
                             {% endif %}
                         </td>
                         <td>{{ resource.current_allocations }}/{{ resource.capacity }}</td>
@@ -79,24 +88,54 @@
                     {% endfor %}
                 </tbody>
             </table>
+
+            {% if total_pages > 1 %}
+            <nav class="pagination" aria-label="Pool resource pages">
+                {% if page > 1 %}
+                <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
+                {% endif %}
+
+                {% if page_window[0] > 1 %}
+                <a href="{{ page_url(1) }}">1</a>
+                {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
+                {% endif %}
+
+                {% for p in page_window %}
+                    {% if p == page %}
+                    <span class="active">{{ p }}</span>
+                    {% else %}
+                    <a href="{{ page_url(p) }}">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page_window[-1] < total_pages %}
+                {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
+                <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
+                {% endif %}
+
+                {% if page < total_pages %}
+                <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
+                {% endif %}
+            </nav>
+            {% endif %}
             {% else %}
             <p style="color: #6c757d; margin: 0;">No resources in this pool</p>
             {% endif %}
         </div>
     </div>
-    
+
     <div>
         <div class="card">
             <div class="card-header">Actions</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <a href="{{ url_for('resources.resource_create') }}?pool_id={{ pool.id }}" class="btn btn-primary">
-                    <span class="material-icons">add</span> Add Resource
+                    <span class="material-icons" aria-hidden="true">add</span> Add Resource
                 </a>
                 {% if not pool.is_default %}
                 <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Delete this pool?')">
-                        <span class="material-icons">delete</span> Delete Pool
+                    <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?')">
+                        <span class="material-icons" aria-hidden="true">delete</span> Delete Pool
                     </button>
                 </form>
                 {% endif %}

@@ -29,6 +29,12 @@ overlap with this module's routes — the colon-action
 ``clients``, and ``capabilities`` is a different fixed last
 segment than ``revoke`` / ``attributes``.
 
+All four routes are operator/admin facing and enforce RBAC:
+reads require ``system:clients.read``; revoke and attribute
+updates require ``system:clients.write``. The client-facing
+enrollment/redeem flow lives in :mod:`enrollment_routes` and is
+not gated by these keys.
+
 Error responses are RFC 7807 problem documents per the convention
 in :mod:`api.problem_json_webworks`.
 """
@@ -39,6 +45,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from ccai.errors.exceptions import SemanticError
@@ -68,9 +75,13 @@ from ccai.pychestrate.webservice.clients.registry.service import (
     list_clients,
     update_attributes,
 )
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 CLIENTS_PATH = "/clients"
+
+CLIENTS_READ_PERMISSION_KEY = "system:clients.read"
+CLIENTS_WRITE_PERMISSION_KEY = "system:clients.write"
 
 
 class _ProblemAbort(Exception):
@@ -134,6 +145,60 @@ def _require_session(request: Request) -> Any:
             detail="Request-scoped db_session not configured",
         )
     rtnval = db_session
+    return rtnval
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session
+        middleware, or ``None`` when the request is anonymous.
+
+        :param request: Incoming webworks request.
+
+        :returns: AuthPrincipal or None.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        permission_key: str
+    ) -> Any:
+    """
+        Require the calling principal to hold ``permission_key``.
+
+        :param request: Incoming webworks request.
+        :param db_session: Active SQLAlchemy session.
+        :param permission_key: Required ``system:*`` permission key.
+
+        :returns: The :class:`AuthPrincipal`.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+
+    now = datetime.now(timezone.utc)
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=now,
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(permission_key),
+            extensions={"required_permission": permission_key},
+        )
+    rtnval = principal
     return rtnval
 
 
@@ -326,6 +391,11 @@ def handle_list_clients(request: Request) -> Response:
     """
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=CLIENTS_READ_PERMISSION_KEY,
+        )
         project_id = request.query_params.get("project_id", None)
         status = _parse_client_status_or_abort(
             request=request,
@@ -362,6 +432,11 @@ def handle_read_client(request: Request) -> Response:
     client_id = request.path_params.get("client_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=CLIENTS_READ_PERMISSION_KEY,
+        )
 
         try:
             view = get_client(db_session=db_session, client_id=client_id)
@@ -394,6 +469,11 @@ def handle_revoke_client(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=CLIENTS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -447,6 +527,11 @@ def handle_update_client_attributes(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=CLIENTS_WRITE_PERMISSION_KEY,
+        )
 
         updates = _build_attribute_updates_or_abort(
             request=request,
@@ -525,6 +610,8 @@ def register_clients_routes(*, app: Any, version_prefix: str) -> None:
 
 __all__ = [
     "CLIENTS_PATH",
+    "CLIENTS_READ_PERMISSION_KEY",
+    "CLIENTS_WRITE_PERMISSION_KEY",
     "register_clients_routes",
     "handle_list_clients",
     "handle_read_client",

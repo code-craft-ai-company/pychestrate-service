@@ -428,6 +428,34 @@ class _FakeWatchManager:
         return self.test_watch_response
 
 
+class _FakeBuildSpec:
+    def __init__(self, *, spec_id: int, name: str = "spec") -> None:
+        self.id: int = spec_id
+        self.name: str = name
+        return
+
+
+class _FakeBuildManager:
+    last_instance: Optional["_FakeBuildManager"] = None
+
+    def __init__(self, db_session: Any) -> None:
+        self.db_session: Any = db_session
+        self.list_specs_response: List[_FakeBuildSpec] = []
+        _FakeBuildManager.last_instance = self
+        return
+
+    def list_specs(
+            self, project_id: int, **kwargs: Any
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            specs=self.list_specs_response,
+            total=len(self.list_specs_response),
+            offset=0,
+            limit=len(self.list_specs_response),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Setup helpers
 # ---------------------------------------------------------------------------
@@ -460,6 +488,7 @@ def _reset_global_state() -> None:
     _FakeRepositoryManager.last_instance = None
     _FakeReleaseManager.last_instance = None
     _FakeWatchManager.last_instance = None
+    _FakeBuildManager.last_instance = None
     return
 
 
@@ -529,6 +558,30 @@ def _patch_release_manager(
 
     patch = create_module_patch(
         projects_routes_calendar, "_build_release_manager"
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=_builder)
+    return patch
+
+
+def _patch_build_manager_in_watches(
+        *,
+        configure: Optional[Callable[[_FakeBuildManager], None]] = None
+    ) -> Any:
+    """
+        Patch the ``_build_build_manager`` seam in
+        ``routes_watches`` -- the watch create / edit forms fetch
+        the project's build specs for the ``action_spec_id``
+        selector.
+    """
+    def _builder(*, db_session: Any) -> _FakeBuildManager:
+        instance = _FakeBuildManager(db_session)
+        if configure is not None:
+            configure(instance)
+        return instance
+
+    patch = create_module_patch(
+        projects_routes_watches, "_build_build_manager"
     )
     mock = patch.activate()
     mock.configure(side_effect=_builder)
@@ -1163,6 +1216,7 @@ def test_handle_watch_create_get_renders_form_with_repositories():
     sm_patch = None
     pm_patch = None
     repo_patch = None
+    bm_patch = None
     wm_patch = None
     try:
         env = _install_stub_environment()
@@ -1191,6 +1245,16 @@ def test_handle_watch_create_get_renders_form_with_repositories():
             target_module=projects_routes_watches,
             configure=_seed_repo,
         )
+
+        def _seed_bm(instance: _FakeBuildManager) -> None:
+            instance.list_specs_response = [
+                _FakeBuildSpec(spec_id=5, name="spec-a"),
+            ]
+            return
+
+        bm_patch = _patch_build_manager_in_watches(
+            configure=_seed_bm
+        )
         wm_patch = _patch_watch_manager()
 
         cookie_value = _build_authenticated_cookie()
@@ -1203,12 +1267,14 @@ def test_handle_watch_create_get_renders_form_with_repositories():
         testbase.assert_equal(response.status_code, 200)
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(len(ctx["repositories"]), 2)
+        # The action_spec_id selector must be populated too.
+        testbase.assert_equal(len(ctx["build_specs"]), 1)
         # GET path should not have invoked create_watch.
         testbase.assert_equal(
             _FakeWatchManager.last_instance, None
         )
     finally:
-        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+        for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1647,6 +1713,7 @@ def test_handle_watch_create_post_translates_form_to_dataclass():
     sm_patch = None
     pm_patch = None
     repo_patch = None
+    bm_patch = None
     wm_patch = None
     try:
         _install_stub_environment()
@@ -1666,6 +1733,7 @@ def test_handle_watch_create_post_translates_form_to_dataclass():
         repo_patch = _patch_repository_manager_in(
             target_module=projects_routes_watches
         )
+        bm_patch = _patch_build_manager_in_watches()
 
         def _seed_wm(instance: _FakeWatchManager) -> None:
             instance.create_watch_response = _FakeWatch(
@@ -1726,7 +1794,7 @@ def test_handle_watch_create_post_translates_form_to_dataclass():
         )
         testbase.assert_equal(action0.target_id, 22)
     finally:
-        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+        for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1744,6 +1812,7 @@ def test_handle_watch_create_post_invalid_event_type_yields_error():
     sm_patch = None
     pm_patch = None
     repo_patch = None
+    bm_patch = None
     wm_patch = None
     try:
         _install_stub_environment()
@@ -1763,6 +1832,7 @@ def test_handle_watch_create_post_invalid_event_type_yields_error():
         repo_patch = _patch_repository_manager_in(
             target_module=projects_routes_watches
         )
+        bm_patch = _patch_build_manager_in_watches()
         wm_patch = _patch_watch_manager()
 
         cookie_value = _build_authenticated_cookie()
@@ -1785,7 +1855,7 @@ def test_handle_watch_create_post_invalid_event_type_yields_error():
         wm = _FakeWatchManager.last_instance
         testbase.assert_equal(len(wm.create_watch_calls), 0)
     finally:
-        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+        for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1804,6 +1874,7 @@ def test_handle_watch_create_post_missing_repository_id_yields_error():
     sm_patch = None
     pm_patch = None
     repo_patch = None
+    bm_patch = None
     wm_patch = None
     try:
         _install_stub_environment()
@@ -1823,6 +1894,7 @@ def test_handle_watch_create_post_missing_repository_id_yields_error():
         repo_patch = _patch_repository_manager_in(
             target_module=projects_routes_watches
         )
+        bm_patch = _patch_build_manager_in_watches()
         wm_patch = _patch_watch_manager()
 
         cookie_value = _build_authenticated_cookie()
@@ -1846,7 +1918,7 @@ def test_handle_watch_create_post_missing_repository_id_yields_error():
         # ``_FakeWatchManager.last_instance`` is still None.
         testbase.assert_equal(_FakeWatchManager.last_instance, None)
     finally:
-        for p in (wm_patch, repo_patch, pm_patch, sm_patch):
+        for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1933,6 +2005,90 @@ def test_handle_watch_edit_post_translates_form_to_update_request():
         testbase.assert_equal(req_obj.enabled, True)
     finally:
         for p in (wm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_edit_get_renders_form_with_repositories_and_specs():
+    """
+    **Feature: webworks projects watches T13.23 (audit fix)**
+    **Property: GET .../watches/{wid}/edit renders the edit form
+    with the project's repositories AND build specs in the
+    context. Regression guard for the audit blocker where the
+    required repository <select> rendered with zero options,
+    making the form unsubmittable.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    repo_patch = None
+    bm_patch = None
+    wm_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+
+        def _seed_repo(instance: _FakeRepositoryManager) -> None:
+            instance.list_repositories_response = [
+                _FakeRepository(repo_id=1, project_id=7),
+                _FakeRepository(repo_id=2, project_id=7),
+            ]
+            return
+
+        repo_patch = _patch_repository_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_repo,
+        )
+
+        def _seed_bm(instance: _FakeBuildManager) -> None:
+            instance.list_specs_response = [
+                _FakeBuildSpec(spec_id=5, name="spec-a"),
+            ]
+            return
+
+        bm_patch = _patch_build_manager_in_watches(
+            configure=_seed_bm
+        )
+
+        def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=7
+            )
+            return
+
+        wm_patch = _patch_watch_manager(configure=_seed_wm)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7", "watch_id": "42"},
+        )
+        response = projects_routes_watches.handle_watch_edit(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        testbase.assert_equal(
+            env.template_lookups, ["projects/watches/edit.html"]
+        )
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["watch"].id, 42)
+        testbase.assert_equal(len(ctx["repositories"]), 2)
+        testbase.assert_equal(len(ctx["build_specs"]), 1)
+    finally:
+        for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()

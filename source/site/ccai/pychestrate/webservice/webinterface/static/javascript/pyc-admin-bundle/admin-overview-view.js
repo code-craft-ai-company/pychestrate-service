@@ -7,6 +7,7 @@ import {
   flag_state_tone,
   next_flag_state,
   build_flag_url,
+  toggle_message_for_status,
   FLAG_STATE_ENABLED,
   FLAG_STATE_RETIRED
 } from "./feature-flags-view.js";
@@ -28,6 +29,7 @@ class PycAdminOverview extends HTMLElement {
   _extensionsErrored;
   _health_region;
   _flags_region;
+  _flags_status_region;
   _ext_region;
   constructor() {
     super();
@@ -40,6 +42,7 @@ class PycAdminOverview extends HTMLElement {
     this._extensionsErrored = false;
     this._health_region = null;
     this._flags_region = null;
+    this._flags_status_region = null;
     this._ext_region = null;
   }
   /**
@@ -99,6 +102,13 @@ class PycAdminOverview extends HTMLElement {
     flags_heading.classList.add("pyc-admin__subheading");
     flags_heading.textContent = "Feature Flags";
     root.appendChild(flags_heading);
+    const flags_status_region = document.createElement("div");
+    flags_status_region.setAttribute(
+      "data-role",
+      "flags-status-region"
+    );
+    root.appendChild(flags_status_region);
+    this._flags_status_region = flags_status_region;
     const flags_region = document.createElement("div");
     flags_region.setAttribute("data-role", "flags-region");
     root.appendChild(flags_region);
@@ -132,13 +142,13 @@ class PycAdminOverview extends HTMLElement {
   }
   async _load_health() {
     this._healthErrored = false;
-    const document_body = await fetch_system_health();
-    if (document_body === null) {
+    const outcome = await fetch_system_health();
+    if (outcome.document_body === null) {
       this._healthErrored = true;
       this._health = null;
       return;
     }
-    this._health = document_body;
+    this._health = outcome.document_body;
     return;
   }
   async _load_flags() {
@@ -417,6 +427,10 @@ class PycAdminOverview extends HTMLElement {
       toggle.toggleAttribute("disabled", true);
     }
     toggle.addEventListener("click", () => {
+      const question = "Set flag \"" + String(entry.flag_key) + "\" to " + target + "?";
+      if (window.confirm(question) === false) {
+        return;
+      }
       toggle.toggleAttribute("disabled", true);
       void this._on_toggle(entry, toggle);
     });
@@ -424,9 +438,13 @@ class PycAdminOverview extends HTMLElement {
   }
   async _on_toggle(entry, toggle) {
     const target = next_flag_state(entry.state);
-    const ok = await this.toggleFlag(entry.flag_key, target);
+    const outcome = await this.toggleFlag(entry.flag_key, target);
     toggle.toggleAttribute("disabled", false);
-    if (ok === true) {
+    this._show_flags_status(
+      outcome.message,
+      outcome.ok === true ? "ok" : "error"
+    );
+    if (outcome.ok === true) {
       await this._load_flags();
       this._render_flags();
     }
@@ -439,10 +457,12 @@ class PycAdminOverview extends HTMLElement {
    * @param flag_key The flag to update.
    * @param target_state The desired flag-state value.
    *
-   * @returns ``true`` when the PATCH succeeded.
+   * @returns The toggle outcome (``ok`` / ``status`` /
+   *          ``flagKey`` / ``message``), mirroring the full
+   *          feature-flags view.
    */
   async toggleFlag(flag_key, target_state) {
-    let ok = false;
+    let status = 0;
     try {
       const response = await fetch(build_flag_url(flag_key), {
         method: "PATCH",
@@ -453,15 +473,42 @@ class PycAdminOverview extends HTMLElement {
         },
         body: JSON.stringify({ state: target_state })
       });
-      ok = response.status === 200;
+      status = response.status;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.admin.overview_flag_toggle_failed",
         { reason: String(reason) }
       );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        flagKey: flag_key,
+        message: "Failed to reach the feature-flags service."
+      };
+      return rtnval2;
     }
-    const rtnval = ok;
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      flagKey: flag_key,
+      message: toggle_message_for_status(status)
+    };
     return rtnval;
+  }
+  _show_flags_status(message, tone) {
+    if (this._flags_status_region === null) {
+      return;
+    }
+    const notice = document.createElement("p");
+    notice.classList.add("pyc-admin__notice");
+    if (tone === "error") {
+      notice.classList.add("pyc-admin__notice--error");
+    }
+    notice.setAttribute("data-role", "flags-toggle-status");
+    notice.textContent = message;
+    this._flags_status_region.replaceChildren(notice);
+    return;
   }
 }
 export {

@@ -58,7 +58,14 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No repositories found</td>
+            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+                No repositories yet.
+                {% if can_manage %}
+                <a href="{{ url_for('projects.repository_create', project_id=project.id) }}">Add your first repository</a>
+                {% else %}
+                Repositories are added by project developers.
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

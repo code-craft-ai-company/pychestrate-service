@@ -623,7 +623,7 @@ def test_handle_test_job_list_passes_status_and_spec_filters():
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             path_params={"project_id": "7"},
             query_mapping={
-                "status": "passed", "spec_id": "5",
+                "status": "succeeded", "spec_id": "5",
                 "page": "2", "per_page": "10",
             },
         )
@@ -634,7 +634,9 @@ def test_handle_test_job_list_passes_status_and_spec_filters():
         kwargs = tm.list_jobs_calls[0]
         testbase.assert_equal(kwargs["project_id"], 7)
         testbase.assert_equal(kwargs["spec_id"], 5)
-        testbase.assert_equal(kwargs["status"], "passed")
+        # The handler forwards the JobStatus str-enum member,
+        # which compares equal to its string value.
+        testbase.assert_equal(kwargs["status"], "succeeded")
         testbase.assert_equal(kwargs["offset"], 10)
         testbase.assert_equal(kwargs["limit"], 10)
     finally:
@@ -844,7 +846,7 @@ def test_handle_release_list_passes_status_and_channel_filters():
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             path_params={"project_id": "7"},
             query_mapping={
-                "status": "published", "channel": "stable",
+                "status": "published", "channel_id": "3",
                 "page": "1", "per_page": "20",
             },
         )
@@ -856,8 +858,12 @@ def test_handle_release_list_passes_status_and_channel_filters():
         rm = _FakeReleaseManager.last_instance
         kwargs = rm.list_releases_calls[0]
         testbase.assert_equal(kwargs["project_id"], 7)
+        # The handler forwards the ReleaseStatus str-enum member,
+        # which compares equal to its string value; the channel
+        # filter matches the manager's real ``channel_id`` kwarg
+        # (the legacy ``channel=`` kwarg was a TypeError).
         testbase.assert_equal(kwargs["status"], "published")
-        testbase.assert_equal(kwargs["channel"], "stable")
+        testbase.assert_equal(kwargs["channel_id"], 3)
         testbase.assert_equal(kwargs["offset"], 0)
         testbase.assert_equal(kwargs["limit"], 20)
     finally:

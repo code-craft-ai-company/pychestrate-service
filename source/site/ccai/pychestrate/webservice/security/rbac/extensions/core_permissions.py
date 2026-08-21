@@ -234,6 +234,30 @@ _CORE_PERMISSION_DESCRIPTIONS = {
         "Create resource pools and manage pool members and "
         "reservations via the REST surface"
     ),
+    # Fleet pods + clients surface: read/write keys gating the
+    # pods controller (/api/v1/projects/{id}/pod-definitions,
+    # /pods/..., /pod-templates, run-scoped variables) and the
+    # clients-admin controller (/api/v1/clients). Also consumed by
+    # the ``fleet.pods`` / ``fleet.clients`` sidebar entries in
+    # :mod:`webinterface.site_shell.nav_manifest`. The
+    # unauthenticated client enrollment/redeem flow authenticates
+    # via enrollment tokens, not these keys.
+    "system:pods.read": (
+        "Read pod definitions, pod state, registrations, topology, "
+        "and pod templates via the REST surface"
+    ),
+    "system:pods.write": (
+        "Create pod definitions and templates, materialize "
+        "templates, and mutate run-scoped pod variables via the "
+        "REST surface"
+    ),
+    "system:clients.read": (
+        "Read enrolled clients and client detail via the REST surface"
+    ),
+    "system:clients.write": (
+        "Revoke clients and update client attributes via the REST "
+        "surface"
+    ),
     # 8-webhooks-in / 8-webhooks-out PR p21a: operator-facing
     # webhooks REST surface (inbound integration configs +
     # deliveries, outbound subscriptions + delivery history).

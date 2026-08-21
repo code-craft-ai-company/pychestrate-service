@@ -18,6 +18,8 @@ Implements the inbound-webhook operations from
   integration configurations (operator-facing).
 * ``POST /api/v1/webhooks/in/integrations`` -- register a new
   inbound integration configuration.
+* ``PATCH /api/v1/webhooks/in/integrations/{webhook_id}`` --
+  enable / disable an integration (``{"enabled": bool}``).
 * ``GET  /api/v1/webhooks/in/deliveries`` -- recent inbound
   deliveries (replay-cache ledger) for audit/debug.
 
@@ -60,6 +62,7 @@ from ccai.pychestrate.webservice.webhooks_in.dispatcher import (
 from ccai.pychestrate.webservice.webhooks_in.errors import (
     WebhookConfigurationConflictError,
     WebhookConfigurationInvalidError,
+    WebhookConfigurationNotFoundError,
     WebhookProviderUnknownError,
 )
 
@@ -698,6 +701,84 @@ def handle_create_integration(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/v1/webhooks/in/integrations/{webhook_id}
+# ---------------------------------------------------------------------------
+
+
+def handle_update_integration(request: Request) -> Response:
+    """
+        ``PATCH /api/v1/webhooks/in/integrations/{webhook_id}``
+
+        Enables or disables the integration. The only mutable
+        field is ``enabled`` -- provider / hook / secret are
+        immutable in M1 (the rotate-secret path lands in M2).
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the updated
+                  integration or a problem response.
+    """
+    webhook_id = request.path_params.get("webhook_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=WEBHOOKS_WRITE_PERMISSION_KEY,
+        )
+
+        body = _decode_json_object_or_abort(request=request)
+        enabled = body.get("enabled", None)
+        if isinstance(enabled, bool) is False:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'enabled' is required and must be a boolean.",
+                extensions={"missing_fields": ["enabled"]},
+            )
+
+        actor_id: Optional[str] = None
+        principal_user_id = getattr(principal, "user_id", None)
+        if principal_user_id is not None:
+            actor_id = str(principal_user_id)
+
+        try:
+            if enabled is True:
+                view = configuration_service.enable_webhook(
+                    db_session=db_session,
+                    webhook_id=webhook_id,
+                    actor_id=actor_id,
+                )
+            else:
+                view = configuration_service.disable_webhook(
+                    db_session=db_session,
+                    webhook_id=webhook_id,
+                    actor_id=actor_id,
+                )
+        except WebhookConfigurationNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"webhook_id": webhook_id},
+            )
+            view = None  # unreachable
+
+        _LOGGER.info(
+            "pychestrate.webhooks_in.integration_updated webhook_id=%s"
+            " enabled=%s",
+            webhook_id,
+            enabled,
+        )
+
+        body_dict = _integration_view_to_dict(view=view)
+        rtnval: Response = JSONResponse(content=body_dict, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/webhooks/in/deliveries
 # ---------------------------------------------------------------------------
 
@@ -801,6 +882,9 @@ def register_webhooks_in_routes(*, app: Any, version_prefix: str) -> None:
         base + "/integrations", methods=["POST"],
     )(handle_create_integration)
     app.attach_route(
+        base + "/integrations/{webhook_id}", methods=["PATCH"],
+    )(handle_update_integration)
+    app.attach_route(
         base + "/deliveries", methods=["GET"],
     )(handle_list_deliveries)
     app.attach_route(
@@ -823,5 +907,6 @@ __all__ = [
     "handle_receive_webhook",
     "handle_list_integrations",
     "handle_create_integration",
+    "handle_update_integration",
     "handle_list_deliveries",
 ]

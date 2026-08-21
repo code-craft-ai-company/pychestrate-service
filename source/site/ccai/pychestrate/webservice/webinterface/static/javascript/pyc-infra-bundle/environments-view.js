@@ -127,7 +127,11 @@ function drift_status_label(status) {
     const rtnval2 = "Check failed";
     return rtnval2;
   }
-  if (report.state === "pending" || report.state === "running") {
+  if (report.state === "pending") {
+    const rtnval2 = "Recorded (pending)";
+    return rtnval2;
+  }
+  if (report.state === "running") {
     const rtnval2 = "Checking\u2026";
     return rtnval2;
   }
@@ -137,6 +141,23 @@ function drift_status_label(status) {
     return rtnval2;
   }
   const rtnval = "No drift";
+  return rtnval;
+}
+function drift_status_title(status) {
+  if (status === null || status.has_report === false) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const report = status.latest_report;
+  if (report === void 0 || report === null) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  if (report.state === "pending") {
+    const rtnval2 = "Drift check recorded. Automatic processing isn't available in this release, so this check will not progress.";
+    return rtnval2;
+  }
+  const rtnval = "";
   return rtnval;
 }
 function has_next_page(state) {
@@ -174,7 +195,7 @@ function register_message_for_status(status) {
 }
 function drift_check_message_for_status(status) {
   if (status === 202 || status === 200) {
-    const rtnval2 = "Drift check queued.";
+    const rtnval2 = "Drift check recorded \u2014 automatic processing isn't available yet.";
     return rtnval2;
   }
   if (status === 409) {
@@ -189,8 +210,44 @@ function drift_check_message_for_status(status) {
     const rtnval2 = "You do not have permission to check drift.";
     return rtnval2;
   }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to check drift.";
+    return rtnval2;
+  }
   const rtnval = "Failed to check drift (HTTP " + String(status) + ").";
   return rtnval;
+}
+function list_load_message_for_status(status, what) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to " + what + ".";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the server \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + what + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
 }
 function parse_environment_attrs(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) {
@@ -210,6 +267,8 @@ class PycEnvironments extends HTMLElement {
   _drift;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _root;
   _table_region;
   _register_region;
@@ -223,12 +282,15 @@ class PycEnvironments extends HTMLElement {
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._environments = [];
     this._drift = /* @__PURE__ */ new Map();
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._root = null;
     this._table_region = null;
     this._pager = null;
@@ -247,7 +309,8 @@ class PycEnvironments extends HTMLElement {
       perPage: this._state.perPage,
       total: this._state.total,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -340,6 +403,12 @@ class PycEnvironments extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-infra__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const register_region = document.createElement("div");
     register_region.classList.add("pyc-infra__form-region");
     register_region.setAttribute("data-role", "register-region");
@@ -392,17 +461,23 @@ class PycEnvironments extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = this._extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.infra.projects_fetch_failed",
         { reason: String(reason) }
@@ -411,17 +486,70 @@ class PycEnvironments extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-infra__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-infra__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-infra__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-infra__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -507,10 +635,12 @@ class PycEnvironments extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._drift = /* @__PURE__ */ new Map();
     this._render_table_region();
     const url = build_environments_query_url(this._state);
     let page = null;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -518,6 +648,7 @@ class PycEnvironments extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        error_status = response.status;
         throw new Error(
           "environments fetch failed: HTTP " + String(response.status)
         );
@@ -529,14 +660,19 @@ class PycEnvironments extends HTMLElement {
         "pychestrate.ui.infra.environments_fetch_failed",
         { reason: String(reason) }
       );
+      if (error_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = error_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
@@ -592,8 +728,23 @@ class PycEnvironments extends HTMLElement {
         "pyc-infra__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load environments. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "environments"
+      );
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-infra__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       this._render_pager();
       return;
     }
@@ -665,6 +816,10 @@ class PycEnvironments extends HTMLElement {
           const status = self._drift.get(environment.environment_id) ?? null;
           drift_badge.setAttribute("data-tone", drift_status_tone(status));
           drift_badge.textContent = drift_status_label(status);
+          const badge_title = drift_status_title(status);
+          if (badge_title.length > 0) {
+            drift_badge.title = badge_title;
+          }
           return drift_badge;
         }
       },
@@ -739,6 +894,12 @@ class PycEnvironments extends HTMLElement {
     const status = this._drift.get(environment_id) ?? null;
     badge.setAttribute("data-tone", drift_status_tone(status));
     badge.textContent = drift_status_label(status);
+    const badge_title = drift_status_title(status);
+    if (badge_title.length > 0) {
+      badge.setAttribute("title", badge_title);
+    } else {
+      badge.removeAttribute("title");
+    }
     return;
   }
   /**
@@ -1105,17 +1266,20 @@ export {
   DRIFT_STATES,
   ENVIRONMENT_STATES,
   PycEnvironments,
+  announce_session_expired,
   build_drift_check_url,
   build_drift_status_url,
   build_environments_collection_url,
   build_environments_query_url,
   drift_check_message_for_status,
   drift_status_label,
+  drift_status_title,
   drift_status_tone,
   environment_state_tone,
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   parse_environment_attrs,
   register_message_for_status,
   short_id

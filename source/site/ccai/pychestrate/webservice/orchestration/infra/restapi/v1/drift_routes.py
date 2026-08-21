@@ -71,6 +71,16 @@ PROJECTS_PATH_PREFIX = "/projects"
 DRIFT_READ_PERMISSION_KEY = "system:drift.read"
 DRIFT_CHECK_PERMISSION_KEY = "system:drift.check"
 
+# Honest 202 detail for POST /drift:check -- the Layer-5
+# dispatch handoff is M2 work, so a recorded drift run does not
+# progress past PENDING in this release. Surfaced in the
+# response body so clients do not imply the check is running.
+DRIFT_CHECK_RECORDED_DETAIL = (
+    "Drift check recorded. Automatic processing is not available"
+    " in this release; the run will remain PENDING until the"
+    " dispatch handoff ships."
+)
+
 _LOGGER = logging.getLogger("pychestrate.drift.routes")
 
 
@@ -431,10 +441,18 @@ def handle_trigger_drift_check(request: Request) -> Response:
         :class:`DriftScheduleNotFoundError` and this handler
         responds 409.
 
+        The 202 response is honest about what happened: the run
+        is RECORDED (persisted in ``PENDING``) but automatic
+        processing is not available in this release, so the body
+        carries ``dispatch_available: false`` and a ``detail``
+        message saying so alongside the ``DriftReport`` fields.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (202) carrying the freshly-created
-                  :class:`DriftReport`, or a problem response.
+                  :class:`DriftReport` plus the
+                  ``dispatch_available`` / ``detail`` honesty
+                  fields, or a problem response.
     """
     project_id = request.path_params.get("project_id", "")
     environment_id = request.path_params.get("environment_id", "")
@@ -486,6 +504,8 @@ def handle_trigger_drift_check(request: Request) -> Response:
         )
 
         body_dict = _drift_run_view_to_dict(view=view)
+        body_dict["dispatch_available"] = False
+        body_dict["detail"] = DRIFT_CHECK_RECORDED_DETAIL
         rtnval: Response = JSONResponse(content=body_dict, status_code=202)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -536,6 +556,7 @@ __all__ = [
     "DRIFT_CHECK_PATH_SUFFIX",
     "DRIFT_READ_PERMISSION_KEY",
     "DRIFT_CHECK_PERMISSION_KEY",
+    "DRIFT_CHECK_RECORDED_DETAIL",
     "register_drift_routes",
     "handle_get_drift_status",
     "handle_trigger_drift_check",

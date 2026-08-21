@@ -283,6 +283,49 @@ def disable_target(
     return rtnval
 
 
+def enable_target(
+        *,
+        db_session: DbSession,
+        target_id: str,
+        actor_id: Optional[str] = None
+    ) -> WebhookTargetView:
+    """
+        Flip ``enabled = True``. Idempotent + emits
+        TARGET_ENABLED on the first transition.
+
+        :param db_session: Active SQLAlchemy session.
+        :param target_id: Target to enable.
+        :param actor_id: Optional acting-user id for the event.
+
+        :returns: The refreshed target read-model.
+
+        :raises: WebhookTargetNotFoundError on miss.
+    """
+    row = _require_target(db_session=db_session, target_id=target_id)
+    if row.enabled is True:
+        rtnval = _target_to_view(row=row)
+        return rtnval
+    now = utc_now()
+    row.enabled = True
+    row.updated_at = now
+    db_session.flush()
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=WebhookOutEventTopics.TARGET_ENABLED,
+            payload={
+                "target_id": str(row.target_id),
+                "project_id": str(row.project_id),
+                "actor_id": actor_id,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _target_to_view(row=row)
+    return rtnval
+
+
 def build_signed_request(
         *,
         db_session: DbSession,

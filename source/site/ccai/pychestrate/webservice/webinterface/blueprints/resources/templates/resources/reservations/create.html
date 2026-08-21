@@ -9,9 +9,35 @@
 </div>
 
 <div class="card" style="max-width: 700px;">
+    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
+        <span style="color: #495057; font-weight: 500;">Narrow the resource list:</span>
+        <select name="pool_id" class="form-control" style="width: 160px;" aria-label="Filter selectable resources by pool">
+            <option value="">All Pools</option>
+            {% for pool in pools %}
+            <option value="{{ pool.id }}" {% if selector_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
+            {% endfor %}
+        </select>
+        <select name="resource_type" class="form-control" style="width: 160px;" aria-label="Filter selectable resources by type">
+            <option value="">All Types</option>
+            <option value="device" {% if selector_resource_type == 'device' %}selected{% endif %}>Device</option>
+            <option value="ip_address" {% if selector_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
+            <option value="port" {% if selector_resource_type == 'port' %}selected{% endif %}>Port</option>
+            <option value="credential" {% if selector_resource_type == 'credential' %}selected{% endif %}>Credential</option>
+            <option value="generic" {% if selector_resource_type == 'generic' %}selected{% endif %}>Generic</option>
+        </select>
+        <button type="submit" class="btn btn-sm btn-secondary">Apply</button>
+    </form>
+
+    {% if resource_total > resources | length %}
+    <div class="alert alert-warning">
+        Showing the first {{ resources | length }} of {{ resource_total }} resources
+        &mdash; narrow the list by pool or type above to reach the rest.
+    </div>
+    {% endif %}
+
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+
         <div class="form-group">
             <label for="resource_id">Resource *</label>
             <select id="resource_id" name="resource_id" class="form-control" required>
@@ -21,19 +47,19 @@
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
                    value="{{ form_data.start_time if form_data else '' }}">
         </div>
-        
+
         <div class="form-group">
             <label for="end_time">End Time *</label>
             <input type="datetime-local" id="end_time" name="end_time" class="form-control" required
                    value="{{ form_data.end_time if form_data else '' }}">
         </div>
-        
+
         <div class="form-group">
             <label for="mode">Allocation Mode</label>
             <select id="mode" name="mode" class="form-control">
@@ -41,21 +67,21 @@
                 <option value="shared" {% if form_data and form_data.mode == 'shared' %}selected{% endif %}>Shared</option>
             </select>
         </div>
-        
+
         <div class="form-group">
             <label for="job_id">Job ID (optional)</label>
             <input type="text" id="job_id" name="job_id" class="form-control"
                    value="{{ form_data.job_id if form_data else '' }}">
         </div>
-        
+
         <div class="form-group">
             <label for="reason">Reason</label>
             <textarea id="reason" name="reason" class="form-control" rows="3">{{ form_data.reason if form_data else '' }}</textarea>
         </div>
-        
+
         <div style="display: flex; gap: 10px;">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Create Reservation
+                <span class="material-icons" aria-hidden="true">save</span> Create Reservation
             </button>
             <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">Cancel</a>
         </div>

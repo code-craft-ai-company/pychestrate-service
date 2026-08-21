@@ -870,6 +870,8 @@ def test_handle_dashboard_renders_with_user_projects():
     _reset_global_state()
     sm_patch = None
     pm_patch = None
+    bm_patch = None
+    tm_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -885,6 +887,10 @@ def test_handle_dashboard_renders_with_user_projects():
             return
 
         pm_patch = _patch_project_manager(configure=_seed)
+        # The dashboard now queries recent builds / tests across
+        # the user's projects for the activity panels.
+        bm_patch = _patch_build_manager()
+        tm_patch = _patch_test_manager()
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -898,8 +904,10 @@ def test_handle_dashboard_renders_with_user_projects():
         )
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(len(ctx["projects"]), 2)
+        testbase.assert_equal(ctx["recent_builds"], [])
+        testbase.assert_equal(ctx["recent_tests"], [])
     finally:
-        for p in (pm_patch, sm_patch):
+        for p in (tm_patch, bm_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -1633,6 +1641,76 @@ def test_handle_member_remove_happy_path_redirects_to_member_list():
         testbase.assert_equal(
             pm.remove_member_calls, [(7, 11, "u-admin")]
         )
+    finally:
+        for p in (pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_member_remove_refuses_self_removal():
+    """
+    **Feature: webworks projects port T9.13 (audit fix)**
+    **Property: POST .../members/{uid}/remove where the target
+    is the requesting user redirects back to the member list
+    with an error flash and never calls remove_member -- an
+    admin removing themselves would lock themselves out of the
+    project mid-session.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+
+        # Local security-manager patch with an int-like user id
+        # so the target-vs-self comparison can actually match
+        # (the member routes coerce the path user_id to int).
+        info = _FakeSessionInfo(
+            user_id="11", username="selfadmin",
+            csrf_token="csrf-fresh",
+        )
+
+        def _builder(*, db_session):
+            instance = _FakeSecurityManager(db_session)
+            instance.validate_token_response = info
+            return instance
+
+        sm_patch = create_module_patch(
+            config_routes, "_build_security_manager"
+        )
+        sm_mock = sm_patch.activate()
+        sm_mock.configure(side_effect=_builder)
+
+        pm_patch = _patch_project_manager()
+
+        payload = {
+            "user_id": "11",
+            "username": "selfadmin",
+            "session_token": "tok-abc",
+        }
+        cookie_value = cookie_session.sign_session_payload(
+            payload=payload, secret=_TEST_UI_COOKIE_SECRET
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7", "user_id": "11"},
+        )
+        response = projects_routes.handle_member_remove(request)
+
+        is_redirect = isinstance(response, RedirectResponse)
+        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/members"
+        )
+        pm = _FakeProjectManager.last_instance
+        testbase.assert_equal(pm.remove_member_calls, [])
     finally:
         for p in (pm_patch, sm_patch):
             if p is not None:

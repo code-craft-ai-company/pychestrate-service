@@ -158,6 +158,34 @@ _ADMIN_ROUTE_TABLE = (
 )
 
 
+# Path-prefix → page-label table for the ``/admin`` surface. The
+# shell wrapper resolves the ``<title>`` for every admin render
+# from this table (longest matching prefix wins) so each admin
+# page gets a distinguishable browser title instead of every tab
+# reading "Pychestrate". The table covers this module's
+# ``_ADMIN_ROUTE_TABLE`` entries plus the per-feature sibling
+# modules' route prefixes; an unmatched path falls back to the
+# bare product name.
+_ADMIN_PAGE_TITLE_TABLE: Tuple[Tuple[str, str], ...] = (
+    (ADMIN_PATH + "/dashboard", "Dashboard"),
+    (ADMIN_PATH + "/overview", "Overview"),
+    (ADMIN_PATH + "/feature-flags", "Feature Flags"),
+    (ADMIN_PATH + "/extensions", "Extension Registry"),
+    (ADMIN_PATH + "/system-health", "System Health"),
+    (ADMIN_PATH + "/users", "Users"),
+    (ADMIN_PATH + "/roles", "Roles"),
+    (ADMIN_PATH + "/variables", "Variables"),
+    (ADMIN_PATH + "/scopes", "Secret Scopes"),
+    (ADMIN_PATH + "/secrets", "Secrets"),
+    (ADMIN_PATH + "/sessions", "Sessions"),
+    (ADMIN_PATH + "/audit-logs", "Audit Logs"),
+    (ADMIN_PATH + "/enrollment-tokens", "Enrollment Tokens"),
+)
+
+
+_DEFAULT_PAGE_TITLE = "Pychestrate"
+
+
 
 
 
@@ -526,6 +554,38 @@ def _build_auth_request(
     return rtnval
 
 
+def _resolve_admin_page_title(*, path: str) -> str:
+    """
+        Resolve the shell document ``<title>`` for an admin page
+        from the request path via :data:`_ADMIN_PAGE_TITLE_TABLE`.
+        The longest matching prefix wins so detail pages (e.g.
+        ``/admin/secrets/create``) inherit their section's title.
+        Unmatched paths keep the bare product-name default.
+
+        :param path: Request path (e.g. ``"/admin/users/u-1"``).
+
+        :returns: Title string (e.g. ``"Users · Pychestrate"``).
+    """
+    if path is None or len(path) == 0:
+        rtnval = _DEFAULT_PAGE_TITLE
+        return rtnval
+
+    best_label = None
+    best_length = -1
+    for prefix, label in _ADMIN_PAGE_TITLE_TABLE:
+        if path == prefix or path.startswith(prefix + "/"):
+            if len(prefix) > best_length:
+                best_label = label
+                best_length = len(prefix)
+
+    if best_label is None:
+        rtnval = _DEFAULT_PAGE_TITLE
+        return rtnval
+
+    rtnval = "{} · {}".format(best_label, _DEFAULT_PAGE_TITLE)
+    return rtnval
+
+
 def _wrap_admin_handler_in_shell(handler: Any) -> Any:
     """
         Wrap an admin-blueprint handler so its HTML response body
@@ -580,7 +640,10 @@ def _wrap_admin_handler_in_shell(handler: Any) -> Any:
             except Exception:
                 return inner
 
-        page_title = "Pychestrate"
+        request_path = getattr(request, "path", "")
+        if isinstance(request_path, str) is False:
+            request_path = ""
+        page_title = _resolve_admin_page_title(path=request_path)
         rtnval = render_shell_document(
             request=request,
             page_title=page_title,
@@ -590,6 +653,31 @@ def _wrap_admin_handler_in_shell(handler: Any) -> Any:
             rtnval._status_code = inner._status_code
         except AttributeError:
             pass
+
+        # Carry the inner response's cookies across -- the session
+        # cookie re-signed by the flash drain records that queued
+        # flashes were consumed; dropping it would make every flash
+        # reappear on the next admin page.
+        try:
+            inner_cookies = inner._cookies
+        except AttributeError:
+            inner_cookies = None
+        if inner_cookies is not None:
+            for cookie_name in inner_cookies:
+                rtnval._cookies[cookie_name] = inner_cookies[cookie_name]
+
+        # Carry any extra headers too, but keep the shell render's
+        # own Content-Type.
+        try:
+            inner_headers = inner._headers
+        except AttributeError:
+            inner_headers = None
+        if inner_headers is not None:
+            for header_name, header_value in inner_headers.items():
+                if header_name.lower() == "content-type":
+                    continue
+                rtnval._headers[header_name] = header_value
+
         return rtnval
 
     _wrapped.__name__ = "{}_in_shell".format(
@@ -615,14 +703,127 @@ def _render(
 
 
 # ---------------------------------------------------------------------------
+# Login-failure messaging + ``next`` threading helpers
+# ---------------------------------------------------------------------------
+
+
+# Adapter failure messages that are safe to surface verbatim on the
+# login form. Both originate in ``security.auth.local_flow`` and are
+# re-raised message-intact by
+# :class:`auth_adapter.ConsumerUISecurityAdapter`:
+#
+# * The backoff lockout is keyed by ``(login_name, source_ip)`` and
+#   records failures for nonexistent usernames too
+#   (``local_flow.verify_local_credentials`` marks a failure before
+#   it knows whether the user exists), so surfacing it does not
+#   reveal whether the username is real.
+# * "Account is not active" is deliberately NOT surfaced: the check
+#   fires in ``local_flow`` before password verification, so echoing
+#   it would confirm account existence (and its disabled state) to
+#   anyone submitting any password for that username. Disabled
+#   accounts therefore see the generic message; operators learn the
+#   real state from an administrator.
+#
+# Every other failure keeps the generic message so bad credentials
+# stay indistinguishable from unknown usernames.
+_SURFACEABLE_LOGIN_FAILURE_MESSAGES: Tuple[str, ...] = (
+    "Too many recent failures; try again later",
+)
+
+_GENERIC_LOGIN_FAILURE_MESSAGE: str = "Invalid username or password."
+
+
+def _resolve_login_failure_message(*, error: Exception) -> str:
+    """
+        Map an ``authenticate()`` failure onto the user-facing
+        flash message. The adapter's :class:`AuthenticationError`
+        carries the modern stack's message; the rate-limit lockout
+        and inactive-account messages are surfaced verbatim (see
+        :data:`_SURFACEABLE_LOGIN_FAILURE_MESSAGES`), every other
+        failure flattens to the generic bad-credentials message.
+
+        :param error: Exception raised by
+                      ``security_manager.authenticate``.
+
+        :returns: The flash message to render on the login form.
+    """
+    try:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.auth_adapter import (  # noqa: E402
+            AuthenticationError,
+        )
+    except Exception:
+        # The adapter module (and its security-stack imports) may
+        # be absent in stubbed test runtimes; the generic message
+        # is always safe.
+        rtnval = _GENERIC_LOGIN_FAILURE_MESSAGE
+        return rtnval
+
+    if isinstance(error, AuthenticationError) is True:
+        message = getattr(error, "message", "")
+        if isinstance(message, str) is True:
+            if message in _SURFACEABLE_LOGIN_FAILURE_MESSAGES:
+                rtnval = message
+                return rtnval
+
+    rtnval = _GENERIC_LOGIN_FAILURE_MESSAGE
+    return rtnval
+
+
+def _resolve_safe_login_next(*, candidate: Optional[str]) -> str:
+    """
+        Validate a raw ``next`` candidate for embedding in the
+        login form's hidden field. Returns the candidate when it
+        passes the same-origin check, or an empty string when the
+        candidate is missing / rejected (the template omits the
+        hidden field for an empty value).
+
+        :param candidate: Raw ``next`` value from the query string
+                          or form body.
+
+        :returns: The safe candidate or ``""``.
+    """
+    validator = NextValidator(fallback_target="/")
+    if validator.is_safe_same_origin_target(candidate=candidate) is True:
+        rtnval = candidate
+        return rtnval
+
+    rtnval = ""
+    return rtnval
+
+
+def _read_login_next_candidate(*, request: Request) -> Optional[str]:
+    """
+        Lift the raw ``next`` candidate off a login request's
+        query string. Returns ``None`` when absent or when the
+        request object exposes no usable ``query_params``.
+
+        :param request: Incoming webworks request.
+
+        :returns: Raw candidate string or ``None``.
+    """
+    try:
+        rtnval = request.query_params.get("next", None)
+    except Exception:
+        rtnval = None
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
 # Handlers — login (GET + POST)
 # ---------------------------------------------------------------------------
 
 
 def handle_login_form(request: Request) -> Response:
     """
-        ``GET /config/login`` -- render the login form. Drains
-        any pending flash messages so the form can render them.
+        ``GET /login`` -- render the login form. Drains any
+        pending flash messages so the form can render them.
+
+        When the request carries a ``?next=<target>`` parameter
+        (placed there by the auth guards when an anonymous browser
+        hits a protected page), the validated target is threaded
+        into the template context so the form can carry it in a
+        hidden field -- the POST handler reads it back from the
+        form body and redirects there after a successful sign-in.
 
         :param request: Incoming webworks request.
 
@@ -633,11 +834,15 @@ def handle_login_form(request: Request) -> Response:
     session = _read_session(request=request)
     flashes = flash.consume_flashes(session=session)
 
+    next_candidate = _read_login_next_candidate(request=request)
+    next_target = _resolve_safe_login_next(candidate=next_candidate)
+
     context = _build_default_template_context(
         session=session,
         request_endpoint="config.login",
         flashes=flashes,
     )
+    context["next_target"] = next_target
     response = _render(
         template_name="config/login.html",
         context=context,
@@ -648,9 +853,14 @@ def handle_login_form(request: Request) -> Response:
 
 def handle_login_submit(request: Request) -> Response:
     """
-        ``POST /config/login`` -- authenticate via SecurityManager
-        and (on success) populate the session cookie + redirect to
-        either the ``next`` query param or the dashboard.
+        ``POST /login`` -- authenticate via SecurityManager and
+        (on success) populate the session cookie + redirect to
+        the validated ``next`` target or ``/``.
+
+        The ``next`` target is read from the form body first (the
+        login form carries it in a hidden field) with the query
+        string as a fallback; either way it must pass
+        :class:`NextValidator` before it is honored.
 
         :param request: Incoming webworks request.
 
@@ -660,6 +870,13 @@ def handle_login_submit(request: Request) -> Response:
     form = _parse_form_or_empty(request=request)
     username = str(form.get("username", "")).strip()
     password = str(form.get("password", ""))
+
+    # Resolve the post-login redirect candidate. The login form
+    # carries ``next`` in a hidden field (form body); direct
+    # POSTs to ``/login?next=...`` fall back to the query param.
+    next_candidate = form.get("next", None)
+    if next_candidate is None or len(str(next_candidate)) == 0:
+        next_candidate = _read_login_next_candidate(request=request)
 
     session = _read_session(request=request)
 
@@ -674,6 +891,9 @@ def handle_login_submit(request: Request) -> Response:
             session=session,
             request_endpoint="config.login",
             flashes=flashes,
+        )
+        context["next_target"] = _resolve_safe_login_next(
+            candidate=next_candidate
         )
         response = _render(
             template_name="config/login.html",
@@ -704,10 +924,13 @@ def handle_login_submit(request: Request) -> Response:
 
         try:
             auth_response = security_manager.authenticate(auth_request)
-        except Exception:
+        except Exception as auth_error:
+            failure_message = _resolve_login_failure_message(
+                error=auth_error
+            )
             flash.add_flash(
                 session=session,
-                message="Invalid username or password.",
+                message=failure_message,
                 category=flash.CATEGORY_ERROR,
             )
             flashes = flash.consume_flashes(session=session)
@@ -715,6 +938,9 @@ def handle_login_submit(request: Request) -> Response:
                 session=session,
                 request_endpoint="config.login",
                 flashes=flashes,
+            )
+            context["next_target"] = _resolve_safe_login_next(
+                candidate=next_candidate
             )
             response = _render(
                 template_name="config/login.html",
@@ -730,23 +956,19 @@ def handle_login_submit(request: Request) -> Response:
         session[auth_guard.SESSION_TOKEN_KEY] = auth_response.token
         session[csrf.SESSION_KEY] = auth_response.csrf_token
 
-        flash.add_flash(
-            session=session,
-            message="Welcome, {}!".format(auth_response.username),
-            category=flash.CATEGORY_SUCCESS,
-        )
+        # No welcome flash: the shell document the browser lands
+        # on after this redirect never drains the flash queue, so
+        # a queued greeting would surface minutes later on the
+        # next legacy-template page instead.
 
-        # Resolve the post-login redirect target. The browser
-        # may have carried a ``next=...`` parameter from the
-        # protected page that bounced it here; run the value
-        # through the same-origin validator (NFR-2 of
-        # 1-authentication/requirements.md) before honoring it.
-        # Reject paths that are absolute / protocol-relative /
-        # credentialed / cross-host and fall back to ``/``.
-        candidate_next = request.query_params.get("next", None)
+        # Honor the ``next`` candidate resolved above only after
+        # it passes the same-origin validator (NFR-2 of
+        # 1-authentication/requirements.md). Reject paths that are
+        # absolute / protocol-relative / credentialed / cross-host
+        # and fall back to ``/``.
         validator = NextValidator(fallback_target="/")
         next_url = validator.resolve_safe_target(
-            candidate=candidate_next, fallback="/"
+            candidate=next_candidate, fallback="/"
         )
 
         response = RedirectResponse(url=next_url, status_code=303)
@@ -766,16 +988,43 @@ def handle_login_submit(request: Request) -> Response:
 
 def handle_logout(request: Request) -> Response:
     """
-        ``POST /config/logout`` -- invoke
+        ``GET /logout`` and ``POST /logout`` -- invoke
         ``SecurityManager.logout`` if a token is present, clear
         the cookie session, redirect to the login page.
 
+        The POST path is CSRF-gated like every other
+        state-changing form post in the consumer UI; the legacy
+        base templates carry the token in their logout forms. The
+        GET path stays ungated -- it is the convenience
+        entrypoint sidebar links bind to.
+
         :param request: Incoming webworks request.
 
-        :returns: RedirectResponse to /config/login with a
-                  "logged out" flash.
+        :returns: RedirectResponse to /login with a "logged out"
+                  flash, or a redirect back to ``/`` when a POST
+                  fails the CSRF check.
     """
     session = _read_session(request=request)
+
+    request_method = getattr(request, "method", "")
+    if isinstance(request_method, str) is True:
+        request_method = request_method.upper()
+    else:
+        request_method = ""
+
+    if request_method == "POST":
+        form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=form,
+            session=session,
+            fallback_url="/",
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=session
+            )
+            return csrf_redirect
+
     session_token = session.get(auth_guard.SESSION_TOKEN_KEY, None)
 
     if session_token is not None and len(session_token) > 0:

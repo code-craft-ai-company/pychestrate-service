@@ -1,6 +1,8 @@
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
 var WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 var WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
+var TEST_EVENT_HISTORY_REFRESH_MS = 1500;
+var TOAST_STACK_LIMIT = 4;
 function build_integrations_url(project_id) {
   const params = new URLSearchParams();
   params.set("project_id", project_id);
@@ -9,6 +11,10 @@ function build_integrations_url(project_id) {
 }
 function build_integrations_collection_url() {
   const rtnval = WEBHOOKS_IN_PATH + "/integrations";
+  return rtnval;
+}
+function build_integration_resource_url(webhook_id) {
+  const rtnval = WEBHOOKS_IN_PATH + "/integrations/" + encodeURIComponent(webhook_id);
   return rtnval;
 }
 function build_in_deliveries_url(provider) {
@@ -25,6 +31,10 @@ function build_subscriptions_url(project_id) {
   const params = new URLSearchParams();
   params.set("project_id", project_id);
   const rtnval = WEBHOOKS_OUT_PATH + "?" + params.toString();
+  return rtnval;
+}
+function build_subscription_resource_url(subscription_id) {
+  const rtnval = WEBHOOKS_OUT_PATH + "/" + encodeURIComponent(subscription_id);
   return rtnval;
 }
 function build_subscription_deliveries_url(subscription_id) {
@@ -89,9 +99,30 @@ function create_message_for_status(status, subject) {
   const rtnval = "Failed to create " + subject.toLowerCase() + " (HTTP " + String(status) + ").";
   return rtnval;
 }
+function toggle_message_for_status(status, subject, enabled) {
+  const verb = enabled === true ? "enable" : "disable";
+  if (status === 200) {
+    const rtnval2 = subject + " " + verb + "d.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "Unknown " + subject.toLowerCase() + " \u2014 refresh the list.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to " + verb + " this " + subject.toLowerCase() + ".";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Failed to reach the webhooks service \u2014 the " + subject.toLowerCase() + " was not changed.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to " + verb + " the " + subject.toLowerCase() + " (HTTP " + String(status) + ").";
+  return rtnval;
+}
 function test_message_for_status(status) {
   if (status === 202 || status === 200) {
-    const rtnval2 = "Test event queued.";
+    const rtnval2 = "Test event queued \u2014 the delivery history below refreshes in a moment.";
     return rtnval2;
   }
   if (status === 409) {
@@ -129,7 +160,22 @@ var PycWebhooks = class extends HTMLElement {
   _activeTab;
   _integrations;
   _inDeliveries;
+  _inProvider;
   _subscriptions;
+  /**
+   * One-time signing-secret payload ``{name, secret}`` captured
+   * from the last create response, or ``null``. Held only until
+   * the operator dismisses the panel -- the server never returns
+   * the secret again.
+   */
+  _signingSecret;
+  /**
+   * The subscription whose delivery history is currently shown,
+   * or ``null``. Refreshes re-fetch it instead of leaving a
+   * stale panel behind.
+   */
+  _historySubscription;
+  _pendingHistoryTimer;
   _root;
   _panel_region;
   _toast_region;
@@ -139,7 +185,11 @@ var PycWebhooks = class extends HTMLElement {
     this._activeTab = "inbound";
     this._integrations = [];
     this._inDeliveries = [];
+    this._inProvider = "";
     this._subscriptions = [];
+    this._signingSecret = null;
+    this._historySubscription = null;
+    this._pendingHistoryTimer = 0;
     this._root = null;
     this._panel_region = null;
     this._toast_region = null;
@@ -161,6 +211,14 @@ var PycWebhooks = class extends HTMLElement {
     return rtnval;
   }
   /**
+   * Diagnostic accessor used by unit tests to read the inbound
+   * provider filter.
+   */
+  get inboundProviderFilter() {
+    const rtnval = this._inProvider;
+    return rtnval;
+  }
+  /**
    * Lifecycle hook -- render the static chrome when inserted.
    */
   connectedCallback() {
@@ -168,8 +226,19 @@ var PycWebhooks = class extends HTMLElement {
     return;
   }
   /**
+   * Lifecycle hook -- drop any pending history-refresh timer so
+   * it cannot fire against a detached view.
+   */
+  disconnectedCallback() {
+    if (this._pendingHistoryTimer !== 0) {
+      clearTimeout(this._pendingHistoryTimer);
+      this._pendingHistoryTimer = 0;
+    }
+    return;
+  }
+  /**
    * Build the persistent chrome -- heading, project input, tab
-   * strip, panel region, toast region.
+   * strip, toast region, panel region.
    */
   _render_chrome() {
     const root = document.createElement("section");
@@ -306,7 +375,8 @@ var PycWebhooks = class extends HTMLElement {
   // ----------------------------------------------------------------
   /**
    * Render the inbound-panel scaffolding -- create-form toggle,
-   * integrations table region, recent-deliveries region.
+   * refresh action, integrations table region, recent-deliveries
+   * heading + provider filter + region.
    */
   _render_inbound_panel() {
     if (this._panel_region === null) {
@@ -315,6 +385,8 @@ var PycWebhooks = class extends HTMLElement {
     const panel = document.createElement("div");
     panel.classList.add("pyc-ops__panel");
     panel.setAttribute("data-role", "inbound-panel");
+    const actions = document.createElement("div");
+    actions.classList.add("pyc-ops__controls");
     const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
@@ -323,7 +395,17 @@ var PycWebhooks = class extends HTMLElement {
     create_button.addEventListener("click", () => {
       this._toggle_inbound_form(panel);
     });
-    panel.appendChild(create_button);
+    actions.appendChild(create_button);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-ops__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "inbound-refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this.refreshInbound();
+    });
+    actions.appendChild(refresh_button);
+    panel.appendChild(actions);
     const form_region = document.createElement("div");
     form_region.classList.add("pyc-ops__form-region");
     form_region.setAttribute("data-role", "inbound-form-region");
@@ -335,8 +417,28 @@ var PycWebhooks = class extends HTMLElement {
     panel.appendChild(table_region);
     const deliveries_heading = document.createElement("h2");
     deliveries_heading.classList.add("pyc-ops__subheading");
-    deliveries_heading.textContent = "Recent Deliveries";
+    deliveries_heading.textContent = "All Recent Inbound Deliveries";
     panel.appendChild(deliveries_heading);
+    const deliveries_note = document.createElement("p");
+    deliveries_note.classList.add("pyc-ops__note");
+    deliveries_note.setAttribute("data-role", "inbound-deliveries-note");
+    deliveries_note.textContent = "The inbound replay ledger across every project. It records that a delivery was received; per-delivery dispatch outcomes are not recorded yet.";
+    panel.appendChild(deliveries_note);
+    const filter_row = document.createElement("div");
+    filter_row.classList.add("pyc-ops__controls");
+    const provider_label = document.createElement("label");
+    provider_label.classList.add("pyc-ops__field");
+    provider_label.textContent = "Provider";
+    const provider_select = document.createElement("mj-select");
+    provider_select.classList.add("pyc-ops__select");
+    provider_select.setAttribute("data-role", "in-provider-filter");
+    provider_select.addEventListener("change", () => {
+      this._inProvider = provider_select.value;
+      void this._load_inbound_deliveries();
+    });
+    provider_label.appendChild(provider_select);
+    filter_row.appendChild(provider_label);
+    panel.appendChild(filter_row);
     const deliveries_region = document.createElement("div");
     deliveries_region.classList.add("pyc-ops__table-region");
     deliveries_region.setAttribute(
@@ -345,23 +447,24 @@ var PycWebhooks = class extends HTMLElement {
     );
     panel.appendChild(deliveries_region);
     this._panel_region.replaceChildren(panel);
+    this._sync_provider_options();
     this._render_inbound_table();
     this._render_inbound_deliveries();
     return;
   }
   /**
    * Fetch the inbound integrations + recent deliveries and
-   * re-render. Exposed so unit tests can await a fetch cycle.
+   * re-render. The delivery ledger is global, so it loads even
+   * when no project id is set. Exposed so unit tests can await
+   * a fetch cycle.
    */
   async refreshInbound() {
     if (this._projectId.length === 0) {
       this._integrations = [];
-      this._inDeliveries = [];
       this._render_inbound_table();
-      this._render_inbound_deliveries();
-      return;
+    } else {
+      await this._load_integrations();
     }
-    await this._load_integrations();
     await this._load_inbound_deliveries();
     return;
   }
@@ -388,13 +491,14 @@ var PycWebhooks = class extends HTMLElement {
       );
     }
     this._integrations = items ?? [];
+    this._sync_provider_options();
     this._render_inbound_table();
     return;
   }
   async _load_inbound_deliveries() {
     let items = null;
     try {
-      const url = build_in_deliveries_url("");
+      const url = build_in_deliveries_url(this._inProvider);
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
@@ -414,7 +518,52 @@ var PycWebhooks = class extends HTMLElement {
       );
     }
     this._inDeliveries = items ?? [];
+    this._sync_provider_options();
     this._render_inbound_deliveries();
+    return;
+  }
+  /**
+   * Rebuild the provider-filter options from the providers seen
+   * in the loaded integrations + deliveries, preserving the
+   * current selection.
+   */
+  _sync_provider_options() {
+    if (this._panel_region === null) {
+      return;
+    }
+    const select = this._panel_region.querySelector(
+      '[data-role="in-provider-filter"]'
+    );
+    if (select instanceof HTMLElement === false) {
+      return;
+    }
+    const providers = [];
+    for (const integration of this._integrations) {
+      if (typeof integration.provider === "string" && integration.provider.length > 0 && providers.includes(integration.provider) === false) {
+        providers.push(integration.provider);
+      }
+    }
+    for (const delivery of this._inDeliveries) {
+      if (typeof delivery.provider === "string" && delivery.provider.length > 0 && providers.includes(delivery.provider) === false) {
+        providers.push(delivery.provider);
+      }
+    }
+    if (this._inProvider.length > 0 && providers.includes(this._inProvider) === false) {
+      providers.push(this._inProvider);
+    }
+    providers.sort();
+    const all_option = document.createElement("mj-option");
+    all_option.setAttribute("value", "");
+    all_option.textContent = "All providers";
+    const options = [all_option];
+    for (const provider of providers) {
+      const option = document.createElement("mj-option");
+      option.setAttribute("value", provider);
+      option.textContent = provider;
+      options.push(option);
+    }
+    select.replaceChildren(...options);
+    select.value = this._inProvider;
     return;
   }
   _render_inbound_table() {
@@ -445,6 +594,9 @@ var PycWebhooks = class extends HTMLElement {
     table.classList.add("pyc-ops__table");
     table.setAttribute("sortable", "");
     table.setAttribute("resizable", "");
+    table.rowAttrs = (integration) => ({
+      "data-webhook-id": integration.webhook_id
+    });
     table.columns = [
       { key: "provider", label: "Provider", width: "10rem" },
       { key: "hook_name", label: "Hook", width: "10rem" },
@@ -463,11 +615,104 @@ var PycWebhooks = class extends HTMLElement {
           integration.enabled === true ? "enabled" : "disabled",
           integration.enabled === true ? "ok" : "neutral"
         )
+      },
+      {
+        key: "actions",
+        label: "Actions",
+        width: "10rem",
+        sortable: false,
+        render: (integration) => {
+          const toggle_button = document.createElement("mj-button");
+          toggle_button.classList.add(
+            "pyc-ops__button",
+            "pyc-ops__row-action"
+          );
+          toggle_button.setAttribute("type", "button");
+          toggle_button.setAttribute("data-role", "integration-toggle");
+          toggle_button.textContent = integration.enabled === true ? "Disable" : "Enable";
+          toggle_button.addEventListener("click", () => {
+            toggle_button.toggleAttribute("disabled", true);
+            void self._on_toggle_integration(integration, toggle_button);
+          });
+          return toggle_button;
+        }
       }
     ];
     table.rows = this._integrations;
     el.replaceChildren(table);
     return;
+  }
+  async _on_toggle_integration(integration, button) {
+    const next_enabled = integration.enabled !== true;
+    if (next_enabled === false) {
+      const confirm_fn = window.confirm;
+      if (typeof confirm_fn !== "function") {
+        button.toggleAttribute("disabled", false);
+        return;
+      }
+      const confirmed = window.confirm(
+        "Disable the inbound integration " + integration.provider + "/" + integration.hook_name + "? The receiver will reject its deliveries until it is re-enabled."
+      );
+      if (confirmed === false) {
+        button.toggleAttribute("disabled", false);
+        return;
+      }
+    }
+    const outcome = await this.updateIntegration(
+      integration.webhook_id,
+      next_enabled
+    );
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true) {
+      await this._load_integrations();
+    }
+    return;
+  }
+  /**
+   * PATCH an inbound integration's ``enabled`` flag. Exposed so
+   * unit tests can drive a toggle without a row button.
+   *
+   * @param webhook_id The integration to update.
+   * @param enabled The desired enabled state.
+   *
+   * @returns The update outcome.
+   */
+  async updateIntegration(webhook_id, enabled) {
+    let status = 0;
+    try {
+      const response = await fetch(
+        build_integration_resource_url(webhook_id),
+        {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ enabled })
+        }
+      );
+      status = response.status;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.ops.integration_update_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        message: toggle_message_for_status(0, "Integration", enabled)
+      };
+      return rtnval2;
+    }
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      message: toggle_message_for_status(status, "Integration", enabled)
+    };
+    return rtnval;
   }
   _render_inbound_deliveries() {
     if (this._panel_region === null) {
@@ -484,6 +729,7 @@ var PycWebhooks = class extends HTMLElement {
       el.replaceChildren(this._notice("No recent inbound deliveries"));
       return;
     }
+    const self = this;
     const table = document.createElement("mj-data-table");
     table.classList.add("pyc-ops__table");
     table.setAttribute("sortable", "");
@@ -492,6 +738,22 @@ var PycWebhooks = class extends HTMLElement {
       { key: "provider", label: "Provider", width: "10rem" },
       { key: "hook_name", label: "Hook", width: "10rem" },
       { key: "delivery_id", label: "Delivery id", width: "16rem", sortable: false },
+      {
+        key: "status",
+        label: "Status",
+        width: "8rem",
+        sortable: false,
+        // The ledger only proves receipt -- an honest "recorded"
+        // chip, not a fabricated dispatch outcome.
+        render: (delivery) => {
+          const chip = self._badge("recorded", "neutral");
+          chip.setAttribute(
+            "title",
+            "The replay ledger records that this delivery was received. Its dispatch outcome is not recorded yet."
+          );
+          return chip;
+        }
+      },
       {
         key: "first_seen_at",
         label: "First seen",
@@ -660,7 +922,8 @@ var PycWebhooks = class extends HTMLElement {
   // ----------------------------------------------------------------
   /**
    * Render the outbound-panel scaffolding -- create-form toggle,
-   * subscriptions table region.
+   * refresh action, one-time signing-secret region, subscriptions
+   * table region, delivery-history region.
    */
   _render_outbound_panel() {
     if (this._panel_region === null) {
@@ -669,6 +932,8 @@ var PycWebhooks = class extends HTMLElement {
     const panel = document.createElement("div");
     panel.classList.add("pyc-ops__panel");
     panel.setAttribute("data-role", "outbound-panel");
+    const actions = document.createElement("div");
+    actions.classList.add("pyc-ops__controls");
     const create_button = document.createElement("mj-button");
     create_button.classList.add("pyc-ops__button");
     create_button.setAttribute("type", "button");
@@ -677,12 +942,27 @@ var PycWebhooks = class extends HTMLElement {
     create_button.addEventListener("click", () => {
       this._toggle_outbound_form(panel);
     });
-    panel.appendChild(create_button);
+    actions.appendChild(create_button);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-ops__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "outbound-refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this.refreshOutbound();
+    });
+    actions.appendChild(refresh_button);
+    panel.appendChild(actions);
     const form_region = document.createElement("div");
     form_region.classList.add("pyc-ops__form-region");
     form_region.setAttribute("data-role", "outbound-form-region");
     form_region.hidden = true;
     panel.appendChild(form_region);
+    const secret_region = document.createElement("div");
+    secret_region.classList.add("pyc-ops__secret-region");
+    secret_region.setAttribute("data-role", "signing-secret-region");
+    secret_region.hidden = true;
+    panel.appendChild(secret_region);
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-ops__table-region");
     table_region.setAttribute("data-role", "outbound-table-region");
@@ -692,17 +972,22 @@ var PycWebhooks = class extends HTMLElement {
     history_region.setAttribute("data-role", "outbound-history-region");
     panel.appendChild(history_region);
     this._panel_region.replaceChildren(panel);
+    this._render_signing_secret();
     this._render_outbound_table();
     return;
   }
   /**
-   * Fetch the outbound subscriptions and re-render. Exposed so
-   * unit tests can await a fetch cycle.
+   * Fetch the outbound subscriptions and re-render. When a
+   * delivery-history panel is open its data is re-fetched too so
+   * the panel never goes stale. Exposed so unit tests can await
+   * a fetch cycle.
    */
   async refreshOutbound() {
     if (this._projectId.length === 0) {
       this._subscriptions = [];
+      this._historySubscription = null;
       this._render_outbound_table();
+      this._render_outbound_history(null, []);
       return;
     }
     let items = null;
@@ -728,6 +1013,13 @@ var PycWebhooks = class extends HTMLElement {
     }
     this._subscriptions = items ?? [];
     this._render_outbound_table();
+    if (this._historySubscription !== null) {
+      const open_subscription = this._historySubscription;
+      const deliveries = await this.loadSubscriptionDeliveries(
+        open_subscription.subscription_id
+      );
+      this._render_outbound_history(open_subscription, deliveries);
+    }
     return;
   }
   _render_outbound_table() {
@@ -783,7 +1075,7 @@ var PycWebhooks = class extends HTMLElement {
       {
         key: "actions",
         label: "Actions",
-        width: "18rem",
+        width: "22rem",
         sortable: false,
         render: (subscription) => {
           const fragment = document.createDocumentFragment();
@@ -810,6 +1102,19 @@ var PycWebhooks = class extends HTMLElement {
             void self._on_history(subscription, history_button);
           });
           fragment.appendChild(history_button);
+          const toggle_button = document.createElement("mj-button");
+          toggle_button.classList.add(
+            "pyc-ops__button",
+            "pyc-ops__row-action"
+          );
+          toggle_button.setAttribute("type", "button");
+          toggle_button.setAttribute("data-role", "subscription-toggle");
+          toggle_button.textContent = subscription.enabled === true ? "Disable" : "Enable";
+          toggle_button.addEventListener("click", () => {
+            toggle_button.toggleAttribute("disabled", true);
+            void self._on_toggle_subscription(subscription, toggle_button);
+          });
+          fragment.appendChild(toggle_button);
           return fragment;
         }
       }
@@ -818,10 +1123,110 @@ var PycWebhooks = class extends HTMLElement {
     el.replaceChildren(table);
     return;
   }
+  async _on_toggle_subscription(subscription, button) {
+    const next_enabled = subscription.enabled !== true;
+    if (next_enabled === false) {
+      const confirm_fn = window.confirm;
+      if (typeof confirm_fn !== "function") {
+        button.toggleAttribute("disabled", false);
+        return;
+      }
+      const confirmed = window.confirm(
+        "Disable the subscription " + subscription.name + "? Deliveries to its URL stop until it is re-enabled."
+      );
+      if (confirmed === false) {
+        button.toggleAttribute("disabled", false);
+        return;
+      }
+    }
+    const outcome = await this.updateSubscription(
+      subscription.subscription_id,
+      next_enabled
+    );
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true) {
+      await this.refreshOutbound();
+    }
+    return;
+  }
+  /**
+   * PATCH an outbound subscription's ``enabled`` flag. Exposed so
+   * unit tests can drive a toggle without a row button.
+   *
+   * @param subscription_id The subscription to update.
+   * @param enabled The desired enabled state.
+   *
+   * @returns The update outcome.
+   */
+  async updateSubscription(subscription_id, enabled) {
+    let status = 0;
+    try {
+      const response = await fetch(
+        build_subscription_resource_url(subscription_id),
+        {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ enabled })
+        }
+      );
+      status = response.status;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.ops.subscription_update_failed",
+        { reason: String(reason) }
+      );
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        message: toggle_message_for_status(0, "Subscription", enabled)
+      };
+      return rtnval2;
+    }
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      message: toggle_message_for_status(status, "Subscription", enabled)
+    };
+    return rtnval;
+  }
   async _on_test(subscription, button) {
     const outcome = await this._do_test(subscription.subscription_id);
     button.toggleAttribute("disabled", false);
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true) {
+      this._schedule_history_refresh(subscription);
+    }
+    return;
+  }
+  /**
+   * Schedule a short-delay refresh of the delivery history after
+   * a test event, so the operator sees the recorded attempt
+   * without hunting for a refresh control.
+   *
+   * @param subscription The subscription that was tested.
+   */
+  _schedule_history_refresh(subscription) {
+    if (this._pendingHistoryTimer !== 0) {
+      clearTimeout(this._pendingHistoryTimer);
+    }
+    this._pendingHistoryTimer = setTimeout(() => {
+      this._pendingHistoryTimer = 0;
+      void this._load_and_render_history(subscription);
+    }, TEST_EVENT_HISTORY_REFRESH_MS);
+    return;
+  }
+  async _load_and_render_history(subscription) {
+    const deliveries = await this.loadSubscriptionDeliveries(
+      subscription.subscription_id
+    );
+    this._historySubscription = subscription;
+    this._render_outbound_history(subscription, deliveries);
     return;
   }
   /**
@@ -873,11 +1278,8 @@ var PycWebhooks = class extends HTMLElement {
     return rtnval;
   }
   async _on_history(subscription, button) {
-    const deliveries = await this.loadSubscriptionDeliveries(
-      subscription.subscription_id
-    );
+    await this._load_and_render_history(subscription);
     button.toggleAttribute("disabled", false);
-    this._render_outbound_history(subscription, deliveries);
     return;
   }
   /**
@@ -924,6 +1326,10 @@ var PycWebhooks = class extends HTMLElement {
       return;
     }
     const el = region;
+    if (subscription === null) {
+      el.replaceChildren();
+      return;
+    }
     const heading = document.createElement("h2");
     heading.classList.add("pyc-ops__subheading");
     heading.textContent = "Delivery History \u2014 " + subscription.name;
@@ -1047,8 +1453,72 @@ var PycWebhooks = class extends HTMLElement {
     status.textContent = "";
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     if (outcome.ok === true) {
+      if (typeof outcome.signingSecret === "string" && outcome.signingSecret.length > 0) {
+        this._signingSecret = {
+          name,
+          secret: outcome.signingSecret
+        };
+      }
       await this.refreshOutbound();
+      this._render_signing_secret();
     }
+    return;
+  }
+  /**
+   * Render (or hide) the one-time signing-secret panel from the
+   * transient ``_signingSecret`` state. The secret is shown once
+   * after creation and is never retrievable again -- dismissing
+   * the panel drops it.
+   */
+  _render_signing_secret() {
+    if (this._panel_region === null) {
+      return;
+    }
+    const region = this._panel_region.querySelector(
+      '[data-role="signing-secret-region"]'
+    );
+    if (region instanceof HTMLElement === false) {
+      return;
+    }
+    const el = region;
+    if (this._signingSecret === null) {
+      el.replaceChildren();
+      el.hidden = true;
+      return;
+    }
+    const captured = this._signingSecret;
+    const title = document.createElement("p");
+    title.classList.add("pyc-ops__secret-title");
+    title.textContent = "Signing secret for " + captured.name + " \u2014 save it now";
+    const secret_code = document.createElement("code");
+    secret_code.classList.add("pyc-ops__secret-value");
+    secret_code.setAttribute("data-role", "signing-secret-value");
+    secret_code.textContent = captured.secret;
+    const copy_button = document.createElement("mj-button");
+    copy_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
+    copy_button.setAttribute("type", "button");
+    copy_button.setAttribute("data-role", "signing-secret-copy");
+    copy_button.textContent = "Copy";
+    copy_button.addEventListener("click", () => {
+      if (typeof navigator !== "undefined" && navigator.clipboard !== void 0) {
+        void navigator.clipboard.writeText(captured.secret);
+        copy_button.textContent = "Copied";
+      }
+    });
+    const dismiss_button = document.createElement("mj-button");
+    dismiss_button.classList.add("pyc-ops__button", "pyc-ops__row-action");
+    dismiss_button.setAttribute("type", "button");
+    dismiss_button.setAttribute("data-role", "signing-secret-dismiss");
+    dismiss_button.textContent = "Dismiss";
+    dismiss_button.addEventListener("click", () => {
+      this._signingSecret = null;
+      this._render_signing_secret();
+    });
+    const note = document.createElement("p");
+    note.classList.add("pyc-ops__note");
+    note.textContent = "This secret is shown only once and cannot be retrieved later. Receivers verify deliveries by recomputing the X-Pychestrate-Signature header with it.";
+    el.replaceChildren(title, secret_code, copy_button, dismiss_button, note);
+    el.hidden = false;
     return;
   }
   /**
@@ -1060,7 +1530,9 @@ var PycWebhooks = class extends HTMLElement {
    * @param url The target URL.
    * @param topic_filters The topic-filter list.
    *
-   * @returns The create outcome.
+   * @returns The create outcome. On success ``signingSecret``
+   *          carries the one-time generated secret when the
+   *          server returned one.
    */
   async createSubscription(name, url, topic_filters) {
     const rtnval = await this._do_create_subscription(
@@ -1075,6 +1547,7 @@ var PycWebhooks = class extends HTMLElement {
       const rtnval2 = {
         ok: false,
         status: 0,
+        signingSecret: "",
         message: "Enter a project id before creating a subscription."
       };
       return rtnval2;
@@ -1086,6 +1559,7 @@ var PycWebhooks = class extends HTMLElement {
       topic_filters
     };
     let status = 0;
+    let signing_secret = "";
     try {
       const response = await fetch(WEBHOOKS_OUT_PATH, {
         method: "POST",
@@ -1097,6 +1571,13 @@ var PycWebhooks = class extends HTMLElement {
         body: JSON.stringify(payload)
       });
       status = response.status;
+      if (response.ok === true) {
+        const body = await response.json();
+        const created = body;
+        if (created !== null && typeof created.signing_secret === "string") {
+          signing_secret = created.signing_secret;
+        }
+      }
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.subscription_create_failed",
@@ -1105,6 +1586,7 @@ var PycWebhooks = class extends HTMLElement {
       const rtnval2 = {
         ok: false,
         status: 0,
+        signingSecret: "",
         message: "Failed to reach the webhooks service."
       };
       return rtnval2;
@@ -1113,6 +1595,7 @@ var PycWebhooks = class extends HTMLElement {
     const rtnval = {
       ok,
       status,
+      signingSecret: signing_secret,
       message: create_message_for_status(status, "Subscription")
     };
     return rtnval;
@@ -1145,37 +1628,6 @@ var PycWebhooks = class extends HTMLElement {
     return input;
   }
   /**
-   * Build a ``<thead>`` from a list of column labels.
-   *
-   * @param columns The column header labels.
-   *
-   * @returns A populated ``<thead>``.
-   */
-  _table_head(columns) {
-    const thead = document.createElement("thead");
-    const head_row = document.createElement("tr");
-    for (const column of columns) {
-      const th = document.createElement("th");
-      th.scope = "col";
-      th.textContent = column;
-      head_row.appendChild(th);
-    }
-    thead.appendChild(head_row);
-    return thead;
-  }
-  /**
-   * Append a plain-text ``<td>`` to a table row.
-   *
-   * @param row The row to append the cell to.
-   * @param text The cell text content.
-   */
-  _append_text_cell(row, text) {
-    const cell = document.createElement("td");
-    cell.textContent = text;
-    row.appendChild(cell);
-    return;
-  }
-  /**
    * Build a token-toned status badge span.
    *
    * @param text The badge label.
@@ -1204,7 +1656,10 @@ var PycWebhooks = class extends HTMLElement {
     return notice;
   }
   /**
-   * Render a dismissible toast in the toast region.
+   * Render a dismissible toast in the toast region. Toasts stack
+   * (newest last) instead of replacing one another so an earlier
+   * outcome is not silently destroyed; the stack is capped at
+   * ``TOAST_STACK_LIMIT``.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
@@ -1229,7 +1684,10 @@ var PycWebhooks = class extends HTMLElement {
       toast.remove();
     });
     toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
+      this._toast_region.removeChild(this._toast_region.firstElementChild);
+    }
+    this._toast_region.appendChild(toast);
     return;
   }
 };
@@ -1308,10 +1766,17 @@ function publish_message_for_status(status) {
   const rtnval = "Failed to publish release (HTTP " + String(status) + ").";
   return rtnval;
 }
+var RELEASE_TOAST_STACK_LIMIT = 4;
 var PycReleaseChannels = class extends HTMLElement {
   _entries;
   _loading;
   _errored;
+  /**
+   * The channel_id whose published-release detail is currently
+   * shown, or ``""``. Refreshes re-fetch it instead of leaving
+   * a stale panel behind.
+   */
+  _detailChannelId;
   _root;
   _table_region;
   _publish_region;
@@ -1322,6 +1787,7 @@ var PycReleaseChannels = class extends HTMLElement {
     this._entries = [];
     this._loading = false;
     this._errored = false;
+    this._detailChannelId = "";
     this._root = null;
     this._table_region = null;
     this._publish_region = null;
@@ -1457,6 +1923,27 @@ var PycReleaseChannels = class extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._render_table_region();
+    await this._refresh_open_detail();
+    return;
+  }
+  /**
+   * Re-fetch the open detail panel (if any) so it never shows a
+   * stale entry after a list refresh. When the entry can no
+   * longer be read the panel clears instead of lingering.
+   */
+  async _refresh_open_detail() {
+    if (this._detailChannelId.length === 0) {
+      return;
+    }
+    const detail = await this.loadReleaseChannel(this._detailChannelId);
+    if (detail === null) {
+      this._detailChannelId = "";
+      if (this._detail_region !== null) {
+        this._detail_region.replaceChildren();
+      }
+      return;
+    }
+    this._render_detail(detail);
     return;
   }
   _render_table_region() {
@@ -1580,6 +2067,7 @@ var PycReleaseChannels = class extends HTMLElement {
   async _on_show_release(entry, button) {
     const detail = await this.loadReleaseChannel(entry.channel_id);
     button.toggleAttribute("disabled", false);
+    this._detailChannelId = entry.channel_id;
     this._render_detail(detail);
     return;
   }
@@ -1736,6 +2224,11 @@ var PycReleaseChannels = class extends HTMLElement {
     submit.setAttribute("data-role", "publish-submit");
     submit.textContent = "Publish Release";
     form.appendChild(submit);
+    const rollout_note = document.createElement("p");
+    rollout_note.classList.add("pyc-ops__note");
+    rollout_note.setAttribute("data-role", "publish-rollout-note");
+    rollout_note.textContent = "The rollout starts at the channel policy's initial fraction. Promote and rollback controls arrive with the next release-service milestone.";
+    form.appendChild(rollout_note);
     const status = document.createElement("p");
     status.classList.add("pyc-ops__form-status");
     status.setAttribute("data-role", "publish-status");
@@ -1763,6 +2256,14 @@ var PycReleaseChannels = class extends HTMLElement {
     const artifact_sha256 = sha_input.value.trim();
     if (component.length === 0 || version.length === 0 || artifact_uri.length === 0) {
       status.textContent = "Component, version and artifact URI are required.";
+      return;
+    }
+    if (typeof channel !== "string" || channel.length === 0) {
+      status.textContent = "Select a release channel.";
+      return;
+    }
+    if (RELEASE_CHANNEL_VALUES.includes(channel) === false) {
+      status.textContent = "The channel must be one of: " + RELEASE_CHANNEL_VALUES.join(", ") + ".";
       return;
     }
     if (artifact_sha256.length !== 64) {
@@ -1859,18 +2360,6 @@ var PycReleaseChannels = class extends HTMLElement {
     return rtnval;
   }
   /**
-   * Append a plain-text ``<td>`` to a table row.
-   *
-   * @param row The row to append the cell to.
-   * @param text The cell text content.
-   */
-  _append_text_cell(row, text) {
-    const cell = document.createElement("td");
-    cell.textContent = text;
-    row.appendChild(cell);
-    return;
-  }
-  /**
    * Build a labelled text input, append it to the supplied form,
    * and return the input element.
    *
@@ -1895,7 +2384,10 @@ var PycReleaseChannels = class extends HTMLElement {
     return input;
   }
   /**
-   * Render a dismissible toast in the toast region.
+   * Render a dismissible toast in the toast region. Toasts stack
+   * (newest last) instead of replacing one another so an earlier
+   * outcome is not silently destroyed; the stack is capped at
+   * ``RELEASE_TOAST_STACK_LIMIT``.
    *
    * @param message The toast message text.
    * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
@@ -1920,7 +2412,10 @@ var PycReleaseChannels = class extends HTMLElement {
       toast.remove();
     });
     toast.appendChild(dismiss);
-    this._toast_region.replaceChildren(toast);
+    while (this._toast_region.children.length >= RELEASE_TOAST_STACK_LIMIT) {
+      this._toast_region.removeChild(this._toast_region.firstElementChild);
+    }
+    this._toast_region.appendChild(toast);
     return;
   }
 };

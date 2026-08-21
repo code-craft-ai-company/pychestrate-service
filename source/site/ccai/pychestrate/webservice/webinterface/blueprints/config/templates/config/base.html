@@ -6,9 +6,8 @@
     render_shell_document(content_html=...). The shell owns the
     surrounding chrome (header, sidebar, layout); this fragment
     contributes only the page-specific body, any extra CSS, and any
-    extra JS (Vue + bootstrap-vue remain available for the
-    legacy admin internals until a follow-on PR migrates each page
-    to Web Components).
+    extra JS. The legacy Vue + bootstrap-vue script stack has been
+    retired -- no admin template mounts Vue widgets any more.
 
     {% block title %} is preserved so per-page templates can still
     set their <title> without altering the wrapper -- the shell
@@ -211,15 +210,56 @@
     {% block content %}{% endblock %}
 
     {#
-        Vue + bootstrap-vue remain loaded so the existing admin
-        templates that mount Vue widgets continue to function while
-        the Vue->Web-Components migration is incremental. A
-        follow-on PR retires these once every page is a Custom
-        Element.
+        The legacy polyfill / vue / bootstrap-vue script tags were
+        removed: no admin template mounts a Vue widget any more, so
+        the ~2.4 MB stack was dead weight on every /admin page.
     #}
-    <script src="/static/javascript/polyfill.js"></script>
-    <script src="/static/javascript/vue.js"></script>
-    <script src="/static/javascript/bootstrap-vue.js"></script>
-    <script src="/static/javascript/bootstrap-vue-icons.js"></script>
+    <script>
+        // Unsaved-changes guard for the admin POST forms: warn on
+        // navigation after an edit until the form is submitted.
+        // GET filter forms are exempt -- losing an unsubmitted
+        // filter value costs nothing.
+        (function () {
+            var dirty = false;
+
+            function owning_post_form(target) {
+                if (target === null || typeof target.closest !== "function") {
+                    return null;
+                }
+                var form = target.closest("form");
+                if (form === null) {
+                    return null;
+                }
+                var method = (form.getAttribute("method") || "get").toLowerCase();
+                if (method !== "post") {
+                    return null;
+                }
+                return form;
+            }
+
+            document.addEventListener("input", function (event) {
+                if (owning_post_form(event.target) !== null) {
+                    dirty = true;
+                }
+            }, true);
+
+            document.addEventListener("change", function (event) {
+                if (owning_post_form(event.target) !== null) {
+                    dirty = true;
+                }
+            }, true);
+
+            document.addEventListener("submit", function () {
+                dirty = false;
+            }, true);
+
+            window.addEventListener("beforeunload", function (event) {
+                if (dirty === true) {
+                    event.preventDefault();
+                    event.returnValue = "";
+                }
+            });
+        })();
+    </script>
     {% block extra_js %}{% endblock %}
 </section>

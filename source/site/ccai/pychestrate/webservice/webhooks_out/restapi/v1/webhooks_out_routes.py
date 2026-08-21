@@ -13,6 +13,8 @@ Implements the outbound-webhook operations from
 * ``POST   /api/v1/webhooks/out/subscriptions`` -- register a new
   outbound subscription (a URL + event/topic filter).
 * ``GET    /api/v1/webhooks/out/subscriptions/{id}`` -- detail.
+* ``PATCH  /api/v1/webhooks/out/subscriptions/{id}`` -- enable /
+  disable the subscription (``{"enabled": bool}``).
 * ``DELETE /api/v1/webhooks/out/subscriptions/{id}`` -- disable
   the subscription (idempotent).
 * ``GET    /api/v1/webhooks/out/subscriptions/{id}/deliveries``
@@ -36,6 +38,7 @@ __version__ = "1.0.0"
 
 import json
 import logging
+import secrets as py_secrets
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -499,6 +502,13 @@ def handle_create_subscription(request: Request) -> Response:
         Registers a new outbound subscription (a URL + event
         topic filter).
 
+        When the caller does not supply a ``secret_ref``, the
+        route generates an HMAC signing secret for the
+        subscription and returns it ONCE as ``signing_secret``
+        on the 201 response. It is never readable again through
+        the API -- receivers use it to verify the
+        ``X-Pychestrate-Signature`` header on deliveries.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (201) carrying the created
@@ -548,6 +558,16 @@ def handle_create_subscription(request: Request) -> Response:
                 status=422,
                 detail="Field 'secret_ref' must be a string.",
             )
+
+        # M1 stores the literal shared secret in ``secret_ref``
+        # (the M2 follow-on resolves it through 1-secrets-vault).
+        # When the caller supplies none, generate one so every
+        # subscription's deliveries are verifiable, and surface
+        # it exactly once on the create response.
+        generated_signing_secret: Optional[str] = None
+        if len(secret_ref) == 0:
+            generated_signing_secret = py_secrets.token_hex(32)
+            secret_ref = generated_signing_secret
 
         topic_filters_raw = body.get("topic_filters", [])
         if isinstance(topic_filters_raw, list) is False:
@@ -620,6 +640,8 @@ def handle_create_subscription(request: Request) -> Response:
         )
 
         body_dict = _subscription_view_to_dict(view=view)
+        if generated_signing_secret is not None:
+            body_dict["signing_secret"] = generated_signing_secret
         rtnval: Response = JSONResponse(content=body_dict, status_code=201)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -657,6 +679,85 @@ def handle_read_subscription(request: Request) -> Response:
 
         body = _subscription_view_to_dict(view=view)
         rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/webhooks/out/subscriptions/{subscription_id}
+# ---------------------------------------------------------------------------
+
+
+def handle_update_subscription(request: Request) -> Response:
+    """
+        ``PATCH /api/v1/webhooks/out/subscriptions/{subscription_id}``
+
+        Enables or disables the subscription. The only mutable
+        field is ``enabled`` -- name / URL / topic filters are
+        immutable in M1 (recreate the subscription to change
+        them).
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) with the updated
+                  subscription or a problem response.
+    """
+    subscription_id = request.path_params.get("subscription_id", "")
+    try:
+        db_session = _require_session(request=request)
+        principal = _require_permission(
+            request=request,
+            db_session=db_session,
+            permission_key=WEBHOOKS_WRITE_PERMISSION_KEY,
+        )
+
+        body = _decode_json_object_or_abort(request=request)
+        enabled = body.get("enabled", None)
+        if isinstance(enabled, bool) is False:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'enabled' is required and must be a boolean.",
+                extensions={"missing_fields": ["enabled"]},
+            )
+
+        actor_id: Optional[str] = None
+        principal_user_id = getattr(principal, "user_id", None)
+        if principal_user_id is not None:
+            actor_id = str(principal_user_id)
+
+        try:
+            if enabled is True:
+                view = out_service.enable_target(
+                    db_session=db_session,
+                    target_id=subscription_id,
+                    actor_id=actor_id,
+                )
+            else:
+                view = out_service.disable_target(
+                    db_session=db_session,
+                    target_id=subscription_id,
+                    actor_id=actor_id,
+                )
+        except WebhookTargetNotFoundError as xcpt:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail=str(xcpt),
+                extensions={"subscription_id": subscription_id},
+            )
+            view = None  # unreachable
+
+        _LOGGER.info(
+            "pychestrate.webhooks_out.subscription_updated"
+            " subscription_id=%s enabled=%s",
+            subscription_id,
+            enabled,
+        )
+
+        body_dict = _subscription_view_to_dict(view=view)
+        rtnval: Response = JSONResponse(content=body_dict, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval
@@ -925,6 +1026,9 @@ def register_webhooks_out_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{subscription_id}", methods=["GET"],
     )(handle_read_subscription)
     app.attach_route(
+        base + "/{subscription_id}", methods=["PATCH"],
+    )(handle_update_subscription)
+    app.attach_route(
         base + "/{subscription_id}", methods=["DELETE"],
     )(handle_delete_subscription)
     app.attach_route(
@@ -949,6 +1053,7 @@ __all__ = [
     "handle_list_subscriptions",
     "handle_create_subscription",
     "handle_read_subscription",
+    "handle_update_subscription",
     "handle_delete_subscription",
     "handle_list_subscription_deliveries",
     "handle_test_subscription",

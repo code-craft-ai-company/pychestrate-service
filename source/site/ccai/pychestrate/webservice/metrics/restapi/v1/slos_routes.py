@@ -21,7 +21,10 @@ It does NOT ship an ``update_slo`` mutator (the SLO row carries a
 landed). A ``PATCH`` route is therefore intentionally NOT
 registered -- there is no domain capability behind it. The
 ``GET .../slos/{slo_id}`` read embeds the current burn-rate /
-status by calling ``compute_status``.
+status by calling ``compute_status``; the ``GET .../slos``
+list embeds the same ``status`` block per item (bounded by
+``MAX_LIST_STATUS_ITEMS`` per page) so the SLOs page can show
+health without a per-row fetch.
 
 Error responses are RFC 7807 problem documents emitted via
 :mod:`api.problem_json_webworks`.
@@ -66,6 +69,12 @@ SLOS_WRITE_PERMISSION_KEY = "system:slos.write"
 DEFAULT_PAGE_SIZE = 50
 MIN_PAGE_SIZE = 1
 MAX_PAGE_SIZE = 500
+
+# Upper bound on per-item ``compute_status`` calls the list
+# endpoint performs for one page. Items beyond the bound carry
+# ``status: null`` and can be read individually via the detail
+# endpoint.
+MAX_LIST_STATUS_ITEMS = 100
 
 _LOGGER = logging.getLogger("pychestrate.slos.routes")
 
@@ -401,6 +410,15 @@ def handle_list_slos(request: Request) -> Response:
 
         Query params: ``kind``, ``page``, ``per_page``.
 
+        Each item embeds a ``status`` block carrying the current
+        burn-rate / achieved ratio, computed the same way the
+        detail read computes it (``compute_status``). Computing
+        status for a page of N SLOs costs one kind-compute per
+        SLO -- that is the page's purpose, so it is done
+        eagerly, bounded by :data:`MAX_LIST_STATUS_ITEMS` per
+        page; items beyond the bound (and items whose kind is no
+        longer registered) carry ``status: null``.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) with an ``{items, meta}``
@@ -453,8 +471,23 @@ def handle_list_slos(request: Request) -> Response:
         window = all_views[offset:offset + per_page]
 
         items: List[Dict[str, Any]] = []
+        status_budget = MAX_LIST_STATUS_ITEMS
         for view in window:
-            items.append(_slo_view_to_dict(view=view))
+            item = _slo_view_to_dict(view=view)
+            item["status"] = None
+            if status_budget > 0:
+                status_budget = status_budget - 1
+                try:
+                    status = slos_service.compute_status(
+                        db_session=db_session,
+                        slo_id=str(view.slo_id),
+                    )
+                    item["status"] = _slo_status_to_dict(status=status)
+                except SLOKindUnknownError:
+                    item["status"] = None
+                except SLONotFoundError:
+                    item["status"] = None
+            items.append(item)
 
         body = {
             "items": items,
@@ -810,6 +843,7 @@ __all__ = [
     "SLOS_WRITE_PERMISSION_KEY",
     "DEFAULT_PAGE_SIZE",
     "MAX_PAGE_SIZE",
+    "MAX_LIST_STATUS_ITEMS",
     "register_slos_routes",
     "handle_list_slos",
     "handle_create_slo",

@@ -27,6 +27,10 @@ function build_builds_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/builds";
   return rtnval;
 }
+function build_build_detail_link(project_id, run_id) {
+  const rtnval = "/builds/" + encodeURIComponent(run_id) + "?project_id=" + encodeURIComponent(project_id);
+  return rtnval;
+}
 function build_source_integrations_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/source-integrations";
   return rtnval;
@@ -110,6 +114,38 @@ function trigger_message_for_status(status) {
   const rtnval = "Failed to trigger build (HTTP " + String(status) + ").";
   return rtnval;
 }
+function list_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to builds.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the build service \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load builds (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
 function parse_runner_inputs(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) {
     const rtnval2 = {};
@@ -128,11 +164,13 @@ class PycBuildsList extends HTMLElement {
   _builds;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
   _integrations;
   _root;
   _table_region;
   _trigger_region;
   _toast_region;
+  _projects_notice_region;
   constructor() {
     super();
     this._state = {
@@ -142,17 +180,20 @@ class PycBuildsList extends HTMLElement {
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._builds = [];
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
     this._integrations = [];
     this._root = null;
     this._table_region = null;
     this._pager = null;
     this._trigger_region = null;
     this._toast_region = null;
+    this._projects_notice_region = null;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the
@@ -166,7 +207,8 @@ class PycBuildsList extends HTMLElement {
       perPage: this._state.perPage,
       total: this._state.total,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -259,6 +301,12 @@ class PycBuildsList extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-builds__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const trigger_region = document.createElement("div");
     trigger_region.classList.add("pyc-builds__trigger-region");
     trigger_region.setAttribute("data-role", "trigger-region");
@@ -311,17 +359,23 @@ class PycBuildsList extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = this._extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.builds.projects_fetch_failed",
         { reason: String(reason) }
@@ -330,17 +384,70 @@ class PycBuildsList extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._on_project_changed();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-builds__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-builds__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-builds__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-builds__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -506,12 +613,14 @@ class PycBuildsList extends HTMLElement {
     this._render_table_region();
     const url = build_builds_query_url(this._state);
     let page = null;
+    let fetch_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      fetch_status = response.status;
       if (response.ok === false) {
         throw new Error("builds fetch failed: HTTP " + String(response.status));
       }
@@ -522,14 +631,19 @@ class PycBuildsList extends HTMLElement {
         "pychestrate.ui.builds.list_fetch_failed",
         { reason: String(reason) }
       );
+      if (fetch_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = fetch_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = fetch_status;
       this._render_table_region();
       return;
     }
@@ -548,6 +662,7 @@ class PycBuildsList extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table_region();
     return;
   }
@@ -581,8 +696,20 @@ class PycBuildsList extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-builds__status", "pyc-builds__status--error");
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load builds. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(this._state.errorStatus);
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-builds__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       this._render_pager();
       return;
     }
@@ -622,7 +749,10 @@ class PycBuildsList extends HTMLElement {
         render: (build) => {
           const link = document.createElement("a");
           link.classList.add("pyc-builds__build-link");
-          link.setAttribute("href", "/builds/" + build.run_id);
+          link.setAttribute(
+            "href",
+            build_build_detail_link(build.project_id, build.run_id)
+          );
           link.textContent = short_id(build.run_id);
           link.title = build.run_id;
           return link;
@@ -912,7 +1042,10 @@ class PycBuildsList extends HTMLElement {
     if (outcome.ok === true && outcome.buildId.length > 0) {
       const link = document.createElement("a");
       link.classList.add("pyc-builds__toast-link");
-      link.setAttribute("href", "/builds/" + outcome.buildId);
+      link.setAttribute(
+        "href",
+        build_build_detail_link(this._state.projectId, outcome.buildId)
+      );
       link.setAttribute("data-role", "trigger-toast-link");
       link.textContent = "View build";
       toast.appendChild(link);
@@ -934,6 +1067,8 @@ export {
   BUILD_STATES,
   PycBuildsList,
   TERMINAL_BUILD_STATES,
+  announce_session_expired,
+  build_build_detail_link,
   build_builds_collection_url,
   build_builds_query_url,
   build_source_integrations_url,
@@ -942,6 +1077,7 @@ export {
   has_next_page,
   has_previous_page,
   is_terminal_build_state,
+  list_load_message_for_status,
   parse_runner_inputs,
   short_id,
   trigger_message_for_status

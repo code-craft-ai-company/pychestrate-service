@@ -259,14 +259,22 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
+    """
+        Compute the real page count from a list response's
+        ``total`` field.
+
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
+
+        :returns: Number of pages (at least 1).
+    """
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
 
 
 def _resolve_repository_or_redirect(
@@ -377,9 +385,10 @@ def handle_repository_list(request: Request) -> Response:
         repository_manager = _build_repository_manager(
             db_session=db_session
         )
-        repositories = repository_manager.list_repositories(
+        repositories_result = repository_manager.list_repositories(
             project_id, offset=offset, limit=params["per_page"]
-        ).repositories
+        )
+        repositories = repositories_result.repositories
 
         try:
             can_manage = project_manager.check_permission(
@@ -388,10 +397,9 @@ def handle_repository_list(request: Request) -> Response:
         except Exception:
             can_manage = False
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=repositories_result.total,
             per_page=params["per_page"],
-            returned_count=len(repositories),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -726,8 +734,15 @@ def handle_repository_edit(request: Request) -> Response:
 
         method = request.method.upper()
 
+        # Populated on a POST that falls through to the re-render
+        # so the form shows the submitted values rather than the
+        # stale database copy.
+        form_view: Optional[MultiFormView] = None
+
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
+            multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -802,9 +817,11 @@ def handle_repository_edit(request: Request) -> Response:
         )
         context["project"] = project
         context["repository"] = repository
+        context["form_data"] = form_view
         response = _render(
             template_name="projects/repositories/edit.html",
             context=context,
+            status_code=400 if form_view is not None else 200,
         )
         _attach_session_to_response(
             response=response, session=auth.session

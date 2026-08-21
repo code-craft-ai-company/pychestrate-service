@@ -34,6 +34,9 @@ from typing import Any, Mapping, Optional
 from ccai.pychestrate.webservice.ingest.progress.events import (
     ProgressEventTopics,
 )
+from ccai.pychestrate.webservice.ingest.result.events import (
+    ResultEventTopics,
+)
 from ccai.pychestrate.webservice.jobs.run.state.events import (
     RunStateEventTopics,
 )
@@ -62,6 +65,7 @@ _TOPIC_TO_KIND: Mapping[str, str] = {
     ProgressEventTopics.SUMMARY_LANDED: "progress.summary",
     ProgressEventTopics.RECORD_INGESTED: "progress.record",
     ProgressEventTopics.FRAME_LANDED: "progress.frame",
+    ResultEventTopics.MANIFEST_LANDED: "result.manifest",
 }
 
 

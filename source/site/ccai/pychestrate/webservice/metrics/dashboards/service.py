@@ -10,6 +10,9 @@ M1 ships:
 * :func:`update_dashboard_tiles` — replace the tile array;
   per-tile validation; bumps the version (optimistic
   concurrency counter).
+* :func:`update_dashboard` — in-place update of name /
+  description / grid width / tiles; name-conflict checked;
+  bumps the version.
 * :func:`delete_dashboard` — idempotent on miss.
 * :func:`list_tile_kinds` — read every registered tile kind
   in PRECEDENCE order.
@@ -237,6 +240,111 @@ def update_dashboard_tiles(
                 "dashboard_id": str(row.dashboard_id),
                 "project_id": str(row.project_id),
                 "tile_count": len(tiles),
+                "version": row.version,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
+    db_session.commit()
+    rtnval = _to_view(row=row)
+    return rtnval
+
+
+def update_dashboard(
+        *,
+        db_session: DbSession,
+        dashboard_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        grid_columns_max: Optional[int] = None,
+        tiles: Optional[List[TileInstance]] = None,
+        expected_version: Optional[int] = None
+    ) -> DashboardView:
+    """
+        Update a dashboard in place. Only the supplied fields
+        change -- pass ``None`` to keep the persisted value. A
+        supplied ``tiles`` list replaces the whole tile array
+        after per-tile validation. Renaming to a name already
+        used by another dashboard in the same project raises
+        :class:`DashboardConflictError`. ``expected_version``
+        enables optimistic concurrency -- when supplied, the
+        caller's version must match the persisted version.
+
+        :param db_session: Active SQLAlchemy session.
+        :param dashboard_id: Dashboard UUID to update.
+        :param name: Replacement name, or ``None`` to keep.
+        :param description: Replacement description, or ``None``
+                            to keep.
+        :param grid_columns_max: Replacement grid width, or
+                                 ``None`` to keep.
+        :param tiles: Replacement tile array, or ``None`` to
+                      keep.
+        :param expected_version: Optional optimistic-concurrency
+                                 version guard.
+
+        :returns: The updated :class:`DashboardView`.
+
+        :raises: DashboardNotFoundError, TileKindUnknownError,
+                 TileConfigInvalidError,
+                 DashboardConflictError on name or version
+                 conflict.
+    """
+    row = repository.find_by_id(
+        db_session=db_session, dashboard_id=dashboard_id,
+    )
+    if row is None:
+        err_lines = ["Dashboard not found."]
+        err_lines.append("DASHBOARD_ID: {}".format(dashboard_id))
+        err_msg = os.linesep.join(err_lines)
+        raise DashboardNotFoundError(err_msg) from None
+
+    if expected_version is not None and expected_version != row.version:
+        err_lines = ["Dashboard version mismatch."]
+        err_lines.append("EXPECTED: {}".format(expected_version))
+        err_lines.append("ACTUAL: {}".format(row.version))
+        err_msg = os.linesep.join(err_lines)
+        raise DashboardConflictError(err_msg) from None
+
+    if name is not None and name != row.name:
+        if len(name) == 0:
+            err_lines = ["Dashboard name must be non-empty."]
+            err_msg = os.linesep.join(err_lines)
+            raise TileConfigInvalidError(err_msg) from None
+        existing = repository.find_by_name(
+            db_session=db_session,
+            project_id=str(row.project_id),
+            name=name,
+        )
+        if existing is not None:
+            err_lines = ["Dashboard name already exists in project."]
+            err_lines.append("PROJECT_ID: {}".format(row.project_id))
+            err_lines.append("NAME: {}".format(name))
+            err_msg = os.linesep.join(err_lines)
+            raise DashboardConflictError(err_msg) from None
+        row.name = name
+
+    if description is not None:
+        row.description = description
+
+    if grid_columns_max is not None:
+        row.grid_columns_max = grid_columns_max
+
+    if tiles is not None:
+        _validate_tiles(tiles=tiles)
+        row.tiles = [_tile_to_payload(tile=t) for t in tiles]
+
+    now = utc_now()
+    row.version = row.version + 1
+    row.updated_at = now
+    db_session.flush()
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=DashboardEventTopics.UPDATED,
+            payload={
+                "dashboard_id": str(row.dashboard_id),
+                "project_id": str(row.project_id),
+                "tile_count": len(row.tiles or []),
                 "version": row.version,
             },
             source_event_id=new_uuid(),

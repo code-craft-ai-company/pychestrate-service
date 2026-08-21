@@ -8,13 +8,14 @@
 Covers the dashboard operations attached by
 ``register_dashboards_routes``:
 
-* GET  /api/v1/projects/{project_id}/dashboards
-* POST /api/v1/projects/{project_id}/dashboards
-* GET  /api/v1/projects/{project_id}/dashboards/{dashboard_id}
+* GET   /api/v1/projects/{project_id}/dashboards
+* POST  /api/v1/projects/{project_id}/dashboards
+* GET   /api/v1/projects/{project_id}/dashboards/{dashboard_id}
+* PATCH /api/v1/projects/{project_id}/dashboards/{dashboard_id}
 
 Auth (401/403), session boundary (503), project not-found (404),
-malformed body (422), name conflict (409), and happy-path
-200/201 each get explicit coverage.
+malformed body (422), name conflict (409), version conflict
+(409), and happy-path 200/201 each get explicit coverage.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -178,10 +179,10 @@ def _make_dashboard_view(
 # ---------------------------------------------------------------------------
 
 
-def test_register_dashboards_routes_attaches_three_endpoints():
+def test_register_dashboards_routes_attaches_four_endpoints():
     """
     **Feature: 7-project-dashboards PR p20f**
-    **Property: register_dashboards_routes attaches the three
+    **Property: register_dashboards_routes attaches the four
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -194,6 +195,10 @@ def test_register_dashboards_routes_attaches_three_endpoints():
         (
             "/api/v1/projects/{project_id}/dashboards/{dashboard_id}",
             ("GET",),
+        ),
+        (
+            "/api/v1/projects/{project_id}/dashboards/{dashboard_id}",
+            ("PATCH",),
         ),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
@@ -588,4 +593,236 @@ def test_read_returns_200_on_happy_path():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(body["dashboard_id"], "dash-7")
+    return
+
+
+# ---------------------------------------------------------------------------
+# PATCH /dashboards/{dashboard_id}
+# ---------------------------------------------------------------------------
+
+
+def _patch_get_dashboard(*, view: Any) -> Any:
+    patch = create_module_patch(
+        dashboards_routes.dashboards_service, "get_dashboard",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: view)
+    return patch
+
+
+def test_update_returns_403_when_permission_denied():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 403 when the
+    principal lacks system:dashboards.write.**
+    """
+    perm_patch = _patch_check_permission(allowed=False)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-1",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"tiles": []},
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        body["required_permission"], "system:dashboards.write",
+    )
+    return
+
+
+def test_update_returns_404_when_dashboard_missing():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 404 when the
+    dashboard does not exist.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    get_patch = create_module_patch(
+        dashboards_routes.dashboards_service, "get_dashboard",
+    )
+    get_mock = get_patch.activate()
+
+    def _raise(**kwargs):
+        raise DashboardNotFoundError("missing")
+
+    get_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-x",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-x"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"tiles": []},
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        get_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
+    body = _decode_body(response)
+    testbase.assert_equal(body["dashboard_id"], "dash-x")
+    return
+
+
+def test_update_returns_404_on_project_mismatch():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 404 when the
+    dashboard belongs to a different project.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    get_patch = _patch_get_dashboard(
+        view=_make_dashboard_view(
+            dashboard_id="dash-9", project_id="other-proj",
+        ),
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-9",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-9"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"tiles": []},
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        get_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
+    return
+
+
+def test_update_returns_422_on_missing_body():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 422 when the body
+    is missing.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    get_patch = _patch_get_dashboard(view=_make_dashboard_view())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-1",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body=None,
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        get_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_VALIDATION_FAILED)
+    return
+
+
+def test_update_returns_409_on_version_conflict():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 409 when the
+    service reports a conflict (stale expected_version or a
+    duplicate name).**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    get_patch = _patch_get_dashboard(view=_make_dashboard_view())
+    update_patch = create_module_patch(
+        dashboards_routes.dashboards_service, "update_dashboard",
+    )
+    update_mock = update_patch.activate()
+
+    def _raise(**kwargs):
+        raise DashboardConflictError("version mismatch")
+
+    update_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-1",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"tiles": [], "expected_version": 1},
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        update_patch.deactivate()
+        get_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 409)
+    body = _decode_body(response)
+    testbase.assert_equal(body["dashboard_id"], "dash-1")
+    return
+
+
+def test_update_returns_200_on_happy_path():
+    """
+    **Feature: 7-project-dashboards PR p20f**
+    **Property: PATCH dashboards/{id} returns 200 with the
+    updated Dashboard shape and passes only the supplied fields
+    to the service.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    get_patch = _patch_get_dashboard(view=_make_dashboard_view())
+    captured: Dict[str, Any] = {}
+    update_patch = create_module_patch(
+        dashboards_routes.dashboards_service, "update_dashboard",
+    )
+    update_mock = update_patch.activate()
+
+    def _update(**kwargs):
+        captured.update(kwargs)
+        rtnval = _make_dashboard_view(dashboard_id="dash-1")
+        return rtnval
+
+    update_mock.configure(side_effect=_update)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/dashboards/dash-1",
+            path_params={"project_id": "proj-1", "dashboard_id": "dash-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={
+                "tiles": [
+                    {
+                        "tile_id": "tile-1",
+                        "kind": "line",
+                        "x": 0,
+                        "y": 0,
+                        "w": 1,
+                        "h": 1,
+                        "config": {"metric": "pass_rate"},
+                    },
+                ],
+                "expected_version": 1,
+            },
+        )
+        response = dashboards_routes.handle_update_dashboard(request)
+    finally:
+        update_patch.deactivate()
+        get_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(body["dashboard_id"], "dash-1")
+    testbase.assert_equal(captured["name"], None)
+    testbase.assert_equal(captured["expected_version"], 1)
+    testbase.assert_equal(len(captured["tiles"]), 1)
+    testbase.assert_equal(captured["tiles"][0].tile_id, "tile-1")
     return

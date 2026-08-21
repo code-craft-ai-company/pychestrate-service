@@ -52,6 +52,8 @@ __version__ = "1.0.0"
 
 import json
 
+from datetime import datetime
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -300,14 +302,22 @@ def _parse_pagination_params(
     return rtnval
 
 
-def _approximate_total_pages(
-        *, page: int, per_page: int, returned_count: int
-    ) -> int:
-    if returned_count < per_page:
-        if page == 1:
-            return 1
-        return page
-    return page + 1
+def _total_pages_from_count(*, total: int, per_page: int) -> int:
+    """
+        Compute the real page count from a list response's
+        ``total`` field.
+
+        :param total: Total matching rows reported by the manager.
+        :param per_page: Page size.
+
+        :returns: Number of pages (at least 1).
+    """
+    if total is None:
+        return 1
+    if total <= 0:
+        return 1
+    rtnval = (total + per_page - 1) // per_page
+    return rtnval
 
 
 def _parse_metadata_json_or_default(
@@ -429,6 +439,62 @@ def _resolve_project_or_redirect(
 # ---------------------------------------------------------------------------
 
 
+def _created_at_sort_key(*, item: Any) -> Any:
+    """
+        Sort key for merging per-project recent-activity rows.
+        Falls back to ``datetime.min`` when a row carries no
+        ``created_at`` so mixed rows still sort deterministically.
+    """
+    created_at = getattr(item, "created_at", None)
+    if created_at is None:
+        return datetime.min
+    return created_at
+
+
+def _collect_recent_activity(
+        *, db_session: Any, projects: List[Any], limit: int = 10
+    ) -> Dict[str, List[Any]]:
+    """
+        Gather the most recent builds and test jobs across the
+        user's projects for the dashboard activity panels.
+
+        :param db_session: Open SQLAlchemy session.
+        :param projects: The user's projects (already bounded).
+        :param limit: Maximum rows per activity list.
+
+        :returns: Dict with ``builds`` and ``tests`` lists,
+                  newest first.
+    """
+    build_manager = _build_build_manager(db_session=db_session)
+    test_manager = _build_test_manager(db_session=db_session)
+
+    recent_builds: List[Any] = []
+    recent_tests: List[Any] = []
+    for project in projects:
+        builds = build_manager.list_builds(
+            project_id=project.id, limit=limit
+        ).builds
+        recent_builds.extend(builds)
+
+        jobs = test_manager.list_jobs(
+            project_id=project.id, limit=limit
+        ).jobs
+        recent_tests.extend(jobs)
+
+    recent_builds.sort(
+        key=lambda item: _created_at_sort_key(item=item), reverse=True
+    )
+    recent_tests.sort(
+        key=lambda item: _created_at_sort_key(item=item), reverse=True
+    )
+
+    rtnval = {
+        "builds": recent_builds[:limit],
+        "tests": recent_tests[:limit],
+    }
+    return rtnval
+
+
 def handle_dashboard(request: Request) -> Response:
     """
         ``GET /projects/`` and ``/projects/dashboard``.
@@ -444,6 +510,10 @@ def handle_dashboard(request: Request) -> Response:
             auth.user_id, limit=10
         ).projects
 
+        recent_activity = _collect_recent_activity(
+            db_session=db_session, projects=projects
+        )
+
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -452,8 +522,8 @@ def handle_dashboard(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["projects"] = projects
-        context["recent_builds"] = []
-        context["recent_tests"] = []
+        context["recent_builds"] = recent_activity["builds"]
+        context["recent_tests"] = recent_activity["tests"]
         response = _render(
             template_name="projects/dashboard.html",
             context=context,
@@ -489,17 +559,17 @@ def handle_project_list(request: Request) -> Response:
         search = request.query_params.get("search", "") or ""
 
         project_manager = _build_project_manager(db_session=db_session)
-        projects = project_manager.list_projects(
+        projects_result = project_manager.list_projects(
             user_id=auth.user_id,
             offset=offset,
             limit=params["per_page"],
             search=search if len(search) > 0 else None,
-        ).projects
+        )
+        projects = projects_result.projects
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=projects_result.total,
             per_page=params["per_page"],
-            returned_count=len(projects),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -700,6 +770,22 @@ def handle_project_detail(request: Request) -> Response:
             project_id, limit=10
         ).members
 
+        # Capability flags so the template only shows actions the
+        # viewer can actually use (edit is admin-gated, delete is
+        # owner-gated). A permission-probe failure means "no".
+        try:
+            can_edit = project_manager.check_permission(
+                project_id, auth.user_id, "admin"
+            )
+        except Exception:
+            can_edit = False
+        try:
+            can_delete = project_manager.check_permission(
+                project_id, auth.user_id, "owner"
+            )
+        except Exception:
+            can_delete = False
+
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -712,6 +798,8 @@ def handle_project_detail(request: Request) -> Response:
         context["recent_builds"] = recent_builds
         context["recent_tests"] = recent_tests
         context["members"] = members
+        context["can_edit"] = can_edit
+        context["can_delete"] = can_delete
 
         response = _render(
             template_name="projects/projects/detail.html",
@@ -767,8 +855,15 @@ def handle_project_edit(request: Request) -> Response:
 
         method = request.method.upper()
 
+        # Populated on a POST that falls through to the re-render
+        # so the form shows the submitted values rather than the
+        # stale database copy.
+        form_view: Optional[MultiFormView] = None
+
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
+            multi_form = _parse_form_multi(request=request)
+            form_view = MultiFormView(data=multi_form)
 
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
                 form=single_form,
@@ -836,9 +931,11 @@ def handle_project_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["project"] = project
+        context["form_data"] = form_view
         response = _render(
             template_name="projects/projects/edit.html",
             context=context,
+            status_code=400 if form_view is not None else 200,
         )
         _attach_session_to_response(
             response=response, session=auth.session
@@ -973,9 +1070,10 @@ def handle_member_list(request: Request) -> Response:
         params = _parse_pagination_params(request=request)
         offset = (params["page"] - 1) * params["per_page"]
 
-        members = project_manager.list_members(
+        members_result = project_manager.list_members(
             project_id, offset=offset, limit=params["per_page"]
-        ).members
+        )
+        members = members_result.members
 
         # Separate per-render permission probe (matches legacy
         # template's ``can_manage`` flag).
@@ -986,10 +1084,9 @@ def handle_member_list(request: Request) -> Response:
         except Exception:
             can_manage = False
 
-        total_pages = _approximate_total_pages(
-            page=params["page"],
+        total_pages = _total_pages_from_count(
+            total=members_result.total,
             per_page=params["per_page"],
-            returned_count=len(members),
         )
 
         flashes = flash.consume_flashes(session=auth.session)
@@ -1002,6 +1099,7 @@ def handle_member_list(request: Request) -> Response:
         context["project"] = project
         context["members"] = members
         context["can_manage"] = can_manage
+        context["current_user_id"] = auth.user_id
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
@@ -1351,6 +1449,24 @@ def handle_member_remove(request: Request) -> Response:
         if deny_response is not None:
             return deny_response
 
+        # Refuse self-removal: an admin removing themselves would
+        # lock themselves out of the project mid-session. String
+        # comparison because path params arrive as coerced ints
+        # while auth user ids may be strings.
+        if str(target_user_id) == str(auth.user_id):
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.member_list", project_id=project_id
+                ),
+                message=(
+                    "You cannot remove yourself from a project. "
+                    "Ask another administrator to remove you."
+                ),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
         try:
             project_manager.remove_member(
                 project_id, target_user_id, auth.user_id
@@ -1382,6 +1498,221 @@ def handle_member_remove(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Site-shell wrapping
+#
+# Mirrors the /admin surface's strategy (config.routes
+# _wrap_admin_handler_in_shell): the blueprint routes still own
+# webworks dispatch for /projects/*, but every HTML render is
+# re-emitted inside the shell document so the unified header +
+# sidebar + theme render around the page. The templates extend the
+# fragment-style projects/base.html; redirects (auth bounce to
+# /login?next=..., post-POST redirects) pass through untouched.
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_PROJECTS_PAGE_TITLE = "Pychestrate"
+
+
+# Second path segment (/projects/<segment>) → tab label for the
+# project-root pages. Anything else in that position is a project
+# id, titled by the section table below.
+_PROJECTS_ROOT_TITLE_LABELS: Dict[str, str] = {
+    "dashboard": "Projects",
+    "list": "All Projects",
+    "create": "New Project",
+}
+
+
+# Third path segment (/projects/{id}/<segment>) → tab label for the
+# project-scoped sections. Deeper paths inherit their section's
+# label so e.g. /projects/7/builds/42/logs is titled "Builds".
+_PROJECTS_SECTION_TITLE_LABELS: Dict[str, str] = {
+    "edit": "Edit Project",
+    "members": "Members",
+    "repositories": "Repositories",
+    "builds": "Builds",
+    "infrastructure": "Infrastructure",
+    "tests": "Tests",
+    "releases": "Releases",
+    "release-templates": "Release Templates",
+    "calendar": "Calendar",
+    "watches": "Watches",
+}
+
+
+def _resolve_projects_page_title(*, path: str) -> str:
+    """
+        Resolve the shell document ``<title>`` for a projects page
+        from the request path. Sibling of the admin surface's
+        ``_resolve_admin_page_title`` but segment-based, because
+        project paths embed dynamic ids
+        (``/projects/{id}/builds/...``) that a longest-prefix
+        table cannot match.
+
+        :param path: Request path (e.g. ``"/projects/7/builds"``).
+
+        :returns: Title string (e.g. ``"Builds · Pychestrate"``).
+    """
+    if path is None or len(path) == 0:
+        return _DEFAULT_PROJECTS_PAGE_TITLE
+
+    segments = [
+        segment for segment in path.split("/") if len(segment) > 0
+    ]
+    if len(segments) == 0 or segments[0] != "projects":
+        return _DEFAULT_PROJECTS_PAGE_TITLE
+
+    label = "Projects"
+    if len(segments) >= 2:
+        second = segments[1]
+        if second in _PROJECTS_ROOT_TITLE_LABELS:
+            label = _PROJECTS_ROOT_TITLE_LABELS[second]
+        else:
+            # Second segment is a project id.
+            label = "Project"
+            if len(segments) >= 3:
+                section = segments[2]
+                if section in _PROJECTS_SECTION_TITLE_LABELS:
+                    label = _PROJECTS_SECTION_TITLE_LABELS[section]
+
+    rtnval = "{} · {}".format(label, _DEFAULT_PROJECTS_PAGE_TITLE)
+    return rtnval
+
+
+def _wrap_projects_handler_in_shell(handler: Any) -> Any:
+    """
+        Wrap a projects-blueprint handler so its HTML response body
+        renders as a content fragment inside the site shell's main
+        slot.
+
+        The handlers render templates extending the fragment-style
+        ``projects/base.html`` -- no ``<html>/<head>/<body>``, no
+        standalone chrome. This wrapper takes the rendered fragment
+        and re-emits it inside the shell document so the unified
+        header + sidebar render around it. The server-rendered
+        fragment counts as mounted route content to the shell's
+        landing-state check, so the client-side not-found view never
+        fires on these pages.
+
+        Non-HTML responses (the auth redirect to ``/login?next=``,
+        post-POST redirects) pass through unchanged. The inner
+        response's status code, cookies (the signed session cookie
+        that carries consumed-flash state), and non-content-type
+        headers are all carried onto the shell response.
+
+        :param handler: The original handler taking a webworks
+                        ``Request`` and returning a ``Response``.
+
+        :returns: A new callable with the same signature that wraps
+                  the response body in the shell document when the
+                  response is an HTML render.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (  # noqa: E402
+        render_shell_document,
+    )
+
+    def _wrapped(request: Request) -> Response:
+        inner = handler(request)
+        if isinstance(inner, HTMLResponse) is False:
+            return inner
+
+        try:
+            inner_body_bytes = inner._body
+        except AttributeError:
+            return inner
+
+        if inner_body_bytes is None:
+            inner_html = ""
+        else:
+            try:
+                inner_html = inner_body_bytes.decode("utf-8")
+            except Exception:
+                return inner
+
+        request_path = getattr(request, "path", "")
+        if isinstance(request_path, str) is False:
+            request_path = ""
+        page_title = _resolve_projects_page_title(path=request_path)
+        rtnval = render_shell_document(
+            request=request,
+            page_title=page_title,
+            content_html=inner_html,
+        )
+        try:
+            rtnval._status_code = inner._status_code
+        except AttributeError:
+            pass
+
+        # Carry the inner response's cookies across -- the session
+        # cookie re-signed by _attach_session_to_response records
+        # that queued flashes were consumed; dropping it would make
+        # every flash reappear on the next page.
+        try:
+            inner_cookies = inner._cookies
+        except AttributeError:
+            inner_cookies = None
+        if inner_cookies is not None:
+            for cookie_name in inner_cookies:
+                rtnval._cookies[cookie_name] = inner_cookies[cookie_name]
+
+        # Carry any extra headers too, but keep the shell render's
+        # own Content-Type.
+        try:
+            inner_headers = inner._headers
+        except AttributeError:
+            inner_headers = None
+        if inner_headers is not None:
+            for header_name, header_value in inner_headers.items():
+                if header_name.lower() == "content-type":
+                    continue
+                rtnval._headers[header_name] = header_value
+
+        return rtnval
+
+    _wrapped.__name__ = "{}_in_shell".format(
+        getattr(handler, "__name__", "projects_handler")
+    )
+    return _wrapped
+
+
+class _ShellWrappingApp:
+    """
+        Registration adapter that wraps every attached handler in
+        :func:`_wrap_projects_handler_in_shell` before delegating
+        to the real webworks app. Passed to every per-feature
+        ``register_*_routes`` function by
+        :func:`register_projects_routes` so all 60+ projects routes
+        get shell-wrapped without touching each sub-module.
+    """
+
+    def __init__(self, *, app: Any) -> None:
+        self._app = app
+        return
+
+    def attach_route(
+            self, path: str, methods: Optional[List[str]] = None
+        ) -> Callable:
+        """
+            Mirror of ``app.attach_route``: returns a decorator
+            that registers the shell-wrapped handler on the real
+            app and hands the original handler back to the caller.
+
+            :param path: Route pattern.
+            :param methods: HTTP methods for the route.
+
+            :returns: Decorator callable.
+        """
+        inner_decorator = self._app.attach_route(path, methods=methods)
+
+        def decorator(handler: Any) -> Any:
+            wrapped_handler = _wrap_projects_handler_in_shell(handler)
+            inner_decorator(wrapped_handler)
+            return handler
+
+        return decorator
+
+
+# ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
 
@@ -1407,11 +1738,20 @@ def register_projects_routes(*, app: Any) -> None:
         register their endpoint names with the url_for shim.
         Cascades through every per-feature sub-module (F1 .. F5).
 
+        Every handler is registered through the
+        :class:`_ShellWrappingApp` adapter so its HTML renders are
+        re-emitted inside the site shell document -- the /projects
+        surface shares the unified header / sidebar / theme with
+        the rest of the site instead of its retired standalone
+        chrome.
+
         :param app: WebWorks application built by
                     ``establish_webapp_persona``.
 
         :returns: None.
     """
+    shell_app = _ShellWrappingApp(app=app)
+
     for endpoint_name, relative_path, methods in _ROUTE_TABLE:
         full_path = PROJECTS_PATH + relative_path
         if full_path.endswith("/") and full_path != "/":
@@ -1423,7 +1763,7 @@ def register_projects_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        shell_app.attach_route(full_path, methods=list(methods))(handler)
 
     for endpoint_name, relative_path in _FUTURE_ENDPOINT_PATTERNS:
         full_path = PROJECTS_PATH + relative_path
@@ -1436,7 +1776,7 @@ def register_projects_routes(*, app: Any) -> None:
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_repositories import (  # noqa: E402
         register_repositories_routes,
     )
-    register_repositories_routes(app=app)
+    register_repositories_routes(app=shell_app)
 
     # F3 features -- builds + infrastructure.
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_builds import (  # noqa: E402
@@ -1445,8 +1785,8 @@ def register_projects_routes(*, app: Any) -> None:
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_infrastructure import (  # noqa: E402
         register_infrastructure_routes,
     )
-    register_builds_routes(app=app)
-    register_infrastructure_routes(app=app)
+    register_builds_routes(app=shell_app)
+    register_infrastructure_routes(app=shell_app)
 
     # F4 features -- tests + releases.
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_tests import (  # noqa: E402
@@ -1455,14 +1795,14 @@ def register_projects_routes(*, app: Any) -> None:
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_releases import (  # noqa: E402
         register_releases_routes,
     )
-    register_tests_routes(app=app)
-    register_releases_routes(app=app)
+    register_tests_routes(app=shell_app)
+    register_releases_routes(app=shell_app)
 
     # Project-scoped release templates UI.
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_release_templates import (  # noqa: E402
         register_release_templates_routes,
     )
-    register_release_templates_routes(app=app)
+    register_release_templates_routes(app=shell_app)
 
     # F5 features -- calendar + watches (final slice).
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_calendar import (  # noqa: E402
@@ -1471,8 +1811,8 @@ def register_projects_routes(*, app: Any) -> None:
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_watches import (  # noqa: E402
         register_watches_routes,
     )
-    register_calendar_routes(app=app)
-    register_watches_routes(app=app)
+    register_calendar_routes(app=shell_app)
+    register_watches_routes(app=shell_app)
 
     return
 
@@ -1480,6 +1820,7 @@ def register_projects_routes(*, app: Any) -> None:
 __all__ = [
     "PROJECTS_PATH",
     "register_projects_routes",
+    "_wrap_projects_handler_in_shell",
     "handle_dashboard",
     "handle_project_list",
     "handle_project_create",

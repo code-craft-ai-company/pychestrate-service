@@ -4,6 +4,7 @@ const SECRET_SCOPE_KINDS = [
   "USER"
 ];
 const SECRETS_API_PATH = "/api/v1/secrets";
+const SECRETS_PER_PAGE = 25;
 function build_secrets_list_url(scope_kind, scope_ref) {
   const params = new URLSearchParams();
   if (scope_kind.length > 0) {
@@ -41,7 +42,7 @@ function build_secret_resource_url(secret_ref) {
 }
 function format_timestamp(value) {
   if (value === null || value === void 0 || value.length === 0) {
-    const rtnval2 = "\u2014";
+    const rtnval2 = "—";
     return rtnval2;
   }
   const parsed = new Date(value);
@@ -68,12 +69,71 @@ function reveal_error_message(status) {
   const rtnval = "Failed to read the secret value. Try again.";
   return rtnval;
 }
+function list_error_message(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired. Sign in again to view secrets.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to secrets in this scope.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Could not reach the secrets service. Check your connection and try again.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load secrets. Try refreshing.";
+  return rtnval;
+}
+function rotate_error_message(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired. Sign in again, then retry the rotation. The value was not changed.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have permission to rotate this secret. The value was not changed.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This secret no longer exists. Refresh the list.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Could not reach the secrets service — the rotation may not have been applied. Verify before retrying.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to rotate the secret (HTTP " + String(status) + "). The value was not changed.";
+  return rtnval;
+}
+function delete_error_message(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired. Sign in again, then retry the delete. The secret was not deleted.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have permission to delete this secret. The secret was not deleted.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This secret no longer exists. Refresh the list.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Could not reach the secrets service — the delete may not have been applied. Refresh to verify.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to delete the secret (HTTP " + String(status) + "). The secret is still in place.";
+  return rtnval;
+}
 class PycSecrets extends HTMLElement {
   _state;
   _secrets;
   _root;
   _table_region;
   _table;
+  _pager;
+  _rotate_region;
+  _action_status;
   /**
    * Per-secret transient reveal state, keyed by secret_ref. The
    * plaintext value lives ONLY here -- never persisted, never
@@ -89,26 +149,39 @@ class PycSecrets extends HTMLElement {
     this._state = {
       scopeKind: "ORG",
       scopeRef: "",
+      filter: "",
+      page: 1,
+      perPage: SECRETS_PER_PAGE,
+      total: 0,
       loading: false,
-      errored: false
+      errored: false,
+      lastErrorStatus: 0
     };
     this._secrets = [];
     this._root = null;
     this._table_region = null;
     this._table = null;
+    this._pager = null;
+    this._rotate_region = null;
+    this._action_status = null;
     this._revealed = /* @__PURE__ */ new Map();
     this._reveal_errors = /* @__PURE__ */ new Map();
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the scope
-   * + load state without scraping the DOM.
+   * + filter + load state without scraping the DOM.
    */
   get viewState() {
     const rtnval = {
       scopeKind: this._state.scopeKind,
       scopeRef: this._state.scopeRef,
+      filter: this._state.filter,
+      page: this._state.page,
+      perPage: this._state.perPage,
+      total: this._state.total,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      lastErrorStatus: this._state.lastErrorStatus
     };
     return rtnval;
   }
@@ -141,8 +214,9 @@ class PycSecrets extends HTMLElement {
   }
   /**
    * Build the persistent chrome -- heading, scope selector,
-   * create form, and the table region the data render replaces
-   * on every fetch.
+   * create form, action status, rotate-form region, name filter,
+   * and the table region + pager the data render replaces on
+   * every fetch.
    */
   _render_chrome() {
     const root = document.createElement("section");
@@ -154,11 +228,35 @@ class PycSecrets extends HTMLElement {
     root.appendChild(this._build_scope_tabs());
     root.appendChild(this._build_scope_ref_field());
     root.appendChild(this._build_create_form());
+    const action_status = document.createElement("p");
+    action_status.classList.add("pyc-secrets__action-status");
+    action_status.setAttribute("data-role", "action-status");
+    root.appendChild(action_status);
+    this._action_status = action_status;
+    const rotate_region = document.createElement("div");
+    rotate_region.classList.add("pyc-secrets__rotate-region");
+    rotate_region.setAttribute("data-role", "rotate-region");
+    rotate_region.hidden = true;
+    root.appendChild(rotate_region);
+    this._rotate_region = rotate_region;
+    root.appendChild(this._build_filter_row());
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-secrets__table-region");
     table_region.setAttribute("data-role", "table-region");
     root.appendChild(table_region);
     this._table_region = table_region;
+    const pager = document.createElement("mj-pagination");
+    pager.classList.add("pyc-secrets__pager");
+    pager.setAttribute("data-role", "pager");
+    pager.setAttribute("page", String(this._state.page));
+    pager.setAttribute("page-size", String(this._state.perPage));
+    pager.setAttribute("total-items", String(this._state.total));
+    pager.addEventListener("mj-pagination-change", (event) => {
+      this._state.page = event.detail.page;
+      this._render_table_region();
+    });
+    this._pager = pager;
+    root.appendChild(pager);
     this._root = root;
     this.replaceChildren(root);
     this._sync_scope_ref_visibility();
@@ -222,6 +320,30 @@ class PycSecrets extends HTMLElement {
     return wrapper;
   }
   /**
+   * Build the name-filter row -- a client-side substring filter
+   * over the loaded secret refs.
+   */
+  _build_filter_row() {
+    const filters = document.createElement("div");
+    filters.classList.add("pyc-secrets__filters");
+    const label = document.createElement("label");
+    label.classList.add("pyc-secrets__field");
+    label.textContent = "Filter by name";
+    const input = document.createElement("mj-text-field");
+    input.classList.add("pyc-secrets__input");
+    input.setAttribute("type", "text");
+    input.setAttribute("data-role", "name-filter");
+    input.setAttribute("placeholder", "substring of the secret name");
+    input.addEventListener("change", () => {
+      this._state.filter = input.value.trim();
+      this._state.page = 1;
+      this._render_table_region();
+    });
+    label.appendChild(input);
+    filters.appendChild(label);
+    return filters;
+  }
+  /**
    * Build the "Create Secret" form -- name + scope-bound value.
    */
   _build_create_form() {
@@ -278,8 +400,10 @@ class PycSecrets extends HTMLElement {
     }
     this._state.scopeKind = scope_kind;
     this._state.scopeRef = "";
+    this._state.page = 1;
     this._revealed.clear();
     this._reveal_errors.clear();
+    this._close_rotate_form();
     if (this._root !== null) {
       const tabs = this._root.querySelectorAll('[data-role="scope-tab"]');
       for (const tab of Array.from(tabs)) {
@@ -328,24 +452,22 @@ class PycSecrets extends HTMLElement {
   async _refresh() {
     this._state.loading = true;
     this._state.errored = false;
+    this._state.lastErrorStatus = 0;
     this._render_table_region();
     const url = build_secrets_list_url(
       this._state.scopeKind,
       this._state.scopeRef
     );
     let secrets = null;
-    let forbidden = false;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
-      if (response.status === 403) {
-        forbidden = true;
-        throw new Error("secrets list forbidden");
-      }
       if (response.ok === false) {
+        error_status = response.status;
         throw new Error(
           "secrets fetch failed: HTTP " + String(response.status)
         );
@@ -359,16 +481,19 @@ class PycSecrets extends HTMLElement {
       );
       this._state.loading = false;
       this._state.errored = true;
-      this._render_table_region(forbidden);
+      this._state.lastErrorStatus = error_status;
+      this._render_table_region();
       return;
     }
     if (Array.isArray(secrets) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.lastErrorStatus = 0;
       this._render_table_region();
       return;
     }
     this._secrets = secrets;
+    this._state.page = 1;
     this._state.loading = false;
     this._state.errored = false;
     this._render_table_region();
@@ -398,7 +523,7 @@ class PycSecrets extends HTMLElement {
     if (this._state.scopeKind !== "ORG") {
       payload.scope_ref = this._state.scopeRef;
     }
-    status.textContent = "Creating\u2026";
+    status.textContent = "Creating…";
     status.setAttribute("data-tone", "neutral");
     try {
       const response = await fetch(SECRETS_API_PATH, {
@@ -438,50 +563,117 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Re-render the table region from the current state + secrets.
+   * Set the rotate / delete outcome line under the create form.
    *
-   * @param forbidden When true, render the scope-forbidden
-   *                   message instead of the generic error.
+   * @param message The outcome text ("" clears the line).
+   * @param tone ``"ok"`` | ``"error"`` | ``"neutral"``.
    */
-  _render_table_region(forbidden = false) {
+  _set_action_status(message, tone) {
+    if (this._action_status === null) {
+      return;
+    }
+    this._action_status.textContent = message;
+    this._action_status.setAttribute("data-tone", tone);
+    return;
+  }
+  /**
+   * Filter the loaded secrets by the client-side name filter.
+   *
+   * @returns The secrets whose ref contains the filter text.
+   */
+  _filtered_secrets() {
+    if (this._state.filter.length === 0) {
+      const rtnval2 = this._secrets;
+      return rtnval2;
+    }
+    const needle = this._state.filter.toLowerCase();
+    const rtnval = this._secrets.filter(
+      (secret) => secret.secret_ref.toLowerCase().includes(needle)
+    );
+    return rtnval;
+  }
+  /**
+   * Slice the filtered secrets down to the current page.
+   *
+   * @param filtered The filtered secrets list.
+   *
+   * @returns The secrets for the current page.
+   */
+  _page_slice(filtered) {
+    const page_count = Math.max(
+      1,
+      Math.ceil(filtered.length / this._state.perPage)
+    );
+    if (this._state.page > page_count) {
+      this._state.page = page_count;
+    }
+    const start = (this._state.page - 1) * this._state.perPage;
+    const end = start + this._state.perPage;
+    const rtnval = filtered.slice(start, end);
+    return rtnval;
+  }
+  _render_pager() {
+    if (this._pager === null) {
+      return;
+    }
+    this._pager.setAttribute("page", String(this._state.page));
+    this._pager.setAttribute("page-size", String(this._state.perPage));
+    this._pager.setAttribute("total-items", String(this._state.total));
+    return;
+  }
+  /**
+   * Re-render the table region from the current state + secrets.
+   */
+  _render_table_region() {
     if (this._table_region === null) {
       return;
     }
     const region = this._table_region;
     if (this._state.loading === true) {
       this._table = null;
+      this._state.total = 0;
       const loading = document.createElement("p");
       loading.classList.add("pyc-secrets__status");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading secrets\u2026";
+      loading.textContent = "Loading secrets…";
       region.replaceChildren(loading);
+      this._render_pager();
       return;
     }
     if (this._state.errored === true) {
       this._table = null;
+      this._state.total = 0;
       const error = document.createElement("p");
       error.classList.add("pyc-secrets__status", "pyc-secrets__status--error");
-      if (forbidden === true) {
+      if (this._state.lastErrorStatus === 403) {
         error.setAttribute("data-role", "forbidden-state");
-        error.textContent = "You don't have access to secrets in this scope.";
       } else {
         error.setAttribute("data-role", "error-state");
-        error.textContent = "Failed to load secrets. Try refreshing.";
       }
+      error.textContent = list_error_message(this._state.lastErrorStatus);
       region.replaceChildren(error);
+      this._render_pager();
       return;
     }
-    if (this._secrets.length === 0) {
+    const filtered = this._filtered_secrets();
+    this._state.total = filtered.length;
+    if (filtered.length === 0) {
       this._table = null;
       const empty = document.createElement("p");
       empty.classList.add("pyc-secrets__status");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No secrets in this scope yet";
+      if (this._secrets.length === 0) {
+        empty.textContent = "No secrets in this scope yet";
+      } else {
+        empty.textContent = "No secrets match the name filter";
+      }
       region.replaceChildren(empty);
+      this._render_pager();
       return;
     }
-    const table = this._build_table();
+    const table = this._build_table(this._page_slice(filtered));
     region.replaceChildren(table);
+    this._render_pager();
     return;
   }
   /**
@@ -490,8 +682,10 @@ class PycSecrets extends HTMLElement {
    * value column on initial load. The Value column re-renders from
    * the transient ``_revealed`` / ``_reveal_errors`` maps when a
    * row's reveal state changes (see ``_refresh_row``).
+   *
+   * @param page_rows The current page's secrets.
    */
-  _build_table() {
+  _build_table(page_rows) {
     const self = this;
     const table = document.createElement("mj-data-table");
     table.classList.add("pyc-secrets__table");
@@ -574,7 +768,7 @@ class PycSecrets extends HTMLElement {
           rotate_button.setAttribute("data-role", "rotate-action");
           rotate_button.textContent = "Rotate";
           rotate_button.addEventListener("click", () => {
-            void self._rotate_secret(secret);
+            self._open_rotate_form(secret);
           });
           fragment.appendChild(rotate_button);
           const delete_button = document.createElement("mj-button");
@@ -590,7 +784,7 @@ class PycSecrets extends HTMLElement {
         }
       }
     ];
-    table.rows = this._secrets;
+    table.rows = page_rows;
     this._table = table;
     return table;
   }
@@ -623,7 +817,7 @@ class PycSecrets extends HTMLElement {
     const masked = document.createElement("span");
     masked.classList.add("pyc-secrets__value-masked");
     masked.setAttribute("data-role", "masked-value");
-    masked.textContent = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+    masked.textContent = "••••••••";
     return masked;
   }
   /**
@@ -683,23 +877,154 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Rotate a secret's value via ``PUT /api/v1/secrets/{ref}``.
-   * Prompts for the new value, never reads back the old one.
+   * Open the inline masked rotate form for one secret. The new
+   * value is collected through ``mj-password-field`` inputs (with
+   * a confirmation copy) -- never through a plaintext prompt.
    *
    * @param secret The secret to rotate.
    */
-  async _rotate_secret(secret) {
-    const prompt_fn = window.prompt;
-    if (typeof prompt_fn !== "function") {
+  _open_rotate_form(secret) {
+    if (this._rotate_region === null) {
       return;
     }
-    const new_value = window.prompt(
-      "Enter the new value for " + secret.secret_ref
+    this._set_action_status("", "neutral");
+    const region = this._rotate_region;
+    const form = document.createElement("form");
+    form.classList.add("pyc-secrets__rotate-form");
+    form.setAttribute("data-role", "rotate-form");
+    form.setAttribute("data-secret-ref", secret.secret_ref);
+    const title = document.createElement("p");
+    title.classList.add("pyc-secrets__rotate-title");
+    const title_prefix = document.createTextNode("Rotate ");
+    const title_ref = document.createElement("code");
+    title_ref.classList.add("pyc-secrets__ref");
+    title_ref.textContent = secret.secret_ref;
+    title.appendChild(title_prefix);
+    title.appendChild(title_ref);
+    form.appendChild(title);
+    const value_label = document.createElement("label");
+    value_label.classList.add("pyc-secrets__field");
+    value_label.textContent = "New value";
+    const value_input = document.createElement("mj-password-field");
+    value_input.classList.add("pyc-secrets__input");
+    value_input.setAttribute("type", "password");
+    value_input.setAttribute("data-role", "rotate-value");
+    value_input.setAttribute("autocomplete", "new-password");
+    value_input.required = true;
+    value_label.appendChild(value_input);
+    form.appendChild(value_label);
+    const confirm_label = document.createElement("label");
+    confirm_label.classList.add("pyc-secrets__field");
+    confirm_label.textContent = "Confirm new value";
+    const confirm_input = document.createElement("mj-password-field");
+    confirm_input.classList.add("pyc-secrets__input");
+    confirm_input.setAttribute("type", "password");
+    confirm_input.setAttribute("data-role", "rotate-confirm");
+    confirm_input.setAttribute("autocomplete", "new-password");
+    confirm_input.required = true;
+    confirm_label.appendChild(confirm_input);
+    form.appendChild(confirm_label);
+    const submit = document.createElement("mj-button");
+    submit.classList.add("pyc-secrets__button", "pyc-secrets__button--primary");
+    submit.setAttribute("type", "submit");
+    submit.setAttribute("data-role", "rotate-submit");
+    submit.textContent = "Rotate Secret";
+    form.appendChild(submit);
+    const cancel = document.createElement("mj-button");
+    cancel.classList.add("pyc-secrets__button");
+    cancel.setAttribute("type", "button");
+    cancel.setAttribute("data-role", "rotate-cancel");
+    cancel.textContent = "Cancel";
+    cancel.addEventListener("click", () => {
+      this._close_rotate_form();
+    });
+    form.appendChild(cancel);
+    const status = document.createElement("p");
+    status.classList.add("pyc-secrets__create-status");
+    status.setAttribute("data-role", "rotate-status");
+    form.appendChild(status);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void this._submit_rotate(
+        secret,
+        value_input,
+        confirm_input,
+        submit,
+        status
+      );
+    });
+    region.replaceChildren(form);
+    region.hidden = false;
+    return;
+  }
+  /**
+   * Hide the rotate form and drop its transient inputs.
+   */
+  _close_rotate_form() {
+    if (this._rotate_region === null) {
+      return;
+    }
+    this._rotate_region.replaceChildren();
+    this._rotate_region.hidden = true;
+    return;
+  }
+  /**
+   * Validate + submit the rotate form. Failures surface in the
+   * form status with status-specific messages -- a failed
+   * rotation is never silent.
+   *
+   * @param secret The secret being rotated.
+   * @param value_input The new-value masked input.
+   * @param confirm_input The confirmation masked input.
+   * @param submit The submit button (disabled while in flight).
+   * @param status The form status line.
+   */
+  async _submit_rotate(secret, value_input, confirm_input, submit, status) {
+    const new_value = value_input.value;
+    const confirm_value = confirm_input.value;
+    if (new_value.length === 0) {
+      status.textContent = "Enter the new secret value.";
+      status.setAttribute("data-tone", "error");
+      return;
+    }
+    if (new_value !== confirm_value) {
+      status.textContent = "The confirmation does not match the new value.";
+      status.setAttribute("data-tone", "error");
+      return;
+    }
+    submit.toggleAttribute("disabled", true);
+    status.textContent = "Rotating…";
+    status.setAttribute("data-tone", "neutral");
+    const outcome = await this._do_rotate(secret.secret_ref, new_value);
+    submit.toggleAttribute("disabled", false);
+    if (outcome.ok === false) {
+      status.textContent = outcome.message;
+      status.setAttribute("data-tone", "error");
+      this._set_action_status(outcome.message, "error");
+      return;
+    }
+    this._close_rotate_form();
+    this._set_action_status(
+      "Secret " + secret.secret_ref + " rotated.",
+      "ok"
     );
-    if (new_value === null || new_value.length === 0) {
-      return;
-    }
-    const url = build_secret_resource_url(secret.secret_ref);
+    this._revealed.delete(secret.secret_ref);
+    this._reveal_errors.delete(secret.secret_ref);
+    await this._refresh();
+    return;
+  }
+  /**
+   * PUT the new value to ``/api/v1/secrets/{ref}``. Exposed via
+   * the rotate form only -- never reads back the old value.
+   *
+   * @param secret_ref The secret to rotate.
+   * @param new_value The replacement value.
+   *
+   * @returns The rotate outcome ``{ok, status, message}``.
+   */
+  async _do_rotate(secret_ref, new_value) {
+    const url = build_secret_resource_url(secret_ref);
+    let status = 0;
     try {
       const response = await fetch(url, {
         method: "PUT",
@@ -710,28 +1035,42 @@ class PycSecrets extends HTMLElement {
         },
         body: JSON.stringify({ value: new_value })
       });
-      if (response.ok === false) {
-        console.warn(
-          "pychestrate.ui.secrets.rotate_failed",
-          { secret_ref: secret.secret_ref, status: response.status }
-        );
-        return;
-      }
+      status = response.status;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.secrets.rotate_failed",
-        { secret_ref: secret.secret_ref }
+        { secret_ref }
       );
-      return;
+      const rtnval2 = {
+        ok: false,
+        status: 0,
+        message: rotate_error_message(0)
+      };
+      return rtnval2;
     }
-    this._revealed.delete(secret.secret_ref);
-    this._reveal_errors.delete(secret.secret_ref);
-    await this._refresh();
-    return;
+    if (status < 200 || status >= 300) {
+      console.warn(
+        "pychestrate.ui.secrets.rotate_failed",
+        { secret_ref, status }
+      );
+      const rtnval2 = {
+        ok: false,
+        status,
+        message: rotate_error_message(status)
+      };
+      return rtnval2;
+    }
+    const rtnval = {
+      ok: true,
+      status,
+      message: "Secret rotated."
+    };
+    return rtnval;
   }
   /**
    * Delete a secret via ``DELETE /api/v1/secrets/{ref}`` after a
-   * confirmation prompt.
+   * confirmation prompt. Failures surface in the action-status
+   * line with status-specific messages.
    *
    * @param secret The secret to delete.
    */
@@ -746,27 +1085,36 @@ class PycSecrets extends HTMLElement {
     if (confirmed === false) {
       return;
     }
+    this._set_action_status("", "neutral");
     const url = build_secret_resource_url(secret.secret_ref);
+    let status = 0;
     try {
       const response = await fetch(url, {
         method: "DELETE",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
-      if (response.ok === false) {
-        console.warn(
-          "pychestrate.ui.secrets.delete_failed",
-          { secret_ref: secret.secret_ref, status: response.status }
-        );
-        return;
-      }
+      status = response.status;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.secrets.delete_failed",
         { secret_ref: secret.secret_ref }
       );
+      this._set_action_status(delete_error_message(0), "error");
       return;
     }
+    if (status < 200 || status >= 300) {
+      console.warn(
+        "pychestrate.ui.secrets.delete_failed",
+        { secret_ref: secret.secret_ref, status }
+      );
+      this._set_action_status(delete_error_message(status), "error");
+      return;
+    }
+    this._set_action_status(
+      "Secret " + secret.secret_ref + " deleted.",
+      "ok"
+    );
     this._revealed.delete(secret.secret_ref);
     this._reveal_errors.delete(secret.secret_ref);
     await this._refresh();
@@ -779,22 +1127,26 @@ class PycSecrets extends HTMLElement {
    * maps so a single ``rows = …`` re-assignment is enough.
    *
    * @param secret_ref The secret_ref of the row that changed
-   *                    (unused -- the whole table re-renders).
+   *                    (unused -- the whole page re-renders).
    */
   _refresh_row(secret_ref) {
     if (this._table === null) {
       return;
     }
-    this._table.rows = this._secrets;
+    this._table.rows = this._page_slice(this._filtered_secrets());
     return;
   }
 }
 export {
   PycSecrets,
   SECRET_SCOPE_KINDS,
+  SECRETS_PER_PAGE,
   build_secret_resource_url,
   build_secret_value_url,
   build_secrets_list_url,
+  delete_error_message,
   format_timestamp,
-  reveal_error_message
+  list_error_message,
+  reveal_error_message,
+  rotate_error_message
 };

@@ -1,7 +1,11 @@
 import {
+  announce_session_expired,
   build_pod_definition_url,
+  format_clock_time,
   format_timestamp,
+  load_projects,
   member_count,
+  project_display_map,
   short_id
 } from "./pods-list-view.js";
 const POD_STATES = [
@@ -18,7 +22,20 @@ const TRANSIENT_POD_STATES = [
   "PROVISIONING",
   "DRAINING"
 ];
-const POLL_INTERVAL_MS = 5e3;
+const TERMINAL_POD_STATES = [
+  "RELEASED"
+];
+const DRAINABLE_POD_STATES = [
+  "READY",
+  "IN_USE"
+];
+const RETIRABLE_POD_STATES = [
+  "DRAINING",
+  "FAILED"
+];
+const POLL_INTERVAL_TRANSIENT_MS = 5e3;
+const POLL_INTERVAL_SETTLED_MS = 15e3;
+const TOAST_STACK_LIMIT = 3;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pod_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -68,6 +85,10 @@ function is_transient_pod_state(state) {
   const rtnval = TRANSIENT_POD_STATES.indexOf(state) >= 0;
   return rtnval;
 }
+function is_terminal_pod_state(state) {
+  const rtnval = TERMINAL_POD_STATES.indexOf(state) >= 0;
+  return rtnval;
+}
 function pod_state_tone(state) {
   if (state === "READY" || state === "IN_USE") {
     const rtnval2 = "ok";
@@ -92,6 +113,10 @@ function build_pod_state_history_url(project_id, pod_id) {
   const rtnval = build_pod_state_url(project_id, pod_id) + "/history";
   return rtnval;
 }
+function build_pod_transitions_url(project_id, pod_id) {
+  const rtnval = build_pod_state_url(project_id, pod_id) + "/transitions";
+  return rtnval;
+}
 function build_pod_registration_url(project_id, pod_id) {
   const rtnval = "/api/v1/projects/" + encodeURIComponent(project_id) + "/pods/" + encodeURIComponent(pod_id) + "/registration";
   return rtnval;
@@ -100,35 +125,126 @@ function build_pod_registrations_url(project_id, pod_id) {
   const rtnval = "/api/v1/projects/" + encodeURIComponent(project_id) + "/pods/" + encodeURIComponent(pod_id) + "/registrations";
   return rtnval;
 }
+function detail_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired — sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to pods.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "No pod with this id in this project.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the service — check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load this pod (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function runtime_section_message_for_status(status, what) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired — sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to " + what + ".";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't load " + what + " — check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + what + " (HTTP " + String(status) + ").";
+  return rtnval;
+}
+function transition_message_for_status(status, event_kind) {
+  if (status === 200) {
+    if (event_kind === "drain") {
+      const rtnval2 = "Drain started — the pod is now DRAINING.";
+      return rtnval2;
+    }
+    const rtnval2 = "Pod retired — its registration is released.";
+    return rtnval2;
+  }
+  if (status === 400) {
+    const rtnval2 = "The transition request was rejected (HTTP 400).";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired — sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to change pod state.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This pod's runtime state was not found.";
+    return rtnval2;
+  }
+  if (status === 409) {
+    const rtnval2 = "That action is not allowed from the pod's current state.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the service — check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to apply the transition (HTTP " + String(status) + ").";
+  return rtnval;
+}
 class PycPodDetail extends HTMLElement {
   _pod_id;
   _project_id;
   _definition;
+  _definition_status;
   _state_row;
   _registration;
   _registration_history;
   _state_history;
+  _runtime_status;
+  _project_names;
   _loading;
   _errored;
   _transient;
   _poll_status;
   _poll_timer;
   _root;
+  _toast_region;
+  _stamp_region;
+  _on_visibility_change;
   constructor() {
     super();
     this._pod_id = "";
     this._project_id = "";
     this._definition = null;
+    this._definition_status = 0;
     this._state_row = null;
     this._registration = null;
     this._registration_history = [];
     this._state_history = [];
+    this._runtime_status = {
+      state: 0,
+      registration: 0,
+      registrations: 0,
+      stateHistory: 0
+    };
+    this._project_names = null;
     this._loading = false;
     this._errored = false;
     this._transient = false;
     this._poll_status = "idle";
     this._poll_timer = null;
     this._root = null;
+    this._toast_region = null;
+    this._stamp_region = null;
+    this._on_visibility_change = () => {
+      this._handle_visibility_change();
+    };
   }
   /**
    * Observed attributes -- ``pod-id`` / ``project-id`` may be
@@ -150,7 +266,13 @@ class PycPodDetail extends HTMLElement {
       loading: this._loading,
       errored: this._errored,
       pollStatus: this._poll_status,
-      transient: this._transient
+      transient: this._transient,
+      runtimeStatus: {
+        state: this._runtime_status.state,
+        registration: this._runtime_status.registration,
+        registrations: this._runtime_status.registrations,
+        stateHistory: this._runtime_status.stateHistory
+      }
     };
     return rtnval;
   }
@@ -173,19 +295,31 @@ class PycPodDetail extends HTMLElement {
     }
     this._render_chrome();
     void this._load();
+    if (typeof document !== "undefined") {
+      document.addEventListener(
+        "visibilitychange",
+        this._on_visibility_change
+      );
+    }
     return;
   }
   /**
-   * Lifecycle hook -- stop the live-poll timer so a navigation
-   * away never leaks a timer.
+   * Lifecycle hook -- stop the live-poll timer and drop the
+   * visibility listener so a navigation away never leaks either.
    */
   disconnectedCallback() {
     this._stop_poll();
+    if (typeof document !== "undefined") {
+      document.removeEventListener(
+        "visibilitychange",
+        this._on_visibility_change
+      );
+    }
     return;
   }
   /**
-   * Fetch the pod snapshot then -- when the pod is in a transient
-   * state -- start the live-poll loop. Exposed so unit tests can
+   * Fetch the pod snapshot then start the live-poll loop when
+   * the pod is not in a terminal state. Exposed so unit tests can
    * await a load cycle.
    */
   async load() {
@@ -196,122 +330,258 @@ class PycPodDetail extends HTMLElement {
     if (is_valid_pod_id(this._pod_id) === false) {
       this._loading = false;
       this._errored = true;
+      this._definition_status = 0;
       this._render_body();
       return;
     }
     if (this._project_id.length === 0) {
       this._loading = false;
       this._errored = true;
+      this._definition_status = 0;
       this._render_body();
       return;
     }
     this._loading = true;
     this._errored = false;
     this._render_body();
-    const definition = await this._fetch_json(
+    const definition_env = await this._fetch_json(
       build_pod_definition_url(this._project_id, this._pod_id),
       "definition_fetch_failed"
     );
-    if (definition === null) {
+    this._definition_status = definition_env.status;
+    if (definition_env.ok === false || definition_env.body === null) {
       this._loading = false;
       this._errored = true;
       this._render_body();
       return;
     }
-    this._definition = definition;
+    this._definition = definition_env.body;
+    if (this._project_names === null) {
+      const projects_outcome = await load_projects();
+      if (projects_outcome.ok === true) {
+        this._project_names = project_display_map(
+          projects_outcome.projects
+        );
+      } else {
+        // Display names are cosmetic -- fall back to raw ids
+        // rather than blocking the pod view on the projects list.
+        this._project_names = {};
+      }
+    }
     await this._refresh_runtime();
     this._loading = false;
     this._errored = false;
+    this._render_stamp();
     this._render_body();
-    if (this._transient === true) {
-      this._start_poll();
-    } else {
-      this._poll_status = "stopped";
-      this._render_poll_banner();
-    }
+    this._update_poll_state();
     return;
   }
   /**
-   * Re-fetch the live state, registration and history rows.
-   * Shared by the initial load and each poll cycle.
+   * Re-fetch the live state, registration and history rows in
+   * parallel. Shared by the initial load and each poll cycle.
+   * Each fetch's HTTP status is tracked so the sections can
+   * render an honest error state instead of a fake empty one.
    */
   async _refresh_runtime() {
-    const state_row = await this._fetch_json(
+    const state_promise = this._fetch_json(
       build_pod_state_url(this._project_id, this._pod_id),
       "state_fetch_failed"
     );
-    if (state_row !== null) {
-      this._state_row = state_row;
-      this._transient = is_transient_pod_state(state_row.state);
-    }
-    const registration = await this._fetch_json(
+    const registration_promise = this._fetch_json(
       build_pod_registration_url(this._project_id, this._pod_id),
       "registration_fetch_failed"
     );
-    this._registration = registration;
-    const history = await this._fetch_json(
+    const registrations_promise = this._fetch_json(
       build_pod_registrations_url(this._project_id, this._pod_id),
       "registrations_fetch_failed"
     );
-    if (history !== null && Array.isArray(history) === true) {
-      this._registration_history = history;
-    }
-    const state_history = await this._fetch_json(
+    const state_history_promise = this._fetch_json(
       build_pod_state_history_url(this._project_id, this._pod_id),
       "state_history_fetch_failed"
     );
-    if (state_history !== null && Array.isArray(state_history) === true) {
-      this._state_history = state_history;
+    const envelopes = await Promise.all([
+      state_promise,
+      registration_promise,
+      registrations_promise,
+      state_history_promise
+    ]);
+    const state_env = envelopes[0];
+    const registration_env = envelopes[1];
+    const registrations_env = envelopes[2];
+    const state_history_env = envelopes[3];
+    this._runtime_status.state = state_env.status;
+    if (state_env.ok === true && state_env.body !== null) {
+      this._state_row = state_env.body;
+      this._transient = is_transient_pod_state(state_env.body.state);
+    } else {
+      // Never invent a state -- an unavailable state renders as
+      // "State unavailable", not as DEFINED.
+      this._state_row = null;
+      this._transient = false;
+    }
+    this._runtime_status.registration = registration_env.status;
+    if (registration_env.ok === true) {
+      this._registration = registration_env.body;
+    } else {
+      this._registration = null;
+    }
+    this._runtime_status.registrations = registrations_env.status;
+    if (registrations_env.ok === true && Array.isArray(registrations_env.body) === true) {
+      this._registration_history = registrations_env.body;
+    } else {
+      this._registration_history = [];
+    }
+    this._runtime_status.stateHistory = state_history_env.status;
+    if (state_history_env.ok === true && Array.isArray(state_history_env.body) === true) {
+      this._state_history = state_history_env.body;
+    } else {
+      this._state_history = [];
     }
     return;
   }
   /**
-   * Fetch a JSON document. A non-OK response or a thrown error
-   * yields ``null`` -- callers decide whether a missing document
-   * is an error or an empty state.
+   * Fetch a JSON document. Never throws -- a network error yields
+   * ``{ok: false, status: 0, body: null}``. A 401 announces the
+   * shared ``pyc-session-401`` event so the shell can surface the
+   * expired session.
    *
    * @param url Relative URL to GET.
    * @param failure_tag A log tag for diagnostic warnings.
    *
-   * @returns The parsed JSON body, or ``null`` on failure.
+   * @returns ``{ok, status, body}``.
    */
   async _fetch_json(url, failure_tag) {
+    let status = 0;
+    let ok = false;
+    let body = null;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
-      if (response.ok === false) {
-        const rtnval2 = null;
-        return rtnval2;
+      status = response.status;
+      ok = response.ok;
+      if (ok === true) {
+        body = await response.json();
       }
-      const body = await response.json();
-      const rtnval = body;
-      return rtnval;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.pods." + failure_tag,
         { reason: String(reason) }
       );
-      const rtnval = null;
-      return rtnval;
     }
+    if (status === 401) {
+      announce_session_expired();
+    }
+    const rtnval = { ok, status, body };
+    return rtnval;
   }
-  _start_poll() {
-    if (this._poll_timer !== null) {
+  /**
+   * POST an operator lifecycle event (``drain`` / ``deregister``)
+   * to the pod. Exposed so unit tests can drive a transition
+   * without a button.
+   *
+   * @param event_kind The lifecycle event to apply.
+   *
+   * @returns ``{ok, status, message}``.
+   */
+  async applyTransition(event_kind) {
+    let status = 0;
+    try {
+      const response = await fetch(
+        build_pod_transitions_url(this._project_id, this._pod_id),
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ event_kind })
+        }
+      );
+      status = response.status;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.pods.transition_failed",
+        { reason: String(reason), event_kind }
+      );
+    }
+    if (status === 401) {
+      announce_session_expired();
+    }
+    const ok = status === 200;
+    const rtnval = {
+      ok,
+      status,
+      message: transition_message_for_status(status, event_kind)
+    };
+    return rtnval;
+  }
+  async _on_transition(event_kind, confirm_text, button) {
+    const confirm_fn = window.confirm;
+    if (typeof confirm_fn !== "function") {
+      button.toggleAttribute("disabled", false);
+      return;
+    }
+    const confirmed = window.confirm(confirm_text);
+    if (confirmed === false) {
+      button.toggleAttribute("disabled", false);
+      return;
+    }
+    const outcome = await this.applyTransition(event_kind);
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true) {
+      await this._refresh_runtime();
+      this._render_stamp();
+      this._render_body();
+      this._update_poll_state();
+    }
+    return;
+  }
+  /**
+   * Start / stop the poll loop from the current pod state. The
+   * view polls in every non-terminal state (transient states at
+   * 5s, settled ones at 15s) and also while the state is
+   * unavailable so a transient fetch failure recovers on its own.
+   * Only a terminal (RELEASED) pod stops the loop.
+   */
+  _update_poll_state() {
+    if (this._definition === null) {
+      this._stop_poll();
+      this._poll_status = "stopped";
+      this._render_poll_banner();
+      return;
+    }
+    const state_known = this._state_row !== null;
+    if (state_known === true && is_terminal_pod_state(this._state_row.state) === true) {
+      this._stop_poll();
+      this._poll_status = "stopped";
+      this._render_poll_banner();
       return;
     }
     this._poll_status = "polling";
     this._render_poll_banner();
-    this._schedule_poll();
+    if (this._poll_timer === null) {
+      this._schedule_poll();
+    }
     return;
+  }
+  _poll_interval_ms() {
+    if (this._transient === true) {
+      const rtnval2 = POLL_INTERVAL_TRANSIENT_MS;
+      return rtnval2;
+    }
+    const rtnval = POLL_INTERVAL_SETTLED_MS;
+    return rtnval;
   }
   _schedule_poll() {
     const timer = setTimeout(() => {
       this._poll_timer = null;
       void this._poll_once();
-    }, POLL_INTERVAL_MS);
+    }, this._poll_interval_ms());
     const handle = timer;
     if (typeof handle.unref === "function") {
       handle.unref();
@@ -321,7 +591,7 @@ class PycPodDetail extends HTMLElement {
   }
   /**
    * Run one poll cycle -- re-fetch runtime rows, re-render, and
-   * either reschedule (still transient) or stop (now settled).
+   * either reschedule (still live) or stop (now terminal).
    * Exposed so unit tests can drive a poll cycle without waiting
    * on a real timer.
    */
@@ -330,21 +600,34 @@ class PycPodDetail extends HTMLElement {
     return;
   }
   async _poll_once() {
-    await this._refresh_runtime();
-    this._render_body();
-    if (this._transient === false) {
-      this._stop_poll();
-      this._poll_status = "stopped";
-      this._render_poll_banner();
+    if (typeof document !== "undefined" && document.hidden === true) {
+      // The visibility handler restarts the loop when the tab
+      // becomes visible again.
       return;
     }
-    this._schedule_poll();
+    await this._refresh_runtime();
+    this._render_stamp();
+    this._render_body();
+    this._update_poll_state();
     return;
   }
   _stop_poll() {
     if (this._poll_timer !== null) {
       clearTimeout(this._poll_timer);
       this._poll_timer = null;
+    }
+    return;
+  }
+  _handle_visibility_change() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (document.hidden === true) {
+      this._stop_poll();
+      return;
+    }
+    if (this._poll_timer === null && this._poll_status === "polling") {
+      void this._poll_once();
     }
     return;
   }
@@ -357,18 +640,44 @@ class PycPodDetail extends HTMLElement {
     heading.classList.add("pyc-pod-detail__heading");
     heading.textContent = "Pod detail";
     root.appendChild(heading);
+    const toolbar = document.createElement("div");
+    toolbar.classList.add("pyc-pod-detail__toolbar");
     const back = document.createElement("a");
     back.classList.add("pyc-pod-detail__back-link");
-    back.setAttribute("href", "/pods");
+    let back_href = "/pods";
+    if (this._project_id.length > 0) {
+      back_href = "/pods?project_id=" + encodeURIComponent(this._project_id);
+    }
+    back.setAttribute("href", back_href);
     back.setAttribute("data-role", "back-link");
     back.textContent = "Back to pods";
-    root.appendChild(back);
+    toolbar.appendChild(back);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-pod-detail__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._load();
+    });
+    toolbar.appendChild(refresh_button);
+    const stamp = document.createElement("span");
+    stamp.classList.add("pyc-pod-detail__stamp");
+    stamp.setAttribute("data-role", "last-updated");
+    toolbar.appendChild(stamp);
+    this._stamp_region = stamp;
+    root.appendChild(toolbar);
     const banner = document.createElement("p");
     banner.classList.add("pyc-pod-detail__banner");
     banner.setAttribute("data-role", "poll-banner");
     banner.setAttribute("role", "status");
     banner.hidden = true;
     root.appendChild(banner);
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-pod-detail__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
     const body = document.createElement("div");
     body.classList.add("pyc-pod-detail__body");
     body.setAttribute("data-role", "body");
@@ -376,6 +685,30 @@ class PycPodDetail extends HTMLElement {
     this._root = root;
     this.replaceChildren(root);
     return;
+  }
+  _render_stamp() {
+    if (this._stamp_region === null) {
+      return;
+    }
+    this._stamp_region.textContent = "as of " + format_clock_time(new Date());
+    return;
+  }
+  /**
+   * Resolve the definition-load error message from how the load
+   * failed -- a malformed id and a missing project id are caller
+   * mistakes, the rest map from the HTTP status.
+   */
+  _load_error_message() {
+    if (is_valid_pod_id(this._pod_id) === false) {
+      const rtnval2 = "No pod with this id.";
+      return rtnval2;
+    }
+    if (this._project_id.length === 0) {
+      const rtnval2 = "A project id is required — open this pod from the pods list.";
+      return rtnval2;
+    }
+    const rtnval = detail_load_message_for_status(this._definition_status);
+    return rtnval;
   }
   _render_body() {
     if (this._root === null) {
@@ -389,7 +722,7 @@ class PycPodDetail extends HTMLElement {
       const loading = document.createElement("p");
       loading.classList.add("pyc-pod-detail__status");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading pod\u2026";
+      loading.textContent = "Loading pod…";
       body.replaceChildren(loading);
       return;
     }
@@ -400,7 +733,20 @@ class PycPodDetail extends HTMLElement {
         "pyc-pod-detail__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load this pod. A project id query parameter is required \u2014 try refreshing from the pods list.";
+      const message = document.createElement("span");
+      message.textContent = this._load_error_message();
+      error.appendChild(message);
+      if (is_valid_pod_id(this._pod_id) === true && this._project_id.length > 0) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-pod-detail__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "error-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._load();
+        });
+        error.appendChild(retry);
+      }
       body.replaceChildren(error);
       return;
     }
@@ -412,6 +758,21 @@ class PycPodDetail extends HTMLElement {
     fragment.appendChild(this._build_state_history());
     body.replaceChildren(fragment);
     return;
+  }
+  /**
+   * Resolve a project's display name from the cached projects
+   * map, falling back to the raw id.
+   */
+  _project_display_name(project_id) {
+    if (this._project_names !== null) {
+      const display = this._project_names[project_id];
+      if (typeof display === "string" && display.length > 0) {
+        const rtnval2 = display;
+        return rtnval2;
+      }
+    }
+    const rtnval = project_id;
+    return rtnval;
   }
   _build_summary(definition) {
     const section = document.createElement("section");
@@ -426,19 +787,49 @@ class PycPodDetail extends HTMLElement {
     id_value.textContent = short_id(definition.pod_id);
     id_value.title = definition.pod_id;
     id_row.appendChild(id_value);
-    const state_value = this._state_row !== null ? this._state_row.state : "DEFINED";
     const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-pod-detail__badge");
     badge.setAttribute("data-role", "state-badge");
-    badge.setAttribute("data-tone", pod_state_tone(state_value));
-    badge.textContent = state_value;
+    if (this._state_row !== null) {
+      badge.setAttribute("data-tone", pod_state_tone(this._state_row.state));
+      badge.textContent = this._state_row.state;
+    } else {
+      // The state fetch failed -- say so instead of inventing a
+      // state the pod may not be in.
+      badge.setAttribute("data-tone", "neutral");
+      badge.textContent = "State unavailable";
+      badge.title = runtime_section_message_for_status(
+        this._runtime_status.state,
+        "the pod state"
+      );
+    }
     id_row.appendChild(badge);
+    id_row.appendChild(this._build_actions());
     section.appendChild(id_row);
+    if (this._state_row === null) {
+      const state_error = document.createElement("p");
+      state_error.classList.add(
+        "pyc-pod-detail__status",
+        "pyc-pod-detail__status--error",
+        "pyc-pod-detail__status--inline"
+      );
+      state_error.setAttribute("data-role", "state-error");
+      state_error.textContent = runtime_section_message_for_status(
+        this._runtime_status.state,
+        "the pod state"
+      );
+      section.appendChild(state_error);
+    }
     const grid = document.createElement("dl");
     grid.classList.add("pyc-pod-detail__grid");
     this._append_field(grid, "Pod id", definition.pod_id);
     this._append_field(grid, "Pod name", definition.pod_name);
-    this._append_field(grid, "Project", definition.project_id);
+    this._append_field(
+      grid,
+      "Project",
+      this._project_display_name(definition.project_id),
+      definition.project_id
+    );
     this._append_field(
       grid,
       "Version",
@@ -470,6 +861,54 @@ class PycPodDetail extends HTMLElement {
     }
     section.appendChild(grid);
     return section;
+  }
+  /**
+   * Build the operator action buttons. Drain is legal from READY
+   * / IN_USE, retire (deregister) from DRAINING / FAILED --
+   * mirroring the server's transition table so an always-illegal
+   * click never leaves the page.
+   */
+  _build_actions() {
+    const actions = document.createElement("span");
+    actions.classList.add("pyc-pod-detail__actions");
+    actions.setAttribute("data-role", "pod-actions");
+    const state_known = this._state_row !== null;
+    const current_state = state_known === true ? this._state_row.state : "";
+    const drain_button = document.createElement("mj-button");
+    drain_button.classList.add("pyc-pod-detail__button");
+    drain_button.setAttribute("type", "button");
+    drain_button.setAttribute("data-role", "drain-action");
+    drain_button.textContent = "Drain";
+    const drain_allowed = DRAINABLE_POD_STATES.indexOf(current_state) >= 0;
+    if (drain_allowed === false) {
+      drain_button.toggleAttribute("disabled", true);
+      drain_button.title = state_known === true ? "Drain is only available while the pod is READY or IN_USE." : "The pod state is unavailable — actions are disabled.";
+    } else {
+      drain_button.addEventListener("click", () => {
+        drain_button.toggleAttribute("disabled", true);
+        const confirm_text = "Drain pod " + short_id(this._pod_id) + "? The pod stops accepting new work, finishes what is in flight, and moves to DRAINING.";
+        void this._on_transition("drain", confirm_text, drain_button);
+      });
+    }
+    actions.appendChild(drain_button);
+    const retire_button = document.createElement("mj-button");
+    retire_button.classList.add("pyc-pod-detail__button");
+    retire_button.setAttribute("type", "button");
+    retire_button.setAttribute("data-role", "retire-action");
+    retire_button.textContent = "Retire";
+    const retire_allowed = RETIRABLE_POD_STATES.indexOf(current_state) >= 0;
+    if (retire_allowed === false) {
+      retire_button.toggleAttribute("disabled", true);
+      retire_button.title = state_known === true ? "Retire is only available while the pod is DRAINING or FAILED." : "The pod state is unavailable — actions are disabled.";
+    } else {
+      retire_button.addEventListener("click", () => {
+        retire_button.toggleAttribute("disabled", true);
+        const confirm_text = "Retire pod " + short_id(this._pod_id) + "? Its registration is released and the pod moves to RELEASED — it must be re-provisioned before it can serve work again.";
+        void this._on_transition("deregister", confirm_text, retire_button);
+      });
+    }
+    actions.appendChild(retire_button);
+    return actions;
   }
   _build_members(definition) {
     const section = document.createElement("section");
@@ -543,6 +982,22 @@ class PycPodDetail extends HTMLElement {
     const rtnval = JSON.stringify(member);
     return rtnval;
   }
+  /**
+   * Build one section-level error paragraph for a failed runtime
+   * fetch -- used instead of the section's empty state so a
+   * failure never masquerades as "no data".
+   */
+  _build_section_error(role, status, what) {
+    const error = document.createElement("p");
+    error.classList.add(
+      "pyc-pod-detail__status",
+      "pyc-pod-detail__status--error"
+    );
+    error.setAttribute("data-role", role);
+    error.textContent = runtime_section_message_for_status(status, what);
+    const rtnval = error;
+    return rtnval;
+  }
   _build_registration() {
     const section = document.createElement("section");
     section.classList.add("pyc-pod-detail__registration");
@@ -554,11 +1009,23 @@ class PycPodDetail extends HTMLElement {
     heading.textContent = "Registered client";
     section.appendChild(heading);
     if (this._registration === null) {
-      const empty = document.createElement("p");
-      empty.classList.add("pyc-pod-detail__status");
-      empty.setAttribute("data-role", "registration-empty");
-      empty.textContent = "No active registration for this pod.";
-      section.appendChild(empty);
+      // A 404 is the documented "no active registration" answer;
+      // anything else is a failure and renders as one.
+      if (this._runtime_status.registration === 404) {
+        const empty = document.createElement("p");
+        empty.classList.add("pyc-pod-detail__status");
+        empty.setAttribute("data-role", "registration-empty");
+        empty.textContent = "No active registration for this pod.";
+        section.appendChild(empty);
+      } else {
+        section.appendChild(
+          this._build_section_error(
+            "registration-error",
+            this._runtime_status.registration,
+            "the registration"
+          )
+        );
+      }
       return section;
     }
     const grid = document.createElement("dl");
@@ -580,7 +1047,7 @@ class PycPodDetail extends HTMLElement {
       field.appendChild(def);
       grid.appendChild(field);
     } else {
-      this._append_field(grid, "Client", "\u2014");
+      this._append_field(grid, "Client", "—");
     }
     this._append_field(grid, "Registration state", this._registration.state);
     this._append_field(
@@ -606,6 +1073,16 @@ class PycPodDetail extends HTMLElement {
     heading.classList.add("pyc-pod-detail__section-heading");
     heading.textContent = "Registration history";
     section.appendChild(heading);
+    if (this._runtime_status.registrations !== 200) {
+      section.appendChild(
+        this._build_section_error(
+          "registration-history-error",
+          this._runtime_status.registrations,
+          "the registration history"
+        )
+      );
+      return section;
+    }
     if (this._registration_history.length === 0) {
       const empty = document.createElement("p");
       empty.classList.add("pyc-pod-detail__status");
@@ -619,12 +1096,12 @@ class PycPodDetail extends HTMLElement {
     for (const row of this._registration_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const summary = row.state + " \xB7 v" + String(row.pod_definition_version) + " \xB7 " + format_timestamp(row.registered_at);
+      const summary = row.state + " · v" + String(row.pod_definition_version) + " · " + format_timestamp(row.registered_at);
       item.textContent = summary;
       if (row.deregister_reason !== null && row.deregister_reason !== void 0 && row.deregister_reason.length > 0) {
         const reason = document.createElement("span");
         reason.classList.add("pyc-pod-detail__history-reason");
-        reason.textContent = " \u2014 " + row.deregister_reason;
+        reason.textContent = " — " + row.deregister_reason;
         item.appendChild(reason);
       }
       list.appendChild(item);
@@ -642,6 +1119,16 @@ class PycPodDetail extends HTMLElement {
     heading.classList.add("pyc-pod-detail__section-heading");
     heading.textContent = "Lifecycle history";
     section.appendChild(heading);
+    if (this._runtime_status.stateHistory !== 200) {
+      section.appendChild(
+        this._build_section_error(
+          "state-history-error",
+          this._runtime_status.stateHistory,
+          "the lifecycle history"
+        )
+      );
+      return section;
+    }
     if (this._state_history.length === 0) {
       const empty = document.createElement("p");
       empty.classList.add("pyc-pod-detail__status");
@@ -655,8 +1142,8 @@ class PycPodDetail extends HTMLElement {
     for (const row of this._state_history) {
       const item = document.createElement("li");
       item.classList.add("pyc-pod-detail__history-entry");
-      const from_label = row.from_state !== null && row.from_state !== void 0 ? row.from_state : "\u2205";
-      const summary = from_label + " \u2192 " + row.to_state + " \xB7 " + format_timestamp(row.applied_at);
+      const from_label = row.from_state !== null && row.from_state !== void 0 ? row.from_state : "∅";
+      const summary = from_label + " → " + row.to_state + " · " + format_timestamp(row.applied_at);
       item.textContent = summary;
       if (row.event_kind !== null && row.event_kind !== void 0 && row.event_kind.length > 0) {
         const event = document.createElement("span");
@@ -669,16 +1156,49 @@ class PycPodDetail extends HTMLElement {
     section.appendChild(list);
     return section;
   }
-  _append_field(grid, label, value) {
+  _append_field(grid, label, value, title) {
     const field = document.createElement("div");
     field.classList.add("pyc-pod-detail__field");
     const term = document.createElement("dt");
     term.textContent = label;
     const def = document.createElement("dd");
-    def.textContent = value;
+    if (typeof value === "string" && value.length > 0) {
+      def.textContent = value;
+    } else {
+      def.textContent = "—";
+    }
+    if (typeof title === "string" && title.length > 0) {
+      def.title = title;
+    }
     field.appendChild(term);
     field.appendChild(def);
     grid.appendChild(field);
+    return;
+  }
+  _show_toast(message, tone) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-pod-detail__toast");
+    toast.setAttribute("data-role", "toast");
+    toast.setAttribute("data-tone", tone);
+    const text = document.createElement("span");
+    text.textContent = message;
+    toast.appendChild(text);
+    const dismiss = document.createElement("mj-button");
+    dismiss.classList.add("pyc-pod-detail__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "×";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
+      this._toast_region.removeChild(this._toast_region.firstElementChild);
+    }
+    this._toast_region.appendChild(toast);
     return;
   }
   _render_poll_banner() {
@@ -693,12 +1213,11 @@ class PycPodDetail extends HTMLElement {
     if (this._poll_status === "polling") {
       el.hidden = false;
       el.setAttribute("data-tone", "neutral");
-      el.textContent = "Pod is mid-transition \u2014 refreshing every 5 seconds.";
-      return;
-    }
-    if (this._poll_status === "stopped" && this._transient === false) {
-      el.hidden = true;
-      el.textContent = "";
+      if (this._transient === true) {
+        el.textContent = "Pod is mid-transition — refreshing every 5 seconds.";
+      } else {
+        el.textContent = "Live view — refreshing every 15 seconds.";
+      }
       return;
     }
     el.hidden = true;
@@ -709,14 +1228,20 @@ class PycPodDetail extends HTMLElement {
 export {
   POD_STATES,
   PycPodDetail,
+  TERMINAL_POD_STATES,
   TRANSIENT_POD_STATES,
   build_pod_registration_url,
   build_pod_registrations_url,
   build_pod_state_history_url,
   build_pod_state_url,
+  build_pod_transitions_url,
+  detail_load_message_for_status,
+  is_terminal_pod_state,
   is_transient_pod_state,
   is_valid_pod_id,
   pod_id_from_path,
   pod_state_tone,
-  project_id_from_search
+  project_id_from_search,
+  runtime_section_message_for_status,
+  transition_message_for_status
 };

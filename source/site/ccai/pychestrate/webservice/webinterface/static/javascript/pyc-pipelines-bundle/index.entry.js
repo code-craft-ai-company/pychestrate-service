@@ -123,6 +123,8 @@ function _boot() {
 }
 import { PycPipelinesList as PycPipelinesList2 } from "./pipelines-list-view.js";
 import {
+  announce_session_expired,
+  build_pipeline_detail_link,
   build_pipelines_query_url,
   build_pipelines_collection_url,
   build_pipelines_validate_url,
@@ -131,6 +133,7 @@ import {
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   parse_matrix_spec,
   validate_message_for_status
 } from "./pipelines-list-view.js";
@@ -139,7 +142,9 @@ import {
   pipeline_id_from_path as pipeline_id_from_path2,
   pipeline_detail_url,
   compute_dag_columns,
-  compute_dag_layout
+  compute_dag_layout,
+  detail_load_message_for_status,
+  project_id_from_search
 } from "./pipeline-detail-view.js";
 if (typeof window !== "undefined") {
   _boot();
@@ -147,6 +152,8 @@ if (typeof window !== "undefined") {
 export {
   PycPipelineDetail2 as PycPipelineDetail,
   PycPipelinesList2 as PycPipelinesList,
+  announce_session_expired,
+  build_pipeline_detail_link,
   build_pipelines_collection_url,
   build_pipelines_expand_matrix_url,
   build_pipelines_query_url,
@@ -155,14 +162,17 @@ export {
   compute_dag_columns,
   compute_dag_layout,
   define_pipelines_elements,
+  detail_load_message_for_status,
   ensure_pipelines_stylesheet,
   format_timestamp,
   has_next_page,
   has_previous_page,
+  list_load_message_for_status,
   mount_pipelines_view_if_active,
   parse_matrix_spec,
   pipeline_detail_url,
   pipeline_id_from_path2 as pipeline_id_from_path,
+  project_id_from_search,
   register_pipelines_sidebar,
   short_id,
   validate_message_for_status

@@ -302,11 +302,13 @@ class _SessionSeamRecorder:
     """
         Records calls to the patched ``routes_sessions`` data-access
         seams (``_list_active_sessions`` / ``_terminate_session``) and
-        supplies their canned responses.
+        supplies their canned responses. ``list_calls`` records the
+        ``(filter_username, offset, limit)`` triples the handler
+        passed.
     """
 
     def __init__(self) -> None:
-        self.list_calls: List[Optional[str]] = []
+        self.list_calls: List[Any] = []
         self.list_response: List[Any] = []
         self.terminate_calls: List[str] = []
         self.terminate_raises: Optional[Exception] = None
@@ -477,10 +479,18 @@ def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
         DB-independent. Returns the patches for the caller to deactivate.
     """
     def _fake_list(
-            *, db_session: Any, filter_user_id: Optional[str]
-        ) -> List[Any]:
-        recorder.list_calls.append(filter_user_id)
-        return recorder.list_response
+            *,
+            db_session: Any,
+            filter_username: Optional[str],
+            offset: int = 0,
+            limit: int = 20
+        ) -> Any:
+        recorder.list_calls.append((filter_username, offset, limit))
+        rtnval = config_routes_sessions._SessionPage(
+            rows=recorder.list_response,
+            total=len(recorder.list_response),
+        )
+        return rtnval
 
     def _fake_terminate(*, db_session: Any, session_id: str) -> None:
         recorder.terminate_calls.append(session_id)
@@ -785,8 +795,9 @@ def test_handle_secret_create_post_happy_path_redirects_to_list():
 def test_handle_secret_create_post_manager_error_re_renders_with_flash():
     """
     **Feature: webworks config secrets port T4.5**
-    **Property: A SecretManager exception on create yields a
-    400 re-render with an error-category flash.**
+    **Property: A curated (surfaceable) exception on create
+    yields a 400 re-render with an error-category flash
+    carrying the curated message.**
     """
     _reset_global_state()
     sm_patch = None
@@ -801,7 +812,7 @@ def test_handle_secret_create_post_manager_error_re_renders_with_flash():
         sm_patch = _patch_security_manager()
 
         def _seed(instance: _FakeSecretManager) -> None:
-            instance.create_secret_raises = RuntimeError(
+            instance.create_secret_raises = ValueError(
                 "duplicate secret name"
             )
             return
@@ -1015,8 +1026,10 @@ def test_handle_session_list_renders_with_active_sessions():
     """
     **Feature: webworks config sessions port T4.8**
     **Property: GET /admin/sessions renders the sessions list
-    template with the _list_active_sessions output and passes
-    filter_user_id through.**
+    template with the _list_active_sessions page, passes the
+    username filter + pagination params through to the seam,
+    and exposes total / total_pages / current_session_id in the
+    context.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1056,7 +1069,9 @@ def test_handle_session_list_renders_with_active_sessions():
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
             cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={"user_id": "u-7"},
+            query_mapping={
+                "username": "alice", "page": "2", "per_page": "10",
+            },
         )
         response = config_routes_sessions.handle_session_list(request)
 
@@ -1066,8 +1081,15 @@ def test_handle_session_list_renders_with_active_sessions():
         )
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(ctx["sessions"], active)
-        testbase.assert_equal(ctx["filter_user_id"], "u-7")
-        testbase.assert_equal(recorder.list_calls, ["u-7"])
+        testbase.assert_equal(ctx["filter_username"], "alice")
+        testbase.assert_equal(ctx["total"], 2)
+        testbase.assert_equal(ctx["total_pages"], 1)
+        # The cookie's session_token surfaces as the current
+        # session id so the template can badge the own row.
+        testbase.assert_equal(ctx["current_session_id"], "tok-abc")
+        testbase.assert_equal(
+            recorder.list_calls, [("alice", 10, 10)]
+        )
     finally:
         for patch in seam_patches:
             patch.deactivate()
@@ -1392,6 +1414,282 @@ def test_audit_log_response_to_entries_handles_dataclass_and_list():
         response=None
     )
     testbase.assert_equal(rtnval, [])
+    return
+
+
+# ===========================================================================
+# Admin UX fixes -- pagination totals, masked errors, username
+# filters, page titles
+# ===========================================================================
+
+
+def test_handle_secret_list_passes_pagination_totals():
+    """
+    **Feature: admin UX -- secret list pagination**
+    **Property: GET /admin/secrets passes total + total_pages
+    into the template context so the list can render windowed
+    pagination controls.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        secrets = [
+            _FakeSecretMetadata(
+                secret_id=n, name="s-{}".format(n), scope_id=1
+            )
+            for n in range(1, 8)
+        ]
+
+        def _seed(instance: _FakeSecretManager) -> None:
+            instance.list_secrets_response = secrets
+            return
+
+        secret_patch = _patch_secret_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            query_mapping={"page": "2", "per_page": "3"},
+        )
+        response = config_routes_secrets.handle_secret_list(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        ctx = env.last_template.render_calls[0]
+        # The fake reports total == len(list_secrets_response).
+        testbase.assert_equal(ctx["total"], 7)
+        testbase.assert_equal(ctx["total_pages"], 3)
+        testbase.assert_equal(ctx["page"], 2)
+        testbase.assert_equal(ctx["per_page"], 3)
+    finally:
+        for p in (secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_secret_create_post_unexpected_error_masks_message():
+    """
+    **Feature: admin UX -- typed error flashes**
+    **Property: A non-curated (unexpected) exception on create
+    re-renders with a GENERIC error flash -- the raw exception
+    text never reaches the browser.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    secret_patch = None
+    cr_patch = None
+    rt_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed(instance: _FakeSecretManager) -> None:
+            instance.create_secret_raises = RuntimeError(
+                "psycopg2.OperationalError: connection refused"
+            )
+            return
+
+        secret_patch = _patch_secret_manager(configure=_seed)
+        cr_patch = _patch_secret_create_request_factory()
+        rt_patch = _patch_resolve_secret_type()
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&name=db_pw&value=x"
+            b"&secret_type=password&scope_id=2"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+        )
+        response = config_routes_secrets.handle_secret_create(request)
+
+        testbase.assert_equal(response.status_code, 400)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(len(ctx["flashes"]), 1)
+        category, message = ctx["flashes"][0]
+        testbase.assert_equal(category, "error")
+        raw_leaked = "psycopg2" in message
+        testbase.assert_equal(raw_leaked, False)
+        generic_present = "unexpected internal error" in message
+        testbase.assert_equal(generic_present, True)
+    finally:
+        for p in (rt_patch, cr_patch, secret_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def _patch_resolve_user_id_for_username(
+        *, mapping: Dict[str, str]
+    ) -> Any:
+    """
+        Patch the ``_resolve_user_id_for_username`` seam in
+        ``routes_audit`` with a dict-backed resolver.
+    """
+    def _resolve(*, db_session: Any, username: str) -> Optional[str]:
+        return mapping.get(username, None)
+
+    patch = create_module_patch(
+        config_routes_audit, "_resolve_user_id_for_username"
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=_resolve)
+    return patch
+
+
+def test_handle_audit_log_list_resolves_username_filter():
+    """
+    **Feature: admin UX -- audit username filter**
+    **Property: ?username= resolves to the user id server-side
+    and the audit query filters on that id; total / total_pages
+    land in the context for windowed pagination.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    al_patch = None
+    q_patch = None
+    et_patch = None
+    aet_patch = None
+    user_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        entries = [
+            _FakeAuditLogEntry(entry_id=1, event_type_value="LOGIN_SUCCESS"),
+        ]
+
+        def _seed(instance: _FakeAuditLogger) -> None:
+            instance.query_logs_response = _FakeAuditLogResponse(
+                entries=entries, total=120
+            )
+            return
+
+        al_patch = _patch_audit_logger(configure=_seed)
+        q_patch = _patch_audit_log_query_factory()
+        et_patch = _patch_resolve_audit_event_type_or_none(returns=None)
+        aet_patch = _patch_resolve_all_audit_event_types(returns=[])
+        user_patch = _patch_resolve_user_id_for_username(
+            mapping={"alice": "u-alice"}
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            query_mapping={"username": "alice", "per_page": "50"},
+        )
+        response = config_routes_audit.handle_audit_log_list(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["filter_username"], "alice")
+        testbase.assert_equal(ctx["username_unmatched"], False)
+        testbase.assert_equal(ctx["total"], 120)
+        testbase.assert_equal(ctx["total_pages"], 3)
+        al = _FakeAuditLogger.last_instance
+        q = al.query_logs_calls[0]
+        testbase.assert_equal(q.user_id, "u-alice")
+    finally:
+        for p in (
+            user_patch, aet_patch, et_patch, q_patch, al_patch,
+            sm_patch,
+        ):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_audit_log_list_unmatched_username_yields_empty():
+    """
+    **Feature: admin UX -- audit username filter**
+    **Property: An unknown ?username= renders an empty page with
+    username_unmatched=True and never queries the audit logger
+    (no silently-unfiltered results).**
+    """
+    _reset_global_state()
+    sm_patch = None
+    al_patch = None
+    q_patch = None
+    et_patch = None
+    aet_patch = None
+    user_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        al_patch = _patch_audit_logger()
+        q_patch = _patch_audit_log_query_factory()
+        et_patch = _patch_resolve_audit_event_type_or_none(returns=None)
+        aet_patch = _patch_resolve_all_audit_event_types(returns=[])
+        user_patch = _patch_resolve_user_id_for_username(mapping={})
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            query_mapping={"username": "ghost"},
+        )
+        response = config_routes_audit.handle_audit_log_list(request)
+
+        testbase.assert_equal(response.status_code, 200)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["logs"], [])
+        testbase.assert_equal(ctx["username_unmatched"], True)
+        testbase.assert_equal(ctx["total"], 0)
+        testbase.assert_equal(_FakeAuditLogger.last_instance, None)
+    finally:
+        for p in (
+            user_patch, aet_patch, et_patch, q_patch, al_patch,
+            sm_patch,
+        ):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_resolve_admin_page_title_maps_known_paths_and_defaults():
+    """
+    **Feature: admin UX -- per-page shell titles**
+    **Property: _resolve_admin_page_title maps every admin
+    section prefix to "<Label> · Pychestrate" (detail pages
+    inherit their section) and keeps the bare product name for
+    unknown paths.**
+    """
+    cases = (
+        ("/admin/users", "Users · Pychestrate"),
+        ("/admin/users/u-1/edit", "Users · Pychestrate"),
+        ("/admin/secrets", "Secrets · Pychestrate"),
+        ("/admin/scopes/3/edit", "Secret Scopes · Pychestrate"),
+        ("/admin/sessions", "Sessions · Pychestrate"),
+        ("/admin/audit-logs", "Audit Logs · Pychestrate"),
+        ("/admin/enrollment-tokens", "Enrollment Tokens · Pychestrate"),
+        ("/admin/variables/x/history", "Variables · Pychestrate"),
+        ("/admin/feature-flags", "Feature Flags · Pychestrate"),
+        ("/admin", "Pychestrate"),
+        ("/admin/unknown-surface", "Pychestrate"),
+        ("", "Pychestrate"),
+    )
+    for path, expected in cases:
+        actual = config_routes._resolve_admin_page_title(path=path)
+        testbase.assert_equal(actual, expected)
     return
 
 

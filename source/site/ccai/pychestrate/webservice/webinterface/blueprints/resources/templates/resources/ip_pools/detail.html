@@ -14,31 +14,31 @@
             <div class="card-header">Pool Information</div>
             <table class="data-table" style="margin-top: 0;">
                 <tr>
-                    <th style="width: 150px;">ID</th>
+                    <th scope="row" style="width: 150px;">ID</th>
                     <td>{{ pool.id }}</td>
                 </tr>
                 <tr>
-                    <th>Name</th>
+                    <th scope="row">Name</th>
                     <td>{{ pool.name }}</td>
                 </tr>
                 <tr>
-                    <th>CIDR</th>
+                    <th scope="row">CIDR</th>
                     <td><code>{{ pool.cidr }}</code></td>
                 </tr>
                 <tr>
-                    <th>IP Version</th>
+                    <th scope="row">IP Version</th>
                     <td>{{ pool.ip_version.value if pool.ip_version.value else pool.ip_version }}</td>
                 </tr>
                 <tr>
-                    <th>Gateway</th>
+                    <th scope="row">Gateway</th>
                     <td>{{ pool.gateway or '-' }}</td>
                 </tr>
                 <tr>
-                    <th>DNS Servers</th>
+                    <th scope="row">DNS Servers</th>
                     <td>{{ pool.dns_servers | join(', ') if pool.dns_servers else '-' }}</td>
                 </tr>
                 <tr>
-                    <th>Description</th>
+                    <th scope="row">Description</th>
                     <td>{{ pool.description or '-' }}</td>
                 </tr>
             </table>
@@ -72,11 +72,11 @@
             <table class="data-table" style="margin-top: 0;">
                 <thead>
                     <tr>
-                        <th>IP Address</th>
-                        <th>User</th>
-                        <th>Job ID</th>
-                        <th>Checkout Time</th>
-                        <th>Actions</th>
+                        <th scope="col">IP Address</th>
+                        <th scope="col">User</th>
+                        <th scope="col">Job ID</th>
+                        <th scope="col">Checkout Time</th>
+                        <th scope="col">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -122,12 +122,12 @@
             <div class="card-header">Actions</div>
             <div style="display: flex; flex-direction: column; gap: 10px;">
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-secondary">
-                    <span class="material-icons">edit</span> Edit Pool
+                    <span class="material-icons" aria-hidden="true">edit</span> Edit Pool
                 </a>
                 <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Delete this IP pool?')">
-                        <span class="material-icons">delete</span> Delete Pool
+                        <span class="material-icons" aria-hidden="true">delete</span> Delete Pool
                     </button>
                 </form>
             </div>
@@ -165,7 +165,7 @@
                 </div>
                 
                 <button type="submit" class="btn btn-success" style="width: 100%;">
-                    <span class="material-icons">assignment_turned_in</span> Checkout
+                    <span class="material-icons" aria-hidden="true">assignment_turned_in</span> Checkout
                 </button>
             </form>
         </div>
@@ -183,7 +183,7 @@
                 </div>
                 
                 <button type="submit" class="btn btn-warning" style="width: 100%;">
-                    <span class="material-icons">assignment_return</span> Checkin All Job IPs
+                    <span class="material-icons" aria-hidden="true">assignment_return</span> Checkin All Job IPs
                 </button>
             </form>
         </div>

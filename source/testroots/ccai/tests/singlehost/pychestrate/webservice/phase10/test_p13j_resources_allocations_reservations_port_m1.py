@@ -368,6 +368,17 @@ class _FakeResourceManager:
             limit=len(self.list_resources_response),
         )
 
+    def list_pools(
+            self, user_id: str, offset: int = 0, limit: int = 50
+        ) -> Any:
+        from types import SimpleNamespace
+        return SimpleNamespace(
+            pools=[],
+            total=0,
+            offset=offset,
+            limit=limit,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Setup helpers
@@ -602,22 +613,22 @@ def test_parse_iso_datetime_or_none_handles_valid_and_invalid():
     return
 
 
-def test_approximate_total_pages_full_page_reports_next():
+def test_calculate_total_pages_uses_manager_totals():
     """
     **Feature: E3 helpers T7.4**
-    **Property: When the returned count == per_page, the helper
-    reports page+1 (legacy "Next link enabled" shape).**
+    **Property: Allocation list pagination derives total_pages
+    from the manager's real row count (ceiling of
+    total/per_page, floor 1) instead of the legacy page+1
+    approximation.**
     """
-    helper = resources_routes_allocations._approximate_total_pages
-    testbase.assert_equal(
-        helper(page=2, per_page=20, returned_count=20), 3
+    helper = resources_routes_allocations._calculate_total_pages
+    testbase.assert_equal(helper(total=0, per_page=20), 1)
+    testbase.assert_equal(helper(total=20, per_page=20), 1)
+    testbase.assert_equal(helper(total=41, per_page=20), 3)
+    window = resources_routes_allocations._build_page_window(
+        page=5, total_pages=9
     )
-    testbase.assert_equal(
-        helper(page=1, per_page=20, returned_count=5), 1
-    )
-    testbase.assert_equal(
-        helper(page=2, per_page=20, returned_count=5), 2
-    )
+    testbase.assert_equal(window, [3, 4, 5, 6, 7])
     return
 
 

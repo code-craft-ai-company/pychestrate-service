@@ -32,9 +32,11 @@ from ccai.testbase.mocking import create_module_patch
 
 from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_TYPE_BAD_REQUEST,
+    PROBLEM_TYPE_CONFLICT,
     PROBLEM_TYPE_NOT_FOUND,
     PROBLEM_TYPE_SERVICE_UNAVAILABLE,
     PROBLEM_TYPE_UNAUTHENTICATED,
+    PROBLEM_TYPE_VALIDATION_FAILED,
 )
 from ccai.pychestrate.webservice.resources.health.errors import (
     HealthRecordNotFoundError,
@@ -44,6 +46,7 @@ from ccai.pychestrate.webservice.resources.health.models import (
 )
 from ccai.pychestrate.webservice.resources.inventory.errors import (
     ResourceNotFoundError,
+    ResourceStateTransitionError,
 )
 from ccai.pychestrate.webservice.resources.inventory.models import (
     ResourceState,
@@ -79,7 +82,8 @@ class _FakeRequest:
             path_params: Optional[Dict[str, Any]] = None,
             query: Optional[Dict[str, str]] = None,
             db_session: Optional[Any] = None,
-            auth_principal: Optional[Any] = None
+            auth_principal: Optional[Any] = None,
+            body: Optional[Any] = None
         ) -> None:
         self.path: str = path
         self.path_params: Dict[str, Any] = (
@@ -88,10 +92,11 @@ class _FakeRequest:
         self.query_params: _FakeQueryParams = _FakeQueryParams(values=query)
         self.db_session: Optional[Any] = db_session
         self.auth_principal: Optional[Any] = auth_principal
+        self._body: Optional[Any] = body
         return
 
     def json(self) -> Any:
-        rtnval = None
+        rtnval = self._body
         return rtnval
 
 
@@ -201,10 +206,10 @@ def _make_usage_view(*, event_id: str = "evt-1") -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_register_resources_routes_attaches_three_endpoints():
+def test_register_resources_routes_attaches_four_endpoints():
     """
     **Feature: 4-resources PR p20p**
-    **Property: register_resources_routes attaches the three
+    **Property: register_resources_routes attaches the four
     method+path pairs from the OpenAPI spec.**
     """
     app = _FakeApp()
@@ -213,6 +218,7 @@ def test_register_resources_routes_attaches_three_endpoints():
     )
     expected_pairs = (
         ("/api/v1/resources/{resource_id}", ("GET",)),
+        ("/api/v1/resources/{resource_id}/state", ("POST",)),
         ("/api/v1/resources/{resource_id}/health", ("GET",)),
         ("/api/v1/resources/{resource_id}/usage-history", ("GET",)),
     )
@@ -351,6 +357,218 @@ def test_read_resource_returns_200_on_happy_path():
     body = _decode_body(response)
     testbase.assert_equal(body["resource_id"], "res-7")
     testbase.assert_equal(body["state"], "available")
+    return
+
+
+# ---------------------------------------------------------------------------
+# POST /resources/{resource_id}/state
+# ---------------------------------------------------------------------------
+
+
+def test_transition_state_returns_401_when_no_principal():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 401 when no
+    AuthPrincipal is bound.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/resources/res-1/state",
+        path_params={"resource_id": "res-1"},
+        db_session=object(),
+        auth_principal=None,
+        body={"state": "quarantined"},
+    )
+    response = resources_routes.handle_transition_resource_state(request)
+    testbase.assert_equal(response.status_code, 401)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_UNAUTHENTICATED)
+    return
+
+
+def test_transition_state_returns_403_when_permission_denied():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 403 when the
+    principal lacks system:resources.write.**
+    """
+    perm_patch = _patch_check_permission(allowed=False)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-1/state",
+            path_params={"resource_id": "res-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"state": "quarantined"},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        body["required_permission"], "system:resources.write",
+    )
+    return
+
+
+def test_transition_state_returns_422_on_unknown_state():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 422 when the
+    requested state is not a lifecycle state.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-1/state",
+            path_params={"resource_id": "res-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"state": "not-a-state"},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_VALIDATION_FAILED)
+    return
+
+
+def test_transition_state_returns_422_when_state_missing():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 422 when the body
+    has no state field.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-1/state",
+            path_params={"resource_id": "res-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
+    return
+
+
+def test_transition_state_returns_404_when_resource_missing():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 404 when the
+    resource is not found.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    transition_patch = create_module_patch(
+        resources_routes.inventory_service, "transition_state",
+    )
+    transition_mock = transition_patch.activate()
+
+    def _raise_missing(**kwargs):
+        raise ResourceNotFoundError("missing")
+
+    transition_mock.configure(side_effect=_raise_missing)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-x/state",
+            path_params={"resource_id": "res-x"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"state": "quarantined"},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        transition_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
+    testbase.assert_equal(body["resource_id"], "res-x")
+    return
+
+
+def test_transition_state_returns_409_on_illegal_transition():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 409 with a
+    transition_not_permitted reason when the service rejects the
+    move.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    transition_patch = create_module_patch(
+        resources_routes.inventory_service, "transition_state",
+    )
+    transition_mock = transition_patch.activate()
+
+    def _raise_illegal(**kwargs):
+        raise ResourceStateTransitionError("not permitted")
+
+    transition_mock.configure(side_effect=_raise_illegal)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-1/state",
+            path_params={"resource_id": "res-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"state": "available"},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        transition_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 409)
+    body = _decode_body(response)
+    testbase.assert_equal(body["type"], PROBLEM_TYPE_CONFLICT)
+    testbase.assert_equal(body["reason"], "transition_not_permitted")
+    testbase.assert_equal(body["requested_state"], "available")
+    return
+
+
+def test_transition_state_returns_200_on_happy_path():
+    """
+    **Feature: 4-resources resource lifecycle**
+    **Property: POST resources/{id}/state returns 200 with the
+    updated Resource shape and passes the acting user + reason to
+    the service.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    transition_patch = create_module_patch(
+        resources_routes.inventory_service, "transition_state",
+    )
+    transition_mock = transition_patch.activate()
+    observed_kwargs: Dict[str, Any] = {}
+
+    def _capture(**kwargs):
+        observed_kwargs.update(kwargs)
+        rtnval = _make_resource_view(resource_id="res-7")
+        return rtnval
+
+    transition_mock.configure(side_effect=_capture)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resources/res-7/state",
+            path_params={"resource_id": "res-7"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(user_id="user-9"),
+            body={"state": "quarantined", "reason": "flaky nic"},
+        )
+        response = resources_routes.handle_transition_resource_state(request)
+    finally:
+        transition_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(body["resource_id"], "res-7")
+    testbase.assert_equal(
+        observed_kwargs["new_state"], ResourceState.QUARANTINED,
+    )
+    testbase.assert_equal(observed_kwargs["actor"], "user:user-9")
+    testbase.assert_equal(observed_kwargs["reason"], "flaky nic")
     return
 
 

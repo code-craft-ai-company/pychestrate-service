@@ -17,6 +17,79 @@ const RUN_STATES = [
 ];
 const DEFAULT_PER_PAGE = 25;
 const RUNS_API_PATH = "/api/v1/runs";
+const PROJECTS_API_PATH = "/api/v1/projects";
+const POLL_INTERVAL_MS = 5e3;
+const SESSION_EXPIRED_EVENT = "pyc-session-401";
+function emit_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent(SESSION_EXPIRED_EVENT, {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
+function login_next_url() {
+  const here = window.location.pathname + window.location.search;
+  const rtnval = "/login?next=" + encodeURIComponent(here);
+  return rtnval;
+}
+async function fetch_projects() {
+  let projects = null;
+  try {
+    const response = await fetch(PROJECTS_API_PATH, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === true) {
+      const body = await response.json();
+      projects = extract_projects(body);
+    }
+  } catch (reason) {
+    console.warn(
+      "pychestrate.ui.runs.projects_fetch_failed",
+      { reason: String(reason) }
+    );
+  }
+  return projects;
+}
+function extract_projects(body) {
+  let raw = [];
+  if (Array.isArray(body) === true) {
+    raw = body;
+  } else if (body !== null && typeof body === "object") {
+    const items = body.items;
+    if (Array.isArray(items) === true) {
+      raw = items;
+    }
+  }
+  const rtnval = [];
+  for (const item of raw) {
+    if (item === null || typeof item !== "object") {
+      continue;
+    }
+    const record = item;
+    const project_id = record.project_id;
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      continue;
+    }
+    const display = record.display_name;
+    const display_name = typeof display === "string" && display.length > 0 ? display : project_id;
+    rtnval.push({ project_id, display_name });
+  }
+  return rtnval;
+}
+function project_display_map(projects) {
+  const rtnval = {};
+  for (const project of projects) {
+    rtnval[project.project_id] = project.display_name;
+  }
+  return rtnval;
+}
 function build_runs_query_url(state) {
   const params = new URLSearchParams();
   if (state.projectFilter.length > 0) {
@@ -90,6 +163,21 @@ class PycRunsList extends HTMLElement {
   _runs;
   _root;
   _table_region;
+  _projects;
+  _project_names;
+  _projectsAvailable;
+  _projects_errored;
+  _state_select;
+  _project_select;
+  _project_input;
+  _projects_notice;
+  _refresh_stamp;
+  _last_refreshed_at;
+  _poll_timer;
+  _poll_enabled;
+  _visibility_handler;
+  _session_expired;
+  _fetch_seq;
   constructor() {
     super();
     this._state = {
@@ -99,12 +187,28 @@ class PycRunsList extends HTMLElement {
       perPage: DEFAULT_PER_PAGE,
       total: 0,
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._runs = [];
     this._root = null;
     this._table_region = null;
     this._pager = null;
+    this._projects = [];
+    this._project_names = {};
+    this._projectsAvailable = false;
+    this._projects_errored = false;
+    this._state_select = null;
+    this._project_select = null;
+    this._project_input = null;
+    this._projects_notice = null;
+    this._refresh_stamp = null;
+    this._last_refreshed_at = null;
+    this._poll_timer = null;
+    this._poll_enabled = false;
+    this._visibility_handler = null;
+    this._session_expired = false;
+    this._fetch_seq = 0;
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the
@@ -118,17 +222,68 @@ class PycRunsList extends HTMLElement {
       perPage: this._state.perPage,
       total: this._state.total,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus,
+      projectsAvailable: this._projectsAvailable,
+      polling: this._poll_enabled
     };
     return rtnval;
   }
   /**
-   * Lifecycle hook -- render the static chrome and kick off the
-   * first fetch when the element is inserted into the document.
+   * Lifecycle hook -- render the static chrome, load the projects
+   * collection, kick off the first fetch, and start the live-poll
+   * loop when the element is inserted into the document.
    */
   connectedCallback() {
     this._render_chrome();
-    void this._refresh();
+    this._wire_visibility();
+    void this._bootstrap();
+    return;
+  }
+  /**
+   * Lifecycle hook -- stop the live-poll timer and unhook the
+   * visibility listener so a navigation away from the list never
+   * leaks a timer or listener.
+   */
+  disconnectedCallback() {
+    this._stop_poll();
+    this._unwire_visibility();
+    return;
+  }
+  /**
+   * Load the projects collection (for display names + the
+   * project filter), render the project control, run the first
+   * fetch, and start the live-poll loop. Exposed via
+   * ``connectedCallback``; separated so unit tests can await it.
+   */
+  async _bootstrap() {
+    await this._load_projects();
+    this._render_project_control();
+    await this._refresh();
+    if (this._state.errorStatus !== 401 && this._state.errorStatus !== 403) {
+      this._start_poll();
+    }
+    return;
+  }
+  /**
+   * Fetch the projects collection once and build the
+   * id -> display-name map used by the project column and the
+   * project filter. A failed fetch flags ``_projects_errored`` so
+   * the chrome can surface the degraded filter honestly.
+   */
+  async _load_projects() {
+    const projects = await fetch_projects();
+    if (projects === null) {
+      this._projects = [];
+      this._project_names = {};
+      this._projectsAvailable = false;
+      this._projects_errored = true;
+      return;
+    }
+    this._projects = projects;
+    this._project_names = project_display_map(projects);
+    this._projectsAvailable = projects.length > 0;
+    this._projects_errored = false;
     return;
   }
   /**
@@ -167,21 +322,38 @@ class PycRunsList extends HTMLElement {
       void this._refresh();
     });
     state_label.appendChild(state_select);
+    this._state_select = state_select;
     filters.appendChild(state_label);
     const project_label = document.createElement("label");
     project_label.classList.add("pyc-runs-list__filter");
     project_label.textContent = "Project";
+    const project_select = document.createElement("mj-select");
+    project_select.classList.add("pyc-runs-list__select");
+    project_select.setAttribute("data-role", "project-filter");
+    const all_projects_option = document.createElement("mj-option");
+    all_projects_option.setAttribute("value", "");
+    all_projects_option.textContent = "All projects";
+    project_select.appendChild(all_projects_option);
+    project_select.addEventListener("change", () => {
+      this._state.projectFilter = project_select.value;
+      this._state.page = 1;
+      void this._refresh();
+    });
+    project_label.appendChild(project_select);
+    this._project_select = project_select;
     const project_input = document.createElement("mj-text-field");
     project_input.classList.add("pyc-runs-list__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
-    project_input.setAttribute("data-role", "project-filter");
+    project_input.setAttribute("data-role", "project-filter-input");
+    project_input.hidden = true;
     project_input.addEventListener("change", () => {
       this._state.projectFilter = project_input.value.trim();
       this._state.page = 1;
       void this._refresh();
     });
     project_label.appendChild(project_input);
+    this._project_input = project_input;
     filters.appendChild(project_label);
     const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-runs-list__button");
@@ -192,7 +364,20 @@ class PycRunsList extends HTMLElement {
       void this._refresh();
     });
     filters.appendChild(refresh_button);
+    const refresh_stamp = document.createElement("span");
+    refresh_stamp.classList.add("pyc-runs-list__stamp");
+    refresh_stamp.setAttribute("data-role", "refresh-stamp");
+    refresh_stamp.hidden = true;
+    filters.appendChild(refresh_stamp);
+    this._refresh_stamp = refresh_stamp;
     root.appendChild(filters);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-runs-list__notice");
+    projects_notice.setAttribute("data-role", "projects-error-notice");
+    projects_notice.textContent = "Couldn't load projects — you can still filter by project id.";
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice = projects_notice;
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-runs-list__table-region");
     table_region.setAttribute("data-role", "table-region");
@@ -215,6 +400,64 @@ class PycRunsList extends HTMLElement {
     return;
   }
   /**
+   * Render the project-filter control from the loaded projects --
+   * the ``mj-select`` picker when the collection loaded, or the
+   * manual id input (plus, on a fetch *failure*, an inline notice
+   * saying the picker degraded) when it did not.
+   */
+  _render_project_control() {
+    if (this._project_select === null || this._project_input === null) {
+      return;
+    }
+    const select_el = this._project_select;
+    const input_el = this._project_input;
+    if (this._projectsAvailable === true) {
+      select_el.hidden = false;
+      input_el.hidden = true;
+      select_el.replaceChildren();
+      const all_projects_option = document.createElement("mj-option");
+      all_projects_option.setAttribute("value", "");
+      all_projects_option.textContent = "All projects";
+      select_el.appendChild(all_projects_option);
+      for (const project of this._projects) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", project.project_id);
+        option.textContent = project.display_name;
+        select_el.appendChild(option);
+      }
+      select_el.value = this._state.projectFilter;
+    } else {
+      select_el.hidden = true;
+      input_el.hidden = false;
+    }
+    if (this._projects_notice !== null) {
+      this._projects_notice.hidden = this._projects_errored === false;
+    }
+    return;
+  }
+  /**
+   * Resolve a project id to its display name, falling back to the
+   * short form of the id when the projects collection did not
+   * load or does not know the id. Never returns an empty string.
+   *
+   * @param project_id The run's project UUID.
+   *
+   * @returns A human-readable project label.
+   */
+  _project_display_name(project_id) {
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      const rtnval2 = "—";
+      return rtnval2;
+    }
+    const known = this._project_names[project_id];
+    if (typeof known === "string" && known.length > 0) {
+      const rtnval2 = known;
+      return rtnval2;
+    }
+    const rtnval = short_run_id(project_id);
+    return rtnval;
+  }
+  /**
    * Fetch the current page from the REST endpoint and re-render
    * the table region. Drives the loading / error / empty
    * states. Exposed so unit tests can await a fetch cycle.
@@ -223,12 +466,19 @@ class PycRunsList extends HTMLElement {
     await this._refresh();
     return;
   }
-  async _refresh() {
-    this._state.loading = true;
-    this._state.errored = false;
-    this._render_table_region();
+  async _refresh(options) {
+    const background = options !== undefined && options !== null && options.background === true;
+    this._fetch_seq = this._fetch_seq + 1;
+    const fetch_seq = this._fetch_seq;
+    if (background === false) {
+      this._state.loading = true;
+      this._state.errored = false;
+      this._state.errorStatus = 0;
+      this._render_table_region();
+    }
     const url = build_runs_query_url(this._state);
     let page = null;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -236,6 +486,7 @@ class PycRunsList extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        error_status = response.status;
         throw new Error("runs fetch failed: HTTP " + String(response.status));
       }
       const body = await response.json();
@@ -245,14 +496,42 @@ class PycRunsList extends HTMLElement {
         "pychestrate.ui.runs.list_fetch_failed",
         { reason: String(reason) }
       );
+      if (fetch_seq !== this._fetch_seq) {
+        // A newer fetch superseded this one while it was in
+        // flight -- its outcome wins, not ours.
+        return;
+      }
+      if (error_status === 401 || error_status === 403) {
+        // The session is gone (or access was revoked) -- polling
+        // again every five seconds cannot recover it.
+        this._stop_poll();
+      }
+      if (error_status === 401) {
+        this._emit_session_expired_once();
+      }
+      if (background === true && error_status !== 401 && error_status !== 403) {
+        // A transient poll failure must not wipe the table the
+        // user is looking at; the next poll cycle retries.
+        return;
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = error_status;
       this._render_table_region();
       return;
     }
+    if (fetch_seq !== this._fetch_seq) {
+      // A newer fetch superseded this one while it was in
+      // flight -- its outcome wins, not ours.
+      return;
+    }
     if (page === null || Array.isArray(page.items) === false) {
+      if (background === true) {
+        return;
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
@@ -271,7 +550,134 @@ class PycRunsList extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = false;
+    this._state.errorStatus = 0;
+    this._last_refreshed_at = new Date();
     this._render_table_region();
+    this._render_refresh_stamp();
+    return;
+  }
+  /**
+   * Dispatch the site shell's global session-expired event
+   * exactly once so the shell shows its sign-in toast without
+   * being re-triggered by every subsequent failed poll.
+   */
+  _emit_session_expired_once() {
+    if (this._session_expired === true) {
+      return;
+    }
+    this._session_expired = true;
+    emit_session_expired();
+    return;
+  }
+  /**
+   * Start the live-poll loop. A no-op when polling is already
+   * enabled or the tab is hidden.
+   */
+  _start_poll() {
+    if (this._poll_enabled === true) {
+      return;
+    }
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      return;
+    }
+    this._poll_enabled = true;
+    this._schedule_poll();
+    return;
+  }
+  _schedule_poll() {
+    if (this._poll_timer !== null) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      this._poll_timer = null;
+      void this._poll_once();
+    }, POLL_INTERVAL_MS);
+    const handle = timer;
+    if (typeof handle.unref === "function") {
+      handle.unref();
+    }
+    this._poll_timer = timer;
+    return;
+  }
+  /**
+   * Run one poll cycle -- a background refresh that keeps the
+   * current table on transient failures -- then reschedule while
+   * polling is still enabled and the element is connected.
+   * Exposed so unit tests can drive a poll cycle without waiting
+   * on a real timer.
+   */
+  async pollOnce() {
+    await this._poll_once();
+    return;
+  }
+  async _poll_once() {
+    await this._refresh({ background: true });
+    if (this._poll_enabled === false) {
+      return;
+    }
+    if (this.isConnected === false) {
+      this._stop_poll();
+      return;
+    }
+    this._schedule_poll();
+    return;
+  }
+  /**
+   * Stop the live-poll loop, clearing any pending timer.
+   */
+  _stop_poll() {
+    this._poll_enabled = false;
+    if (this._poll_timer !== null) {
+      clearTimeout(this._poll_timer);
+      this._poll_timer = null;
+    }
+    return;
+  }
+  /**
+   * Pause the live-poll loop while the tab is hidden and resume
+   * it (with an immediate background refresh) when the tab
+   * becomes visible again.
+   */
+  _wire_visibility() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const handler = () => {
+      if (document.visibilityState === "hidden") {
+        this._stop_poll();
+        return;
+      }
+      if (this._session_expired === true) {
+        return;
+      }
+      this._start_poll();
+      void this._refresh({ background: true });
+    };
+    document.addEventListener("visibilitychange", handler);
+    this._visibility_handler = handler;
+    return;
+  }
+  _unwire_visibility() {
+    if (this._visibility_handler !== null && typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this._visibility_handler);
+      this._visibility_handler = null;
+    }
+    return;
+  }
+  /**
+   * Update the "as of HH:MM:SS" stamp next to the refresh button
+   * from the last successful fetch time.
+   */
+  _render_refresh_stamp() {
+    if (this._refresh_stamp === null) {
+      return;
+    }
+    if (this._last_refreshed_at === null) {
+      this._refresh_stamp.hidden = true;
+      return;
+    }
+    this._refresh_stamp.hidden = false;
+    this._refresh_stamp.textContent = "as of " + this._last_refreshed_at.toLocaleTimeString();
     return;
   }
   /**
@@ -295,7 +701,25 @@ class PycRunsList extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-runs-list__status", "pyc-runs-list__status--error");
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load runs. Try refreshing.";
+      const error_status = this._state.errorStatus;
+      if (error_status === 401) {
+        const expired_text = document.createElement("span");
+        expired_text.textContent = "Your session has expired — sign in again. ";
+        error.appendChild(expired_text);
+        const login_link = document.createElement("a");
+        login_link.classList.add("pyc-runs-list__status-link");
+        login_link.setAttribute("href", login_next_url());
+        login_link.textContent = "Sign in";
+        error.appendChild(login_link);
+      } else if (error_status === 403) {
+        error.textContent = "You don't have access to runs.";
+      } else if (error_status === 404) {
+        error.textContent = "The runs API endpoint was not found (HTTP 404).";
+      } else if (error_status === 0) {
+        error.textContent = "Couldn't reach the server. Check your connection and try refreshing.";
+      } else {
+        error.textContent = "Failed to load runs. Try refreshing.";
+      }
       region.replaceChildren(error);
       this._render_pager();
       return;
@@ -304,14 +728,59 @@ class PycRunsList extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-runs-list__status");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No runs yet";
-      region.replaceChildren(empty);
+      const filters_active = this._state.stateFilter.length > 0 || this._state.projectFilter.length > 0;
+      if (filters_active === true) {
+        empty.textContent = "No runs match the current filters.";
+        const empty_actions = document.createElement("div");
+        empty_actions.classList.add("pyc-runs-list__empty-actions");
+        const clear_button = document.createElement("mj-button");
+        clear_button.classList.add("pyc-runs-list__button");
+        clear_button.setAttribute("type", "button");
+        clear_button.setAttribute("data-role", "clear-filters");
+        clear_button.textContent = "Clear filters";
+        clear_button.addEventListener("click", () => {
+          this._clear_filters();
+        });
+        empty_actions.appendChild(clear_button);
+        region.replaceChildren(empty, empty_actions);
+      } else {
+        empty.textContent = "No runs yet";
+        region.replaceChildren(empty);
+      }
       this._render_pager();
       return;
     }
     const table = this._build_table();
-    region.replaceChildren(table);
+    if (this._state.total > this._state.perPage) {
+      const sort_note = document.createElement("p");
+      sort_note.classList.add("pyc-runs-list__sort-note");
+      sort_note.setAttribute("data-role", "sort-scope-note");
+      sort_note.textContent = "Sorting applies to this page only.";
+      region.replaceChildren(table, sort_note);
+    } else {
+      region.replaceChildren(table);
+    }
     this._render_pager();
+    return;
+  }
+  /**
+   * Reset both filters (and their controls) back to the
+   * unfiltered view and refresh.
+   */
+  _clear_filters() {
+    this._state.stateFilter = "";
+    this._state.projectFilter = "";
+    this._state.page = 1;
+    if (this._state_select !== null) {
+      this._state_select.value = "";
+    }
+    if (this._project_select !== null) {
+      this._project_select.value = "";
+    }
+    if (this._project_input !== null) {
+      this._project_input.value = "";
+    }
+    void this._refresh();
     return;
   }
   /**
@@ -341,7 +810,20 @@ class PycRunsList extends HTMLElement {
           return link;
         },
       },
-      { key: "project_id", label: "Project", width: "16rem" },
+      {
+        key: "project_id",
+        label: "Project",
+        width: "16rem",
+        render: (run) => {
+          const project = document.createElement("span");
+          project.classList.add("pyc-runs-list__project");
+          project.textContent = this._project_display_name(run.project_id);
+          if (typeof run.project_id === "string" && run.project_id.length > 0) {
+            project.title = run.project_id;
+          }
+          return project;
+        },
+      },
       {
         key: "state",
         label: "State",
@@ -391,12 +873,17 @@ class PycRunsList extends HTMLElement {
   }
 }
 export {
+  POLL_INTERVAL_MS,
   PycRunsList,
   RUN_STATES,
   build_runs_query_url,
+  emit_session_expired,
+  fetch_projects,
   format_timestamp,
   has_next_page,
   has_previous_page,
+  login_next_url,
+  project_display_map,
   short_run_id,
   state_badge_tone
 };

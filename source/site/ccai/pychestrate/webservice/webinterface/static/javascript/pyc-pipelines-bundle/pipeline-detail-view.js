@@ -1,4 +1,5 @@
 import {
+  announce_session_expired,
   short_id,
   format_timestamp
 } from "./pipelines-list-view.js";
@@ -8,7 +9,6 @@ const COLUMN_GAP = 80;
 const ROW_GAP = 24;
 const CANVAS_PADDING = 20;
 const PROJECTS_API_PATH = "/api/v1/projects";
-const PIPELINES_RESOLVER_PATH = "/api/v1/pipelines";
 function pipeline_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -31,8 +31,42 @@ function pipeline_id_from_path(path) {
   const rtnval = tail;
   return rtnval;
 }
+function project_id_from_search(search) {
+  if (typeof search !== "string" || search.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const params = new URLSearchParams(search);
+  const value = params.get("project_id");
+  if (value === null) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = value;
+  return rtnval;
+}
 function pipeline_detail_url(project_id, pipeline_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/pipelines/" + encodeURIComponent(pipeline_id);
+  return rtnval;
+}
+function detail_load_message_for_status(status) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to pipelines.";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This pipeline was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the pipeline service \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load this pipeline (HTTP " + String(status) + "). Try refreshing.";
   return rtnval;
 }
 function compute_dag_columns(stages) {
@@ -163,6 +197,8 @@ class PycPipelineDetail extends HTMLElement {
   _pipeline;
   _loading;
   _errored;
+  _error_kind;
+  _error_status;
   _is_dag;
   _root;
   constructor() {
@@ -172,16 +208,18 @@ class PycPipelineDetail extends HTMLElement {
     this._pipeline = null;
     this._loading = false;
     this._errored = false;
+    this._error_kind = "";
+    this._error_status = 0;
     this._is_dag = true;
     this._root = null;
   }
   /**
-   * Observed attributes -- ``pipeline-id`` may be supplied
-   * explicitly by a host; otherwise it is read from the path on
-   * mount.
+   * Observed attributes -- ``pipeline-id`` and ``project-id`` may
+   * be supplied explicitly by a host; otherwise they are read
+   * from the URL on mount.
    */
   static get observedAttributes() {
-    const rtnval = ["pipeline-id"];
+    const rtnval = ["pipeline-id", "project-id"];
     return rtnval;
   }
   /**
@@ -194,13 +232,18 @@ class PycPipelineDetail extends HTMLElement {
       projectId: this._project_id,
       loading: this._loading,
       errored: this._errored,
+      errorKind: this._error_kind,
+      errorStatus: this._error_status,
       isDag: this._is_dag
     };
     return rtnval;
   }
   /**
-   * Lifecycle hook -- resolve the pipeline id, render the chrome,
-   * and fetch the snapshot.
+   * Lifecycle hook -- resolve the pipeline + project ids, render
+   * the chrome, and fetch the snapshot. The project id rides on
+   * the detail link's ``?project_id=`` query parameter because
+   * pipelines are only addressable through the project-scoped
+   * API.
    */
   connectedCallback() {
     const attr_id = this.getAttribute("pipeline-id");
@@ -208,6 +251,12 @@ class PycPipelineDetail extends HTMLElement {
       this._pipeline_id = attr_id;
     } else {
       this._pipeline_id = pipeline_id_from_path(window.location.pathname);
+    }
+    const attr_project = this.getAttribute("project-id");
+    if (attr_project !== null && attr_project.length > 0) {
+      this._project_id = attr_project;
+    } else {
+      this._project_id = project_id_from_search(window.location.search);
     }
     this._render_chrome();
     void this._load();
@@ -225,16 +274,26 @@ class PycPipelineDetail extends HTMLElement {
     if (this._pipeline_id.length === 0) {
       this._loading = false;
       this._errored = true;
+      this._error_kind = "invalid-id";
+      this._render_body();
+      return;
+    }
+    if (this._project_id.length === 0) {
+      this._loading = false;
+      this._errored = true;
+      this._error_kind = "missing-project";
       this._render_body();
       return;
     }
     this._loading = true;
     this._errored = false;
+    this._error_kind = "";
     this._render_body();
     const pipeline = await this._fetch_pipeline();
     if (pipeline === null) {
       this._loading = false;
       this._errored = true;
+      this._error_kind = "http";
       this._render_body();
       return;
     }
@@ -246,28 +305,33 @@ class PycPipelineDetail extends HTMLElement {
     return;
   }
   /**
-   * Fetch the pipeline-definition snapshot via the project-
-   * agnostic resolver path.
+   * Fetch the pipeline-definition snapshot from the project-
+   * scoped endpoint -- pipelines have no project-agnostic
+   * resolver, so the project id must already be known (threaded
+   * through the detail link's ``?project_id=`` query parameter).
    *
    * @returns The ``PipelineDefinition``, or ``null`` on failure.
    */
   async _fetch_pipeline() {
-    let url = PIPELINES_RESOLVER_PATH + "/" + encodeURIComponent(this._pipeline_id);
-    if (this._project_id.length > 0) {
-      url = pipeline_detail_url(this._project_id, this._pipeline_id);
-    }
+    const url = pipeline_detail_url(this._project_id, this._pipeline_id);
+    this._error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      this._error_status = response.status;
       if (response.ok === false) {
+        if (response.status === 401) {
+          announce_session_expired();
+        }
         throw new Error(
           "pipeline fetch failed: HTTP " + String(response.status)
         );
       }
       const body = await response.json();
+      this._error_status = 0;
       const rtnval = body;
       return rtnval;
     } catch (reason) {
@@ -333,8 +397,28 @@ class PycPipelineDetail extends HTMLElement {
         "pyc-pipeline-detail__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load this pipeline. Try refreshing.";
-      body.replaceChildren(error);
+      if (this._error_kind === "missing-project") {
+        error.textContent = "This link is missing its project context \u2014 open the pipeline from the Pipelines list.";
+      } else if (this._error_kind === "invalid-id") {
+        error.textContent = "This pipeline link is not valid \u2014 open the pipeline from the Pipelines list.";
+      } else {
+        error.textContent = detail_load_message_for_status(this._error_status);
+      }
+      const children = [error];
+      if (this._error_kind === "http") {
+        if (this._error_status === 0 || this._error_status >= 500) {
+          const retry = document.createElement("mj-button");
+          retry.classList.add("pyc-pipeline-detail__retry");
+          retry.setAttribute("type", "button");
+          retry.setAttribute("data-role", "detail-retry");
+          retry.textContent = "Retry";
+          retry.addEventListener("click", () => {
+            void this._load();
+          });
+          children.push(retry);
+        }
+      }
+      body.replaceChildren(...children);
       return;
     }
     const fragment = document.createDocumentFragment();
@@ -614,6 +698,8 @@ export {
   PycPipelineDetail,
   compute_dag_columns,
   compute_dag_layout,
+  detail_load_message_for_status,
   pipeline_detail_url,
-  pipeline_id_from_path
+  pipeline_id_from_path,
+  project_id_from_search
 };

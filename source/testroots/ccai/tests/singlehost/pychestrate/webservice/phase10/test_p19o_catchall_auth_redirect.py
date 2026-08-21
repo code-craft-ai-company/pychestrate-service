@@ -17,10 +17,14 @@ request:
   ``/login?next=%2Fruns``.
 * An unauthenticated GET to ``/runs?status=active`` carries the
   encoded query string in the ``next`` parameter.
-* An authenticated GET to ``/runs`` (valid signed session cookie)
-  serves the shell document with status 200.
+* An authenticated GET to ``/runs`` (valid signed session cookie
+  whose token names a live session row) serves the shell document
+  with status 200.
+* A valid signed cookie whose session row is dead (logout /
+  expiry) 303-redirects to login instead of receiving the shell.
 * A non-shell path (``/api/v1/...``) still 404s without touching
-  the auth check.
+  the auth check, and every catch-all 404 carries an explicit
+  ``Content-Type`` (friendly HTML for chromeless-prefix paths).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -111,6 +115,32 @@ def _build_authenticated_cookie() -> Dict[str, str]:
     return rtnval
 
 
+def _stub_session_row_alive(*, session: Dict[str, Any]) -> bool:
+    """
+        Stand-in for the catch-all's DB session-token check that
+        reports the session row as live.
+
+        :param session: Decoded session dict (unused).
+
+        :returns: True.
+    """
+    rtnval = True
+    return rtnval
+
+
+def _stub_session_row_dead(*, session: Dict[str, Any]) -> bool:
+    """
+        Stand-in for the catch-all's DB session-token check that
+        reports the session row as closed / expired.
+
+        :param session: Decoded session dict (unused).
+
+        :returns: False.
+    """
+    rtnval = False
+    return rtnval
+
+
 def test_unauthenticated_shell_path_redirects_to_login():
     """
     **Feature: site-shell + authentication**
@@ -160,12 +190,15 @@ def test_unauthenticated_redirect_preserves_query_string():
 def test_authenticated_shell_path_serves_shell_document():
     """
     **Feature: site-shell + authentication**
-    **Property: An authenticated GET (valid signed session cookie)
-    to a protected shell route serves the shell document with
-    status 200 -- no redirect.**
+    **Property: An authenticated GET (valid signed session cookie
+    whose token names a live session row) to a protected shell
+    route serves the shell document with status 200 -- no
+    redirect. The DB token check is stubbed live.**
     """
     previous_secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
+    previous_row_check = catchall_route._is_session_row_alive
     SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = _TEST_COOKIE_SECRET
+    catchall_route._is_session_row_alive = _stub_session_row_alive
     templating.set_default_environment(environment=_StubJinjaEnvironment())
     try:
         request = _FakeRequest(
@@ -174,9 +207,38 @@ def test_authenticated_shell_path_serves_shell_document():
         response = catchall_route._serve_shell_or_pass(request=request)
     finally:
         SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = previous_secret
+        catchall_route._is_session_row_alive = previous_row_check
         templating.reset_default_environment_for_testing()
 
     testbase.assert_equal(response.status_code, 200)
+    return
+
+
+def test_stale_cookie_shell_path_redirects_to_login():
+    """
+    **Feature: site-shell + authentication**
+    **Property: A syntactically valid signed cookie whose session
+    row is dead (logged out / expired) does NOT receive the shell
+    document -- the catch-all's DB token check bounces it to
+    ``/login?next=<original>`` exactly like an anonymous
+    request.**
+    """
+    previous_secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
+    previous_row_check = catchall_route._is_session_row_alive
+    SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = _TEST_COOKIE_SECRET
+    catchall_route._is_session_row_alive = _stub_session_row_dead
+    try:
+        request = _FakeRequest(
+            path="/runs", cookies=_build_authenticated_cookie()
+        )
+        response = catchall_route._serve_shell_or_pass(request=request)
+    finally:
+        SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = previous_secret
+        catchall_route._is_session_row_alive = previous_row_check
+
+    testbase.assert_equal(response.status_code, 303)
+    location = response.headers.get("Location", "")
+    testbase.assert_equal(location, "/login?next=%2Fruns")
     return
 
 
@@ -184,13 +246,41 @@ def test_non_shell_path_returns_404_without_redirect():
     """
     **Feature: site-shell**
     **Property: A non-shell path (``/api/v1/...``) is not a shell
-    candidate and 404s -- the auth-redirect logic only applies to
-    shell-candidate paths.**
+    candidate and 404s with an explicit plain-text Content-Type --
+    the auth-redirect logic only applies to shell-candidate
+    paths.**
     """
     request = _FakeRequest(path="/api/v1/runs")
     response = catchall_route._serve_shell_or_pass(request=request)
 
     testbase.assert_equal(response.status_code, 404)
+    content_type = response.headers.get("Content-Type", "")
+    testbase.assert_equal(
+        content_type, "text/plain; charset=utf-8"
+    )
+    return
+
+
+def test_chromeless_prefix_miss_returns_friendly_html_404():
+    """
+    **Feature: site-shell**
+    **Property: A chromeless-prefix path no route claims (e.g.
+    bare ``/setup`` once the wizard is complete) returns a
+    friendly HTML 404 page -- proper ``text/html`` Content-Type,
+    a human-readable message, and a link to ``/login`` -- rather
+    than an empty untyped body.**
+    """
+    request = _FakeRequest(path="/setup")
+    response = catchall_route._serve_shell_or_pass(request=request)
+
+    testbase.assert_equal(response.status_code, 404)
+    content_type = response.headers.get("Content-Type", "")
+    testbase.assert_equal(
+        content_type.startswith("text/html"), True
+    )
+    body_text = response.body.decode("utf-8")
+    testbase.assert_equal("Page not found" in body_text, True)
+    testbase.assert_equal('href="/login"' in body_text, True)
     return
 
 

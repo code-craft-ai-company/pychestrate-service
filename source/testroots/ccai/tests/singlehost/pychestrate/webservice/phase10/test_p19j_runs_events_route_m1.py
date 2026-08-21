@@ -524,3 +524,103 @@ def test_bus_bridge_forwards_state_change_onto_hub_relay():
     testbase.assert_equal(len(history), 1)
     testbase.assert_equal(history[0].kind, "state_changed")
     return
+
+
+def test_bus_bridge_forwards_result_manifest_onto_hub_relay():
+    """
+    **Feature: run-detail data path**
+    **Property: A MANIFEST_LANDED EntityEvent delivered to the
+    LiveRunBusBridge is forwarded onto the owning run's hub relay
+    with the result.manifest kind.**
+    """
+    from ccai.pychestrate.webservice.ingest.result.events import (
+        ResultEventTopics,
+    )
+    from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
+
+    hub = LiveRunHub()
+    bridge = LiveRunBusBridge(hub=hub)
+
+    bridge._on_bus_event(
+        EntityEvent(
+            topic=ResultEventTopics.MANIFEST_LANDED,
+            payload={
+                "run_id": "run-9",
+                "project_id": "proj-9",
+                "terminal_outcome": "success",
+                "received_at": "2026-05-17T12:45:00+00:00",
+                "manifest": {
+                    "run_id": "run-9",
+                    "format_tag": "testbase",
+                    "html_summary_artifact_path": "testsummary.html",
+                    "artifact_count": 1,
+                    "files": [
+                        {
+                            "relative_path": "testsummary.html",
+                            "size_bytes": 4096,
+                            "sha256": "cc",
+                        },
+                    ],
+                },
+            },
+            source_event_id="evt-9",
+        ),
+    )
+
+    relay = hub.find_relay(run_id="run-9")
+    testbase.assert_true(relay is not None)
+    history = relay.history()
+    testbase.assert_equal(len(history), 1)
+    testbase.assert_equal(history[0].kind, "result.manifest")
+    return
+
+
+def test_stream_delivers_published_result_manifest_event():
+    """
+    **Feature: run-detail data path**
+    **Property: A result.manifest event published on the hub
+    relay reaches a subscribed SSE stream as a result_manifest
+    frame whose manifest block carries the artifact paths the
+    run-detail artifacts pane renders.**
+    """
+    bridge = LiveRunBusBridge(hub=LiveRunHub())
+    stream = runs_events_routes.build_run_events_stream(
+        bridge=bridge,
+        run_id="run-9",
+        project_id="proj-9",
+        heartbeat_interval_seconds=0.2,
+    )
+    try:
+        _initial = next(stream)
+        bridge.hub().publish(
+            run_id="run-9",
+            project_id="proj-9",
+            kind="result.manifest",
+            payload={
+                "run_id": "run-9",
+                "project_id": "proj-9",
+                "terminal_outcome": "success",
+                "manifest": {
+                    "run_id": "run-9",
+                    "format_tag": "testbase",
+                    "summary_artifact_path": "testrun_summary.json",
+                    "html_summary_artifact_path": "testsummary.html",
+                    "artifact_count": 2,
+                    "files": [],
+                },
+            },
+            recorded_at=datetime.now(timezone.utc),
+        )
+        frame = next(stream)
+    finally:
+        stream.close()
+    event_type, data_obj = _parse_sse_frame(frame)
+    testbase.assert_equal(event_type, "result_manifest")
+    testbase.assert_equal(data_obj["event_type"], "result_manifest")
+    testbase.assert_equal(data_obj["terminal_outcome"], "success")
+    manifest = data_obj["manifest"]
+    testbase.assert_equal(
+        manifest["html_summary_artifact_path"], "testsummary.html",
+    )
+    testbase.assert_equal(manifest["artifact_count"], 2)
+    return

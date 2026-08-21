@@ -221,6 +221,35 @@ def append_outbox_row(
     return row
 
 
+def find_latest_outbox_row_for_topic(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        topic: str
+    ) -> Optional[RunEventOutbox]:
+    """
+        Return the most recently created outbox row for one
+        ``(run_id, topic)`` pair, or ``None`` when the run has
+        never emitted on that topic. Used by the run read model to
+        recall durable milestone payloads (e.g. the latest
+        result-manifest event) after the fact.
+
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+        :param topic: Bus topic string.
+
+        :returns: The newest :class:`RunEventOutbox` row or ``None``.
+    """
+    rtnval = (
+        db_session.query(RunEventOutbox)
+        .filter(RunEventOutbox.run_id == run_id)
+        .filter(RunEventOutbox.topic == topic)
+        .order_by(RunEventOutbox.created_at.desc())
+        .first()
+    )
+    return rtnval
+
+
 def mark_outbox_published(
         *,
         db_session: DbSession,

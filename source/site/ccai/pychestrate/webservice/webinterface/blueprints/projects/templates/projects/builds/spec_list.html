@@ -64,7 +64,14 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No build specifications found</td>
+            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+                No build specifications yet.
+                {% if can_manage %}
+                <a href="{{ url_for('projects.build_spec_create', project_id=project.id) }}">Create your first specification</a>
+                {% else %}
+                Build specifications are created by project developers.
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

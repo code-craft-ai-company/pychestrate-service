@@ -54,6 +54,9 @@ from ccai.pychestrate.webservice.resources.checkout.models import (
     ReservationMode,
     ReservationState,
 )
+from ccai.pychestrate.webservice.resources.inventory.models import (
+    ResourceState,
+)
 from ccai.pychestrate.webservice.resources.pools.errors import (
     PoolEmptyError,
     PoolMemberConflictError,
@@ -152,6 +155,62 @@ class _FakeMemberRow:
             2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc,
         )
         return
+
+
+class _FakeResourceRow:
+    def __init__(
+            self,
+            *,
+            resource_id: str = "res-1",
+            display_name: str = "lab-device",
+            kind: str = "device",
+            state: Any = None
+        ) -> None:
+        self.resource_id: str = resource_id
+        self.display_name: str = display_name
+        self.kind: str = kind
+        self.state: Any = (
+            state if state is not None else ResourceState.AVAILABLE
+        )
+        return
+
+
+class _FakeHealthRow:
+    def __init__(
+            self,
+            *,
+            resource_id: str = "res-1",
+            last_outcome: str = "pass"
+        ) -> None:
+        self.resource_id: str = resource_id
+        self.last_outcome: str = last_outcome
+        return
+
+
+def _patch_member_enrichment(
+        *,
+        resource_row: Any = None,
+        health_row: Any = None
+    ) -> Any:
+    """
+        Patch the inventory + health repository lookups the
+        member serializer joins through, returning the two patch
+        handles as ``(inventory_patch, health_patch)``.
+    """
+    inventory_patch = create_module_patch(
+        resource_pools_routes.inventory_repository, "find_by_id",
+    )
+    inventory_mock = inventory_patch.activate()
+    inventory_mock.configure(side_effect=lambda **kwargs: resource_row)
+
+    health_patch = create_module_patch(
+        resource_pools_routes.health_repository, "find_by_resource",
+    )
+    health_mock = health_patch.activate()
+    health_mock.configure(side_effect=lambda **kwargs: health_row)
+
+    rtnval = (inventory_patch, health_patch)
+    return rtnval
 
 
 def _decode_body(response: Any) -> Any:
@@ -712,7 +771,8 @@ def test_list_pool_resources_returns_page_on_happy_path():
     """
     **Feature: 4-resources PR p20p**
     **Property: GET pool resources returns a {items, meta} page of
-    member rows.**
+    member rows enriched with the joined resource's name / kind /
+    state and current health outcome.**
     """
     perm_patch = _patch_check_permission(allowed=True)
     get_patch = create_module_patch(
@@ -727,6 +787,10 @@ def test_list_pool_resources_returns_page_on_happy_path():
     members_mock.configure(
         side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="res-1")],
     )
+    inventory_patch, health_patch = _patch_member_enrichment(
+        resource_row=_FakeResourceRow(resource_id="res-1"),
+        health_row=_FakeHealthRow(resource_id="res-1"),
+    )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources",
@@ -736,6 +800,8 @@ def test_list_pool_resources_returns_page_on_happy_path():
         )
         response = resource_pools_routes.handle_list_pool_resources(request)
     finally:
+        health_patch.deactivate()
+        inventory_patch.deactivate()
         members_patch.deactivate()
         get_patch.deactivate()
         perm_patch.deactivate()
@@ -743,6 +809,58 @@ def test_list_pool_resources_returns_page_on_happy_path():
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
     testbase.assert_equal(body["items"][0]["resource_id"], "res-1")
+    testbase.assert_equal(body["items"][0]["resource_name"], "lab-device")
+    testbase.assert_equal(body["items"][0]["resource_kind"], "device")
+    testbase.assert_equal(body["items"][0]["resource_state"], "available")
+    testbase.assert_equal(body["items"][0]["resource_health"], "pass")
+    return
+
+
+def test_list_pool_resources_tolerates_missing_enrichment_rows():
+    """
+    **Feature: 4-resources PR p20p**
+    **Property: GET pool resources serves null enrichment fields
+    when the inventory / health rows are unavailable instead of
+    failing.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    get_patch = create_module_patch(
+        resource_pools_routes.pools_service, "get_pool",
+    )
+    get_mock = get_patch.activate()
+    get_mock.configure(side_effect=lambda **kwargs: _make_pool_view())
+    members_patch = create_module_patch(
+        resource_pools_routes.pools_repository, "list_members",
+    )
+    members_mock = members_patch.activate()
+    members_mock.configure(
+        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="res-1")],
+    )
+    inventory_patch, health_patch = _patch_member_enrichment(
+        resource_row=None,
+        health_row=None,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/resource-pools/pool-1/resources",
+            path_params={"pool_id": "pool-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = resource_pools_routes.handle_list_pool_resources(request)
+    finally:
+        health_patch.deactivate()
+        inventory_patch.deactivate()
+        members_patch.deactivate()
+        get_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(len(body["items"]), 1)
+    testbase.assert_equal(body["items"][0]["resource_name"], None)
+    testbase.assert_equal(body["items"][0]["resource_kind"], None)
+    testbase.assert_equal(body["items"][0]["resource_state"], None)
+    testbase.assert_equal(body["items"][0]["resource_health"], None)
     return
 
 
@@ -792,6 +910,10 @@ def test_add_pool_resource_returns_201_on_happy_path():
     add_mock.configure(
         side_effect=lambda **kwargs: _FakeMemberRow(resource_id="res-9"),
     )
+    inventory_patch, health_patch = _patch_member_enrichment(
+        resource_row=_FakeResourceRow(resource_id="res-9"),
+        health_row=None,
+    )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources",
@@ -802,11 +924,15 @@ def test_add_pool_resource_returns_201_on_happy_path():
         )
         response = resource_pools_routes.handle_add_pool_resource(request)
     finally:
+        health_patch.deactivate()
+        inventory_patch.deactivate()
         add_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
     testbase.assert_equal(body["resource_id"], "res-9")
+    testbase.assert_equal(body["resource_name"], "lab-device")
+    testbase.assert_equal(body["resource_health"], None)
     return
 
 

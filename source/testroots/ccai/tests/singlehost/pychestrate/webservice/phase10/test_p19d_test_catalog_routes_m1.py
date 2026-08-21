@@ -156,6 +156,7 @@ def _make_view(*, entry_id: str = "ent-1", project_id: str = "proj-1") -> TestCa
         raw_metadata={"runner_kind": "testbase"},
         canonical_digest="deadbeef",
         retired=False,
+        created_at=datetime(2026, 5, 10, 9, 0, 0, tzinfo=timezone.utc),
         updated_at=datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc),
     )
     return rtnval
@@ -302,6 +303,15 @@ def test_list_returns_page_envelope_on_happy_path():
     testbase.assert_equal(len(body["items"]), 1)
     testbase.assert_equal(body["items"][0]["entry_id"], "ent-1")
     testbase.assert_equal(body["items"][0]["importer_tag"], "testbase-project")
+    testbase.assert_equal(
+        body["items"][0]["required_capability_tags"], ["linux"],
+    )
+    testbase.assert_equal(
+        body["items"][0]["created_at"], "2026-05-10T09:00:00+00:00",
+    )
+    testbase.assert_equal(
+        body["items"][0]["updated_at"], "2026-05-17T12:00:00+00:00",
+    )
     testbase.assert_equal(body["meta"]["page"], 1)
     testbase.assert_equal(body["meta"]["per_page"], 10)
     testbase.assert_equal(body["meta"]["total"], 1)

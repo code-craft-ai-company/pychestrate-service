@@ -1,11 +1,21 @@
 import {
+  announce_session_expired,
+  build_pod_definitions_url,
+  format_clock_time,
+  load_projects,
+  project_display_map
+} from "./pods-list-view.js";
+import {
   build_client_detail_url,
   capability_tags,
   format_timestamp,
   liveness_tone,
+  perform_client_revoke,
   short_id,
   status_tone
 } from "./clients-list-view.js";
+const CLIENT_POLL_INTERVAL_MS = 15e3;
+const TOAST_STACK_LIMIT = 3;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function client_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -37,19 +47,55 @@ function is_valid_client_id(client_id) {
   const rtnval = UUID_PATTERN.test(client_id);
   return rtnval;
 }
+function client_detail_message_for_status(status) {
+  if (status === 404) {
+    const rtnval2 = "No client with this id.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired — sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to clients.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the service — check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load this client (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
 class PycClientDetail extends HTMLElement {
   _client_id;
   _client;
+  _client_status;
+  _pod_link;
+  _project_names;
   _loading;
   _errored;
   _root;
+  _toast_region;
+  _stamp_region;
+  _poll_timer;
+  _on_visibility_change;
   constructor() {
     super();
     this._client_id = "";
     this._client = null;
+    this._client_status = 0;
+    this._pod_link = null;
+    this._project_names = null;
     this._loading = false;
     this._errored = false;
     this._root = null;
+    this._toast_region = null;
+    this._stamp_region = null;
+    this._poll_timer = null;
+    this._on_visibility_change = () => {
+      this._handle_visibility_change();
+    };
   }
   /**
    * Observed attributes -- ``client-id`` may be supplied
@@ -68,13 +114,15 @@ class PycClientDetail extends HTMLElement {
     const rtnval = {
       clientId: this._client_id,
       loading: this._loading,
-      errored: this._errored
+      errored: this._errored,
+      errorStatus: this._client_status,
+      polling: this._poll_timer !== null
     };
     return rtnval;
   }
   /**
    * Lifecycle hook -- resolve the client id, render the chrome,
-   * and fetch the snapshot.
+   * fetch the snapshot, and start the liveness poll loop.
    */
   connectedCallback() {
     const attr_id = this.getAttribute("client-id");
@@ -84,7 +132,89 @@ class PycClientDetail extends HTMLElement {
       this._client_id = client_id_from_path(window.location.pathname);
     }
     this._render_chrome();
-    void this._load();
+    void this._load(false);
+    this._start_poll();
+    if (typeof document !== "undefined") {
+      document.addEventListener(
+        "visibilitychange",
+        this._on_visibility_change
+      );
+    }
+    return;
+  }
+  /**
+   * Lifecycle hook -- stop the poll timer and drop the visibility
+   * listener so a navigation away never leaks either.
+   */
+  disconnectedCallback() {
+    this._stop_poll();
+    if (typeof document !== "undefined") {
+      document.removeEventListener(
+        "visibilitychange",
+        this._on_visibility_change
+      );
+    }
+    return;
+  }
+  _start_poll() {
+    if (this._poll_timer !== null) {
+      return;
+    }
+    if (is_valid_client_id(this._client_id) === false) {
+      return;
+    }
+    this._schedule_poll();
+    return;
+  }
+  _schedule_poll() {
+    const timer = setTimeout(() => {
+      this._poll_timer = null;
+      void this._poll_once();
+    }, CLIENT_POLL_INTERVAL_MS);
+    const handle = timer;
+    if (typeof handle.unref === "function") {
+      handle.unref();
+    }
+    this._poll_timer = timer;
+    return;
+  }
+  /**
+   * Run one poll cycle. Exposed so unit tests can drive a cycle
+   * without waiting on a real timer.
+   */
+  async pollOnce() {
+    await this._poll_once();
+    return;
+  }
+  async _poll_once() {
+    if (typeof document !== "undefined" && document.hidden === true) {
+      // The visibility handler restarts the loop when the tab
+      // becomes visible again.
+      return;
+    }
+    await this._load(true);
+    this._schedule_poll();
+    return;
+  }
+  _stop_poll() {
+    if (this._poll_timer !== null) {
+      clearTimeout(this._poll_timer);
+      this._poll_timer = null;
+    }
+    return;
+  }
+  _handle_visibility_change() {
+    if (typeof document === "undefined") {
+      return;
+    }
+    if (document.hidden === true) {
+      this._stop_poll();
+      return;
+    }
+    if (this._poll_timer === null && is_valid_client_id(this._client_id) === true) {
+      void this._load(true);
+      this._schedule_poll();
+    }
     return;
   }
   /**
@@ -92,56 +222,134 @@ class PycClientDetail extends HTMLElement {
    * load cycle.
    */
   async load() {
-    await this._load();
+    await this._load(false);
     return;
   }
-  async _load() {
+  /**
+   * Load / reload the client snapshot.
+   *
+   * @param silent When true (poll cycles), skip the intermediate
+   *               loading state so the page does not flicker
+   *               every poll interval.
+   */
+  async _load(silent) {
     if (is_valid_client_id(this._client_id) === false) {
       this._loading = false;
       this._errored = true;
+      this._client_status = 404;
       this._render_body();
       return;
     }
-    this._loading = true;
-    this._errored = false;
-    this._render_body();
-    const client = await this._fetch_client();
-    if (client === null) {
+    if (silent !== true) {
+      this._loading = true;
+      this._errored = false;
+      this._render_body();
+    }
+    const envelope = await this._fetch_client();
+    this._client_status = envelope.status;
+    if (envelope.ok === false || envelope.body === null) {
       this._loading = false;
       this._errored = true;
       this._render_body();
       return;
     }
-    this._client = client;
+    this._client = envelope.body;
+    if (this._project_names === null) {
+      const projects_outcome = await load_projects();
+      if (projects_outcome.ok === true) {
+        this._project_names = project_display_map(
+          projects_outcome.projects
+        );
+      } else {
+        // Display names are cosmetic -- fall back to raw ids
+        // rather than blocking the client view.
+        this._project_names = {};
+      }
+    }
+    await this._resolve_pod_link();
     this._loading = false;
     this._errored = false;
+    this._render_stamp();
     this._render_body();
     return;
   }
   async _fetch_client() {
     const url = build_client_detail_url(this._client_id);
+    let status = 0;
+    let ok = false;
+    let body = null;
     try {
       const response = await fetch(url, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
-      if (response.ok === false) {
-        throw new Error(
-          "client fetch failed: HTTP " + String(response.status)
-        );
+      status = response.status;
+      ok = response.ok;
+      if (ok === true) {
+        body = await response.json();
       }
-      const body = await response.json();
-      const rtnval = body;
-      return rtnval;
     } catch (reason) {
       console.warn(
         "pychestrate.ui.clients.detail_fetch_failed",
         { reason: String(reason) }
       );
-      const rtnval = null;
-      return rtnval;
     }
+    if (status === 401) {
+      announce_session_expired();
+    }
+    const rtnval = { ok, status, body };
+    return rtnval;
+  }
+  /**
+   * Resolve the enrolled pod's detail-page link. The client
+   * record carries the pod *name*, but the pod detail route needs
+   * the pod definition's UUID -- look it up in the project's
+   * pod-definitions collection. A failed lookup leaves the pod
+   * rendered as plain text rather than a dead link.
+   */
+  async _resolve_pod_link() {
+    this._pod_link = null;
+    if (this._client === null) {
+      return;
+    }
+    const pod_name = this._client.pod_name;
+    const project_id = this._client.project_id;
+    if (typeof pod_name !== "string" || pod_name.length === 0) {
+      return;
+    }
+    if (typeof project_id !== "string" || project_id.length === 0) {
+      return;
+    }
+    let definitions = null;
+    try {
+      const response = await fetch(build_pod_definitions_url(project_id), {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        definitions = await response.json();
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.clients.pod_link_resolution_failed",
+        { reason: String(reason) }
+      );
+    }
+    if (definitions === null || Array.isArray(definitions) === false) {
+      return;
+    }
+    for (const definition of definitions) {
+      if (definition === null || typeof definition !== "object") {
+        continue;
+      }
+      if (definition.pod_name === pod_name && typeof definition.pod_id === "string" && definition.pod_id.length > 0) {
+        this._pod_link = "/pods/" + definition.pod_id + "?project_id=" + encodeURIComponent(project_id);
+        return;
+      }
+    }
+    return;
   }
   _render_chrome() {
     const root = document.createElement("section");
@@ -152,18 +360,47 @@ class PycClientDetail extends HTMLElement {
     heading.classList.add("pyc-client-detail__heading");
     heading.textContent = "Client detail";
     root.appendChild(heading);
+    const toolbar = document.createElement("div");
+    toolbar.classList.add("pyc-client-detail__toolbar");
     const back = document.createElement("a");
     back.classList.add("pyc-client-detail__back-link");
     back.setAttribute("href", "/clients");
     back.setAttribute("data-role", "back-link");
     back.textContent = "Back to clients";
-    root.appendChild(back);
+    toolbar.appendChild(back);
+    const refresh_button = document.createElement("mj-button");
+    refresh_button.classList.add("pyc-client-detail__button");
+    refresh_button.setAttribute("type", "button");
+    refresh_button.setAttribute("data-role", "refresh");
+    refresh_button.textContent = "Refresh";
+    refresh_button.addEventListener("click", () => {
+      void this._load(false);
+    });
+    toolbar.appendChild(refresh_button);
+    const stamp = document.createElement("span");
+    stamp.classList.add("pyc-client-detail__stamp");
+    stamp.setAttribute("data-role", "last-updated");
+    toolbar.appendChild(stamp);
+    this._stamp_region = stamp;
+    root.appendChild(toolbar);
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-client-detail__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
     const body = document.createElement("div");
     body.classList.add("pyc-client-detail__body");
     body.setAttribute("data-role", "body");
     root.appendChild(body);
     this._root = root;
     this.replaceChildren(root);
+    return;
+  }
+  _render_stamp() {
+    if (this._stamp_region === null) {
+      return;
+    }
+    this._stamp_region.textContent = "as of " + format_clock_time(new Date());
     return;
   }
   _render_body() {
@@ -178,7 +415,7 @@ class PycClientDetail extends HTMLElement {
       const loading = document.createElement("p");
       loading.classList.add("pyc-client-detail__status");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading client\u2026";
+      loading.textContent = "Loading client…";
       body.replaceChildren(loading);
       return;
     }
@@ -189,17 +426,47 @@ class PycClientDetail extends HTMLElement {
         "pyc-client-detail__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load this client. Try refreshing.";
+      const message = document.createElement("span");
+      message.textContent = client_detail_message_for_status(
+        this._client_status
+      );
+      error.appendChild(message);
+      const retriable = is_valid_client_id(this._client_id) === true && this._client_status !== 404;
+      if (retriable === true) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-client-detail__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "error-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._load(false);
+        });
+        error.appendChild(retry);
+      }
       body.replaceChildren(error);
       return;
     }
     const fragment = document.createDocumentFragment();
     fragment.appendChild(this._build_summary(this._client));
     fragment.appendChild(this._build_heartbeat(this._client));
-    fragment.appendChild(this._build_pods(this._client));
     fragment.appendChild(this._build_capabilities(this._client));
     body.replaceChildren(fragment);
     return;
+  }
+  /**
+   * Resolve a project's display name from the cached projects
+   * map, falling back to the raw id.
+   */
+  _project_display_name(project_id) {
+    if (this._project_names !== null) {
+      const display = this._project_names[project_id];
+      if (typeof display === "string" && display.length > 0) {
+        const rtnval2 = display;
+        return rtnval2;
+      }
+    }
+    const rtnval = project_id;
+    return rtnval;
   }
   _build_summary(client) {
     const section = document.createElement("section");
@@ -229,29 +496,109 @@ class PycClientDetail extends HTMLElement {
     );
     liveness_badge.textContent = client.liveness_state;
     id_row.appendChild(liveness_badge);
+    id_row.appendChild(this._build_actions(client));
     section.appendChild(id_row);
     const grid = document.createElement("dl");
     grid.classList.add("pyc-client-detail__grid");
     this._append_field(grid, "Client id", client.client_id);
-    this._append_field(grid, "Project", client.project_id);
-    this._append_field(grid, "Enrolled pod", client.pod_name);
+    this._append_field(
+      grid,
+      "Project",
+      this._project_display_name(client.project_id),
+      client.project_id
+    );
+    this._append_pod_field(grid, client);
     this._append_field(
       grid,
       "Enrolled",
       format_timestamp(client.enrolled_at)
     );
+    this._append_field(grid, "Transport", client.transport_name);
     this._append_field(
       grid,
-      "Transport",
-      client.transport_name !== null && client.transport_name !== void 0 && client.transport_name.length > 0 ? client.transport_name : "\u2014"
-    );
-    this._append_field(
-      grid,
-      "Agent version",
-      client.last_agent_version !== null && client.last_agent_version !== void 0 && client.last_agent_version.length > 0 ? client.last_agent_version : "\u2014"
+      "Runtime version",
+      client.last_agent_version
     );
     section.appendChild(grid);
     return section;
+  }
+  /**
+   * Build the operator action buttons for the client -- a single
+   * Revoke action, disabled once the client is already revoked.
+   */
+  _build_actions(client) {
+    const actions = document.createElement("span");
+    actions.classList.add("pyc-client-detail__actions");
+    actions.setAttribute("data-role", "client-actions");
+    const revoke_button = document.createElement("mj-button");
+    revoke_button.classList.add("pyc-client-detail__button");
+    revoke_button.setAttribute("type", "button");
+    revoke_button.setAttribute("data-role", "revoke-action");
+    revoke_button.textContent = "Revoke";
+    if (client.status === "REVOKED") {
+      revoke_button.toggleAttribute("disabled", true);
+      revoke_button.title = "This client is already revoked.";
+    } else {
+      revoke_button.addEventListener("click", () => {
+        revoke_button.toggleAttribute("disabled", true);
+        void this._on_revoke(revoke_button);
+      });
+    }
+    actions.appendChild(revoke_button);
+    return actions;
+  }
+  async _on_revoke(button) {
+    const confirm_fn = window.confirm;
+    if (typeof confirm_fn !== "function") {
+      button.toggleAttribute("disabled", false);
+      return;
+    }
+    const confirmed = window.confirm(
+      "Revoke client " + short_id(this._client_id) + "? The client's certificate is revoked and the pod it backs stops receiving work. This cannot be undone from this UI."
+    );
+    if (confirmed === false) {
+      button.toggleAttribute("disabled", false);
+      return;
+    }
+    const outcome = await perform_client_revoke(this._client_id);
+    button.toggleAttribute("disabled", false);
+    this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (outcome.ok === true) {
+      await this._load(true);
+    }
+    return;
+  }
+  /**
+   * Append the single "Enrolled pod" field. The data model is one
+   * pod per client (``pod_name`` is a scalar); the field links to
+   * the pod's detail page when the pod id could be resolved.
+   */
+  _append_pod_field(grid, client) {
+    const field = document.createElement("div");
+    field.classList.add("pyc-client-detail__field");
+    const term = document.createElement("dt");
+    term.textContent = "Enrolled pod";
+    const def = document.createElement("dd");
+    const pod_name = client.pod_name;
+    if (typeof pod_name === "string" && pod_name.length > 0) {
+      if (this._pod_link !== null) {
+        const link = document.createElement("a");
+        link.classList.add("pyc-client-detail__pod-link");
+        link.setAttribute("href", this._pod_link);
+        link.setAttribute("data-role", "enrolled-pod-link");
+        link.textContent = pod_name;
+        def.appendChild(link);
+      } else {
+        def.textContent = pod_name;
+      }
+    } else {
+      def.textContent = "—";
+      def.title = "This client is not enrolled under a pod.";
+    }
+    field.appendChild(term);
+    field.appendChild(def);
+    grid.appendChild(field);
+    return;
   }
   _build_heartbeat(client) {
     const section = document.createElement("section");
@@ -278,34 +625,8 @@ class PycClientDetail extends HTMLElement {
     section.appendChild(grid);
     const note = document.createElement("p");
     note.classList.add("pyc-client-detail__note");
-    note.textContent = "Full heartbeat history is not exposed by the operator REST surface \u2014 showing the latest cadence markers only.";
+    note.textContent = "Full heartbeat history is not exposed by the operator REST surface — showing the latest cadence markers only.";
     section.appendChild(note);
-    return section;
-  }
-  _build_pods(client) {
-    const section = document.createElement("section");
-    section.classList.add("pyc-client-detail__pods");
-    section.setAttribute("data-role", "pods-section");
-    section.setAttribute("role", "region");
-    section.setAttribute("aria-label", "Backed pods");
-    const heading = document.createElement("h2");
-    heading.classList.add("pyc-client-detail__section-heading");
-    heading.textContent = "Backed pods";
-    section.appendChild(heading);
-    const list = document.createElement("ul");
-    list.classList.add("pyc-client-detail__pod-list");
-    if (client.pod_name !== null && client.pod_name.length > 0) {
-      const item = document.createElement("li");
-      item.classList.add("pyc-client-detail__pod-entry");
-      item.textContent = client.pod_name;
-      list.appendChild(item);
-    } else {
-      const empty = document.createElement("li");
-      empty.classList.add("pyc-client-detail__pod-empty");
-      empty.textContent = "This client is not enrolled under a pod.";
-      list.appendChild(empty);
-    }
-    section.appendChild(list);
     return section;
   }
   _build_capabilities(client) {
@@ -338,21 +659,55 @@ class PycClientDetail extends HTMLElement {
     section.appendChild(tag_list);
     return section;
   }
-  _append_field(grid, label, value) {
+  _append_field(grid, label, value, title) {
     const field = document.createElement("div");
     field.classList.add("pyc-client-detail__field");
     const term = document.createElement("dt");
     term.textContent = label;
     const def = document.createElement("dd");
-    def.textContent = value;
+    if (typeof value === "string" && value.length > 0) {
+      def.textContent = value;
+    } else {
+      def.textContent = "—";
+    }
+    if (typeof title === "string" && title.length > 0) {
+      def.title = title;
+    }
     field.appendChild(term);
     field.appendChild(def);
     grid.appendChild(field);
     return;
   }
+  _show_toast(message, tone) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-client-detail__toast");
+    toast.setAttribute("data-role", "toast");
+    toast.setAttribute("data-tone", tone);
+    const text = document.createElement("span");
+    text.textContent = message;
+    toast.appendChild(text);
+    const dismiss = document.createElement("mj-button");
+    dismiss.classList.add("pyc-client-detail__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "×";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    while (this._toast_region.children.length >= TOAST_STACK_LIMIT) {
+      this._toast_region.removeChild(this._toast_region.firstElementChild);
+    }
+    this._toast_region.appendChild(toast);
+    return;
+  }
 }
 export {
   PycClientDetail,
+  client_detail_message_for_status,
   client_id_from_path,
   is_valid_client_id
 };

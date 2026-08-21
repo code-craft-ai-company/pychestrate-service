@@ -7,7 +7,6 @@ import {
 } from "./test-metrics-view.js";
 import {
   build_dashboard_detail_url,
-  build_dashboards_collection_url,
   DASHBOARDS_ROUTE
 } from "./dashboards-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
@@ -161,24 +160,20 @@ function build_save_payload(dashboard, tiles) {
     tile_payload.push(entry);
   }
   const rtnval = {
-    name: dashboard.name + " (edited)",
     tiles: tile_payload
   };
-  if (dashboard.description !== void 0 && dashboard.description.length > 0) {
-    rtnval.description = dashboard.description;
-  }
-  if (typeof dashboard.grid_columns_max === "number") {
-    rtnval.grid_columns_max = dashboard.grid_columns_max;
+  if (typeof dashboard.version === "number") {
+    rtnval.expected_version = dashboard.version;
   }
   return rtnval;
 }
 function save_message_for_status(status) {
-  if (status === 201 || status === 200) {
-    const rtnval2 = "Layout saved as a new dashboard (the dashboards API has no in-place update).";
+  if (status === 200 || status === 201) {
+    const rtnval2 = "Dashboard saved.";
     return rtnval2;
   }
   if (status === 409) {
-    const rtnval2 = "A dashboard with the edited name already exists \u2014 rename and retry.";
+    const rtnval2 = "This dashboard changed since you loaded it \u2014 reload the editor and try again.";
     return rtnval2;
   }
   if (status === 422) {
@@ -186,11 +181,15 @@ function save_message_for_status(status) {
     return rtnval2;
   }
   if (status === 403) {
-    const rtnval2 = "You do not have permission to save dashboards.";
+    const rtnval2 = "You do not have permission to edit dashboards.";
     return rtnval2;
   }
   if (status === 404) {
-    const rtnval2 = "Unknown project.";
+    const rtnval2 = "This dashboard no longer exists.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to save.";
     return rtnval2;
   }
   const rtnval = "Failed to save layout (HTTP " + String(status) + ").";
@@ -629,8 +628,9 @@ class PycDashboardEditor extends HTMLElement {
     return;
   }
   /**
-   * Save the current layout via a create-replace POST. Exposed
-   * so unit tests can drive the save path directly.
+   * Save the current layout in place via a PATCH to the
+   * dashboard's detail URL. Exposed so unit tests can drive the
+   * save path directly.
    *
    * @returns The save outcome.
    */
@@ -652,9 +652,12 @@ class PycDashboardEditor extends HTMLElement {
     let status = 0;
     let dashboard_id = "";
     try {
-      const url = build_dashboards_collection_url(this._projectId);
+      const url = build_dashboard_detail_url(
+        this._projectId,
+        this._dashboard.dashboard_id
+      );
       const response = await fetch(url, {
-        method: "POST",
+        method: "PATCH",
         credentials: "same-origin",
         headers: {
           Accept: "application/json",
@@ -668,6 +671,9 @@ class PycDashboardEditor extends HTMLElement {
         const record = body;
         if (typeof record.dashboard_id === "string") {
           dashboard_id = record.dashboard_id;
+        }
+        if (typeof record.version === "number") {
+          this._dashboard.version = record.version;
         }
       }
     } catch (reason) {
@@ -683,7 +689,7 @@ class PycDashboardEditor extends HTMLElement {
       };
       return rtnval2;
     }
-    const ok = status === 201 || status === 200;
+    const ok = status === 200 || status === 201;
     const rtnval = {
       ok,
       status,

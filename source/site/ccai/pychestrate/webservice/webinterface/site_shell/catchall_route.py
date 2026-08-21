@@ -27,9 +27,12 @@ shell document and leaving the client-side JS to discover the
 401. The catch-all enforces this: before serving the shell
 document it resolves the cookie session the same way the rest of
 the consumer UI does (:func:`cookie_session.read_session_from_request`
-+ :func:`auth_guard.is_authenticated`) and 303-redirects anonymous
-browsers. The ``next`` target is run through
-:class:`NextValidator` so it is same-origin-safe.
++ :func:`auth_guard.is_authenticated`), validates the cookie's
+session token against the database (one indexed lookup -- the
+same deep check the blueprint guards run, so a stale logged-out
+cookie bounces too), and 303-redirects anonymous browsers. The
+``next`` target is run through :class:`NextValidator` so it is
+same-origin-safe.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -40,13 +43,18 @@ __version__ = "1.0.0"
 
 import logging
 
-from typing import Any
+from typing import Any, Dict
 from urllib.parse import quote
 
 from ccai.webworks.routing.request import Request
-from ccai.webworks.routing.response import RedirectResponse, Response
+from ccai.webworks.routing.response import (
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
 
 from ccai.pychestrate.webservice.webinterface.site_shell.chromeless_routes import (
+    is_chromeless,
     is_shell_candidate,
 )
 from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
@@ -69,32 +77,72 @@ CATCHALL_PATH_PATTERN: str = "/{shell_path:path}"
 LOGIN_PATH: str = "/login"
 
 
+def _is_session_row_alive(*, session: Dict[str, Any]) -> bool:
+    """
+        Validate the cookie's ``session_token`` against the
+        database -- the same deep check the ``/admin`` dashboard
+        performs via
+        :func:`blueprints.config.routes._validate_session_via_security_manager`.
+        A signed cookie whose session row has been closed (logout)
+        or has expired is stale and must not receive the shell.
+
+        Imported lazily so this module keeps its startup
+        independence from the config blueprint (which imports the
+        shell-document renderer -- a module-level import here
+        would cycle).
+
+        On any infrastructure failure (unconfigured session
+        factory, DB error) the check fails closed.
+
+        :param session: Decoded session dict from the cookie.
+
+        :returns: True when the token names a live session row.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (  # noqa: E402
+        _validate_session_via_security_manager,
+    )
+
+    try:
+        validated = _validate_session_via_security_manager(
+            session=session
+        )
+    except Exception:
+        validated = None
+
+    rtnval = validated is not None
+    return rtnval
+
+
 def _is_request_authenticated(*, request: Request) -> bool:
     """
-        Resolve whether the incoming request carries a valid UI
-        session cookie.
+        Resolve whether the incoming request carries a live UI
+        session.
 
-        This reuses the canonical consumer-UI session resolution
-        (:func:`cookie_session.read_session_from_request` +
-        :func:`auth_guard.is_authenticated`) -- the same cookie
-        predicate the ``/admin`` dashboard's
-        ``require_login_or_redirect`` guard runs before its
-        deeper DB token validation. The catch-all only needs the
-        cheap cookie-level predicate: a request with no / invalid
-        cookie is unambiguously anonymous and must bounce to
-        login; a request with a cookie is allowed to reach the
-        shell document, whose per-route handlers + the REST
-        surface perform the authoritative DB token check.
+        Two layers run in order:
 
-        On any failure to resolve the cookie secret or decode the
-        cookie the request is treated as unauthenticated -- a
-        misconfigured deployment fails closed (bounce to login)
-        rather than leaking the shell.
+        * The cheap cookie predicate
+          (:func:`cookie_session.read_session_from_request` +
+          :func:`auth_guard.is_authenticated`) -- a request with
+          no / invalid / unsigned cookie is unambiguously
+          anonymous and bounces without touching the database.
+        * The DB token check (:func:`_is_session_row_alive`) --
+          the same single session-token lookup the legacy
+          blueprint guards perform. Without it a logged-out
+          (stale) cookie still passes the cookie predicate and
+          receives the full shell document. One indexed lookup
+          per shell GET is the cost of not serving the shell to
+          dead sessions; the per-route handlers + REST surface
+          still perform their own authoritative checks.
+
+        On any failure to resolve the cookie secret, decode the
+        cookie, or reach the session store the request is treated
+        as unauthenticated -- a misconfigured deployment fails
+        closed (bounce to login) rather than leaking the shell.
 
         :param request: Incoming webworks request.
 
         :returns: True when the request carries a valid signed
-                  session cookie naming an authenticated user.
+                  session cookie naming a live session.
     """
     from ccai.pychestrate.webservice.metadata import (  # noqa: E402
         SITE_SHARED_GLOBALS,
@@ -121,7 +169,11 @@ def _is_request_authenticated(*, request: Request) -> bool:
         rtnval = False
         return rtnval
 
-    rtnval = auth_guard.is_authenticated(session=session)
+    if auth_guard.is_authenticated(session=session) is False:
+        rtnval = False
+        return rtnval
+
+    rtnval = _is_session_row_alive(session=session)
     return rtnval
 
 
@@ -185,9 +237,12 @@ def register_shell_catchall(*, app: Any) -> None:
 
         Call this AFTER every other route registration so explicit
         blueprint routes (``/admin/users``, ``/projects/...``,
-        ``/login``, ``/api/...``) match first. Webworks gives the
-        first-registered route priority on collision; the catch-
-        all is a fallback.
+        ``/login``, ``/api/...``) match first. Ordering is a
+        readability convention, not a correctness requirement:
+        the webworks router is a specificity-ordered trie that
+        tries static path segments before parameterized ones, so
+        explicit routes win over the ``{shell_path:path}``
+        catch-all regardless of registration order.
 
         Two handlers register:
 
@@ -220,21 +275,87 @@ def register_shell_catchall(*, app: Any) -> None:
     return
 
 
+def _build_not_found_response(*, path: str) -> Response:
+    """
+        Build the 404 for a path the catch-all does not own.
+
+        Chromeless-prefix paths (``/login/...``, ``/setup`` after
+        the wizard completes, ``/errors/...``) are browser-facing
+        -- a person typed or bookmarked them -- so they get a
+        small friendly HTML page instead of an empty body. API /
+        static / webhook paths keep a terse plain-text 404. Both
+        carry an explicit ``Content-Type`` so no client ever has
+        to sniff an empty, untyped body.
+
+        :param path: The request path that missed every route.
+
+        :returns: :class:`Response` with status 404 and an
+                  explicit ``Content-Type``.
+    """
+    if is_chromeless(path=path) is True:
+        page_html = (
+            "<!doctype html>\n"
+            "<html lang=\"en\">\n"
+            "<head>\n"
+            "    <meta charset=\"utf-8\">\n"
+            "    <meta name=\"viewport\""
+            " content=\"width=device-width, initial-scale=1\">\n"
+            "    <title>Page Not Found - Pychestrate</title>\n"
+            "    <style>\n"
+            "        body { margin: 0; padding: 0;"
+            " font-family: -apple-system, BlinkMacSystemFont,"
+            " 'Segoe UI', Roboto, sans-serif;"
+            " background: #f5f5f7; min-height: 100vh; }\n"
+            "        .nf-container { max-width: 400px;"
+            " margin: 100px auto; padding: 40px;"
+            " background: white; border-radius: 8px;"
+            " box-shadow: 0 4px 20px rgba(0,0,0,0.1);"
+            " text-align: center; }\n"
+            "        .nf-container h1 { margin: 0 0 10px;"
+            " color: #1a1a2e; }\n"
+            "        .nf-container p { color: #6c757d; }\n"
+            "        .nf-container a { color: #1a1a2e; }\n"
+            "    </style>\n"
+            "</head>\n"
+            "<body>\n"
+            "    <div class=\"nf-container\">\n"
+            "        <h1>Page not found</h1>\n"
+            "        <p>The page you requested does not"
+            " exist.</p>\n"
+            "        <p><a href=\"/\">Go to the home page</a>"
+            " or <a href=\"/login\">sign in</a>.</p>\n"
+            "    </div>\n"
+            "</body>\n"
+            "</html>\n"
+        )
+        rtnval = HTMLResponse(content=page_html, status_code=404)
+        return rtnval
+
+    rtnval = Response(
+        status_code=404,
+        headers={"Content-Type": "text/plain; charset=utf-8"},
+        body=b"Not Found",
+    )
+    return rtnval
+
+
 def _serve_shell_or_pass(*, request: Request) -> Response:
     """
         Decide whether the request path should render the shell.
 
-        For non-shell candidates return a 404 so the dispatcher
-        does not surface a half-rendered shell on API / static /
-        chromeless paths. (In practice, those paths are claimed by
-        their own handlers and never reach the catch-all.)
+        For non-shell candidates return a 404 -- a friendly HTML
+        page for chromeless-prefix paths, a plain-text body for
+        API-ish paths, both with an explicit ``Content-Type``
+        (see :func:`_build_not_found_response`).
 
         For shell candidates the request must be authenticated:
         per ``specs/1-authentication`` Requirement 5 an anonymous
         browser hitting a protected shell route (``/runs``,
         ``/admin/*``, ``/`` ...) is server-side 303-redirected to
         ``/login?next=<original-path>`` rather than being served
-        an empty shell document. Chromeless surfaces (``/login``,
+        an empty shell document. A syntactically valid cookie
+        whose session row is dead (logout / expiry) is treated
+        the same way. Chromeless surfaces (``/login``,
         ``/logout``, ``/setup/*``, error pages) are already
         excluded by :func:`is_shell_candidate`, so the redirect
         cannot loop.
@@ -250,7 +371,7 @@ def _serve_shell_or_pass(*, request: Request) -> Response:
     if isinstance(path, str) is False:
         path = ""
     if is_shell_candidate(path=path) is False:
-        rtnval = Response(status_code=404, body=b"")
+        rtnval = _build_not_found_response(path=path)
         return rtnval
 
     if _is_request_authenticated(request=request) is False:

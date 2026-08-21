@@ -3,6 +3,38 @@ function build_test_metrics_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/test-metrics";
   return rtnval;
 }
+function list_load_message_for_status(status, what) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to " + what + ".";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the server \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + what + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
 function format_rate(rate) {
   if (typeof rate !== "number" || Number.isFinite(rate) === false) {
     const rtnval2 = "\u2014";
@@ -54,6 +86,8 @@ class PycTestMetrics extends HTMLElement {
   _state;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _summary;
   _root;
   _content_region;
@@ -62,10 +96,13 @@ class PycTestMetrics extends HTMLElement {
     this._state = {
       projectId: "",
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._summary = null;
     this._root = null;
     this._content_region = null;
@@ -78,7 +115,8 @@ class PycTestMetrics extends HTMLElement {
     const rtnval = {
       projectId: this._state.projectId,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -133,6 +171,12 @@ class PycTestMetrics extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-metrics__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const content_region = document.createElement("div");
     content_region.classList.add("pyc-metrics__content-region");
     content_region.setAttribute("data-role", "content-region");
@@ -152,17 +196,23 @@ class PycTestMetrics extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.metrics.projects_fetch_failed",
         { reason: String(reason) }
@@ -171,17 +221,70 @@ class PycTestMetrics extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_content();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-metrics__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-metrics__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-metrics__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-metrics__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   _render_project_control() {
@@ -228,9 +331,11 @@ class PycTestMetrics extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_content();
     let summary = null;
     let errored = false;
+    let error_status = 0;
     try {
       const url = build_test_metrics_url(this._state.projectId);
       const response = await fetch(url, {
@@ -243,9 +348,14 @@ class PycTestMetrics extends HTMLElement {
         summary = body;
       } else {
         errored = true;
+        error_status = response.status;
+        if (error_status === 401) {
+          announce_session_expired();
+        }
       }
     } catch (reason) {
       errored = true;
+      error_status = 0;
       console.warn(
         "pychestrate.ui.metrics.test_metrics_fetch_failed",
         { reason: String(reason) }
@@ -253,6 +363,7 @@ class PycTestMetrics extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = errored;
+    this._state.errorStatus = error_status;
     this._summary = summary;
     this._render_content();
     return;
@@ -266,6 +377,7 @@ class PycTestMetrics extends HTMLElement {
     if (this._state.projectId.length === 0) {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "no-project-state");
       notice.textContent = "Select a project to view test metrics.";
       region.appendChild(notice);
       return;
@@ -281,8 +393,23 @@ class PycTestMetrics extends HTMLElement {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.classList.add("pyc-metrics__notice--error");
-      notice.textContent = "Failed to load test metrics for this project.";
+      notice.setAttribute("data-role", "error-state");
+      notice.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "test metrics"
+      );
       region.appendChild(notice);
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        region.appendChild(retry);
+      }
       return;
     }
     region.appendChild(this._build_cards(this._summary.summary));
@@ -390,7 +517,18 @@ class PycTestMetrics extends HTMLElement {
         key: "run_id",
         label: "Run",
         width: "10rem",
-        render: (run) => short_metric_id(run.run_id)
+        render: (run) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-metrics__row-link");
+          link.setAttribute("data-role", "run-link");
+          link.setAttribute(
+            "href",
+            "/runs/" + encodeURIComponent(run.run_id)
+          );
+          link.textContent = short_metric_id(run.run_id);
+          link.title = run.run_id;
+          return link;
+        }
       },
       {
         key: "parser_tag",
@@ -478,10 +616,12 @@ function extract_projects(body) {
 }
 export {
   PycTestMetrics,
+  announce_session_expired,
   build_test_metrics_url,
   compute_bar_fractions,
   extract_projects,
   format_duration,
   format_rate,
+  list_load_message_for_status,
   short_metric_id
 };

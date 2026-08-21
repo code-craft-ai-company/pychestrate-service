@@ -21,6 +21,7 @@
             <th>Description</th>
             <th>Type</th>
             <th>Permissions</th>
+            <th>Assigned</th>
             <th>Actions</th>
         </tr>
     </thead>
@@ -31,23 +32,29 @@
             <td>{{ role.description or '-' }}</td>
             <td>
                 {% if role.is_system %}
-                <span class="badge badge-info">System</span>
+                <span class="badge badge-info">Built-in</span>
                 {% else %}
                 <span class="badge badge-success">Custom</span>
                 {% endif %}
             </td>
             <td>{{ role.permissions | length }} permissions</td>
+            <td>{{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }}</td>
             <td>
                 {% if not role.is_system %}
                 <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post" style="display:inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger"
+                            onclick="return confirm('Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.')">Delete</button>
+                </form>
                 {% else %}
-                <span style="color: #6c757d;">System role</span>
+                <span style="color: #6c757d;">Built-in role</span>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" style="text-align: center; color: #6c757d;">No roles found</td>
+            <td colspan="6" style="text-align: center; color: #6c757d;">No roles found</td>
         </tr>
         {% endfor %}
     </tbody>

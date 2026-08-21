@@ -1,3 +1,7 @@
+import {
+  announce_session_expired,
+  list_load_message_for_status
+} from "./test-metrics-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 function build_slos_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/slos";
@@ -140,6 +144,8 @@ class PycSlos extends HTMLElement {
   _status;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _root;
   _table_region;
   _create_region;
@@ -150,12 +156,15 @@ class PycSlos extends HTMLElement {
       projectId: "",
       loading: false,
       errored: false,
+      errorStatus: 0,
       total: 0
     };
     this._slos = [];
     this._status = /* @__PURE__ */ new Map();
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._root = null;
     this._table_region = null;
     this._create_region = null;
@@ -170,6 +179,7 @@ class PycSlos extends HTMLElement {
       projectId: this._state.projectId,
       loading: this._state.loading,
       errored: this._state.errored,
+      errorStatus: this._state.errorStatus,
       total: this._state.total
     };
     return rtnval;
@@ -238,6 +248,12 @@ class PycSlos extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-metrics__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const create_region = document.createElement("div");
     create_region.classList.add("pyc-metrics__form-region");
     create_region.setAttribute("data-role", "create-region");
@@ -268,17 +284,23 @@ class PycSlos extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = extract_slo_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.metrics.slo_projects_fetch_failed",
         { reason: String(reason) }
@@ -287,17 +309,70 @@ class PycSlos extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-metrics__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-metrics__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-metrics__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-metrics__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -348,10 +423,12 @@ class PycSlos extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._status = /* @__PURE__ */ new Map();
     this._render_table_region();
     const url = build_slos_collection_url(this._state.projectId);
     let page = null;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -359,6 +436,7 @@ class PycSlos extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        error_status = response.status;
         throw new Error(
           "slos fetch failed: HTTP " + String(response.status)
         );
@@ -370,18 +448,34 @@ class PycSlos extends HTMLElement {
         "pychestrate.ui.metrics.slos_fetch_failed",
         { reason: String(reason) }
       );
+      if (error_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = error_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
     this._slos = page.items;
+    for (const slo of this._slos) {
+      if (slo === null || typeof slo !== "object") {
+        continue;
+      }
+      if (typeof slo.slo_id !== "string") {
+        continue;
+      }
+      if (slo.status !== void 0 && slo.status !== null) {
+        this._status.set(slo.slo_id, slo.status);
+      }
+    }
     const meta = page.meta;
     if (meta !== void 0 && meta !== null) {
       if (typeof meta.total === "number") {
@@ -424,8 +518,23 @@ class PycSlos extends HTMLElement {
         "pyc-metrics__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load SLOs. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "SLOs"
+      );
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       return;
     }
     if (this._slos.length === 0) {
@@ -506,7 +615,7 @@ class PycSlos extends HTMLElement {
           status_button.classList.add("pyc-metrics__button");
           status_button.setAttribute("type", "button");
           status_button.setAttribute("data-role", "load-status");
-          status_button.textContent = "Burn-rate Status";
+          status_button.textContent = "Refresh Status";
           status_button.addEventListener("click", () => {
             status_button.toggleAttribute("disabled", true);
             void self._on_load_status(slo, status_button);

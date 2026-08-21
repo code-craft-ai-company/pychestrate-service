@@ -4,6 +4,38 @@ function build_test_metrics_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/test-metrics";
   return rtnval;
 }
+function list_load_message_for_status(status, what) {
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to continue.";
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You don't have access to " + what + ".";
+    return rtnval2;
+  }
+  if (status === 404) {
+    const rtnval2 = "This project was not found \u2014 it may have been removed.";
+    return rtnval2;
+  }
+  if (status === 0) {
+    const rtnval2 = "Couldn't reach the server \u2014 check your connection and retry.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to load " + what + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+function announce_session_expired() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.dispatchEvent(
+    new CustomEvent("pyc-session-401", {
+      bubbles: false,
+      detail: {}
+    })
+  );
+  return;
+}
 function format_rate(rate) {
   if (typeof rate !== "number" || Number.isFinite(rate) === false) {
     const rtnval2 = "\u2014";
@@ -55,6 +87,8 @@ var PycTestMetrics = class extends HTMLElement {
   _state;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _summary;
   _root;
   _content_region;
@@ -63,10 +97,13 @@ var PycTestMetrics = class extends HTMLElement {
     this._state = {
       projectId: "",
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._summary = null;
     this._root = null;
     this._content_region = null;
@@ -79,7 +116,8 @@ var PycTestMetrics = class extends HTMLElement {
     const rtnval = {
       projectId: this._state.projectId,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -134,6 +172,12 @@ var PycTestMetrics = class extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-metrics__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const content_region = document.createElement("div");
     content_region.classList.add("pyc-metrics__content-region");
     content_region.setAttribute("data-role", "content-region");
@@ -153,17 +197,23 @@ var PycTestMetrics = class extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.metrics.projects_fetch_failed",
         { reason: String(reason) }
@@ -172,17 +222,70 @@ var PycTestMetrics = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_content();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-metrics__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-metrics__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-metrics__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-metrics__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   _render_project_control() {
@@ -229,9 +332,11 @@ var PycTestMetrics = class extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_content();
     let summary = null;
     let errored = false;
+    let error_status = 0;
     try {
       const url = build_test_metrics_url(this._state.projectId);
       const response = await fetch(url, {
@@ -244,9 +349,14 @@ var PycTestMetrics = class extends HTMLElement {
         summary = body;
       } else {
         errored = true;
+        error_status = response.status;
+        if (error_status === 401) {
+          announce_session_expired();
+        }
       }
     } catch (reason) {
       errored = true;
+      error_status = 0;
       console.warn(
         "pychestrate.ui.metrics.test_metrics_fetch_failed",
         { reason: String(reason) }
@@ -254,6 +364,7 @@ var PycTestMetrics = class extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = errored;
+    this._state.errorStatus = error_status;
     this._summary = summary;
     this._render_content();
     return;
@@ -267,6 +378,7 @@ var PycTestMetrics = class extends HTMLElement {
     if (this._state.projectId.length === 0) {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "no-project-state");
       notice.textContent = "Select a project to view test metrics.";
       region.appendChild(notice);
       return;
@@ -282,8 +394,23 @@ var PycTestMetrics = class extends HTMLElement {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.classList.add("pyc-metrics__notice--error");
-      notice.textContent = "Failed to load test metrics for this project.";
+      notice.setAttribute("data-role", "error-state");
+      notice.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "test metrics"
+      );
       region.appendChild(notice);
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        region.appendChild(retry);
+      }
       return;
     }
     region.appendChild(this._build_cards(this._summary.summary));
@@ -391,7 +518,18 @@ var PycTestMetrics = class extends HTMLElement {
         key: "run_id",
         label: "Run",
         width: "10rem",
-        render: (run) => short_metric_id(run.run_id)
+        render: (run) => {
+          const link = document.createElement("a");
+          link.classList.add("pyc-metrics__row-link");
+          link.setAttribute("data-role", "run-link");
+          link.setAttribute(
+            "href",
+            "/runs/" + encodeURIComponent(run.run_id)
+          );
+          link.textContent = short_metric_id(run.run_id);
+          link.title = run.run_id;
+          return link;
+        }
       },
       {
         key: "parser_tag",
@@ -914,6 +1052,8 @@ var PycDashboardsList = class extends HTMLElement {
   _state;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _dashboards;
   _root;
   _form_region;
@@ -924,10 +1064,13 @@ var PycDashboardsList = class extends HTMLElement {
     this._state = {
       projectId: "",
       loading: false,
-      errored: false
+      errored: false,
+      errorStatus: 0
     };
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._dashboards = [];
     this._root = null;
     this._form_region = null;
@@ -942,7 +1085,8 @@ var PycDashboardsList = class extends HTMLElement {
     const rtnval = {
       projectId: this._state.projectId,
       loading: this._state.loading,
-      errored: this._state.errored
+      errored: this._state.errored,
+      errorStatus: this._state.errorStatus
     };
     return rtnval;
   }
@@ -997,6 +1141,12 @@ var PycDashboardsList = class extends HTMLElement {
     });
     controls.appendChild(create_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-metrics__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const form_region = document.createElement("div");
     form_region.classList.add("pyc-metrics__form-region");
     form_region.setAttribute("data-role", "form-region");
@@ -1027,17 +1177,23 @@ var PycDashboardsList = class extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH2, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = extract_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.metrics.projects_fetch_failed",
         { reason: String(reason) }
@@ -1046,17 +1202,70 @@ var PycDashboardsList = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-metrics__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-metrics__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-metrics__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-metrics__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   _render_project_control() {
@@ -1102,9 +1311,11 @@ var PycDashboardsList = class extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._render_table();
     let dashboards = [];
     let errored = false;
+    let error_status = 0;
     try {
       const url = build_dashboards_collection_url(
         this._state.projectId
@@ -1119,9 +1330,14 @@ var PycDashboardsList = class extends HTMLElement {
         dashboards = extract_dashboards(body);
       } else {
         errored = true;
+        error_status = response.status;
+        if (error_status === 401) {
+          announce_session_expired();
+        }
       }
     } catch (reason) {
       errored = true;
+      error_status = 0;
       console.warn(
         "pychestrate.ui.metrics.dashboards_fetch_failed",
         { reason: String(reason) }
@@ -1129,6 +1345,7 @@ var PycDashboardsList = class extends HTMLElement {
     }
     this._state.loading = false;
     this._state.errored = errored;
+    this._state.errorStatus = error_status;
     this._dashboards = dashboards;
     this._render_table();
     return;
@@ -1142,6 +1359,7 @@ var PycDashboardsList = class extends HTMLElement {
     if (this._state.projectId.length === 0) {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
+      notice.setAttribute("data-role", "no-project-state");
       notice.textContent = "Select a project to view dashboards.";
       region.appendChild(notice);
       return;
@@ -1157,8 +1375,23 @@ var PycDashboardsList = class extends HTMLElement {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.classList.add("pyc-metrics__notice--error");
-      notice.textContent = "Failed to load dashboards for this project.";
+      notice.setAttribute("data-role", "error-state");
+      notice.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "dashboards"
+      );
       region.appendChild(notice);
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        region.appendChild(retry);
+      }
       return;
     }
     if (this._dashboards.length === 0) {
@@ -1366,6 +1599,7 @@ var PycDashboardDetail = class extends HTMLElement {
   _dashboard;
   _loading;
   _errored;
+  _errorStatus;
   _root;
   _tiles_region;
   constructor() {
@@ -1374,6 +1608,7 @@ var PycDashboardDetail = class extends HTMLElement {
     this._dashboard = null;
     this._loading = false;
     this._errored = false;
+    this._errorStatus = 0;
     this._root = null;
     this._tiles_region = null;
   }
@@ -1461,6 +1696,7 @@ var PycDashboardDetail = class extends HTMLElement {
     this._render_tiles();
     let dashboard = null;
     let errored = false;
+    let error_status = 0;
     try {
       const url = build_dashboard_detail_url(project_id, dashboard_id);
       const response = await fetch(url, {
@@ -1473,9 +1709,14 @@ var PycDashboardDetail = class extends HTMLElement {
         dashboard = body;
       } else {
         errored = true;
+        error_status = response.status;
+        if (error_status === 401) {
+          announce_session_expired();
+        }
       }
     } catch (reason) {
       errored = true;
+      error_status = 0;
       console.warn(
         "pychestrate.ui.metrics.dashboard_fetch_failed",
         { reason: String(reason) }
@@ -1483,6 +1724,7 @@ var PycDashboardDetail = class extends HTMLElement {
     }
     this._loading = false;
     this._errored = errored;
+    this._errorStatus = error_status;
     this._dashboard = dashboard;
     this._render_tiles();
     return;
@@ -1510,8 +1752,27 @@ var PycDashboardDetail = class extends HTMLElement {
       const notice = document.createElement("div");
       notice.classList.add("pyc-metrics__notice");
       notice.classList.add("pyc-metrics__notice--error");
-      notice.textContent = "Failed to load this dashboard.";
+      notice.setAttribute("data-role", "error-state");
+      if (this._errorStatus === 404) {
+        notice.textContent = "This dashboard was not found \u2014 it may have been removed.";
+      } else {
+        notice.textContent = list_load_message_for_status(
+          this._errorStatus,
+          "this dashboard"
+        );
+      }
       region.appendChild(notice);
+      if (this._errorStatus === 0 || this._errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "detail-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._load_dashboard();
+        });
+        region.appendChild(retry);
+      }
       return;
     }
     if (this._dashboard.tiles.length === 0) {
@@ -1783,6 +2044,8 @@ var PycSlos = class extends HTMLElement {
   _status;
   _projects;
   _projectsAvailable;
+  _projectsNoticeKind;
+  _projects_notice_region;
   _root;
   _table_region;
   _create_region;
@@ -1793,12 +2056,15 @@ var PycSlos = class extends HTMLElement {
       projectId: "",
       loading: false,
       errored: false,
+      errorStatus: 0,
       total: 0
     };
     this._slos = [];
     this._status = /* @__PURE__ */ new Map();
     this._projects = [];
     this._projectsAvailable = false;
+    this._projectsNoticeKind = "";
+    this._projects_notice_region = null;
     this._root = null;
     this._table_region = null;
     this._create_region = null;
@@ -1813,6 +2079,7 @@ var PycSlos = class extends HTMLElement {
       projectId: this._state.projectId,
       loading: this._state.loading,
       errored: this._state.errored,
+      errorStatus: this._state.errorStatus,
       total: this._state.total
     };
     return rtnval;
@@ -1881,6 +2148,12 @@ var PycSlos = class extends HTMLElement {
     });
     controls.appendChild(refresh_button);
     root.appendChild(controls);
+    const projects_notice = document.createElement("p");
+    projects_notice.classList.add("pyc-metrics__projects-notice");
+    projects_notice.setAttribute("data-role", "projects-notice");
+    projects_notice.hidden = true;
+    root.appendChild(projects_notice);
+    this._projects_notice_region = projects_notice;
     const create_region = document.createElement("div");
     create_region.classList.add("pyc-metrics__form-region");
     create_region.setAttribute("data-role", "create-region");
@@ -1911,17 +2184,23 @@ var PycSlos = class extends HTMLElement {
   }
   async _load_projects() {
     let projects = null;
+    let load_status = 0;
+    let load_failed = false;
     try {
       const response = await fetch(PROJECTS_API_PATH3, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      load_status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         projects = extract_slo_projects(body);
+      } else {
+        load_failed = true;
       }
     } catch (reason) {
+      load_failed = true;
       console.warn(
         "pychestrate.ui.metrics.slo_projects_fetch_failed",
         { reason: String(reason) }
@@ -1930,17 +2209,70 @@ var PycSlos = class extends HTMLElement {
     if (projects !== null && projects.length > 0) {
       this._projects = projects;
       this._projectsAvailable = true;
+      this._projectsNoticeKind = "";
       this._state.projectId = projects[0].project_id;
     } else {
       this._projects = [];
       this._projectsAvailable = false;
+      if (load_failed === false) {
+        this._projectsNoticeKind = "empty";
+      } else if (load_status === 403) {
+        this._projectsNoticeKind = "forbidden";
+      } else {
+        this._projectsNoticeKind = "error";
+      }
+      if (load_status === 401) {
+        announce_session_expired();
+      }
     }
     this._render_project_control();
+    this._render_projects_notice();
     if (this._state.projectId.length > 0) {
       await this._refresh();
     } else {
       this._render_table_region();
     }
+    return;
+  }
+  /**
+   * Render the projects-load notice -- explains why the project
+   * selector degraded to the manual id input (no projects exist
+   * yet, no permission to list them, or a failed fetch with a
+   * retry control).
+   */
+  _render_projects_notice() {
+    if (this._projects_notice_region === null) {
+      return;
+    }
+    const region = this._projects_notice_region;
+    if (this._projectsNoticeKind === "") {
+      region.hidden = true;
+      region.replaceChildren();
+      return;
+    }
+    region.hidden = false;
+    if (this._projectsNoticeKind === "empty") {
+      region.classList.remove("pyc-metrics__projects-notice--error");
+      region.textContent = "No projects exist yet.";
+      return;
+    }
+    if (this._projectsNoticeKind === "forbidden") {
+      region.classList.add("pyc-metrics__projects-notice--error");
+      region.textContent = "You don't have permission to list projects.";
+      return;
+    }
+    region.classList.add("pyc-metrics__projects-notice--error");
+    const message = document.createElement("span");
+    message.textContent = "Couldn't load projects.";
+    const retry = document.createElement("mj-button");
+    retry.classList.add("pyc-metrics__button");
+    retry.setAttribute("type", "button");
+    retry.setAttribute("data-role", "projects-retry");
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => {
+      void this._load_projects();
+    });
+    region.replaceChildren(message, retry);
     return;
   }
   /**
@@ -1991,10 +2323,12 @@ var PycSlos = class extends HTMLElement {
     }
     this._state.loading = true;
     this._state.errored = false;
+    this._state.errorStatus = 0;
     this._status = /* @__PURE__ */ new Map();
     this._render_table_region();
     const url = build_slos_collection_url(this._state.projectId);
     let page = null;
+    let error_status = 0;
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -2002,6 +2336,7 @@ var PycSlos = class extends HTMLElement {
         headers: { Accept: "application/json" }
       });
       if (response.ok === false) {
+        error_status = response.status;
         throw new Error(
           "slos fetch failed: HTTP " + String(response.status)
         );
@@ -2013,18 +2348,34 @@ var PycSlos = class extends HTMLElement {
         "pychestrate.ui.metrics.slos_fetch_failed",
         { reason: String(reason) }
       );
+      if (error_status === 401) {
+        announce_session_expired();
+      }
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = error_status;
       this._render_table_region();
       return;
     }
     if (page === null || Array.isArray(page.items) === false) {
       this._state.loading = false;
       this._state.errored = true;
+      this._state.errorStatus = 0;
       this._render_table_region();
       return;
     }
     this._slos = page.items;
+    for (const slo of this._slos) {
+      if (slo === null || typeof slo !== "object") {
+        continue;
+      }
+      if (typeof slo.slo_id !== "string") {
+        continue;
+      }
+      if (slo.status !== void 0 && slo.status !== null) {
+        this._status.set(slo.slo_id, slo.status);
+      }
+    }
     const meta = page.meta;
     if (meta !== void 0 && meta !== null) {
       if (typeof meta.total === "number") {
@@ -2067,8 +2418,23 @@ var PycSlos = class extends HTMLElement {
         "pyc-metrics__notice--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load SLOs. Try refreshing.";
-      region.replaceChildren(error);
+      error.textContent = list_load_message_for_status(
+        this._state.errorStatus,
+        "SLOs"
+      );
+      const children = [error];
+      if (this._state.errorStatus === 0 || this._state.errorStatus >= 500) {
+        const retry = document.createElement("mj-button");
+        retry.classList.add("pyc-metrics__button");
+        retry.setAttribute("type", "button");
+        retry.setAttribute("data-role", "list-retry");
+        retry.textContent = "Retry";
+        retry.addEventListener("click", () => {
+          void this._refresh();
+        });
+        children.push(retry);
+      }
+      region.replaceChildren(...children);
       return;
     }
     if (this._slos.length === 0) {
@@ -2149,7 +2515,7 @@ var PycSlos = class extends HTMLElement {
           status_button.classList.add("pyc-metrics__button");
           status_button.setAttribute("type", "button");
           status_button.setAttribute("data-role", "load-status");
-          status_button.textContent = "Burn-rate Status";
+          status_button.textContent = "Refresh Status";
           status_button.addEventListener("click", () => {
             status_button.toggleAttribute("disabled", true);
             void self._on_load_status(slo, status_button);
@@ -3607,24 +3973,20 @@ function build_save_payload(dashboard, tiles) {
     tile_payload.push(entry);
   }
   const rtnval = {
-    name: dashboard.name + " (edited)",
     tiles: tile_payload
   };
-  if (dashboard.description !== void 0 && dashboard.description.length > 0) {
-    rtnval.description = dashboard.description;
-  }
-  if (typeof dashboard.grid_columns_max === "number") {
-    rtnval.grid_columns_max = dashboard.grid_columns_max;
+  if (typeof dashboard.version === "number") {
+    rtnval.expected_version = dashboard.version;
   }
   return rtnval;
 }
 function save_message_for_status(status) {
-  if (status === 201 || status === 200) {
-    const rtnval2 = "Layout saved as a new dashboard (the dashboards API has no in-place update).";
+  if (status === 200 || status === 201) {
+    const rtnval2 = "Dashboard saved.";
     return rtnval2;
   }
   if (status === 409) {
-    const rtnval2 = "A dashboard with the edited name already exists \u2014 rename and retry.";
+    const rtnval2 = "This dashboard changed since you loaded it \u2014 reload the editor and try again.";
     return rtnval2;
   }
   if (status === 422) {
@@ -3632,11 +3994,15 @@ function save_message_for_status(status) {
     return rtnval2;
   }
   if (status === 403) {
-    const rtnval2 = "You do not have permission to save dashboards.";
+    const rtnval2 = "You do not have permission to edit dashboards.";
     return rtnval2;
   }
   if (status === 404) {
-    const rtnval2 = "Unknown project.";
+    const rtnval2 = "This dashboard no longer exists.";
+    return rtnval2;
+  }
+  if (status === 401) {
+    const rtnval2 = "Your session has expired \u2014 sign in again to save.";
     return rtnval2;
   }
   const rtnval = "Failed to save layout (HTTP " + String(status) + ").";
@@ -4075,8 +4441,9 @@ var PycDashboardEditor = class extends HTMLElement {
     return;
   }
   /**
-   * Save the current layout via a create-replace POST. Exposed
-   * so unit tests can drive the save path directly.
+   * Save the current layout in place via a PATCH to the
+   * dashboard's detail URL. Exposed so unit tests can drive the
+   * save path directly.
    *
    * @returns The save outcome.
    */
@@ -4098,9 +4465,12 @@ var PycDashboardEditor = class extends HTMLElement {
     let status = 0;
     let dashboard_id = "";
     try {
-      const url = build_dashboards_collection_url(this._projectId);
+      const url = build_dashboard_detail_url(
+        this._projectId,
+        this._dashboard.dashboard_id
+      );
       const response = await fetch(url, {
-        method: "POST",
+        method: "PATCH",
         credentials: "same-origin",
         headers: {
           Accept: "application/json",
@@ -4114,6 +4484,9 @@ var PycDashboardEditor = class extends HTMLElement {
         const record = body;
         if (typeof record.dashboard_id === "string") {
           dashboard_id = record.dashboard_id;
+        }
+        if (typeof record.version === "number") {
+          this._dashboard.version = record.version;
         }
       }
     } catch (reason) {
@@ -4129,7 +4502,7 @@ var PycDashboardEditor = class extends HTMLElement {
       };
       return rtnval2;
     }
-    const ok = status === 201 || status === 200;
+    const ok = status === 200 || status === 201;
     const rtnval = {
       ok,
       status,
@@ -4420,6 +4793,7 @@ export {
   TIME_RANGE_PRESETS,
   add_tile,
   alert_create_message_for_status,
+  announce_session_expired,
   build_alert_rules_collection_url,
   build_catalog_url,
   build_chart_element,
@@ -4453,6 +4827,7 @@ export {
   format_window,
   generate_tile_id,
   is_dashboard_edit_path,
+  list_load_message_for_status,
   mount_metrics_view_if_active,
   move_tile_down,
   move_tile_up,
