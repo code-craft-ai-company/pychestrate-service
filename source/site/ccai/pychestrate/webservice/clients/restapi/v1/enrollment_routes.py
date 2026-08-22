@@ -446,10 +446,21 @@ def handle_redeem_enrollment_token(request: Request) -> Response:
             csr_pem=csr_for_payload,
         )
 
+        # ``bootstrap_secret`` is the field name the OpenAPI
+        # contract declares required for this operation, and the
+        # name pychestrate-client actually sends. This handler read
+        # only ``secret``, so every real enrollment failed with
+        # "empty secret" -- no pod could ever enroll. ``secret`` is
+        # still accepted so callers written against the old
+        # behavior keep working.
+        bootstrap_secret = str(payload.get("bootstrap_secret", "") or "")
+        if len(bootstrap_secret) == 0:
+            bootstrap_secret = str(payload.get("secret", "") or "")
+
         try:
             result = redeem_enrollment_token(
                 db_session=db_session,
-                secret=payload.get("secret", ""),
+                secret=bootstrap_secret,
                 payload=enrollment_payload,
             )
         except EnrollmentTokenNotFoundError as xcpt:

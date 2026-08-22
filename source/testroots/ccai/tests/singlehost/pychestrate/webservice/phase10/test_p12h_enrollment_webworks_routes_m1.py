@@ -1099,3 +1099,77 @@ def test_bootstrap_imports_register_enrollment_routes_and_calls_it():
     testbase.assert_equal(has_import, True)
     testbase.assert_equal(has_call, True)
     return
+
+
+def test_handle_redeem_reads_the_bootstrap_secret_field():
+    """
+    **Feature: client enrollment contract**
+    **Property: The redeem handler reads the ``bootstrap_secret``
+    body field -- the name the OpenAPI contract declares required
+    for this operation and the name pychestrate-client sends. The
+    handler previously read only ``secret``, so every real
+    enrollment was rejected with "empty secret" and no pod could
+    enroll, while the suite stayed green because the tests spoke
+    the implementation's private spelling rather than the
+    published contract.**
+    """
+    seen = {}
+
+    def _capture(**kwargs):
+        seen.update(kwargs)
+        rtnval = _FakeRedemptionResult(client_id="c-1")
+        return rtnval
+
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=_capture,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={
+                "bootstrap_secret": "contract-secret",
+                "pod_name": "pod-x",
+            },
+        )
+        response = enrollment_routes.handle_redeem_enrollment_token(request)
+    finally:
+        patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 200)
+    testbase.assert_equal(seen["secret"], "contract-secret")
+    return
+
+
+def test_handle_redeem_still_accepts_the_legacy_secret_field():
+    """
+    **Feature: client enrollment contract**
+    **Property: ``secret`` remains accepted as an alias for
+    ``bootstrap_secret`` so callers written against the handler's
+    original behavior keep working. Pinned deliberately: the alias
+    is back-compat, not contract -- ``bootstrap_secret`` is the
+    documented field.**
+    """
+    seen = {}
+
+    def _capture(**kwargs):
+        seen.update(kwargs)
+        rtnval = _FakeRedemptionResult(client_id="c-1")
+        return rtnval
+
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=_capture,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={"secret": "legacy-secret", "pod_name": "pod-x"},
+        )
+        response = enrollment_routes.handle_redeem_enrollment_token(request)
+    finally:
+        patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 200)
+    testbase.assert_equal(seen["secret"], "legacy-secret")
+    return

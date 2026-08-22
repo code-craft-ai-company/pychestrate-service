@@ -90,11 +90,32 @@ class CsrSubjectVerifier(ClientIdentityVerifierProtocol):
 
             :returns: :class:`VerificationReport` describing the outcome.
         """
-        if token_scope.pod_name != payload.pod_name:
-            rtnval = VerificationReport(accepted=False, reason="pod_name_mismatch")
-            return rtnval
+        has_csr = (
+            payload.csr_pem is not None and len(payload.csr_pem) > 0
+        )
+        echoed_pod_name = payload.pod_name
+        if echoed_pod_name is None:
+            echoed_pod_name = ""
 
-        if payload.csr_pem is None or len(payload.csr_pem) == 0:
+        # The echoed ``pod_name`` is only checked when the caller
+        # actually supplied one. It is not part of the published
+        # EnrollmentRedeemRequest contract -- pychestrate-client
+        # sends bootstrap_secret / csr_pem / display_name and never
+        # this field -- so demanding it rejected every real
+        # enrollment with ``pod_name_mismatch``. Nothing is lost by
+        # letting it be absent: the value is not a secret, and when
+        # a CSR is present the Subject CN is checked against the
+        # same token scope below, which is the cryptographic
+        # binding this verifier exists to enforce. A bearer-only
+        # M1 caller carries no CSR, so it must still echo the name.
+        if len(echoed_pod_name) > 0 or has_csr is False:
+            if token_scope.pod_name != echoed_pod_name:
+                rtnval = VerificationReport(
+                    accepted=False, reason="pod_name_mismatch"
+                )
+                return rtnval
+
+        if has_csr is False:
             rtnval = VerificationReport(accepted=True, reason="")
             return rtnval
 
