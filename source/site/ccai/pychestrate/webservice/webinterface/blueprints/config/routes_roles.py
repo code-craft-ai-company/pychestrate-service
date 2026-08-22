@@ -524,7 +524,17 @@ def handle_role_edit(request: Request) -> Response:
                 str(single_form.get("confirm_remove_all", "")) == "on"
             )
 
-            if len(permission_keys) == 0 and confirm_remove_all is False:
+            # Only a genuine removal needs the confirmation. A role
+            # that already grants nothing is not losing anything by
+            # being saved with nothing selected, and demanding the
+            # tick there makes its description un-editable.
+            currently_grants_permissions = len(role.permissions) > 0
+            removing_all_permissions = (
+                currently_grants_permissions is True
+                and len(permission_keys) == 0
+            )
+
+            if removing_all_permissions is True and confirm_remove_all is False:
                 flash.add_flash(
                     session=auth.session,
                     message=(

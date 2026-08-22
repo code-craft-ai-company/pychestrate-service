@@ -553,6 +553,16 @@ class PycGuards extends HTMLElement {
       this._render_table_region();
       return;
     }
+    // The collection endpoint requires environment_id -- fetching
+    // without one earns a 400 the user cannot act on ("Failed to
+    // load guards (HTTP 400). Try refreshing." never resolves,
+    // because refreshing sends the same incomplete request). Hold
+    // the fetch until an environment is chosen and prompt instead.
+    if (this._state.environmentFilter.length === 0) {
+      this._guards = [];
+      this._render_table_region();
+      return;
+    }
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
@@ -623,6 +633,15 @@ class PycGuards extends HTMLElement {
       notice.classList.add("pyc-infra__status");
       notice.setAttribute("data-role", "no-project-state");
       notice.textContent = "Select a project to view its guards.";
+      region.replaceChildren(notice);
+      return;
+    }
+    if (this._state.environmentFilter.length === 0) {
+      const notice = document.createElement("p");
+      notice.classList.add("pyc-infra__status");
+      notice.setAttribute("data-role", "no-environment-state");
+      notice.textContent =
+        "Select an environment to view its guards.";
       region.replaceChildren(notice);
       return;
     }

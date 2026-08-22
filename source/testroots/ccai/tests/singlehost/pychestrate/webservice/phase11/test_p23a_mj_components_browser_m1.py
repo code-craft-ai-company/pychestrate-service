@@ -329,10 +329,14 @@ def test_runs_list_pager_is_an_mj_pagination(browser: Browser):
 def test_sign_out_control_is_an_mj_button(browser: Browser):
     """
     **Feature: site-shell-mj-migration**
-    **Property: The Sign-out button in the app bar is an
-    <mj-button type=submit> -- proves the shell-chrome button
-    substitution shipped (it lives in the user-menu slot
-    inside the app-bar's "actions" slot).**
+    **Property: The Sign-out control in the app bar is an
+    <mj-button> -- proves the shell-chrome button substitution
+    shipped (it lives in the user-menu slot inside the app-bar's
+    "actions" slot). It is a ``type=button`` navigation to GET
+    /logout rather than the original ``type=submit`` form post:
+    POST /logout is CSRF-gated and a script-built form cannot
+    carry the token, which lives in an HttpOnly cookie the shell
+    document never projects into the DOM.**
     """
     login_name, password = _resolve_admin_credentials()
 
@@ -344,9 +348,12 @@ def test_sign_out_control_is_an_mj_button(browser: Browser):
         page.goto(BASE_URL + "/")
         page.wait_for_selector("mj-app-bar", timeout=NAVIGATION_TIMEOUT_MS)
 
-        button_tag = page.locator(
-            "mj-app-bar mj-button[type='submit']"
-        ).first.evaluate("(el) => el.tagName.toLowerCase()")
+        logout_button = page.locator(
+            "mj-app-bar mj-button.pyc-site-shell__logout-button"
+        ).first
+        button_tag = logout_button.evaluate(
+            "(el) => el.tagName.toLowerCase()"
+        )
         testbase.assert_equal(button_tag, "mj-button")
     finally:
         context.close()

@@ -317,8 +317,14 @@ def test_resource_create_appears_in_list(browser: Browser):
         content = page.content()
         testbase.assert_true(resource_name in content)
 
-        # Also verify the resource appears in the list.
-        _go(page=page, path="/resources/list")
+        # Also verify the resource appears in the list. The list is
+        # paginated at 20 rows, so a freshly created resource is not
+        # guaranteed a slot on page one -- filter for it by name
+        # rather than assuming it landed there.
+        _go(
+            page=page,
+            path="/resources/list?search={}".format(resource_name),
+        )
         content = page.content()
         testbase.assert_true(resource_name in content)
     finally:
@@ -448,7 +454,9 @@ def test_resource_delete_removes_from_list(browser: Browser):
         testbase.assert_true(resource_id_str.isdigit())
 
         # Navigate to the list and click Delete for our resource.
-        list_path = "/resources/list"
+        # Filter by name: the list pages at 20 rows, so the row is
+        # not necessarily on page one.
+        list_path = "/resources/list?search={}".format(resource_name)
         _go(page=page, path=list_path)
         content = page.content()
         testbase.assert_true(resource_name in content)

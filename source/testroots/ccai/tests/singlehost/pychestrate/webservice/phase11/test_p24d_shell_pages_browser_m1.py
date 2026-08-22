@@ -432,8 +432,13 @@ def test_blast_radius_guards_shell_page_renders(browser: Browser):
         host_count = page.locator("pyc-guards").count()
         testbase.assert_true(host_count >= 1)
 
+        # ``no-environment-state`` is a terminal state too: the
+        # guards collection endpoint requires an environment_id,
+        # so the view holds the fetch and prompts for one rather
+        # than issuing a request that can only answer 400.
         terminal_inner = (
             '[data-role="no-project-state"], '
+            '[data-role="no-environment-state"], '
             '[data-role="empty-state"], '
             '[data-role="error-state"], '
             'mj-data-table'
