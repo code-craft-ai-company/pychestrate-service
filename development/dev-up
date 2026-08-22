@@ -35,6 +35,7 @@ mkdir -p "${SECRETS_DIR}"
 KEK_FILE="${SECRETS_DIR}/dev.kek"
 PEPPER_FILE="${SECRETS_DIR}/dev.password-pepper"
 UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
+ENROLLMENT_CA_FILE="${SECRETS_DIR}/dev.enrollment-ca.pem"
 
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
@@ -52,6 +53,23 @@ if [[ ! -s "${UI_COOKIE_SECRET_FILE}" ]]; then
     head -c 32 /dev/urandom > "${UI_COOKIE_SECRET_FILE}"
     chmod 600 "${UI_COOKIE_SECRET_FILE}"
     echo "dev-up: generated ${UI_COOKIE_SECRET_FILE} (32 random bytes)"
+fi
+
+# Self-signed client-enrollment CA. This signs the client
+# certificates minted by POST /enrollment-tokens/redeem; without it
+# that route answers 503 and no pod can enroll locally. Cert and key
+# are concatenated into one PEM because that is what
+# ``ca_adapter.load_ca_at_startup`` reads.
+if [[ ! -s "${ENROLLMENT_CA_FILE}" ]]; then
+    CA_TMP="$(mktemp -d)"
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "${CA_TMP}/ca.key" -out "${CA_TMP}/ca.crt" \
+        -days 3650 -subj "/CN=pychestrate-dev-enrollment-ca" \
+        >/dev/null 2>&1
+    cat "${CA_TMP}/ca.crt" "${CA_TMP}/ca.key" > "${ENROLLMENT_CA_FILE}"
+    chmod 600 "${ENROLLMENT_CA_FILE}"
+    rm -rf "${CA_TMP}"
+    echo "dev-up: generated ${ENROLLMENT_CA_FILE} (self-signed dev CA)"
 fi
 
 # ----------------------------------------------------------------------------
@@ -95,6 +113,10 @@ export PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH="${PYCHESTRATE_PASSWORD_PEPPER_FILE
 export PYCHESTRATE_UI_COOKIE_SECRET_SOURCE="${PYCHESTRATE_UI_COOKIE_SECRET_SOURCE:-file}"
 export PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH="${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH:-${UI_COOKIE_SECRET_FILE}}"
 
+export PYCHESTRATE_ENROLLMENT_CA_SOURCE="${PYCHESTRATE_ENROLLMENT_CA_SOURCE:-file}"
+export PYCHESTRATE_ENROLLMENT_CA_FILE_PATH="${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH:-${ENROLLMENT_CA_FILE}}"
+export PYCHESTRATE_ENROLLMENT_CA_ID="${PYCHESTRATE_ENROLLMENT_CA_ID:-dev-enrollment-ca-1}"
+
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
 
@@ -112,6 +134,7 @@ echo "dev-up: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
 echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
 echo "dev-up: ui-cookie-secret=${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH}"
+echo "dev-up: enrollment-ca=${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH}"
 echo "dev-up: presence-dir=${PYCHESTRATE_PRESENCE_DIR}"
 echo
 

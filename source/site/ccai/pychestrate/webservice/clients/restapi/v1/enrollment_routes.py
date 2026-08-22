@@ -507,6 +507,18 @@ def handle_redeem_enrollment_token(request: Request) -> Response:
             "bearer_token": result.bearer_token,
             "bearer_algorithm": result.bearer_algorithm,
             "cert_serial": result.cert_serial or "",
+            # ``client_certificate_pem`` / ``ca_chain_pem`` are the
+            # field names EnrollmentRedeemResponse declares required,
+            # and the names pychestrate-client reads. The handler
+            # emitted only ``cert_pem`` / ``cert_chain_pem``, so a
+            # real agent redeemed successfully and then failed with
+            # "Enrollment response is missing 'client_certificate_pem'"
+            # -- the certificate was minted and then thrown away.
+            # Both spellings are emitted: the contract names for
+            # correctness, the originals so nothing built against the
+            # old shape breaks.
+            "client_certificate_pem": _encode_pem_field(result.cert_pem),
+            "ca_chain_pem": _encode_pem_field(result.cert_chain_pem),
             "cert_pem": _encode_pem_field(result.cert_pem),
             "cert_chain_pem": _encode_pem_field(result.cert_chain_pem),
             "envelope_signing_keys": envelope_signing_keys,
