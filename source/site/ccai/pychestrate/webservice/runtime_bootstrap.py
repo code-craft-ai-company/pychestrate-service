@@ -124,6 +124,7 @@ from ccai.pychestrate.webservice.persistence.schema import (
 from ccai.pychestrate.core.orm import (
     PychestrateModelBase as PychestrateLegacyCoreBase,
 )
+from ccai.pychestrate.webservice.clients.enrollment import ca_adapter
 from ccai.pychestrate.webservice.secrets.kek_loader import KekHandle
 from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 
@@ -149,6 +150,11 @@ ENV_PEPPER_ENV_VAR: str = "PYCHESTRATE_PASSWORD_PEPPER_ENV_VAR"
 ENV_UI_COOKIE_SECRET_SOURCE: str = "PYCHESTRATE_UI_COOKIE_SECRET_SOURCE"
 ENV_UI_COOKIE_SECRET_FILE_PATH: str = "PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH"
 ENV_UI_COOKIE_SECRET_ENV_VAR: str = "PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR"
+
+ENV_ENROLLMENT_CA_SOURCE: str = "PYCHESTRATE_ENROLLMENT_CA_SOURCE"
+ENV_ENROLLMENT_CA_FILE_PATH: str = "PYCHESTRATE_ENROLLMENT_CA_FILE_PATH"
+ENV_ENROLLMENT_CA_ENV_VAR: str = "PYCHESTRATE_ENROLLMENT_CA_ENV_VAR"
+ENV_ENROLLMENT_CA_ID: str = "PYCHESTRATE_ENROLLMENT_CA_ID"
 ENV_TEST_MODE: str = "PYCHESTRATE_TEST_MODE"
 ENV_TEST_ADMIN_LOGIN: str = "PYCHESTRATE_TEST_ADMIN_LOGIN"
 ENV_TEST_ADMIN_EMAIL: str = "PYCHESTRATE_TEST_ADMIN_EMAIL"
@@ -226,6 +232,16 @@ class RuntimeBootstrapConfig:
     ui_cookie_secret_env_var: Optional[str]
     auto_create_schema: bool
     sql_echo: bool
+    # The client-enrollment CA carries defaults for the same reason
+    # the test-mode fields below do -- existing constructors keep
+    # working unchanged -- and because it is genuinely optional: a
+    # deployment that never enrolls pods should not be made to hold
+    # a signing key. ``load_config_from_environment`` always
+    # populates these from the documented env vars.
+    enrollment_ca_source: Optional[str] = None
+    enrollment_ca_file_path: Optional[str] = None
+    enrollment_ca_env_var: Optional[str] = None
+    enrollment_ca_id: Optional[str] = None
     # Test-mode fields carry defaults so existing constructors (tests,
     # the e2e harness) keep working unchanged and test mode stays OFF
     # unless an operator explicitly opts in. ``load_config_from_environment``
@@ -454,6 +470,18 @@ def load_config_from_environment() -> RuntimeBootstrapConfig:
         ui_cookie_secret_env_var=_read_app_var(
             accessor_name="PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR"
         ),
+        enrollment_ca_source=_read_app_var(
+            accessor_name="PYCHESTRATE_ENROLLMENT_CA_SOURCE"
+        ),
+        enrollment_ca_file_path=_read_app_var(
+            accessor_name="PYCHESTRATE_ENROLLMENT_CA_FILE_PATH"
+        ),
+        enrollment_ca_env_var=_read_app_var(
+            accessor_name="PYCHESTRATE_ENROLLMENT_CA_ENV_VAR"
+        ),
+        enrollment_ca_id=_read_app_var(
+            accessor_name="PYCHESTRATE_ENROLLMENT_CA_ID"
+        ),
         auto_create_schema=_read_app_var_bool(
             accessor_name="PYCHESTRATE_AUTO_CREATE_SCHEMA"
         ),
@@ -625,6 +653,65 @@ def _load_ui_cookie_secret_or_none(
     err_msg_lines.append("SUPPORTED: file, env")
     err_msg = os.linesep.join(err_msg_lines)
     raise ConfigurationError(err_msg)
+
+
+# ---------------------------------------------------------------------------
+# Client-enrollment CA
+# ---------------------------------------------------------------------------
+
+
+def _install_enrollment_ca_or_skip(
+        *, config: RuntimeBootstrapConfig
+    ) -> bool:
+    """
+        Load the client-enrollment CA and install it as the active
+        signing CA, when a source is configured.
+
+        The CA is what signs the client certificates minted during
+        ``POST /enrollment-tokens/redeem``. Without it that route
+        answers 503 and no pod can enroll, so a deployment that
+        wants pods must configure this. It stays OPTIONAL because a
+        REST-only or UI-only deployment never enrolls anything, and
+        those should not be forced to hold a signing key.
+
+        The PEM file must carry the CA certificate AND its private
+        key concatenated, and must be the same CA whose certificate
+        fronts the mTLS routes -- nginx verifies client certs
+        against that CA, so certificates signed by any other one are
+        rejected at the edge no matter how valid they are.
+
+        Mirrors the KEK / pepper / cookie-secret loaders' source
+        dispatch shape.
+
+        :param config: Full runtime config.
+
+        :returns: True when a CA was installed, False when no source
+                  is configured.
+        :raises: ConfigurationError on misconfiguration.
+    """
+    source = config.enrollment_ca_source
+    if source is None or len(source) == 0:
+        rtnval = False
+        return rtnval
+
+    ca_id = config.enrollment_ca_id
+    if ca_id is None or len(ca_id) == 0:
+        err_msg_lines = ["Enrollment CA is configured without an id."]
+        err_msg_lines.append("SOURCE: {}".format(source))
+        err_msg_lines.append("REQUIRED: {}".format(ENV_ENROLLMENT_CA_ID))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ConfigurationError(err_msg)
+
+    handle = ca_adapter.load_ca_at_startup(
+        source=source,
+        file_path=config.enrollment_ca_file_path,
+        env_var=config.enrollment_ca_env_var,
+        ca_id=ca_id,
+    )
+    ca_adapter.set_active_ca(ca=handle)
+
+    rtnval = True
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -851,6 +938,8 @@ def bootstrap_runtime(
 
     ui_cookie_secret = _load_ui_cookie_secret_or_none(config=config)
     SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = ui_cookie_secret
+
+    _install_enrollment_ca_or_skip(config=config)
 
     phase1_config = Phase1BootstrapConfig(
         kek_source=config.kek_source,

@@ -180,6 +180,34 @@ class PychestrateVariablesDesc(AppVarSet):
         default=None,
     )
 
+    # Client-enrollment CA. Signs the client certificates minted by
+    # POST /enrollment-tokens/redeem. Optional: a deployment that
+    # never enrolls pods should not be made to hold a signing key,
+    # and that route answers 503 until one is configured.
+    PYCHESTRATE_ENROLLMENT_CA_SOURCE = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_ENROLLMENT_CA_FILE_PATH = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_ENROLLMENT_CA_ENV_VAR = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
+    PYCHESTRATE_ENROLLMENT_CA_ID = AppVarDesc(
+        section=SECTION_SECURITY,
+        source=VariableSource.ENVIRONMENT,
+        default=None,
+    )
+
     # ------------------------------------------------------------------
     # NETWORK section -- bind host / port for the embedded server
     # ------------------------------------------------------------------
@@ -314,6 +342,18 @@ class PychestrateVariables:
     )
     PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR = AppVarAccessor(
         PychestrateVariablesDesc.PYCHESTRATE_UI_COOKIE_SECRET_ENV_VAR
+    )
+    PYCHESTRATE_ENROLLMENT_CA_SOURCE = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_ENROLLMENT_CA_SOURCE
+    )
+    PYCHESTRATE_ENROLLMENT_CA_FILE_PATH = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_ENROLLMENT_CA_FILE_PATH
+    )
+    PYCHESTRATE_ENROLLMENT_CA_ENV_VAR = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_ENROLLMENT_CA_ENV_VAR
+    )
+    PYCHESTRATE_ENROLLMENT_CA_ID = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_ENROLLMENT_CA_ID
     )
 
     PYCHESTRATE_BIND_HOST = AppVarAccessor(
