@@ -2349,6 +2349,7 @@ def _setup_real_stack() -> Any:
     """
     from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
     from ccai.pychestrate.webservice.security.auth import local_flow
+    from ccai.errors.exceptions import ConfigurationError
     from ccai.pychestrate.webservice.security.auth.pepper_loader import (
         get_active_pepper,
         reset_active_pepper_for_testing,
@@ -2366,10 +2367,16 @@ def _setup_real_stack() -> Any:
     # only installs its own constant when none is active, so a
     # clear here makes every later e2e login verify against the
     # wrong pepper (8 e2e failures in the full phase10 run).
+    # ``get_active_pepper`` raises ConfigurationError when nothing
+    # is loaded, which is the ordinary case for a standalone module
+    # run. Catch that type by name rather than ``Exception``:
+    # ConfigurationError derives from BaseException, so an
+    # ``except Exception`` here silently fails to catch it and the
+    # probe takes the whole test down.
     global _AMBIENT_PEPPER_STASH
     try:
         _AMBIENT_PEPPER_STASH = get_active_pepper()
-    except Exception:
+    except ConfigurationError:
         _AMBIENT_PEPPER_STASH = None
 
     reset_phase1_runtime()

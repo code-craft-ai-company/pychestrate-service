@@ -141,6 +141,40 @@ def _wait_for_admin_fragment(*, page: Page) -> None:
     return
 
 
+def _page_message_text(*, page: Page) -> str:
+    """
+        Return the user-visible message text for the current page,
+        lowercased, gathered from both places a flash can legally
+        live.
+
+        The site shell lifts server-rendered flashes out of the
+        page fragment into its own notices region at boot, so that
+        a feature bundle replacing ``<main>`` cannot destroy a
+        message before the user reads it. A flash therefore lands
+        in ``.pyc-site-shell__notices`` on any shell-served route,
+        and only remains inside the fragment when the shell has
+        not booted. Reading both keeps these assertions true in
+        either case.
+
+        :param page: Authenticated Playwright Page, already
+                     settled on the target route.
+
+        :returns: The combined message text, lowercased.
+    """
+    collected = []
+
+    notices = page.locator(".pyc-site-shell__notices")
+    if notices.count() > 0:
+        collected.append(notices.inner_text())
+
+    fragment = page.locator(FRAGMENT_SELECTOR)
+    if fragment.count() > 0:
+        collected.append(fragment.inner_text())
+
+    rtnval = " ".join(collected).lower()
+    return rtnval
+
+
 def _click_submit_and_goto_list(
         *, page: Page, submit_selector: str, list_path: str
     ) -> None:
@@ -713,12 +747,10 @@ def test_admin_role_edit_non_system_role_workflow(browser: Browser):
             page.click("button[type='submit']")
         _wait_for_admin_fragment(page=page)
 
-        fragment_text = page.locator(
-            "section.pyc-admin-page-fragment"
-        ).inner_text()
+        message_text = _page_message_text(page=page)
         testbase.assert_true(
-            "updated successfully" in fragment_text.lower()
-            or edit_desc_updated in fragment_text
+            "updated successfully" in message_text
+            or edit_desc_updated.lower() in message_text
         )
     finally:
         context.close()
@@ -855,12 +887,10 @@ def test_admin_edit_variable_workflow(browser: Browser):
             page.click("button[type='submit']")
         _wait_for_admin_fragment(page=page)
 
-        fragment_text = page.locator(
-            "section.pyc-admin-page-fragment"
-        ).inner_text()
+        message_text = _page_message_text(page=page)
         testbase.assert_true(
-            "updated successfully" in fragment_text.lower()
-            or var_value_updated in fragment_text
+            "updated successfully" in message_text
+            or var_value_updated.lower() in message_text
         )
     finally:
         context.close()
@@ -1271,16 +1301,15 @@ def test_admin_edit_secret_workflow(browser: Browser):
 
         desc_field = page.locator("textarea[name='description']")
         desc_field.fill(new_description)
-        _click_submit_and_goto_list(
-            page=page,
-            submit_selector="button[type='submit']",
-            list_path="/admin/secrets",
-        )
+        # Read the flash on the page the POST redirects to. A flash
+        # is one-shot: navigating on to the list first would consume
+        # it and assert against a page that can never carry it.
+        with page.expect_navigation(timeout=NAVIGATION_TIMEOUT_MS):
+            page.click("button[type='submit']")
+        _wait_for_admin_fragment(page=page)
 
-        fragment_text = page.locator(
-            "section.pyc-admin-page-fragment"
-        ).inner_text()
-        testbase.assert_true("updated successfully" in fragment_text.lower())
+        message_text = _page_message_text(page=page)
+        testbase.assert_true("updated successfully" in message_text)
     finally:
         context.close()
     return
