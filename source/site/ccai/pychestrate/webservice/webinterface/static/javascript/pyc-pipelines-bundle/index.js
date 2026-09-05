@@ -1,4 +1,4 @@
-// pyc-pipelines-bundle/pipelines-list-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipelines-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
 function build_pipelines_query_url(state) {
@@ -1239,7 +1239,7 @@ var PycPipelinesList = class extends HTMLElement {
   }
 };
 
-// pyc-pipelines-bundle/pipeline-detail-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipeline-detail-view.js
 var NODE_WIDTH = 140;
 var NODE_HEIGHT = 44;
 var COLUMN_GAP = 80;
@@ -1932,7 +1932,7 @@ var PycPipelineDetail = class extends HTMLElement {
   }
 };
 
-// pyc-pipelines-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var PIPELINES_READ_PERMISSION = "system:pipelines.read";
 var PIPELINES_ROUTE = "/pipelines";

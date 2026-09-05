@@ -1,4 +1,4 @@
-// pyc-secrets-bundle/secrets-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/secrets-view.js
 var SECRET_SCOPE_KINDS = [
   "ORG",
   "PROJECT",
@@ -1175,7 +1175,7 @@ var PycSecrets = class extends HTMLElement {
   }
 };
 
-// pyc-secrets-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/index.entry.js
 var SECRETS_ROUTE = "/secrets";
 var SECRETS_TAG = "pyc-secrets";
 var SECRETS_STYLESHEET_HREF = "/static/javascript/pyc-secrets-bundle/pyc-secrets-bundle.css";

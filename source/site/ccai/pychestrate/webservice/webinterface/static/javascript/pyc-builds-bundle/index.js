@@ -1,4 +1,4 @@
-// pyc-builds-bundle/builds-list-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/builds-list-view.js
 var BUILD_STATES = [
   "pending",
   "running",
@@ -1047,7 +1047,7 @@ var PycBuildsList = class extends HTMLElement {
   }
 };
 
-// pyc-builds-bundle/build-detail-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/build-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1684,7 +1684,7 @@ var PycBuildDetail = class extends HTMLElement {
   }
 };
 
-// pyc-builds-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var BUILDS_READ_PERMISSION = "system:builds.read";
 var BUILDS_ROUTE = "/builds";

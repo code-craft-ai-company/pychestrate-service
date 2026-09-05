@@ -1,4 +1,4 @@
-// pyc-runs-bundle/runs-list-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/runs-list-view.js
 var RUN_STATES = [
   "pending",
   "dispatching",
@@ -854,7 +854,7 @@ var PycRunsList = class extends HTMLElement {
   }
 };
 
-// pyc-runs-bundle/run-detail-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/run-detail-view.js
 var TERMINAL_RUN_STATES = [
   "dispatch_failed",
   "cancelled",
@@ -1894,7 +1894,7 @@ var PycRunDetail = class extends HTMLElement {
   }
 };
 
-// pyc-runs-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var RUNS_READ_PERMISSION = "system:runs.read";
 var RUNS_ROUTE = "/runs";

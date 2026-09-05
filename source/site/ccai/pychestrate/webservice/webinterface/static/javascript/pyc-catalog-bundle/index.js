@@ -1,4 +1,4 @@
-// pyc-catalog-bundle/catalog-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-catalog-bundle/catalog-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
 function build_catalog_query_url(state) {
@@ -963,7 +963,7 @@ var PycTestCatalog = class extends HTMLElement {
   }
 };
 
-// pyc-catalog-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-catalog-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var CATALOG_READ_PERMISSION = "system:test_catalog.read";
 var CATALOG_ROUTE = "/test-catalog";

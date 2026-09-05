@@ -52,7 +52,7 @@ if [ ! -f "${MJ_INDEX}" ]; then
 fi
 
 mkdir -p "${STATIC_JS}/pyc-mj-lib"
-${ESBUILD} "${MJ_INDEX}" --bundle --format=esm \
+${ESBUILD} "${MJ_INDEX}" --bundle --format=esm --minify \
     --outfile="${STATIC_JS}/pyc-mj-lib/index.js" >/dev/null 2>&1
 echo "    bundled mj-* library -> pyc-mj-lib/index.js"
 

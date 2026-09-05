@@ -1,4 +1,4 @@
-// pyc-admin-bundle/feature-flags-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
 var FLAGS_PATH = "/api/v1/flags";
 var FLAG_STATE_ENABLED = "enabled";
 var FLAG_STATE_DISABLED = "disabled";
@@ -423,7 +423,7 @@ var PycFeatureFlags = class extends HTMLElement {
   }
 };
 
-// pyc-admin-bundle/system-health-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/system-health-view.js
 var SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
   if (typeof status !== "string") {
@@ -694,7 +694,7 @@ var PycSystemHealth = class extends HTMLElement {
   }
 };
 
-// pyc-admin-bundle/extension-registry-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/extension-registry-view.js
 var EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
   const buckets = /* @__PURE__ */ new Map();
@@ -1039,7 +1039,7 @@ var PycExtensionRegistry = class extends HTMLElement {
   }
 };
 
-// pyc-admin-bundle/admin-overview-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/admin-overview-view.js
 var SYSTEM_HEALTH_ROUTE = "/admin/system-health";
 var FEATURE_FLAGS_ROUTE = "/admin/feature-flags";
 var EXTENSION_REGISTRY_ROUTE = "/admin/extensions";
@@ -1538,7 +1538,7 @@ var PycAdminOverview = class extends HTMLElement {
   }
 };
 
-// pyc-admin-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/index.entry.js
 var OVERVIEW_TAG = "pyc-admin-overview";
 var FEATURE_FLAGS_TAG = "pyc-feature-flags";
 var EXTENSION_REGISTRY_TAG = "pyc-extension-registry";
