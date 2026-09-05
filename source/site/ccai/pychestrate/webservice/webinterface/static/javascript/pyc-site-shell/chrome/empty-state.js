@@ -10,6 +10,7 @@ function build_empty_state() {
     const panel = document.createElement("mj-empty-state");
     panel.setAttribute("heading", "Your account has no access yet");
     panel.setAttribute("role", "status");
+    panel.setAttribute("heading-level", "1");
     panel.classList.add("pyc-site-shell__empty-state");
 
     const body = document.createElement("p");

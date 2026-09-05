@@ -59,7 +59,7 @@ import os
 import re
 import time
 
-from typing import Any, Dict, Optional, Tuple
+from typing import List, Any, Dict, Optional, Tuple
 from urllib.parse import parse_qs
 
 from ccai.webworks.routing.request import Request
@@ -201,12 +201,38 @@ def _build_404_response() -> Response:
 
         :returns: HTMLResponse with a 404 body.
     """
-    body = (
-        "<!doctype html><title>Not Found</title>"
-        "<h1>404 Not Found</h1>"
-        "<p>The setup wizard has already been completed.</p>"
+    from ccai.pychestrate.webservice.webinterface.foundation.templating import (  # noqa: E402
+        render_template_response,
     )
-    rtnval = HTMLResponse(content=body, status_code=404)
+    from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+        CHROMELESS_ERROR_TEMPLATE,
+    )
+    try:
+        rtnval = render_template_response(
+            template_name=CHROMELESS_ERROR_TEMPLATE,
+            context={
+                "status_code": 404,
+                "title": "Setup is already complete",
+                "message": (
+                    "The first-run setup wizard has been completed and"
+                    " its pages are no longer available. Sign in to"
+                    " continue."
+                ),
+            },
+            status_code=404,
+        )
+    except Exception:
+        # No templating environment (very early boot): fall back to a
+        # minimal but well-formed document.
+        body = (
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>Not Found</title></head><body>"
+            "<h1>404 Not Found</h1>"
+            "<p>The setup wizard has already been completed.</p>"
+            "</body></html>"
+        )
+        rtnval = HTMLResponse(content=body, status_code=404)
     return rtnval
 
 
@@ -432,25 +458,47 @@ def _validate_admin_form(
 
         :returns: Error message string or ``None``.
     """
+    problems = _collect_admin_form_errors(
+        login_name=login_name,
+        email=email,
+        password=password,
+        password_confirm=password_confirm,
+        display_name=display_name,
+    )
+    if len(problems) == 0:
+        return None
+    rtnval = " ".join(problems)
+    return rtnval
+
+
+def _collect_admin_form_errors(
+        *, login_name: str, email: str, password: str,
+        password_confirm: str, display_name: str
+    ) -> List[str]:
+    """
+        Return every user-facing validation problem with the
+        first-admin form, so one submission reports all of them.
+
+        :returns: List of messages (empty when the form is valid).
+    """
+    rtnval: List[str] = []
     if LOGIN_NAME_PATTERN.match(login_name) is None:
-        return (
+        rtnval.append(
             "Login must be 3-64 characters, alphanumeric with"
             " optional underscore or hyphen, starting with a letter"
             " or digit."
         )
     if EMAIL_PATTERN.match(email) is None:
-        return "Email address looks invalid."
+        rtnval.append("Email address looks invalid.")
     if len(password) < MIN_PASSWORD_LENGTH:
-        return "Password must be at least {} characters.".format(
+        rtnval.append("Password must be at least {} characters.".format(
             MIN_PASSWORD_LENGTH
-        )
+        ))
     if password != password_confirm:
-        return "Password and confirmation do not match."
+        rtnval.append("Password and confirmation do not match.")
     if len(display_name) == 0:
-        return "Display name is required."
-    return None
-
-
+        rtnval.append("Display name is required.")
+    return rtnval
 # ---------------------------------------------------------------------------
 # Handlers -- /setup/unlock
 # ---------------------------------------------------------------------------
@@ -601,6 +649,7 @@ def handle_admin_form(request: Request) -> Response:
         },
         "min_password_length": MIN_PASSWORD_LENGTH,
         "error": None,
+        "errors": [],
     }
     rtnval = templating.render_template_response(
         template_name="setup/admin.html",
@@ -656,13 +705,14 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
             )
             return rtnval
 
-        validation_error = _validate_admin_form(
+        validation_errors = _collect_admin_form_errors(
             login_name=login_name,
             email=email,
             password=password,
             password_confirm=password_confirm,
             display_name=display_name,
         )
+        validation_error = " ".join(validation_errors) if len(validation_errors) > 0 else None
         if validation_error is not None:
             context = {
                 "form_values": {
@@ -672,6 +722,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                 },
                 "min_password_length": MIN_PASSWORD_LENGTH,
                 "error": validation_error,
+                "errors": validation_errors,
             }
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
@@ -740,6 +791,23 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
         )
 
         response = RedirectResponse(url="/login", status_code=303)
+        # Tell the new administrator the account exists (audit U-6):
+        # queue an info flash on a fresh UI session cookie so the
+        # sign-in page can show it.
+        try:
+            from ccai.pychestrate.webservice.webinterface.foundation import flash as _flash  # noqa: E402
+            from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (  # noqa: E402
+                _attach_session_to_response,
+            )
+            fresh_session = {}
+            _flash.add_flash(
+                session=fresh_session,
+                message="Administrator account created. Sign in to continue.",
+                category=_flash.CATEGORY_SUCCESS,
+            )
+            _attach_session_to_response(response=response, session=fresh_session)
+        except Exception:
+            pass
         _clear_unlock_cookie(response=response)
         return response
     finally:

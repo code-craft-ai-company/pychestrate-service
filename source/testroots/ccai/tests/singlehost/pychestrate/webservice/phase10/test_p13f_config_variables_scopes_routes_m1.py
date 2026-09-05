@@ -602,31 +602,20 @@ def test_register_scopes_routes_attaches_documented_routes():
 # ===========================================================================
 
 
-def test_multi_form_view_subscript_returns_first_value_or_raises():
+def test_multi_form_view_subscript_returns_first_value_or_empty():
     """
     **Feature: D3 helpers T3.3**
     **Property: MultiFormView.__getitem__ returns the first
-    submitted value (jinja attribute-fallback path), and raises
-    KeyError on absent / empty keys.**
+    submitted value (jinja attribute-fallback path), and an empty
+    string on absent / empty keys so a re-rendered form that reads
+    an unchecked checkbox never raises under StrictUndefined.**
     """
     view = config_routes.MultiFormView(
         data={"var_type": ["integer"], "empty": []}
     )
     testbase.assert_equal(view["var_type"], "integer")
-
-    raised = False
-    try:
-        _ = view["missing"]
-    except KeyError:
-        raised = True
-    testbase.assert_equal(raised, True)
-
-    raised = False
-    try:
-        _ = view["empty"]
-    except KeyError:
-        raised = True
-    testbase.assert_equal(raised, True)
+    testbase.assert_equal(view["missing"], "")
+    testbase.assert_equal(view["empty"], "")
     return
 
 

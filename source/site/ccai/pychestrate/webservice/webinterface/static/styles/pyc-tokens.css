@@ -116,7 +116,7 @@
     --pyc-color-surface-hover: hsla(0, 0%, 100%, 0.06);
     --pyc-color-on-surface: #f7f8fa;
     --pyc-color-on-surface-elevated: #f7f8fa;
-    --pyc-color-on-surface-muted: #9aa1b1;
+    --pyc-color-on-surface-muted: #a9b0bf;
     --pyc-color-border: #353c49;
     --pyc-color-divider: hsla(0, 0%, 100%, 0.12);
     --pyc-color-backdrop: rgba(0, 0, 0, 0.68);
@@ -155,7 +155,7 @@
         --pyc-color-surface-hover: hsla(0, 0%, 100%, 0.06);
         --pyc-color-on-surface: #f7f8fa;
         --pyc-color-on-surface-elevated: #f7f8fa;
-        --pyc-color-on-surface-muted: #9aa1b1;
+        --pyc-color-on-surface-muted: #a9b0bf;
         --pyc-color-border: #353c49;
         --pyc-color-divider: hsla(0, 0%, 100%, 0.12);
         --pyc-color-backdrop: rgba(0, 0, 0, 0.68);

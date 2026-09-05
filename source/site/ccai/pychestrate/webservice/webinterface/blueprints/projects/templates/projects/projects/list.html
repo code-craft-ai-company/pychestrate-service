@@ -1,45 +1,47 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Projects - Pychestrate{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Projects</h2>
+    <h1>Projects</h1>
     <p>Manage your orchestration projects</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="search" class="form-control" placeholder="Search projects..."
+<div class="toolbar">
+    <form method="get" class="actions-row">
+        <input type="text" name="search" class="form-control w-lg" placeholder="Search projects..."
                aria-label="Search projects"
-               value="{{ search }}" style="width: 300px;">
+               value="{{ search }}">
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">search</span> Search
+            {{ ui.icon("search") }} Search
         </button>
+        <a href="{{ url_for(request_endpoint) }}" class="btn btn-secondary">Clear</a>
     </form>
     
     <a href="{{ url_for('projects.project_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create Project
+        {{ ui.icon("add") }} Create Project
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Owner</th>
-            <th>Members</th>
-            <th>Repositories</th>
-            <th>Last Activity</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Owner</th>
+            <th scope="col">Members</th>
+            <th scope="col">Repositories</th>
+            <th scope="col">Last Activity</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for project in projects %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="strong">
                     {{ project.name }}
                 </a>
             </td>
@@ -47,7 +49,7 @@
             <td>{{ project.owner_username }}</td>
             <td>{{ project.member_count }}</td>
             <td>{{ project.repository_count }}</td>
-            <td>{{ project.last_activity_at.strftime('%Y-%m-%d %H:%M') if project.last_activity_at else 'N/A' }}</td>
+            <td>{{ project.last_activity_at | format_datetime('%Y-%m-%d %H:%M', 'N/A') }}</td>
             <td>
                 <a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="btn btn-sm btn-secondary">View</a>
                 <a href="{{ url_for('projects.project_edit', project_id=project.id) }}" class="btn btn-sm btn-secondary">Edit</a>
@@ -55,29 +57,11 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No projects found</td>
+            {{ ui.empty_state("No projects found", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.project_list', page=page-1, search=search or none) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.project_list', page=p, search=search or none) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.project_list', page=page+1, search=search or none) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.project_list', page, total_pages, {'search': search or none}) }}
 {% endblock %}

@@ -1,28 +1,29 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Roles - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Role Management</h2>
+    <h1>Role Management</h1>
     <p>Configure roles and their permissions</p>
 </div>
 
-<div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+<div class="toolbar toolbar--end">
     <a href="{{ url_for('config.role_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create Role
+        {{ ui.icon("add") }} Create Role
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Description</th>
-            <th>Type</th>
-            <th>Permissions</th>
-            <th>Assigned</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Description</th>
+            <th scope="col">Type</th>
+            <th scope="col">Permissions</th>
+            <th scope="col">Assigned</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -42,21 +43,20 @@
             <td>
                 {% if not role.is_system %}
                 <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger"
-                            onclick="return confirm('Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">Delete</button>
                 </form>
                 {% else %}
-                <span style="color: #6c757d;">Built-in role</span>
+                <span class="muted">Built-in role</span>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" style="text-align: center; color: #6c757d;">No roles found</td>
+            {{ ui.empty_state("No roles found", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% endblock %}

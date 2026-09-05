@@ -129,7 +129,7 @@ def bundles_for(*, path: str) -> List[str]:
     for prefix, bundle_names in _REGISTERED_BUNDLES.items():
         if prefix == "":
             continue
-        if path.startswith(prefix) is True:
+        if path == prefix or path.startswith(prefix + "/") is True:
             candidates.append((prefix, bundle_names))
     candidates.sort(key=lambda pair: len(pair[0]))
     for _, bundle_names in candidates:
@@ -137,6 +137,18 @@ def bundles_for(*, path: str) -> List[str]:
             if bundle_name not in rtnval:
                 rtnval.append(bundle_name)
 
+    return rtnval
+
+
+def registered_route_prefixes() -> List[str]:
+    """
+        Every route prefix a bundle is registered under (including
+        the shell-wide ``""``). Used by the catch-all to tell a real
+        shell route from a mistyped URL.
+
+        :returns: List of prefixes.
+    """
+    rtnval = list(_REGISTERED_BUNDLES.keys())
     return rtnval
 
 
@@ -313,6 +325,7 @@ def get_registered_bundles_snapshot() -> Dict[str, List[str]]:
 
 
 __all__ = [
+    "registered_route_prefixes",
     "register_bundle",
     "bundles_for",
     "install_default_bundles",

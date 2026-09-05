@@ -1,26 +1,27 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}{{ role.name }} - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Role: {{ role.name }}</h2>
+    <h1>Role: {{ role.name }}</h1>
     <p>View role details and permissions</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
-    <table style="width: 100%;">
+<div class="card narrow">
+    <table class="btn-block">
         <tr>
-            <td style="padding: 10px 0; font-weight: 500; width: 150px;">Name</td>
-            <td style="padding: 10px 0;">{{ role.name }}</td>
+            <th scope="row">Name</th>
+            <td>{{ role.name }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Description</td>
-            <td style="padding: 10px 0;">{{ role.description or '-' }}</td>
+            <th scope="row">Description</th>
+            <td>{{ role.description or '-' }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Type</td>
-            <td style="padding: 10px 0;">
+            <th scope="row">Type</th>
+            <td>
                 {% if role.is_system %}
                 <span class="badge badge-info">Built-in Role</span>
                 {% else %}
@@ -29,42 +30,41 @@
             </td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Assigned</td>
-            <td style="padding: 10px 0;">{{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }}</td>
+            <th scope="row">Assigned</th>
+            <td>{{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Created</td>
-            <td style="padding: 10px 0;">{{ role.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <th scope="row">Created</th>
+            <td>{{ role.created_at | format_datetime('%Y-%m-%d %H:%M:%S', 'Unknown') }}</td>
         </tr>
     </table>
 </div>
 
-<div class="card" style="max-width: 600px; margin-top: 20px;">
-    <div class="card-header">Permissions ({{ role.permissions | length }})</div>
+<div class="card narrow mt">
+    <h2 class="card-header">Permissions ({{ role.permissions | length }})</h2>
     {% if role.permissions %}
-    <ul style="margin: 0; padding-left: 20px;">
+    <ul class="list-tight">
         {% for permission in role.permissions %}
-        <li style="padding: 5px 0;">
+        <li class="py-sm">
             {{ permission.name }}
-            {% if permission.description %}<span style="color: #6c757d;"> - {{ permission.description }}</span>{% endif %}
+            {% if permission.description %}<span class="muted"> - {{ permission.description }}</span>{% endif %}
         </li>
         {% endfor %}
     </ul>
     {% else %}
-    <p style="color: #6c757d;">No permissions assigned</p>
+    <p class="muted">No permissions assigned</p>
     {% endif %}
 </div>
 
-<div style="display: flex; gap: 10px; margin-top: 20px;">
+<div class="actions-row mt">
     {% if not role.is_system %}
     <a href="{{ url_for('config.role_edit', role_id=role.id) }}" class="btn btn-primary">
-        <span class="material-icons">edit</span> Edit Role
+        {{ ui.icon("edit") }} Edit Role
     </a>
-    <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post" style="display:inline;">
+    <form action="{{ url_for('config.role_delete', role_id=role.id) }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn btn-danger"
-                onclick="return confirm('Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.')">
-            <span class="material-icons">delete</span> Delete Role
+        <button type="submit" class="btn btn-danger" data-confirm="Delete role {{ role.name }}? {{ role.binding_count }} user{{ '' if role.binding_count == 1 else 's' }} will lose this role.">
+            {{ ui.icon("delete") }} Delete Role
         </button>
     </form>
     {% else %}

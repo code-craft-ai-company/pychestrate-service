@@ -45,9 +45,10 @@ __version__ = "1.0.0"
 
 import logging
 import mimetypes
+import hashlib
 import os
 
-from typing import Any, Optional
+from typing import Dict, Tuple, Any, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import Response
@@ -103,19 +104,161 @@ def serve_static_file(
 
     with open(resolved_candidate, "rb") as fh:
         body_bytes = fh.read()
-
     content_type, _ = mimetypes.guess_type(resolved_candidate)
     if content_type is None:
         content_type = DEFAULT_CONTENT_TYPE
 
+    # Caching: a versioned URL (``?v=<content hash>``, built by
+    # :func:`build_static_url`) is immutable for a year; a bare URL
+    # must revalidate on every use. Either way an ETag lets the
+    # browser skip the body when nothing changed.
+    etag = '"{}"'.format(hashlib.sha256(body_bytes).hexdigest()[:32])
+    if _request_has_version_param(request=request) is True:
+        cache_control = "public, max-age=31536000, immutable"
+    else:
+        cache_control = "no-cache"
+    headers = {
+        "Content-Type": content_type,
+        "Cache-Control": cache_control,
+        "ETag": etag,
+    }
+    if _if_none_match_matches(request=request, etag=etag) is True:
+        rtnval = Response(status_code=304, body=b"", headers=headers)
+        return rtnval
     rtnval = Response(
         status_code=200,
         body=body_bytes,
-        headers={"Content-Type": content_type},
+        headers=headers,
     )
     return rtnval
 
 
+def _request_has_version_param(*, request: Request) -> bool:
+    try:
+        value = request.query_params.get("v", None)
+    except Exception:
+        value = None
+    rtnval = value is not None and len(str(value)) > 0
+    return rtnval
+
+
+def _if_none_match_matches(*, request: Request, etag: str) -> bool:
+    try:
+        header = request.headers.get("If-None-Match", None)
+    except Exception:
+        header = None
+    if header is None:
+        return False
+    candidates = [part.strip() for part in str(header).split(",")]
+    rtnval = etag in candidates or "*" in candidates
+    return rtnval
+
+
+_STATIC_URL_CACHE: Dict[str, Tuple[float, int, str]] = {}
+_static_url_root: Optional[str] = None
+
+
+def configure_static_url_root(*, static_root: str) -> None:
+    """
+        Tell :func:`build_static_url` where the static tree lives so
+        it can hash file contents. Called once at bootstrap alongside
+        :func:`register_static_routes`.
+
+        :param static_root: Absolute path to the static directory.
+
+        :returns: None.
+    """
+    global _static_url_root
+    _static_url_root = static_root
+    _STATIC_URL_CACHE.clear()
+    return
+
+
+def build_static_url(relative_path: str) -> str:
+    """
+        Build a cache-busting URL for a static asset:
+        ``/static/<relative_path>?v=<content hash>``. The hash is
+        recomputed only when the file's mtime or size changes, so
+        the per-render cost is one ``stat``. A file that cannot be
+        found is returned un-versioned so the page still links it.
+
+        Installed on the jinja environment as the ``static_url``
+        global.
+
+        :param relative_path: Path under the static root, e.g.
+                              ``"styles/pyc-tokens.css"``.
+
+        :returns: URL string.
+    """
+    clean = str(relative_path).lstrip("/")
+    base_url = "/static/" + clean
+    root = _static_url_root
+    if root is None:
+        try:
+            from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES  # noqa: E402
+            root = SITE_DIRECTORIES.DIR_STATIC
+        except Exception:
+            return base_url
+    full_path = os.path.join(root, clean)
+    try:
+        stat_result = os.stat(full_path)
+    except OSError:
+        return base_url
+    cached = _STATIC_URL_CACHE.get(clean, None)
+    if cached is not None and cached[0] == stat_result.st_mtime and cached[1] == stat_result.st_size:
+        digest = cached[2]
+    else:
+        hasher = hashlib.sha1()
+        with open(full_path, "rb") as fh:
+            hasher.update(fh.read())
+        digest = hasher.hexdigest()[:12]
+        _STATIC_URL_CACHE[clean] = (stat_result.st_mtime, stat_result.st_size, digest)
+    rtnval = "{}?v={}".format(base_url, digest)
+    return rtnval
+
+
+def install_static_url_global(*, environment: Any) -> None:
+    """
+        Attach :func:`build_static_url` to a jinja environment as the
+        ``static_url`` global.
+
+        :param environment: :class:`jinja2.Environment`.
+
+        :returns: None.
+    """
+    environment.globals["static_url"] = build_static_url
+    return
+
+
+def register_favicon_route(*, app: Any, favicon_path: str) -> None:
+    """
+        Serve ``/favicon.ico`` from the SVG favicon so browsers stop
+        receiving a redirect to the login page for it.
+
+        :param app: WebWorks application.
+        :param favicon_path: Absolute path to ``favicon.svg``.
+
+        :returns: None.
+    """
+    def favicon_handler(request: Request) -> Response:
+        try:
+            with open(favicon_path, "rb") as fh:
+                body = fh.read()
+        except OSError:
+            rtnval = _not_found_response()
+            return rtnval
+        rtnval = Response(
+            status_code=200,
+            body=body,
+            headers={
+                "Content-Type": "image/svg+xml",
+                "Cache-Control": "public, max-age=86400",
+            },
+        )
+        return rtnval
+
+    app.attach_route("/favicon.ico", methods=["GET"])(favicon_handler)
+    return
 def _not_found_response() -> Response:
     """
         Build the standard 404 response the static handler emits
@@ -179,6 +322,10 @@ def register_static_routes(
 
 
 __all__ = [
+    "build_static_url",
+    "configure_static_url_root",
+    "install_static_url_global",
+    "register_favicon_route",
     "DEFAULT_CONTENT_TYPE",
     "serve_static_file",
     "register_static_routes",

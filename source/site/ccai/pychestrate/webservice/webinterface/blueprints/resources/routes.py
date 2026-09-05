@@ -86,18 +86,72 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     MultiFormView,
     _attach_session_to_response,
     _build_default_template_context,
+    _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
     _require_permission_or_redirect,
     _resolve_authenticated_request,
+    _wrap_fragment_handler_in_shell,
 )
 
 
 RESOURCES_PATH = "/resources"
 
+_DEFAULT_RESOURCES_PAGE_TITLE = "Pychestrate"
 
+# Second path segment (/resources/<segment>) -> tab label. Deeper
+# paths inherit their section's label.
+_RESOURCES_SECTION_TITLE_LABELS: Dict[str, str] = {
+    "pools": "Resource Pools",
+    "ip-pools": "IP Pools",
+    "allocations": "Allocations",
+    "reservations": "Reservations",
+    "health": "Resource Health",
+    "tags": "Tags",
+    "create": "New Resource",
+}
+
+
+def _resolve_resources_page_title(*, path: str) -> str:
+    """
+        Resolve the shell document ``<title>`` for a resources page
+        from the request path (``/resources/ip-pools/7`` ->
+        ``"IP Pools · Pychestrate"``).
+
+        :param path: Request path.
+
+        :returns: Title string.
+    """
+    if path is None or len(path) == 0:
+        return _DEFAULT_RESOURCES_PAGE_TITLE
+    segments = [segment for segment in path.split("/") if len(segment) > 0]
+    if len(segments) == 0 or segments[0] != "resources":
+        return _DEFAULT_RESOURCES_PAGE_TITLE
+    label = "Resources"
+    if len(segments) >= 2:
+        label = _RESOURCES_SECTION_TITLE_LABELS.get(segments[1], "Resource")
+    rtnval = "{} · {}".format(label, _DEFAULT_RESOURCES_PAGE_TITLE)
+    return rtnval
+
+
+def _wrap_resources_handler_in_shell(handler: Any) -> Any:
+    """
+        Render a resources-blueprint handler's HTML inside the site
+        shell (UI remediation Phase 2, finding R-1). The resources
+        pages used to ship as standalone documents with their own
+        header and sidebar; ``resources/base.html`` is now a fragment
+        like the admin and projects bases.
+
+        :param handler: The original handler.
+
+        :returns: Shell-wrapping handler.
+    """
+    rtnval = _wrap_fragment_handler_in_shell(
+        handler, title_resolver=_resolve_resources_page_title
+    )
+    return rtnval
 _LOGGER = logging.getLogger("pychestrate.ui.resources")
 
 
@@ -133,6 +187,24 @@ _FUTURE_ENDPOINT_PATTERNS: tuple = ()
 _ADMIN_PERMISSION = "system:resources.manage"
 
 
+def _resources_permission_flags(*, auth: Any) -> Dict[str, Any]:
+    """
+        Template flags for the resources pages: ``can_manage`` is the
+        same probe the write handlers gate on, so templates can hide
+        Create / Edit / Delete / Force-checkin controls from users the
+        gate would bounce (audit findings R-4, R-12).
+        ``current_user_id`` lets a template show owner-only controls
+        (checkin, cancel reservation) on the rows the user owns.
+
+        :param auth: Resolution from ``_resolve_authenticated_request``.
+
+        :returns: Dict to merge into the render context.
+    """
+    rtnval = {
+        "can_manage": _has_permission(auth=auth, permission=_ADMIN_PERMISSION),
+        "current_user_id": getattr(auth, "user_id", ""),
+    }
+    return rtnval
 # ---------------------------------------------------------------------------
 # Lazy-import builder seams (test-patchable)
 # ---------------------------------------------------------------------------
@@ -592,6 +664,7 @@ def handle_dashboard(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resource_count"] = resource_count
         context["pool_count"] = pool_count
         context["ip_pool_count"] = ip_pool_count
@@ -701,6 +774,7 @@ def handle_resource_list(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resources"] = resources
         context["resource_total"] = resources_response.total
         context["pools"] = pools
@@ -754,6 +828,7 @@ def _render_resource_create_form(
         flashes=flashes,
         csrf_token=auth.csrf_token,
     )
+    context.update(_resources_permission_flags(auth=auth))
     context["pools"] = pools
     context["all_tags"] = all_tags
     context["form_data"] = form_data
@@ -793,10 +868,19 @@ def handle_resource_create(request: Request) -> Response:
         resource_manager = _build_resource_manager(db_session=db_session)
 
         if method == "GET":
+            # "Add Resource" from a pool page links here with
+            # ?pool_id=; pre-select that pool in the form.
+            preselect: Optional[MultiFormView] = None
+            requested_pool_id = request.query_params.get("pool_id", None)
+            if requested_pool_id is not None and len(str(requested_pool_id)) > 0:
+                preselect = MultiFormView(data={
+                    "pool_id": [str(requested_pool_id)],
+                    "resource_type": ["generic"],
+                })
             response = _render_resource_create_form(
                 auth=auth,
                 resource_manager=resource_manager,
-                form_data=None,
+                form_data=preselect,
             )
             return response
 
@@ -949,6 +1033,7 @@ def handle_resource_detail(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resource"] = resource
         context["active_allocations"] = active_allocations
         context["upcoming_reservations"] = upcoming_reservations
@@ -1107,6 +1192,7 @@ def handle_resource_edit(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resource"] = resource
         context["pools"] = pools
         context["all_tags"] = all_tags
@@ -1353,8 +1439,8 @@ def register_resources_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
-
+        wrapped_handler = _wrap_resources_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     for endpoint_name, relative_path in _FUTURE_ENDPOINT_PATTERNS:
         full_path = RESOURCES_PATH + relative_path
         _url_for_module.register_endpoint(

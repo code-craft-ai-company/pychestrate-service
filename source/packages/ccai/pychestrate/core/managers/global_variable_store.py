@@ -628,6 +628,21 @@ class GlobalVariableStore:
     # Change History
     # =========================================================================
     
+    def count_change_history(self, name: str) -> int:
+        """
+        Count the change-history rows for a variable so the history
+        page can paginate.
+
+        :param name: The variable name
+        :returns: Number of history entries
+        """
+        from ccai.pychestrate.core.orm import GlobalVariableHistory
+
+        rtnval = self._db_session.query(GlobalVariableHistory).filter(
+            GlobalVariableHistory.variable_name == name
+        ).count()
+        return rtnval
+
     def get_change_history(
         self,
         name: str,

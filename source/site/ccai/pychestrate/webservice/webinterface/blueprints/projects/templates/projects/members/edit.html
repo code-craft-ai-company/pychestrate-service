@@ -1,24 +1,24 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit Member Role - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.member_list', project_id=project.id) }}">Members</a>
-    <span>/</span>
-    <span>Edit Role</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.member_list', project_id=project.id) }}">Members</a></li>
+        <li aria-current="page">Edit Role</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Edit Member Role</h2>
+    <h1>Edit Member Role</h1>
     <p>Update role for {{ member.username }}</p>
 </div>
 
-<div class="card" style="max-width: 500px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -42,9 +42,9 @@
             </div>
         </div>
         
-        <div style="display: flex; gap: 10px; margin-top: 30px;">
+        <div class="actions-row mt-lg">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('projects.member_list', project_id=project.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

@@ -51,7 +51,7 @@ from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
 # Real assets shipped with the consumer UI -- used as the
 # happy-path subjects of the GET tests.
 _REAL_CSS_RELATIVE: str = "styles/color-theme.css"
-_REAL_JS_RELATIVE: str = "javascript/scrypt.js"
+_REAL_JS_RELATIVE: str = "javascript/pyc-site-shell/pyc-site-shell.js"
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +109,7 @@ def test_static_css_asset_returns_200_with_css_content_type():
 def test_static_js_asset_returns_200_with_javascript_content_type():
     """
     **Feature: consumer UI static-assets T16.2**
-    **Property: ``GET /static/javascript/scrypt.js`` returns
+    **Property: ``GET /static/javascript/pyc-site-shell/pyc-site-shell.js`` returns
     200 with a JS-shaped Content-Type. The exact mimetype
     string varies between platforms (``application/javascript``
     on most systems, ``text/javascript`` on some Apple Pythons),

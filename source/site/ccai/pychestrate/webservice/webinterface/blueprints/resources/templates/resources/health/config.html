@@ -1,14 +1,15 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Health Config - {{ resource.name }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Configure Health Check</h2>
+    <h1>Configure Health Check</h1>
     <p>Set up automated health monitoring for {{ resource.name }}</p>
 </div>
 
-<div class="card" style="max-width: 700px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -22,7 +23,7 @@
         <div class="form-group">
             <label for="probe_url">Probe URL</label>
             <input type="text" id="probe_url" name="probe_url" class="form-control"
-                   value="{{ config.probe_url if config else '' }}"
+                   value="{{ (config.probe_url or '') if config else '' }}"
                    placeholder="https://example.com/health">
             <p class="form-text">HTTP(S) URL to probe for health status (expects 2xx response)</p>
         </div>
@@ -30,7 +31,7 @@
         <div class="form-group">
             <label for="probe_command">Probe Command</label>
             <input type="text" id="probe_command" name="probe_command" class="form-control"
-                   value="{{ config.probe_command if config else '' }}"
+                   value="{{ (config.probe_command or '') if config else '' }}"
                    placeholder="ping -c 1 hostname">
             <p class="form-text">Shell command to execute (exit code 0 = healthy)</p>
         </div>
@@ -61,9 +62,9 @@
             <p class="form-text">Number of consecutive successes before marking healthy</p>
         </div>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">save</span> Save Configuration
+                {{ ui.icon("save") }} Save Configuration
             </button>
             <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

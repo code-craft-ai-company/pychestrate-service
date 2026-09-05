@@ -379,8 +379,10 @@ def test_authenticated_projects_dashboard_renders_inside_site_shell():
     )
 
     # The projects page rides inside as a fragment.
+    # The fragment now also carries the shared pyc-admin-page-fragment
+    # class (Phase 3 shared stylesheet), so match the class token.
     testbase.assert_equal(
-        'class="projects-fragment"' in body, True
+        'projects-fragment' in body, True
     )
     testbase.assert_equal("Projects Dashboard" in body, True)
 

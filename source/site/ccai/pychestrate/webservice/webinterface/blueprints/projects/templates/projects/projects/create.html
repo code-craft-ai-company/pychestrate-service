@@ -1,20 +1,22 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Create Project - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <span>Create</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li aria-current="page">Create</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Create Project</h2>
+    <h1>Create Project</h1>
     <p>Create a new orchestration project</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -40,9 +42,9 @@
             <div class="form-text">Optional JSON metadata for the project</div>
         </div>
         
-        <div style="display: flex; gap: 10px; margin-top: 30px;">
+        <div class="actions-row mt-lg">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">add</span> Create Project
+                {{ ui.icon("add") }} Create Project
             </button>
             <a href="{{ url_for('projects.project_list') }}" class="btn btn-secondary">Cancel</a>
         </div>

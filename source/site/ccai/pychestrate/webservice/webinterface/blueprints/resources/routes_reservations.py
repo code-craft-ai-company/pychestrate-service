@@ -63,6 +63,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _resources_permission_flags,
+    _wrap_resources_handler_in_shell,
     _build_page_window,
     _calculate_total_pages,
     _describe_allocation_error,
@@ -225,23 +227,22 @@ def _find_reservation_by_id(
         *, allocation_manager: Any, reservation_id: int
     ) -> Optional[Any]:
     """
-        Mirror the legacy "list 1000 reservations and search
-        by id" pattern. The manager has no direct
-        ``get_reservation``; this helper wraps the lookup so
-        every callsite uses the same shape.
+        Look up one reservation by id through the manager's
+        direct getter. (An earlier version listed the first 1,000
+        reservations and scanned them, which made every
+        reservation past the first thousand unreachable from its
+        own detail link.)
 
         :param allocation_manager: AllocationManager instance.
         :param reservation_id: Target id.
 
-        :returns: The reservation row or None.
+        :returns: The reservation response or None.
     """
-    reservations = allocation_manager.list_reservations(
-        limit=1000
-    ).reservations
-    for r in reservations:
-        if getattr(r, "id", None) == reservation_id:
-            return r
-    return None
+    try:
+        rtnval = allocation_manager.get_reservation(reservation_id)
+    except Exception:
+        rtnval = None
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +314,7 @@ def handle_reservation_list(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["reservations"] = reservations
         context["resources"] = resources
         context["resource_total"] = resources_response.total
@@ -377,6 +379,7 @@ def _render_reservation_create_form(
         flashes=flashes,
         csrf_token=auth.csrf_token,
     )
+    context.update(_resources_permission_flags(auth=auth))
     context["resources"] = resources
     context["resource_total"] = resources_response.total
     context["pools"] = pools
@@ -422,15 +425,24 @@ def handle_reservation_create(request: Request) -> Response:
         )
 
         if method == "GET":
+            # "Apply filter" submits the whole form with GET, so the
+            # draft the user has typed rides along in the query string;
+            # echo it back so narrowing the resource list never wipes
+            # the form.
+            draft: Dict[str, List[str]] = {}
+            for field in ("resource_id", "start_time", "end_time", "mode", "job_id", "reason"):
+                value = request.query_params.get(field, None)
+                if value is not None and len(str(value)) > 0:
+                    draft[field] = [str(value)]
+            form_view: Optional[MultiFormView] = MultiFormView(data=draft) if len(draft) > 0 else None
             response = _render_reservation_create_form(
                 auth=auth,
                 resource_manager=resource_manager,
-                form_data=None,
+                form_data=form_view,
                 selector_pool_id=selector_pool_id,
                 selector_resource_type=selector_resource_type,
             )
             return response
-
         # POST
         single_form = _parse_form_or_empty(request=request)
         multi_form = _parse_form_multi(request=request)
@@ -509,13 +521,10 @@ def handle_reservation_create(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
-                    "resources.reservation_list"
+                    "resources.reservation_detail",
+                    reservation_id=reservation.id,
                 ),
-                message=(
-                    "Reservation created successfully. ID: {}".format(
-                        reservation.id
-                    )
-                ),
+                message="Reservation created.",
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
@@ -600,6 +609,7 @@ def handle_reservation_detail(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["reservation"] = reservation
         response = _render(
             template_name="resources/reservations/detail.html",
@@ -733,6 +743,7 @@ def handle_reservation_edit(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["reservation"] = reservation
         context["form_data"] = form_view
         response = _render(
@@ -857,7 +868,8 @@ def register_reservations_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        wrapped_handler = _wrap_resources_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 
 

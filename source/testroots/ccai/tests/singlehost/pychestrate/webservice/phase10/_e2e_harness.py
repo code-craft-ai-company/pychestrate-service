@@ -63,9 +63,11 @@ __version__ = "1.0.0"
 
 
 import io
+import re
 import os
 import sys
 import tempfile
+import urllib.parse
 import uuid
 
 from http.cookies import SimpleCookie
@@ -105,6 +107,7 @@ from ccai.pychestrate.webservice.webinterface.foundation.static_files import (
 )
 from ccai.pychestrate.webservice.webinterface.foundation.templating import (
     build_jinja_environment,
+    install_template_globals,
     discover_blueprint_template_paths,
     set_default_environment,
 )
@@ -217,7 +220,7 @@ def _install_test_templating() -> None:
     environment = build_jinja_environment(
         template_search_paths=template_paths,
     )
-    install_url_for_global(environment=environment)
+    install_template_globals(environment=environment)
     set_default_environment(environment=environment)
     return
 
@@ -904,9 +907,15 @@ def login_via_post(
     )
     reset_backoff_for_testing()
 
+    # The sign-in form is CSRF-gated: GET /login mints a token into
+    # the anonymous session cookie and echoes it in the form. Do the
+    # same round trip a browser does.
+    form_cookies, csrf_token = fetch_login_form_token(wsgi_app=wsgi_app)
     body = (
-        "username={username}&password={password}".format(
-            username=login, password=password
+        "username={username}&password={password}&csrf_token={token}".format(
+            username=urllib.parse.quote_plus(login),
+            password=urllib.parse.quote_plus(password),
+            token=urllib.parse.quote_plus(csrf_token),
         )
     ).encode("utf-8")
     response = drive_request(
@@ -914,12 +923,33 @@ def login_via_post(
         method="POST",
         path="/login",
         body=body,
+        cookies=form_cookies,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
     cookies = response.collect_set_cookies()
     return (response, cookies)
 
 
+_LOGIN_CSRF_PATTERN = re.compile(
+    r'name="csrf_token"\s+value="([^"]*)"'
+)
+
+
+def fetch_login_form_token(*, wsgi_app: Any) -> Tuple[Dict[str, str], str]:
+    """
+        GET ``/login`` and return ``(cookies, csrf_token)`` -- the
+        anonymous session cookie the form was minted against plus the
+        token echoed in the hidden field.
+
+        :param wsgi_app: The WSGI callable under test.
+
+        :returns: Tuple of cookie dict and token string.
+    """
+    response = drive_request(wsgi_app=wsgi_app, method="GET", path="/login")
+    cookies = response.collect_set_cookies()
+    match = _LOGIN_CSRF_PATTERN.search(response.text)
+    token = match.group(1) if match is not None else ""
+    return (cookies, token)
 def logged_in_cookies(*, wsgi_app: Any) -> Dict[str, str]:
     """
         Convenience: seed the admin user, POST login, return the
@@ -1138,6 +1168,7 @@ def login_as(*, wsgi_app: Any, user: SeededAdmin) -> Dict[str, str]:
 
 
 __all__ = [
+    "fetch_login_form_token",
     "TEST_UI_COOKIE_SECRET",
     "TestAppHandle",
     "WsgiResponse",

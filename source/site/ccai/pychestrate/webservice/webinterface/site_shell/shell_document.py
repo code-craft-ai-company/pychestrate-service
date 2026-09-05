@@ -30,7 +30,7 @@ __version__ = "1.0.0"
 
 import os
 
-from typing import Any, Dict, Optional
+from typing import List, Any, Dict, Optional
 
 from ccai.webworks.routing.response import HTMLResponse
 
@@ -44,6 +44,73 @@ from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import 
 
 
 SHELL_TEMPLATE_NAME: str = "site_shell/shell_document.html"
+
+
+def _read_shell_session(*, request: Any) -> Dict[str, Any]:
+    """
+        Decode the signed UI session cookie so the shell document can
+        carry the signed-in username and the CSRF token (the sign-out
+        control POSTs with it). Any failure yields an empty view: the
+        shell then renders the anonymous placeholders.
+
+        :param request: Incoming webworks request.
+
+        :returns: Dict with optional ``username`` / ``csrf_token``.
+    """
+    rtnval: Dict[str, Any] = {}
+    if request is None:
+        return rtnval
+    try:
+        from ccai.pychestrate.webservice.metadata import (  # noqa: E402
+            SITE_SHARED_GLOBALS,
+        )
+        from ccai.pychestrate.webservice.webinterface.foundation import (  # noqa: E402
+            cookie_session,
+        )
+        secret = SITE_SHARED_GLOBALS.UI_COOKIE_SECRET
+        if secret is None or len(secret) < 32:
+            return rtnval
+        session = cookie_session.read_session_from_request(
+            request=request, secret=secret
+        )
+        if isinstance(session, dict) is False:
+            return rtnval
+        username = session.get("username", "")
+        if isinstance(username, str) and len(username) > 0:
+            rtnval["username"] = username
+        csrf_token = session.get("csrf_token", "")
+        if isinstance(csrf_token, str) and len(csrf_token) > 0:
+            rtnval["csrf_token"] = csrf_token
+    except Exception:
+        return {}
+    return rtnval
+
+
+def _bundle_stylesheets_for(*, bundle_names: List[str]) -> List[str]:
+    """
+        The subset of ``bundle_names`` that ship a
+        ``<bundle>/<bundle>.css`` next to their module. The shell
+        document links these in ``<head>`` so a bundle's first paint
+        is styled; the bundles' own runtime injectors see the link
+        (``data-pyc-bundle``) and skip.
+
+        :param bundle_names: Bundles selected for the page.
+
+        :returns: Bundle names with a stylesheet on disk.
+    """
+    rtnval: List[str] = []
+    try:
+        from ccai.pychestrate.webservice.metadata import (  # noqa: E402
+            SITE_DIRECTORIES,
+        )
+        static_root = SITE_DIRECTORIES.DIR_STATIC
+    except Exception:
+        return rtnval
+    for bundle_name in bundle_names:
+        candidate = os.path.join(static_root, "javascript", bundle_name, bundle_name + ".css")
+        if os.path.isfile(candidate):
+            rtnval.append(bundle_name)
+    return rtnval
 
 
 def render_shell_document(
@@ -84,13 +151,16 @@ def render_shell_document(
         if bundle_name not in bundle_names:
             bundle_names = list(bundle_names) + [bundle_name]
 
+    session_view = _read_shell_session(request=request)
     context: Dict[str, Any] = {
         "page_title": page_title,
         "initial_route": path if len(path) > 0 else "/",
         "bundle_names": bundle_names,
+        "bundle_stylesheets": _bundle_stylesheets_for(bundle_names=bundle_names),
         "content_html": content_html if content_html is not None else "",
+        "csrf_token": session_view.get("csrf_token", ""),
+        "user_display_name": session_view.get("username", ""),
     }
-
     rtnval = render_template_response(
         template_name=SHELL_TEMPLATE_NAME,
         context=context,

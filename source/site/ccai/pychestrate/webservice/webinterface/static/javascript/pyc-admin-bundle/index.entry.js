@@ -13,99 +13,6 @@ const FEATURE_FLAGS_ROUTE = "/admin/feature-flags";
 const EXTENSION_REGISTRY_ROUTE = "/admin/extensions";
 const SYSTEM_HEALTH_ROUTE = "/admin/system-health";
 const ADMIN_STYLESHEET_HREF = "/static/javascript/pyc-admin-bundle/pyc-admin-bundle.css";
-const ADMIN_ENTRIES = [
-  {
-    entryId: "admin.overview",
-    label: "Overview",
-    route: OVERVIEW_ROUTE,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.dashboard",
-    label: "Dashboard",
-    route: "/admin/dashboard",
-    requiredPermissions: [],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.feature-flags",
-    label: "Feature Flags",
-    route: FEATURE_FLAGS_ROUTE,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.extensions",
-    label: "Extension Registry",
-    route: EXTENSION_REGISTRY_ROUTE,
-    requiredPermissions: ["system:plugin_api.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.system-health",
-    label: "System Health",
-    route: SYSTEM_HEALTH_ROUTE,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.users",
-    label: "Users",
-    route: "/admin/users",
-    requiredPermissions: ["system:users.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.roles",
-    label: "Roles",
-    route: "/admin/roles",
-    requiredPermissions: ["system:rbac.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.variables",
-    label: "Variables",
-    route: "/admin/variables",
-    requiredPermissions: [],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.scopes",
-    label: "Secret Scopes",
-    route: "/admin/scopes",
-    requiredPermissions: ["system:secrets.admin"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.secrets",
-    label: "Secrets",
-    route: "/admin/secrets",
-    requiredPermissions: ["system:secrets.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.sessions",
-    label: "Sessions",
-    route: "/admin/sessions",
-    requiredPermissions: ["system:auth.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.audit",
-    label: "Audit Logs",
-    route: "/admin/audit-logs",
-    requiredPermissions: ["system:audit.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.enrollment-tokens",
-    label: "Enrollment Tokens",
-    route: "/admin/enrollment-tokens",
-    requiredPermissions: ["system:resources.manage"],
-    group: ADMIN_GROUP_ID
-  }
-];
 function ensure_admin_stylesheet() {
   if (typeof document === "undefined") {
     return;
@@ -119,17 +26,6 @@ function ensure_admin_stylesheet() {
   link.href = ADMIN_STYLESHEET_HREF;
   link.setAttribute("data-pyc-bundle", "pyc-admin-bundle");
   document.head.appendChild(link);
-  return;
-}
-function register_admin_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: ADMIN_GROUP_ID,
-    label: "Admin",
-    requiredPermissions: ["system:ui.admin.view"]
-  });
-  for (const entry of ADMIN_ENTRIES) {
-    sidebar.registerEntry(entry);
-  }
   return;
 }
 function define_admin_elements() {
@@ -277,7 +173,6 @@ function _boot() {
   }
   return;
 }
-const ADMIN_SIDEBAR_ENTRIES = ADMIN_ENTRIES;
 import { PycAdminOverview as PycAdminOverview2 } from "./admin-overview-view.js";
 import { PycFeatureFlags as PycFeatureFlags2 } from "./feature-flags-view.js";
 import { PycExtensionRegistry as PycExtensionRegistry2 } from "./extension-registry-view.js";
@@ -302,7 +197,6 @@ if (typeof window !== "undefined") {
   _boot();
 }
 export {
-  ADMIN_SIDEBAR_ENTRIES,
   EXT_LISTING_PATH,
   FLAGS_PATH,
   PycAdminOverview2 as PycAdminOverview,
@@ -320,7 +214,6 @@ export {
   mount_admin_view_if_active,
   mount_state_tone,
   next_flag_state,
-  register_admin_sidebar,
   tag_for_admin_route,
   toggle_message_for_status
 };

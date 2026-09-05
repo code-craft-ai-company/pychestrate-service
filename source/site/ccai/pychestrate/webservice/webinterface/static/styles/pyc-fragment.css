@@ -1,0 +1,850 @@
+/*
+    pyc-fragment.css -- shared classes for the server-rendered page
+    fragments (/admin, /projects, /resources) that render inside the
+    site shell.
+
+    Every colour, radius, and spacing value flows through the --pyc-*
+    and --mj-* design tokens (see pyc-tokens.css), so the fragments
+    follow the shell's light and dark palettes. Structural pixels for
+    borders and shadow offsets are intentional; nothing here hard-codes
+    a colour or a pixel font size.
+
+    Introduced by the UI remediation roadmap (Phase 2, R-1 / Phase 3,
+    C-1 / P-25 / R-17). The per-blueprint base templates used to carry
+    their own copies of these rules with hard-coded hex values.
+*/
+
+.pyc-admin-page-fragment {
+    color: var(--pyc-color-on-surface);
+    font-family: var(--pyc-font-family-base, inherit);
+}
+
+/* ---- Layout: sub-navigation beside content ------------------------ */
+
+.pyc-admin-page-fragment .pyc-subnav-layout {
+    display: flex;
+    gap: var(--mj-space-6, 1.5rem);
+    align-items: flex-start;
+}
+
+.pyc-admin-page-fragment .pyc-subnav {
+    flex: 0 0 13rem;
+    min-width: 0;
+}
+
+.pyc-admin-page-fragment .pyc-subnav-layout__content {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+@media (max-width: 900px) {
+    .pyc-admin-page-fragment .pyc-subnav-layout {
+        flex-direction: column;
+    }
+    .pyc-admin-page-fragment .pyc-subnav {
+        flex-basis: auto;
+        width: 100%;
+    }
+}
+
+.pyc-admin-page-fragment .pyc-subnav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.pyc-admin-page-fragment .pyc-subnav li {
+    margin: 0;
+}
+
+.pyc-admin-page-fragment .pyc-subnav a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    color: var(--pyc-color-on-surface-muted);
+    text-decoration: none;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.pyc-admin-page-fragment .pyc-subnav a:hover {
+    background: var(--pyc-color-surface-hover);
+    color: var(--pyc-color-on-surface);
+}
+
+.pyc-admin-page-fragment .pyc-subnav a.active {
+    background: var(--pyc-color-accent-surface);
+    color: var(--pyc-color-accent-on-surface);
+    font-weight: 500;
+}
+
+.pyc-admin-page-fragment .pyc-subnav a:focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 2px;
+}
+
+.pyc-admin-page-fragment .pyc-subnav .material-icons {
+    font-size: 1.125rem;
+}
+
+.pyc-admin-page-fragment .pyc-subnav__section {
+    padding: 0.75rem 0.75rem 0.25rem;
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+/* ---- Page header --------------------------------------------------- */
+
+.pyc-admin-page-fragment .page-header {
+    margin-bottom: var(--mj-space-6, 1.5rem);
+    padding-bottom: var(--mj-space-4, 1rem);
+    border-bottom: 1px solid var(--pyc-color-border);
+}
+
+.pyc-admin-page-fragment .page-header h1,
+.pyc-admin-page-fragment .page-header h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: var(--pyc-color-on-surface);
+}
+
+.pyc-admin-page-fragment .page-header p {
+    margin: 0;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+/* ---- Alerts (flash messages) -------------------------------------- */
+
+.pyc-admin-page-fragment .alert {
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+}
+
+.pyc-admin-page-fragment .alert-success {
+    background: var(--pyc-color-success-surface);
+    color: var(--pyc-color-on-success-surface);
+}
+
+.pyc-admin-page-fragment .alert-error,
+.pyc-admin-page-fragment .alert-danger {
+    background: var(--pyc-color-error-surface);
+    color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .alert-warning {
+    background: var(--pyc-color-warning-surface);
+    color: var(--pyc-color-on-warning-surface);
+}
+
+.pyc-admin-page-fragment .alert-info {
+    background: var(--pyc-color-accent-surface);
+    color: var(--pyc-color-accent-on-surface);
+}
+
+/* ---- Buttons ------------------------------------------------------- */
+
+.pyc-admin-page-fragment .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-weight: 500;
+    line-height: 1.25;
+    cursor: pointer;
+    text-decoration: none;
+    transition: filter 0.15s, background-color 0.15s;
+    font-family: inherit;
+}
+
+.pyc-admin-page-fragment .btn:hover {
+    filter: brightness(0.94);
+}
+
+.pyc-admin-page-fragment .btn:focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 2px;
+}
+
+.pyc-admin-page-fragment .btn .material-icons {
+    font-size: 1.125rem;
+}
+
+.pyc-admin-page-fragment .btn-primary {
+    background: var(--pyc-color-accent);
+    color: var(--pyc-color-on-accent);
+}
+
+.pyc-admin-page-fragment .btn-secondary {
+    background: var(--pyc-color-surface-elevated);
+    color: var(--pyc-color-on-surface);
+    border-color: var(--pyc-color-border);
+}
+
+.pyc-admin-page-fragment .btn-danger {
+    background: var(--pyc-color-error-surface);
+    color: var(--pyc-color-on-error-surface);
+    border-color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .btn-success {
+    background: var(--pyc-color-success-surface);
+    color: var(--pyc-color-on-success-surface);
+    border-color: var(--pyc-color-on-success-surface);
+}
+
+.pyc-admin-page-fragment .btn-warning {
+    background: var(--pyc-color-warning-surface);
+    color: var(--pyc-color-on-warning-surface);
+    border-color: var(--pyc-color-on-warning-surface);
+}
+
+.pyc-admin-page-fragment .btn-sm {
+    padding: 0.25rem 0.6rem;
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+}
+
+/* ---- Cards ---------------------------------------------------------- */
+
+.pyc-admin-page-fragment .card {
+    background: var(--pyc-color-surface);
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 8px;
+    padding: var(--mj-space-5, 1.25rem);
+    margin-bottom: var(--mj-space-5, 1.25rem);
+}
+
+.pyc-admin-page-fragment .card-header {
+    font-weight: 600;
+    margin-bottom: 1rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--pyc-color-divider);
+    color: var(--pyc-color-on-surface);
+}
+
+.pyc-admin-page-fragment .stat-card {
+    background: var(--pyc-color-surface);
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 8px;
+    padding: var(--mj-space-5, 1.25rem);
+}
+
+.pyc-admin-page-fragment .stat-card .stat-label {
+    color: var(--pyc-color-on-surface-muted);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--pyc-color-on-surface);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- Tables --------------------------------------------------------- */
+
+.pyc-admin-page-fragment .table-scroll {
+    overflow-x: auto;
+}
+
+.pyc-admin-page-fragment .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--pyc-color-surface);
+    border-radius: 8px;
+    margin-top: 1rem;
+}
+
+.pyc-admin-page-fragment .data-table th,
+.pyc-admin-page-fragment .data-table td {
+    padding: 0.7rem 0.9rem;
+    text-align: left;
+    border-bottom: 1px solid var(--pyc-color-divider);
+    vertical-align: top;
+}
+
+.pyc-admin-page-fragment .data-table th {
+    background: var(--pyc-color-surface-elevated);
+    font-weight: 600;
+    color: var(--pyc-color-on-surface);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .data-table tbody tr:hover {
+    background: var(--pyc-color-surface-hover);
+}
+
+/* ---- Badges ---------------------------------------------------------- */
+
+.pyc-admin-page-fragment .badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.pyc-admin-page-fragment .badge-success,
+.pyc-admin-page-fragment .health-online {
+    background: var(--pyc-color-success-surface);
+    color: var(--pyc-color-on-success-surface);
+}
+
+.pyc-admin-page-fragment .badge-danger,
+.pyc-admin-page-fragment .health-offline {
+    background: var(--pyc-color-error-surface);
+    color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .badge-warning,
+.pyc-admin-page-fragment .health-degraded {
+    background: var(--pyc-color-warning-surface);
+    color: var(--pyc-color-on-warning-surface);
+}
+
+.pyc-admin-page-fragment .badge-info {
+    background: var(--pyc-color-accent-surface);
+    color: var(--pyc-color-accent-on-surface);
+}
+
+.pyc-admin-page-fragment .badge-secondary,
+.pyc-admin-page-fragment .health-maintenance {
+    background: var(--pyc-color-surface-elevated);
+    color: var(--pyc-color-on-surface-muted);
+    border: 1px solid var(--pyc-color-border);
+}
+
+/* ---- Forms ----------------------------------------------------------- */
+
+.pyc-admin-page-fragment .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.pyc-admin-page-fragment .form-group label,
+.pyc-admin-page-fragment .form-group legend {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-weight: 500;
+    color: var(--pyc-color-on-surface);
+}
+
+.pyc-admin-page-fragment .form-control {
+    width: 100%;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-family: inherit;
+    background: var(--pyc-color-surface);
+    color: var(--pyc-color-on-surface);
+    box-sizing: border-box;
+    transition: border-color 0.15s;
+}
+
+.pyc-admin-page-fragment .form-control:focus,
+.pyc-admin-page-fragment .form-control:focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 1px;
+    border-color: var(--pyc-color-accent);
+}
+
+.pyc-admin-page-fragment .form-control[aria-invalid="true"] {
+    border-color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .form-control:disabled {
+    background: var(--pyc-color-surface-elevated);
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment select.form-control {
+    appearance: auto;
+}
+
+.pyc-admin-page-fragment .form-text {
+    margin-top: 0.3rem;
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .form-error {
+    margin-top: 0.3rem;
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+    color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 1.25rem;
+}
+
+.pyc-admin-page-fragment .filter-bar .form-control {
+    width: auto;
+}
+
+/* ---- Pagination ------------------------------------------------------ */
+
+.pyc-admin-page-fragment .pagination {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 1.25rem;
+    align-items: center;
+}
+
+.pyc-admin-page-fragment .pagination a,
+.pyc-admin-page-fragment .pagination span {
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    color: var(--pyc-color-on-surface);
+    text-decoration: none;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .pagination a:hover {
+    background: var(--pyc-color-surface-hover);
+}
+
+.pyc-admin-page-fragment .pagination a:focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 2px;
+}
+
+.pyc-admin-page-fragment .pagination .active {
+    background: var(--pyc-color-accent);
+    color: var(--pyc-color-on-accent);
+    border-color: var(--pyc-color-accent);
+}
+
+.pyc-admin-page-fragment .pagination .ellipsis {
+    border-color: transparent;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+/* ---- Utilities -------------------------------------------------------- */
+
+.pyc-admin-page-fragment .muted {
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .mono {
+    font-family: var(--pyc-font-family-mono, ui-monospace, monospace);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-bottom: 1rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .breadcrumb a {
+    color: var(--pyc-color-accent-on-surface);
+    text-decoration: none;
+}
+
+.pyc-admin-page-fragment .breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.pyc-admin-page-fragment .actions-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+}
+
+/* ---- Error page ------------------------------------------------------- */
+
+.pyc-error-page {
+    max-width: 36rem;
+    margin: 3rem auto;
+    text-align: center;
+}
+
+.pyc-error-page__code {
+    font-size: 4rem;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--pyc-color-on-surface-muted);
+    margin: 0 0 0.5rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.pyc-error-page h1 {
+    font-size: 1.5rem;
+    margin: 0 0 0.75rem;
+}
+
+.pyc-error-page p {
+    color: var(--pyc-color-on-surface-muted);
+}
+
+/* ---- Bundle mount point ---------------------------------------------- */
+
+.pyc-admin-page-fragment__loading {
+    color: var(--pyc-color-on-surface-muted);
+    padding: var(--mj-space-6, 1.5rem) 0;
+}
+
+/* ---- Empty state ------------------------------------------------------ */
+
+.pyc-admin-page-fragment .pyc-empty-state {
+    text-align: center;
+    padding: var(--mj-space-8, 2.5rem) var(--mj-space-4, 1rem);
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .pyc-empty-state__title {
+    font-weight: 600;
+    color: var(--pyc-color-on-surface);
+    margin: 0 0 0.35rem;
+}
+
+.pyc-admin-page-fragment .pyc-empty-state__hint {
+    margin: 0 0 1rem;
+}
+
+.pyc-admin-page-fragment ol.breadcrumb {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1rem;
+}
+
+.pyc-admin-page-fragment ol.breadcrumb li + li::before {
+    content: "/";
+    margin: 0 0.4rem;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .pyc-inline-icon {
+    width: 1.125rem;
+    height: 1.125rem;
+    vertical-align: -0.2em;
+    flex: 0 0 auto;
+}
+
+.pyc-admin-page-fragment .pyc-key-value {
+    display: grid;
+    grid-template-columns: minmax(8rem, 12rem) 1fr;
+    gap: 0.5rem 1rem;
+    margin: 0;
+}
+
+.pyc-admin-page-fragment .pyc-key-value dt {
+    font-weight: 500;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .pyc-key-value dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.pyc-admin-page-fragment time {
+    font-variant-numeric: tabular-nums;
+}
+
+.pyc-admin-page-fragment .pyc-icon-large .pyc-inline-icon {
+    width: 3rem;
+    height: 3rem;
+}
+
+.pyc-admin-page-fragment .health-online,
+.pyc-admin-page-fragment .health-degraded,
+.pyc-admin-page-fragment .health-maintenance,
+.pyc-admin-page-fragment .health-offline {
+    border-radius: 999px;
+}
+
+.pyc-admin-page-fragment .pyc-icon-large.health-online,
+.pyc-admin-page-fragment .pyc-icon-large.health-degraded,
+.pyc-admin-page-fragment .pyc-icon-large.health-maintenance,
+.pyc-admin-page-fragment .pyc-icon-large.health-offline {
+    display: inline-flex;
+    padding: 0.5rem;
+}
+
+.pyc-admin-page-fragment .pyc-flashes {
+    margin-bottom: 1rem;
+}
+
+.pyc-admin-page-fragment .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.pyc-admin-page-fragment .pyc-run-details summary {
+    list-style: none;
+    display: inline-flex;
+}
+
+.pyc-admin-page-fragment .pyc-run-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.pyc-admin-page-fragment .pyc-run-form {
+    margin-top: 0.6rem;
+    padding: 0.75rem;
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    background: var(--pyc-color-surface-elevated);
+    display: grid;
+    gap: 0.4rem;
+    min-width: 16rem;
+    text-align: left;
+}
+
+.pyc-admin-page-fragment .pyc-run-form label {
+    font-size: var(--pyc-font-size-xsmall, 0.75rem);
+    font-weight: 500;
+    color: var(--pyc-color-on-surface-muted);
+}
+
+.pyc-admin-page-fragment .pyc-filter-details {
+    position: relative;
+}
+
+.pyc-admin-page-fragment .pyc-filter-details summary {
+    list-style: none;
+    display: inline-flex;
+}
+
+.pyc-admin-page-fragment .pyc-filter-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.pyc-admin-page-fragment .pyc-checkbox-group {
+    position: absolute;
+    z-index: 5;
+    margin: 0.35rem 0 0;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    background: var(--pyc-color-surface);
+    box-shadow: var(--pyc-shadow-elevated);
+    display: grid;
+    gap: 0.3rem;
+    min-width: 12rem;
+    max-height: 16rem;
+    overflow-y: auto;
+}
+
+.pyc-admin-page-fragment .pyc-checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-weight: 400;
+    margin: 0;
+}
+
+.pyc-admin-page-fragment [aria-busy="true"] button[type="submit"] {
+    opacity: 0.7;
+    cursor: progress;
+}
+
+.pyc-admin-page-fragment .pyc-filter-fieldset {
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 6px;
+    padding: 0.6rem 0.9rem 0.8rem;
+    margin: 0 0 1rem;
+}
+
+.pyc-admin-page-fragment .pyc-filter-fieldset legend {
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    font-weight: 500;
+    color: var(--pyc-color-on-surface-muted);
+    padding: 0 0.3rem;
+}
+
+/* ---- Log viewer ------------------------------------------------------ */
+
+.pyc-admin-page-fragment .pyc-log-viewer__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+    margin-bottom: 0.6rem;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-admin-page-fragment .pyc-log-viewer__toolbar [data-log-status] {
+    margin-right: auto;
+}
+
+.pyc-admin-page-fragment .pyc-log-viewer__follow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin: 0;
+    font-weight: 400;
+}
+
+.pyc-admin-page-fragment .pyc-log-viewer__output {
+    margin: 0;
+    padding: 1rem 1.25rem;
+    background: var(--pyc-color-surface-elevated);
+    color: var(--pyc-color-on-surface);
+    border: 1px solid var(--pyc-color-border);
+    border-radius: 8px;
+    font-family: var(--pyc-font-family-mono, ui-monospace, Menlo, monospace);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    max-height: 70vh;
+    overflow: auto;
+}
+
+.pyc-admin-page-fragment .pyc-log-viewer__output:focus-visible {
+    outline: var(--pyc-focus-ring);
+}
+
+/* ---- Layout utilities used by the fragments --------------------------- */
+
+.pyc-admin-page-fragment .strong { font-weight: 500; }
+.pyc-admin-page-fragment .narrow { max-width: 44rem; }
+.pyc-admin-page-fragment .w-sm { width: 10rem; }
+.pyc-admin-page-fragment .w-md { width: 13rem; }
+.pyc-admin-page-fragment .w-lg { width: 19rem; }
+.pyc-admin-page-fragment .mt { margin-top: 1.25rem; }
+.pyc-admin-page-fragment .mt-lg { margin-top: 1.9rem; }
+.pyc-admin-page-fragment .push-end { margin-left: auto; }
+.pyc-admin-page-fragment .btn-block { width: 100%; }
+.pyc-admin-page-fragment .badge-lg { font-size: var(--pyc-font-size-body, 1rem); padding: 0.3rem 0.7rem; }
+.pyc-admin-page-fragment .card .data-table { margin-top: 0; }
+.pyc-admin-page-fragment h2.card-header { font-size: var(--pyc-font-size-body, 1rem); }
+
+.pyc-admin-page-fragment .page-header--split {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.pyc-admin-page-fragment .toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.pyc-admin-page-fragment .toolbar--end { justify-content: flex-end; }
+
+.pyc-admin-page-fragment .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
+    gap: 1.25rem;
+    margin-bottom: 1.9rem;
+}
+
+.pyc-admin-page-fragment .stat-grid--dense {
+    grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+}
+
+.pyc-admin-page-fragment .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+
+@media (max-width: 900px) {
+    .pyc-admin-page-fragment .two-col { grid-template-columns: 1fr; }
+}
+
+.pyc-admin-page-fragment .data-table th[scope="row"] {
+    background: transparent;
+    font-weight: 500;
+    color: var(--pyc-color-on-surface-muted);
+    width: 12rem;
+    text-align: left;
+}
+
+.pyc-admin-page-fragment .center { text-align: center; }
+.pyc-admin-page-fragment .regular { font-weight: 400; }
+.pyc-admin-page-fragment .small { font-size: var(--pyc-font-size-small, 0.875rem); }
+.pyc-admin-page-fragment .pad { padding: 1rem; }
+.pyc-admin-page-fragment .pad-lg { padding: 2.5rem 1rem; }
+.pyc-admin-page-fragment .mb { margin-bottom: 1.25rem; }
+.pyc-admin-page-fragment .mb-sm { margin-bottom: 0.6rem; }
+.pyc-admin-page-fragment .mb-lg { margin-bottom: 1.9rem; }
+.pyc-admin-page-fragment .mt-sm { margin-top: 0.6rem; }
+.pyc-admin-page-fragment .my-sm { margin: 0.3rem 0; }
+.pyc-admin-page-fragment .stack { display: flex; flex-direction: column; gap: 0.6rem; }
+.pyc-admin-page-fragment .split { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+.pyc-admin-page-fragment .truncate { max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pyc-admin-page-fragment .text-danger { color: var(--pyc-color-on-error-surface); }
+.pyc-admin-page-fragment .text-success { color: var(--pyc-color-on-success-surface); }
+.pyc-admin-page-fragment .field-label { display: block; margin-bottom: 0.3rem; font-size: var(--pyc-font-size-small, 0.875rem); }
+.pyc-admin-page-fragment .stat-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pyc-admin-page-fragment .stat-value--sm { font-size: 1.25rem; font-weight: 500; }
+.pyc-admin-page-fragment .detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.25rem; }
+@media (max-width: 900px) {
+    .pyc-admin-page-fragment .detail-grid { grid-template-columns: 1fr; }
+}
+
+.pyc-admin-page-fragment .pyc-subnav__section { overflow-wrap: anywhere; }
+
+.pyc-admin-page-fragment .stat-card--link {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s;
+}
+.pyc-admin-page-fragment .stat-card--link:hover { border-color: var(--pyc-color-accent); }
+.pyc-admin-page-fragment .stat-card--link:focus-visible { outline: var(--pyc-focus-ring); outline-offset: 2px; }
+
+/* Dark palette: the accent is a light blue, so white text on it fails
+   contrast; use the app background as the button text colour there. */
+[data-theme="dark"] .pyc-admin-page-fragment .btn-primary,
+[data-theme="dark"] .pyc-admin-page-fragment .pagination .active {
+    color: var(--pyc-color-app-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .pyc-admin-page-fragment .btn-primary,
+    :root:not([data-theme="light"]) .pyc-admin-page-fragment .pagination .active {
+        color: var(--pyc-color-app-bg);
+    }
+}
+
+.pyc-admin-page-fragment .table-scroll:focus-visible { outline: var(--pyc-focus-ring); outline-offset: 2px; }
+
+.pyc-admin-page-fragment .scroll-box { max-height: 18rem; overflow-y: auto; border: 1px solid var(--pyc-color-border); border-radius: 6px; padding: 0.6rem; }
+.pyc-admin-page-fragment .pre-block { margin: 0; padding: 0.9rem; background: var(--pyc-color-surface-elevated); border-radius: 6px; overflow: auto; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); }
+.pyc-admin-page-fragment .pre-wrap { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pyc-admin-page-fragment .command-box { margin: 0 0 1rem; padding: 0.6rem 0.75rem; background: var(--pyc-color-on-surface); color: var(--pyc-color-surface-elevated); border-radius: 6px; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); overflow-x: auto; user-select: all; }
+.pyc-admin-page-fragment .narrow-sm { max-width: 19rem; }
+.pyc-admin-page-fragment .list-tight { margin: 0; padding-left: 1.25rem; }
+.pyc-admin-page-fragment .masked { letter-spacing: 0.15em; color: var(--pyc-color-on-surface-muted); }
+.pyc-admin-page-fragment .py-sm { padding: 0.3rem 0; }

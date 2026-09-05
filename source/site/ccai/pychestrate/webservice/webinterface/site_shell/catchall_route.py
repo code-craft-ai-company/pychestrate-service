@@ -275,70 +275,56 @@ def register_shell_catchall(*, app: Any) -> None:
     return
 
 
-def _build_not_found_response(*, path: str) -> Response:
+def _build_not_found_response(*, path: str, request: Any = None) -> Response:
     """
         Build the 404 for a path the catch-all does not own.
 
-        Chromeless-prefix paths (``/login/...``, ``/setup`` after
-        the wizard completes, ``/errors/...``) are browser-facing
-        -- a person typed or bookmarked them -- so they get a
-        small friendly HTML page instead of an empty body. API /
-        static / webhook paths keep a terse plain-text 404. Both
-        carry an explicit ``Content-Type`` so no client ever has
-        to sniff an empty, untyped body.
+        Browser-facing paths (anything that is not an API / static /
+        webhook path) get the shared error page from
+        :mod:`site_shell.error_pages` -- inside the shell for a
+        signed-in browser, chromeless otherwise. API-ish paths keep a
+        terse plain-text body so clients never receive HTML.
 
-        :param path: The request path that missed every route.
+        :param path: The request path that missed.
+        :param request: The incoming request (drives the
+                        authenticated / anonymous rendering choice).
 
-        :returns: :class:`Response` with status 404 and an
-                  explicit ``Content-Type``.
+        :returns: :class:`Response` with status 404.
     """
-    if is_chromeless(path=path) is True:
+    api_like = False
+    for prefix in ("/api/", "/static/", "/webhooks/", "/mj/"):
+        if path.startswith(prefix):
+            api_like = True
+            break
+    if api_like is False and request is not None:
+        try:
+            from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+                render_error_response,
+            )
+            rtnval = render_error_response(request=request, status_code=404)
+            return rtnval
+        except Exception:
+            pass
+    if api_like is False:
+        # Templating unavailable (early boot, stubbed environment):
+        # a minimal but complete document rather than plain text.
         page_html = (
-            "<!doctype html>\n"
-            "<html lang=\"en\">\n"
-            "<head>\n"
-            "    <meta charset=\"utf-8\">\n"
-            "    <meta name=\"viewport\""
-            " content=\"width=device-width, initial-scale=1\">\n"
-            "    <title>Page Not Found - Pychestrate</title>\n"
-            "    <style>\n"
-            "        body { margin: 0; padding: 0;"
-            " font-family: -apple-system, BlinkMacSystemFont,"
-            " 'Segoe UI', Roboto, sans-serif;"
-            " background: #f5f5f7; min-height: 100vh; }\n"
-            "        .nf-container { max-width: 400px;"
-            " margin: 100px auto; padding: 40px;"
-            " background: white; border-radius: 8px;"
-            " box-shadow: 0 4px 20px rgba(0,0,0,0.1);"
-            " text-align: center; }\n"
-            "        .nf-container h1 { margin: 0 0 10px;"
-            " color: #1a1a2e; }\n"
-            "        .nf-container p { color: #6c757d; }\n"
-            "        .nf-container a { color: #1a1a2e; }\n"
-            "    </style>\n"
-            "</head>\n"
-            "<body>\n"
-            "    <div class=\"nf-container\">\n"
-            "        <h1>Page not found</h1>\n"
-            "        <p>The page you requested does not"
-            " exist.</p>\n"
-            "        <p><a href=\"/\">Go to the home page</a>"
-            " or <a href=\"/login\">sign in</a>.</p>\n"
-            "    </div>\n"
-            "</body>\n"
-            "</html>\n"
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+            "<title>Page not found · Pychestrate</title></head><body>"
+            "<main><h1>Page not found</h1>"
+            "<p>The address may be mistyped, or the page may have moved.</p>"
+            "<p><a href=\"/\">Go to the home page</a> or <a href=\"/login\">sign in</a>.</p>"
+            "</main></body></html>"
         )
         rtnval = HTMLResponse(content=page_html, status_code=404)
         return rtnval
-
     rtnval = Response(
         status_code=404,
-        headers={"Content-Type": "text/plain; charset=utf-8"},
         body=b"Not Found",
+        headers={"Content-Type": "text/plain; charset=utf-8"},
     )
     return rtnval
-
-
 def _serve_shell_or_pass(*, request: Request) -> Response:
     """
         Decide whether the request path should render the shell.
@@ -371,17 +357,55 @@ def _serve_shell_or_pass(*, request: Request) -> Response:
     if isinstance(path, str) is False:
         path = ""
     if is_shell_candidate(path=path) is False:
-        rtnval = _build_not_found_response(path=path)
+        rtnval = _build_not_found_response(path=path, request=request)
         return rtnval
 
     if _is_request_authenticated(request=request) is False:
+        # Only paths the shell actually owns earn a login redirect;
+        # a mistyped URL is a 404 whether or not the browser is
+        # signed in, so anonymous visitors are not asked to sign in
+        # just to be told the page does not exist.
+        if _is_known_shell_route(path=path) is False:
+            rtnval = _build_not_found_response(path=path, request=request)
+            return rtnval
         rtnval = _build_login_redirect(request=request)
+        return rtnval
+
+    if _is_known_shell_route(path=path) is False:
+        # Signed in, but the path belongs to nothing: a real 404 inside
+        # the shell rather than a 200 whose body says "not found".
+        rtnval = _build_not_found_response(path=path, request=request)
         return rtnval
 
     rtnval = render_shell_document(request=request)
     return rtnval
+def _is_known_shell_route(*, path: str) -> bool:
+    """
+        True when ``path`` is the shell root or lies under a prefix a
+        registered web-component bundle owns (``/admin``, ``/runs``,
+        ``/pods`` ...). Blueprint routes never reach the catch-all,
+        so bundle prefixes are the only other legitimate shell paths.
 
+        :param path: Request path.
 
+        :returns: Whether the shell owns the path.
+    """
+    if path in ("", "/"):
+        return True
+    from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import (  # noqa: E402
+        install_default_bundles,
+        registered_route_prefixes,
+    )
+    prefixes = [prefix for prefix in registered_route_prefixes() if len(prefix) > 0]
+    if len(prefixes) == 0:
+        # The registry is populated at bootstrap; a bare process
+        # (unit tests, tooling) still knows the default bundle set.
+        install_default_bundles()
+        prefixes = [prefix for prefix in registered_route_prefixes() if len(prefix) > 0]
+    for prefix in prefixes:
+        if path == prefix or path.startswith(prefix + "/"):
+            return True
+    return False
 __all__ = [
     "register_shell_catchall",
     "CATCHALL_ROOT_PATTERN",

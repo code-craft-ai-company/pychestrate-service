@@ -1,92 +1,94 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}{{ repository.name }} - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.repository_list', project_id=project.id) }}">Repositories</a>
-    <span>/</span>
-    <span>{{ repository.name }}</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}">Repositories</a></li>
+        <li aria-current="page">{{ repository.name }}</li>
+    </ol>
+</nav>
 
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+<div class="page-header page-header--split">
     <div>
-        <h2>{{ repository.name }}</h2>
+        <h1>{{ repository.name }}</h1>
         <p>{{ repository.description or 'No description' }}</p>
     </div>
     {% if can_manage %}
-    <div style="display: flex; gap: 10px;">
-        <form action="{{ url_for('projects.repository_fetch', project_id=project.id, repository_id=repository.id) }}" method="post" style="margin:0;">
+    <div class="actions-row">
+        <form action="{{ url_for('projects.repository_fetch', project_id=project.id, repository_id=repository.id) }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-secondary">
-                <span class="material-icons">refresh</span> Fetch
+                {{ ui.icon("refresh") }} Fetch
             </button>
         </form>
-        <form action="{{ url_for('projects.repository_test', project_id=project.id, repository_id=repository.id) }}" method="post" style="margin:0;">
+        <form action="{{ url_for('projects.repository_test', project_id=project.id, repository_id=repository.id) }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-secondary">
-                <span class="material-icons">wifi_tethering</span> Test
+                {{ ui.icon("wifi_tethering") }} Test
             </button>
         </form>
         <a href="{{ url_for('projects.repository_edit', project_id=project.id, repository_id=repository.id) }}" class="btn btn-secondary">
-            <span class="material-icons">edit</span> Edit
+            {{ ui.icon("edit") }} Edit
         </a>
-        <form action="{{ url_for('projects.repository_delete', project_id=project.id, repository_id=repository.id) }}" method="post" style="margin:0;">
+        {% if can_delete %}
+        <form action="{{ url_for('projects.repository_delete', project_id=project.id, repository_id=repository.id) }}" method="post" data-confirm="Remove the repository &quot;{{ repository.name | e }}&quot; from this project? Build specifications that reference it will stop working. This cannot be undone.">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-danger" onclick="return confirm('Remove this repository?')">
-                <span class="material-icons">delete</span> Remove
+            <button type="submit" class="btn btn-danger">
+                {{ ui.icon("delete") }} Remove
             </button>
         </form>
+        {% endif %}
     </div>
     {% endif %}
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px;">
     <div class="card">
-        <div style="font-size: 0.875rem; color: #6c757d;">URL</div>
+        <div class="muted">URL</div>
         <div style="font-family: monospace; font-size: 0.9rem; word-break: break-all;">{{ repository.url }}</div>
     </div>
     <div class="card">
-        <div style="font-size: 0.875rem; color: #6c757d;">Authentication</div>
+        <div class="muted">Authentication</div>
         <div><span class="badge badge-secondary">{{ repository.auth_type.value }}</span></div>
     </div>
     <div class="card">
-        <div style="font-size: 0.875rem; color: #6c757d;">Default Branch</div>
-        <div style="font-weight: 500;">{{ repository.default_branch }}</div>
+        <div class="muted">Default Branch</div>
+        <div class="strong">{{ repository.default_branch }}</div>
     </div>
 </div>
 
 <div class="card">
-    <div class="card-header">Last Commit</div>
+    <h2 class="card-header">Last Commit</h2>
     {% if repository.last_commit_sha %}
-    <table class="data-table" style="margin-top: 0;">
+    <div class="table-scroll" tabindex="0"><table class="data-table">
         <tr>
-            <td style="width: 120px; font-weight: 500;">SHA</td>
-            <td style="font-family: monospace;">{{ repository.last_commit_sha }}</td>
+            <th scope="row">SHA</th>
+            <td class="mono">{{ repository.last_commit_sha }}</td>
         </tr>
         <tr>
-            <td style="font-weight: 500;">Message</td>
+            <th scope="row">Message</th>
             <td>{{ repository.last_commit_message or 'N/A' }}</td>
         </tr>
         <tr>
-            <td style="font-weight: 500;">Author</td>
+            <th scope="row">Author</th>
             <td>{{ repository.last_commit_author or 'N/A' }}</td>
         </tr>
         <tr>
-            <td style="font-weight: 500;">Time</td>
-            <td>{{ repository.last_commit_time.strftime('%Y-%m-%d %H:%M:%S') if repository.last_commit_time else 'N/A' }}</td>
+            <th scope="row">Time</th>
+            <td>{{ repository.last_commit_time | format_datetime('%Y-%m-%d %H:%M:%S', 'N/A') }}</td>
         </tr>
         <tr>
-            <td style="font-weight: 500;">Last Fetch</td>
-            <td>{{ repository.last_fetch_time.strftime('%Y-%m-%d %H:%M:%S') if repository.last_fetch_time else 'Never' }}</td>
+            <th scope="row">Last Fetch</th>
+            <td>{{ repository.last_fetch_time | format_datetime('%Y-%m-%d %H:%M:%S', 'Never') }}</td>
         </tr>
-    </table>
+    </table></div>
     {% else %}
-    <p style="color: #6c757d; text-align: center; padding: 20px;">No commit information available. Click "Fetch" to retrieve latest data.</p>
+    {% if can_manage %}{{ ui.empty_state("No commit information yet", hint="Use Fetch to retrieve the latest commit from the repository.") }}{% else %}{{ ui.empty_state("No commit information yet", hint="A project developer can fetch the latest commit.") }}{% endif %}
     {% endif %}
 </div>
 {% endblock %}

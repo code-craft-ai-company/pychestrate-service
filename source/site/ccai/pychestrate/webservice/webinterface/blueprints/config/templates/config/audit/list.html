@@ -1,19 +1,19 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Audit Logs - Pychestrate Configuration{% endblock %}
 
 {% block content %}
-{% import "config/_pagination.html" as pagination %}
 <div class="page-header">
-    <h2>Audit Logs</h2>
+    <h1>Audit Logs</h1>
     <p>Review security events and system activity</p>
 </div>
 
-<div class="card" style="margin-bottom: 20px;">
+<div class="card mb">
     <form method="get" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
         <div>
-            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Event Type</label>
-            <select name="event_type" class="form-control" style="width: 200px;">
+            <label class="field-label" for="audit-event-type">Event Type</label>
+            <select id="audit-event-type" name="event_type" class="form-control w-md">
                 <option value="">All Events</option>
                 {% for event_type in all_event_types %}
                 <option value="{{ event_type }}" {% if selected_event_type == event_type %}selected{% endif %}>
@@ -24,26 +24,26 @@
         </div>
 
         <div>
-            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Username</label>
-            <input type="text" name="username" class="form-control" placeholder="Username"
-                   value="{{ filter_username or '' }}" style="width: 150px;">
+            <label class="field-label" for="audit-username">Username</label>
+            <input type="text" id="audit-username" name="username" class="form-control w-sm" placeholder="Username"
+                   value="{{ filter_username or '' }}">
         </div>
 
         <div>
-            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">Start Date</label>
-            <input type="datetime-local" name="start_date" class="form-control"
-                   value="{{ start_date or '' }}" style="width: 200px;">
+            <label class="field-label" for="audit-start">Start Date</label>
+            <input type="datetime-local" id="audit-start" name="start_date" class="form-control w-md"
+                   value="{{ start_date or '' }}">
         </div>
 
         <div>
-            <label style="display: block; margin-bottom: 5px; font-size: 0.875rem;">End Date</label>
-            <input type="datetime-local" name="end_date" class="form-control"
-                   value="{{ end_date or '' }}" style="width: 200px;">
+            <label class="field-label" for="audit-end">End Date</label>
+            <input type="datetime-local" id="audit-end" name="end_date" class="form-control w-md"
+                   value="{{ end_date or '' }}">
         </div>
 
         <div>
             <button type="submit" class="btn btn-secondary">
-                <span class="material-icons">filter_list</span> Filter
+                {{ ui.icon("filter_list") }} Filter
             </button>
             <a href="{{ url_for('config.audit_log_list') }}" class="btn btn-secondary">Clear</a>
         </div>
@@ -56,30 +56,30 @@
 </div>
 {% endif %}
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Timestamp</th>
-            <th>Event Type</th>
-            <th>User</th>
-            <th>Target User</th>
-            <th>Client IP</th>
-            <th>Details</th>
+            <th scope="col">Timestamp</th>
+            <th scope="col">Event Type</th>
+            <th scope="col">User</th>
+            <th scope="col">Target User</th>
+            <th scope="col">Client IP</th>
+            <th scope="col">Details</th>
         </tr>
     </thead>
     <tbody>
         {% for log in logs %}
         <tr>
-            <td>{% if log.timestamp %}{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}{% else %}&mdash;{% endif %}</td>
-            <td><span class="badge badge-info">{{ log.event_type.value }}</span></td>
+            <td>{% if log.timestamp %}{{ log.timestamp | format_datetime('%Y-%m-%d %H:%M:%S') }}{% else %}&mdash;{% endif %}</td>
+            <td><span class="badge badge-info">{{ log.event_type.value if log.event_type.value is defined else log.event_type }}</span></td>
             <td>{{ log.username or log.user_id or '-' }}</td>
             <td>{{ log.target_username or log.target_user_id or '-' }}</td>
             <td>{{ log.client_ip or '-' }}</td>
-            <td style="max-width: 300px;">
+            <td class="narrow-sm">
                 {% if log.details %}
                 <details>
                     <summary style="cursor: pointer; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.details | tojson | truncate(60) }}</summary>
-                    <pre style="margin: 8px 0 0; padding: 8px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-size: 0.8rem; max-width: 480px; overflow-x: auto; white-space: pre-wrap; word-break: break-word;">{{ log.details | tojson(indent=2) }}</pre>
+                    <pre class="pre-block small">{{ log.details | tojson(indent=2) }}</pre>
                 </details>
                 {% else %}
                 -
@@ -88,19 +88,13 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" style="text-align: center; color: #6c757d;">No audit logs found</td>
+            {{ ui.empty_state("No audit logs found", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{{ pagination.render('config.audit_log_list', page, total_pages,
-                     {'event_type': selected_event_type,
-                      'username': filter_username,
-                      'user_id': filter_user_id if not filter_username else None,
-                      'start_date': start_date,
-                      'end_date': end_date,
-                      'per_page': per_page}) }}
+{{ ui.pagination('config.audit_log_list', page, total_pages, {'event_type': selected_event_type, 'username': filter_username, 'user_id': filter_user_id if not filter_username else None, 'start_date': start_date, 'end_date': end_date, 'per_page': per_page}, total=total) }}
 
-<p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} entries</p>
+<p class="muted mt">Total: {{ total }} entries</p>
 {% endblock %}

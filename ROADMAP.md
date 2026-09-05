@@ -148,3 +148,89 @@ roadmap reflects current activity:
 
 After PR6 lands, the next milestone-bumping work is to pick one of the
 alpha-slice candidates above and drive its dependencies to completion.
+
+## UI Remediation Program (2026-09)
+
+A usability and presentation audit of the consumer web UI (September
+2026) produced 179 findings; the remediation runs as seven phases. The
+audit and the phase plan are tracked outside the repo; this section
+records the decisions and status that the code alone does not show.
+
+### Decisions
+
+- **`/resources/*` stays, inside the shell.** The server-rendered
+  resources blueprint covers IP pools, reservations, allocation
+  history, tags, and health monitoring that the `/resource-pools`
+  web-component bundle does not. Rather than retire it, every
+  `/resources/*` handler now renders as a fragment inside the site
+  shell (`_wrap_resources_handler_in_shell`), and the shell navigation
+  links the three pages the bundle lacks (IP Pools, Reservations,
+  Resource Health). The overlap between the legacy pools/resources
+  pages and the bundle remains a known duplication; retiring the
+  legacy pools and resources list pages is deferred until the bundle
+  exposes checkout / checkin.
+- **One owner per concept.** Bundle pages own the global,
+  cross-project view of Builds, Pipelines, Tests, and Secrets; the
+  project-scoped server pages own the per-project view. The
+  `/admin` landing routes owned by `pyc-admin-bundle` no longer
+  render the server dashboard first (they emit an empty mount point),
+  and `/admin/dashboard` remains the only server-rendered landing
+  page.
+- **Strict templates.** The jinja environment runs with
+  `StrictUndefined`; a template that reads an attribute the handler
+  never supplied fails loudly instead of rendering a blank. The
+  phase-13 render-smoke suite renders every template against fixtures
+  derived from the manager response dataclasses. Roll back for one
+  release with `PYCHESTRATE_TEMPLATE_STRICT_UNDEFINED=0`.
+- **Sign-in and sign-out are CSRF-gated.** `GET /login` mints a token
+  into the anonymous session and the form carries it; `GET /logout`
+  renders a confirmation page whose button POSTs. The shell's sign-out
+  control POSTs with the token the shell document carries.
+- **Unknown paths are 404s, not sign-in prompts.** The catch-all only
+  redirects anonymous browsers to `/login` for paths a registered
+  bundle owns; everything else gets the shared error page
+  (`site_shell/error_pages.py`), inside the shell when signed in.
+- **Static assets are content-hashed.** Templates link assets through
+  `static_url(...)`, which appends a content hash; versioned URLs are
+  served immutable for a year, bare URLs with `no-cache` plus an
+  `ETag`. Bundle stylesheets are linked in the shell document's
+  `<head>` so bundle views no longer paint unstyled.
+
+### Status
+
+| Phase | Scope | State |
+|---|---|---|
+| 0 | Guardrails: strict templates, render-smoke suite, endpoint lint | Done |
+| 1 | Crashing pages, wrong data, broken controls | Done |
+| 2 | Resources in the shell, error pages, catch-all, CSRF, caching, dead assets | Done |
+| 3 | Shared fragment stylesheet (`pyc-fragment.css`), macros (`site_shell/_macros.html`), filters, confirm dialog delegate, field errors, permission flags, glossary (`userguide/18-00-ui-glossary.rst`) | Done |
+| 4 | Per-area migration: icons as inline SVG, status badges, pagers, empty states, breadcrumbs, table semantics, tokens, setup wizard, log viewer, calendar, forms | Done |
+| 5 | Shell and bundle accessibility: landmarks, skip link, theme toggle, palette combobox, list-valid sidebar, live regions, component labels | Done |
+| 6 | Browser verification (Playwright + axe-core against a local dev server), regression tests (`phase13`), this record | Done |
+
+Verification (2026-09-04, local dev server, Chromium): every audited
+page renders inside the shell with one `main` landmark and one `h1`,
+in light and dark themes, with zero serious or critical axe-core
+violations, except the two pages below. Anonymous requests for unknown
+paths receive a 404; signed-in requests receive the shell-wrapped 404;
+sign-out requires a POST.
+
+Known remaining items:
+
+- `mj-select`'s internal trigger button has no accessible name when
+  nothing is selected (`/builds`, `/runs`, and any bundle list using
+  it). The `label` attribute is set on the host; the fix belongs in
+  `codecraftai-webworks`.
+- Low-severity polish deferred: one shared stylesheet for the eleven
+  bundle CSS files (A-7) and host-level styling of `mj-button` and
+  scope chips in the bundle CSS (B-9, B-10), both of which depend on
+  component internals in `codecraftai-webworks`.
+- About 30 layout-only inline `style` attributes remain in the
+  fragments (calendar grid rows, a few form widths); all colours and
+  font sizes flow through tokens.
+
+Also done after the phase table above: the duplicate sidebar tables in
+the admin and secrets bundle entries are gone (S-22), release templates
+show repository names with links (P-53), and every fragment's
+`{% block title %}` now feeds the browser tab title through the shell
+wrapper (P-46, C-15), so detail pages are titled by their entity.

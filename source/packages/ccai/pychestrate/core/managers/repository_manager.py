@@ -86,6 +86,7 @@ class RepositoryResponse:
     last_commit_time: Optional[datetime]
     last_fetch_time: Optional[datetime]
     created_at: datetime
+    credential_secret_ref: Optional[str] = None
 
 
 @dataclass
@@ -321,7 +322,8 @@ class RepositoryManager:
             last_commit_author=repository.last_commit_author,
             last_commit_time=repository.last_commit_time,
             last_fetch_time=repository.last_fetch_time,
-            created_at=repository.created_at
+            created_at=repository.created_at,
+            credential_secret_ref=repository.credential_secret_ref
         )
     
     # =========================================================================

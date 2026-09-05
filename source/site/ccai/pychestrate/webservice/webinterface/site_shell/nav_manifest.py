@@ -101,36 +101,43 @@ NAV_GROUPS: List[NavGroup] = [
     NavGroup(
         group_id=GROUP_PROJECTS,
         label="Projects",
+        icon="projects",
         required_permissions=["system:projects.read"],
     ),
     NavGroup(
         group_id=GROUP_ORCHESTRATION,
         label="Orchestration",
+        icon="orchestration",
         required_permissions=[],
     ),
     NavGroup(
         group_id=GROUP_INSIGHTS,
         label="Insights",
+        icon="insights",
         required_permissions=[],
     ),
     NavGroup(
         group_id=GROUP_FLEET,
         label="Fleet",
+        icon="fleet",
         required_permissions=[],
     ),
     NavGroup(
         group_id=GROUP_OPERATIONS,
         label="Operations",
+        icon="operations",
         required_permissions=[],
     ),
     NavGroup(
         group_id=GROUP_SYSTEM,
         label="System",
+        icon="system",
         required_permissions=[],
     ),
     NavGroup(
         group_id=GROUP_ADMIN,
         label="Admin",
+        icon="admin",
         required_permissions=["system:ui.admin.view"],
     ),
 ]
@@ -281,6 +288,30 @@ NAV_ENTRIES: List[NavEntry] = [
             "system:resources.read",
             "system:resource_pools.read",
         ],
+    ),
+    # The server-rendered /resources/* pages cover what the
+    # /resource-pools bundle does not yet: IP pools, reservations,
+    # and health monitoring. They render inside the shell.
+    NavEntry(
+        entry_id="fleet.ip-pools",
+        label="IP Pools",
+        route="/resources/ip-pools",
+        group_id=GROUP_FLEET,
+        required_permissions=["system:resources.read"],
+    ),
+    NavEntry(
+        entry_id="fleet.reservations",
+        label="Reservations",
+        route="/resources/reservations",
+        group_id=GROUP_FLEET,
+        required_permissions=["system:resources.read"],
+    ),
+    NavEntry(
+        entry_id="fleet.resource-health",
+        label="Resource Health",
+        route="/resources/health",
+        group_id=GROUP_FLEET,
+        required_permissions=["system:resources.read"],
     ),
     # ---- Operations ----------------------------------------------
     NavEntry(

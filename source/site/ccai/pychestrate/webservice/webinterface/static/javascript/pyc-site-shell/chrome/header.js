@@ -31,9 +31,13 @@ function build_header(options) {
     const brand = document.createElement("span");
     brand.setAttribute("slot", "brand");
     brand.classList.add("pyc-site-shell__brand");
-    brand.textContent = options.brand_label;
+    const brand_link = document.createElement("a");
+    brand_link.href = "/";
+    brand_link.classList.add("pyc-site-shell__brand-link");
+    brand_link.textContent = options.brand_label;
+    brand_link.setAttribute("aria-label", options.brand_label + " home");
+    brand.appendChild(brand_link);
     app_bar.appendChild(brand);
-
     if (typeof options.on_palette_hint_activate === "function") {
         const hint = build_palette_hint(
             options.palette_shortcut_label,
@@ -44,7 +48,6 @@ function build_header(options) {
 
     const actions = document.createElement("div");
     actions.setAttribute("slot", "actions");
-    actions.setAttribute("role", "menu");
     actions.classList.add("pyc-site-shell__user-menu");
 
     const display_name = options.user_display_name !== null
@@ -56,20 +59,50 @@ function build_header(options) {
     name_label.textContent = display_name;
     actions.appendChild(name_label);
 
-    // Sign out is a plain navigation to GET /logout. POST /logout
-    // is CSRF-gated and the token lives in an HttpOnly cookie the
-    // shell cannot read, so a script-built POST form can never
-    // carry it; the GET route is un-gated by design.
+    if (typeof options.on_theme_toggle === "function") {
+        const theme_button = document.createElement("mj-button");
+        theme_button.setAttribute("type", "button");
+        theme_button.setAttribute("variant", "tertiary");
+        theme_button.setAttribute("size", "sm");
+        theme_button.classList.add("pyc-site-shell__theme-toggle");
+        const is_dark = options.current_theme === "dark";
+        theme_button.setAttribute("aria-pressed", is_dark ? "true" : "false");
+        theme_button.setAttribute("aria-label", is_dark ? "Switch to light theme" : "Switch to dark theme");
+        theme_button.textContent = "Theme";
+        theme_button.addEventListener("click", (event) => {
+            event.preventDefault();
+            options.on_theme_toggle();
+        });
+        actions.appendChild(theme_button);
+    }
+    // Sign out POSTs to /logout with the CSRF token the shell
+    // document carries (csrf-token attribute). Without a token the
+    // control falls back to GET /logout, which renders a
+    // confirmation page whose button performs the POST.
     const logout_button = document.createElement("mj-button");
     logout_button.setAttribute("type", "button");
     logout_button.setAttribute("variant", "tertiary");
     logout_button.setAttribute("size", "sm");
-    logout_button.setAttribute("role", "menuitem");
     logout_button.classList.add("pyc-site-shell__logout-button");
     logout_button.textContent = "Sign out";
     logout_button.addEventListener("click", (event) => {
         event.preventDefault();
-        window.location.assign(LOGOUT_PATH);
+        const csrf_token = typeof options.csrf_token === "string" ? options.csrf_token : "";
+        if (csrf_token.length === 0) {
+            window.location.assign(LOGOUT_PATH);
+            return;
+        }
+        const form = document.createElement("form");
+        form.method = "post";
+        form.action = LOGOUT_PATH;
+        form.hidden = true;
+        const token_input = document.createElement("input");
+        token_input.type = "hidden";
+        token_input.name = "csrf_token";
+        token_input.value = csrf_token;
+        form.appendChild(token_input);
+        document.body.appendChild(form);
+        form.submit();
     });
     actions.appendChild(logout_button);
 

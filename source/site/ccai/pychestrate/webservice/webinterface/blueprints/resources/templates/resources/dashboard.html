@@ -1,91 +1,74 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Dashboard - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Resource Management Dashboard</h2>
+    <h1>Resource Management Dashboard</h1>
     <p>Overview of resources, allocations, and system health</p>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
-    <div class="stat-card">
+<div class="stat-grid">
+    <a href="{{ url_for('resources.resource_list') }}" class="stat-card stat-card--link">
         <div class="stat-value">{{ resource_count }}</div>
         <div class="stat-label">Total Resources</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="{{ url_for('resources.pool_list') }}" class="stat-card stat-card--link">
         <div class="stat-value">{{ pool_count }}</div>
         <div class="stat-label">Resource Pools</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="{{ url_for('resources.ip_pool_list') }}" class="stat-card stat-card--link">
         <div class="stat-value">{{ ip_pool_count }}</div>
         <div class="stat-label">IP Pools</div>
-    </div>
-    <div class="stat-card">
+    </a>
+    <a href="{{ url_for('resources.allocation_list') }}" class="stat-card stat-card--link">
         <div class="stat-value">{{ active_allocation_count }}</div>
         <div class="stat-label">Active Allocations</div>
-    </div>
+    </a>
 </div>
 
 <div class="card">
-    <div class="card-header">Resource Health Status</div>
+    <h2 class="card-header">Resource Health Status</h2>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
-        <div style="text-align: center; padding: 15px;">
-            <span class="material-icons health-online" style="font-size: 48px;">check_circle</span>
-            <div style="font-size: 1.5rem; font-weight: 600;">{{ health_counts.online }}</div>
-            <div style="color: #6c757d;">Online</div>
+        <div class="center pad">
+            <span class="health-online pyc-icon-large" aria-hidden="true">{{ ui.icon("check_circle") }}</span>
+            <div class="stat-value">{{ health_counts.online }}</div>
+            <div class="muted">Online</div>
         </div>
-        <div style="text-align: center; padding: 15px;">
-            <span class="material-icons health-degraded" style="font-size: 48px;">warning</span>
-            <div style="font-size: 1.5rem; font-weight: 600;">{{ health_counts.degraded }}</div>
-            <div style="color: #6c757d;">Degraded</div>
+        <div class="center pad">
+            <span class="health-degraded pyc-icon-large" aria-hidden="true">{{ ui.icon("warning") }}</span>
+            <div class="stat-value">{{ health_counts.degraded }}</div>
+            <div class="muted">Degraded</div>
         </div>
-        <div style="text-align: center; padding: 15px;">
-            <span class="material-icons health-maintenance" style="font-size: 48px;">build</span>
-            <div style="font-size: 1.5rem; font-weight: 600;">{{ health_counts.maintenance }}</div>
-            <div style="color: #6c757d;">Maintenance</div>
+        <div class="center pad">
+            <span class="health-maintenance pyc-icon-large" aria-hidden="true">{{ ui.icon("build") }}</span>
+            <div class="stat-value">{{ health_counts.maintenance }}</div>
+            <div class="muted">Maintenance</div>
         </div>
-        <div style="text-align: center; padding: 15px;">
-            <span class="material-icons health-offline" style="font-size: 48px;">cancel</span>
-            <div style="font-size: 1.5rem; font-weight: 600;">{{ health_counts.offline }}</div>
-            <div style="color: #6c757d;">Offline</div>
+        <div class="center pad">
+            <span class="health-offline pyc-icon-large" aria-hidden="true">{{ ui.icon("cancel") }}</span>
+            <div class="stat-value">{{ health_counts.offline }}</div>
+            <div class="muted">Offline</div>
         </div>
     </div>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
+<div class="narrow">
     <div class="card">
-        <div class="card-header">Quick Actions</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
+        <h2 class="card-header">Quick Actions</h2>
+        <div class="stack">
             <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">add</span> Create Resource
+                {{ ui.icon("add") }} Create Resource
             </a>
             <a href="{{ url_for('resources.pool_create') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">create_new_folder</span> Create Resource Pool
+                {{ ui.icon("create_new_folder") }} Create Resource Pool
             </a>
             <a href="{{ url_for('resources.ip_pool_create') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">add_circle</span> Create IP Pool
+                {{ ui.icon("add_circle") }} Create IP Pool
             </a>
             <a href="{{ url_for('resources.reservation_create') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">event</span> Create Reservation
-            </a>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="card-header">Navigation</div>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-            <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">devices</span> View All Resources
-            </a>
-            <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">assignment</span> View Active Allocations
-            </a>
-            <a href="{{ url_for('resources.health_dashboard') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">monitor_heart</span> Health Dashboard
-            </a>
-            <a href="{{ url_for('config.dashboard') }}" class="btn btn-secondary">
-                <span class="material-icons" aria-hidden="true">settings</span> System Configuration
+                {{ ui.icon("event") }} Create Reservation
             </a>
         </div>
     </div>

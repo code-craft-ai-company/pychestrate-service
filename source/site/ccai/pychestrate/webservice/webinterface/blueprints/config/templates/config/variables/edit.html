@@ -1,25 +1,26 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit {{ variable.name }} - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Edit Variable: {{ variable.name }}</h2>
+    <h1>Edit Variable: {{ variable.name }}</h1>
     <p>Update variable value</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
         <div class="form-group">
-            <label>Variable Name</label>
-            <input type="text" class="form-control" value="{{ variable.name }}" disabled>
+            <label for="ro-variable-name">Variable Name</label>
+            <input type="text" class="form-control" value="{{ variable.name }}" id="ro-variable-name" disabled>
         </div>
         
         <div class="form-group">
-            <label>Type</label>
-            <input type="text" class="form-control" value="{{ variable.var_type.value }}" disabled>
+            <label for="ro-type">Type</label>
+            <input type="text" class="form-control" value="{{ variable.var_type.value }}" id="ro-type" disabled>
         </div>
         
         <div class="form-group">
@@ -43,9 +44,9 @@
             <textarea id="description" name="description" class="form-control" rows="2">{{ variable.description or '' }}</textarea>
         </div>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('config.variable_detail', name=variable.name) }}" class="btn btn-secondary">Cancel</a>
         </div>

@@ -1,14 +1,15 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Create User - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Create User</h2>
+    <h1>Create User</h1>
     <p>Add a new user account to the system</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -28,8 +29,11 @@
         
         <div class="form-group">
             <label for="password">Password *</label>
-            <input type="password" id="password" name="password" class="form-control" required
-                   minlength="12">
+            <div class="actions-row">
+                <input type="password" id="password" name="password" class="form-control" required
+                       minlength="12" autocomplete="new-password">
+                <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
+            </div>
             <p class="form-text">Minimum 12 characters with uppercase, lowercase, digit, and special character</p>
         </div>
         
@@ -55,21 +59,21 @@
         <div class="form-group">
             <label>Roles</label>
             {% for role in roles %}
-            <div style="margin: 5px 0;">
-                <label style="font-weight: normal;">
+            <div class="my-sm">
+                <label class="regular">
                     <input type="checkbox" name="role_names" value="{{ role.name }}"
                            {% if form_data and role.name in form_data.getlist('role_names') %}checked{% endif %}>
                     {{ role.name }}
-                    {% if role.description %}<span style="color: #6c757d;"> - {{ role.description }}</span>{% endif %}
+                    {% if role.description %}<span class="muted"> - {{ role.description }}</span>{% endif %}
                 </label>
             </div>
             {% endfor %}
         </div>
         {% endif %}
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Create User
+                {{ ui.icon("save") }} Create User
             </button>
             <a href="{{ url_for('config.user_list') }}" class="btn btn-secondary">Cancel</a>
         </div>

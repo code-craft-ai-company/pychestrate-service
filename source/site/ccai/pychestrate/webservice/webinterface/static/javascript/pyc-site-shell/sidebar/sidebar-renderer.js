@@ -50,6 +50,11 @@ const DEFAULT_GROUP_ICON_SVGS = {
     + "</svg>"
 };
 
+const CHEVRON_ICON_SVG =
+  "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\">"
+  + "<path d=\"M9 6l6 6-6 6\" />"
+  + "</svg>";
+
 const FALLBACK_GROUP_ICON_SVG =
   "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\" focusable=\"false\">"
   + "<circle cx=\"12\" cy=\"12\" r=\"4\" />"
@@ -90,10 +95,18 @@ class SidebarRenderer {
     }
     this._open_button = null;
     this._container.replaceChildren();
-    const nav = document.createElement("nav");
-    nav.setAttribute("role", "navigation");
-    nav.setAttribute("aria-label", "Primary");
+    // <mj-side-nav> already renders the <nav> landmark around this
+    // container, so the entry list is a plain group (one Navigation
+    // landmark per page, not three).
+    // <mj-side-nav> slots this content into its own <ul role="list">,
+    // so every top-level child we render must be a list item and the
+    // wrappers in between must be transparent to the accessibility tree.
+    this._container.setAttribute("role", "presentation");
+    const nav = document.createElement("div");
     nav.classList.add("pyc-site-shell__sidebar-nav");
+    nav.setAttribute("role", "presentation");
+    const resolved_active = this._resolve_active_route(visible_sidebar, active_path);
+    active_path = resolved_active;
     for (const entry of visible_sidebar.ungrouped) {
       const entry_element = this._build_entry_element(
         entry.label,
@@ -101,7 +114,10 @@ class SidebarRenderer {
         active_path
       );
       entry_element.classList.add("pyc-site-shell__sidebar-navitem");
-      nav.appendChild(entry_element);
+      const item = document.createElement("li");
+      item.classList.add("pyc-site-shell__sidebar-item");
+      item.appendChild(entry_element);
+      nav.appendChild(item);
     }
     let auto_open_button = null;
     for (const bucket of visible_sidebar.groups) {
@@ -131,8 +147,8 @@ class SidebarRenderer {
    * ``_toggle_group`` closes the previously open one.
    */
   _build_group_element(group, entries, active_path) {
-    const wrapper = document.createElement("div");
-    wrapper.classList.add("pyc-site-shell__sidebar-group");
+    const wrapper = document.createElement("li");
+    wrapper.classList.add("pyc-site-shell__sidebar-group", "pyc-site-shell__sidebar-item");
     const button = document.createElement("button");
     button.type = "button";
     button.classList.add(
@@ -141,6 +157,8 @@ class SidebarRenderer {
     );
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("tabindex", "-1");
+    const panel_id = "pyc-sidebar-panel-" + String(group.groupId || group.group_id || group.label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    button.setAttribute("aria-controls", panel_id);
     const icon_span = document.createElement("span");
     icon_span.classList.add("pyc-site-shell__sidebar-group-icon");
     icon_span.setAttribute("aria-hidden", "true");
@@ -151,11 +169,19 @@ class SidebarRenderer {
     label_span.textContent = group.label;
     button.appendChild(icon_span);
     button.appendChild(label_span);
+    const chevron_span = document.createElement("span");
+    chevron_span.classList.add("pyc-site-shell__sidebar-group-chevron");
+    chevron_span.setAttribute("aria-hidden", "true");
+    chevron_span.innerHTML = CHEVRON_ICON_SVG;
+    button.appendChild(chevron_span);
     const panel = document.createElement("div");
     panel.classList.add("pyc-site-shell__sidebar-panel");
-    panel.setAttribute("role", "region");
+    panel.id = panel_id;
+    panel.setAttribute("role", "group");
     panel.setAttribute("aria-label", group.label);
     panel.hidden = true;
+    const panel_list = document.createElement("ul");
+    panel_list.classList.add("pyc-site-shell__sidebar-panel-list");
     let has_active_entry = false;
     for (const entry of entries) {
       const entry_element = this._build_entry_element(
@@ -166,8 +192,11 @@ class SidebarRenderer {
       if (entry.route === active_path) {
         has_active_entry = true;
       }
-      panel.appendChild(entry_element);
+      const item = document.createElement("li");
+      item.appendChild(entry_element);
+      panel_list.appendChild(item);
     }
+    panel.appendChild(panel_list);
     if (has_active_entry === true) {
       button.classList.add("pyc-site-shell__sidebar-group-btn--active");
     }
@@ -192,14 +221,55 @@ class SidebarRenderer {
     if (group !== null && typeof group === "object") {
       const supplied = group.icon;
       if (typeof supplied === "string" && supplied.length > 0) {
-        return supplied;
+        if (supplied.trim().startsWith("<svg")) {
+          return supplied;
+        }
+        for (const key of Object.keys(DEFAULT_GROUP_ICON_SVGS)) {
+          if (key.toLowerCase() === supplied.toLowerCase()) {
+            return DEFAULT_GROUP_ICON_SVGS[key];
+          }
+        }
+      }
+      const label = group.label;
+      if (typeof label === "string" && DEFAULT_GROUP_ICON_SVGS[label] !== undefined) {
+        return DEFAULT_GROUP_ICON_SVGS[label];
       }
     }
-    const by_label = DEFAULT_GROUP_ICON_SVGS[group.label];
-    if (typeof by_label === "string") {
-      return by_label;
-    }
     return FALLBACK_GROUP_ICON_SVG;
+  }
+  /**
+   * Longest-prefix (segment boundary) match of the current path
+   * against every visible entry, so /admin/users/u-1 highlights
+   * "Users" and /builds/42 highlights "Builds". Falls back to the
+   * raw path when nothing matches.
+   */
+  _resolve_active_route(visible_sidebar, active_path) {
+    if (typeof active_path !== "string" || active_path.length === 0) {
+      return active_path;
+    }
+    const entries = [];
+    for (const entry of visible_sidebar.ungrouped) {
+      entries.push(entry);
+    }
+    for (const bucket of visible_sidebar.groups) {
+      for (const entry of bucket.entries) {
+        entries.push(entry);
+      }
+    }
+    let best = null;
+    for (const entry of entries) {
+      const route = entry.route;
+      if (typeof route !== "string" || route.length === 0) {
+        continue;
+      }
+      const prefix = route.endsWith("/") ? route : route + "/";
+      if (active_path === route || active_path.startsWith(prefix)) {
+        if (best === null || route.length > best.length) {
+          best = route;
+        }
+      }
+    }
+    return best !== null ? best : active_path;
   }
   /**
    * Toggle a group's accordion. Opening one closes the other open

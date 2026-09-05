@@ -1,0 +1,43 @@
+{% extends "config/chromeless_base.html" %}
+
+{% block title %}Sign out - Pychestrate{% endblock %}
+
+{% block extra_css %}
+<style>
+    .logout-container {
+        max-width: 400px;
+        margin: 100px auto;
+        padding: 40px;
+        background: var(--pyc-color-surface, white);
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+    .logout-container h2 {
+        margin: 0 0 10px;
+    }
+    .logout-container p {
+        color: var(--pyc-color-on-surface-muted);
+        margin: 0 0 24px;
+    }
+    .logout-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="logout-container">
+    <h2>Sign out of Pychestrate?</h2>
+    <p>Signing out ends your session on this browser.</p>
+    <div class="logout-actions">
+        <form method="post" action="{{ url_for('config.logout') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-primary">Sign out</button>
+        </form>
+        <a href="/" class="btn btn-secondary">Stay signed in</a>
+    </div>
+</div>
+{% endblock %}

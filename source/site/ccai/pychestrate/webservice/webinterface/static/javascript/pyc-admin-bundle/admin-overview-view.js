@@ -428,7 +428,7 @@ class PycAdminOverview extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = "Set flag \"" + String(entry.flag_key) + "\" to " + target + "?";
-      if (window.confirm(question) === false) {
+      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
         return;
       }
       toggle.toggleAttribute("disabled", true);
@@ -506,6 +506,7 @@ class PycAdminOverview extends HTMLElement {
       notice.classList.add("pyc-admin__notice--error");
     }
     notice.setAttribute("data-role", "flags-toggle-status");
+    notice.setAttribute("role", tone === "error" ? "alert" : "status");
     notice.textContent = message;
     this._flags_status_region.replaceChildren(notice);
     return;

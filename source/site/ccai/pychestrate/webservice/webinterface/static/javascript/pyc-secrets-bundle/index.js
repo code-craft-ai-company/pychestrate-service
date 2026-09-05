@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/secrets-view.js
+// pyc-secrets-bundle/secrets-view.js
 var SECRET_SCOPE_KINDS = [
   "ORG",
   "PROJECT",
@@ -232,6 +232,8 @@ var PycSecrets = class extends HTMLElement {
     const action_status = document.createElement("p");
     action_status.classList.add("pyc-secrets__action-status");
     action_status.setAttribute("data-role", "action-status");
+    action_status.setAttribute("role", "status");
+    action_status.setAttribute("aria-live", "polite");
     root.appendChild(action_status);
     this._action_status = action_status;
     const rotate_region = document.createElement("div");
@@ -244,6 +246,9 @@ var PycSecrets = class extends HTMLElement {
     const table_region = document.createElement("div");
     table_region.classList.add("pyc-secrets__table-region");
     table_region.setAttribute("data-role", "table-region");
+    table_region.id = "pyc-secrets-tabpanel";
+    table_region.setAttribute("role", "region");
+    table_region.setAttribute("aria-label", "Secrets in the selected scope");
     root.appendChild(table_region);
     this._table_region = table_region;
     const pager = document.createElement("mj-pagination");
@@ -269,7 +274,8 @@ var PycSecrets = class extends HTMLElement {
   _build_scope_tabs() {
     const tabs = document.createElement("div");
     tabs.classList.add("pyc-secrets__tabs");
-    tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("role", "group");
+    tabs.setAttribute("aria-label", "Secret scope");
     const labels = {
       ORG: "Org",
       PROJECT: "Project",
@@ -279,20 +285,34 @@ var PycSecrets = class extends HTMLElement {
       const tab = document.createElement("mj-button");
       tab.classList.add("pyc-secrets__tab");
       tab.setAttribute("type", "button");
-      tab.setAttribute("role", "tab");
+      tab.id = "pyc-secrets-tab-" + kind.toLowerCase();
       tab.setAttribute("data-role", "scope-tab");
       tab.setAttribute("data-scope-kind", kind);
       tab.textContent = labels[kind];
-      if (kind === this._state.scopeKind) {
-        tab.setAttribute("aria-selected", "true");
-      } else {
-        tab.setAttribute("aria-selected", "false");
-      }
+      tab.setAttribute("aria-pressed", kind === this._state.scopeKind ? "true" : "false");
       tab.addEventListener("click", () => {
         this._select_scope(kind);
       });
       tabs.appendChild(tab);
     }
+    tabs.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+        return;
+      }
+      const kinds = Array.from(SECRET_SCOPE_KINDS);
+      const current = kinds.indexOf(this._state.scopeKind);
+      let next = current;
+      if (event.key === "ArrowRight") next = (current + 1) % kinds.length;
+      if (event.key === "ArrowLeft") next = (current - 1 + kinds.length) % kinds.length;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = kinds.length - 1;
+      event.preventDefault();
+      this._select_scope(kinds[next]);
+      const focus_target = tabs.querySelector('[data-scope-kind="' + kinds[next] + '"]');
+      if (focus_target !== null && typeof focus_target.focus === "function") {
+        focus_target.focus();
+      }
+    });
     return tabs;
   }
   /**
@@ -304,15 +324,15 @@ var PycSecrets = class extends HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.classList.add("pyc-secrets__scope-ref");
     wrapper.setAttribute("data-role", "scope-ref-field");
-    const label = document.createElement("label");
+    const label = document.createElement("div");
     label.classList.add("pyc-secrets__field");
-    label.textContent = "Scope reference";
     const input = document.createElement("mj-text-field");
+    input.setAttribute("label", "Scope reference");
     input.classList.add("pyc-secrets__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", "scope-ref-input");
     input.setAttribute("placeholder", "project id or user id");
-    input.addEventListener("change", () => {
+    input.addEventListener("mj-change", () => {
       this._state.scopeRef = input.value.trim();
       void this._refresh();
     });
@@ -327,15 +347,15 @@ var PycSecrets = class extends HTMLElement {
   _build_filter_row() {
     const filters = document.createElement("div");
     filters.classList.add("pyc-secrets__filters");
-    const label = document.createElement("label");
+    const label = document.createElement("div");
     label.classList.add("pyc-secrets__field");
-    label.textContent = "Filter by name";
     const input = document.createElement("mj-text-field");
+    input.setAttribute("label", "Filter by name");
     input.classList.add("pyc-secrets__input");
     input.setAttribute("type", "text");
     input.setAttribute("data-role", "name-filter");
     input.setAttribute("placeholder", "substring of the secret name");
-    input.addEventListener("change", () => {
+    input.addEventListener("mj-change", () => {
       this._state.filter = input.value.trim();
       this._state.page = 1;
       this._render_table_region();
@@ -351,10 +371,10 @@ var PycSecrets = class extends HTMLElement {
     const form = document.createElement("form");
     form.classList.add("pyc-secrets__create");
     form.setAttribute("data-role", "create-form");
-    const name_label = document.createElement("label");
+    const name_label = document.createElement("div");
     name_label.classList.add("pyc-secrets__field");
-    name_label.textContent = "Name";
     const name_input = document.createElement("mj-text-field");
+    name_input.setAttribute("label", "Name");
     name_input.classList.add("pyc-secrets__input");
     name_input.setAttribute("type", "text");
     name_input.setAttribute("data-role", "create-name");
@@ -362,10 +382,10 @@ var PycSecrets = class extends HTMLElement {
     name_input.required = true;
     name_label.appendChild(name_input);
     form.appendChild(name_label);
-    const value_label = document.createElement("label");
+    const value_label = document.createElement("div");
     value_label.classList.add("pyc-secrets__field");
-    value_label.textContent = "Value";
     const value_input = document.createElement("mj-password-field");
+    value_input.setAttribute("label", "Value");
     value_input.classList.add("pyc-secrets__input");
     value_input.setAttribute("type", "password");
     value_input.setAttribute("data-role", "create-value");
@@ -382,6 +402,8 @@ var PycSecrets = class extends HTMLElement {
     const status = document.createElement("p");
     status.classList.add("pyc-secrets__create-status");
     status.setAttribute("data-role", "create-status");
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
     form.appendChild(status);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -861,6 +883,11 @@ var PycSecrets = class extends HTMLElement {
         return;
       }
       this._revealed.set(secret.secret_ref, secret_value.value);
+      window.setTimeout(() => {
+        if (this._revealed.delete(secret.secret_ref) === true) {
+          this._render_table_region();
+        }
+      }, 3e4);
       this._refresh_row(secret.secret_ref);
     } catch (reason) {
       console.warn(
@@ -901,10 +928,10 @@ var PycSecrets = class extends HTMLElement {
     title.appendChild(title_prefix);
     title.appendChild(title_ref);
     form.appendChild(title);
-    const value_label = document.createElement("label");
+    const value_label = document.createElement("div");
     value_label.classList.add("pyc-secrets__field");
-    value_label.textContent = "New value";
     const value_input = document.createElement("mj-password-field");
+    value_input.setAttribute("label", "New value");
     value_input.classList.add("pyc-secrets__input");
     value_input.setAttribute("type", "password");
     value_input.setAttribute("data-role", "rotate-value");
@@ -941,6 +968,8 @@ var PycSecrets = class extends HTMLElement {
     const status = document.createElement("p");
     status.classList.add("pyc-secrets__create-status");
     status.setAttribute("data-role", "rotate-status");
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
     form.appendChild(status);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -954,6 +983,15 @@ var PycSecrets = class extends HTMLElement {
     });
     region.replaceChildren(form);
     region.hidden = false;
+    {
+      const first_field = region.querySelector("mj-password-field, mj-text-field, input, mj-button, button");
+      if (first_field !== null && typeof first_field.focus === "function") {
+        first_field.focus();
+        if (typeof first_field.scrollIntoView === "function") {
+          first_field.scrollIntoView({ block: "nearest" });
+        }
+      }
+    }
     return;
   }
   /**
@@ -1137,9 +1175,7 @@ var PycSecrets = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-secrets-bundle/index.entry.js
-var SYSTEM_GROUP_ID = "system";
-var SECRETS_READ_PERMISSION = "system:secrets.read";
+// pyc-secrets-bundle/index.entry.js
 var SECRETS_ROUTE = "/secrets";
 var SECRETS_TAG = "pyc-secrets";
 var SECRETS_STYLESHEET_HREF = "/static/javascript/pyc-secrets-bundle/pyc-secrets-bundle.css";
@@ -1156,22 +1192,6 @@ function ensure_secrets_stylesheet() {
   link.href = SECRETS_STYLESHEET_HREF;
   link.setAttribute("data-pyc-bundle", "pyc-secrets-bundle");
   document.head.appendChild(link);
-  return;
-}
-var SECRETS_ENTRY = {
-  entryId: "system.secrets",
-  label: "Secrets",
-  route: SECRETS_ROUTE,
-  requiredPermissions: [SECRETS_READ_PERMISSION],
-  group: SYSTEM_GROUP_ID
-};
-function register_secrets_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: SYSTEM_GROUP_ID,
-    label: "System",
-    requiredPermissions: [SECRETS_READ_PERMISSION]
-  });
-  sidebar.registerEntry(SECRETS_ENTRY);
   return;
 }
 function define_secrets_element() {
@@ -1240,12 +1260,12 @@ function _boot() {
       _register_against(retry);
       return;
     }
-    console.warn(
-      "pychestrate.ui.secrets.bundle_no_shell_handle",
-      {
-        reason: "window.pychestrateShell missing after microtask retry"
+    window.addEventListener("pyc-site-shell-ready", () => {
+      const late = target.pychestrateShell;
+      if (late !== void 0 && late.sidebar !== void 0) {
+        _register_against(late);
       }
-    );
+    }, { once: true });
   });
   return;
 }
@@ -1263,6 +1283,5 @@ export {
   ensure_secrets_stylesheet,
   format_timestamp,
   mount_secrets_view_if_active,
-  register_secrets_sidebar,
   reveal_error_message
 };

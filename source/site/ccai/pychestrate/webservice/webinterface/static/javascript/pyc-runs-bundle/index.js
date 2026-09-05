@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/runs-list-view.js
+// pyc-runs-bundle/runs-list-view.js
 var RUN_STATES = [
   "pending",
   "dispatching",
@@ -292,10 +292,10 @@ var PycRunsList = class extends HTMLElement {
     root.appendChild(heading);
     const filters = document.createElement("div");
     filters.classList.add("pyc-runs-list__filters");
-    const state_label = document.createElement("label");
+    const state_label = document.createElement("div");
     state_label.classList.add("pyc-runs-list__filter");
-    state_label.textContent = "State";
     const state_select = document.createElement("mj-select");
+    state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
     state_select.setAttribute("data-role", "state-filter");
     const any_option = document.createElement("mj-option");
@@ -316,10 +316,10 @@ var PycRunsList = class extends HTMLElement {
     state_label.appendChild(state_select);
     this._state_select = state_select;
     filters.appendChild(state_label);
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-runs-list__select");
     project_select.setAttribute("data-role", "project-filter");
     const all_projects_option = document.createElement("mj-option");
@@ -337,6 +337,7 @@ var PycRunsList = class extends HTMLElement {
     project_input.classList.add("pyc-runs-list__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-filter-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
@@ -853,7 +854,7 @@ var PycRunsList = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/run-detail-view.js
+// pyc-runs-bundle/run-detail-view.js
 var TERMINAL_RUN_STATES = [
   "dispatch_failed",
   "cancelled",
@@ -1404,7 +1405,7 @@ var PycRunDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-run-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Run detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-run-detail__heading");
@@ -1893,7 +1894,7 @@ var PycRunDetail = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/index.entry.js
+// pyc-runs-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var RUNS_READ_PERMISSION = "system:runs.read";
 var RUNS_ROUTE = "/runs";

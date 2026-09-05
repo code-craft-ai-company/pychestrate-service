@@ -39,6 +39,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import enum
 import os
 
 from typing import Any, Dict, List, Optional
@@ -55,7 +56,8 @@ def build_jinja_environment(
         *,
         template_search_paths: List[str],
         autoescape: bool = True,
-        cache_size: int = 400
+        cache_size: int = 400,
+        strict_undefined: bool = False
     ) -> jinja2.Environment:
     """
         Construct a configured :class:`jinja2.Environment`.
@@ -72,6 +74,16 @@ def build_jinja_environment(
         :param cache_size: Number of compiled templates to cache
                            in-process. Set to 0 to disable caching
                            (development convenience).
+        :param strict_undefined: When True, install
+                                 :class:`jinja2.StrictUndefined` so a
+                                 template that reads a variable or
+                                 attribute the handler never supplied
+                                 raises :class:`jinja2.UndefinedError`
+                                 instead of rendering an empty string.
+                                 The render-smoke tests always enable
+                                 this; production enables it through
+                                 the ``PYCHESTRATE_TEMPLATE_STRICT_UNDEFINED``
+                                 environment variable.
 
         :returns: Configured :class:`jinja2.Environment`.
         :raises: ValueError on an empty path list.
@@ -91,11 +103,158 @@ def build_jinja_environment(
         enabled_extensions=("html", "htm", "xml", "svg"),
     ) if autoescape is True else False
 
+    if strict_undefined is True:
+        undefined_class = jinja2.StrictUndefined
+    else:
+        undefined_class = jinja2.Undefined
+
     rtnval = jinja2.Environment(
         loader=combined_loader,
         autoescape=autoescape_callable,
         cache_size=cache_size,
         keep_trailing_newline=True,
+        undefined=undefined_class,
+    )
+    return rtnval
+
+
+def install_template_globals(*, environment: jinja2.Environment) -> None:
+    """
+        Install every global the consumer-UI templates rely on:
+        ``url_for`` (route registry shim) and ``static_url``
+        (content-hashed static asset URLs). Production bootstrap and
+        the test harnesses all call this one function so the set of
+        globals can never drift between them.
+
+        :param environment: Configured jinja2 environment.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.webservice.webinterface.foundation.url_for import (  # noqa: E402
+        install_url_for_global,
+    )
+    from ccai.pychestrate.webservice.webinterface.foundation.static_files import (  # noqa: E402
+        install_static_url_global,
+    )
+    install_url_for_global(environment=environment)
+    install_static_url_global(environment=environment)
+    environment.filters["format_datetime"] = format_datetime_filter
+    environment.filters["display"] = display_filter
+    environment.filters["status_tone"] = status_tone_filter
+    environment.filters["enum_value"] = enum_value_filter
+    return
+
+
+# ---------------------------------------------------------------------------
+# Template filters shared by every fragment
+# ---------------------------------------------------------------------------
+
+DISPLAY_PLACEHOLDER: str = "\u2014"
+
+# Status vocabulary -> badge tone. Every status the managers emit maps
+# here so the same value renders the same colour on every page.
+_STATUS_TONES: Dict[str, str] = {
+    "succeeded": "success", "success": "success", "passed": "success",
+    "completed": "success", "published": "success", "online": "success",
+    "enabled": "success", "active": "success", "healthy": "success",
+    "approved": "success", "available": "success",
+    "failed": "danger", "failure": "danger", "error": "danger",
+    "errored": "danger", "offline": "danger", "cancelled": "danger",
+    "canceled": "danger", "timeout": "danger", "timed_out": "danger",
+    "deprecated": "danger", "rejected": "danger", "revoked": "danger",
+    "expired": "danger", "unhealthy": "danger",
+    "running": "info", "in_progress": "info", "started": "info",
+    "provisioning": "info", "checked_out": "info", "allocated": "info",
+    "pending": "warning", "queued": "warning", "scheduled": "warning",
+    "degraded": "warning", "draft": "warning", "maintenance": "warning",
+    "waiting_approval": "warning", "reserved": "warning",
+    "exclusive": "info", "shared": "secondary",
+    "skipped": "secondary", "disabled": "secondary", "unknown": "secondary",
+    "inactive": "secondary", "destroyed": "secondary", "released": "secondary",
+}
+
+
+def enum_value_filter(value: Any) -> Any:
+    """
+        Return ``value.value`` for an Enum member and ``value`` itself
+        otherwise, so templates can render a field that is an Enum on
+        one response type and a plain string on another.
+    """
+    if isinstance(value, enum.Enum):
+        return value.value
+    return value
+
+
+def status_tone_filter(value: Any) -> str:
+    """
+        Map a status value (Enum or string) to a badge tone:
+        ``success`` / ``danger`` / ``info`` / ``warning`` /
+        ``secondary``.
+    """
+    raw = enum_value_filter(value)
+    key = str(raw).strip().lower() if raw is not None else ""
+    rtnval = _STATUS_TONES.get(key, "secondary")
+    return rtnval
+
+
+def display_filter(value: Any, placeholder: str = DISPLAY_PLACEHOLDER) -> Any:
+    """
+        Render ``None`` (and empty strings) as an em dash instead of
+        the literal word ``None``.
+    """
+    if value is None:
+        return placeholder
+    if isinstance(value, str) and len(value.strip()) == 0:
+        return placeholder
+    return value
+
+
+def format_datetime_filter(
+        value: Any,
+        fmt: str = "%Y-%m-%d %H:%M",
+        placeholder: str = DISPLAY_PLACEHOLDER
+    ) -> Any:
+    """
+        Render a datetime as a ``<time>`` element: the visible text in
+        ``fmt`` with an explicit UTC marker, the machine-readable ISO
+        value in ``datetime=``, and the full timestamp as the title.
+        ``None`` renders the placeholder.
+    """
+    if value is None:
+        return placeholder
+    if isinstance(value, str):
+        return value
+    try:
+        iso_value = value.isoformat()
+        display_value = value.strftime(fmt)
+    except Exception:
+        return str(value)
+    zone_label = "UTC"
+    tzinfo = getattr(value, "tzinfo", None)
+    if tzinfo is not None:
+        try:
+            name = value.tzname()
+            if name:
+                zone_label = name
+        except Exception:
+            pass
+    rtnval = jinja2.Markup(
+        '<time datetime="{}" title="{}">{} {}</time>'.format(
+            jinja2.escape(iso_value),
+            jinja2.escape(iso_value),
+            jinja2.escape(display_value),
+            jinja2.escape(zone_label),
+        )
+    ) if hasattr(jinja2, "Markup") else _markup_time(iso_value, display_value, zone_label)
+    return rtnval
+
+
+def _markup_time(iso_value: str, display_value: str, zone_label: str) -> Any:
+    from markupsafe import Markup, escape  # noqa: E402
+    rtnval = Markup(
+        '<time datetime="{}" title="{}">{} {}</time>'.format(
+            escape(iso_value), escape(iso_value), escape(display_value), escape(zone_label)
+        )
     )
     return rtnval
 
@@ -273,6 +432,7 @@ def discover_blueprint_template_paths(
 
 __all__ = [
     "build_jinja_environment",
+    "install_template_globals",
     "set_default_environment",
     "get_default_environment",
     "reset_default_environment_for_testing",

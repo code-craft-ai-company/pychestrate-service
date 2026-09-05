@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <!-- codecraftai-webworks mj-* component library: design tokens,
          base stylesheet, and the barrel module that registers every
          <mj-*> custom element. Loaded BEFORE the pyc-* bundles so
@@ -15,12 +16,21 @@
          guards as the mj tokens above. Loaded AFTER /mj/styles/
          tokens.css so the cascade between the packs stays
          deterministic. -->
-    <link rel="stylesheet" href="/static/styles/pyc-tokens.css">
+    <link rel="stylesheet" href="{{ static_url('styles/pyc-tokens.css') }}">
     <link rel="stylesheet" href="/mj/styles/base.css">
-    <script type="module" src="/static/javascript/pyc-mj-lib/index.js"></script>
-    <link rel="stylesheet" href="/static/javascript/pyc-site-shell/pyc-site-shell.css">
+    <script type="module" src="{{ static_url('javascript/pyc-mj-lib/index.js') }}"></script>
+    <link rel="stylesheet" href="{{ static_url('javascript/pyc-site-shell/pyc-site-shell.css') }}">
+    <!-- Shared classes for the server-rendered fragments (/admin,
+         /projects, /resources). -->
+    <link rel="stylesheet" href="{{ static_url('styles/pyc-fragment.css') }}">
+    {#- Bundle stylesheets go in <head> so the first paint of a
+        bundle view is styled; the bundles' runtime injectors look for
+        data-pyc-bundle and skip when the link already exists. #}
+    {%- for bundle_name in bundle_stylesheets %}
+    <link rel="stylesheet" href="{{ static_url('javascript/' ~ bundle_name ~ '/' ~ bundle_name ~ '.css') }}" data-pyc-bundle="{{ bundle_name }}">
+    {%- endfor %}
     {%- for bundle_name in bundle_names %}
-    <script type="module" src="/static/javascript/{{ bundle_name }}/index.js"></script>
+    <script type="module" src="{{ static_url('javascript/' ~ bundle_name ~ '/index.js') }}"></script>
     {%- endfor %}
 </head>
 <body>
@@ -29,7 +39,12 @@
         permissions-endpoint="/api/v1/me/permissions"
         navigation-endpoint="/api/v1/me/navigation"
         palette-timeout-ms="5000"
-        aria-label="Pychestrate site shell"
+        {%- if user_display_name %}
+        user-display-name="{{ user_display_name }}"
+        {%- endif %}
+        {%- if csrf_token %}
+        csrf-token="{{ csrf_token }}"
+        {%- endif %}
         brand-label="Pychestrate">
         {%- if content_html %}
         {{ content_html|safe }}

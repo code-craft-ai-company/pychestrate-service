@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/builds-list-view.js
+// pyc-builds-bundle/builds-list-view.js
 var BUILD_STATES = [
   "pending",
   "running",
@@ -235,10 +235,10 @@ var PycBuildsList = class extends HTMLElement {
     root.appendChild(heading);
     const controls = document.createElement("div");
     controls.classList.add("pyc-builds__controls");
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-builds__field");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-builds__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -252,6 +252,7 @@ var PycBuildsList = class extends HTMLElement {
     project_input.classList.add("pyc-builds__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
@@ -260,10 +261,10 @@ var PycBuildsList = class extends HTMLElement {
       void this._on_project_changed();
     });
     controls.appendChild(project_input);
-    const state_label = document.createElement("label");
+    const state_label = document.createElement("div");
     state_label.classList.add("pyc-builds__field");
-    state_label.textContent = "State";
     const state_select = document.createElement("mj-select");
+    state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-builds__select");
     state_select.setAttribute("data-role", "state-filter");
     const any_option = document.createElement("mj-option");
@@ -317,6 +318,8 @@ var PycBuildsList = class extends HTMLElement {
     const toast_region = document.createElement("div");
     toast_region.classList.add("pyc-builds__toast-region");
     toast_region.setAttribute("data-role", "toast-region");
+    toast_region.setAttribute("role", "status");
+    toast_region.setAttribute("aria-live", "polite");
     root.appendChild(toast_region);
     this._toast_region = toast_region;
     const table_region = document.createElement("div");
@@ -833,10 +836,10 @@ var PycBuildsList = class extends HTMLElement {
     const form = document.createElement("form");
     form.classList.add("pyc-builds__trigger-form");
     form.setAttribute("data-role", "trigger-form");
-    const integration_label = document.createElement("label");
+    const integration_label = document.createElement("div");
     integration_label.classList.add("pyc-builds__field");
-    integration_label.textContent = "Source integration";
     const integration_select = document.createElement("mj-select");
+    integration_select.setAttribute("label", "Source integration");
     integration_select.classList.add("pyc-builds__select");
     integration_select.setAttribute("data-role", "trigger-integration");
     if (this._integrations.length === 0) {
@@ -854,10 +857,10 @@ var PycBuildsList = class extends HTMLElement {
     }
     integration_label.appendChild(integration_select);
     form.appendChild(integration_label);
-    const runner_label = document.createElement("label");
+    const runner_label = document.createElement("div");
     runner_label.classList.add("pyc-builds__field");
-    runner_label.textContent = "Runner kind";
     const runner_input = document.createElement("mj-text-field");
+    runner_input.setAttribute("label", "Runner kind");
     runner_input.classList.add("pyc-builds__input");
     runner_input.setAttribute("type", "text");
     runner_input.setAttribute("placeholder", "makefile");
@@ -1044,7 +1047,7 @@ var PycBuildsList = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/build-detail-view.js
+// pyc-builds-bundle/build-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1395,7 +1398,7 @@ var PycBuildDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-build-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Build detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-build-detail__heading");
@@ -1681,7 +1684,7 @@ var PycBuildDetail = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/index.entry.js
+// pyc-builds-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var BUILDS_READ_PERMISSION = "system:builds.read";
 var BUILDS_ROUTE = "/builds";

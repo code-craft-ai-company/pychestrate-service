@@ -652,6 +652,15 @@ def handle_repository_detail(request: Request) -> Response:
             )
         except Exception:
             can_manage = False
+        # Deletion is admin-gated in handle_repository_delete; gate
+        # the button the same way so developers never see a Remove
+        # control that bounces them with an error.
+        try:
+            can_delete = project_manager.check_permission(
+                project_id, auth.user_id, "admin"
+            )
+        except Exception:
+            can_delete = False
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -663,6 +672,7 @@ def handle_repository_detail(request: Request) -> Response:
         context["project"] = project
         context["repository"] = repository
         context["can_manage"] = can_manage
+        context["can_delete"] = can_delete
 
         response = _render(
             template_name="projects/repositories/detail.html",

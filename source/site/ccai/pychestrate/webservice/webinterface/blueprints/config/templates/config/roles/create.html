@@ -1,14 +1,15 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Create Role - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Create Role</h2>
+    <h1>Create Role</h1>
     <p>Add a new role with specific permissions</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -26,14 +27,14 @@
         {% if permissions %}
         <div class="form-group">
             <label>Permissions</label>
-            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ced4da; border-radius: 4px; padding: 10px;">
+            <div class="scroll-box">
                 {% for permission in permissions %}
-                <div style="margin: 5px 0;">
-                    <label style="font-weight: normal;">
+                <div class="my-sm">
+                    <label class="regular">
                         <input type="checkbox" name="permission_keys" value="{{ permission.id }}"
                                {% if form_data and permission.id in form_data.getlist('permission_keys') %}checked{% endif %}>
                         {{ permission.name }}
-                        {% if permission.description %}<span style="color: #6c757d;"> - {{ permission.description }}</span>{% endif %}
+                        {% if permission.description %}<span class="muted"> - {{ permission.description }}</span>{% endif %}
                     </label>
                 </div>
                 {% endfor %}
@@ -41,9 +42,9 @@
         </div>
         {% endif %}
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Create Role
+                {{ ui.icon("save") }} Create Role
             </button>
             <a href="{{ url_for('config.role_list') }}" class="btn btn-secondary">Cancel</a>
         </div>

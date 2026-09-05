@@ -57,6 +57,9 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass, field
+import html as _html_module
+import re
+
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, quote
 
@@ -402,12 +405,16 @@ class MultiFormView:
 
             :param key: Form field name.
 
-            :returns: First submitted value.
-            :raises: KeyError when the field is absent.
+            Absent fields resolve to an empty string rather than
+            raising: an unchecked checkbox is simply not submitted,
+            and under ``StrictUndefined`` a raised ``KeyError`` would
+            surface as a 500 on every form re-render that reads it.
+
+            :returns: First submitted value, or ``""`` when absent.
         """
         values = self._data.get(key, None)
         if values is None or len(values) == 0:
-            raise KeyError(key)
+            return ""
         rtnval = values[0]
         return rtnval
 
@@ -436,6 +443,23 @@ class _AuthResolution:
     user_id: str = ""
     username: str = ""
     csrf_token: str = ""
+    request: Any = None
+def _ensure_session_csrf_token(*, session: Dict[str, Any]) -> str:
+    """
+        Return the session's CSRF token, minting one when absent.
+        Wraps :func:`csrf.get_or_create_token_in_session`, which
+        reports ``(token, created)``; callers here only want the
+        token string.
+
+        :param session: Session dict (mutated when a token is minted).
+
+        :returns: The CSRF token.
+    """
+    value = csrf.get_or_create_token_in_session(session=session)
+    if isinstance(value, tuple):
+        value = value[0]
+    rtnval = str(value)
+    return rtnval
 
 
 def _build_default_template_context(
@@ -486,10 +510,11 @@ def _build_default_template_context(
         "request_endpoint": request_endpoint,
         "flashes": flashes_value,
         "csrf_token": csrf_value,
+        # Field-level validation errors ({field: message}); handlers
+        # that re-render a form after a failed POST fill this in.
+        "errors": {},
     }
     return rtnval
-
-
 # ---------------------------------------------------------------------------
 # Security-manager + auth-request construction
 #
@@ -586,9 +611,53 @@ def _resolve_admin_page_title(*, path: str) -> str:
     return rtnval
 
 
-def _wrap_admin_handler_in_shell(handler: Any) -> Any:
+_FRAGMENT_TITLE_PATTERN = re.compile(
+    r'\s*<meta name="pyc-page-title" content="([^"]*)">'
+)
+_FRAGMENT_TITLE_SUFFIXES = (
+    " - Pychestrate Configuration",
+    " - Pychestrate Resources",
+    " - Pychestrate",
+)
+
+
+def extract_fragment_title(*, html: str) -> "Tuple[str, Optional[str]]":
     """
-        Wrap an admin-blueprint handler so its HTML response body
+        Pull the page title a fragment template declared in its
+        ``{% block title %}`` (rendered into a ``pyc-page-title`` meta
+        element by the fragment bases) and remove the element from the
+        HTML. Returns ``(html, None)`` when the fragment declares no
+        title, so the path-based table keeps deciding.
+
+        The legacy blocks end in " - Pychestrate Configuration" and the
+        like; the suffix is normalised to the shell's "· Pychestrate"
+        convention so a user page reads "jdoe - User · Pychestrate".
+
+        :param html: Rendered fragment HTML.
+
+        :returns: Tuple of the HTML without the meta element and the
+                  resolved title (or ``None``).
+    """
+    match = _FRAGMENT_TITLE_PATTERN.search(html)
+    if match is None:
+        return html, None
+    cleaned = html[:match.start()] + html[match.end():]
+    raw_title = _html_module.unescape(match.group(1)).strip()
+    if len(raw_title) == 0:
+        return cleaned, None
+    for suffix in _FRAGMENT_TITLE_SUFFIXES:
+        if raw_title.endswith(suffix):
+            raw_title = raw_title[: -len(suffix)].strip()
+            break
+    if len(raw_title) == 0 or raw_title == _DEFAULT_PAGE_TITLE:
+        return cleaned, None
+    rtnval = "{} · {}".format(raw_title, _DEFAULT_PAGE_TITLE)
+    return cleaned, rtnval
+
+
+def _wrap_fragment_handler_in_shell(handler: Any, *, title_resolver: Any) -> Any:
+    """
+        Wrap a fragment-rendering blueprint handler so its HTML response body
         renders as a content fragment inside the site shell's main
         slot.
 
@@ -643,7 +712,10 @@ def _wrap_admin_handler_in_shell(handler: Any) -> Any:
         request_path = getattr(request, "path", "")
         if isinstance(request_path, str) is False:
             request_path = ""
-        page_title = _resolve_admin_page_title(path=request_path)
+        page_title = title_resolver(path=request_path)
+        inner_html, fragment_title = extract_fragment_title(html=inner_html)
+        if fragment_title is not None:
+            page_title = fragment_title
         rtnval = render_shell_document(
             request=request,
             page_title=page_title,
@@ -686,6 +758,19 @@ def _wrap_admin_handler_in_shell(handler: Any) -> Any:
     return _wrapped
 
 
+def _wrap_admin_handler_in_shell(handler: Any) -> Any:
+    """
+        Admin-blueprint flavour of :func:`_wrap_fragment_handler_in_shell`:
+        the tab title comes from :data:`_ADMIN_PAGE_TITLE_TABLE`.
+
+        :param handler: The original handler.
+
+        :returns: Shell-wrapping handler.
+    """
+    rtnval = _wrap_fragment_handler_in_shell(
+        handler, title_resolver=_resolve_admin_page_title
+    )
+    return rtnval
 def _render(
         *, template_name: str, context: Optional[Dict[str, Any]] = None,
         status_code: int = 200
@@ -841,6 +926,7 @@ def handle_login_form(request: Request) -> Response:
         session=session,
         request_endpoint="config.login",
         flashes=flashes,
+        csrf_token=_ensure_session_csrf_token(session=session),
     )
     context["next_target"] = next_target
     response = _render(
@@ -880,6 +966,22 @@ def handle_login_submit(request: Request) -> Response:
 
     session = _read_session(request=request)
 
+    # Login CSRF: the sign-in form carries the token minted for the
+    # anonymous session on GET /login. A missing or stale token
+    # (an old tab, a cleared cookie) goes back to the form with a
+    # plain explanation rather than into the authenticator.
+    csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+        form=form,
+        session=session,
+        fallback_url=LOGIN_PATH,
+        flash_message=(
+            "Your sign-in form expired. Please try again."
+        ),
+    )
+    if csrf_redirect is not None:
+        _attach_session_to_response(response=csrf_redirect, session=session)
+        return csrf_redirect
+
     if len(username) == 0 or len(password) == 0:
         flash.add_flash(
             session=session,
@@ -891,6 +993,7 @@ def handle_login_submit(request: Request) -> Response:
             session=session,
             request_endpoint="config.login",
             flashes=flashes,
+            csrf_token=_ensure_session_csrf_token(session=session),
         )
         context["next_target"] = _resolve_safe_login_next(
             candidate=next_candidate
@@ -938,6 +1041,7 @@ def handle_login_submit(request: Request) -> Response:
                 session=session,
                 request_endpoint="config.login",
                 flashes=flashes,
+                csrf_token=_ensure_session_csrf_token(session=session),
             )
             context["next_target"] = _resolve_safe_login_next(
                 candidate=next_candidate
@@ -954,8 +1058,10 @@ def handle_login_submit(request: Request) -> Response:
         session[auth_guard.SESSION_USER_ID_KEY] = auth_response.user_id
         session["username"] = auth_response.username
         session[auth_guard.SESSION_TOKEN_KEY] = auth_response.token
-        session[csrf.SESSION_KEY] = auth_response.csrf_token
-
+        if auth_response.csrf_token is not None and len(auth_response.csrf_token) > 0:
+            session[csrf.SESSION_KEY] = auth_response.csrf_token
+        elif session.get(csrf.SESSION_KEY, None) in (None, ""):
+            session[csrf.SESSION_KEY] = csrf.generate_csrf_token()
         # No welcome flash: the shell document the browser lands
         # on after this redirect never drains the flash queue, so
         # a queued greeting would surface minutes later on the
@@ -1024,9 +1130,26 @@ def handle_logout(request: Request) -> Response:
                 response=csrf_redirect, session=session
             )
             return csrf_redirect
+    else:
+        # GET /logout used to sign the user out immediately, which
+        # let link prefetchers and history restores end sessions.
+        # It now renders a confirmation page whose button POSTs.
+        csrf_token_value = _ensure_session_csrf_token(session=session)
+        flashes = flash.consume_flashes(session=session)
+        context = _build_default_template_context(
+            session=session,
+            request_endpoint="config.logout",
+            flashes=flashes,
+            csrf_token=csrf_token_value,
+        )
+        response = _render(
+            template_name="config/logout_confirm.html",
+            context=context,
+        )
+        _attach_session_to_response(response=response, session=session)
+        return response
 
     session_token = session.get(auth_guard.SESSION_TOKEN_KEY, None)
-
     if session_token is not None and len(session_token) > 0:
         db_session = _resolve_db_session()
         try:
@@ -1180,27 +1303,87 @@ def _require_permission_or_redirect(
                   helper treats that as denial and returns the
                   redirect.
     """
-    security_manager = _build_security_manager(db_session=auth.db_session)
-    try:
-        has_permission = security_manager.check_permission(
-            auth.user_id, permission
-        )
-    except Exception:
-        has_permission = False
-
-    if has_permission is True:
+    if _has_permission(auth=auth, permission=permission) is True:
         return None
-
     flash.add_flash(
         session=auth.session,
         message=deny_message,
         category=flash.CATEGORY_ERROR,
     )
-    rtnval = RedirectResponse(url=deny_redirect_url, status_code=302)
+    target_url = _deny_redirect_target(
+        auth=auth, fallback_url=deny_redirect_url
+    )
+    rtnval = RedirectResponse(url=target_url, status_code=302)
     _attach_session_to_response(response=rtnval, session=auth.session)
     return rtnval
 
 
+def _has_permission(*, auth: _AuthResolution, permission: str) -> bool:
+    """
+        Probe one system permission for the signed-in user. Any
+        SecurityManager failure counts as "no" (fail closed). Used by
+        the permission gate and by the ``can_manage`` template flags
+        that hide controls the gate would refuse.
+
+        :param auth: Resolution carrying the open db_session.
+        :param permission: Permission string.
+
+        :returns: Whether the user holds the permission.
+    """
+    try:
+        security_manager = _build_security_manager(db_session=auth.db_session)
+        rtnval = bool(security_manager.check_permission(auth.user_id, permission))
+    except Exception:
+        rtnval = False
+    return rtnval
+
+
+def _same_origin_referer(*, request: Any) -> Optional[str]:
+    """
+        The request's ``Referer`` reduced to a same-origin path, or
+        ``None`` when absent or cross-origin.
+    """
+    if request is None:
+        return None
+    try:
+        referer = request.headers.get("Referer", None)
+    except Exception:
+        referer = None
+    if referer is None or len(str(referer)) == 0:
+        return None
+    referer = str(referer)
+    if referer.startswith("/") and referer.startswith("//") is False:
+        return referer
+    try:
+        host = request.headers.get("Host", None)
+    except Exception:
+        host = None
+    if host is not None:
+        marker = "://" + str(host)
+        index = referer.find(marker)
+        if index >= 0:
+            tail = referer[index + len(marker):]
+            if tail.startswith("/"):
+                return tail
+    return None
+
+
+def _deny_redirect_target(*, auth: _AuthResolution, fallback_url: str) -> str:
+    """
+        Where to send a user whose request was denied: back to the
+        page they came from when the browser told us (same-origin
+        Referer that is not the denied URL itself), else the caller's
+        fallback. Bouncing to an unrelated overview page lost the
+        user's place.
+    """
+    request = getattr(auth, "request", None)
+    referer = _same_origin_referer(request=request)
+    if referer is None:
+        return fallback_url
+    current_path = getattr(request, "path", None)
+    if isinstance(current_path, str) and referer.split("?", 1)[0] == current_path:
+        return fallback_url
+    return referer
 def _build_login_url_with_next(*, request: Request) -> str:
     """
         Build the login-page URL with a percent-encoded ``next``
@@ -1352,6 +1535,7 @@ def _resolve_authenticated_request(
     resolved_csrf_token = session.get(csrf.SESSION_KEY, "")
 
     rtnval = _AuthResolution(
+        request=request,
         redirect_response=None,
         session=session,
         db_session=db_session,
@@ -1362,10 +1546,15 @@ def _resolve_authenticated_request(
     return rtnval
 
 
-def handle_dashboard(request: Request) -> Response:
+def _render_admin_landing(
+        request: Request,
+        *,
+        template_name: str,
+        request_endpoint: str
+    ) -> Response:
     """
-        ``GET /config/`` and ``GET /config/dashboard`` -- render
-        the dashboard for an authenticated session. Anonymous /
+        Shared body for the admin landing handlers: render
+        ``template_name`` for an authenticated session. Anonymous /
         expired sessions redirect to the login page with a
         flash explaining why.
 
@@ -1421,17 +1610,49 @@ def handle_dashboard(request: Request) -> Response:
 
     context = _build_default_template_context(
         session=session,
-        request_endpoint="config.dashboard",
+        request_endpoint=request_endpoint,
         flashes=flashes,
         csrf_token=csrf_token,
     )
     context["user_id"] = user_id
     response = _render(
-        template_name="config/dashboard.html",
+        template_name=template_name,
         context=context,
     )
     _attach_session_to_response(response=response, session=session)
     return response
+
+
+def handle_dashboard(request: Request) -> Response:
+    """
+        ``GET /admin/dashboard`` -- the server-rendered dashboard
+        cards for an authenticated session.
+    """
+    rtnval = _render_admin_landing(
+        request,
+        template_name="config/dashboard.html",
+        request_endpoint="config.dashboard",
+    )
+    return rtnval
+
+
+def handle_bundle_mount(request: Request) -> Response:
+    """
+        ``GET /admin``, ``/admin/overview``, ``/admin/feature-flags``,
+        ``/admin/extensions``, ``/admin/system-health`` -- routes the
+        ``pyc-admin-bundle`` web components own. The handler still
+        enforces authentication and renders inside the shell, but
+        emits only an empty mount point: rendering the dashboard
+        cards here made every admin landing flash the dashboard
+        before the bundle replaced it, and showed the dashboard to
+        anyone whose bundle failed to load.
+    """
+    rtnval = _render_admin_landing(
+        request,
+        template_name="config/bundle_mount.html",
+        request_endpoint="config.admin_overview",
+    )
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -1443,12 +1664,12 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Any] = {
     "config.login": handle_login_form,
     "config.login_submit": handle_login_submit,
     "config.logout": handle_logout,
-    "config.dashboard_root": handle_dashboard,
+    "config.dashboard_root": handle_bundle_mount,
     "config.dashboard": handle_dashboard,
-    "config.admin_overview": handle_dashboard,
-    "config.feature_flags": handle_dashboard,
-    "config.extension_registry": handle_dashboard,
-    "config.system_health": handle_dashboard,
+    "config.admin_overview": handle_bundle_mount,
+    "config.feature_flags": handle_bundle_mount,
+    "config.extension_registry": handle_bundle_mount,
+    "config.system_health": handle_bundle_mount,
 }
 
 
@@ -1547,6 +1768,7 @@ def register_config_routes(*, app: Any) -> None:
 
 
 __all__ = [
+    "extract_fragment_title",
     "ADMIN_PATH",
     "CONFIG_PATH",
     "LOGIN_PATH",

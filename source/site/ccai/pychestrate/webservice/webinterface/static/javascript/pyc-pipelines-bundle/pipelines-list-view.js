@@ -202,10 +202,10 @@ class PycPipelinesList extends HTMLElement {
     root.appendChild(heading);
     const controls = document.createElement("div");
     controls.classList.add("pyc-pipelines__controls");
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-pipelines__field");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-pipelines__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -219,6 +219,7 @@ class PycPipelinesList extends HTMLElement {
     project_input.classList.add("pyc-pipelines__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
@@ -296,10 +297,10 @@ class PycPipelinesList extends HTMLElement {
     form.setAttribute("data-role", "upsert-form");
     const fields = document.createElement("div");
     fields.classList.add("pyc-pipelines__field-row");
-    const commit_label = document.createElement("label");
+    const commit_label = document.createElement("div");
     commit_label.classList.add("pyc-pipelines__field");
-    commit_label.textContent = "Commit SHA";
     const commit_input = document.createElement("mj-text-field");
+    commit_input.setAttribute("label", "Commit SHA");
     commit_input.classList.add("pyc-pipelines__input");
     commit_input.setAttribute("type", "text");
     commit_input.setAttribute("placeholder", "0000000000000000000000000000000000000000");
@@ -307,10 +308,10 @@ class PycPipelinesList extends HTMLElement {
     commit_input.required = true;
     commit_label.appendChild(commit_input);
     fields.appendChild(commit_label);
-    const filename_label = document.createElement("label");
+    const filename_label = document.createElement("div");
     filename_label.classList.add("pyc-pipelines__field");
-    filename_label.textContent = "Filename";
     const filename_input = document.createElement("mj-text-field");
+    filename_input.setAttribute("label", "Filename");
     filename_input.classList.add("pyc-pipelines__input");
     filename_input.setAttribute("type", "text");
     filename_input.setAttribute("placeholder", "pipeline.yaml");
@@ -395,10 +396,10 @@ class PycPipelinesList extends HTMLElement {
     matrix_area.rows = 4;
     matrix_label.appendChild(matrix_area);
     panel.appendChild(matrix_label);
-    const strategy_label = document.createElement("label");
+    const strategy_label = document.createElement("div");
     strategy_label.classList.add("pyc-pipelines__field");
-    strategy_label.textContent = "Strategy";
     const strategy_input = document.createElement("mj-text-field");
+    strategy_input.setAttribute("label", "Strategy");
     strategy_input.classList.add("pyc-pipelines__input");
     strategy_input.setAttribute("type", "text");
     strategy_input.setAttribute("placeholder", "cartesian");

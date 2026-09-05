@@ -88,11 +88,9 @@ def test_login_page_renders_for_anonymous_user():
     """
     **Feature: consumer UI e2e smoke T14.2**
     **Property: GET /login returns a 200 with the login
-    form fields the consumer expects (username + password). The
-    login surface intentionally does not carry a CSRF token --
-    there is no prior session to bind it to. Subsequent POSTs
-    establish a session whose CSRF token then guards the rest
-    of the consumer UI.**
+    form fields the consumer expects (username + password) plus
+    the CSRF token minted for the anonymous session, which the
+    POST handler verifies before it touches credentials.**
     """
     handle = ensure_app()
     response = drive_request(

@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
+// pyc-admin-bundle/feature-flags-view.js
 var FLAGS_PATH = "/api/v1/flags";
 var FLAG_STATE_ENABLED = "enabled";
 var FLAG_STATE_DISABLED = "disabled";
@@ -340,7 +340,7 @@ var PycFeatureFlags = class extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
-      if (window.confirm(question) === false) {
+      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
         return;
       }
       toggle.toggleAttribute("disabled", true);
@@ -416,13 +416,14 @@ var PycFeatureFlags = class extends HTMLElement {
       notice.classList.add("pyc-admin__notice--error");
     }
     notice.setAttribute("data-role", "toggle-status");
+    notice.setAttribute("role", tone === "error" ? "alert" : "status");
     notice.textContent = message;
     this._status_region.replaceChildren(notice);
     return;
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/system-health-view.js
+// pyc-admin-bundle/system-health-view.js
 var SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
   if (typeof status !== "string") {
@@ -693,7 +694,7 @@ var PycSystemHealth = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/extension-registry-view.js
+// pyc-admin-bundle/extension-registry-view.js
 var EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
   const buckets = /* @__PURE__ */ new Map();
@@ -1038,7 +1039,7 @@ var PycExtensionRegistry = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/admin-overview-view.js
+// pyc-admin-bundle/admin-overview-view.js
 var SYSTEM_HEALTH_ROUTE = "/admin/system-health";
 var FEATURE_FLAGS_ROUTE = "/admin/feature-flags";
 var EXTENSION_REGISTRY_ROUTE = "/admin/extensions";
@@ -1452,7 +1453,7 @@ var PycAdminOverview = class extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = 'Set flag "' + String(entry.flag_key) + '" to ' + target + "?";
-      if (window.confirm(question) === false) {
+      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
         return;
       }
       toggle.toggleAttribute("disabled", true);
@@ -1530,14 +1531,14 @@ var PycAdminOverview = class extends HTMLElement {
       notice.classList.add("pyc-admin__notice--error");
     }
     notice.setAttribute("data-role", "flags-toggle-status");
+    notice.setAttribute("role", tone === "error" ? "alert" : "status");
     notice.textContent = message;
     this._flags_status_region.replaceChildren(notice);
     return;
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/index.entry.js
-var ADMIN_GROUP_ID = "admin";
+// pyc-admin-bundle/index.entry.js
 var OVERVIEW_TAG = "pyc-admin-overview";
 var FEATURE_FLAGS_TAG = "pyc-feature-flags";
 var EXTENSION_REGISTRY_TAG = "pyc-extension-registry";
@@ -1548,99 +1549,6 @@ var FEATURE_FLAGS_ROUTE2 = "/admin/feature-flags";
 var EXTENSION_REGISTRY_ROUTE2 = "/admin/extensions";
 var SYSTEM_HEALTH_ROUTE2 = "/admin/system-health";
 var ADMIN_STYLESHEET_HREF = "/static/javascript/pyc-admin-bundle/pyc-admin-bundle.css";
-var ADMIN_ENTRIES = [
-  {
-    entryId: "admin.overview",
-    label: "Overview",
-    route: OVERVIEW_ROUTE,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.dashboard",
-    label: "Dashboard",
-    route: "/admin/dashboard",
-    requiredPermissions: [],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.feature-flags",
-    label: "Feature Flags",
-    route: FEATURE_FLAGS_ROUTE2,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.extensions",
-    label: "Extension Registry",
-    route: EXTENSION_REGISTRY_ROUTE2,
-    requiredPermissions: ["system:plugin_api.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.system-health",
-    label: "System Health",
-    route: SYSTEM_HEALTH_ROUTE2,
-    requiredPermissions: ["system:ui.admin.view"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.users",
-    label: "Users",
-    route: "/admin/users",
-    requiredPermissions: ["system:users.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.roles",
-    label: "Roles",
-    route: "/admin/roles",
-    requiredPermissions: ["system:rbac.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.variables",
-    label: "Variables",
-    route: "/admin/variables",
-    requiredPermissions: [],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.scopes",
-    label: "Secret Scopes",
-    route: "/admin/scopes",
-    requiredPermissions: ["system:secrets.admin"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.secrets",
-    label: "Secrets",
-    route: "/admin/secrets",
-    requiredPermissions: ["system:secrets.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.sessions",
-    label: "Sessions",
-    route: "/admin/sessions",
-    requiredPermissions: ["system:auth.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.audit",
-    label: "Audit Logs",
-    route: "/admin/audit-logs",
-    requiredPermissions: ["system:audit.read"],
-    group: ADMIN_GROUP_ID
-  },
-  {
-    entryId: "admin.enrollment-tokens",
-    label: "Enrollment Tokens",
-    route: "/admin/enrollment-tokens",
-    requiredPermissions: ["system:resources.manage"],
-    group: ADMIN_GROUP_ID
-  }
-];
 function ensure_admin_stylesheet() {
   if (typeof document === "undefined") {
     return;
@@ -1654,17 +1562,6 @@ function ensure_admin_stylesheet() {
   link.href = ADMIN_STYLESHEET_HREF;
   link.setAttribute("data-pyc-bundle", "pyc-admin-bundle");
   document.head.appendChild(link);
-  return;
-}
-function register_admin_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: ADMIN_GROUP_ID,
-    label: "Admin",
-    requiredPermissions: ["system:ui.admin.view"]
-  });
-  for (const entry of ADMIN_ENTRIES) {
-    sidebar.registerEntry(entry);
-  }
   return;
 }
 function define_admin_elements() {
@@ -1806,12 +1703,10 @@ function _boot() {
   }
   return;
 }
-var ADMIN_SIDEBAR_ENTRIES = ADMIN_ENTRIES;
 if (typeof window !== "undefined") {
   _boot();
 }
 export {
-  ADMIN_SIDEBAR_ENTRIES,
   EXT_LISTING_PATH,
   FLAGS_PATH,
   PycAdminOverview,
@@ -1829,7 +1724,6 @@ export {
   mount_admin_view_if_active,
   mount_state_tone,
   next_flag_state,
-  register_admin_sidebar,
   tag_for_admin_route,
   toggle_message_for_status
 };

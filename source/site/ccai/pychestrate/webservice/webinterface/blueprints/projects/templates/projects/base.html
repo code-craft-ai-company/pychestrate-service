@@ -1,3 +1,4 @@
+{% import "site_shell/_macros.html" as ui %}
 {#
     Fragment-style base for /projects/* pages.
 
@@ -29,360 +30,84 @@
     automatically. Every selector is scoped under
     .projects-fragment so nothing leaks into the shell chrome.
 #}
-<section class="projects-fragment">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <style>
-        .projects-fragment {
-            color: var(--pyc-color-on-surface, #1a1a2e);
-        }
-        .projects-fragment .projects-layout {
-            display: flex;
-            gap: 24px;
-            align-items: flex-start;
-        }
-        .projects-fragment .projects-subnav {
-            flex: 0 0 200px;
-            min-width: 0;
-        }
-        .projects-fragment .projects-content {
-            flex: 1 1 auto;
-            min-width: 0;
-        }
-        @media (max-width: 900px) {
-            .projects-fragment .projects-layout {
-                flex-direction: column;
-            }
-            .projects-fragment .projects-subnav {
-                flex-basis: auto;
-                width: 100%;
-            }
-        }
-        .projects-fragment .projects-subnav ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .projects-fragment .projects-subnav li {
-            margin: 0;
-        }
-        .projects-fragment .projects-subnav a {
-            display: flex;
-            align-items: center;
-            padding: 8px 12px;
-            border-radius: 6px;
-            color: var(--pyc-color-on-surface-muted, #495057);
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        .projects-fragment .projects-subnav a:hover {
-            background: var(--pyc-color-surface-hover, rgba(0, 0, 0, 0.04));
-            color: var(--pyc-color-on-surface, #1a1a2e);
-        }
-        .projects-fragment .projects-subnav a.active {
-            background: var(--pyc-color-accent-surface, rgba(37, 99, 235, 0.12));
-            color: var(--pyc-color-accent-on-surface, #1d4fc4);
-            font-weight: 500;
-        }
-        .projects-fragment .projects-subnav .material-icons {
-            margin-right: 8px;
-            font-size: 18px;
-        }
-        .projects-fragment .projects-subnav .subnav-section {
-            padding: 12px 12px 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            color: var(--pyc-color-on-surface-muted, #6c757d);
-            letter-spacing: 0.5px;
-        }
-        .projects-fragment .page-header {
-            margin-bottom: 30px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--pyc-color-border, #dee2e6);
-        }
-        .projects-fragment .page-header h2 {
-            margin: 0 0 5px;
-            font-size: 1.75rem;
-            font-weight: 600;
-            color: var(--pyc-color-on-surface, #1a1a2e);
-        }
-        .projects-fragment .page-header p {
-            margin: 0;
-            color: var(--pyc-color-on-surface-muted, #6c757d);
-        }
-        .projects-fragment .alert {
-            padding: 15px 20px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            border: 1px solid transparent;
-        }
-        .projects-fragment .alert-success {
-            background: var(--pyc-color-success-surface, #d4edda);
-            color: var(--pyc-color-on-success-surface, #155724);
-        }
-        .projects-fragment .alert-error,
-        .projects-fragment .alert-danger {
-            background: var(--pyc-color-error-surface, #f8d7da);
-            color: var(--pyc-color-on-error-surface, #721c24);
-        }
-        .projects-fragment .alert-warning {
-            background: var(--pyc-color-warning-surface, #fff3cd);
-            color: var(--pyc-color-on-warning-surface, #856404);
-        }
-        .projects-fragment .alert-info {
-            background: var(--pyc-color-accent-surface, #d1ecf1);
-            color: var(--pyc-color-accent-on-surface, #0c5460);
-        }
-        .projects-fragment .btn {
-            display: inline-flex;
-            align-items: center;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            text-decoration: none;
-            transition: all 0.2s;
-        }
-        .projects-fragment .btn-primary {
-            background: var(--pyc-color-accent, #2563eb);
-            color: var(--pyc-color-on-accent, #ffffff);
-        }
-        .projects-fragment .btn-primary:hover {
-            filter: brightness(0.92);
-        }
-        .projects-fragment .btn-secondary {
-            background: var(--pyc-color-surface-hover, rgba(0, 0, 0, 0.04));
-            color: var(--pyc-color-on-surface, #1a1a2e);
-            border: 1px solid var(--pyc-color-border, #dee2e6);
-        }
-        .projects-fragment .btn-secondary:hover {
-            background: var(--pyc-color-accent-surface, rgba(37, 99, 235, 0.12));
-        }
-        .projects-fragment .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        .projects-fragment .btn-danger:hover {
-            background: #c82333;
-        }
-        .projects-fragment .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        .projects-fragment .btn-success:hover {
-            background: #218838;
-        }
-        .projects-fragment .btn-sm {
-            padding: 4px 10px;
-            font-size: 0.8rem;
-        }
-        .projects-fragment .btn .material-icons {
-            font-size: 18px;
-            margin-right: 5px;
-        }
-        .projects-fragment .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .projects-fragment .data-table th,
-        .projects-fragment .data-table td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid var(--pyc-color-border, #dee2e6);
-        }
-        .projects-fragment .data-table th {
-            background: var(--pyc-color-surface-hover, rgba(0, 0, 0, 0.04));
-            font-weight: 600;
-            color: var(--pyc-color-on-surface, #495057);
-            font-size: 0.875rem;
-        }
-        .projects-fragment .data-table tr:hover {
-            background: var(--pyc-color-surface-hover, rgba(0, 0, 0, 0.04));
-        }
-        .projects-fragment .form-group {
-            margin-bottom: 20px;
-        }
-        .projects-fragment .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-            color: var(--pyc-color-on-surface, #495057);
-        }
-        .projects-fragment .form-control {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid var(--pyc-color-border, #ced4da);
-            border-radius: 4px;
-            font-size: 0.875rem;
-            transition: border-color 0.2s;
-            box-sizing: border-box;
-            background: var(--pyc-color-surface, #ffffff);
-            color: var(--pyc-color-on-surface, #1a1a2e);
-        }
-        .projects-fragment .form-control:focus {
-            outline: none;
-            border-color: var(--pyc-color-accent, #2563eb);
-            box-shadow: 0 0 0 2px var(--pyc-color-accent-surface, rgba(37, 99, 235, 0.12));
-        }
-        .projects-fragment .form-text {
-            margin-top: 5px;
-            font-size: 0.8rem;
-            color: var(--pyc-color-on-surface-muted, #6c757d);
-        }
-        .projects-fragment .card {
-            background: var(--pyc-color-surface, #ffffff);
-            border: 1px solid var(--pyc-color-border, #dee2e6);
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .projects-fragment .card-header {
-            font-weight: 600;
-            font-size: 1.1rem;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid var(--pyc-color-border, #dee2e6);
-        }
-        .projects-fragment .pagination {
-            display: flex;
-            gap: 5px;
-            margin-top: 20px;
-            justify-content: center;
-        }
-        .projects-fragment .pagination a,
-        .projects-fragment .pagination span {
-            padding: 8px 12px;
-            border: 1px solid var(--pyc-color-border, #dee2e6);
-            border-radius: 4px;
-            text-decoration: none;
-            color: var(--pyc-color-on-surface, #495057);
-        }
-        .projects-fragment .pagination a:hover {
-            background: var(--pyc-color-surface-hover, rgba(0, 0, 0, 0.04));
-        }
-        .projects-fragment .pagination .active {
-            background: var(--pyc-color-accent, #2563eb);
-            color: var(--pyc-color-on-accent, #ffffff);
-            border-color: var(--pyc-color-accent, #2563eb);
-        }
-        .projects-fragment .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .projects-fragment .badge-success {
-            background: var(--pyc-color-success-surface, #d4edda);
-            color: var(--pyc-color-on-success-surface, #155724);
-        }
-        .projects-fragment .badge-danger {
-            background: var(--pyc-color-error-surface, #f8d7da);
-            color: var(--pyc-color-on-error-surface, #721c24);
-        }
-        .projects-fragment .badge-warning {
-            background: var(--pyc-color-warning-surface, #fff3cd);
-            color: var(--pyc-color-on-warning-surface, #856404);
-        }
-        .projects-fragment .badge-info {
-            background: var(--pyc-color-accent-surface, #d1ecf1);
-            color: var(--pyc-color-accent-on-surface, #0c5460);
-        }
-        .projects-fragment .badge-secondary {
-            background: var(--pyc-color-surface-hover, #e9ecef);
-            color: var(--pyc-color-on-surface-muted, #495057);
-        }
-        .projects-fragment .breadcrumb {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 20px;
-            font-size: 0.875rem;
-        }
-        .projects-fragment .breadcrumb a {
-            color: var(--pyc-color-on-surface-muted, #6c757d);
-            text-decoration: none;
-        }
-        .projects-fragment .breadcrumb a:hover {
-            color: var(--pyc-color-accent-on-surface, #1a1a2e);
-        }
-        .projects-fragment .breadcrumb span {
-            color: var(--pyc-color-on-surface-muted, #6c757d);
-        }
-    </style>
+<section class="pyc-admin-page-fragment projects-fragment">
+    {#- The child template's title block feeds the shell document's <title>;
+        the shell wrapper reads and removes this element. #}
+    <meta name="pyc-page-title" content="{% block title %}{% endblock %}">
+
     {% block extra_css %}{% endblock %}
 
     {% if flashes %}
+    <div class="pyc-flashes" role="status" aria-live="polite">
         {% for category, message in flashes %}
         <div class="alert alert-{{ category }}">{{ message }}</div>
         {% endfor %}
+    </div>
     {% endif %}
 
-    <div class="projects-layout">
-        {% if project %}
-        <nav class="projects-subnav" aria-label="Project navigation">
+    <div class="pyc-subnav-layout">
+        {% if project is defined and project %}
+        <nav class="pyc-subnav" aria-label="Project navigation">
             <ul>
-                <li><a href="{{ url_for('projects.dashboard') }}" class="{% if request_endpoint == 'projects.dashboard' %}active{% endif %}">
-                    <span class="material-icons">dashboard</span> Dashboard
+                <li><a href="{{ url_for('projects.dashboard') }}" {% if request_endpoint == 'projects.dashboard' %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("dashboard") }} Dashboard
                 </a></li>
-                <li><a href="{{ url_for('projects.project_list') }}" class="{% if 'project_list' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">folder</span> All Projects
-                </a></li>
-
-                <li class="subnav-section">{{ project.name }}</li>
-                <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}" class="{% if request_endpoint == 'projects.project_detail' %}active{% endif %}">
-                    <span class="material-icons">info</span> Overview
-                </a></li>
-                <li><a href="{{ url_for('projects.member_list', project_id=project.id) }}" class="{% if 'member' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">people</span> Members
-                </a></li>
-                <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}" class="{% if 'repository' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">source</span> Repositories
+                <li><a href="{{ url_for('projects.project_list') }}" {% if request_endpoint in ('projects.project_list', 'projects.project_create') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("folder") }} All Projects
                 </a></li>
 
-                <li class="subnav-section">CI/CD</li>
-                <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}" class="{% if 'build' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">build</span> Builds
+                <li class="pyc-subnav__section">{{ project.name }}</li>
+                <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}" {% if request_endpoint in ('projects.project_detail', 'projects.project_edit') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("info") }} Overview
                 </a></li>
-                <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" class="{% if 'infra' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">cloud</span> Infrastructure
+                <li><a href="{{ url_for('projects.member_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.member_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("people") }} Members
                 </a></li>
-                <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" class="{% if 'test' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">science</span> Tests
-                </a></li>
-
-                <li class="subnav-section">Releases</li>
-                <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" class="{% if 'release' in request_endpoint and 'event' not in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">new_releases</span> Releases
-                </a></li>
-                <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" class="{% if 'pipeline' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">account_tree</span> Pipelines
-                </a></li>
-                <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" class="{% if 'channel' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">rss_feed</span> Channels
-                </a></li>
-                <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" class="{% if 'schedule' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">schedule</span> Schedules
-                </a></li>
-                <li><a href="{{ url_for('projects.release_template_list', project_id=project.id) }}" class="{% if 'release_template' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">layers</span> Release Templates
+                <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.repository_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("source") }} Repositories
                 </a></li>
 
-                <li class="subnav-section">Planning</li>
-                <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="{% if 'calendar' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">calendar_today</span> Calendar
+                <li class="pyc-subnav__section">CI/CD</li>
+                <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.build_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("build") }} Builds
+                </a></li>
+                <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.infra_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("cloud") }} Infrastructure
+                </a></li>
+                <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.test_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("science") }} Tests
                 </a></li>
 
-                <li class="subnav-section">Automation</li>
-                <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}" class="{% if 'watch' in request_endpoint %}active{% endif %}">
-                    <span class="material-icons">visibility</span> Watches
+                <li class="pyc-subnav__section">Releases</li>
+                <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" {% if request_endpoint in ('projects.release_list', 'projects.release_detail') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("new_releases") }} Releases
+                </a></li>
+                <li><a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.pipeline_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("account_tree") }} Pipelines
+                </a></li>
+                <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" {% if request_endpoint == 'projects.channel_list' %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("rss_feed") }} Channels
+                </a></li>
+                <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" {% if request_endpoint == 'projects.schedule_list' %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("schedule") }} Schedules
+                </a></li>
+                <li><a href="{{ url_for('projects.release_template_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.release_template_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("layers") }} Release Templates
+                </a></li>
+
+                <li class="pyc-subnav__section">Planning</li>
+                <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" {% if request_endpoint in ('projects.calendar_view', 'projects.release_event_list', 'projects.release_event_detail') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("calendar_today") }} Calendar
+                </a></li>
+
+                <li class="pyc-subnav__section">Automation</li>
+                <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.watch_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("visibility") }} Watches
                 </a></li>
             </ul>
         </nav>
         {% endif %}
-        <div class="projects-content">
+        <div class="pyc-subnav-layout__content">
             {% block content %}{% endblock %}
         </div>
     </div>

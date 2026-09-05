@@ -309,6 +309,14 @@ class _FakeAllocationManager:
             raise self.force_checkin_raises
         return
 
+    def get_reservation(
+            self, reservation_id: int
+        ) -> Optional[_FakeReservation]:
+        for r in self.list_reservations_response:
+            if getattr(r, "id", None) == reservation_id:
+                return r
+        return None
+
     def list_reservations(self, **kwargs: Any) -> Any:
         from types import SimpleNamespace
         self.list_reservations_calls.append(kwargs)
@@ -635,8 +643,8 @@ def test_calculate_total_pages_uses_manager_totals():
 def test_find_reservation_by_id_returns_none_when_missing():
     """
     **Feature: E3 helpers T7.5**
-    **Property: _find_reservation_by_id linearly scans the
-    list_reservations(limit=1000) result for a matching id.**
+    **Property: _find_reservation_by_id resolves through the
+    manager's get_reservation(id) and returns None when absent.**
     """
     finder = resources_routes_reservations._find_reservation_by_id
     fake_mgr = _FakeAllocationManager(db_session=None)
@@ -1017,12 +1025,12 @@ def test_handle_reservation_list_passes_filters_through():
     return
 
 
-def test_handle_reservation_create_post_happy_path_redirects_to_list():
+def test_handle_reservation_create_post_happy_path_redirects_to_detail():
     """
     **Feature: webworks resources port T7.12 (E3)**
     **Property: A valid POST builds a ReservationRequest and
-    creates the reservation; redirects to /resources/reservations
-    with a success flash naming the created reservation.id.**
+    creates the reservation; redirects to the new reservation's
+    detail page with a success flash (UI remediation R-32).**
     """
     _reset_global_state()
     sm_patch = None
@@ -1073,7 +1081,7 @@ def test_handle_reservation_create_post_happy_path_redirects_to_list():
         testbase.assert_equal(is_redirect, True)
         testbase.assert_equal(
             response.headers["Location"],
-            "/resources/reservations",
+            "/resources/reservations/42",
         )
         am = _FakeAllocationManager.last_instance
         testbase.assert_equal(len(am.create_reservation_calls), 1)
@@ -1154,8 +1162,8 @@ def test_handle_reservation_detail_renders_via_list_and_find():
     """
     **Feature: webworks resources port T7.13 (E3)**
     **Property: GET /resources/reservations/{id} renders the
-    detail template after finding the reservation in the
-    list_reservations(limit=1000) result.**
+    detail template after resolving the reservation through
+    the manager's get_reservation(id).**
     """
     _reset_global_state()
     sm_patch = None

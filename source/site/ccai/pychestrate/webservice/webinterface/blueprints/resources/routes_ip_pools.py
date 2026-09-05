@@ -76,6 +76,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _resources_permission_flags,
+    _wrap_resources_handler_in_shell,
     _build_page_window,
     _calculate_total_pages,
 )
@@ -372,6 +374,7 @@ def handle_ip_pool_list(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["pools"] = pools
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
@@ -424,6 +427,7 @@ def handle_ip_pool_create(request: Request) -> Response:
                 flashes=flashes,
                 csrf_token=auth.csrf_token,
             )
+            context.update(_resources_permission_flags(auth=auth))
             context["form_data"] = None
             response = _render(
                 template_name="resources/ip_pools/create.html",
@@ -510,6 +514,7 @@ def handle_ip_pool_create(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["form_data"] = form_view
         response = _render(
             template_name="resources/ip_pools/create.html",
@@ -579,6 +584,7 @@ def handle_ip_pool_detail(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["pool"] = pool
         context["allocations"] = allocations
         context["available_ips"] = available_ips
@@ -741,6 +747,7 @@ def handle_ip_pool_edit(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["pool"] = pool
         context["form_data"] = form_view
         response = _render(
@@ -1101,7 +1108,8 @@ def register_ip_pools_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        wrapped_handler = _wrap_resources_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 
 

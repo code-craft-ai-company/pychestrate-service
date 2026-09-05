@@ -1,26 +1,27 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit {{ resource.name }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Edit Resource</h2>
+    <h1>Edit Resource</h1>
     <p>Modify resource settings for {{ resource.name }}</p>
 </div>
 
-<div class="card" style="max-width: 700px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
         <div class="form-group">
-            <label>Resource Name</label>
-            <input type="text" class="form-control" value="{{ resource.name }}" disabled>
+            <label for="ro-resource-name">Resource Name</label>
+            <input type="text" class="form-control" value="{{ resource.name }}" id="ro-resource-name" disabled>
             <p class="form-text">Resource name cannot be changed</p>
         </div>
 
         <div class="form-group">
-            <label>Resource Type</label>
-            <input type="text" class="form-control" value="{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}" disabled>
+            <label for="ro-resource-type">Resource Type</label>
+            <input type="text" class="form-control" value="{{ resource.resource_type }}" id="ro-resource-type" disabled>
             <p class="form-text">Resource type cannot be changed</p>
         </div>
 
@@ -38,7 +39,7 @@
 
         <div class="form-group">
             <label>Health Status</label>
-            {% set current_status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+            {% set current_status = resource.health_status %}
             {% if current_status == 'online' %}
             <span class="badge badge-success">Online</span>
             {% elif current_status == 'offline' %}
@@ -59,9 +60,9 @@
         {% if all_tags %}
         <div class="form-group">
             <label>Tags</label>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <div class="actions-row">
                 {% for tag in all_tags %}
-                <label style="font-weight: normal;">
+                <label class="regular">
                     <input type="checkbox" name="tags" value="{{ tag.name }}"
                            {% if form_data %}{% if tag.name in form_data.getlist('tags') %}checked{% endif %}{% elif tag.name in resource.tags %}checked{% endif %}>
                     {{ tag.name }}
@@ -78,9 +79,9 @@
             <p class="form-text">Optional key-value metadata in JSON format</p>
         </div>
 
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

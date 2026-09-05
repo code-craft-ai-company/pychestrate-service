@@ -1,31 +1,32 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Health Dashboard - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Health Dashboard</h2>
+    <h1>Health Dashboard</h1>
     <p>Resource health status overview</p>
 </div>
 
 <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
     <div class="stat-card">
-        <span class="material-icons health-online" style="font-size: 48px;" aria-hidden="true">check_circle</span>
+        <span class="health-online pyc-icon-large" aria-hidden="true">{{ ui.icon("check_circle") }}</span>
         <div class="stat-value">{{ health_counts.online }}</div>
         <div class="stat-label">Online</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-degraded" style="font-size: 48px;" aria-hidden="true">warning</span>
+        <span class="health-degraded pyc-icon-large" aria-hidden="true">{{ ui.icon("warning") }}</span>
         <div class="stat-value">{{ health_counts.degraded }}</div>
         <div class="stat-label">Degraded</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-maintenance" style="font-size: 48px;" aria-hidden="true">build</span>
+        <span class="health-maintenance pyc-icon-large" aria-hidden="true">{{ ui.icon("build") }}</span>
         <div class="stat-value">{{ health_counts.maintenance }}</div>
         <div class="stat-label">Maintenance</div>
     </div>
     <div class="stat-card">
-        <span class="material-icons health-offline" style="font-size: 48px;" aria-hidden="true">cancel</span>
+        <span class="health-offline pyc-icon-large" aria-hidden="true">{{ ui.icon("cancel") }}</span>
         <div class="stat-value">{{ health_counts.offline }}</div>
         <div class="stat-label">Offline</div>
     </div>
@@ -33,137 +34,121 @@
 
 {% if health_groups.offline %}
 <div class="card">
-    <div class="card-header" style="color: #dc3545;">
-        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">cancel</span> Offline Resources
+    <div class="card-header text-danger">
+        {{ ui.icon("cancel") }} Offline Resources
     </div>
-    <table class="data-table" style="margin-top: 0;">
-        <thead>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <th scope="col"ead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Pool</th>
-                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for resource in health_groups.offline %}
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
-                <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+                <td>{{ resource.resource_type }}</td>
                 <td>{{ resource.pool_name or 'Default' }}</td>
-                <td>
-                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">View</a>
-                </td>
             </tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
     {% if health_counts.offline > health_groups.offline | length %}
-    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.offline | length }} of {{ health_counts.offline }} resources</p>
+    <p class="muted mt-sm">Showing {{ health_groups.offline | length }} of {{ health_counts.offline }} resources</p>
     {% endif %}
 </div>
 {% endif %}
 
 {% if health_groups.degraded %}
 <div class="card">
-    <div class="card-header" style="color: #ffc107;">
-        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">warning</span> Degraded Resources
+    <div class="card-header" style="color: var(--pyc-color-on-warning-surface);">
+        {{ ui.icon("warning") }} Degraded Resources
     </div>
-    <table class="data-table" style="margin-top: 0;">
-        <thead>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <th scope="col"ead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Pool</th>
-                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for resource in health_groups.degraded %}
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
-                <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+                <td>{{ resource.resource_type }}</td>
                 <td>{{ resource.pool_name or 'Default' }}</td>
-                <td>
-                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">View</a>
-                </td>
             </tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
     {% if health_counts.degraded > health_groups.degraded | length %}
-    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.degraded | length }} of {{ health_counts.degraded }} resources</p>
+    <p class="muted mt-sm">Showing {{ health_groups.degraded | length }} of {{ health_counts.degraded }} resources</p>
     {% endif %}
 </div>
 {% endif %}
 
 {% if health_groups.maintenance %}
 <div class="card">
-    <div class="card-header" style="color: #6c757d;">
-        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">build</span> Resources in Maintenance
+    <div class="card-header" style="color: var(--pyc-color-on-surface-muted);">
+        {{ ui.icon("build") }} Resources in Maintenance
     </div>
-    <table class="data-table" style="margin-top: 0;">
-        <thead>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <th scope="col"ead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Pool</th>
-                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for resource in health_groups.maintenance %}
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
-                <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+                <td>{{ resource.resource_type }}</td>
                 <td>{{ resource.pool_name or 'Default' }}</td>
-                <td>
-                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">View</a>
-                </td>
             </tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
     {% if health_counts.maintenance > health_groups.maintenance | length %}
-    <p style="color: #6c757d; margin-top: 10px;">Showing {{ health_groups.maintenance | length }} of {{ health_counts.maintenance }} resources</p>
+    <p class="muted mt-sm">Showing {{ health_groups.maintenance | length }} of {{ health_counts.maintenance }} resources</p>
     {% endif %}
 </div>
 {% endif %}
 
 <div class="card">
-    <div class="card-header" style="color: #28a745;">
-        <span class="material-icons" style="vertical-align: middle;" aria-hidden="true">check_circle</span> Online Resources ({{ health_counts.online }})
+    <div class="card-header text-success">
+        {{ ui.icon("check_circle") }} Online Resources ({{ health_counts.online }})
     </div>
     {% if health_groups.online %}
-    <table class="data-table" style="margin-top: 0;">
-        <thead>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <th scope="col"ead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Type</th>
                 <th scope="col">Pool</th>
                 <th scope="col">Capacity</th>
-                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for resource in health_groups.online[:20] %}
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
-                <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+                <td>{{ resource.resource_type }}</td>
                 <td>{{ resource.pool_name or 'Default' }}</td>
                 <td>{{ resource.current_allocations }}/{{ resource.capacity }}</td>
-                <td>
-                    <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">View</a>
-                </td>
             </tr>
             {% endfor %}
         </tbody>
-    </table>
+    </table></div>
     {% if health_counts.online > 20 %}
-    <p style="color: #6c757d; margin-top: 10px;">Showing 20 of {{ health_counts.online }} online resources</p>
+    <p class="muted mt-sm">Showing 20 of {{ health_counts.online }} online resources</p>
     {% endif %}
     {% else %}
-    <p style="color: #6c757d; margin: 0;">No online resources</p>
+    <p class="muted">No online resources</p>
     {% endif %}
 </div>
 {% endblock %}

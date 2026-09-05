@@ -336,6 +336,26 @@ def _resolve_template_or_redirect(
 # ---------------------------------------------------------------------------
 
 
+def _repository_name_map(*, db_session: Any, project_id: int) -> Dict[int, str]:
+    """
+        ``{repository_id: name}`` for the project, so templates can show
+        repository names instead of raw ids (audit P-53). Any failure
+        yields an empty map and the template falls back to the id.
+    """
+    rtnval: Dict[int, str] = {}
+    try:
+        from ccai.pychestrate.core.managers.repository_manager import (  # noqa: E402
+            RepositoryManager,
+        )
+        manager = RepositoryManager(db_session)
+        response = manager.list_repositories(project_id, limit=500)
+        for repository in getattr(response, "repositories", []) or []:
+            rtnval[int(repository.id)] = str(repository.name)
+    except Exception:
+        return {}
+    return rtnval
+
+
 def handle_release_template_list(request: Request) -> Response:
     """
         ``GET /projects/{project_id}/release-templates``.
@@ -409,6 +429,7 @@ def handle_release_template_list(request: Request) -> Response:
         )
         context["project"] = project
         context["templates"] = templates
+        context["repository_names"] = _repository_name_map(db_session=db_session, project_id=project_id)
         context["can_manage"] = can_manage
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
@@ -695,6 +716,7 @@ def handle_release_template_detail(request: Request) -> Response:
         )
         context["project"] = project
         context["template"] = template
+        context["repository_names"] = _repository_name_map(db_session=db_session, project_id=project_id)
         context["can_manage"] = can_manage
         context["can_delete"] = can_delete
         context["default_pipeline_json"] = (
@@ -876,6 +898,7 @@ def handle_release_template_edit(request: Request) -> Response:
         )
         context["project"] = project
         context["template"] = template
+        context["repository_names"] = _repository_name_map(db_session=db_session, project_id=project_id)
         context["form_data"] = form_view
         context["default_pipeline_json"] = (
             json.dumps(template.default_pipeline, indent=2)

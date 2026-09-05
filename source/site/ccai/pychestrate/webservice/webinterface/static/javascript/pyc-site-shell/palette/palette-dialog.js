@@ -57,7 +57,7 @@ class PaletteDialog {
       this._input.value = "";
       this._input.focus();
     }
-    this._render_status("Type to search across registered providers.");
+    this._render_status("Type to search pages and actions.");
     this._host.emit("pyc-site-shell-palette-opened", {});
     if (typeof this._host.observePaletteOpened === "function") {
       this._host.observePaletteOpened();
@@ -104,8 +104,12 @@ class PaletteDialog {
     const input = document.createElement("input");
     input.type = "search";
     input.classList.add("pyc-site-shell__palette-input");
-    input.setAttribute("aria-label", "Search providers");
+    input.setAttribute("aria-label", "Search pages and actions");
     input.setAttribute("autocomplete", "off");
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-controls", "pyc-palette-results");
     input.setAttribute("spellcheck", "false");
     input.placeholder = "Type to search...";
     input.addEventListener("input", () => {
@@ -120,7 +124,8 @@ class PaletteDialog {
     const results = document.createElement("div");
     results.classList.add("pyc-site-shell__palette-results");
     results.setAttribute("role", "listbox");
-    results.setAttribute("aria-label", "Palette results");
+    results.id = "pyc-palette-results";
+    results.setAttribute("aria-label", "Search results");
     dialog.appendChild(results);
     dialog.addEventListener("keydown", (event) => {
       this._on_dialog_keydown(event);
@@ -169,7 +174,7 @@ class PaletteDialog {
       this._results_region.replaceChildren();
       this._flat_results = [];
       this._active_index = -1;
-      this._render_status("No providers available for your account.");
+      this._render_status("Navigation search is unavailable for your account.");
       return;
     }
     this._render_status("Searching...");
@@ -197,15 +202,18 @@ class PaletteDialog {
     for (const outcome of outcomes) {
       const section = document.createElement("div");
       section.classList.add("pyc-site-shell__palette-group");
+      section.setAttribute("role", "group");
+      section.setAttribute("aria-label", outcome.providerLabel);
       const heading = document.createElement("div");
       heading.classList.add("pyc-site-shell__palette-group-label");
+      heading.setAttribute("role", "presentation");
       heading.textContent = outcome.providerLabel;
       section.appendChild(heading);
       if (outcome.error !== null) {
         const notice = document.createElement("div");
         notice.classList.add("pyc-site-shell__palette-provider-error");
-        notice.setAttribute("role", "note");
-        notice.textContent = "This provider is unavailable.";
+        notice.setAttribute("role", "presentation");
+        notice.textContent = "This source is unavailable right now.";
         section.appendChild(notice);
         this._results_region.appendChild(section);
         continue;
@@ -224,6 +232,7 @@ class PaletteDialog {
         option.setAttribute("role", "option");
         option.setAttribute("data-provider-id", outcome.providerId);
         option.setAttribute("data-result-id", result.id);
+        option.id = "pyc-palette-option-" + String(total_results);
         option.tabIndex = -1;
         const label = document.createElement("div");
         label.classList.add("pyc-site-shell__palette-option-label");
@@ -251,6 +260,12 @@ class PaletteDialog {
       this._results_region.appendChild(section);
     }
     this._active_index = this._flat_results.length > 0 ? 0 : -1;
+    if (this._input !== null) {
+      this._input.setAttribute("aria-expanded", this._flat_results.length > 0 ? "true" : "false");
+      if (this._flat_results.length === 0) {
+        this._input.removeAttribute("aria-activedescendant");
+      }
+    }
     this._update_active_highlight();
     if (total_results === 0) {
       this._render_status("No results.");
@@ -271,6 +286,9 @@ class PaletteDialog {
       const entry = this._flat_results[index];
       if (index === this._active_index) {
         entry.element.setAttribute("aria-selected", "true");
+        if (this._input !== null) {
+          this._input.setAttribute("aria-activedescendant", entry.element.id);
+        }
         entry.element.classList.add(
           "pyc-site-shell__palette-option--active"
         );

@@ -1,52 +1,61 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Watches - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <span>Watches</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li aria-current="page">Watches</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Watches</h2>
-    <p>Repository event triggers</p>
+    <h1>Watches</h1>
+    <p>Repository and build event triggers</p>
 </div>
 
-<div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+<div class="toolbar toolbar--end">
     {% if can_manage %}
     <a href="{{ url_for('projects.watch_create', project_id=project.id) }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create Watch
+        {{ ui.icon("add") }} Create Watch
     </a>
     {% endif %}
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Repository</th>
-            <th>Event Type</th>
-            <th>Branch Pattern</th>
-            <th>Enabled</th>
-            <th>Last Triggered</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Source</th>
+            <th scope="col">Trigger</th>
+            <th scope="col">Branch Pattern</th>
+            <th scope="col">Actions</th>
+            <th scope="col">Enabled</th>
+            <th scope="col">Last Triggered</th>
+            <th scope="col"></th>
         </tr>
     </thead>
     <tbody>
         {% for watch in watches %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}" class="strong">
                     {{ watch.name }}
                 </a>
             </td>
-            <td>{{ watch.repository_name }}</td>
-            <td><span class="badge badge-secondary">{{ watch.event_type.value }}</span></td>
-            <td style="font-family: monospace; font-size: 0.8rem;">{{ watch.branch_pattern or '*' }}</td>
+            <td>{{ watch.source_name }}</td>
+            <td><span class="badge badge-secondary">{{ watch.trigger_source.value }}</span></td>
+            <td class="mono">{{ watch.conditions.branch_pattern or '*' }}</td>
+            <td>
+                {% for action in watch.actions %}
+                <span class="badge badge-info">{{ action.action.value }}</span>
+                {% else %}
+                <span class="muted">None configured</span>
+                {% endfor %}
+            </td>
             <td>
                 {% if watch.enabled %}
                 <span class="badge badge-success">Enabled</span>
@@ -54,7 +63,7 @@
                 <span class="badge badge-secondary">Disabled</span>
                 {% endif %}
             </td>
-            <td>{{ watch.last_triggered_at.strftime('%Y-%m-%d %H:%M') if watch.last_triggered_at else 'Never' }}</td>
+            <td>{{ watch.last_trigger_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</td>
             <td>
                 <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}" class="btn btn-sm btn-secondary">View</a>
                 {% if can_manage %}
@@ -64,36 +73,18 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+            <td colspan="8" class="muted center pad-lg">
                 No watches yet.
                 {% if can_manage %}
                 <a href="{{ url_for('projects.watch_create', project_id=project.id) }}">Create your first watch</a>
                 {% else %}
-                Watches are repository event triggers set up by project developers.
+                Watches are event triggers set up by project developers.
                 {% endif %}
             </td>
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.watch_list', project_id=project.id, page=page-1) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.watch_list', project_id=project.id, page=p) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.watch_list', project_id=project.id, page=page+1) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.watch_list', page, total_pages, {'project_id': project.id}) }}
 {% endblock %}

@@ -436,6 +436,19 @@ def handle_session_terminate(request: Request) -> Response:
             _terminate_session(
                 db_session=db_session, session_id=session_id
             )
+            current_session_id = str(auth.session.get("session_token", ""))
+            if session_id == current_session_id:
+                # The operator ended their own session: the next
+                # request would bounce with "Session expired", so send
+                # them to the sign-in page with the true story instead.
+                fresh_session: Dict[str, Any] = {}
+                response = _redirect_with_flash(
+                    session=fresh_session,
+                    url=_url_for_module.url_for("config.login"),
+                    message="You signed out of this session.",
+                    category=flash.CATEGORY_INFO,
+                )
+                return response
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("config.session_list"),

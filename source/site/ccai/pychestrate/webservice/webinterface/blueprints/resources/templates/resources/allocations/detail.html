@@ -1,20 +1,21 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Allocation {{ allocation.id }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Allocation #{{ allocation.id }}</h2>
+    <h1>Allocation #{{ allocation.id }}</h1>
     <p>Allocation details for {{ allocation.resource_name }}</p>
 </div>
 
-<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+<div class="detail-grid">
     <div>
         <div class="card">
-            <div class="card-header">Allocation Information</div>
-            <table class="data-table" style="margin-top: 0;">
+            <h2 class="card-header">Allocation Information</h2>
+            <div class="table-scroll" tabindex="0"><table class="data-table">
                 <tr>
-                    <th scope="row" style="width: 150px;">ID</th>
+                    <th scope="row" class="w-sm">ID</th>
                     <td>{{ allocation.id }}</td>
                 </tr>
                 <tr>
@@ -27,7 +28,7 @@
                 </tr>
                 <tr>
                     <th scope="row">User</th>
-                    <td>{{ allocation.username }}</td>
+                    <td>{{ allocation.username or '-' }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Job ID</th>
@@ -36,7 +37,7 @@
                 <tr>
                     <th scope="row">Mode</th>
                     <td>
-                        {% set mode = allocation.mode.value if allocation.mode.value else allocation.mode %}
+                        {% set mode = allocation.mode %}
                         {% if mode == 'exclusive' %}
                         <span class="badge badge-danger">Exclusive</span>
                         {% else %}
@@ -47,7 +48,7 @@
                 <tr>
                     <th scope="row">Status</th>
                     <td>
-                        {% set status = allocation.status.value if allocation.status.value else allocation.status %}
+                        {% set status = allocation.status %}
                         {% if status == 'active' %}
                         <span class="badge badge-success">Active</span>
                         {% elif status == 'released' %}
@@ -63,42 +64,42 @@
                 </tr>
                 <tr>
                     <th scope="row">Checkout Time</th>
-                    <td>{{ allocation.checkout_time.strftime('%Y-%m-%d %H:%M:%S') if allocation.checkout_time else '-' }}</td>
+                    <td>{{ allocation.checkout_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Expected Checkin</th>
-                    <td>{{ allocation.expected_checkin.strftime('%Y-%m-%d %H:%M:%S') if allocation.expected_checkin else '-' }}</td>
+                    <td>{{ allocation.expected_checkin | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Actual Checkin</th>
-                    <td>{{ allocation.actual_checkin.strftime('%Y-%m-%d %H:%M:%S') if allocation.actual_checkin else '-' }}</td>
+                    <td>{{ allocation.actual_checkin | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Duration</th>
-                    <td>{{ allocation.duration_minutes }} minutes</td>
+                    <td>{% if allocation.duration_minutes is not none %}{{ allocation.duration_minutes }} minutes{% else %}-{% endif %}</td>
                 </tr>
-            </table>
+            </table></div>
         </div>
         
         {% if allocation.metadata %}
         <div class="card">
-            <div class="card-header">Resource Metadata (at checkout)</div>
-            <pre style="background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; margin: 0;">{{ allocation.metadata | tojson(indent=2) }}</pre>
+            <h2 class="card-header">Resource Metadata (at checkout)</h2>
+            <pre class="pre-block">{{ allocation.metadata | tojson(indent=2) }}</pre>
         </div>
         {% endif %}
     </div>
     
     <div>
-        {% set status = allocation.status.value if allocation.status.value else allocation.status %}
+        {% set status = allocation.status %}
         {% if status == 'active' %}
         <div class="card">
-            <div class="card-header">Actions</div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <h2 class="card-header">Actions</h2>
+            <div class="stack">
                 {% if allocation.user_id == current_user_id %}
-                <form action="{{ url_for('resources.allocation_checkin', allocation_id=allocation.id) }}" method="post">
+                <form action="{{ url_for('resources.allocation_checkin', allocation_id=allocation.id) }}" method="post" data-confirm="Check in this resource?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-warning" style="width: 100%;" onclick="return confirm('Check in this resource?')">
-                        <span class="material-icons" aria-hidden="true">assignment_return</span> Checkin
+                    <button type="submit" class="btn btn-warning btn-block">
+                        {{ ui.icon("assignment_return") }} Checkin
                     </button>
                 </form>
                 {% else %}
@@ -108,8 +109,8 @@
                         <label for="reason">Reason for force checkin</label>
                         <input type="text" id="reason" name="reason" class="form-control" required placeholder="Reason for force checkin">
                     </div>
-                    <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Force check in this resource?')">
-                        <span class="material-icons" aria-hidden="true">warning</span> Force Checkin
+                    <button type="submit" class="btn btn-danger btn-block" data-confirm="Force check in this resource?">
+                        {{ ui.icon("warning") }} Force Checkin
                     </button>
                 </form>
                 {% endif %}
@@ -118,16 +119,16 @@
         {% endif %}
         
         <div class="card">
-            <div class="card-header">Navigation</div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <h2 class="card-header">Navigation</h2>
+            <div class="stack">
                 <a href="{{ url_for('resources.resource_detail', resource_id=allocation.resource_id) }}" class="btn btn-secondary">
-                    <span class="material-icons" aria-hidden="true">devices</span> View Resource
+                    {{ ui.icon("devices") }} View Resource
                 </a>
                 <a href="{{ url_for('resources.allocation_list') }}" class="btn btn-secondary">
-                    <span class="material-icons" aria-hidden="true">assignment</span> Active Allocations
+                    {{ ui.icon("assignment") }} Active Allocations
                 </a>
                 <a href="{{ url_for('resources.allocation_history') }}" class="btn btn-secondary">
-                    <span class="material-icons" aria-hidden="true">history</span> Allocation History
+                    {{ ui.icon("history") }} Allocation History
                 </a>
             </div>
         </div>

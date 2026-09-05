@@ -66,6 +66,7 @@ class IPPoolResponse:
     available_count: int
     created_at: datetime
     created_by: Optional[str]
+    reserved_ips: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -1542,7 +1543,8 @@ class IPPoolManager:
             allocated_count=stats["allocated_count"],
             available_count=stats["available_count"],
             created_at=pool.created_at,
-            created_by=created_by
+            created_by=created_by,
+            reserved_ips=list(pool.reserved_ips or [])
         )
     
     def _allocation_to_response(self, allocation, pool) -> IPAllocationResponse:

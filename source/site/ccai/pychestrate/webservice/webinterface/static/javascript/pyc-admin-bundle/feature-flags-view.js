@@ -339,7 +339,7 @@ class PycFeatureFlags extends HTMLElement {
     }
     toggle.addEventListener("click", () => {
       const question = "Set flag \"" + String(entry.flag_key) + "\" to " + target + "?";
-      if (window.confirm(question) === false) {
+      if (target !== FLAG_STATE_ENABLED && window.confirm(question) === false) {
         return;
       }
       toggle.toggleAttribute("disabled", true);
@@ -415,6 +415,7 @@ class PycFeatureFlags extends HTMLElement {
       notice.classList.add("pyc-admin__notice--error");
     }
     notice.setAttribute("data-role", "toggle-status");
+    notice.setAttribute("role", tone === "error" ? "alert" : "status");
     notice.textContent = message;
     this._status_region.replaceChildren(notice);
     return;

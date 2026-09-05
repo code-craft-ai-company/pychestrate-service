@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipelines-list-view.js
+// pyc-pipelines-bundle/pipelines-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
 function build_pipelines_query_url(state) {
@@ -203,10 +203,10 @@ var PycPipelinesList = class extends HTMLElement {
     root.appendChild(heading);
     const controls = document.createElement("div");
     controls.classList.add("pyc-pipelines__controls");
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-pipelines__field");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-pipelines__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -220,6 +220,7 @@ var PycPipelinesList = class extends HTMLElement {
     project_input.classList.add("pyc-pipelines__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
@@ -287,10 +288,10 @@ var PycPipelinesList = class extends HTMLElement {
     form.setAttribute("data-role", "upsert-form");
     const fields = document.createElement("div");
     fields.classList.add("pyc-pipelines__field-row");
-    const commit_label = document.createElement("label");
+    const commit_label = document.createElement("div");
     commit_label.classList.add("pyc-pipelines__field");
-    commit_label.textContent = "Commit SHA";
     const commit_input = document.createElement("mj-text-field");
+    commit_input.setAttribute("label", "Commit SHA");
     commit_input.classList.add("pyc-pipelines__input");
     commit_input.setAttribute("type", "text");
     commit_input.setAttribute("placeholder", "0000000000000000000000000000000000000000");
@@ -298,10 +299,10 @@ var PycPipelinesList = class extends HTMLElement {
     commit_input.required = true;
     commit_label.appendChild(commit_input);
     fields.appendChild(commit_label);
-    const filename_label = document.createElement("label");
+    const filename_label = document.createElement("div");
     filename_label.classList.add("pyc-pipelines__field");
-    filename_label.textContent = "Filename";
     const filename_input = document.createElement("mj-text-field");
+    filename_input.setAttribute("label", "Filename");
     filename_input.classList.add("pyc-pipelines__input");
     filename_input.setAttribute("type", "text");
     filename_input.setAttribute("placeholder", "pipeline.yaml");
@@ -386,10 +387,10 @@ var PycPipelinesList = class extends HTMLElement {
     matrix_area.rows = 4;
     matrix_label.appendChild(matrix_area);
     panel.appendChild(matrix_label);
-    const strategy_label = document.createElement("label");
+    const strategy_label = document.createElement("div");
     strategy_label.classList.add("pyc-pipelines__field");
-    strategy_label.textContent = "Strategy";
     const strategy_input = document.createElement("mj-text-field");
+    strategy_input.setAttribute("label", "Strategy");
     strategy_input.classList.add("pyc-pipelines__input");
     strategy_input.setAttribute("type", "text");
     strategy_input.setAttribute("placeholder", "cartesian");
@@ -1238,7 +1239,7 @@ var PycPipelinesList = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipeline-detail-view.js
+// pyc-pipelines-bundle/pipeline-detail-view.js
 var NODE_WIDTH = 140;
 var NODE_HEIGHT = 44;
 var COLUMN_GAP = 80;
@@ -1586,7 +1587,7 @@ var PycPipelineDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-pipeline-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Pipeline detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-pipeline-detail__heading");
@@ -1931,7 +1932,7 @@ var PycPipelineDetail = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/index.entry.js
+// pyc-pipelines-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var PIPELINES_READ_PERMISSION = "system:pipelines.read";
 var PIPELINES_ROUTE = "/pipelines";

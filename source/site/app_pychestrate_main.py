@@ -205,10 +205,14 @@ from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import
     register_resources_routes,
 )
 from ccai.pychestrate.webservice.webinterface.foundation.static_files import (
+    configure_static_url_root,
+    install_static_url_global,
+    register_favicon_route,
     register_static_routes,
 )
 from ccai.pychestrate.webservice.webinterface.foundation.templating import (
     build_jinja_environment,
+    install_template_globals,
     discover_blueprint_template_paths,
     set_default_environment,
 )
@@ -408,6 +412,30 @@ app = establish_webapp_persona(
 # registered, so any explicit blueprint route (``/admin/...``,
 # ``/projects/...``, ``/login``, ``/api/...``) takes precedence.
 
+ENV_TEMPLATE_STRICT_UNDEFINED = "PYCHESTRATE_TEMPLATE_STRICT_UNDEFINED"
+
+
+def _resolve_template_strict_undefined() -> bool:
+    """
+        Read the ``PYCHESTRATE_TEMPLATE_STRICT_UNDEFINED`` environment
+        variable and decide whether the consumer-UI jinja environment
+        should raise on undefined template variables.
+
+        Strict is the default: every template passes the phase-13
+        render-smoke suite under ``StrictUndefined``, so a template
+        that reads an attribute the handler never supplied is a
+        defect and should fail loudly rather than render a blank.
+        An operator can roll back to the lenient historical
+        behaviour for one release by setting the variable to ``0``.
+
+        :returns: True unless the variable explicitly disables it.
+    """
+    raw = os.environ.get(ENV_TEMPLATE_STRICT_UNDEFINED, "")
+    normalized = raw.strip().lower()
+    rtnval = normalized not in ("0", "false", "no", "off")
+    return rtnval
+
+
 def install_web_ui_templating() -> None:
     """
         Build and publish the jinja2 environment the consumer-
@@ -443,10 +471,12 @@ def install_web_ui_templating() -> None:
     # blueprint templates retain priority on any name collision.
     shell_template_path = get_shell_template_search_path()
     template_paths = list(template_paths) + [shell_template_path]
+    strict_undefined = _resolve_template_strict_undefined()
     environment = build_jinja_environment(
         template_search_paths=template_paths,
+        strict_undefined=strict_undefined,
     )
-    install_url_for_global(environment=environment)
+    install_template_globals(environment=environment)
     set_default_environment(environment=environment)
     return
 
@@ -530,6 +560,11 @@ def register_service_extensions() -> None:
         app=app,
         url_prefix="/static",
         static_root=SITE_DIRECTORIES.DIR_STATIC,
+    )
+    configure_static_url_root(static_root=SITE_DIRECTORIES.DIR_STATIC)
+    register_favicon_route(
+        app=app,
+        favicon_path=os.path.join(SITE_DIRECTORIES.DIR_STATIC, "favicon.svg"),
     )
     # codecraftai-webworks ships the mj-* component library + chart
     # renderers + design tokens as static assets under its site-

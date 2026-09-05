@@ -1,26 +1,25 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit {{ repository.name }} - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.repository_list', project_id=project.id) }}">Repositories</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repository.id) }}">{{ repository.name }}</a>
-    <span>/</span>
-    <span>Edit</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.repository_list', project_id=project.id) }}">Repositories</a></li>
+        <li><a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repository.id) }}">{{ repository.name }}</a></li>
+        <li aria-current="page">Edit</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Edit Repository</h2>
+    <h1>Edit Repository</h1>
     <p>Update repository configuration</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -31,8 +30,8 @@
         </div>
         
         <div class="form-group">
-            <label>Repository URL</label>
-            <input type="text" class="form-control" value="{{ repository.url }}" disabled>
+            <label for="ro-repository-url">Repository URL</label>
+            <input type="text" class="form-control" value="{{ repository.url }}" id="ro-repository-url" disabled>
             <div class="form-text">URL cannot be changed after creation</div>
         </div>
         
@@ -55,9 +54,9 @@
             <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else repository.description }}</textarea>
         </div>
         
-        <div style="display: flex; gap: 10px; margin-top: 30px;">
+        <div class="actions-row mt-lg">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repository.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

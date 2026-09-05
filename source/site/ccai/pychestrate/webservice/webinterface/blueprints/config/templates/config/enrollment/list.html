@@ -1,32 +1,33 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Enrollment Tokens - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Client Enrollment Tokens</h2>
+    <h1>Client Enrollment Tokens</h1>
     <p>Mint, list, and revoke client enrollment bootstrap tokens</p>
 </div>
 
-{% if minted %}
-<div class="card" style="max-width: 720px; margin-bottom: 24px; border-color: #c3e6cb; background: #f4fbf6;">
-    <div class="card-header" style="border-color: #c3e6cb;">
+{% if minted is defined and minted %}
+<div class="card" style="max-width: 45rem; margin-bottom: 1.5rem; border-color: var(--pyc-color-on-success-surface); background: var(--pyc-color-success-surface);">
+    <div class="card-header" style="border-color: var(--pyc-color-on-success-surface);">
         Token {{ minted.token_id }} minted for client "{{ minted.pod_name }}"
     </div>
-    <p style="margin: 0 0 8px; font-weight: 600; color: #721c24;">
+    <p class="strong text-danger mb-sm">
         Shown once &mdash; save it now. The secret cannot be retrieved again.
     </p>
-    <p style="margin: 0 0 4px; font-size: 0.875rem; color: #495057;">Enrollment token secret:</p>
-    <pre style="margin: 0 0 16px; padding: 10px 12px; background: #1a1a2e; color: #e9ecef; border-radius: 4px; font-size: 0.85rem; overflow-x: auto; user-select: all;">{{ minted.secret }}</pre>
-    <p style="margin: 0 0 4px; font-size: 0.875rem; color: #495057;">
+    <p class="muted small">Enrollment token secret:</p>
+    <pre class="command-box">{{ minted.secret }}</pre>
+    <p class="muted small">
         Next steps &mdash; on the client machine, enroll and then start the runtime:
     </p>
-    <pre style="margin: 0; padding: 10px 12px; background: #1a1a2e; color: #e9ecef; border-radius: 4px; font-size: 0.85rem; overflow-x: auto; user-select: all;">{{ minted.enroll_command }}
+    <pre class="command-box">{{ minted.enroll_command }}
 {{ minted.run_command }}</pre>
 </div>
 {% endif %}
 
-<div class="card" style="max-width: 640px; margin-bottom: 24px;">
+<div class="card narrow mb">
     <h3>Mint New Token</h3>
     <form method="post"
           action="{{ url_for('config.enrollment_token_mint') }}">
@@ -69,21 +70,21 @@
         </div>
 
         <button type="submit" class="btn btn-primary">
-            <span class="material-icons">add</span> Mint Token
+            {{ ui.icon("add") }} Mint Token
         </button>
     </form>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Token ID</th>
-            <th>Project</th>
-            <th>Pod</th>
-            <th>Status</th>
-            <th>Issued</th>
-            <th>Expires</th>
-            <th>Actions</th>
+            <th scope="col">Token ID</th>
+            <th scope="col">Project</th>
+            <th scope="col">Pod</th>
+            <th scope="col">Status</th>
+            <th scope="col">Issued</th>
+            <th scope="col">Expires</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -98,29 +99,26 @@
             <td>
                 {% if token.status.value == 'PENDING' %}
                 <form action="{{ url_for('config.enrollment_token_revoke', token_id=token.token_id) }}"
-                      method="post" style="display:inline;">
+                      method="post" data-confirm="Revoke this token?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger"
-                            onclick="return confirm('Revoke this token?')">
+                    <button type="submit" class="btn btn-sm btn-danger">
                         Revoke
                     </button>
                 </form>
                 {% else %}
-                <span style="color: #6c757d;">-</span>
+                <span class="muted">-</span>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">
-                No enrollment tokens found
-            </td>
+            {{ ui.empty_state("No enrollment tokens found", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-<p style="margin-top: 20px; color: #6c757d;">
+<p class="muted mt">
     Total: {{ tokens | length }} tokens
 </p>
 {% endblock %}

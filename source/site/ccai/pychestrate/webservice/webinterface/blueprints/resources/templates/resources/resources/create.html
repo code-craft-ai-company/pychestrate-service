@@ -1,14 +1,15 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Create Resource - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Create Resource</h2>
+    <h1>Create Resource</h1>
     <p>Add a new trackable resource to the system</p>
 </div>
 
-<div class="card" style="max-width: 700px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
@@ -56,9 +57,9 @@
         {% if all_tags %}
         <div class="form-group">
             <label>Tags</label>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <div class="actions-row">
                 {% for tag in all_tags %}
-                <label style="font-weight: normal;">
+                <label class="regular">
                     <input type="checkbox" name="tags" value="{{ tag.name }}"
                            {% if form_data and tag.name in form_data.getlist('tags') %}checked{% endif %}>
                     {{ tag.name }}
@@ -75,9 +76,9 @@
             <p class="form-text">Optional key-value metadata in JSON format</p>
         </div>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">save</span> Create Resource
+                {{ ui.icon("save") }} Create Resource
             </button>
             <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Cancel</a>
         </div>

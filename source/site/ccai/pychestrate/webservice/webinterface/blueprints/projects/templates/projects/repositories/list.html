@@ -1,54 +1,55 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Repositories - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <span>Repositories</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li aria-current="page">Repositories</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Repositories</h2>
+    <h1>Repositories</h1>
     <p>Manage source code repositories</p>
 </div>
 
 {% if can_manage %}
-<div style="margin-bottom: 20px;">
+<div class="mb">
     <a href="{{ url_for('projects.repository_create', project_id=project.id) }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Add Repository
+        {{ ui.icon("add") }} Add Repository
     </a>
 </div>
 {% endif %}
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>URL</th>
-            <th>Auth Type</th>
-            <th>Default Branch</th>
-            <th>Last Commit</th>
-            <th>Last Fetch</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">URL</th>
+            <th scope="col">Auth Type</th>
+            <th scope="col">Default Branch</th>
+            <th scope="col">Last Commit</th>
+            <th scope="col">Last Fetch</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for repo in repositories %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repo.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repo.id) }}" class="strong">
                     {{ repo.name }}
                 </a>
             </td>
-            <td style="font-family: monospace; font-size: 0.8rem;">{{ repo.url[:35] }}{% if repo.url|length > 35 %}...{% endif %}</td>
+            <td class="mono">{{ repo.url[:35] }}{% if repo.url|length > 35 %}...{% endif %}</td>
             <td><span class="badge badge-secondary">{{ repo.auth_type.value }}</span></td>
             <td>{{ repo.default_branch }}</td>
             <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else 'N/A' }}</td>
-            <td>{{ repo.last_fetch_time.strftime('%Y-%m-%d %H:%M') if repo.last_fetch_time else 'Never' }}</td>
+            <td>{{ repo.last_fetch_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</td>
             <td>
                 <a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repo.id) }}" class="btn btn-sm btn-secondary">View</a>
                 {% if can_manage %}
@@ -58,7 +59,7 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
+            <td colspan="7" class="muted center pad-lg">
                 No repositories yet.
                 {% if can_manage %}
                 <a href="{{ url_for('projects.repository_create', project_id=project.id) }}">Add your first repository</a>
@@ -69,25 +70,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.repository_list', project_id=project.id, page=page-1) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.repository_list', project_id=project.id, page=p) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.repository_list', project_id=project.id, page=page+1) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.repository_list', page, total_pages, {'project_id': project.id}) }}
 {% endblock %}

@@ -1,20 +1,21 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}{{ pool.name }} - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>{{ pool.name }}</h2>
+    <h1>{{ pool.name }}</h1>
     <p>IP pool details and allocations</p>
 </div>
 
-<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+<div class="detail-grid">
     <div>
         <div class="card">
-            <div class="card-header">Pool Information</div>
-            <table class="data-table" style="margin-top: 0;">
+            <h2 class="card-header">Pool Information</h2>
+            <div class="table-scroll" tabindex="0"><table class="data-table">
                 <tr>
-                    <th scope="row" style="width: 150px;">ID</th>
+                    <th scope="row" class="w-sm">ID</th>
                     <td>{{ pool.id }}</td>
                 </tr>
                 <tr>
@@ -27,7 +28,7 @@
                 </tr>
                 <tr>
                     <th scope="row">IP Version</th>
-                    <td>{{ pool.ip_version.value if pool.ip_version.value else pool.ip_version }}</td>
+                    <td>{{ pool.ip_version }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Gateway</th>
@@ -41,36 +42,36 @@
                     <th scope="row">Description</th>
                     <td>{{ pool.description or '-' }}</td>
                 </tr>
-            </table>
+            </table></div>
         </div>
         
         <div class="card">
-            <div class="card-header">Pool Statistics</div>
+            <h2 class="card-header">Pool Statistics</h2>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; text-align: center;">
                 <div>
-                    <div style="font-size: 1.5rem; font-weight: 600;">{{ pool.total_addresses }}</div>
-                    <div style="color: #6c757d; font-size: 0.875rem;">Total</div>
+                    <div class="stat-value">{{ pool.total_addresses }}</div>
+                    <div class="muted small">Total</div>
                 </div>
                 <div>
-                    <div style="font-size: 1.5rem; font-weight: 600; color: #28a745;">{{ pool.available_count }}</div>
-                    <div style="color: #6c757d; font-size: 0.875rem;">Available</div>
+                    <div class="stat-value text-success">{{ pool.available_count }}</div>
+                    <div class="muted small">Available</div>
                 </div>
                 <div>
-                    <div style="font-size: 1.5rem; font-weight: 600; color: #007bff;">{{ pool.allocated_count }}</div>
-                    <div style="color: #6c757d; font-size: 0.875rem;">Allocated</div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: var(--pyc-color-accent);">{{ pool.allocated_count }}</div>
+                    <div class="muted small">Allocated</div>
                 </div>
                 <div>
-                    <div style="font-size: 1.5rem; font-weight: 600; color: #6c757d;">{{ pool.reserved_count }}</div>
-                    <div style="color: #6c757d; font-size: 0.875rem;">Reserved</div>
+                    <div class="stat-value muted">{{ pool.reserved_count }}</div>
+                    <div class="muted small">Reserved</div>
                 </div>
             </div>
         </div>
         
         <div class="card">
-            <div class="card-header">Active Allocations</div>
+            <h2 class="card-header">Active Allocations</h2>
             {% if allocations %}
-            <table class="data-table" style="margin-top: 0;">
-                <thead>
+            <div class="table-scroll" tabindex="0"><table class="data-table">
+                <th scope="col"ead>
                     <tr>
                         <th scope="col">IP Address</th>
                         <th scope="col">User</th>
@@ -83,34 +84,34 @@
                     {% for alloc in allocations %}
                     <tr>
                         <td><code>{{ alloc.ip_address }}</code></td>
-                        <td>{{ alloc.username }}</td>
+                        <td>{{ alloc.username or '-' }}</td>
                         <td>{{ alloc.job_id or '-' }}</td>
-                        <td>{{ alloc.checkout_time.strftime('%Y-%m-%d %H:%M') if alloc.checkout_time else '-' }}</td>
+                        <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
                         <td>
-                            <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post" style="display:inline;">
+                            <form action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}" method="post">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                 <input type="hidden" name="allocation_id" value="{{ alloc.id }}">
-                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Check in this IP?')">Checkin</button>
+                                <button type="submit" class="btn btn-sm btn-warning" data-confirm="Check in this IP?">Checkin</button>
                             </form>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
-            </table>
+            </table></div>
             {% else %}
-            <p style="color: #6c757d; margin: 0;">No active allocations</p>
+            <p class="muted">No active allocations</p>
             {% endif %}
         </div>
         
         {% if available_ips %}
         <div class="card">
-            <div class="card-header">Available IPs (Preview)</div>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <h2 class="card-header">Available IPs (Preview)</h2>
+            <div class="actions-row">
                 {% for ip in available_ips %}
-                <code style="background: #e9ecef; padding: 4px 8px; border-radius: 4px;">{{ ip }}</code>
+                <code style="background: var(--pyc-color-surface-elevated); padding: 4px 8px; border-radius: 4px;">{{ ip }}</code>
                 {% endfor %}
                 {% if pool.available_count > 10 %}
-                <span style="color: #6c757d;">... and {{ pool.available_count - 10 }} more</span>
+                <span class="muted">... and {{ pool.available_count - 10 }} more</span>
                 {% endif %}
             </div>
         </div>
@@ -119,15 +120,15 @@
     
     <div>
         <div class="card">
-            <div class="card-header">Actions</div>
-            <div style="display: flex; flex-direction: column; gap: 10px;">
+            <h2 class="card-header">Actions</h2>
+            <div class="stack">
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-secondary">
-                    <span class="material-icons" aria-hidden="true">edit</span> Edit Pool
+                    {{ ui.icon("edit") }} Edit Pool
                 </a>
-                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post">
+                <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm="Delete this IP pool?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-danger" style="width: 100%;" onclick="return confirm('Delete this IP pool?')">
-                        <span class="material-icons" aria-hidden="true">delete</span> Delete Pool
+                    <button type="submit" class="btn btn-danger btn-block">
+                        {{ ui.icon("delete") }} Delete Pool
                     </button>
                 </form>
             </div>
@@ -135,7 +136,7 @@
         
         {% if pool.available_count > 0 %}
         <div class="card">
-            <div class="card-header">Checkout IP</div>
+            <h2 class="card-header">Checkout IP</h2>
             <form method="post" action="{{ url_for('resources.ip_pool_checkout', pool_id=pool.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
@@ -164,16 +165,21 @@
                     <input type="text" id="reason" name="reason" class="form-control">
                 </div>
                 
-                <button type="submit" class="btn btn-success" style="width: 100%;">
-                    <span class="material-icons" aria-hidden="true">assignment_turned_in</span> Checkout
+                <button type="submit" class="btn btn-success btn-block">
+                    {{ ui.icon("assignment_turned_in") }} Checkout
                 </button>
             </form>
+        </div>
+        {% else %}
+        <div class="card">
+            <h2 class="card-header">Checkout IP</h2>
+            <p class="muted">This pool is at capacity: every usable address is reserved or checked out. Check an address back in, or extend the pool, to make room.</p>
         </div>
         {% endif %}
         
         {% if allocations %}
         <div class="card">
-            <div class="card-header">Bulk Checkin by Job</div>
+            <h2 class="card-header">Bulk Checkin by Job</h2>
             <form method="post" action="{{ url_for('resources.ip_pool_checkin', pool_id=pool.id) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 
@@ -182,8 +188,8 @@
                     <input type="text" id="bulk_job_id" name="job_id" class="form-control" required>
                 </div>
                 
-                <button type="submit" class="btn btn-warning" style="width: 100%;">
-                    <span class="material-icons" aria-hidden="true">assignment_return</span> Checkin All Job IPs
+                <button type="submit" class="btn btn-warning btn-block">
+                    {{ ui.icon("assignment_return") }} Checkin All Job IPs
                 </button>
             </form>
         </div>

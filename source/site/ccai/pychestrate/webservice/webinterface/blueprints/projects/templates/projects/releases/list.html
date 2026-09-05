@@ -1,104 +1,94 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Releases - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <span>Releases</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li aria-current="page">Releases</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Releases</h2>
+    <h1>Releases</h1>
     <p>Release versions and artifacts</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <select name="status" class="form-control" style="width: 150px;">
+<div class="toolbar">
+    <form method="get" class="actions-row">
+        <label for="release-status" class="visually-hidden">Status</label>
+        <select id="release-status" name="status" class="form-control w-sm">
             <option value="">All Statuses</option>
             <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Draft</option>
             <option value="published" {% if selected_status == 'published' %}selected{% endif %}>Published</option>
             <option value="deprecated" {% if selected_status == 'deprecated' %}selected{% endif %}>Deprecated</option>
         </select>
+        {% if channels %}
+        <label for="release-channel" class="visually-hidden">Channel</label>
+        <select id="release-channel" name="channel_id" class="form-control w-md">
+            <option value="">All Channels</option>
+            {% for channel in channels %}
+            <option value="{{ channel.id }}" {% if selected_channel_id == channel.id %}selected{% endif %}>{{ channel.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            {{ ui.icon("filter_list") }} Filter
         </button>
+        <a href="{{ url_for(request_endpoint, project_id=project.id) }}" class="btn btn-secondary">Clear</a>
     </form>
     
-    <div style="display: flex; gap: 10px;">
+    <div class="actions-row">
         <a href="{{ url_for('projects.pipeline_list', project_id=project.id) }}" class="btn btn-secondary">
-            <span class="material-icons">account_tree</span> Pipelines
+            {{ ui.icon("account_tree") }} Pipelines
         </a>
         <a href="{{ url_for('projects.channel_list', project_id=project.id) }}" class="btn btn-secondary">
-            <span class="material-icons">rss_feed</span> Channels
+            {{ ui.icon("rss_feed") }} Channels
         </a>
     </div>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Version</th>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Artifacts</th>
-            <th>Created By</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th scope="col">Version</th>
+            <th scope="col">Name</th>
+            <th scope="col">Status</th>
+            <th scope="col">Artifacts</th>
+            <th scope="col">Published By</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for release in releases %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.release_detail', project_id=project.id, release_id=release.id) }}" style="font-weight: 500; font-family: monospace;">
+                <a href="{{ url_for('projects.release_detail', project_id=project.id, release_id=release.id) }}" class="strong mono">
                     {{ release.version }}
                 </a>
             </td>
             <td>{{ release.name or '' }}</td>
             <td>
-                <span class="badge badge-{% if release.status.value == 'published' %}success{% elif release.status.value == 'deprecated' %}warning{% else %}secondary{% endif %}">
-                    {{ release.status.value }}
-                </span>
+                {{ ui.status_badge(release.status) }}
             </td>
             <td>{{ release.artifact_count or 0 }}</td>
-            <td>{{ release.created_by_username }}</td>
-            <td>{{ release.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ release.published_by_username or '-' }}</td>
+            <td>{{ release.created_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
             <td>
                 <a href="{{ url_for('projects.release_detail', project_id=project.id, release_id=release.id) }}" class="btn btn-sm btn-secondary">View</a>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
-                No releases yet. Releases are created by pipelines or via the API.
-            </td>
+            {{ ui.empty_state("No releases yet. Releases are created by pipelines or via the API.", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.release_list', project_id=project.id, page=page-1, status=selected_status) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.release_list', project_id=project.id, page=p, status=selected_status) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.release_list', project_id=project.id, page=page+1, status=selected_status) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.release_list', page, total_pages, {'project_id': project.id, 'status': selected_status}) }}
 {% endblock %}

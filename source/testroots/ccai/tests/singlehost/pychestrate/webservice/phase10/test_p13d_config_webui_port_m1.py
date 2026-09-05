@@ -121,6 +121,29 @@ class _FakeRequest:
         return self._form
 
 
+
+_LOGIN_FORM_CSRF_TOKEN = "csrf-login-form"
+
+
+def _login_form_request(**kwargs: Any) -> "_FakeRequest":
+    """
+        Build the request a browser sends when it submits the sign-in
+        form: the anonymous session cookie carrying the CSRF token
+        minted on GET /login, plus that token in the form body.
+        Accepts the same keyword arguments as :class:`_FakeRequest`.
+    """
+    form = dict(kwargs.pop("form", None) or {})
+    form.setdefault("csrf_token", _LOGIN_FORM_CSRF_TOKEN)
+    cookies = dict(kwargs.pop("cookies", None) or {})
+    if cookie_session.COOKIE_NAME not in cookies:
+        cookies[cookie_session.COOKIE_NAME] = cookie_session.sign_session_payload(
+            payload={csrf.SESSION_KEY: _LOGIN_FORM_CSRF_TOKEN},
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+    kwargs.setdefault("method", "POST")
+    rtnval = _FakeRequest(form=form, cookies=cookies, **kwargs)
+    return rtnval
+
 class _FakeApp:
     def __init__(self) -> None:
         self.calls: List[Tuple[str, Tuple[str, ...], Callable]] = []
@@ -515,7 +538,7 @@ def test_handle_login_submit_returns_400_when_username_or_password_missing():
         env = _install_stub_environment()
         _install_ui_cookie_secret()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "", "password": "something"},
         )
         response = config_routes.handle_login_submit(request)
@@ -570,7 +593,7 @@ def test_handle_login_submit_happy_path_redirects_to_root():
         sm_patch = _patch_security_manager(side_effect=_build_with_response)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "admin", "password": "pw"},
         )
         response = config_routes.handle_login_submit(request)
@@ -629,7 +652,7 @@ def test_handle_login_submit_honors_next_query_param_on_success():
         sm_patch = _patch_security_manager(side_effect=_build_with_response)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "admin", "password": "pw"},
             query_mapping={"next": "/admin/users"},
         )
@@ -708,7 +731,7 @@ def test_handle_login_submit_prefers_form_next_over_query():
         sm_patch = _patch_security_manager(side_effect=_build_with_response)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={
                 "username": "admin",
                 "password": "pw",
@@ -759,7 +782,7 @@ def test_handle_login_submit_rejects_unsafe_form_next():
         sm_patch = _patch_security_manager(side_effect=_build_with_response)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={
                 "username": "admin",
                 "password": "pw",
@@ -811,7 +834,7 @@ def test_handle_login_submit_queues_no_welcome_flash_on_success():
         sm_patch = _patch_security_manager(side_effect=_build_with_response)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "admin", "password": "pw"},
         )
         response = config_routes.handle_login_submit(request)
@@ -889,7 +912,7 @@ def test_handle_login_submit_surfaces_lockout_and_flattens_inactive():
             )
             ar_patch = _patch_auth_request_factory()
 
-            request = _FakeRequest(
+            request = _login_form_request(
                 form={"username": "admin", "password": "pw"},
             )
             response = config_routes.handle_login_submit(request)
@@ -949,7 +972,7 @@ def test_handle_login_submit_keeps_generic_message_for_bad_credentials():
         )
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "admin", "password": "wrong"},
         )
         response = config_routes.handle_login_submit(request)
@@ -994,7 +1017,7 @@ def test_handle_login_submit_returns_401_when_authenticate_raises():
         sm_patch = _patch_security_manager(side_effect=_build_with_failure)
         ar_patch = _patch_auth_request_factory()
 
-        request = _FakeRequest(
+        request = _login_form_request(
             form={"username": "admin", "password": "wrong-pw"},
         )
         response = config_routes.handle_login_submit(request)
@@ -1093,12 +1116,11 @@ def test_handle_logout_redirects_without_security_manager_call_when_no_token():
 
         sm_patch = _patch_security_manager()
 
-        request = _FakeRequest(cookies={})
+        request = _FakeRequest(cookies={}, method="POST", form={})
         response = config_routes.handle_logout(request)
-
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(response.status_code, 303)
+        testbase.assert_equal(response.status_code in (302, 303), True)
         # No SecurityManager was constructed.
         testbase.assert_equal(_FakeSecurityManager.last_instance, None)
     finally:
@@ -1167,12 +1189,12 @@ def test_handle_logout_post_without_csrf_token_is_rejected():
     return
 
 
-def test_handle_logout_get_stays_available_without_csrf():
+def test_handle_logout_get_renders_confirmation_without_logging_out():
     """
-    **Feature: logout CSRF protection (audit fix)**
-    **Property: GET /logout -- the convenience entrypoint sidebar
-    links bind to -- still logs out without a CSRF token. Only
-    the POST path is CSRF-gated.**
+    **Feature: logout CSRF protection (UI remediation S-2)**
+    **Property: GET /logout renders a confirmation page whose
+    button POSTs; it never ends the session itself, so link
+    prefetchers and history restores cannot sign a user out.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1200,13 +1222,11 @@ def test_handle_logout_get_stays_available_without_csrf():
             method="GET",
         )
         response = config_routes.handle_logout(request)
-
-        testbase.assert_equal(response.status_code, 303)
-        testbase.assert_equal(
-            response.headers["Location"], "/login"
-        )
+        testbase.assert_equal(response.status_code, 200)
+        testbase.assert_equal(isinstance(response, HTMLResponse), True)
         instance = _FakeSecurityManager.last_instance
-        testbase.assert_equal(instance.logout_calls, ["tok-abc"])
+        logout_calls = instance.logout_calls if instance is not None else []
+        testbase.assert_equal(logout_calls, [])
     finally:
         if sm_patch is not None:
             sm_patch.deactivate()

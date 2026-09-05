@@ -1,43 +1,51 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Create Reservation - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Create Reservation</h2>
+    <h1>Create Reservation</h1>
     <p>Reserve a resource for future use</p>
 </div>
 
-<div class="card" style="max-width: 700px;">
-    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 15px;">
-        <span style="color: #495057; font-weight: 500;">Narrow the resource list:</span>
-        <select name="pool_id" class="form-control" style="width: 160px;" aria-label="Filter selectable resources by pool">
-            <option value="">All Pools</option>
-            {% for pool in pools %}
-            <option value="{{ pool.id }}" {% if selector_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
-            {% endfor %}
-        </select>
-        <select name="resource_type" class="form-control" style="width: 160px;" aria-label="Filter selectable resources by type">
-            <option value="">All Types</option>
-            <option value="device" {% if selector_resource_type == 'device' %}selected{% endif %}>Device</option>
-            <option value="ip_address" {% if selector_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
-            <option value="port" {% if selector_resource_type == 'port' %}selected{% endif %}>Port</option>
-            <option value="credential" {% if selector_resource_type == 'credential' %}selected{% endif %}>Credential</option>
-            <option value="generic" {% if selector_resource_type == 'generic' %}selected{% endif %}>Generic</option>
-        </select>
-        <button type="submit" class="btn btn-sm btn-secondary">Apply</button>
-    </form>
-
-    {% if resource_total > resources | length %}
-    <div class="alert alert-warning">
-        Showing the first {{ resources | length }} of {{ resource_total }} resources
-        &mdash; narrow the list by pool or type above to reach the rest.
-    </div>
-    {% endif %}
-
-    <form method="post">
+<div class="card narrow">
+    <form method="post" id="reservation-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
+        {#- The filter controls live inside the reservation form: "Apply"
+            submits the whole form with GET (formmethod), so the route
+            re-renders with the narrowed resource list *and* every value
+            the user has typed so far. Nothing is lost. #}
+        <fieldset class="pyc-filter-fieldset">
+            <legend>Narrow the resource list</legend>
+            <div class="actions-row">
+                <label for="pool_id" class="visually-hidden">Pool</label>
+                <select id="pool_id" name="pool_id" class="form-control w-sm">
+                    <option value="">All Pools</option>
+                    {% for pool in pools %}
+                    <option value="{{ pool.id }}" {% if selector_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
+                    {% endfor %}
+                </select>
+                <label for="resource_type" class="visually-hidden">Resource type</label>
+                <select id="resource_type" name="resource_type" class="form-control w-sm">
+                    <option value="">All Types</option>
+                    <option value="device" {% if selector_resource_type == 'device' %}selected{% endif %}>Device</option>
+                    <option value="ip_address" {% if selector_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
+                    <option value="port" {% if selector_resource_type == 'port' %}selected{% endif %}>Port</option>
+                    <option value="credential" {% if selector_resource_type == 'credential' %}selected{% endif %}>Credential</option>
+                    <option value="generic" {% if selector_resource_type == 'generic' %}selected{% endif %}>Generic</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-secondary" formmethod="get" formnovalidate>Apply filter</button>
+            </div>
+        </fieldset>
+
+        {% if resource_total > resources | length %}
+        <div class="alert alert-warning">
+            Showing the first {{ resources | length }} of {{ resource_total }} resources
+            &mdash; narrow the list by pool or type above to reach the rest.
+        </div>
+        {% endif %}
         <div class="form-group">
             <label for="resource_id">Resource *</label>
             <select id="resource_id" name="resource_id" class="form-control" required>
@@ -52,6 +60,7 @@
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
                    value="{{ form_data.start_time if form_data else '' }}">
+            <p class="form-text">Times are interpreted in the server's time zone.</p>
         </div>
 
         <div class="form-group">
@@ -79,11 +88,11 @@
             <textarea id="reason" name="reason" class="form-control" rows="3">{{ form_data.reason if form_data else '' }}</textarea>
         </div>
 
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">save</span> Create Reservation
+                {{ ui.icon("save") }} Create Reservation
             </button>
-            <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">Cancel</a>
+            <a href="{{ url_for('resources.reservation_list') }}" class="btn btn-secondary">Back to reservations</a>
         </div>
     </form>
 </div>

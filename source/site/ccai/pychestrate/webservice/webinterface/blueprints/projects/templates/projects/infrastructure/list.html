@@ -1,30 +1,31 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Infrastructure Jobs - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <span>Infrastructure</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li aria-current="page">Infrastructure</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Infrastructure Jobs</h2>
+    <h1>Infrastructure Jobs</h1>
     <p>Infrastructure provisioning and management</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <select name="spec_id" class="form-control" style="width: 200px;">
+<div class="toolbar">
+    <form method="get" class="actions-row">
+        <select name="spec_id" aria-label="Filter by specification" class="form-control w-md">
             <option value="">All Specifications</option>
             {% for spec in specs %}
             <option value="{{ spec.id }}" {% if selected_spec_id == spec.id %}selected{% endif %}>{{ spec.name }}</option>
             {% endfor %}
         </select>
-        <select name="status" class="form-control" style="width: 150px;">
+        <select name="status" aria-label="Filter by status" class="form-control w-sm">
             <option value="">All Statuses</option>
             <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
             <option value="running" {% if selected_status == 'running' %}selected{% endif %}>Running</option>
@@ -32,34 +33,35 @@
             <option value="failed" {% if selected_status == 'failed' %}selected{% endif %}>Failed</option>
         </select>
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            {{ ui.icon("filter_list") }} Filter
         </button>
+        <a href="{{ url_for(request_endpoint, project_id=project.id) }}" class="btn btn-secondary">Clear</a>
     </form>
     
     <a href="{{ url_for('projects.infra_spec_list', project_id=project.id) }}" class="btn btn-secondary">
-        <span class="material-icons">settings</span> View Specs
+        {{ ui.icon("settings") }} View Specs
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Job</th>
-            <th>Specification</th>
-            <th>Action</th>
-            <th>State</th>
-            <th>Status</th>
-            <th>Triggered By</th>
-            <th>Duration</th>
-            <th>Started</th>
-            <th>Actions</th>
+            <th scope="col">Job</th>
+            <th scope="col">Specification</th>
+            <th scope="col">Action</th>
+            <th scope="col">State</th>
+            <th scope="col">Status</th>
+            <th scope="col">Triggered By</th>
+            <th scope="col">Duration</th>
+            <th scope="col">Started</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for job in jobs %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.infra_job_detail', project_id=project.id, job_id=job.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.infra_job_detail', project_id=project.id, job_id=job.id) }}" class="strong">
                     #{{ job.id }}
                 </a>
             </td>
@@ -67,13 +69,11 @@
             <td><span class="badge badge-info">{{ job.action.value }}</span></td>
             <td><span class="badge badge-secondary">{{ job.state.value }}</span></td>
             <td>
-                <span class="badge badge-{% if job.status.value == 'succeeded' %}success{% elif job.status.value == 'failed' %}danger{% elif job.status.value == 'running' %}info{% else %}secondary{% endif %}">
-                    {{ job.status.value }}
-                </span>
+                {{ ui.status_badge(job.status) }}
             </td>
             <td>{{ job.triggered_by_username }}</td>
-            <td>{{ job.duration_seconds or 0 }}s</td>
-            <td>{{ job.started_at.strftime('%Y-%m-%d %H:%M') if job.started_at else 'Pending' }}</td>
+            <td>{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</td>
+            <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
             <td>
                 <a href="{{ url_for('projects.infra_job_detail', project_id=project.id, job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a>
                 <a href="{{ url_for('projects.infra_job_logs', project_id=project.id, job_id=job.id) }}" class="btn btn-sm btn-secondary">Logs</a>
@@ -81,31 +81,11 @@
         </tr>
         {% else %}
         <tr>
-            <td colspan="9" style="text-align: center; color: #6c757d; padding: 40px;">
-                No infrastructure jobs yet. Jobs appear here when an infrastructure specification runs; they are triggered by watches, pipelines, or the API.
-            </td>
+            {{ ui.empty_state("No infrastructure jobs yet. Jobs appear here when an infrastructure specification runs; they are triggered by watches, pipelines, or the API.", colspan=9) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.infra_job_list', project_id=project.id, page=page-1, status=selected_status, spec_id=selected_spec_id) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.infra_job_list', project_id=project.id, page=p, status=selected_status, spec_id=selected_spec_id) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.infra_job_list', project_id=project.id, page=page+1, status=selected_status, spec_id=selected_spec_id) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.infra_job_list', page, total_pages, {'project_id': project.id, 'status': selected_status, 'spec_id': selected_spec_id}) }}
 {% endblock %}

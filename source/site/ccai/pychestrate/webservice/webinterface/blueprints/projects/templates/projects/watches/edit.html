@@ -1,22 +1,21 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit {{ watch.name }} - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.watch_list', project_id=project.id) }}">Watches</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}">{{ watch.name }}</a>
-    <span>/</span>
-    <span>Edit</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}">Watches</a></li>
+        <li><a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}">{{ watch.name }}</a></li>
+        <li aria-current="page">Edit</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Edit Watch</h2>
+    <h1>Edit Watch</h1>
     <p>Modify watch configuration</p>
 </div>
 
@@ -63,7 +62,7 @@
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else (watch.conditions.branch_pattern or '') }}"
                    placeholder="e.g., main, feature/*, release-*">
-            <span class="form-text">Use * as wildcard. Leave empty to match all branches.</span>
+            <span class="form-text">Regular expression matched against the branch name (for example <code>^release/.*</code>). Leave empty to match every branch.</span>
         </div>
 
         <div class="form-group">
@@ -78,7 +77,7 @@
         </div>
 
         <div class="form-group">
-            <label for="action_spec_id">Build Specification (for build actions)</label>
+            <label for="action_spec_id">Target build specification</label>
             <select id="action_spec_id" name="action_spec_id" class="form-control">
                 <option value="">Select a build spec</option>
                 {% for spec in build_specs %}
@@ -87,18 +86,27 @@
                 </option>
                 {% endfor %}
             </select>
+        <p class="form-text">Used when the action is <code>trigger_build</code>.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="action_target_id">Target id for other actions</label>
+            <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
+                   value="{{ form_data.action_target_id if form_data else '' }}"
+                   placeholder="pipeline, infrastructure specification, or test specification id">
+            <p class="form-text">For <code>trigger_pipeline</code>, <code>trigger_infra_job</code>, <code>trigger_test_job</code>, and <code>send_notification</code>: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
 
         <div class="form-group">
             <label>
-                <input type="checkbox" name="enabled" value="true" {% if (form_data and form_data.enabled) or (not form_data and watch.enabled) %}checked{% endif %}>
+                <input type="checkbox" name="enabled" value="true" {% if (form_data and form_data.enabled == 'true') or (not form_data and watch.enabled) %}checked{% endif %}>
                 Enabled
             </label>
         </div>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('projects.watch_detail', project_id=project.id, watch_id=watch.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

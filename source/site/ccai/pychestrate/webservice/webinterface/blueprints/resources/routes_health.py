@@ -64,6 +64,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_PATH,
+    _resources_permission_flags,
+    _wrap_resources_handler_in_shell,
     _build_page_window,
     _calculate_total_pages,
 )
@@ -292,6 +294,7 @@ def handle_health_dashboard(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["health_groups"] = health_groups
         context["health_counts"] = health_counts
         context["total_count"] = total_count
@@ -381,6 +384,7 @@ def handle_health_detail(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resource"] = resource
         context["history"] = history.transitions
         context["config"] = config
@@ -550,6 +554,7 @@ def handle_health_config(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
+        context.update(_resources_permission_flags(auth=auth))
         context["resource"] = resource
         context["config"] = config
         response = _render(
@@ -800,7 +805,8 @@ def register_health_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        app.attach_route(full_path, methods=list(methods))(handler)
+        wrapped_handler = _wrap_resources_handler_in_shell(handler)
+        app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 
 

@@ -19,22 +19,6 @@ function ensure_secrets_stylesheet() {
   document.head.appendChild(link);
   return;
 }
-const SECRETS_ENTRY = {
-  entryId: "system.secrets",
-  label: "Secrets",
-  route: SECRETS_ROUTE,
-  requiredPermissions: [SECRETS_READ_PERMISSION],
-  group: SYSTEM_GROUP_ID
-};
-function register_secrets_sidebar(sidebar) {
-  sidebar.registerGroup({
-    groupId: SYSTEM_GROUP_ID,
-    label: "System",
-    requiredPermissions: [SECRETS_READ_PERMISSION]
-  });
-  sidebar.registerEntry(SECRETS_ENTRY);
-  return;
-}
 function define_secrets_element() {
   if (typeof customElements === "undefined") {
     return;
@@ -101,12 +85,15 @@ function _boot() {
       _register_against(retry);
       return;
     }
-    console.warn(
-      "pychestrate.ui.secrets.bundle_no_shell_handle",
-      {
-        reason: "window.pychestrateShell missing after microtask retry"
+    // The shell element can upgrade after this module runs (slow
+    // component library); wait for its ready event instead of
+    // giving up with a console warning and a blank page.
+    window.addEventListener("pyc-site-shell-ready", () => {
+      const late = target.pychestrateShell;
+      if (late !== void 0 && late.sidebar !== void 0) {
+        _register_against(late);
       }
-    );
+    }, { once: true });
   });
   return;
 }
@@ -133,6 +120,5 @@ export {
   ensure_secrets_stylesheet,
   format_timestamp,
   mount_secrets_view_if_active,
-  register_secrets_sidebar,
   reveal_error_message
 };

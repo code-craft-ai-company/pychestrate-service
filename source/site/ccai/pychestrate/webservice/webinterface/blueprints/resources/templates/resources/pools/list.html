@@ -1,25 +1,23 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Resource Pools - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Resource Pools</h2>
+    <h1>Resource Pools</h1>
     <p>Organize resources into logical groups</p>
 </div>
 
-{% macro page_url(p) -%}
-{{ url_for('resources.pool_list', page=p, per_page=per_page) }}
-{%- endmacro %}
 
-<div style="display: flex; justify-content: flex-end; margin-bottom: 20px;">
+<div class="toolbar toolbar--end">
     <a href="{{ url_for('resources.pool_create') }}" class="btn btn-primary">
-        <span class="material-icons" aria-hidden="true">add</span> Create Pool
+        {{ ui.icon("add") }} Create Pool
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Description</th>
@@ -39,54 +37,26 @@
             </td>
             <td>{{ pool.description or '-' }}</td>
             <td>{{ pool.resource_count }}</td>
-            <td>{{ pool.created_at.strftime('%Y-%m-%d %H:%M') if pool.created_at else '-' }}</td>
+            <td>{{ pool.created_at | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
             <td>
                 {% if not pool.is_default %}
-                <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('resources.pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('{% if pool.resource_count > 0 %}This pool contains {{ pool.resource_count }} resource(s) -- deletion will fail until the pool is empty. {% endif %}Delete this pool?')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="5" style="text-align: center; color: #6c757d;">
+            <td colspan="5" class="muted center">
                 No pools found.
                 <a href="{{ url_for('resources.pool_create') }}">Create one</a>
             </td>
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<nav class="pagination" aria-label="Pool list pages">
-    {% if page > 1 %}
-    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
-    {% endif %}
-
-    {% if page_window[0] > 1 %}
-    <a href="{{ page_url(1) }}">1</a>
-    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
-    {% endif %}
-
-    {% for p in page_window %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ page_url(p) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-
-    {% if page_window[-1] < total_pages %}
-    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
-    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
-    {% endif %}
-
-    {% if page < total_pages %}
-    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
-    {% endif %}
-</nav>
-{% endif %}
+{{ ui.pagination('resources.pool_list', page, total_pages, {'per_page': per_page}, total=None) }}
 {% endblock %}

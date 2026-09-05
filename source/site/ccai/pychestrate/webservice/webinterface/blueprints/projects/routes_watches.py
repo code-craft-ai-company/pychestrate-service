@@ -258,7 +258,9 @@ def _build_watch_action_config(
     )
     if action_spec_id is None:
         raise ValueError(
-            "action_spec_id is required for the selected action"
+            "Choose a target for the action: a build specification"
+            " for trigger_build, or the id of the pipeline, infrastructure"
+            " specification, or test specification for the other actions."
         )
     action_enum = _resolve_watch_action(value=action_type)
     rtnval = WatchActionConfig(
@@ -473,6 +475,23 @@ def _can_manage(
     try:
         rtnval = project_manager.check_permission(
             project_id, user_id, "developer"
+        )
+    except Exception:
+        rtnval = False
+    return rtnval
+
+
+def _can_delete(
+        *, project_manager: Any, project_id: int, user_id: str
+    ) -> bool:
+    """
+        ``handle_watch_delete`` is ``admin``-gated, so the Delete
+        button must be gated the same way -- a developer who sees
+        it would confirm the dialog and be bounced with an error.
+    """
+    try:
+        rtnval = project_manager.check_permission(
+            project_id, user_id, "admin"
         )
     except Exception:
         rtnval = False
@@ -744,10 +763,24 @@ def handle_watch_detail(request: Request) -> Response:
             return watch_or_redirect
         watch = watch_or_redirect
 
-        trigger_logs = watch_manager.get_trigger_logs(
+        trigger_log_response = watch_manager.get_trigger_logs(
             watch_id, limit=20
         )
+        # The manager returns a WatchTriggerLogListResponse; the
+        # template iterates the rows, so hand it the list. Test
+        # fakes may return a bare list -- accept that too.
+        if isinstance(trigger_log_response, list):
+            trigger_logs = trigger_log_response
+        else:
+            trigger_logs = getattr(trigger_log_response, "logs", None)
+        if trigger_logs is None:
+            trigger_logs = []
         can_manage = _can_manage(
+            project_manager=project_manager,
+            project_id=project_id,
+            user_id=auth.user_id,
+        )
+        can_delete = _can_delete(
             project_manager=project_manager,
             project_id=project_id,
             user_id=auth.user_id,
@@ -764,6 +797,7 @@ def handle_watch_detail(request: Request) -> Response:
         context["watch"] = watch
         context["trigger_logs"] = trigger_logs
         context["can_manage"] = can_manage
+        context["can_delete"] = can_delete
 
         response = _render(
             template_name="projects/watches/detail.html",
@@ -863,7 +897,10 @@ def handle_watch_create(request: Request) -> Response:
             single_form.get("action_type", "")
         ).strip()
         action_spec_id = _coerce_int(
-            raw=single_form.get("action_spec_id", None)
+            raw=(
+                single_form.get("action_target_id", None)
+                or single_form.get("action_spec_id", None)
+            )
         )
         enabled_raw = single_form.get("enabled", None)
         enabled = (
@@ -1039,7 +1076,10 @@ def handle_watch_edit(request: Request) -> Response:
             action_type_raw if len(action_type_raw) > 0 else None
         )
         action_spec_id = _coerce_int(
-            raw=single_form.get("action_spec_id", None)
+            raw=(
+                single_form.get("action_target_id", None)
+                or single_form.get("action_spec_id", None)
+            )
         )
 
         # ``enabled`` is a checkbox in the edit form; absence means

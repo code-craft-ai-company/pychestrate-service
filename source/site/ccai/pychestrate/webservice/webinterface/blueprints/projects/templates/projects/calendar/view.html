@@ -1,122 +1,186 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Calendar - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block extra_css %}
 <style>
-    .calendar-grid {
+    .projects-fragment .calendar-grid {
         display: grid;
         grid-template-columns: repeat(7, 1fr);
         gap: 1px;
-        background: #dee2e6;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
+        background: var(--pyc-color-border);
+        border: 1px solid var(--pyc-color-border);
+        border-radius: 6px;
         overflow: hidden;
     }
-    .calendar-header {
-        background: #f8f9fa;
-        padding: 10px;
+    .projects-fragment .calendar-header {
+        background: var(--pyc-color-surface-elevated);
+        color: var(--pyc-color-on-surface-muted);
+        padding: 0.6rem;
         text-align: center;
         font-weight: 600;
-        font-size: 0.875rem;
+        font-size: var(--pyc-font-size-small, 0.875rem);
     }
-    .calendar-day {
-        background: white;
-        min-height: 100px;
-        padding: 8px;
+    .projects-fragment .calendar-day {
+        background: var(--pyc-color-surface);
+        min-height: 6.5rem;
+        padding: 0.5rem;
     }
-    .calendar-day.other-month {
-        background: #f8f9fa;
-        color: #adb5bd;
+    .projects-fragment .calendar-day.other-month {
+        background: var(--pyc-color-surface-elevated);
+        color: var(--pyc-color-on-surface-muted);
     }
-    .calendar-day.today {
-        background: #e3f2fd;
+    .projects-fragment .calendar-day.today {
+        background: var(--pyc-color-accent-surface);
     }
-    .day-number {
+    .projects-fragment .day-number {
         font-weight: 500;
-        margin-bottom: 5px;
+        margin-bottom: 0.3rem;
+        font-variant-numeric: tabular-nums;
     }
-    .calendar-event {
-        font-size: 0.75rem;
-        padding: 2px 4px;
-        margin-bottom: 2px;
-        border-radius: 2px;
+    .projects-fragment .calendar-day.today .day-number::after {
+        content: " Today";
+        font-size: var(--pyc-font-size-xsmall, 0.75rem);
+        color: var(--pyc-color-accent-on-surface);
+    }
+    .projects-fragment .calendar-event {
+        display: block;
+        font-size: var(--pyc-font-size-xsmall, 0.75rem);
+        padding: 0.15rem 0.35rem;
+        margin-bottom: 0.15rem;
+        border-radius: 3px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        text-decoration: none;
+        border-left: 3px solid transparent;
     }
-    .event-release {
-        background: #d4edda;
-        color: #155724;
+    .projects-fragment .calendar-event:focus-visible {
+        outline: var(--pyc-focus-ring);
     }
-    .event-merge {
-        background: #d1ecf1;
-        color: #0c5460;
+    .projects-fragment .event-release,
+    .projects-fragment .legend-release {
+        background: var(--pyc-color-success-surface);
+        color: var(--pyc-color-on-success-surface);
+        border-left-color: var(--pyc-color-on-success-surface);
     }
-    .event-pull {
-        background: #fff3cd;
-        color: #856404;
+    .projects-fragment .event-merge,
+    .projects-fragment .legend-merge {
+        background: var(--pyc-color-accent-surface);
+        color: var(--pyc-color-accent-on-surface);
+        border-left-color: var(--pyc-color-accent-on-surface);
     }
-    .calendar-nav {
+    .projects-fragment .event-pull,
+    .projects-fragment .legend-pull {
+        background: var(--pyc-color-warning-surface);
+        color: var(--pyc-color-on-warning-surface);
+        border-left-color: var(--pyc-color-on-warning-surface);
+    }
+    .projects-fragment .calendar-nav {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        flex-wrap: wrap;
     }
-    .calendar-nav h3 {
+    .projects-fragment .calendar-nav h2 {
         margin: 0;
+        font-size: 1.25rem;
+    }
+    .projects-fragment .calendar-legend {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        margin: 0.75rem 0 0;
+        padding: 0;
+        list-style: none;
+        font-size: var(--pyc-font-size-small, 0.875rem);
+    }
+    .projects-fragment .calendar-legend li {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    .projects-fragment .calendar-legend i {
+        display: inline-block;
+        width: 0.9rem;
+        height: 0.9rem;
+        border-radius: 3px;
+        border-left: 3px solid transparent;
+    }
+    @media (max-width: 700px) {
+        .projects-fragment .calendar-grid {
+            grid-template-columns: repeat(1, 1fr);
+        }
+        .projects-fragment .calendar-header {
+            display: none;
+        }
+        .projects-fragment .calendar-day.other-month:not(:has(.calendar-event)) {
+            display: none;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <span>Calendar</span>
-</div>
+{{ ui.breadcrumb([("Projects", url_for('projects.project_list')), (project.name, url_for('projects.project_detail', project_id=project.id)), ("Calendar", None)]) }}
 
 <div class="page-header">
-    <h2>Release Calendar</h2>
-    <p>Scheduled releases and events</p>
+    <h1>Release Calendar</h1>
+    <p>Scheduled releases, merges, and pull requests for {{ project.name }}</p>
 </div>
 
-<div class="calendar-nav">
-    <a href="{{ url_for('projects.calendar_view', project_id=project.id, year=prev_year, month=prev_month) }}" class="btn btn-secondary">
-        <span class="material-icons">chevron_left</span> Previous
+<nav class="calendar-nav" aria-label="Calendar month">
+    <a href="{{ url_for('projects.calendar_view', project_id=project.id, year=prev_year, month=prev_month) }}" class="btn btn-secondary" rel="prev">
+        {{ ui.icon("chevron_left") }} Previous month
     </a>
-    <h3>{{ month_name }} {{ year }}</h3>
-    <a href="{{ url_for('projects.calendar_view', project_id=project.id, year=next_year, month=next_month) }}" class="btn btn-secondary">
-        Next <span class="material-icons">chevron_right</span>
-    </a>
-</div>
+    <h2 aria-live="polite">{{ month_name }} {{ year }}</h2>
+    <div class="actions-row">
+        <a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="btn btn-secondary">Today</a>
+        <a href="{{ url_for('projects.calendar_view', project_id=project.id, year=next_year, month=next_month) }}" class="btn btn-secondary" rel="next">
+            Next month {{ ui.icon("chevron_right") }}
+        </a>
+    </div>
+</nav>
 
-<div class="calendar-grid">
-    <div class="calendar-header">Sun</div>
-    <div class="calendar-header">Mon</div>
-    <div class="calendar-header">Tue</div>
-    <div class="calendar-header">Wed</div>
-    <div class="calendar-header">Thu</div>
-    <div class="calendar-header">Fri</div>
-    <div class="calendar-header">Sat</div>
-    
+<div class="calendar-grid" role="grid" aria-label="{{ month_name }} {{ year }}">
+    <div role="row" style="display: contents;">
+        <div class="calendar-header" role="columnheader">Sun</div>
+        <div class="calendar-header" role="columnheader">Mon</div>
+        <div class="calendar-header" role="columnheader">Tue</div>
+        <div class="calendar-header" role="columnheader">Wed</div>
+        <div class="calendar-header" role="columnheader">Thu</div>
+        <div class="calendar-header" role="columnheader">Fri</div>
+        <div class="calendar-header" role="columnheader">Sat</div>
+    </div>
     {% for day in calendar_days %}
-    <div class="calendar-day {% if day.other_month %}other-month{% endif %} {% if day.is_today %}today{% endif %}">
-        <div class="day-number">{{ day.day }}</div>
+    {% if loop.index0 % 7 == 0 %}<div role="row" style="display: contents;">{% endif %}
+    <div class="calendar-day {% if day.other_month %}other-month{% endif %} {% if day.is_today %}today{% endif %}" role="gridcell"
+         aria-label="{{ day.day }}{% if day.other_month %} (adjacent month){% endif %}{% if day.is_today %}, today{% endif %}{% if day.events %}, {{ day.events | length }} event{{ '' if day.events | length == 1 else 's' }}{% endif %}">
+        <div class="day-number" aria-hidden="true">{{ day.day }}</div>
         {% for event in day.events %}
-        <div class="calendar-event event-{{ event.event_type }}">
-            {{ event.title }}
-        </div>
+        {% if event.id is defined and event.id and event.event_type == 'release' %}
+        <a class="calendar-event event-{{ event.event_type }}" href="{{ url_for('projects.release_event_detail', project_id=project.id, event_id=event.id) }}" title="{{ event.event_type | capitalize }}: {{ event.title }}">{{ event.title }}</a>
+        {% else %}
+        <span class="calendar-event event-{{ event.event_type }}" title="{{ event.event_type | capitalize }}: {{ event.title }}">{{ event.title }}</span>
+        {% endif %}
         {% endfor %}
     </div>
+    {% if loop.index0 % 7 == 6 or loop.last %}</div>{% endif %}
     {% endfor %}
 </div>
 
-<div style="margin-top: 20px; display: flex; gap: 20px;">
+<ul class="calendar-legend" aria-label="Event types">
+    <li><i class="legend-release" aria-hidden="true"></i> Release</li>
+    <li><i class="legend-merge" aria-hidden="true"></i> Merge</li>
+    <li><i class="legend-pull" aria-hidden="true"></i> Pull request</li>
+</ul>
+
+<div class="actions-row mt">
     <a href="{{ url_for('projects.release_event_list', project_id=project.id) }}" class="btn btn-secondary">
-        <span class="material-icons">event</span> View Events
+        {{ ui.icon("event") }} View all events
     </a>
 </div>
 {% endblock %}

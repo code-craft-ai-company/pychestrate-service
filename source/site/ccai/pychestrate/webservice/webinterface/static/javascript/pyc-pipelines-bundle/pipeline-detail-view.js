@@ -350,7 +350,7 @@ class PycPipelineDetail extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-pipeline-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Pipeline detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-pipeline-detail__heading");

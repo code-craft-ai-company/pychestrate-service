@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-catalog-bundle/catalog-view.js
+// pyc-catalog-bundle/catalog-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
 function build_catalog_query_url(state) {
@@ -176,10 +176,10 @@ var PycTestCatalog = class extends HTMLElement {
     root.appendChild(heading);
     const controls = document.createElement("div");
     controls.classList.add("pyc-catalog__controls");
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-catalog__field");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-catalog__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
@@ -193,6 +193,7 @@ var PycTestCatalog = class extends HTMLElement {
     project_input.classList.add("pyc-catalog__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
@@ -267,6 +268,8 @@ var PycTestCatalog = class extends HTMLElement {
     const toast_region = document.createElement("div");
     toast_region.classList.add("pyc-catalog__toast-region");
     toast_region.setAttribute("data-role", "toast-region");
+    toast_region.setAttribute("role", "status");
+    toast_region.setAttribute("aria-live", "polite");
     toast_region.setAttribute("aria-live", "polite");
     root.appendChild(toast_region);
     this._toast_region = toast_region;
@@ -689,10 +692,10 @@ var PycTestCatalog = class extends HTMLElement {
     const form = document.createElement("form");
     form.classList.add("pyc-catalog__import-form");
     form.setAttribute("data-role", "import-form");
-    const tag_label = document.createElement("label");
+    const tag_label = document.createElement("div");
     tag_label.classList.add("pyc-catalog__field");
-    tag_label.textContent = "Importer tag";
     const tag_input = document.createElement("mj-text-field");
+    tag_input.setAttribute("label", "Importer tag");
     tag_input.classList.add("pyc-catalog__input");
     tag_input.setAttribute("type", "text");
     tag_input.setAttribute("data-role", "import-tag");
@@ -700,20 +703,20 @@ var PycTestCatalog = class extends HTMLElement {
     tag_input.value = "testbase-project";
     tag_label.appendChild(tag_input);
     form.appendChild(tag_label);
-    const root_label = document.createElement("label");
+    const root_label = document.createElement("div");
     root_label.classList.add("pyc-catalog__field");
-    root_label.textContent = "Testbase project root";
     const root_input = document.createElement("mj-text-field");
+    root_input.setAttribute("label", "Testbase project root");
     root_input.classList.add("pyc-catalog__input");
     root_input.setAttribute("type", "text");
     root_input.setAttribute("data-role", "import-root");
     root_input.setAttribute("placeholder", "source/testroots/ccai");
     root_label.appendChild(root_input);
     form.appendChild(root_label);
-    const ref_label = document.createElement("label");
+    const ref_label = document.createElement("div");
     ref_label.classList.add("pyc-catalog__field");
-    ref_label.textContent = "Reference (optional)";
     const ref_input = document.createElement("mj-text-field");
+    ref_input.setAttribute("label", "Reference (optional)");
     ref_input.classList.add("pyc-catalog__input");
     ref_input.setAttribute("type", "text");
     ref_input.setAttribute("data-role", "import-ref");
@@ -960,7 +963,7 @@ var PycTestCatalog = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-catalog-bundle/index.entry.js
+// pyc-catalog-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var CATALOG_READ_PERMISSION = "system:test_catalog.read";
 var CATALOG_ROUTE = "/test-catalog";

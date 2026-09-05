@@ -1,20 +1,20 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Sessions - Pychestrate Configuration{% endblock %}
 
 {% block content %}
-{% import "config/_pagination.html" as pagination %}
 <div class="page-header">
-    <h2>Active Sessions</h2>
+    <h1>Active Sessions</h1>
     <p>Monitor and manage active user sessions</p>
 </div>
 
-<div style="margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="username" class="form-control" placeholder="Filter by username"
-               value="{{ filter_username or '' }}" style="width: 200px;">
+<div class="mb">
+    <form method="get" class="actions-row">
+        <input type="text" name="username" class="form-control w-md" placeholder="Filter by username"
+               value="{{ filter_username or '' }}">
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
+            {{ ui.icon("filter_list") }} Filter
         </button>
         {% if filter_username %}
         <a href="{{ url_for('config.session_list') }}" class="btn btn-secondary">Clear</a>
@@ -22,16 +22,16 @@
     </form>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>User</th>
-            <th>Created</th>
-            <th>Last Activity</th>
-            <th>Expires</th>
-            <th>Client IP</th>
-            <th>User Agent</th>
-            <th>Actions</th>
+            <th scope="col">User</th>
+            <th scope="col">Created</th>
+            <th scope="col">Last Activity</th>
+            <th scope="col">Expires</th>
+            <th scope="col">Client IP</th>
+            <th scope="col">User Agent</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -43,35 +43,33 @@
                 <span class="badge badge-info">This session</span>
                 {% endif %}
             </td>
-            <td>{% if session.created_at %}{{ session.created_at.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
-            <td>{% if session.last_activity %}{{ session.last_activity.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
-            <td>{% if session.expires_at %}{{ session.expires_at.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if session.created_at %}{{ session.created_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if session.last_activity %}{{ session.last_activity | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if session.expires_at %}{{ session.expires_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>{{ session.client_ip or '-' }}</td>
-            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            <td class="truncate">
                 {{ session.user_agent or '-' }}
             </td>
             <td>
-                <form action="{{ url_for('config.session_terminate', session_id=session.session_id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('config.session_terminate', session_id=session.session_id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     {% if session.session_id == current_session_id %}
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('This is your current session — you will be signed out. Terminate it?')">Terminate</button>
+                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Terminate</button>
                     {% else %}
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Terminate this session?')">Terminate</button>
+                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="Terminate this session?">Terminate</button>
                     {% endif %}
                 </form>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d;">No active sessions found</td>
+            {{ ui.empty_state("No active sessions found", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{{ pagination.render('config.session_list', page, total_pages,
-                     {'username': filter_username,
-                      'per_page': per_page}) }}
+{{ ui.pagination('config.session_list', page, total_pages, {'username': filter_username, 'per_page': per_page}, total=total) }}
 
-<p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} active sessions</p>
+<p class="muted mt">Total: {{ total }} active sessions</p>
 {% endblock %}

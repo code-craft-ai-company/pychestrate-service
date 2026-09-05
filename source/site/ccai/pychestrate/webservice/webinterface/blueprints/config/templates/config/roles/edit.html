@@ -1,20 +1,21 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit {{ role.name }} - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Edit Role: {{ role.name }}</h2>
+    <h1>Edit Role: {{ role.name }}</h1>
     <p>Update role permissions</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
         <div class="form-group">
-            <label>Role Name</label>
-            <input type="text" class="form-control" value="{{ role.name }}" disabled>
+            <label for="ro-role-name">Role Name</label>
+            <input type="text" class="form-control" value="{{ role.name }}" id="ro-role-name" disabled>
             <p class="form-text">Role name cannot be changed</p>
         </div>
         
@@ -26,14 +27,14 @@
         {% if permissions %}
         <div class="form-group">
             <label>Permissions</label>
-            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ced4da; border-radius: 4px; padding: 10px;">
+            <div class="scroll-box">
                 {% for permission in permissions %}
-                <div style="margin: 5px 0;">
-                    <label style="font-weight: normal;">
+                <div class="my-sm">
+                    <label class="regular">
                         <input type="checkbox" name="permission_keys" value="{{ permission.id }}"
                                {% if permission.id in current_permission_keys %}checked{% endif %}>
                         {{ permission.name }}
-                        {% if permission.description %}<span style="color: #6c757d;"> - {{ permission.description }}</span>{% endif %}
+                        {% if permission.description %}<span class="muted"> - {{ permission.description }}</span>{% endif %}
                     </label>
                 </div>
                 {% endfor %}
@@ -41,20 +42,21 @@
         </div>
         {% endif %}
 
-        <div class="form-group">
-            <label style="font-weight: normal;">
+        <details class="form-group">
+            <summary class="muted">Removing every permission from this role?</summary>
+            <label class="regular mt-sm">
                 <input type="checkbox" name="confirm_remove_all">
-                I intend to remove all permissions from this role
+                Yes, save this role with no permissions
             </label>
             <p class="form-text">
-                Required only when saving with no permissions selected --
-                it prevents accidentally wiping the role's grants.
+                Only needed when no permission is selected above; it prevents
+                accidentally wiping the role's grants.
             </p>
-        </div>
+        </details>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('config.role_detail', role_id=role.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

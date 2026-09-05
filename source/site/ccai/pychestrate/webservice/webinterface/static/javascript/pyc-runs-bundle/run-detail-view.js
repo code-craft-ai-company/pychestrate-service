@@ -557,7 +557,7 @@ class PycRunDetail extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-run-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Run detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-run-detail__heading");

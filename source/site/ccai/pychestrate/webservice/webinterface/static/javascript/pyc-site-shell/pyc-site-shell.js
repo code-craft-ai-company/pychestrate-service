@@ -4,6 +4,9 @@ import {
   extract_flash_messages
 } from "./chrome/flash-notices.js";
 import { build_header } from "./chrome/header.js";
+import { install_confirm_delegate } from "./chrome/confirm-delegate.js";
+import { install_reveal_toggle } from "./chrome/reveal-toggle.js";
+import { install_log_viewer } from "./chrome/log-viewer.js";
 import { build_home_view } from "./chrome/home-view.js";
 import { build_not_found_view } from "./chrome/not-found-view.js";
 import { DegradedBanner } from "./chrome/degraded-banner.js";
@@ -122,6 +125,11 @@ class PycSiteShell extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
+    _apply_theme_preference(_read_theme_preference());
+    this._install_skip_link();
+    install_confirm_delegate(document);
+    install_reveal_toggle(document);
+    install_log_viewer(document);
     this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();
@@ -228,7 +236,12 @@ class PycSiteShell extends HTMLElement {
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
-      user_display_name: null,
+      user_display_name: this._read_optional_attribute("user-display-name"),
+      csrf_token: this._read_optional_attribute("csrf-token"),
+      on_theme_toggle: () => {
+        this._toggle_theme();
+      },
+      current_theme: _read_theme_preference(),
       nav_open_initial,
       on_nav_toggle: () => {
         this._toggle_sidebar();
@@ -265,7 +278,6 @@ class PycSiteShell extends HTMLElement {
     this._notices_region = notices;
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
-    main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
     // Re-attach the server-rendered fragment captured above (minus
     // the lifted flashes) so the route's page survives the
@@ -603,6 +615,14 @@ class PycSiteShell extends HTMLElement {
    * entry matches, the server-rendered title is left untouched.
    */
   _update_document_title() {
+    // A server-rendered page already carries a specific <title>
+    // ("Users · Pychestrate", "Project · Pychestrate"); only fill in
+    // the title when the document still has the bare brand label.
+    const current_brand = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_only = current_brand !== null && current_brand.length > 0 ? current_brand : "Pychestrate";
+    if (typeof document.title === "string" && document.title.length > 0 && document.title !== brand_only) {
+      return;
+    }
     if (this._nav_manifest_loaded === false) {
       return;
     }
@@ -643,6 +663,52 @@ class PycSiteShell extends HTMLElement {
    * nav-open attribute drives its grid track width and its
    * overlay behavior on narrow viewports).
    */
+  _install_skip_link() {
+    if (document.querySelector(".pyc-site-shell__skip-link") !== null) {
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = "#pyc-main-content";
+    link.classList.add("pyc-site-shell__skip-link");
+    link.textContent = "Skip to main content";
+    link.addEventListener("click", (event) => {
+      const main = document.querySelector(".pyc-site-shell__main");
+      if (main === null) {
+        return;
+      }
+      event.preventDefault();
+      if (main.id.length === 0) {
+        main.id = "pyc-main-content";
+      }
+      main.setAttribute("tabindex", "-1");
+      main.focus();
+    });
+    document.body.insertBefore(link, document.body.firstChild);
+    return;
+  }
+  _toggle_theme() {
+    const current = _read_theme_preference();
+    const next = current === "dark" ? "light" : "dark";
+    _apply_theme_preference(next);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch (error) {
+      // storage unavailable: the choice lasts for this page only
+    }
+    const button = document.querySelector(".pyc-site-shell__theme-toggle");
+    if (button !== null) {
+      button.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
+      button.setAttribute("aria-label", next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    }
+    return;
+  }
+  _read_optional_attribute(name) {
+    const value = this.getAttribute(name);
+    if (value === null || value.length === 0) {
+      return null;
+    }
+    return value;
+  }
   _toggle_sidebar() {
     const layout = this._layout;
     if (layout === null) {
@@ -837,6 +903,38 @@ function _build_sidebar_failure_state(on_retry) {
  * localStorage access throws in some privacy modes; the shell
  * just falls back to the default (open) in that case.
  */
+const THEME_STORAGE_KEY = "pychestrate.ui.theme";
+
+function _read_theme_preference() {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch (error) {
+    // no storage
+  }
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+
+function _apply_theme_preference(theme) {
+  let stored = null;
+  try {
+    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  } catch (error) {
+    stored = null;
+  }
+  if (stored === "dark" || stored === "light") {
+    document.documentElement.setAttribute("data-theme", stored);
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  return;
+}
+
 function _read_nav_collapsed_preference() {
   let rtnval = false;
   try {

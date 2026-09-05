@@ -1,31 +1,29 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Resources - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Resources</h2>
+    <h1>Resources</h1>
     <p>Manage trackable assets for allocation</p>
 </div>
 
-{% macro page_url(p) -%}
-{{ url_for('resources.resource_list', page=p, per_page=per_page, pool_id=selected_pool_id, resource_type=(selected_resource_type or none), health_status=(selected_health_status or none), search=(search or none)) }}{% for t in selected_tags %}&tags={{ t | urlencode }}{% endfor %}
-{%- endmacro %}
 
 <div class="filter-bar">
-    <form method="get" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
-        <input type="text" name="search" class="form-control" placeholder="Search resources..."
+    <form method="get" class="actions-row">
+        <input type="text" name="search" class="form-control w-md" placeholder="Search resources..."
                aria-label="Search resources by name or description"
-               value="{{ search }}" style="width: 200px;">
+               value="{{ search }}">
 
-        <select name="pool_id" class="form-control" style="width: 150px;" aria-label="Filter by pool">
+        <select name="pool_id" class="form-control w-sm" aria-label="Filter by pool">
             <option value="">All Pools</option>
             {% for pool in pools %}
             <option value="{{ pool.id }}" {% if selected_pool_id == pool.id %}selected{% endif %}>{{ pool.name }}</option>
             {% endfor %}
         </select>
 
-        <select name="resource_type" class="form-control" style="width: 150px;" aria-label="Filter by resource type">
+        <select name="resource_type" class="form-control w-sm" aria-label="Filter by resource type">
             <option value="">All Types</option>
             <option value="device" {% if selected_resource_type == 'device' %}selected{% endif %}>Device</option>
             <option value="ip_address" {% if selected_resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
@@ -34,7 +32,7 @@
             <option value="generic" {% if selected_resource_type == 'generic' %}selected{% endif %}>Generic</option>
         </select>
 
-        <select name="health_status" class="form-control" style="width: 150px;" aria-label="Filter by health status">
+        <select name="health_status" class="form-control w-sm" aria-label="Filter by health status">
             <option value="">All Status</option>
             <option value="online" {% if selected_health_status == 'online' %}selected{% endif %}>Online</option>
             <option value="offline" {% if selected_health_status == 'offline' %}selected{% endif %}>Offline</option>
@@ -43,29 +41,32 @@
         </select>
 
         {% if all_tags %}
-        <select name="tags" multiple class="form-control" style="width: 150px; height: 38px;" aria-label="Filter by tags (hold Ctrl or Cmd to select multiple)" title="Hold Ctrl/Cmd to select multiple tags">
-            {% for tag in all_tags %}
-            <option value="{{ tag.name }}" {% if tag.name in selected_tags %}selected{% endif %}>{{ tag.name }}</option>
-            {% endfor %}
-        </select>
+        <details class="pyc-filter-details">
+            <summary class="btn btn-secondary">Tags{% if selected_tags %} ({{ selected_tags | length }}){% endif %}</summary>
+            <fieldset class="pyc-checkbox-group">
+                <legend class="visually-hidden">Filter by tags</legend>
+                {% for tag in all_tags %}
+                <label><input type="checkbox" name="tags" value="{{ tag.name }}" {% if tag.name in selected_tags %}checked{% endif %}> {{ tag.name }}</label>
+                {% endfor %}
+            </fieldset>
+        </details>
         {% endif %}
-
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons" aria-hidden="true">filter_list</span> Filter
+            {{ ui.icon("filter_list") }} Filter
         </button>
 
         <a href="{{ url_for('resources.resource_list') }}" class="btn btn-secondary">Clear</a>
     </form>
 
-    <div style="margin-left: auto;">
+    <div class="push-end">
         <a href="{{ url_for('resources.resource_create') }}" class="btn btn-primary">
-            <span class="material-icons" aria-hidden="true">add</span> Create Resource
+            {{ ui.icon("add") }} Create Resource
         </a>
     </div>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Type</th>
@@ -80,10 +81,10 @@
         {% for resource in resources %}
         <tr>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
-            <td>{{ resource.resource_type.value if resource.resource_type.value else resource.resource_type }}</td>
+            <td>{{ resource.resource_type }}</td>
             <td>{{ resource.pool_name or 'Default' }}</td>
             <td>
-                {% set status = resource.health_status.value if resource.health_status.value else resource.health_status %}
+                {% set status = resource.health_status %}
                 {% if status == 'online' %}
                 <span class="badge badge-success">Online</span>
                 {% elif status == 'offline' %}
@@ -107,21 +108,21 @@
             </td>
             <td>
                 <a href="{{ url_for('resources.resource_edit', resource_id=resource.id) }}" class="btn btn-sm btn-secondary">Edit</a>
-                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('resources.resource_delete', resource_id=resource.id) }}" method="post" data-confirm="Delete this resource?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this resource?')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
             </td>
         </tr>
         {% else %}
         <tr>
             {% if filters_active %}
-            <td colspan="7" style="text-align: center; color: #6c757d;">
+            <td colspan="7" class="muted center">
                 No resources match the current filters.
                 <a href="{{ url_for('resources.resource_list') }}">Clear filters</a>
             </td>
             {% else %}
-            <td colspan="7" style="text-align: center; color: #6c757d;">
+            <td colspan="7" class="muted center">
                 No resources found.
                 <a href="{{ url_for('resources.resource_create') }}">Create one</a>
             </td>
@@ -129,35 +130,7 @@
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<nav class="pagination" aria-label="Resource list pages">
-    {% if page > 1 %}
-    <a href="{{ page_url(page - 1) }}">&laquo; Previous</a>
-    {% endif %}
-
-    {% if page_window[0] > 1 %}
-    <a href="{{ page_url(1) }}">1</a>
-    {% if page_window[0] > 2 %}<span>&hellip;</span>{% endif %}
-    {% endif %}
-
-    {% for p in page_window %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ page_url(p) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-
-    {% if page_window[-1] < total_pages %}
-    {% if page_window[-1] < total_pages - 1 %}<span>&hellip;</span>{% endif %}
-    <a href="{{ page_url(total_pages) }}">{{ total_pages }}</a>
-    {% endif %}
-
-    {% if page < total_pages %}
-    <a href="{{ page_url(page + 1) }}">Next &raquo;</a>
-    {% endif %}
-</nav>
-{% endif %}
+{{ ui.pagination('resources.resource_list', page, total_pages, {'per_page': per_page, 'pool_id': selected_pool_id, 'resource_type': (selected_resource_type or none)}, total=None) }}
 {% endblock %}

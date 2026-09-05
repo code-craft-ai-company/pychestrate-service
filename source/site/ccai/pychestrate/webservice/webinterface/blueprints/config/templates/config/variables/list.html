@@ -1,37 +1,38 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Variables - Pychestrate Configuration{% endblock %}
 
 {% block content %}
-{% import "config/_pagination.html" as pagination %}
 <div class="page-header">
-    <h2>Global Variables</h2>
+    <h1>Global Variables</h1>
     <p>Manage system-wide configuration variables</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="search" class="form-control" placeholder="Search variables..."
-               value="{{ search }}" style="width: 300px;">
+<div class="toolbar">
+    <form method="get" class="actions-row">
+        <input type="text" name="search" class="form-control w-lg" placeholder="Search variables..."
+               value="{{ search }}">
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">search</span> Search
+            {{ ui.icon("search") }} Search
         </button>
+        <a href="{{ url_for(request_endpoint) }}" class="btn btn-secondary">Clear</a>
     </form>
 
     <a href="{{ url_for('config.variable_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create Variable
+        {{ ui.icon("add") }} Create Variable
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Value</th>
-            <th>Description</th>
-            <th>Updated</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Type</th>
+            <th scope="col">Value</th>
+            <th scope="col">Description</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -41,34 +42,33 @@
             <td><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
             {# Values are masked by default -- they may hold credentials.
                The reveal toggle swaps the mask for the real value per row. #}
-            <td style="max-width: 260px;">
-                <span data-role="variable-masked" style="letter-spacing: 2px; color: #6c757d;">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
+            <td class="narrow-sm">
+                <span data-role="variable-masked" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
                 <span data-role="variable-value" hidden style="display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">{{ variable.value }}</span>
-                <button type="button" class="btn btn-sm btn-secondary" data-role="variable-reveal" aria-label="Show value for {{ variable.name }}">Show</button>
+                <button type="button" class="btn btn-sm btn-secondary" data-role="variable-reveal" aria-pressed="false" aria-label="Show value for {{ variable.name }}">Show</button>
             </td>
             <td>{{ variable.description or '-' }}</td>
-            <td>{% if variable.updated_at %}{{ variable.updated_at.strftime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
+            <td>{% if variable.updated_at %}{{ variable.updated_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
             <td>
                 <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-sm btn-secondary">History</a>
-                <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this variable?')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                 </form>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" style="text-align: center; color: #6c757d;">No variables found</td>
+            {{ ui.empty_state("No variables found", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{{ pagination.render('config.variable_list', page, total_pages,
-                     {'search': search, 'per_page': per_page}) }}
+{{ ui.pagination('config.variable_list', page, total_pages, {'search': search, 'per_page': per_page}, total=total) }}
 
-<p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} variables</p>
+<p class="muted mt">Total: {{ total }} variables</p>
 {% endblock %}
 
 {% block extra_js %}
@@ -96,8 +96,12 @@
             revealed.removeAttribute("hidden");
             masked.setAttribute("hidden", "");
             button.textContent = "Hide";
+            button.setAttribute("aria-pressed", "true");
+            button.setAttribute("aria-label", (button.getAttribute("aria-label") || "").replace(/^Show/, "Hide"));
         } else {
             revealed.setAttribute("hidden", "");
+            button.setAttribute("aria-pressed", "false");
+            button.setAttribute("aria-label", (button.getAttribute("aria-label") || "").replace(/^Hide/, "Show"));
             masked.removeAttribute("hidden");
             button.textContent = "Show";
         }

@@ -614,6 +614,12 @@ def handle_variable_history(request: Request) -> Response:
         history = variable_store.get_change_history(
             name, offset=offset, limit=params["per_page"]
         )
+        try:
+            history_total = int(variable_store.count_change_history(name))
+        except Exception:
+            history_total = len(history)
+        per_page = params["per_page"]
+        total_pages = max(1, (history_total + per_page - 1) // per_page)
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -626,6 +632,8 @@ def handle_variable_history(request: Request) -> Response:
         context["history"] = history
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
+        context["total"] = history_total
+        context["total_pages"] = total_pages
         response = _render(
             template_name="config/variables/history.html",
             context=context,

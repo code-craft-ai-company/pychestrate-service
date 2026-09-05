@@ -1,36 +1,38 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Users - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>User Management</h2>
+    <h1>User Management</h1>
     <p>Manage user accounts and their access</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <input type="text" name="search" class="form-control" placeholder="Search users..." 
-               value="{{ search }}" style="width: 300px;">
+<div class="toolbar">
+    <form method="get" class="actions-row">
+        <input type="text" name="search" class="form-control w-lg" placeholder="Search users..." 
+               value="{{ search }}">
         <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">search</span> Search
+            {{ ui.icon("search") }} Search
         </button>
+        <a href="{{ url_for(request_endpoint) }}" class="btn btn-secondary">Clear</a>
     </form>
     
     <a href="{{ url_for('config.user_create') }}" class="btn btn-primary">
-        <span class="material-icons">add</span> Create User
+        {{ ui.icon("add") }} Create User
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Username</th>
-            <th>Email</th>
-            <th>Display Name</th>
-            <th>Status</th>
-            <th>Roles</th>
-            <th>Actions</th>
+            <th scope="col">Username</th>
+            <th scope="col">Email</th>
+            <th scope="col">Display Name</th>
+            <th scope="col">Status</th>
+            <th scope="col">Roles</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -50,42 +52,24 @@
             <td>
                 <a href="{{ url_for('config.user_edit', user_id=user.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 {% if user.is_active and user.id != current_user_id %}
-                <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" style="display:inline;">
+                <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate this user?">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Deactivate this user?')">Deactivate</button>
+                    <button type="submit" class="btn btn-sm btn-danger">Deactivate</button>
                 </form>
                 {% elif user.id == current_user_id %}
-                <span style="color: #6c757d;">(you)</span>
+                <span class="muted">(you)</span>
                 {% endif %}
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" style="text-align: center; color: #6c757d;">No users found</td>
+            {{ ui.empty_state("No users found", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('config.user_list', page=page-1, search=search) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('config.user_list', page=p, search=search) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('config.user_list', page=page+1, search=search) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('config.user_list', page, total_pages, {'search': search}) }}
 
-<p style="margin-top: 20px; color: #6c757d;">Total: {{ total }} users</p>
+<p class="muted mt">Total: {{ total }} users</p>
 {% endblock %}

@@ -1,44 +1,45 @@
 {% extends "resources/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Edit Reservation - Pychestrate Resources{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Edit Reservation</h2>
+    <h1>Edit Reservation</h1>
     <p>Modify reservation time window</p>
 </div>
 
-<div class="card" style="max-width: 700px;">
+<div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         
         <div class="form-group">
-            <label>Resource</label>
-            <input type="text" class="form-control" value="{{ reservation.resource_name }}" disabled>
+            <label for="ro-resource">Resource</label>
+            <input type="text" class="form-control" value="{{ reservation.resource_name }}" id="ro-resource" disabled>
         </div>
         
         <div class="form-group">
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
-                   value="{% if form_data %}{{ form_data.get('start_time', '') }}{% else %}{{ reservation.start_time.strftime('%Y-%m-%dT%H:%M') if reservation.start_time else '' }}{% endif %}">
+                   value="{% if form_data %}{{ form_data.get('start_time', '') }}{% else %}{{ reservation.start_time | format_datetime('%Y-%m-%dT%H:%M', '') }}{% endif %}">
         </div>
 
         <div class="form-group">
             <label for="end_time">End Time *</label>
             <input type="datetime-local" id="end_time" name="end_time" class="form-control" required
-                   value="{% if form_data %}{{ form_data.get('end_time', '') }}{% else %}{{ reservation.end_time.strftime('%Y-%m-%dT%H:%M') if reservation.end_time else '' }}{% endif %}">
+                   value="{% if form_data %}{{ form_data.get('end_time', '') }}{% else %}{{ reservation.end_time | format_datetime('%Y-%m-%dT%H:%M', '') }}{% endif %}">
         </div>
         
         <div class="form-group">
             <label>Mode</label>
-            {% set mode = reservation.mode.value if reservation.mode.value else reservation.mode %}
+            {% set mode = reservation.mode %}
             <input type="text" class="form-control" value="{{ mode }}" disabled>
             <p class="form-text">Allocation mode cannot be changed</p>
         </div>
         
-        <div style="display: flex; gap: 10px;">
+        <div class="actions-row">
             <button type="submit" class="btn btn-primary">
-                <span class="material-icons" aria-hidden="true">save</span> Save Changes
+                {{ ui.icon("save") }} Save Changes
             </button>
             <a href="{{ url_for('resources.reservation_detail', reservation_id=reservation.id) }}" class="btn btn-secondary">Cancel</a>
         </div>

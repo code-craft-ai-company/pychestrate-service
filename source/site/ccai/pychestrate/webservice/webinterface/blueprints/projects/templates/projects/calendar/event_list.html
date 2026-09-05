@@ -1,98 +1,66 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Release Events - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.calendar_view', project_id=project.id) }}">Calendar</a>
-    <span>/</span>
-    <span>Events</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.calendar_view', project_id=project.id) }}">Calendar</a></li>
+        <li aria-current="page">Events</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Release Events</h2>
-    <p>Scheduled release events</p>
+    <h1>Release Events</h1>
+    <p>Scheduled release windows and their phases</p>
 </div>
 
-<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-    <form method="get" style="display: flex; gap: 10px;">
-        <select name="status" class="form-control" style="width: 150px;">
-            <option value="">All Statuses</option>
-            <option value="scheduled" {% if selected_status == 'scheduled' %}selected{% endif %}>Scheduled</option>
-            <option value="in_progress" {% if selected_status == 'in_progress' %}selected{% endif %}>In Progress</option>
-            <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Completed</option>
-            <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-        </select>
-        <button type="submit" class="btn btn-secondary">
-            <span class="material-icons">filter_list</span> Filter
-        </button>
-    </form>
-    
+<div class="toolbar toolbar--end">
     <a href="{{ url_for('projects.calendar_view', project_id=project.id) }}" class="btn btn-secondary">
-        <span class="material-icons">calendar_today</span> Calendar View
+        {{ ui.icon("calendar_today") }} Calendar View
     </a>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Type</th>
-            <th>Status</th>
-            <th>Start Date</th>
-            <th>End Date</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Release</th>
+            <th scope="col">Phases</th>
+            <th scope="col">Start</th>
+            <th scope="col">End</th>
+            <th scope="col"></th>
         </tr>
     </thead>
     <tbody>
         {% for event in events %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.release_event_detail', project_id=project.id, event_id=event.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.release_event_detail', project_id=project.id, event_id=event.id) }}" class="strong">
                     {{ event.name }}
                 </a>
             </td>
-            <td><span class="badge badge-secondary">{{ event.event_type.value }}</span></td>
             <td>
-                <span class="badge badge-{% if event.status.value == 'completed' %}success{% elif event.status.value == 'in_progress' %}info{% elif event.status.value == 'cancelled' %}danger{% else %}secondary{% endif %}">
-                    {{ event.status.value }}
-                </span>
+                <span class="badge badge-secondary mono">{{ event.release_version }}</span>
+                {{ event.release_name }}
             </td>
-            <td>{{ event.start_date.strftime('%Y-%m-%d %H:%M') }}</td>
-            <td>{{ event.end_date.strftime('%Y-%m-%d %H:%M') if event.end_date else 'N/A' }}</td>
+            <td>{{ event.phases | length }}</td>
+            <td>{{ event.start_time | format_datetime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ event.end_time | format_datetime('%Y-%m-%d %H:%M') }}</td>
             <td>
                 <a href="{{ url_for('projects.release_event_detail', project_id=project.id, event_id=event.id) }}" class="btn btn-sm btn-secondary">View</a>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="6" style="text-align: center; color: #6c757d;">No release events found</td>
+            {{ ui.empty_state("No release events scheduled", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 
-{% if total_pages > 1 %}
-<div class="pagination">
-    {% if page > 1 %}
-    <a href="{{ url_for('projects.release_event_list', project_id=project.id, page=page-1, status=selected_status) }}">&laquo; Previous</a>
-    {% endif %}
-    
-    {% for p in range(1, total_pages + 1) %}
-        {% if p == page %}
-        <span class="active">{{ p }}</span>
-        {% else %}
-        <a href="{{ url_for('projects.release_event_list', project_id=project.id, page=p, status=selected_status) }}">{{ p }}</a>
-        {% endif %}
-    {% endfor %}
-    
-    {% if page < total_pages %}
-    <a href="{{ url_for('projects.release_event_list', project_id=project.id, page=page+1, status=selected_status) }}">Next &raquo;</a>
-    {% endif %}
-</div>
-{% endif %}
+{{ ui.pagination('projects.release_event_list', page, total_pages, {'project_id': project.id}) }}
 {% endblock %}

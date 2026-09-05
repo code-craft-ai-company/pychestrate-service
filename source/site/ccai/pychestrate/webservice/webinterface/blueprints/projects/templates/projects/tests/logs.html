@@ -1,34 +1,31 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Logs - Test Job #{{ job.id }} - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.test_job_list', project_id=project.id) }}">Tests</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.test_job_detail', project_id=project.id, job_id=job.id) }}">#{{ job.id }}</a>
-    <span>/</span>
-    <span>Logs</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}">Tests</a></li>
+        <li><a href="{{ url_for('projects.test_job_detail', project_id=project.id, job_id=job.id) }}">#{{ job.id }}</a></li>
+        <li aria-current="page">Logs</li>
+    </ol>
+</nav>
 
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+<div class="page-header page-header--split">
     <div>
-        <h2>Test Job #{{ job.id }} Logs</h2>
+        <h1>Test Job #{{ job.id }} Logs</h1>
         <p>{{ job.spec_name }}</p>
     </div>
     <div>
-        <span class="badge badge-{% if job.status.value == 'succeeded' %}success{% elif job.status.value == 'failed' %}danger{% elif job.status.value == 'running' %}info{% else %}secondary{% endif %}" style="font-size: 1rem;">
-            {{ job.status.value }}
-        </span>
+        {{ ui.status_badge(job.status) }}
     </div>
 </div>
 
 <div class="card">
-    <div class="card-header">Output Logs</div>
-    <pre style="background: #1a1a2e; color: #f8f9fa; padding: 20px; border-radius: 4px; overflow-x: auto; font-size: 0.8rem; line-height: 1.6; max-height: 600px; overflow-y: auto;">{% if logs %}{{ logs }}{% else %}No logs available{% endif %}</pre>
+    <h2 class="card-header">Output log</h2>
+    {{ ui.log_viewer(logs, running=(job.status.value in ('running', 'pending')), filename='test-job-' ~ job.id ~ '.log') }}
 </div>
 {% endblock %}

@@ -300,10 +300,10 @@ class PycRunsList extends HTMLElement {
     root.appendChild(heading);
     const filters = document.createElement("div");
     filters.classList.add("pyc-runs-list__filters");
-    const state_label = document.createElement("label");
+    const state_label = document.createElement("div");
     state_label.classList.add("pyc-runs-list__filter");
-    state_label.textContent = "State";
     const state_select = document.createElement("mj-select");
+    state_select.setAttribute("label", "State");
     state_select.classList.add("pyc-runs-list__select");
     state_select.setAttribute("data-role", "state-filter");
     const any_option = document.createElement("mj-option");
@@ -324,10 +324,10 @@ class PycRunsList extends HTMLElement {
     state_label.appendChild(state_select);
     this._state_select = state_select;
     filters.appendChild(state_label);
-    const project_label = document.createElement("label");
+    const project_label = document.createElement("div");
     project_label.classList.add("pyc-runs-list__filter");
-    project_label.textContent = "Project";
     const project_select = document.createElement("mj-select");
+    project_select.setAttribute("label", "Project");
     project_select.classList.add("pyc-runs-list__select");
     project_select.setAttribute("data-role", "project-filter");
     const all_projects_option = document.createElement("mj-option");
@@ -345,6 +345,7 @@ class PycRunsList extends HTMLElement {
     project_input.classList.add("pyc-runs-list__input");
     project_input.setAttribute("type", "text");
     project_input.setAttribute("placeholder", "project id");
+    project_input.setAttribute("label", "Project id");
     project_input.setAttribute("data-role", "project-filter-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {

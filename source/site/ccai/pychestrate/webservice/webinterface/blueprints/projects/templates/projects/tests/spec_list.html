@@ -1,59 +1,57 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Test Specifications - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.test_job_list', project_id=project.id) }}">Tests</a>
-    <span>/</span>
-    <span>Specifications</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}">Tests</a></li>
+        <li aria-current="page">Specifications</li>
+    </ol>
+</nav>
 
 <div class="page-header">
-    <h2>Test Specifications</h2>
+    <h1>Test Specifications</h1>
     <p>Test configurations (read-only; managed via API)</p>
 </div>
 
-<table class="data-table">
-    <thead>
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <th scope="col"ead>
         <tr>
-            <th>Name</th>
-            <th>Framework</th>
-            <th>Repository</th>
-            <th>Version</th>
-            <th>Timeout</th>
-            <th>Updated</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Framework</th>
+            <th scope="col">Command</th>
+            <th scope="col">Version</th>
+            <th scope="col">Timeout</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
         </tr>
     </thead>
     <tbody>
         {% for spec in specs %}
         <tr>
             <td>
-                <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=spec.id) }}" style="font-weight: 500;">
+                <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=spec.id) }}" class="strong">
                     {{ spec.name }}
                 </a>
             </td>
             <td><span class="badge badge-secondary">{{ spec.framework.value }}</span></td>
-            <td>{{ spec.repository_name or 'N/A' }}</td>
+            <td class="mono">{{ spec.test_command }}</td>
             <td>v{{ spec.version }}</td>
             <td>{{ spec.timeout_minutes }}m</td>
-            <td>{{ spec.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ spec.updated_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
             <td>
                 <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=spec.id) }}" class="btn btn-sm btn-secondary">View</a>
             </td>
         </tr>
         {% else %}
         <tr>
-            <td colspan="7" style="text-align: center; color: #6c757d; padding: 40px;">
-                No test specifications yet. Test specifications are managed via the API.
-            </td>
+            {{ ui.empty_state("No test specifications yet. Test specifications are managed via the API.", colspan=7) }}
         </tr>
         {% endfor %}
     </tbody>
-</table>
+</table></div>
 {% endblock %}

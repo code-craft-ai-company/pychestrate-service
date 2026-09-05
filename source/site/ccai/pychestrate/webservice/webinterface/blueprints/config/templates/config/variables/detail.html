@@ -1,63 +1,64 @@
 {% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}{{ variable.name }} - Pychestrate Configuration{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Variable: {{ variable.name }}</h2>
+    <h1>Variable: {{ variable.name }}</h1>
     <p>View variable details</p>
 </div>
 
-<div class="card" style="max-width: 600px;">
-    <table style="width: 100%;">
+<div class="card narrow">
+    <table class="btn-block">
         <tr>
-            <td style="padding: 10px 0; font-weight: 500; width: 150px;">Name</td>
-            <td style="padding: 10px 0;">{{ variable.name }}</td>
+            <th scope="row">Name</th>
+            <td>{{ variable.name }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Type</td>
-            <td style="padding: 10px 0;"><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
+            <th scope="row">Type</th>
+            <td><span class="badge badge-info">{{ variable.var_type.value }}</span></td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Value</td>
-            <td style="padding: 10px 0;">
-                <pre style="margin: 0; white-space: pre-wrap; word-break: break-all;">{{ variable.value }}</pre>
+            <th scope="row">Value</th>
+            <td>
+                <pre class="pre-wrap">{{ variable.value }}</pre>
             </td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Default</td>
-            <td style="padding: 10px 0;">{{ variable.default_value if variable.default_value is not none else '-' }}</td>
+            <th scope="row">Default</th>
+            <td>{{ variable.default_value if variable.default_value is not none else '-' }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Description</td>
-            <td style="padding: 10px 0;">{{ variable.description or '-' }}</td>
+            <th scope="row">Description</th>
+            <td>{{ variable.description or '-' }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Updated By</td>
-            <td style="padding: 10px 0;">{{ variable.updated_by or '-' }}</td>
+            <th scope="row">Updated By</th>
+            <td>{{ variable.updated_by or '-' }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Created</td>
-            <td style="padding: 10px 0;">{{ variable.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <th scope="row">Created</th>
+            <td>{{ variable.created_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
         </tr>
         <tr>
-            <td style="padding: 10px 0; font-weight: 500;">Updated</td>
-            <td style="padding: 10px 0;">{{ variable.updated_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+            <th scope="row">Updated</th>
+            <td>{{ variable.updated_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
         </tr>
     </table>
 </div>
 
-<div style="display: flex; gap: 10px; margin-top: 20px;">
+<div class="actions-row mt">
     <a href="{{ url_for('config.variable_edit', name=variable.name) }}" class="btn btn-primary">
-        <span class="material-icons">edit</span> Edit Variable
+        {{ ui.icon("edit") }} Edit Variable
     </a>
     <a href="{{ url_for('config.variable_history', name=variable.name) }}" class="btn btn-secondary">
-        <span class="material-icons">history</span> View History
+        {{ ui.icon("history") }} View History
     </a>
-    <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" style="display:inline;">
+    <form action="{{ url_for('config.variable_delete', name=variable.name) }}" method="post" data-confirm="Delete this variable?">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn btn-danger" onclick="return confirm('Delete this variable?')">
-            <span class="material-icons">delete</span> Delete
+        <button type="submit" class="btn btn-danger">
+            {{ ui.icon("delete") }} Delete
         </button>
     </form>
     <a href="{{ url_for('config.variable_list') }}" class="btn btn-secondary">Back to List</a>

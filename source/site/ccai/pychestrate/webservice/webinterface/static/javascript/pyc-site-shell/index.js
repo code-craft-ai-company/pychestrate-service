@@ -3,6 +3,7 @@ function build_empty_state() {
   const panel = document.createElement("mj-empty-state");
   panel.setAttribute("heading", "Your account has no access yet");
   panel.setAttribute("role", "status");
+  panel.setAttribute("heading-level", "1");
   panel.classList.add("pyc-site-shell__empty-state");
   const body = document.createElement("p");
   body.setAttribute("slot", "description");
@@ -97,7 +98,12 @@ function build_header(options) {
   const brand = document.createElement("span");
   brand.setAttribute("slot", "brand");
   brand.classList.add("pyc-site-shell__brand");
-  brand.textContent = options.brand_label;
+  const brand_link = document.createElement("a");
+  brand_link.href = "/";
+  brand_link.classList.add("pyc-site-shell__brand-link");
+  brand_link.textContent = options.brand_label;
+  brand_link.setAttribute("aria-label", options.brand_label + " home");
+  brand.appendChild(brand_link);
   app_bar.appendChild(brand);
   if (typeof options.on_palette_hint_activate === "function") {
     const hint = build_palette_hint(
@@ -108,23 +114,52 @@ function build_header(options) {
   }
   const actions = document.createElement("div");
   actions.setAttribute("slot", "actions");
-  actions.setAttribute("role", "menu");
   actions.classList.add("pyc-site-shell__user-menu");
   const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
   const name_label = document.createElement("span");
   name_label.classList.add("pyc-site-shell__user-menu-name");
   name_label.textContent = display_name;
   actions.appendChild(name_label);
+  if (typeof options.on_theme_toggle === "function") {
+    const theme_button = document.createElement("mj-button");
+    theme_button.setAttribute("type", "button");
+    theme_button.setAttribute("variant", "tertiary");
+    theme_button.setAttribute("size", "sm");
+    theme_button.classList.add("pyc-site-shell__theme-toggle");
+    const is_dark = options.current_theme === "dark";
+    theme_button.setAttribute("aria-pressed", is_dark ? "true" : "false");
+    theme_button.setAttribute("aria-label", is_dark ? "Switch to light theme" : "Switch to dark theme");
+    theme_button.textContent = "Theme";
+    theme_button.addEventListener("click", (event) => {
+      event.preventDefault();
+      options.on_theme_toggle();
+    });
+    actions.appendChild(theme_button);
+  }
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
   logout_button.setAttribute("size", "sm");
-  logout_button.setAttribute("role", "menuitem");
   logout_button.classList.add("pyc-site-shell__logout-button");
   logout_button.textContent = "Sign out";
   logout_button.addEventListener("click", (event) => {
     event.preventDefault();
-    window.location.assign(LOGOUT_PATH);
+    const csrf_token = typeof options.csrf_token === "string" ? options.csrf_token : "";
+    if (csrf_token.length === 0) {
+      window.location.assign(LOGOUT_PATH);
+      return;
+    }
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = LOGOUT_PATH;
+    form.hidden = true;
+    const token_input = document.createElement("input");
+    token_input.type = "hidden";
+    token_input.name = "csrf_token";
+    token_input.value = csrf_token;
+    form.appendChild(token_input);
+    document.body.appendChild(form);
+    form.submit();
   });
   actions.appendChild(logout_button);
   app_bar.appendChild(actions);
@@ -165,6 +200,309 @@ function build_palette_hint(shortcut_label, on_activate) {
     on_activate();
   });
   return hint;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/confirm-delegate.js
+var CONFIRM_ATTRIBUTE = "data-confirm";
+var INSTALLED_FLAG = "__pycConfirmDelegateInstalled";
+function resolve_confirm_message(form, submitter) {
+  let raw = null;
+  if (submitter !== null && submitter !== void 0 && typeof submitter.getAttribute === "function") {
+    raw = submitter.getAttribute(CONFIRM_ATTRIBUTE);
+  }
+  if (raw === null) {
+    raw = form.getAttribute(CONFIRM_ATTRIBUTE);
+  }
+  if (raw === null) {
+    return null;
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    return "Are you sure?";
+  }
+  return trimmed;
+}
+async function ask_confirmation(message) {
+  const dialog_ctor = typeof customElements !== "undefined" ? customElements.get("mj-dialog") : void 0;
+  if (dialog_ctor !== void 0 && typeof dialog_ctor.confirm === "function") {
+    try {
+      const result = await dialog_ctor.confirm({ message, confirmLabel: "Continue", cancelLabel: "Cancel" });
+      return result === true;
+    } catch (error) {
+    }
+  }
+  return window.confirm(message);
+}
+function install_confirm_delegate(root) {
+  const target = root !== void 0 && root !== null ? root : document;
+  if (target[INSTALLED_FLAG] === true) {
+    return;
+  }
+  target[INSTALLED_FLAG] = true;
+  target.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    const submitter = event.submitter !== void 0 ? event.submitter : null;
+    const submitter_confirms = submitter !== null && submitter.hasAttribute(CONFIRM_ATTRIBUTE);
+    if (form.hasAttribute(CONFIRM_ATTRIBUTE) === false && submitter_confirms === false) {
+      return;
+    }
+    if (form.dataset.pycConfirmed === "true") {
+      delete form.dataset.pycConfirmed;
+      return;
+    }
+    event.preventDefault();
+    const message = resolve_confirm_message(form, submitter);
+    ask_confirmation(message).then((accepted) => {
+      if (accepted !== true) {
+        return;
+      }
+      form.dataset.pycConfirmed = "true";
+      if (typeof form.requestSubmit === "function") {
+        form.requestSubmit(submitter !== null && submitter.form === form ? submitter : void 0);
+      } else {
+        form.submit();
+      }
+    });
+  }, true);
+  return;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/reveal-toggle.js
+var REVEAL_ATTRIBUTE = "data-reveal-for";
+var BUSY_ATTRIBUTE = "data-busy-label";
+var INSTALLED_FLAG2 = "__pycRevealToggleInstalled";
+function toggle_reveal(button) {
+  const target_id = button.getAttribute(REVEAL_ATTRIBUTE);
+  if (target_id === null || target_id.length === 0) {
+    return;
+  }
+  const input = document.getElementById(target_id);
+  if (input === null) {
+    return;
+  }
+  const revealed = input.getAttribute("type") === "text";
+  input.setAttribute("type", revealed ? "password" : "text");
+  button.setAttribute("aria-pressed", revealed ? "false" : "true");
+  const show_label = button.getAttribute("data-show-label") || "Show";
+  const hide_label = button.getAttribute("data-hide-label") || "Hide";
+  button.textContent = revealed ? show_label : hide_label;
+  return;
+}
+function mark_busy(form) {
+  const label = form.getAttribute(BUSY_ATTRIBUTE);
+  form.setAttribute("aria-busy", "true");
+  const buttons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+  buttons.forEach((button) => {
+    button.disabled = true;
+    if (label !== null && label.length > 0) {
+      if (button.tagName === "BUTTON") {
+        button.dataset.pycIdleLabel = button.textContent;
+        button.textContent = label;
+      } else {
+        button.value = label;
+      }
+    }
+  });
+  return;
+}
+function install_reveal_toggle(root) {
+  const target = root !== void 0 && root !== null ? root : document;
+  if (target[INSTALLED_FLAG2] === true) {
+    return;
+  }
+  target[INSTALLED_FLAG2] = true;
+  target.addEventListener("click", (event) => {
+    const origin = event.target;
+    if (!(origin instanceof Element)) {
+      return;
+    }
+    const button = origin.closest("[" + REVEAL_ATTRIBUTE + "]");
+    if (button === null) {
+      return;
+    }
+    event.preventDefault();
+    toggle_reveal(button);
+  });
+  target.addEventListener("submit", (event) => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement)) {
+      return;
+    }
+    if (form.hasAttribute(BUSY_ATTRIBUTE) === false) {
+      return;
+    }
+    if (event.defaultPrevented === true) {
+      return;
+    }
+    window.setTimeout(() => {
+      mark_busy(form);
+    }, 0);
+  });
+  return;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/log-viewer.js
+var VIEWER_SELECTOR = ".pyc-log-viewer";
+var OUTPUT_SELECTOR = ".pyc-log-viewer__output";
+var INSTALLED_FLAG3 = "__pycLogViewerInstalled";
+var DEFAULT_REFRESH_SECONDS = 10;
+function is_following(viewer) {
+  const toggle = viewer.querySelector("[data-log-follow]");
+  if (toggle === null) {
+    return true;
+  }
+  return toggle.checked === true;
+}
+function scroll_to_end(output) {
+  output.scrollTop = output.scrollHeight;
+  return;
+}
+async function refresh_once(viewer) {
+  const source = viewer.getAttribute("data-log-source") || window.location.href;
+  let response;
+  try {
+    response = await fetch(source, { credentials: "same-origin", cache: "no-store", headers: { "Accept": "text/html" } });
+  } catch (error) {
+    return false;
+  }
+  if (response.ok !== true) {
+    return false;
+  }
+  const html = await response.text();
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const fresh_viewer = parsed.querySelector(VIEWER_SELECTOR);
+  const fresh_output = parsed.querySelector(OUTPUT_SELECTOR);
+  const output = viewer.querySelector(OUTPUT_SELECTOR);
+  if (fresh_output === null || output === null) {
+    return false;
+  }
+  const follow = is_following(viewer);
+  if (output.textContent !== fresh_output.textContent) {
+    output.textContent = fresh_output.textContent;
+    if (follow === true) {
+      scroll_to_end(output);
+    }
+  }
+  const still_running = fresh_viewer !== null && fresh_viewer.getAttribute("data-log-running") === "true";
+  viewer.setAttribute("data-log-running", still_running ? "true" : "false");
+  const status = viewer.querySelector("[data-log-status]");
+  if (status !== null) {
+    status.textContent = still_running ? "Live: refreshing while the job runs" : "Finished: log is complete";
+  }
+  return still_running;
+}
+function schedule(viewer) {
+  if (viewer.getAttribute("data-log-running") !== "true") {
+    return;
+  }
+  const seconds = Number.parseInt(viewer.getAttribute("data-log-refresh-seconds") || "", 10);
+  const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1e3 : DEFAULT_REFRESH_SECONDS * 1e3;
+  window.setTimeout(() => {
+    if (document.body.contains(viewer) === false) {
+      return;
+    }
+    refresh_once(viewer).then((still_running) => {
+      if (still_running === true) {
+        schedule(viewer);
+      }
+    });
+  }, delay);
+  return;
+}
+function copy_output(viewer) {
+  const output = viewer.querySelector(OUTPUT_SELECTOR);
+  if (output === null || typeof navigator === "undefined" || !navigator.clipboard) {
+    return;
+  }
+  navigator.clipboard.writeText(output.textContent).then(() => {
+    const status = viewer.querySelector("[data-log-status]");
+    if (status !== null) {
+      const previous = status.textContent;
+      status.textContent = "Copied to clipboard";
+      window.setTimeout(() => {
+        status.textContent = previous;
+      }, 2e3);
+    }
+  }).catch(() => {
+  });
+  return;
+}
+function download_output(viewer) {
+  const output = viewer.querySelector(OUTPUT_SELECTOR);
+  if (output === null) {
+    return;
+  }
+  const name = viewer.getAttribute("data-log-filename") || "log.txt";
+  const blob = new Blob([output.textContent], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 1e3);
+  return;
+}
+function initialise_viewer(viewer) {
+  if (viewer.dataset.pycLogInitialised === "true") {
+    return;
+  }
+  viewer.dataset.pycLogInitialised = "true";
+  const output = viewer.querySelector(OUTPUT_SELECTOR);
+  if (output !== null && is_following(viewer) === true) {
+    scroll_to_end(output);
+  }
+  schedule(viewer);
+  return;
+}
+function install_log_viewer(root) {
+  const target = root !== void 0 && root !== null ? root : document;
+  if (target[INSTALLED_FLAG3] === true) {
+    return;
+  }
+  target[INSTALLED_FLAG3] = true;
+  target.addEventListener("click", (event) => {
+    const origin = event.target;
+    if (!(origin instanceof Element)) {
+      return;
+    }
+    const action = origin.closest("[data-log-action]");
+    if (action === null) {
+      return;
+    }
+    const viewer = action.closest(VIEWER_SELECTOR);
+    if (viewer === null) {
+      return;
+    }
+    event.preventDefault();
+    const kind = action.getAttribute("data-log-action");
+    if (kind === "copy") {
+      copy_output(viewer);
+    } else if (kind === "download") {
+      download_output(viewer);
+    } else if (kind === "refresh") {
+      refresh_once(viewer);
+    }
+  });
+  const scan = () => {
+    target.querySelectorAll(VIEWER_SELECTOR).forEach((viewer) => {
+      initialise_viewer(viewer);
+    });
+  };
+  scan();
+  if (typeof MutationObserver === "function" && target === document) {
+    const observer = new MutationObserver(() => {
+      scan();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+  return;
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/home-view.js
@@ -562,7 +900,7 @@ var PaletteDialog = class {
       this._input.value = "";
       this._input.focus();
     }
-    this._render_status("Type to search across registered providers.");
+    this._render_status("Type to search pages and actions.");
     this._host.emit("pyc-site-shell-palette-opened", {});
     if (typeof this._host.observePaletteOpened === "function") {
       this._host.observePaletteOpened();
@@ -609,8 +947,12 @@ var PaletteDialog = class {
     const input = document.createElement("input");
     input.type = "search";
     input.classList.add("pyc-site-shell__palette-input");
-    input.setAttribute("aria-label", "Search providers");
+    input.setAttribute("aria-label", "Search pages and actions");
     input.setAttribute("autocomplete", "off");
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-expanded", "false");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-controls", "pyc-palette-results");
     input.setAttribute("spellcheck", "false");
     input.placeholder = "Type to search...";
     input.addEventListener("input", () => {
@@ -625,7 +967,8 @@ var PaletteDialog = class {
     const results = document.createElement("div");
     results.classList.add("pyc-site-shell__palette-results");
     results.setAttribute("role", "listbox");
-    results.setAttribute("aria-label", "Palette results");
+    results.id = "pyc-palette-results";
+    results.setAttribute("aria-label", "Search results");
     dialog.appendChild(results);
     dialog.addEventListener("keydown", (event) => {
       this._on_dialog_keydown(event);
@@ -674,7 +1017,7 @@ var PaletteDialog = class {
       this._results_region.replaceChildren();
       this._flat_results = [];
       this._active_index = -1;
-      this._render_status("No providers available for your account.");
+      this._render_status("Navigation search is unavailable for your account.");
       return;
     }
     this._render_status("Searching...");
@@ -702,15 +1045,18 @@ var PaletteDialog = class {
     for (const outcome of outcomes) {
       const section = document.createElement("div");
       section.classList.add("pyc-site-shell__palette-group");
+      section.setAttribute("role", "group");
+      section.setAttribute("aria-label", outcome.providerLabel);
       const heading = document.createElement("div");
       heading.classList.add("pyc-site-shell__palette-group-label");
+      heading.setAttribute("role", "presentation");
       heading.textContent = outcome.providerLabel;
       section.appendChild(heading);
       if (outcome.error !== null) {
         const notice = document.createElement("div");
         notice.classList.add("pyc-site-shell__palette-provider-error");
-        notice.setAttribute("role", "note");
-        notice.textContent = "This provider is unavailable.";
+        notice.setAttribute("role", "presentation");
+        notice.textContent = "This source is unavailable right now.";
         section.appendChild(notice);
         this._results_region.appendChild(section);
         continue;
@@ -729,6 +1075,7 @@ var PaletteDialog = class {
         option.setAttribute("role", "option");
         option.setAttribute("data-provider-id", outcome.providerId);
         option.setAttribute("data-result-id", result.id);
+        option.id = "pyc-palette-option-" + String(total_results);
         option.tabIndex = -1;
         const label = document.createElement("div");
         label.classList.add("pyc-site-shell__palette-option-label");
@@ -756,6 +1103,12 @@ var PaletteDialog = class {
       this._results_region.appendChild(section);
     }
     this._active_index = this._flat_results.length > 0 ? 0 : -1;
+    if (this._input !== null) {
+      this._input.setAttribute("aria-expanded", this._flat_results.length > 0 ? "true" : "false");
+      if (this._flat_results.length === 0) {
+        this._input.removeAttribute("aria-activedescendant");
+      }
+    }
     this._update_active_highlight();
     if (total_results === 0) {
       this._render_status("No results.");
@@ -776,6 +1129,9 @@ var PaletteDialog = class {
       const entry = this._flat_results[index];
       if (index === this._active_index) {
         entry.element.setAttribute("aria-selected", "true");
+        if (this._input !== null) {
+          this._input.setAttribute("aria-activedescendant", entry.element.id);
+        }
         entry.element.classList.add(
           "pyc-site-shell__palette-option--active"
         );
@@ -1832,6 +2188,7 @@ var DEFAULT_GROUP_ICON_SVGS = {
   "System": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.05A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.05A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.05A1.7 1.7 0 0 0 15 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.34.6.94 1 1.55 1H21a2 2 0 1 1 0 4h-.05a1.7 1.7 0 0 0-1.55 1z" /></svg>',
   "Admin": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 2 4 5v6c0 5 3.5 9.5 8 11 4.5-1.5 8-6 8-11V5l-8-3z" /></svg>'
 };
+var CHEVRON_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 6l6 6-6 6" /></svg>';
 var FALLBACK_GROUP_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4" /></svg>';
 var SidebarRenderer = class {
   _container;
@@ -1868,10 +2225,12 @@ var SidebarRenderer = class {
     }
     this._open_button = null;
     this._container.replaceChildren();
-    const nav = document.createElement("nav");
-    nav.setAttribute("role", "navigation");
-    nav.setAttribute("aria-label", "Primary");
+    this._container.setAttribute("role", "presentation");
+    const nav = document.createElement("div");
     nav.classList.add("pyc-site-shell__sidebar-nav");
+    nav.setAttribute("role", "presentation");
+    const resolved_active = this._resolve_active_route(visible_sidebar, active_path);
+    active_path = resolved_active;
     for (const entry of visible_sidebar.ungrouped) {
       const entry_element = this._build_entry_element(
         entry.label,
@@ -1879,7 +2238,10 @@ var SidebarRenderer = class {
         active_path
       );
       entry_element.classList.add("pyc-site-shell__sidebar-navitem");
-      nav.appendChild(entry_element);
+      const item = document.createElement("li");
+      item.classList.add("pyc-site-shell__sidebar-item");
+      item.appendChild(entry_element);
+      nav.appendChild(item);
     }
     let auto_open_button = null;
     for (const bucket of visible_sidebar.groups) {
@@ -1909,8 +2271,8 @@ var SidebarRenderer = class {
    * ``_toggle_group`` closes the previously open one.
    */
   _build_group_element(group, entries, active_path) {
-    const wrapper = document.createElement("div");
-    wrapper.classList.add("pyc-site-shell__sidebar-group");
+    const wrapper = document.createElement("li");
+    wrapper.classList.add("pyc-site-shell__sidebar-group", "pyc-site-shell__sidebar-item");
     const button = document.createElement("button");
     button.type = "button";
     button.classList.add(
@@ -1919,6 +2281,8 @@ var SidebarRenderer = class {
     );
     button.setAttribute("aria-expanded", "false");
     button.setAttribute("tabindex", "-1");
+    const panel_id = "pyc-sidebar-panel-" + String(group.groupId || group.group_id || group.label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    button.setAttribute("aria-controls", panel_id);
     const icon_span = document.createElement("span");
     icon_span.classList.add("pyc-site-shell__sidebar-group-icon");
     icon_span.setAttribute("aria-hidden", "true");
@@ -1929,11 +2293,19 @@ var SidebarRenderer = class {
     label_span.textContent = group.label;
     button.appendChild(icon_span);
     button.appendChild(label_span);
+    const chevron_span = document.createElement("span");
+    chevron_span.classList.add("pyc-site-shell__sidebar-group-chevron");
+    chevron_span.setAttribute("aria-hidden", "true");
+    chevron_span.innerHTML = CHEVRON_ICON_SVG;
+    button.appendChild(chevron_span);
     const panel = document.createElement("div");
     panel.classList.add("pyc-site-shell__sidebar-panel");
-    panel.setAttribute("role", "region");
+    panel.id = panel_id;
+    panel.setAttribute("role", "group");
     panel.setAttribute("aria-label", group.label);
     panel.hidden = true;
+    const panel_list = document.createElement("ul");
+    panel_list.classList.add("pyc-site-shell__sidebar-panel-list");
     let has_active_entry = false;
     for (const entry of entries) {
       const entry_element = this._build_entry_element(
@@ -1944,8 +2316,11 @@ var SidebarRenderer = class {
       if (entry.route === active_path) {
         has_active_entry = true;
       }
-      panel.appendChild(entry_element);
+      const item = document.createElement("li");
+      item.appendChild(entry_element);
+      panel_list.appendChild(item);
     }
+    panel.appendChild(panel_list);
     if (has_active_entry === true) {
       button.classList.add("pyc-site-shell__sidebar-group-btn--active");
     }
@@ -1970,14 +2345,55 @@ var SidebarRenderer = class {
     if (group !== null && typeof group === "object") {
       const supplied = group.icon;
       if (typeof supplied === "string" && supplied.length > 0) {
-        return supplied;
+        if (supplied.trim().startsWith("<svg")) {
+          return supplied;
+        }
+        for (const key of Object.keys(DEFAULT_GROUP_ICON_SVGS)) {
+          if (key.toLowerCase() === supplied.toLowerCase()) {
+            return DEFAULT_GROUP_ICON_SVGS[key];
+          }
+        }
+      }
+      const label = group.label;
+      if (typeof label === "string" && DEFAULT_GROUP_ICON_SVGS[label] !== void 0) {
+        return DEFAULT_GROUP_ICON_SVGS[label];
       }
     }
-    const by_label = DEFAULT_GROUP_ICON_SVGS[group.label];
-    if (typeof by_label === "string") {
-      return by_label;
-    }
     return FALLBACK_GROUP_ICON_SVG;
+  }
+  /**
+   * Longest-prefix (segment boundary) match of the current path
+   * against every visible entry, so /admin/users/u-1 highlights
+   * "Users" and /builds/42 highlights "Builds". Falls back to the
+   * raw path when nothing matches.
+   */
+  _resolve_active_route(visible_sidebar, active_path) {
+    if (typeof active_path !== "string" || active_path.length === 0) {
+      return active_path;
+    }
+    const entries = [];
+    for (const entry of visible_sidebar.ungrouped) {
+      entries.push(entry);
+    }
+    for (const bucket of visible_sidebar.groups) {
+      for (const entry of bucket.entries) {
+        entries.push(entry);
+      }
+    }
+    let best = null;
+    for (const entry of entries) {
+      const route = entry.route;
+      if (typeof route !== "string" || route.length === 0) {
+        continue;
+      }
+      const prefix = route.endsWith("/") ? route : route + "/";
+      if (active_path === route || active_path.startsWith(prefix)) {
+        if (best === null || route.length > best.length) {
+          best = route;
+        }
+      }
+    }
+    return best !== null ? best : active_path;
   }
   /**
    * Toggle a group's accordion. Opening one closes the other open
@@ -2471,6 +2887,11 @@ var PycSiteShell = class extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
+    _apply_theme_preference(_read_theme_preference());
+    this._install_skip_link();
+    install_confirm_delegate(document);
+    install_reveal_toggle(document);
+    install_log_viewer(document);
     this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();
@@ -2559,7 +2980,12 @@ var PycSiteShell = class extends HTMLElement {
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
-      user_display_name: null,
+      user_display_name: this._read_optional_attribute("user-display-name"),
+      csrf_token: this._read_optional_attribute("csrf-token"),
+      on_theme_toggle: () => {
+        this._toggle_theme();
+      },
+      current_theme: _read_theme_preference(),
       nav_open_initial,
       on_nav_toggle: () => {
         this._toggle_sidebar();
@@ -2587,7 +3013,6 @@ var PycSiteShell = class extends HTMLElement {
     this._notices_region = notices;
     const main = document.createElement("main");
     main.setAttribute("slot", "main");
-    main.setAttribute("role", "main");
     main.classList.add("pyc-site-shell__main");
     for (const node of flash_extraction.remaining_nodes) {
       main.appendChild(node);
@@ -2834,8 +3259,8 @@ var PycSiteShell = class extends HTMLElement {
    * claimed the route.
    */
   _schedule_landing_state_check() {
-    const schedule = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
-    schedule(() => {
+    const schedule2 = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+    schedule2(() => {
       this._apply_landing_state();
     });
     return;
@@ -2910,6 +3335,11 @@ var PycSiteShell = class extends HTMLElement {
    * entry matches, the server-rendered title is left untouched.
    */
   _update_document_title() {
+    const current_brand = this.getAttribute(ATTR_BRAND_LABEL);
+    const brand_only = current_brand !== null && current_brand.length > 0 ? current_brand : "Pychestrate";
+    if (typeof document.title === "string" && document.title.length > 0 && document.title !== brand_only) {
+      return;
+    }
     if (this._nav_manifest_loaded === false) {
       return;
     }
@@ -2950,6 +3380,51 @@ var PycSiteShell = class extends HTMLElement {
    * nav-open attribute drives its grid track width and its
    * overlay behavior on narrow viewports).
    */
+  _install_skip_link() {
+    if (document.querySelector(".pyc-site-shell__skip-link") !== null) {
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = "#pyc-main-content";
+    link.classList.add("pyc-site-shell__skip-link");
+    link.textContent = "Skip to main content";
+    link.addEventListener("click", (event) => {
+      const main = document.querySelector(".pyc-site-shell__main");
+      if (main === null) {
+        return;
+      }
+      event.preventDefault();
+      if (main.id.length === 0) {
+        main.id = "pyc-main-content";
+      }
+      main.setAttribute("tabindex", "-1");
+      main.focus();
+    });
+    document.body.insertBefore(link, document.body.firstChild);
+    return;
+  }
+  _toggle_theme() {
+    const current = _read_theme_preference();
+    const next = current === "dark" ? "light" : "dark";
+    _apply_theme_preference(next);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch (error) {
+    }
+    const button = document.querySelector(".pyc-site-shell__theme-toggle");
+    if (button !== null) {
+      button.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
+      button.setAttribute("aria-label", next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+    }
+    return;
+  }
+  _read_optional_attribute(name) {
+    const value = this.getAttribute(name);
+    if (value === null || value.length === 0) {
+      return null;
+    }
+    return value;
+  }
   _toggle_sidebar() {
     const layout = this._layout;
     if (layout === null) {
@@ -3111,6 +3586,34 @@ function _build_sidebar_failure_state(on_retry) {
   });
   panel.appendChild(retry_button);
   return panel;
+}
+var THEME_STORAGE_KEY = "pychestrate.ui.theme";
+function _read_theme_preference() {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "dark" || stored === "light") {
+      return stored;
+    }
+  } catch (error) {
+  }
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    return "dark";
+  }
+  return "light";
+}
+function _apply_theme_preference(theme) {
+  let stored = null;
+  try {
+    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  } catch (error) {
+    stored = null;
+  }
+  if (stored === "dark" || stored === "light") {
+    document.documentElement.setAttribute("data-theme", stored);
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  return;
 }
 function _read_nav_collapsed_preference() {
   let rtnval = false;

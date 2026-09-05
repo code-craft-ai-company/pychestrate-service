@@ -74,6 +74,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _AuthResolution,
     _attach_session_to_response,
     _build_default_template_context,
+    extract_fragment_title,
+    _deny_redirect_target,
     _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
@@ -393,7 +395,10 @@ def _require_project_permission_or_redirect(
         message=deny_message,
         category=flash.CATEGORY_ERROR,
     )
-    rtnval = RedirectResponse(url=deny_redirect_url, status_code=302)
+    target_url = _deny_redirect_target(
+        auth=auth, fallback_url=deny_redirect_url
+    )
+    rtnval = RedirectResponse(url=target_url, status_code=302)
     _attach_session_to_response(response=rtnval, session=auth.session)
     return rtnval
 
@@ -506,9 +511,13 @@ def handle_dashboard(request: Request) -> Response:
     db_session = auth.db_session
     try:
         project_manager = _build_project_manager(db_session=db_session)
-        projects = project_manager.list_projects(
+        projects_response = project_manager.list_projects(
             auth.user_id, limit=10
-        ).projects
+        )
+        projects = projects_response.projects
+        project_total = getattr(projects_response, "total", None)
+        if project_total is None:
+            project_total = len(projects)
 
         recent_activity = _collect_recent_activity(
             db_session=db_session, projects=projects
@@ -522,6 +531,7 @@ def handle_dashboard(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["projects"] = projects
+        context["project_total"] = project_total
         context["recent_builds"] = recent_activity["builds"]
         context["recent_tests"] = recent_activity["tests"]
         response = _render(
@@ -1157,6 +1167,7 @@ def handle_member_add(request: Request) -> Response:
             return deny_response
 
         method = request.method.upper()
+        form_data: Optional[MultiFormView] = None
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1177,6 +1188,10 @@ def handle_member_add(request: Request) -> Response:
             user_id_raw = single_form.get("user_id", None)
             user_id = _coerce_int(raw=user_id_raw)
             role_str = str(single_form.get("role", "viewer"))
+            form_data = MultiFormView(data={
+                "user_id": [str(user_id_raw or "")],
+                "role": [role_str],
+            })
 
             try:
                 if user_id is None:
@@ -1232,6 +1247,7 @@ def handle_member_add(request: Request) -> Response:
         context["project"] = project
         context["available_users"] = available_users
         context["roles"] = roles
+        context["form_data"] = form_data
         response = _render(
             template_name="projects/members/add.html",
             context=context,
@@ -1633,6 +1649,9 @@ def _wrap_projects_handler_in_shell(handler: Any) -> Any:
         if isinstance(request_path, str) is False:
             request_path = ""
         page_title = _resolve_projects_page_title(path=request_path)
+        inner_html, fragment_title = extract_fragment_title(html=inner_html)
+        if fragment_title is not None:
+            page_title = fragment_title
         rtnval = render_shell_document(
             request=request,
             page_title=page_title,

@@ -1,74 +1,34 @@
 {% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
 {% block title %}Build #{{ build.id }} Logs - {{ project.name }} - Pychestrate{% endblock %}
 
-{% block extra_css %}
-{% if build.status.value == 'running' %}
-<meta http-equiv="refresh" content="10">
-{% endif %}
-<style>
-    .log-container {
-        background: #1a1a2e;
-        color: #e0e0e0;
-        font-family: 'Consolas', 'Monaco', monospace;
-        font-size: 0.85rem;
-        padding: 20px;
-        border-radius: 8px;
-        overflow-x: auto;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-        max-height: 600px;
-        overflow-y: auto;
-    }
-    .log-container .log-line {
-        line-height: 1.6;
-    }
-    .log-container .log-error {
-        color: #ff6b6b;
-    }
-    .log-container .log-warning {
-        color: #ffd93d;
-    }
-    .log-container .log-success {
-        color: #6bcb77;
-    }
-</style>
-{% endblock %}
 
 {% block content %}
-<div class="breadcrumb">
-    <a href="{{ url_for('projects.project_list') }}">Projects</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.build_list', project_id=project.id) }}">Builds</a>
-    <span>/</span>
-    <a href="{{ url_for('projects.build_detail', project_id=project.id, build_id=build.id) }}">#{{ build.id }}</a>
-    <span>/</span>
-    <span>Logs</span>
-</div>
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}">Builds</a></li>
+        <li><a href="{{ url_for('projects.build_detail', project_id=project.id, build_id=build.id) }}">#{{ build.id }}</a></li>
+        <li aria-current="page">Logs</li>
+    </ol>
+</nav>
 
-<div class="page-header" style="display: flex; justify-content: space-between; align-items: flex-start;">
+<div class="page-header page-header--split">
     <div>
-        <h2>Build #{{ build.id }} Logs</h2>
+        <h1>Build #{{ build.id }} Logs</h1>
         <p>{{ build.spec_name }} - 
-            <span class="badge badge-{% if build.status.value == 'succeeded' %}success{% elif build.status.value == 'failed' %}danger{% elif build.status.value == 'running' %}info{% else %}secondary{% endif %}">
-                {{ build.status.value }}
-            </span>
+            {{ ui.status_badge(build.status) }}
         </p>
     </div>
     <a href="{{ url_for('projects.build_detail', project_id=project.id, build_id=build.id) }}" class="btn btn-secondary">
-        <span class="material-icons">arrow_back</span> Back to Build
+        {{ ui.icon("arrow_back") }} Back to Build
     </a>
 </div>
 
 <div class="card">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <span>Execution Logs{% if selected_step %} - {{ selected_step }}{% endif %}</span>
-        {% if build.status.value == 'running' %}
-        <span class="badge badge-info">Auto-refreshes every 10s while running</span>
-        {% endif %}
-    </div>
-    <div class="log-container">{% if logs %}{{ logs }}{% else %}No logs available{% endif %}</div>
+    <h2 class="card-header">Execution log{% if selected_step %} &middot; step <code>{{ selected_step }}</code>{% endif %}</h2>
+    {{ ui.log_viewer(logs, running=(build.status.value in ('running', 'pending')), filename='build-' ~ build.id ~ '.log') }}
 </div>
 {% endblock %}
