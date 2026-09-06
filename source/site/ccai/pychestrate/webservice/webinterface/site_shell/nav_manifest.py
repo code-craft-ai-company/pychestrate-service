@@ -37,7 +37,7 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -60,6 +60,7 @@ class NavEntry:
     group_id: str
     required_permissions: List[str] = field(default_factory=list)
     icon: str = ""
+    surfaces: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ class NavGroup:
     label: str
     required_permissions: List[str] = field(default_factory=list)
     icon: str = ""
+    surfaces: Tuple[str, ...] = ()
 
 
 # Group identifiers -- mirror the ``groupId`` values the feature
@@ -168,6 +170,7 @@ NAV_ENTRIES: List[NavEntry] = [
     # ---- Orchestration -------------------------------------------
     NavEntry(
         entry_id="orchestration.runs",
+        surfaces=('build', 'testing', 'rpa'),
         label="Runs",
         route="/runs",
         group_id=GROUP_ORCHESTRATION,
@@ -175,6 +178,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.builds",
+        surfaces=('build',),
         label="Builds",
         route="/builds",
         group_id=GROUP_ORCHESTRATION,
@@ -182,6 +186,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.pipelines",
+        surfaces=('build',),
         label="Pipelines",
         route="/pipelines",
         group_id=GROUP_ORCHESTRATION,
@@ -189,6 +194,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.test-catalog",
+        surfaces=('testing',),
         label="Test Catalog",
         route="/test-catalog",
         group_id=GROUP_ORCHESTRATION,
@@ -196,6 +202,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.environments",
+        surfaces=('infra',),
         label="Environments",
         route="/environments",
         group_id=GROUP_ORCHESTRATION,
@@ -203,6 +210,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.provisioning",
+        surfaces=('infra',),
         label="Provisioning",
         route="/provisioning-runs",
         group_id=GROUP_ORCHESTRATION,
@@ -210,6 +218,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="orchestration.guards",
+        surfaces=('infra',),
         label="Blast-Radius Guards",
         route="/blast-radius-guards",
         group_id=GROUP_ORCHESTRATION,
@@ -218,6 +227,7 @@ NAV_ENTRIES: List[NavEntry] = [
     # ---- Insights ------------------------------------------------
     NavEntry(
         entry_id="insights.test-metrics",
+        surfaces=('testing',),
         label="Test Metrics",
         route="/test-metrics",
         group_id=GROUP_INSIGHTS,
@@ -323,6 +333,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="operations.release-channels",
+        surfaces=('build',),
         label="Release Channels",
         route="/release-channels",
         group_id=GROUP_OPERATIONS,
@@ -378,6 +389,21 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/roles",
         group_id=GROUP_ADMIN,
         required_permissions=["system:rbac.read"],
+    ),
+    NavEntry(
+        entry_id="admin.rpa-job-types",
+        label="RPA Job Types",
+        route="/admin/rpa-job-types",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:rpa.job_types.manage"],
+        surfaces=("rpa",),
+    ),
+    NavEntry(
+        entry_id="admin.ui-profile",
+        label="UI Profile",
+        route="/admin/ui-profile",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:ui.profile.manage"],
     ),
     NavEntry(
         entry_id="admin.variables",
@@ -468,13 +494,80 @@ def _entry_to_dict(entry: NavEntry) -> Dict[str, Any]:
         "route": entry.route,
         "icon": entry.icon if len(entry.icon) > 0 else None,
         "required_permissions": list(entry.required_permissions),
+        "surfaces": list(entry.surfaces),
     }
+    return rtnval
+
+
+def _surface_visible(*, tags: Tuple[str, ...], enabled: Optional[set]) -> bool:
+    """
+        Whether an item tagged with ``tags`` shows under ``enabled``
+        surfaces. No tags means core (always visible); ``enabled``
+        ``None`` means no surface filtering at all.
+    """
+    if enabled is None or len(tags) == 0:
+        return True
+    for tag in tags:
+        if str(tag) in enabled:
+            return True
+    return False
+
+
+def validate_manifest_surfaces() -> List[str]:
+    """
+        Startup lint: every surface tag on a group or entry must name
+        a known :class:`UiSurface`. Returns the offending tags.
+
+        :returns: List of ``"<entry_id>: <tag>"`` strings (empty when
+                  the manifest is clean).
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.ui_profile import (  # noqa: E402
+        validate_surface_tags,
+    )
+    problems: List[str] = []
+    for group in NAV_GROUPS:
+        for bad in validate_surface_tags(group.surfaces):
+            problems.append("{}: {}".format(group.group_id, bad))
+    for entry in NAV_ENTRIES:
+        for bad in validate_surface_tags(entry.surfaces):
+            problems.append("{}: {}".format(entry.entry_id, bad))
+    return problems
+
+
+def hidden_routes_for(*, held_permissions: List[str], enabled_surfaces: Iterable[str]) -> List[str]:
+    """
+        Routes of the entries the caller may see but the enabled
+        surfaces hide. The shell uses these to show the
+        hidden-surface notice when such a route is opened by URL.
+    """
+    held = set(held_permissions)
+    enabled = set(str(getattr(x, "value", x)) for x in enabled_surfaces)
+    rtnval: List[str] = []
+    for entry in NAV_ENTRIES:
+        if any(key not in held for key in entry.required_permissions):
+            continue
+        if len(entry.surfaces) == 0:
+            continue
+        if _surface_visible(tags=entry.surfaces, enabled=enabled) is False:
+            rtnval.append(entry.route)
+    return rtnval
+
+
+def governed_entry_counts() -> Dict[str, int]:
+    """
+        How many navigation entries each surface tag governs.
+    """
+    rtnval: Dict[str, int] = {}
+    for entry in NAV_ENTRIES:
+        for tag in entry.surfaces:
+            rtnval[str(tag)] = rtnval.get(str(tag), 0) + 1
     return rtnval
 
 
 def build_navigation_manifest(
         *,
-        held_permissions: List[str]
+        held_permissions: List[str],
+        enabled_surfaces: Optional[Iterable[str]] = None
     ) -> Dict[str, Any]:
     """
         Build the permission-filtered navigation manifest for a
@@ -495,6 +588,9 @@ def build_navigation_manifest(
                   "required_permissions", "entries": [...]}]}``.
     """
     held = set(held_permissions)
+    enabled: Optional[set] = None
+    if enabled_surfaces is not None:
+        enabled = set(str(getattr(x, "value", x)) for x in enabled_surfaces)
 
     groups_payload: List[Dict[str, Any]] = []
     for group in NAV_GROUPS:
@@ -504,6 +600,8 @@ def build_navigation_manifest(
                 group_visible = False
                 break
         if group_visible is False:
+            continue
+        if _surface_visible(tags=group.surfaces, enabled=enabled) is False:
             continue
 
         visible_entries: List[Dict[str, Any]] = []
@@ -516,6 +614,8 @@ def build_navigation_manifest(
                     entry_visible = False
                     break
             if entry_visible is False:
+                continue
+            if _surface_visible(tags=entry.surfaces, enabled=enabled) is False:
                 continue
             visible_entries.append(_entry_to_dict(entry))
 
@@ -540,6 +640,9 @@ def build_navigation_manifest(
 
 __all__ = [
     "NavEntry",
+    "validate_manifest_surfaces",
+    "governed_entry_counts",
+    "hidden_routes_for",
     "NavGroup",
     "NAV_GROUPS",
     "NAV_ENTRIES",

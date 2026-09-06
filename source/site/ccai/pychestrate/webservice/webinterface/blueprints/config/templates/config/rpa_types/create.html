@@ -1,0 +1,76 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Register RPA Job Type - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('config.rpa_type_list') }}">RPA Job Types</a></li>
+        <li aria-current="page">Register</li>
+    </ol>
+</nav>
+
+<div class="page-header">
+    <h1>Register RPA Job Type</h1>
+    <p>Declare how a job runs and what its work packet must contain; publish versions from the detail page afterwards</p>
+</div>
+
+<div class="card narrow">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="form-group">
+            <label for="type_id">Type ID *</label>
+            <input type="text" id="type_id" name="type_id" class="form-control mono" required pattern="[a-z][a-z0-9-]{2,63}"
+                   placeholder="invoice-import" value="{{ form_data.type_id if form_data else '' }}">
+            <div class="form-text">Lowercase slug, 3 to 64 characters. Stable identifier used by specifications and pods.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="display_name">Display Name *</label>
+            <input type="text" id="display_name" name="display_name" class="form-control" required maxlength="256"
+                   value="{{ form_data.display_name if form_data else '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="execution_mode">Execution Mode *</label>
+            <select id="execution_mode" name="execution_mode" class="form-control" required>
+                {% for mode in execution_modes %}
+                <option value="{{ mode.execution_mode }}" {% if form_data and form_data.execution_mode == mode.execution_mode %}selected{% endif %}>{{ mode.execution_mode }} &mdash; {{ mode.description }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="capability_requirements">Required Pod Capabilities</label>
+            <input type="text" id="capability_requirements" name="capability_requirements" class="form-control"
+                   value="{{ form_data.capability_requirements if form_data else '' }}" placeholder="browser, gpu">
+            <div class="form-text">Comma-separated tags an eligible pod must advertise.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="secret_fields">Secret Packet Fields</label>
+            <input type="text" id="secret_fields" name="secret_fields" class="form-control mono"
+                   value="{{ form_data.secret_fields if form_data else '' }}" placeholder="auth.token, /accounts/*/password">
+            <div class="form-text">Packet paths redacted in storage and on every page; the real values travel only in the signed envelope.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="packet_schema">Packet Schema (JSON Schema, optional)</label>
+            <textarea id="packet_schema" name="packet_schema" class="form-control mono" rows="8" spellcheck="false"
+                      placeholder='{"type": "object", "required": ["customer_id"], "properties": {"customer_id": {"type": "integer"}}}'>{{ form_data.packet_schema if form_data else '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else '' }}</textarea>
+        </div>
+
+        <div class="actions-row mt-lg">
+            <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Register</button>
+            <a href="{{ url_for('config.rpa_type_list') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

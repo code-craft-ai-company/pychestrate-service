@@ -83,6 +83,23 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:builds.create",
             effect=PermissionEffect.ALLOW,
         ),
+        # 6-rpa-orchestration + 9-ui-profiles (Phase 11).
+        PermissionGrant(
+            permission_key="system:rpa.read",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:rpa.create",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:rpa.job_types.manage",
+            effect=PermissionEffect.ALLOW,
+        ),
+        PermissionGrant(
+            permission_key="system:ui.profile.manage",
+            effect=PermissionEffect.ALLOW,
+        ),
         # 6-pipeline-definition + 6-matrix-sharding PR p20k:
         # pipeline-definition + matrix-sharding REST surface grants
         # for the admin role.

@@ -848,3 +848,34 @@
 .pyc-admin-page-fragment .list-tight { margin: 0; padding-left: 1.25rem; }
 .pyc-admin-page-fragment .masked { letter-spacing: 0.15em; color: var(--pyc-color-on-surface-muted); }
 .pyc-admin-page-fragment .py-sm { padding: 0.3rem 0; }
+
+/* Inline validation list under a form field (Run form packet pre-check). */
+.pyc-admin-page-fragment .form-errors {
+    margin: 0.5rem 0 0;
+    padding: 0.5rem 0.75rem 0.5rem 1.75rem;
+    border-radius: 6px;
+    background: var(--pyc-color-error-surface, #fde8e6);
+    color: var(--pyc-color-on-error-surface, #7a1d16);
+    font-size: 0.875rem;
+}
+.pyc-admin-page-fragment .form-control[aria-invalid="true"] {
+    border-color: var(--pyc-color-on-error-surface, #b3261e);
+}
+
+/* Hidden-surface notice rendered inside a fragment (project tabs). Kept
+   off the .alert classes so the shell's flash extraction leaves the link
+   in place. */
+.pyc-admin-page-fragment .pyc-hidden-surface-notice--inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--pyc-color-border, #c9cdd6);
+    border-left: 4px solid var(--pyc-color-accent, #2563eb);
+    border-radius: 6px;
+    background: var(--pyc-color-surface-elevated, #f3f5f9);
+    color: var(--pyc-color-on-surface, #1f2430);
+    font-size: 0.9375rem;
+}

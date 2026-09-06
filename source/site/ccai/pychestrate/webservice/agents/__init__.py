@@ -15,6 +15,7 @@ __version__ = "1.0.0"
 
 
 from ccai.pychestrate.webservice.agents.extensions.capability_kind import (
+    RpaCapability,
     CapabilityKindExtension,
     ConcurrencyCapability,
     PodMemberOwnershipCapability,
@@ -50,6 +51,7 @@ def register_builtin_extensions() -> None:
     register_factory_implementation(implementation=ObjectStoreArtifactSource)
     register_factory_implementation(implementation=FixedSetRolloutPolicy)
     register_resource_extension(base_class=CapabilityKindExtension, extension=ToolchainCapability)
+    register_resource_extension(base_class=CapabilityKindExtension, extension=RpaCapability)
     register_resource_extension(base_class=CapabilityKindExtension, extension=PodMemberOwnershipCapability)
     register_resource_extension(base_class=CapabilityKindExtension, extension=ConcurrencyCapability)
     return

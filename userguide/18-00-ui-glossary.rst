@@ -30,7 +30,7 @@ Verbs
     *deleted*.
 
 ``Run``
-    Starting a build, infrastructure, or test job from its
+    Starting a build, infrastructure, test, or RPA job from its
     specification. ``Test`` is reserved for the watch dry-run and the
     repository connectivity check.
 
@@ -55,6 +55,19 @@ Nouns
     The saved definition a job runs from. Abbreviate to ``spec`` only
     inside a table column header where space is short, never in a
     heading or button.
+
+``RPA job type`` / ``Version`` / ``Work packet``
+    An RPA job type is a deployment-wide, versioned automation; a
+    version is one published release of it; the work packet is the JSON
+    document a job processes. ``RPA specification`` and ``RPA job``
+    follow the specification / job pattern of the other domains.
+
+``Surface`` / ``UI profile``
+    A surface is one automation domain's slice of the interface (Build
+    Automation, Testing Automation, Robotic Process Automation,
+    Infrastructure). The UI profile is the set of surfaces shown: the
+    deployment default set by an administrator, narrowed by a user's
+    own preferences. Hiding a surface never removes access.
 
 ``Build`` / ``Infrastructure job`` / ``Test job``
     One execution of a specification. Page headings use the full

@@ -112,6 +112,12 @@ from ccai.pychestrate.core.managers.watch_manager import (
 )
 
 from ccai.pychestrate.webservice.clients.enrollment.service import TokenView
+from ccai.pychestrate.webservice.orchestration.rpa.service import (
+    RpaJobTypeVersionView,
+    RpaJobTypeView,
+    RpaJobView,
+    RpaSpecView,
+)
 from ccai.pychestrate.webservice.webinterface.blueprints.config.identity_admin import (
     AdminPermissionView,
     AdminRoleView,
@@ -378,6 +384,26 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "selected_pool_id": _by_mode(7, None),
     "selected_job_id": _by_mode(7, None),
     "selected_step": _by_mode("build", None),
+    "status_choices": _const(["pending", "running", "succeeded", "failed"]),
+    "default_packet_json": _const('{\n  "region": "eu"\n}'),
+    "packet_schema_json": _by_mode('{\n  "type": "object"\n}', ""),
+    "work_packet_json": _const('{\n  "customer_id": 42\n}'),
+    "is_active": _by_mode(True, False),
+    "job_types": _many(RpaJobTypeView),
+    "job_type": _one(RpaJobTypeView),
+    "versions": _many(RpaJobTypeVersionView),
+    "execution_modes": _const([{"execution_mode": "process", "description": "Simple process job."}]),
+    "has_override": _by_mode(True, False),
+    "override_reset": _by_mode(True, False),
+    "hidden_labels": _by_mode(["Infrastructure"], []),
+    "surfaces": _by_mode(
+        [{"surface": "rpa", "label": "Robotic Process Automation",
+          "description": "RPA specifications and jobs.", "enabled": True, "entry_count": 1}],
+        [],
+    ),
+    "enabled_count": _by_mode(4, 0),
+    "surface_total": _const(4),
+    "variable_name": _const("ui.profile.surfaces"),
     "selected_event_type": _by_mode("release", ""),
     "selected_health_status": _by_mode("online", ""),
     "selected_resource_type": _by_mode("device", ""),
@@ -512,6 +538,14 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "jobs": _many(BuildResponse),
         "job": _one(BuildResponse),
         "recent_jobs": _many(BuildResponse),
+    },
+    "projects/rpa/": {
+        "specs": _many(RpaSpecView),
+        "spec": _one(RpaSpecView),
+        "jobs": _many(RpaJobView),
+        "job": _one(RpaJobView),
+        "recent_jobs": _many(RpaJobView),
+        "selected_spec_id": _by_mode("spec_id-7", None),
     },
     "projects/infrastructure/": {
         "specs": _many(InfraSpecResponse),

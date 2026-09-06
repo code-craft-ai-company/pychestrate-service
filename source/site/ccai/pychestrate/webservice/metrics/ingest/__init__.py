@@ -36,6 +36,9 @@ from ccai.pychestrate.webservice.metrics.ingest.events import (
 from ccai.pychestrate.webservice.metrics.ingest.extensions.metric_definition import (
     MetricDefinitionExtension,
 )
+from ccai.pychestrate.webservice.metrics.ingest.extensions.rpa_counters import (
+    PHASE11_METRIC_EXTENSIONS,
+)
 from ccai.pychestrate.webservice.metrics.ingest.extensions.reservation_granted_counter import (
     ResourceReservationGrantedCounter,
 )
@@ -57,4 +60,9 @@ def register_builtin_extensions() -> None:
         base_class=MetricDefinitionExtension,
         extension=ResourceReservationGrantedCounter,
     )
+    for metric_extension in PHASE11_METRIC_EXTENSIONS:
+        register_resource_extension(
+            base_class=MetricDefinitionExtension,
+            extension=metric_extension,
+        )
     return

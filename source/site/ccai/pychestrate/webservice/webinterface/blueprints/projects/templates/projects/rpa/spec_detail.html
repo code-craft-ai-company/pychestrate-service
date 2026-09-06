@@ -1,0 +1,251 @@
+{% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}{{ spec.name }} - RPA - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.rpa_list', project_id=project.id) }}">RPA</a></li>
+        <li><a href="{{ url_for('projects.rpa_spec_list', project_id=project.id) }}">Specifications</a></li>
+        <li aria-current="page">{{ spec.name }}</li>
+    </ol>
+</nav>
+
+<div class="page-header page-header--split">
+    <div>
+        <h1>{{ spec.name }}</h1>
+        <p>{{ spec.description or 'No description' }}</p>
+    </div>
+    {% if can_manage %}
+    <div class="actions-row">
+        <a href="#run" class="btn btn-success">{{ ui.icon("play_arrow") }} Run</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="stat-grid">
+    <div class="card">
+        <div class="muted">Job Type</div>
+        <div class="strong">{{ spec.type_display_name }}</div>
+        <div class="muted small mono">{{ spec.type_id }}</div>
+    </div>
+    <div class="card">
+        <div class="muted">Version</div>
+        <div class="strong mono">{{ spec.version_selector }}</div>
+        {% if spec.resolved_version %}<div class="muted small">resolves to {{ spec.resolved_version }}</div>{% else %}<div class="muted small">no active version</div>{% endif %}
+    </div>
+    <div class="card">
+        <div class="muted">Execution Mode</div>
+        <div><span class="badge badge-secondary">{{ spec.execution_mode | enum_value }}</span></div>
+    </div>
+    <div class="card">
+        <div class="muted">Revision</div>
+        <div class="strong">r{{ spec.revision }}</div>
+        <div class="muted small">Timeout {{ spec.timeout_minutes if spec.timeout_minutes else 'version default' }}</div>
+    </div>
+</div>
+
+{% if can_manage %}
+<div class="card" id="run">
+    <h2 class="card-header">Run this specification</h2>
+    <form action="{{ url_for('projects.rpa_run', project_id=project.id, spec_id=spec.spec_id) }}" method="post" class="pyc-run-form" data-confirm="Dispatch an RPA job with this work packet?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="work_packet">Work Packet (JSON)</label>
+            <textarea id="work_packet" name="work_packet" class="form-control mono" rows="10" spellcheck="false" aria-describedby="work-packet-help work-packet-errors">{{ default_packet_json }}</textarea>
+            <p id="work-packet-help" class="form-text">Pre-filled from the specification defaults. Keys you change here override the defaults for this run only.</p>
+        </div>
+        <button type="submit" class="btn btn-success" {% if not spec.resolved_version %}disabled{% endif %}>{{ ui.icon("play_arrow") }} Run job now</button>
+        {% if not spec.resolved_version %}<span class="muted small">The job type has no active version to run.</span>{% endif %}
+        {# Errors render below the button so showing them never moves the control under the pointer. #}
+        <ul id="work-packet-errors" class="form-errors" role="alert" hidden></ul>
+    </form>
+</div>
+{% endif %}
+
+{% if packet_schema_json %}
+<div class="card mt">
+    <h2 class="card-header">Packet Schema</h2>
+    <p class="muted small">Work packets are validated against this JSON Schema before dispatch.</p>
+    <pre class="mono small pyc-pre-scroll">{{ packet_schema_json }}</pre>
+</div>
+{% endif %}
+
+<div class="card mt">
+    <h2 class="card-header">Specification Details</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <tr>
+            <th scope="row">Default packet</th>
+            <td><pre class="mono small pyc-pre-scroll">{{ default_packet_json }}</pre></td>
+        </tr>
+        <tr>
+            <th scope="row">Required capabilities</th>
+            <td>{% if spec.required_capabilities %}{{ spec.required_capabilities | join(', ') }}{% else %}&mdash;{% endif %}</td>
+        </tr>
+        <tr>
+            <th scope="row">Target pod</th>
+            <td class="mono">{{ spec.target_pod_id | display }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Created</th>
+            <td>{{ spec.created_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Updated</th>
+            <td>{{ spec.updated_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+    </table></div>
+</div>
+
+<div class="card mt">
+    <h2 class="card-header split">Recent Jobs <a href="{{ url_for('projects.rpa_list', project_id=project.id, spec_id=spec.spec_id) }}" class="btn btn-sm btn-secondary regular">View all</a></h2>
+    {% if recent_jobs %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">Job</th>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col">Duration</th>
+                <th scope="col">Started</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in recent_jobs %}
+            <tr>
+                <td><a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=job.job_id) }}" class="mono">{{ job.job_id[:8] }}</a></td>
+                <td class="mono">{{ job.resolved_version }}</td>
+                <td>{{ ui.status_badge(job.status) }}</td>
+                <td>{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</td>
+                <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}
+    {{ ui.empty_state("No jobs yet") }}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if can_manage %}
+<script id="rpa-packet-schema" type="application/json">{{ (packet_schema_json or 'null') | safe }}</script>
+<script>
+    // Client-side pre-check of the work packet before the confirm dialog
+    // and the POST. The server validates again with the full JSON Schema;
+    // this catches malformed JSON, missing required keys, and primitive
+    // type mismatches without a round trip.
+    (function () {
+        var form = document.querySelector("form.pyc-run-form");
+        var field = document.getElementById("work_packet");
+        var errors = document.getElementById("work-packet-errors");
+        var schemaNode = document.getElementById("rpa-packet-schema");
+        if (form === null || field === null || errors === null) {
+            return;
+        }
+        var schema = null;
+        try {
+            schema = schemaNode !== null ? JSON.parse(schemaNode.textContent) : null;
+        } catch (parseErr) {
+            schema = null;
+        }
+
+        function typeOf(value) {
+            if (value === null) { return "null"; }
+            if (Array.isArray(value)) { return "array"; }
+            if (typeof value === "number") { return Number.isInteger(value) ? "integer" : "number"; }
+            return typeof value;
+        }
+
+        function typeMatches(expected, actual) {
+            var allowed = Array.isArray(expected) ? expected : [expected];
+            for (var i = 0; i < allowed.length; i += 1) {
+                if (allowed[i] === actual) { return true; }
+                if (allowed[i] === "number" && actual === "integer") { return true; }
+            }
+            return false;
+        }
+
+        function checkObject(value, node, pointer, problems) {
+            if (node === null || typeof node !== "object") { return; }
+            if (node.type !== undefined && !typeMatches(node.type, typeOf(value))) {
+                problems.push(pointer + ": expected " + (Array.isArray(node.type) ? node.type.join(" or ") : node.type) + ", got " + typeOf(value));
+                return;
+            }
+            if (node.enum !== undefined && node.enum.indexOf(value) === -1) {
+                problems.push(pointer + ": must be one of " + node.enum.join(", "));
+            }
+            if (typeOf(value) === "object") {
+                var required = Array.isArray(node.required) ? node.required : [];
+                required.forEach(function (key) {
+                    if (!Object.prototype.hasOwnProperty.call(value, key)) {
+                        problems.push(pointer + "/" + key + ": required");
+                    }
+                });
+                var properties = node.properties || {};
+                Object.keys(properties).forEach(function (key) {
+                    if (Object.prototype.hasOwnProperty.call(value, key)) {
+                        checkObject(value[key], properties[key], pointer + "/" + key, problems);
+                    }
+                });
+            }
+        }
+
+        function render(problems) {
+            errors.textContent = "";
+            if (problems.length === 0) {
+                errors.hidden = true;
+                field.removeAttribute("aria-invalid");
+                return;
+            }
+            problems.forEach(function (text) {
+                var item = document.createElement("li");
+                item.textContent = text;
+                errors.appendChild(item);
+            });
+            errors.hidden = false;
+            field.setAttribute("aria-invalid", "true");
+        }
+
+        function validate() {
+            var problems = [];
+            var packet = null;
+            var text = field.value.trim();
+            if (text.length === 0) {
+                packet = {};
+            } else {
+                try {
+                    packet = JSON.parse(text);
+                } catch (jsonErr) {
+                    problems.push("Work packet is not valid JSON: " + jsonErr.message);
+                }
+            }
+            if (packet !== null && typeOf(packet) !== "object") {
+                problems.push("Work packet must be a JSON object.");
+            } else if (packet !== null && schema !== null) {
+                checkObject(packet, schema, "", problems);
+            }
+            render(problems);
+            return problems.length === 0;
+        }
+
+        // Runs before the confirm delegate (capture phase) so a bad packet
+        // never reaches the dialog.
+        form.addEventListener("submit", function (event) {
+            if (!validate()) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                field.focus();
+            }
+        }, true);
+        // Validation runs on submit only: re-validating on blur would show
+        // or hide the error list while the pointer is on its way to the
+        // button and move the control out from under the click.
+    })();
+</script>
+{% endif %}
+{% endblock %}

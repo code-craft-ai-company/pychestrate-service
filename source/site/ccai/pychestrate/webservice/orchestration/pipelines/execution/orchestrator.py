@@ -96,6 +96,7 @@ JOB_KIND_BUILD: str = "build"
 JOB_KIND_TEST: str = "test"
 JOB_KIND_INFRA: str = "infra"
 JOB_KIND_PROVISION: str = "provision"
+JOB_KIND_RPA: str = "rpa"
 JOB_KIND_SCRIPT: str = "script"
 
 
@@ -152,7 +153,8 @@ class PipelineOrchestrator:
             session_factory: SessionFactory,
             test_orchestrator: Optional[Any] = None,
             build_service_module: Optional[Any] = None,
-            infra_service_module: Optional[Any] = None
+            infra_service_module: Optional[Any] = None,
+            rpa_service_module: Optional[Any] = None
         ) -> None:
         """
             :param session_factory: Factory yielding a fresh
@@ -175,6 +177,7 @@ class PipelineOrchestrator:
         self._test_orchestrator: Optional[Any] = test_orchestrator
         self._build_service: Optional[Any] = build_service_module
         self._infra_service: Optional[Any] = infra_service_module
+        self._rpa_service: Optional[Any] = rpa_service_module
         self._subscribed: bool = False
         return
 
@@ -526,6 +529,17 @@ class PipelineOrchestrator:
             )
             return run_id
 
+        if job_kind == JOB_KIND_RPA:
+            run_id = self._dispatch_rpa_job(
+                db_session=db_session,
+                inputs=inputs,
+                project_id=project_id,
+                project_slug=project_slug,
+                candidates=candidates,
+                actor_id=actor_id,
+            )
+            return run_id
+
         if job_kind in (JOB_KIND_INFRA, JOB_KIND_PROVISION):
             run_id = self._dispatch_infra_job(
                 db_session=db_session,
@@ -574,6 +588,45 @@ class PipelineOrchestrator:
             aspects=aspects,
         )
         rtnval = str(view.run_id)
+        return rtnval
+
+    def _dispatch_rpa_job(
+            self,
+            *,
+            db_session: DbSession,
+            inputs: Dict[str, Any],
+            project_id: str,
+            project_slug: str,
+            candidates: Tuple[DispatchCandidate, ...],
+            actor_id: Optional[str]
+        ) -> str:
+        """
+            Dispatch an ``rpa`` step via the reused RPA service: the
+            step's ``spec_id`` names the specification and
+            ``work_packet`` the packet merged over its defaults.
+        """
+        if self._rpa_service is None:
+            raise RuntimeError("rpa dispatch not wired") from None
+
+        spec_id = str(inputs.get("spec_id", "") or "")
+        work_packet = inputs.get("work_packet", {}) or {}
+        if not isinstance(work_packet, dict):
+            work_packet = {}
+        aspects = self._rpa_service.RpaTriggerAspects(
+            actor_id=actor_id,
+            candidates=tuple(candidates),
+            project_slug=project_slug,
+            trigger_cause={"kind": "pipeline"},
+            idempotency_window_seconds=0,
+        )
+        view = self._rpa_service.trigger_job(
+            db_session=db_session,
+            project_id=project_id,
+            spec_id=spec_id,
+            work_packet=work_packet,
+            aspects=aspects,
+        )
+        rtnval = str(view.job_id)
         return rtnval
 
     def _dispatch_test_job(

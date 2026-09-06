@@ -1,0 +1,59 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}RPA Job Types - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>RPA Job Types</h1>
+    <p>Deployment-wide, versioned automations that projects bind through RPA specifications</p>
+</div>
+
+{% if can_manage %}
+<div class="mb">
+    <a href="{{ url_for('config.rpa_type_create') }}" class="btn btn-primary">
+        {{ ui.icon("add") }} Register Job Type
+    </a>
+</div>
+{% endif %}
+
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <thead>
+        <tr>
+            <th scope="col">Type</th>
+            <th scope="col">Name</th>
+            <th scope="col">Mode</th>
+            <th scope="col">State</th>
+            <th scope="col">Active Versions</th>
+            <th scope="col">Latest</th>
+            <th scope="col">Requires</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for job_type in job_types %}
+        <tr>
+            <td><a href="{{ url_for('config.rpa_type_detail', type_id=job_type.type_id) }}" class="strong mono">{{ job_type.type_id }}</a></td>
+            <td>{{ job_type.display_name }}</td>
+            <td><span class="badge badge-secondary">{{ job_type.execution_mode | enum_value }}</span></td>
+            <td>{{ ui.status_badge(job_type.state) }}</td>
+            <td>{{ job_type.active_version_count }}</td>
+            <td class="mono">{{ job_type.latest_active_version | display }}</td>
+            <td>{% if job_type.capability_requirements %}{{ job_type.capability_requirements | join(', ') }}{% else %}&mdash;{% endif %}</td>
+            <td>{{ job_type.updated_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
+            <td><a href="{{ url_for('config.rpa_type_detail', type_id=job_type.type_id) }}" class="btn btn-sm btn-secondary">View</a></td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="9" class="muted center pad-lg">
+                No RPA job types registered yet.
+                {% if can_manage %}<a href="{{ url_for('config.rpa_type_create') }}">Register the first one</a>.{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+
+<p class="muted mt">Total: {{ total }} job types</p>
+{% endblock %}

@@ -68,12 +68,14 @@ class ProgressSummary:
 FRAME_KIND_TEST: str = "test"
 FRAME_KIND_BUILD: str = "build"
 FRAME_KIND_PROVISION: str = "provision"
+FRAME_KIND_RPA: str = "rpa"
 
 #: The set of frame kinds the progress receiver accepts.
 SUPPORTED_FRAME_KINDS: Tuple[str, ...] = (
     FRAME_KIND_TEST,
     FRAME_KIND_BUILD,
     FRAME_KIND_PROVISION,
+    FRAME_KIND_RPA,
 )
 
 

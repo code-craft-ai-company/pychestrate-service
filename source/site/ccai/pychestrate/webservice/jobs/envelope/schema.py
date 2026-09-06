@@ -41,10 +41,12 @@ SUPPORTED_SCHEMA_VERSIONS: Tuple[str, ...] = (ENVELOPE_SCHEMA_VERSION,)
 JOB_KIND_TEST: str = "test"
 JOB_KIND_BUILD: str = "build"
 JOB_KIND_PROVISION: str = "provision"
+JOB_KIND_RPA: str = "rpa"
 SUPPORTED_JOB_KINDS: Tuple[str, ...] = (
     JOB_KIND_TEST,
     JOB_KIND_BUILD,
     JOB_KIND_PROVISION,
+    JOB_KIND_RPA,
 )
 DEFAULT_JOB_KIND: str = JOB_KIND_TEST
 

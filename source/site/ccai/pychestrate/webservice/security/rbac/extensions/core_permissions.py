@@ -98,6 +98,24 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:builds.create": (
         "Trigger new build runs via the REST surface"
     ),
+    # 6-rpa-orchestration (Phase 11): read access to RPA job types,
+    # specifications, and jobs via the REST surface.
+    "system:rpa.read": (
+        "Read RPA job types, specifications, and jobs via the REST surface"
+    ),
+    # Trigger / cancel RPA jobs and manage project specifications.
+    "system:rpa.create": (
+        "Trigger RPA jobs and manage RPA specifications via the REST surface"
+    ),
+    # Register job types and publish / retire versions (deployment-wide).
+    "system:rpa.job_types.manage": (
+        "Register RPA job types and publish or retire their versions"
+    ),
+    # 9-ui-profiles (Phase 11): choose which automation surfaces the
+    # deployment presents by default.
+    "system:ui.profile.manage": (
+        "Set the deployment-wide UI profile (visible automation surfaces)"
+    ),
     # Operator-facing read access for the pipeline-definition REST
     # surface (GET /api/v1/projects/{id}/pipelines, DAG validation,
     # and the matrix-expand preview). Introduced by

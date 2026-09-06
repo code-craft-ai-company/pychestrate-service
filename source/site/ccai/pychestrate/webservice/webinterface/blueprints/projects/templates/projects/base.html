@@ -68,15 +68,21 @@
                 </a></li>
 
                 <li class="pyc-subnav__section">CI/CD</li>
+                {% if ui_profile.is_enabled('build') or request_endpoint.startswith('projects.build_') %}
                 <li><a href="{{ url_for('projects.build_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.build_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("build") }} Builds
                 </a></li>
+                {% endif %}
+                {% if ui_profile.is_enabled('infra') or request_endpoint.startswith('projects.infra_') %}
                 <li><a href="{{ url_for('projects.infra_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.infra_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("cloud") }} Infrastructure
                 </a></li>
+                {% endif %}
+                {% if ui_profile.is_enabled('testing') or request_endpoint.startswith('projects.test_') %}
                 <li><a href="{{ url_for('projects.test_job_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.test_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("science") }} Tests
                 </a></li>
+                {% endif %}
 
                 <li class="pyc-subnav__section">Releases</li>
                 <li><a href="{{ url_for('projects.release_list', project_id=project.id) }}" {% if request_endpoint in ('projects.release_list', 'projects.release_detail') %}class="active" aria-current="page"{% endif %}>
@@ -101,6 +107,11 @@
                 </a></li>
 
                 <li class="pyc-subnav__section">Automation</li>
+                {% if ui_profile.is_enabled('rpa') or request_endpoint.startswith('projects.rpa_') %}
+                <li><a href="{{ url_for('projects.rpa_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.rpa_') %}class="active" aria-current="page"{% endif %}>
+                    {{ ui.icon("assignment") }} RPA
+                </a></li>
+                {% endif %}
                 <li><a href="{{ url_for('projects.watch_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.watch_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("visibility") }} Watches
                 </a></li>
@@ -108,6 +119,18 @@
         </nav>
         {% endif %}
         <div class="pyc-subnav-layout__content">
+            {% set _hidden_surface = none %}
+            {% if request_endpoint.startswith('projects.build_') and not ui_profile.is_enabled('build') %}{% set _hidden_surface = 'Build Automation' %}
+            {% elif request_endpoint.startswith('projects.infra_') and not ui_profile.is_enabled('infra') %}{% set _hidden_surface = 'Infrastructure' %}
+            {% elif request_endpoint.startswith('projects.test_') and not ui_profile.is_enabled('testing') %}{% set _hidden_surface = 'Testing Automation' %}
+            {% elif request_endpoint.startswith('projects.rpa_') and not ui_profile.is_enabled('rpa') %}{% set _hidden_surface = 'Robotic Process Automation' %}
+            {% endif %}
+            {% if _hidden_surface %}
+            <div class="pyc-hidden-surface-notice pyc-hidden-surface-notice--inline" role="status">
+                This area belongs to the {{ _hidden_surface }} surface, which is hidden from your navigation.
+                <a href="{{ url_for('config.account_preferences') }}">Change your preferences</a>
+            </div>
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </div>

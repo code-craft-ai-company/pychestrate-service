@@ -75,6 +75,14 @@ function build_header(options) {
         });
         actions.appendChild(theme_button);
     }
+    // 9-ui-profiles: every signed-in user can narrow which automation
+    // surfaces the shell shows them.
+    const preferences_link = document.createElement("a");
+    preferences_link.href = "/account/preferences";
+    preferences_link.classList.add("pyc-site-shell__preferences-link");
+    preferences_link.textContent = "Preferences";
+    actions.appendChild(preferences_link);
+
     // Sign out POSTs to /logout with the CSRF token the shell
     // document carries (csrf-token attribute). Without a token the
     // control falls back to GET /logout, which renders a

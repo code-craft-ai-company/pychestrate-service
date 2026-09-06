@@ -234,3 +234,58 @@ the admin and secrets bundle entries are gone (S-22), release templates
 show repository names with links (P-53), and every fragment's
 `{% block title %}` now feeds the browser tab title through the shell
 wrapper (P-46, C-15), so detail pages are titled by their entity.
+
+## Phase 11 — RPA Domain & UI Profiles (2026-09)
+
+Specs: `specs/6-rpa-orchestration/` and `specs/9-ui-profiles/`;
+catalog and phase entries in `specs/implementation-plan.md`.
+
+### Status
+
+| Milestone | Scope | State |
+| --- | --- | --- |
+| RPA M1 | `job_kind = "rpa"`; job type registry with versions and execution-mode drivers (process, tasker); project specifications; work-packet trigger (merge, JSON-schema validation, secret redaction, size cap, idempotency, capability filter) that mints a signed envelope and dispatches through Layer 5; REST under `/api/v1/rpa` and `/api/v1/projects/{id}/rpa`; project pages (jobs, specs, run form, detail, logs, cancel); client `rpa_executor` (both modes) and dispatch branch; alembic `f2a3b4c5d6e7` | Done 2026-09-05 |
+| RPA M2 | Admin registry pages, progress frames `rpa.process.v1` and completion branch `rpa.result.v1`, client output streaming and process-group cancel, pipeline step and watch action, audit kinds, capability tag enrichment, pod capability advertisement (`PUT /clients/{id}/capabilities`), heartbeat-delivered cancel channel on the client, browser-side packet pre-check | Done 2026-09-06 |
+| RPA M3 | `factory: rpa_job_type` for code-defined types, RBAC review, metrics, OpenAPI, docs, REST handler tests | Done 2026-09-05 (open: end-to-end run against an enrolled pod) |
+| UI profiles M1 | Surface vocabulary (build, testing, rpa, infra), surface tags on the navigation manifest, filtering in `/api/v1/me/navigation` with a `ui_profile` payload, deployment setting as the `ui.profile.surfaces` global variable, admin page `/admin/ui-profile` plus REST `GET|PUT /api/v1/admin/ui-profile`, request-scoped `ui_profile` template global, project sub-nav gating | Done 2026-09-05 |
+| UI profiles M2 | Per-user override (`ui_user_preference` table, `/account/preferences`, `/api/v1/me/preferences/ui.surfaces`), hidden-surface notice, header Preferences link | Done 2026-09-05 |
+| UI profiles M3 | Bus event, audit kind, metric, OpenAPI, docs | Done 2026-09-05 |
+
+### Decisions
+
+- RPA rows keep `project_id` as a string reference so both the consumer
+  web UI (integer project ids) and the orchestration REST surface (UUID
+  project ids) can own specifications; Layer-5 rows use the UUID derived by
+  `canonical_project_uuid` (UUID5 for consumer ids).
+- Dispatch candidates for an RPA job come from the specification's target
+  pod, else the project's enrolled pods (UUID projects), else every
+  registered client in the deployment, narrowed by capability tags.
+- Fleet navigation entries (Pods, Clients, Resources) stay core rather than
+  `infra`; only Environments, Provisioning, and Blast-Radius Guards carry the
+  infra surface. Runs carries build, testing, and rpa.
+- The `taskplus` engine and the tasker protocol are never imported into the
+  agent or the service; tasker jobs render `workflow.rendered.yaml` and run
+  `taskplus workflow run` as a subprocess.
+
+### Follow-up found while probing the alpha host
+
+- The operator-facing agents routes (`GET /api/v1/clients:inventory`,
+  `GET /api/v1/clients/{id}/capabilities`, and the agent-rollout POSTs)
+  answered without any authentication, although the OpenAPI document
+  declares session or API-key security for every route and the sibling
+  clients routes gate on `system:clients.read`. Closed 2026-09-06: the
+  reads now require `system:clients.read` and the rollout writes
+  `system:clients.write` (both granted to the system-admin role); the
+  route tests carry a permission seam and a 401 regression.
+
+### Fixes surfaced by the Phase 11 browser sweep
+
+- The audit bus wiring ran in both the phase-1 and phase-2 bootstraps, so
+  every audit topic had two handlers and the second insert failed the
+  `source_event_id` unique constraint (logged as a subscriber failure).
+  `audit.bus_subscriber.wire_bus_subscribers` is now idempotent.
+- The shared confirm delegate re-submitted from a promise microtask; when
+  the confirmation came from the synchronous `window.confirm`, the browser
+  ignored `requestSubmit()` because the original submit event was still
+  dispatching, so `data-confirm` forms never submitted without the
+  `mj-dialog` confirm helper. The resubmit now runs from a zero-delay task.

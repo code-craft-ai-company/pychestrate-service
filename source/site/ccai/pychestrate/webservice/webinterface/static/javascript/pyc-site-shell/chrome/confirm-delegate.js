@@ -78,12 +78,20 @@ function install_confirm_delegate(root) {
             if (accepted !== true) {
                 return;
             }
-            form.dataset.pycConfirmed = "true";
-            if (typeof form.requestSubmit === "function") {
-                form.requestSubmit(submitter !== null && submitter.form === form ? submitter : undefined);
-            } else {
-                form.submit();
-            }
+            // Re-submit from a fresh task, never from this microtask: when
+            // the confirmation came from the synchronous window.confirm the
+            // promise settles while the original submit event is still
+            // being dispatched, and the browser silently ignores
+            // requestSubmit() on a form whose submission events are still
+            // firing. A zero-delay timeout runs after the dispatch ends.
+            window.setTimeout(() => {
+                form.dataset.pycConfirmed = "true";
+                if (typeof form.requestSubmit === "function") {
+                    form.requestSubmit(submitter !== null && submitter.form === form ? submitter : undefined);
+                } else {
+                    form.submit();
+                }
+            }, 0);
         });
     }, true);
     return;

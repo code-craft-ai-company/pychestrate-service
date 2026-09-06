@@ -40,6 +40,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from ccai.errors.exceptions import SemanticError
@@ -60,6 +61,7 @@ from ccai.pychestrate.webservice.agents.upgrade_service import (
     draft_rollout,
     start_rollout,
 )
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -135,6 +137,58 @@ def _resolve_actor_user_id(request: Request) -> Optional[str]:
         :returns: User id string or None.
     """
     rtnval = getattr(request, "actor_user_id", None)
+    return rtnval
+
+
+#: Permission keys the operator-facing agents surface enforces. The
+#: OpenAPI document declares session / API-key security for every
+#: route; before Phase 11 these handlers answered without a principal.
+CLIENTS_READ_PERMISSION_KEY: str = "system:clients.read"
+CLIENTS_WRITE_PERMISSION_KEY: str = "system:clients.write"
+
+
+def _resolve_auth_principal(request: Request) -> Optional[Any]:
+    """
+        Return the ``AuthPrincipal`` attached by the session
+        middleware, or ``None`` when the request is anonymous.
+    """
+    rtnval = getattr(request, "auth_principal", None)
+    return rtnval
+
+
+def _require_permission(
+        *,
+        request: Request,
+        db_session: Any,
+        permission_key: str
+    ) -> Any:
+    """
+        Require the calling principal to hold ``permission_key``
+        (401 anonymous, 403 denied).
+
+        :returns: The :class:`AuthPrincipal`.
+    """
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        _abort_problem(
+            request=request,
+            status=401,
+            detail="Authentication required.",
+        )
+    decision = rbac_evaluator.check_permission(
+        db_session=db_session,
+        principal=principal,
+        permission_key=permission_key,
+        now=datetime.now(timezone.utc),
+    )
+    if decision.allowed is False:
+        _abort_problem(
+            request=request,
+            status=403,
+            detail="Permission denied: {}".format(permission_key),
+            extensions={"required_permission": permission_key},
+        )
+    rtnval = principal
     return rtnval
 
 
@@ -236,6 +290,9 @@ def handle_list_client_capabilities(request: Request) -> Response:
     client_id = request.path_params.get("client_id", "")
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session, permission_key=CLIENTS_READ_PERMISSION_KEY,
+        )
         rows = list_capabilities_for_client(
             db_session=db_session,
             client_id=client_id,
@@ -276,6 +333,9 @@ def handle_list_client_inventory(request: Request) -> Response:
     """
     try:
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session, permission_key=CLIENTS_READ_PERMISSION_KEY,
+        )
 
         project_id = request.query_params.get("project_id", None)
         liveness = request.query_params.get("liveness", None)
@@ -339,6 +399,9 @@ def handle_draft_agent_rollout(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session, permission_key=CLIENTS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         try:
@@ -382,6 +445,9 @@ def handle_start_agent_rollout(request: Request) -> Response:
     try:
         payload = _decode_json_or_abort(request=request)
         db_session = _require_session(request=request)
+        _require_permission(
+            request=request, db_session=db_session, permission_key=CLIENTS_WRITE_PERMISSION_KEY,
+        )
         actor = _resolve_actor_user_id(request=request)
 
         candidate_ids_raw = payload.get("candidate_client_ids", None)

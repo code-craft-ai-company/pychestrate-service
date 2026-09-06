@@ -52,6 +52,7 @@ from ccai.pychestrate.webservice.ingest.progress.schema import (
     SUPPORTED_FRAME_KINDS,
     FRAME_KIND_BUILD,
     FRAME_KIND_PROVISION,
+    FRAME_KIND_RPA,
     FRAME_KIND_TEST,
     ProgressFrameEnvelope,
     ProgressRecord,

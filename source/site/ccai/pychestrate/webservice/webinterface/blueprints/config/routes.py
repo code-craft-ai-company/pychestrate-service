@@ -61,6 +61,10 @@ import html as _html_module
 import re
 
 from typing import Any, Dict, List, Optional, Tuple
+
+from ccai.pychestrate.webservice.webinterface.site_shell import (
+    ui_profile as _ui_profile_scope,
+)
 from urllib.parse import parse_qs, quote
 
 from ccai.webworks.routing.request import Request
@@ -173,6 +177,9 @@ _ADMIN_PAGE_TITLE_TABLE: Tuple[Tuple[str, str], ...] = (
     (ADMIN_PATH + "/dashboard", "Dashboard"),
     (ADMIN_PATH + "/overview", "Overview"),
     (ADMIN_PATH + "/feature-flags", "Feature Flags"),
+    (ADMIN_PATH + "/ui-profile", "UI Profile"),
+    (ADMIN_PATH + "/rpa-job-types", "RPA Job Types"),
+    ("/account/preferences", "Preferences"),
     (ADMIN_PATH + "/extensions", "Extension Registry"),
     (ADMIN_PATH + "/system-health", "System Health"),
     (ADMIN_PATH + "/users", "Users"),
@@ -692,7 +699,8 @@ def _wrap_fragment_handler_in_shell(handler: Any, *, title_resolver: Any) -> Any
     )
 
     def _wrapped(request: Request) -> Response:
-        inner = handler(request)
+        with _ui_profile_scope.request_profile_scope():
+            inner = handler(request)
         if isinstance(inner, HTMLResponse) is False:
             return inner
 
@@ -1534,6 +1542,16 @@ def _resolve_authenticated_request(
     # session[csrf.SESSION_KEY] is always correct for both adapters.
     resolved_csrf_token = session.get(csrf.SESSION_KEY, "")
 
+    # 9-ui-profiles: narrow the request's UI profile to this user's
+    # saved surface override (the shell wrapper published the
+    # deployment default before the handler ran).
+    try:
+        _ui_profile_scope.publish_user_profile(
+            db_session=db_session, user_id=session_info.user_id,
+        )
+    except Exception:
+        pass
+
     rtnval = _AuthResolution(
         request=request,
         redirect_response=None,
@@ -1742,6 +1760,20 @@ def register_config_routes(*, app: Any) -> None:
         register_scopes_routes,
     )
     register_variables_routes(app=app)
+
+    # Phase 11 -- 9-ui-profiles deployment profile page.
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_ui_profile import (  # noqa: E402
+        register_ui_profile_routes,
+    )
+    register_ui_profile_routes(app=app)
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_account import (  # noqa: E402
+        register_account_routes,
+    )
+    register_account_routes(app=app)
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_rpa_types import (  # noqa: E402
+        register_rpa_types_routes,
+    )
+    register_rpa_types_routes(app=app)
     register_scopes_routes(app=app)
 
     # D4 features -- secrets + sessions + audit.

@@ -12,3 +12,6 @@ User Manual
    12-00-consumer-ui-auth-stack
    13-00-alpha-deployment
    17-00-site-shell
+   18-00-ui-glossary
+   19-00-rpa-jobs
+   20-00-ui-profiles

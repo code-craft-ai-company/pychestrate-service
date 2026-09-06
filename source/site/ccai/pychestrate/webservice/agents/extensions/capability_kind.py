@@ -62,3 +62,20 @@ class ConcurrencyCapability(CapabilityKindExtension):
             "max_parallel_jobs": {"type": "integer", "minimum": 1},
         },
     }
+
+
+class RpaCapability(CapabilityKindExtension):
+    """
+        RPA job types a client can run (``"type@version"`` labels) and
+        the taskplus engine version it has on ``PATH`` (``null`` when
+        absent). Introduced by 6-rpa-orchestration.
+    """
+    kind_name: ClassVar[str] = "rpa"
+    value_schema: ClassVar[Dict[str, Any]] = {
+        "type": "object",
+        "properties": {
+            "job_types": {"type": "array", "items": {"type": "string"}},
+            "taskplus": {"type": ["string", "null"]},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+    }

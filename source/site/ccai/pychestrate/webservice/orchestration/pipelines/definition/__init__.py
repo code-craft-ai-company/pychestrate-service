@@ -55,6 +55,9 @@ from ccai.pychestrate.webservice.orchestration.pipelines.definition.errors impor
 from ccai.pychestrate.webservice.orchestration.pipelines.definition.events import (
     PipelineEventTopics,
 )
+from ccai.pychestrate.webservice.orchestration.pipelines.definition.factories.rpa_step_kind import (
+    RpaStepKind,
+)
 from ccai.pychestrate.webservice.orchestration.pipelines.definition.factories.build_step_kind import (
     BuildStepKind,
 )
@@ -105,4 +108,5 @@ def register_builtin_extensions() -> None:
     register_factory_implementation(implementation=BuildStepKind)
     register_factory_implementation(implementation=TestStepKind)
     register_factory_implementation(implementation=ScriptStepKind)
+    register_factory_implementation(implementation=RpaStepKind)
     return

@@ -210,6 +210,35 @@ def _raises(exc: BaseException) -> Callable[..., Any]:
 # ---------------------------------------------------------------------------
 
 
+class _GrantedPrincipal:
+    user_id = "00000000-0000-4000-8000-0000000011f0"
+
+
+def _with_permission_granted(test_func):
+    """
+        Run ``test_func`` with the agents routes' permission gate
+        replaced by an allow-all seam. The gate itself is covered by
+        the 401 tests below; the serialisation tests only need it out
+        of the way.
+    """
+    def _wrapped():
+        original = agents_routes._require_permission
+        agents_routes._require_permission = (
+            lambda *, request, db_session, permission_key: _GrantedPrincipal()
+        )
+        try:
+            rtnval = test_func()
+        finally:
+            agents_routes._require_permission = original
+        return rtnval
+
+    _wrapped.__name__ = test_func.__name__
+    _wrapped.__qualname__ = test_func.__qualname__
+    _wrapped.__doc__ = test_func.__doc__
+    _wrapped.__module__ = test_func.__module__
+    return _wrapped
+
+
 def test_register_agents_routes_attaches_four_routes_across_two_prefixes():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -307,6 +336,7 @@ def test_handle_start_rollout_returns_503_when_session_missing():
 # ---------------------------------------------------------------------------
 
 
+@_with_permission_granted
 def test_handle_list_capabilities_returns_serialized_rows():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -349,6 +379,7 @@ def test_handle_list_capabilities_returns_serialized_rows():
     return
 
 
+@_with_permission_granted
 def test_handle_list_capabilities_emits_null_value_when_value_json_missing():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -382,6 +413,7 @@ def test_handle_list_capabilities_emits_null_value_when_value_json_missing():
 # ---------------------------------------------------------------------------
 
 
+@_with_permission_granted
 def test_handle_inventory_returns_paged_response_with_filters_propagated():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -434,6 +466,7 @@ def test_handle_inventory_returns_paged_response_with_filters_propagated():
     return
 
 
+@_with_permission_granted
 def test_handle_inventory_uses_documented_defaults_when_no_filters():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -464,6 +497,7 @@ def test_handle_inventory_uses_documented_defaults_when_no_filters():
     return
 
 
+@_with_permission_granted
 def test_handle_inventory_returns_400_on_non_integer_offset():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -485,6 +519,7 @@ def test_handle_inventory_returns_400_on_non_integer_offset():
     return
 
 
+@_with_permission_granted
 def test_handle_inventory_returns_400_on_non_integer_limit():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -507,6 +542,7 @@ def test_handle_inventory_returns_400_on_non_integer_limit():
 # ---------------------------------------------------------------------------
 
 
+@_with_permission_granted
 def test_handle_draft_rollout_returns_201_with_actor_propagation():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -547,6 +583,7 @@ def test_handle_draft_rollout_returns_201_with_actor_propagation():
     return
 
 
+@_with_permission_granted
 def test_handle_draft_rollout_returns_400_on_semantic_error():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -577,6 +614,7 @@ def test_handle_draft_rollout_returns_400_on_semantic_error():
     return
 
 
+@_with_permission_granted
 def test_handle_draft_rollout_returns_400_on_non_dict_body():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -598,6 +636,7 @@ def test_handle_draft_rollout_returns_400_on_non_dict_body():
 # ---------------------------------------------------------------------------
 
 
+@_with_permission_granted
 def test_handle_start_rollout_returns_202_with_offer_manifest():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -636,6 +675,7 @@ def test_handle_start_rollout_returns_202_with_offer_manifest():
     return
 
 
+@_with_permission_granted
 def test_handle_start_rollout_returns_404_with_rollout_id_extension():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -667,6 +707,7 @@ def test_handle_start_rollout_returns_404_with_rollout_id_extension():
     return
 
 
+@_with_permission_granted
 def test_handle_start_rollout_returns_409_on_state_transition_error():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -701,6 +742,7 @@ def test_handle_start_rollout_returns_409_on_state_transition_error():
     return
 
 
+@_with_permission_granted
 def test_handle_start_rollout_returns_400_on_non_integer_target_size():
     """
     **Feature: 3-agents T1.1 (webworks routes)**
@@ -749,4 +791,29 @@ def test_bootstrap_imports_register_agents_routes_and_calls_it():
     has_call = "register_agents_routes(app=app, version_prefix=\"/api/v1\")" in text
     testbase.assert_equal(has_import, True)
     testbase.assert_equal(has_call, True)
+    return
+
+
+def test_agents_read_routes_require_an_authenticated_principal():
+    """
+    **Feature: agents REST authentication**
+    **Property: the capability read and the inventory read answer 401
+    for an anonymous request now that they enforce system:clients.read
+    like the sibling clients routes and the OpenAPI security scheme.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/clients/11111111-1111-4000-8000-000000000001/capabilities",
+        path_params={"client_id": "11111111-1111-4000-8000-000000000001"},
+        db_session=object(),
+    )
+    response = agents_routes.handle_list_client_capabilities(request)
+    testbase.assert_equal(response.status_code, 401)
+
+    request = _FakeRequest(path="/api/v1/clients:inventory", db_session=object())
+    response = agents_routes.handle_list_client_inventory(request)
+    testbase.assert_equal(response.status_code, 401)
+
+    request = _FakeRequest(path="/api/v1/agent-rollouts", body={}, db_session=object())
+    response = agents_routes.handle_draft_agent_rollout(request)
+    testbase.assert_equal(response.status_code, 401)
     return

@@ -147,6 +147,12 @@ from ccai.pychestrate.webservice.orchestration.test.restapi.v1.test_runs_routes 
 from ccai.pychestrate.webservice.orchestration.build.restapi.v1.build_runs_routes import (
     register_build_runs_routes,
 )
+from ccai.pychestrate.webservice.orchestration.rpa.restapi.v1.rpa_routes import (
+    register_rpa_routes,
+)
+from ccai.pychestrate.webservice.webinterface.site_shell.ui_profile_routes import (
+    register_ui_profile_api_routes,
+)
 from ccai.pychestrate.webservice.orchestration.pipelines.restapi.v1.pipeline_definitions_routes import (
     register_pipeline_definitions_routes,
 )
@@ -542,6 +548,8 @@ def register_service_extensions() -> None:
     register_test_catalog_routes(app=app, version_prefix="/api/v1")
     register_test_runs_routes(app=app, version_prefix="/api/v1")
     register_build_runs_routes(app=app, version_prefix="/api/v1")
+    register_rpa_routes(app=app, version_prefix="/api/v1")
+    register_ui_profile_api_routes(app=app, version_prefix="/api/v1")
     register_pipeline_definitions_routes(app=app, version_prefix="/api/v1")
     register_pipeline_runs_routes(app=app, version_prefix="/api/v1")
     register_source_integrations_routes(app=app, version_prefix="/api/v1")

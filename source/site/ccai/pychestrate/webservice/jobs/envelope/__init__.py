@@ -58,6 +58,7 @@ from ccai.pychestrate.webservice.jobs.envelope.schema import (
     ENVELOPE_SCHEMA_VERSION,
     JOB_KIND_BUILD,
     JOB_KIND_PROVISION,
+    JOB_KIND_RPA,
     JOB_KIND_TEST,
     JobDeadline,
     JobEnvelope,

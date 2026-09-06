@@ -79,6 +79,12 @@ from ccai.pychestrate.webservice.orchestration.build import (
 from ccai.pychestrate.webservice.orchestration.build.artifacts import (
     register_builtin_extensions as build_artifacts_register,
 )
+from ccai.pychestrate.webservice.orchestration.rpa import (
+    register_builtin_extensions as rpa_orch_register,
+)
+from ccai.pychestrate.webservice.orchestration.rpa import (
+    service as rpa_service,
+)
 from ccai.pychestrate.webservice.orchestration.infra.drift import (
     register_builtin_extensions as drift_detection_register,
 )
@@ -126,6 +132,7 @@ from ccai.pychestrate.webservice.orchestration.test.triage import (
 # Side-effect imports so Layer-6 model tables attach to the metadata.
 from ccai.pychestrate.webservice.orchestration.build import models as _build_models  # noqa: F401
 from ccai.pychestrate.webservice.orchestration.build.artifacts import models as _build_artifacts_models  # noqa: F401
+from ccai.pychestrate.webservice.orchestration.rpa import models as _rpa_models  # noqa: F401
 from ccai.pychestrate.webservice.orchestration.infra.drift import models as _drift_models  # noqa: F401
 from ccai.pychestrate.webservice.orchestration.infra.environment import models as _environment_registry_models  # noqa: F401
 from ccai.pychestrate.webservice.orchestration.infra.guards import models as _guards_models  # noqa: F401
@@ -209,6 +216,7 @@ def register_phase6_builtin_extensions() -> None:
     source_integrations_register()
     build_orch_register()
     build_artifacts_register()
+    rpa_orch_register()
     environment_registry_register()
     infra_runs_register()
     drift_detection_register()
@@ -298,6 +306,14 @@ def _build_test_orchestrator(
         backend=config.results_backend,
     )
 
+    # Publish the SAME JobDispatcher on the RPA service's seam so a
+    # triggered RPA job dispatches a ``job_kind=rpa`` envelope into
+    # the same long-poll queue. There is one queue.
+    rpa_service.set_active_job_dispatcher(dispatcher=dispatcher)
+    rpa_service.set_active_results_backend(
+        backend=config.results_backend,
+    )
+
     # Construct the PipelineOrchestrator (6-pipeline-execution PR
     # p20q). It walks a pipeline definition's stage DAG and dispatches
     # each eligible stage's job through the SAME build / test /
@@ -311,6 +327,7 @@ def _build_test_orchestrator(
         test_orchestrator=orchestrator,
         build_service_module=build_service,
         infra_service_module=infra_runs_service,
+        rpa_service_module=rpa_service,
     )
     pipeline_orchestrator.attach_bus_subscribers()
     set_active_pipeline_orchestrator(orchestrator=pipeline_orchestrator)

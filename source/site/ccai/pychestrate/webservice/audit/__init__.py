@@ -27,6 +27,10 @@ from ccai.pychestrate.webservice.audit.extensions.project_events import (
     ProjectUnarchivedAuditEvents,
 )
 from ccai.pychestrate.webservice.audit.extensions.role_events import RoleBindingAuditEvents
+from ccai.pychestrate.webservice.audit.extensions.rpa_events import RPA_AUDIT_EVENT_TYPES
+from ccai.pychestrate.webservice.audit.extensions.ui_profile_events import (
+    UiProfileDeploymentChangedAuditEvents,
+)
 from ccai.pychestrate.webservice.audit.extensions.secret_events import (
     SecretAccessedAuditEvents,
     SecretCreatedAuditEvents,
@@ -90,5 +94,12 @@ def register_builtin_extensions() -> None:
     )
     register_resource_extension(
         base_class=AuditEventTypeExtension, extension=VariableUnsetAuditEvents
+    )
+    for rpa_event_type in RPA_AUDIT_EVENT_TYPES:
+        register_resource_extension(
+            base_class=AuditEventTypeExtension, extension=rpa_event_type
+        )
+    register_resource_extension(
+        base_class=AuditEventTypeExtension, extension=UiProfileDeploymentChangedAuditEvents
     )
     return

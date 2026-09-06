@@ -48,6 +48,10 @@ from ccai.pychestrate.webservice.security.rbac.catalog import (
 )
 from ccai.pychestrate.webservice.webinterface.site_shell.nav_manifest import (
     build_navigation_manifest,
+    hidden_routes_for,
+)
+from ccai.pychestrate.webservice.webinterface.site_shell import (
+    ui_profile as _ui_profile,
 )
 
 
@@ -264,8 +268,120 @@ def handle_get_my_navigation(request: Request) -> Response:
         principal=principal,
     )
 
-    body = build_navigation_manifest(held_permissions=held_keys)
+    # 9-ui-profiles: filter by the enabled automation surfaces and
+    # echo the profile so the shell can render preference controls.
+    principal_user_id = getattr(principal, "user_id", None)
+    profile = _ui_profile.resolve_profile(
+        db_session=db_session,
+        user_id=str(principal_user_id) if principal_user_id is not None else None,
+    )
+    body = build_navigation_manifest(
+        held_permissions=held_keys,
+        enabled_surfaces=profile.effective_surfaces,
+    )
+    profile_body = profile.to_dict()
+    profile_body["hidden_routes"] = hidden_routes_for(
+        held_permissions=held_keys, enabled_surfaces=profile.effective_surfaces,
+    )
+    body["ui_profile"] = profile_body
     rtnval = JSONResponse(content=body, status_code=200)
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# /api/v1/me/preferences/ui.surfaces (9-ui-profiles M2)
+# ---------------------------------------------------------------------------
+
+
+def _preferences_body(*, db_session: Any, user_id: str) -> dict:
+    profile = _ui_profile.resolve_profile(db_session=db_session, user_id=user_id)
+    rtnval = {
+        "surfaces": profile.override_values,
+        "effective": profile.effective_values,
+        "deployment": profile.deployment_values,
+        "override_reset": profile.override_reset,
+        "catalog": profile.to_dict()["surfaces"],
+    }
+    return rtnval
+
+
+def _resolve_me_context(request: Request):
+    principal = _resolve_auth_principal(request=request)
+    if principal is None:
+        return None, None, _build_unauthorized_response(request=request)
+    db_session = _resolve_db_session(request=request)
+    if db_session is None:
+        rtnval = problem_response_for_http_status(
+            status=503, detail="Request-scoped db_session not configured", instance=request.path,
+        )
+        return None, None, rtnval
+    user_id = getattr(principal, "user_id", None)
+    if user_id is None:
+        rtnval = problem_response_for_http_status(
+            status=403, detail="This endpoint requires a user principal.", instance=request.path,
+        )
+        return None, None, rtnval
+    return str(user_id), db_session, None
+
+
+def handle_get_my_ui_surfaces(request: Request) -> Response:
+    """
+        ``GET /api/v1/me/preferences/ui.surfaces``
+    """
+    user_id, db_session, problem = _resolve_me_context(request)
+    if problem is not None:
+        return problem
+    rtnval = JSONResponse(content=_preferences_body(db_session=db_session, user_id=user_id), status_code=200)
+    return rtnval
+
+
+def handle_put_my_ui_surfaces(request: Request) -> Response:
+    """
+        ``PUT /api/v1/me/preferences/ui.surfaces`` -- body ``{"surfaces": [...]}``.
+    """
+    import json as _json
+    user_id, db_session, problem = _resolve_me_context(request)
+    if problem is not None:
+        return problem
+    raw = getattr(request, "body", b"")
+    if callable(raw):
+        raw = raw()
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        decoded = _json.loads(raw) if raw else {}
+    except (ValueError, UnicodeDecodeError) as xcpt:
+        rtnval = problem_response_for_http_status(
+            status=400, detail="Request body is not valid JSON: {}".format(xcpt), instance=request.path,
+        )
+        return rtnval
+    if not isinstance(decoded, dict) or not isinstance(decoded.get("surfaces", None), list):
+        rtnval = problem_response_for_http_status(
+            status=422, detail="Body must be {\"surfaces\": [...]}.", instance=request.path,
+        )
+        return rtnval
+    try:
+        _ui_profile.set_user_override(db_session=db_session, user_id=user_id, surfaces=decoded["surfaces"])
+    except ValueError as xcpt:
+        rtnval = problem_response_for_http_status(
+            status=422, detail=str(xcpt), instance=request.path,
+            extensions={"known_surfaces": list(_ui_profile.ALL_SURFACE_VALUES)},
+        )
+        return rtnval
+    rtnval = JSONResponse(content=_preferences_body(db_session=db_session, user_id=user_id), status_code=200)
+    return rtnval
+
+
+def handle_delete_my_ui_surfaces(request: Request) -> Response:
+    """
+        ``DELETE /api/v1/me/preferences/ui.surfaces`` -- back to the
+        deployment default.
+    """
+    user_id, db_session, problem = _resolve_me_context(request)
+    if problem is not None:
+        return problem
+    _ui_profile.clear_user_override(db_session=db_session, user_id=user_id)
+    rtnval = JSONResponse(content=_preferences_body(db_session=db_session, user_id=user_id), status_code=200)
     return rtnval
 
 
@@ -288,6 +404,15 @@ def register_me_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(base + "/navigation", methods=["GET"])(
         handle_get_my_navigation
     )
+    app.attach_route(base + "/preferences/ui.surfaces", methods=["GET"])(
+        handle_get_my_ui_surfaces
+    )
+    app.attach_route(base + "/preferences/ui.surfaces", methods=["PUT"])(
+        handle_put_my_ui_surfaces
+    )
+    app.attach_route(base + "/preferences/ui.surfaces", methods=["DELETE"])(
+        handle_delete_my_ui_surfaces
+    )
     return
 
 
@@ -296,4 +421,7 @@ __all__ = [
     "register_me_routes",
     "handle_list_my_permissions",
     "handle_get_my_navigation",
+    "handle_get_my_ui_surfaces",
+    "handle_put_my_ui_surfaces",
+    "handle_delete_my_ui_surfaces",
 ]

@@ -81,7 +81,8 @@ function _coerce_manifest(payload) {
     return null;
   }
   const rtnval = {
-    groups: candidate.groups
+    groups: candidate.groups,
+    ui_profile: candidate.ui_profile !== null && typeof candidate.ui_profile === "object" ? candidate.ui_profile : null
   };
   return rtnval;
 }

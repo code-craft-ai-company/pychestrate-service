@@ -1,0 +1,152 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}{{ job_type.display_name }} - RPA Job Types - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('config.rpa_type_list') }}">RPA Job Types</a></li>
+        <li aria-current="page">{{ job_type.type_id }}</li>
+    </ol>
+</nav>
+
+<div class="page-header page-header--split">
+    <div>
+        <h1>{{ job_type.display_name }} <span class="muted mono small">{{ job_type.type_id }}</span></h1>
+        <p>{{ job_type.description or 'No description' }}</p>
+    </div>
+    {% if can_manage and job_type.state.value == 'active' %}
+    <form action="{{ url_for('config.rpa_type_retire', type_id=job_type.type_id) }}" method="post" data-confirm="Retire this job type? New runs will be refused and every version retired.">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">{{ ui.icon("block") }} Retire type</button>
+    </form>
+    {% endif %}
+</div>
+
+<div class="stat-grid">
+    <div class="card">
+        <div class="muted">State</div>
+        <div>{{ ui.status_badge(job_type.state) }}</div>
+    </div>
+    <div class="card">
+        <div class="muted">Execution Mode</div>
+        <div><span class="badge badge-secondary">{{ job_type.execution_mode | enum_value }}</span></div>
+    </div>
+    <div class="card">
+        <div class="muted">Active Versions</div>
+        <div class="strong">{{ job_type.active_version_count }}</div>
+        <div class="muted small">latest {{ job_type.latest_active_version | display }}</div>
+    </div>
+    <div class="card">
+        <div class="muted">Requires</div>
+        <div class="strong">{% if job_type.capability_requirements %}{{ job_type.capability_requirements | join(', ') }}{% else %}&mdash;{% endif %}</div>
+        <div class="muted small">secret fields: {% if job_type.secret_fields %}{{ job_type.secret_fields | join(', ') }}{% else %}none{% endif %}</div>
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-header">Versions ({{ versions | length }})</h2>
+    {% if versions %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">Version</th>
+                <th scope="col">State</th>
+                <th scope="col">Source</th>
+                <th scope="col">Entrypoint</th>
+                <th scope="col">Timeout</th>
+                <th scope="col">Published</th>
+                {% if can_manage %}<th scope="col">Actions</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for version in versions %}
+            <tr>
+                <td class="mono strong">{{ version.version }}</td>
+                <td>{{ ui.status_badge(version.state) }}</td>
+                <td class="mono small">{{ version.source_kind }}: {{ version.source_ref | display }}</td>
+                <td class="mono small">{% if version.entrypoint.command is defined and version.entrypoint.command %}{{ version.entrypoint.command | join(' ') }}{% elif version.entrypoint.workflow is defined and version.entrypoint.workflow %}workflow {{ version.entrypoint.workflow }}{% elif version.entrypoint.tasking is defined and version.entrypoint.tasking %}tasking {{ version.entrypoint.tasking }}{% else %}&mdash;{% endif %}</td>
+                <td>{{ version.timeout_minutes }}m</td>
+                <td>{{ version.published_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
+                {% if can_manage %}
+                <td>
+                    {% if version.state.value == 'active' %}
+                    <form action="{{ url_for('config.rpa_type_version_state', type_id=job_type.type_id, version=version.version) }}" method="post" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="state" value="deprecated">
+                        <button type="submit" class="btn btn-sm btn-secondary">Deprecate</button>
+                    </form>
+                    {% elif version.state.value == 'deprecated' %}
+                    <form action="{{ url_for('config.rpa_type_version_state', type_id=job_type.type_id, version=version.version) }}" method="post" class="inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="state" value="active">
+                        <button type="submit" class="btn btn-sm btn-secondary">Reactivate</button>
+                    </form>
+                    {% endif %}
+                    {% if version.state.value != 'retired' %}
+                    <form action="{{ url_for('config.rpa_type_version_state', type_id=job_type.type_id, version=version.version) }}" method="post" class="inline" data-confirm="Retire version {{ version.version }}? Specifications pinned to it will stop running.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="state" value="retired">
+                        <button type="submit" class="btn btn-sm btn-danger">Retire</button>
+                    </form>
+                    {% endif %}
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}
+    {{ ui.empty_state("No versions published yet", hint="Projects can bind this type once a version is active.") }}
+    {% endif %}
+</div>
+
+{% if can_manage and job_type.state.value == 'active' %}
+<div class="card mt" id="publish">
+    <h2 class="card-header">Publish a version</h2>
+    <form action="{{ url_for('config.rpa_type_publish', type_id=job_type.type_id) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="version">Version *</label>
+            <input type="text" id="version" name="version" class="form-control mono" required placeholder="1.0.0">
+            <div class="form-text">Semantic versions sort highest for <code>latest-active</code>; other labels sort after them.</div>
+        </div>
+        <div class="form-group">
+            <label for="source_kind">Source</label>
+            <select id="source_kind" name="source_kind" class="form-control">
+                <option value="git">git &mdash; clone a repository (url#ref)</option>
+                <option value="package">package &mdash; installed on the pod</option>
+                <option value="local">local &mdash; a directory already on the pod</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="source_ref">Source Reference</label>
+            <input type="text" id="source_ref" name="source_ref" class="form-control mono" placeholder="https://git.example.com/rpa-jobs.git#v1.0.0">
+        </div>
+        <div class="form-group">
+            <label for="entrypoint">Entrypoint (JSON) *</label>
+            <textarea id="entrypoint" name="entrypoint" class="form-control mono" rows="4" spellcheck="false" required
+                      placeholder='{% if job_type.execution_mode.value == "tasker" %}{"workflow": "workflows/job.yaml"} or {"tasking": "jobs.flow@JobFlow"}{% else %}{"command": ["python", "-m", "jobs.invoice_import"], "packet_delivery": "file"}{% endif %}'></textarea>
+            <div class="form-text">{% if job_type.execution_mode.value == 'tasker' %}A taskplus workflow path inside the source, or a <code>module@Class</code> tasking.{% else %}An argv list; <code>packet_delivery</code> is <code>file</code> (default), <code>stdin</code>, or <code>env</code>.{% endif %}</div>
+        </div>
+        <div class="form-group">
+            <label for="environment">Environment (JSON)</label>
+            <textarea id="environment" name="environment" class="form-control mono" rows="3" spellcheck="false" placeholder='{"LOG_LEVEL": "info"}'></textarea>
+        </div>
+        <div class="form-group">
+            <label for="timeout_minutes">Timeout (minutes)</label>
+            <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" value="60" min="1" max="1440">
+        </div>
+        <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Publish version</button>
+    </form>
+</div>
+{% endif %}
+
+{% if packet_schema_json %}
+<div class="card mt">
+    <h2 class="card-header">Packet Schema</h2>
+    <pre class="mono small pyc-pre-scroll">{{ packet_schema_json }}</pre>
+</div>
+{% endif %}
+{% endblock %}

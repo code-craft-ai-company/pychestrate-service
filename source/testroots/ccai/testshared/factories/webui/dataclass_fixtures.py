@@ -41,6 +41,7 @@ __version__ = "1.0.0"
 
 import dataclasses
 import enum
+import collections.abc
 import typing
 
 from datetime import date, datetime, timedelta, timezone
@@ -108,14 +109,14 @@ def build_value(
     origin = typing.get_origin(inner)
     args = typing.get_args(inner)
 
-    if origin in (list, List):
+    if origin in (list, List) or origin is collections.abc.Sequence:
         if mode == MODE_SPARSE:
             return []
         elem_hint = args[0] if len(args) > 0 else Any
         rtnval = [build_value(hint=elem_hint, field_name=field_name, mode=mode, depth=depth + 1)]
         return rtnval
 
-    if origin in (dict, Dict):
+    if origin in (dict, Dict) or origin is collections.abc.Mapping:
         if mode == MODE_SPARSE:
             return {}
         key_hint = args[0] if len(args) > 0 else str

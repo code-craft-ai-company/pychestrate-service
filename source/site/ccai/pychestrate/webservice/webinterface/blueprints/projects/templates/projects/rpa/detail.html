@@ -1,0 +1,120 @@
+{% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}RPA Job {{ job.job_id[:8] }} - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.rpa_list', project_id=project.id) }}">RPA</a></li>
+        <li aria-current="page">{{ job.job_id[:8] }}</li>
+    </ol>
+</nav>
+
+<div class="page-header page-header--split">
+    <div>
+        <h1>RPA Job <span class="mono">{{ job.job_id[:8] }}</span></h1>
+        <p>{{ job.spec_name | display }} &middot; {{ job.type_id }} {{ job.resolved_version }}</p>
+    </div>
+    <div class="actions-row">
+        <a href="{{ url_for('projects.rpa_logs', project_id=project.id, job_id=job.job_id) }}" class="btn btn-secondary">
+            {{ ui.icon("article") }} View Logs
+        </a>
+        {% if can_manage and is_active %}
+        <form action="{{ url_for('projects.rpa_cancel', project_id=project.id, job_id=job.job_id) }}" method="post" data-confirm="Cancel this RPA job?">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-danger">
+                {{ ui.icon("cancel") }} Cancel
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="stat-grid">
+    <div class="card">
+        <div class="muted">Status</div>
+        <div>{{ ui.status_badge(job.status) }}</div>
+        {% if job.run_state %}<div class="muted small">run state {{ job.run_state }}</div>{% endif %}
+    </div>
+    <div class="card">
+        <div class="muted">Specification</div>
+        <div class="strong">
+            {% if job.spec_id %}
+            <a href="{{ url_for('projects.rpa_spec_detail', project_id=project.id, spec_id=job.spec_id) }}">{{ job.spec_name }}</a>
+            {% else %}
+            {{ job.spec_name | display }}
+            {% endif %}
+            <span class="muted small">r{{ job.spec_revision }}</span>
+        </div>
+    </div>
+    <div class="card">
+        <div class="muted">Job Type</div>
+        <div class="strong mono">{{ job.type_id }} {{ job.resolved_version }}</div>
+        <div><span class="badge badge-secondary">{{ job.execution_mode | enum_value }}</span></div>
+    </div>
+    <div class="card">
+        <div class="muted">Duration</div>
+        <div class="strong">{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</div>
+        {% if job.exit_code is not none %}<div class="muted small">exit code {{ job.exit_code }}</div>{% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h2 class="card-header">Job Details</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <tr>
+            <th scope="row">Job ID</th>
+            <td class="mono">{{ job.job_id }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Trigger</th>
+            <td><span class="badge badge-secondary">{{ job.trigger_cause.get('kind', 'manual') if job.trigger_cause else 'manual' }}</span></td>
+        </tr>
+        <tr>
+            <th scope="row">Triggered By</th>
+            <td>{{ job.triggered_by_id | display }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Pod / Client</th>
+            <td class="mono">{{ job.pod_id | display }} / {{ job.client_id | display }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Packet digest</th>
+            <td class="mono">{{ job.packet_digest[:16] if job.packet_digest else '' }}{% if job.packet_digest %}&hellip;{% endif %}</td>
+        </tr>
+        <tr>
+            <th scope="row">Created</th>
+            <td>{{ job.created_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Started</th>
+            <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M:%S', 'Not started') }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Completed</th>
+            <td>{{ job.completed_at | format_datetime('%Y-%m-%d %H:%M:%S', 'Not completed') }}</td>
+        </tr>
+        {% if job.final_state_reason %}
+        <tr>
+            <th scope="row">Reason</th>
+            <td>{{ job.final_state_reason }}</td>
+        </tr>
+        {% endif %}
+        {% if job.result_root_key %}
+        <tr>
+            <th scope="row">Result tree</th>
+            <td class="mono">{{ job.result_root_key }}</td>
+        </tr>
+        {% endif %}
+    </table></div>
+</div>
+
+<div class="card mt">
+    <h2 class="card-header">Work Packet</h2>
+    <p class="muted small">Fields the job type marks as secret are shown redacted.</p>
+    <pre class="mono small pyc-pre-scroll">{{ work_packet_json }}</pre>
+</div>
+{% endblock %}

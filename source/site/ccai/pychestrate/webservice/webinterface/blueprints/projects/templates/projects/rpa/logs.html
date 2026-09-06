@@ -1,0 +1,31 @@
+{% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}RPA Job {{ job.job_id[:8] }} Logs - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.rpa_list', project_id=project.id) }}">RPA</a></li>
+        <li><a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=job.job_id) }}">{{ job.job_id[:8] }}</a></li>
+        <li aria-current="page">Logs</li>
+    </ol>
+</nav>
+
+<div class="page-header page-header--split">
+    <div>
+        <h1>RPA Job <span class="mono">{{ job.job_id[:8] }}</span> Logs</h1>
+        <p>{{ job.spec_name | display }} &middot; {{ ui.status_badge(job.status) }}</p>
+    </div>
+    <a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=job.job_id) }}" class="btn btn-secondary">
+        {{ ui.icon("arrow_back") }} Back to Job
+    </a>
+</div>
+
+<div class="card">
+    <h2 class="card-header">Execution log</h2>
+    {{ ui.log_viewer(logs, running=is_active, filename='rpa-' ~ job.job_id[:8] ~ '.log') }}
+</div>
+{% endblock %}

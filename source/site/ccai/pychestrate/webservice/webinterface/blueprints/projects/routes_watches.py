@@ -157,7 +157,10 @@ def _build_watch_manager(*, db_session: Any) -> Any:
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchManager,
     )
-    rtnval = WatchManager(db_session)
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_rpa import (  # noqa: E402
+        build_watch_rpa_trigger,
+    )
+    rtnval = WatchManager(db_session, rpa_trigger=build_watch_rpa_trigger(db_session=db_session))
     return rtnval
 
 

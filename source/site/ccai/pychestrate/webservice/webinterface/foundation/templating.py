@@ -136,8 +136,12 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     from ccai.pychestrate.webservice.webinterface.foundation.static_files import (  # noqa: E402
         install_static_url_global,
     )
+    from ccai.pychestrate.webservice.webinterface.site_shell.ui_profile import (  # noqa: E402
+        install_ui_profile_global,
+    )
     install_url_for_global(environment=environment)
     install_static_url_global(environment=environment)
+    install_ui_profile_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter

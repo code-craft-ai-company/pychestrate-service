@@ -18,7 +18,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Callable, Dict
+from typing import Any, Callable, Dict, List, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -48,13 +48,59 @@ def wire_bus_subscribers(*, session_factory: SessionFactory) -> None:
         topic_to_kind[pack.source_topic] = pack.kind
 
     for topic, kind in topic_to_kind.items():
-        subscribe(
-            topic=topic,
-            subscriber=_build_handler(
-                session_factory=session_factory, kind=kind, topic=topic
-            ),
-        )
+        # Idempotent: the phase-1 and phase-2 bootstraps both call this
+        # (the phase-2 pass picks up audit kinds registered after phase
+        # 1). Wiring a topic twice would insert every audit record twice
+        # and the second insert violates the ``source_event_id`` unique
+        # constraint, so a topic whose handler is still subscribed is
+        # skipped. A bus reset (tests) drops the handler and the topic
+        # is wired again.
+        # The guard is keyed by (topic, session factory): the same
+        # factory wired twice is a no-op, while a test harness that
+        # supplies its own factory still gets a handler writing to its
+        # database.
+        already = False
+        for wired_factory, wired_handler in _WIRED_HANDLERS.get(topic, []):
+            if wired_factory is session_factory and _is_subscribed(topic=topic, subscriber=wired_handler):
+                already = True
+                break
+        if already:
+            continue
+        handler = _build_handler(session_factory=session_factory, kind=kind, topic=topic)
+        subscribe(topic=topic, subscriber=handler)
+        _WIRED_HANDLERS.setdefault(topic, []).append((session_factory, handler))
 
+    return
+
+
+#: ``topic -> [(session_factory, handler), ...]`` for every subscriber
+#: this module has wired.
+_WIRED_HANDLERS: Dict[str, List[Tuple[Any, Callable[[EntityEvent], None]]]] = {}
+
+
+def _is_subscribed(*, topic: str, subscriber: Callable[[EntityEvent], None]) -> bool:
+    """
+        Whether ``subscriber`` is currently registered on the bus for
+        ``topic``. Falls back to ``False`` (re-wire) when the bus does not
+        expose its registry.
+    """
+    try:
+        from ccai.pychestrate.webservice.messaging import event_bus as _bus  # noqa: E402
+        registry = getattr(_bus, "_SUBSCRIBERS", None)
+        if registry is None:
+            return False
+        bucket = registry.get(topic, [])
+        rtnval = any(candidate is subscriber for candidate in bucket)
+        return rtnval
+    except Exception:
+        return False
+
+
+def reset_wiring_for_testing() -> None:
+    """
+        Forget every handler this module wired (tests reset the bus too).
+    """
+    _WIRED_HANDLERS.clear()
     return
 
 

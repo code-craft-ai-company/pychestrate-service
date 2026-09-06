@@ -70,6 +70,9 @@ from ccai.pychestrate.webservice.ingest.result.errors import (
     ResultIngestError,
     ResultTreeNotFoundError,
 )
+from ccai.pychestrate.webservice.orchestration.rpa.errors import (
+    RpaJobNotFoundError,
+)
 from ccai.pychestrate.webservice.ingest.result import (
     classification as result_classification,
 )
@@ -1136,10 +1139,12 @@ def handle_dispatch_ack(request: Request) -> Response:
 PROGRESS_FRAME_KIND_TEST = "test"
 PROGRESS_FRAME_KIND_BUILD = "build"
 PROGRESS_FRAME_KIND_PROVISION = "provision"
+PROGRESS_FRAME_KIND_RPA = "rpa"
 SUPPORTED_PROGRESS_FRAME_KINDS = (
     PROGRESS_FRAME_KIND_TEST,
     PROGRESS_FRAME_KIND_BUILD,
     PROGRESS_FRAME_KIND_PROVISION,
+    PROGRESS_FRAME_KIND_RPA,
 )
 
 
@@ -1525,6 +1530,12 @@ def _handle_build_provision_completion(
                 run_id=run_id,
                 manifest=payload,
             )
+        elif format_tag == result_completion.RPA_FORMAT_TAG:
+            outcome = result_completion.complete_rpa_run(
+                db_session=db_session,
+                run_id=run_id,
+                manifest=payload,
+            )
         else:
             outcome = result_completion.complete_provision_run(
                 db_session=db_session,
@@ -1539,6 +1550,14 @@ def _handle_build_provision_completion(
             extensions={"run_id": run_id, "format_tag": format_tag},
         )
         outcome = None  # unreachable -- _abort_problem raises.
+    except RpaJobNotFoundError as xcpt:
+        _abort_problem(
+            request=request,
+            status=404,
+            detail=str(xcpt),
+            extensions={"run_id": run_id, "format_tag": format_tag},
+        )
+        outcome = None  # unreachable
     except InfraRunNotFoundError as xcpt:
         _abort_problem(
             request=request,
@@ -1878,6 +1897,7 @@ def handle_post_results_complete(request: Request) -> Response:
         is_build_or_provision = format_tag in (
             result_completion.BUILD_FORMAT_TAG,
             result_completion.PROVISION_FORMAT_TAG,
+            result_completion.RPA_FORMAT_TAG,
         )
 
         if is_build_or_provision is True:

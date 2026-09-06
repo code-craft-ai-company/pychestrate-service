@@ -1,0 +1,82 @@
+{% extends "projects/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}RPA Specifications - {{ project.name }} - Pychestrate{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
+        <li><a href="{{ url_for('projects.project_detail', project_id=project.id) }}">{{ project.name }}</a></li>
+        <li><a href="{{ url_for('projects.rpa_list', project_id=project.id) }}">RPA</a></li>
+        <li aria-current="page">Specifications</li>
+    </ol>
+</nav>
+
+<div class="page-header">
+    <h1>RPA Specifications</h1>
+    <p>Bind a registered job type and version to this project</p>
+</div>
+
+{% if can_manage %}
+<div class="mb">
+    <a href="{{ url_for('projects.rpa_spec_create', project_id=project.id) }}" class="btn btn-primary">
+        {{ ui.icon("add") }} Create Specification
+    </a>
+</div>
+{% endif %}
+
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Job Type</th>
+            <th scope="col">Version</th>
+            <th scope="col">Mode</th>
+            <th scope="col">Revision</th>
+            <th scope="col">Updated</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for spec in specs %}
+        <tr>
+            <td>
+                <a href="{{ url_for('projects.rpa_spec_detail', project_id=project.id, spec_id=spec.spec_id) }}" class="strong">
+                    {{ spec.name }}
+                </a>
+            </td>
+            <td>{{ spec.type_display_name }} <span class="muted small mono">{{ spec.type_id }}</span></td>
+            <td class="mono">
+                {{ spec.version_selector }}
+                {% if spec.resolved_version and spec.resolved_version != spec.version_selector %}
+                <span class="muted small">&rarr; {{ spec.resolved_version }}</span>
+                {% endif %}
+            </td>
+            <td><span class="badge badge-secondary">{{ spec.execution_mode | enum_value }}</span></td>
+            <td>r{{ spec.revision }}</td>
+            <td>{{ spec.updated_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
+            <td>
+                <a href="{{ url_for('projects.rpa_spec_detail', project_id=project.id, spec_id=spec.spec_id) }}" class="btn btn-sm btn-secondary">View</a>
+                {% if can_manage %}
+                <a href="{{ url_for('projects.rpa_spec_detail', project_id=project.id, spec_id=spec.spec_id) }}#run" class="btn btn-sm btn-success">{{ ui.icon("play_arrow") }} Run</a>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="7" class="muted center pad-lg">
+                No RPA specifications yet.
+                {% if can_manage %}
+                <a href="{{ url_for('projects.rpa_spec_create', project_id=project.id) }}">Create your first specification</a>
+                {% else %}
+                RPA specifications are created by project developers.
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table></div>
+
+{{ ui.pagination('projects.rpa_spec_list', page, total_pages, {'project_id': project.id}, total=total) }}
+{% endblock %}

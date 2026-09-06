@@ -51,6 +51,7 @@ class WatchAction(str, Enum):
     TRIGGER_INFRA_JOB = 'trigger_infra_job'
     TRIGGER_TEST_JOB = 'trigger_test_job'
     TRIGGER_PIPELINE = 'trigger_pipeline'
+    TRIGGER_RPA_JOB = 'trigger_rpa_job'
     SEND_NOTIFICATION = 'send_notification'
 
 
@@ -276,7 +277,8 @@ class WatchManager:
     """
     
     def __init__(self, db_session: DbSession, audit_logger=None, build_manager=None,
-                 infra_manager=None, test_manager=None, release_manager=None):
+                 infra_manager=None, test_manager=None, release_manager=None,
+                 rpa_trigger=None):
         """
         Initialize the WatchManager with a database session.
         
@@ -293,6 +295,9 @@ class WatchManager:
         self._infra_manager = infra_manager
         self._test_manager = test_manager
         self._release_manager = release_manager
+        # Optional callable ``(spec_id: str, work_packet: dict, user_id: str) -> job``
+        # used by the ``trigger_rpa_job`` action (6-rpa-orchestration).
+        self._rpa_trigger = rpa_trigger
     
     # =========================================================================
     # Validation Methods
@@ -1068,6 +1073,23 @@ class WatchManager:
                 else:
                     result['error'] = "Test manager not available"
             
+            elif action_config.action == WatchAction.TRIGGER_RPA_JOB:
+                if self._rpa_trigger:
+                    parameters = dict(action_config.parameters or {})
+                    spec_id = str(parameters.get('spec_id', '') or action_config.target_id)
+                    work_packet = parameters.get('work_packet', {}) or {}
+                    if not isinstance(work_packet, dict):
+                        work_packet = {}
+                    job_result = self._rpa_trigger(
+                        spec_id=spec_id,
+                        work_packet=work_packet,
+                        user_id=user_id or 'system',
+                    )
+                    result['success'] = True
+                    result['result_id'] = getattr(job_result, 'job_id', None) if job_result else None
+                else:
+                    result['error'] = "RPA trigger not available"
+
             elif action_config.action == WatchAction.TRIGGER_PIPELINE:
                 if self._release_manager:
                     # Trigger a release pipeline

@@ -56,6 +56,10 @@ from datetime import datetime
 
 from typing import Any, Callable, Dict, List, Optional
 
+from ccai.pychestrate.webservice.webinterface.site_shell import (
+    ui_profile as _ui_profile_scope,
+)
+
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
     HTMLResponse,
@@ -1628,7 +1632,8 @@ def _wrap_projects_handler_in_shell(handler: Any) -> Any:
     )
 
     def _wrapped(request: Request) -> Response:
-        inner = handler(request)
+        with _ui_profile_scope.request_profile_scope():
+            inner = handler(request)
         if isinstance(inner, HTMLResponse) is False:
             return inner
 
@@ -1822,6 +1827,12 @@ def register_projects_routes(*, app: Any) -> None:
         register_release_templates_routes,
     )
     register_release_templates_routes(app=shell_app)
+
+    # Phase 11 -- RPA (6-rpa-orchestration) project pages.
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_rpa import (  # noqa: E402
+        register_rpa_routes,
+    )
+    register_rpa_routes(app=shell_app)
 
     # F5 features -- calendar + watches (final slice).
     from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes_calendar import (  # noqa: E402

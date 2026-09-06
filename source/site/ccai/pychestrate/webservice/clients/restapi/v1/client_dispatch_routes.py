@@ -70,6 +70,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
 import logging
 
 from datetime import datetime, timezone
@@ -87,6 +88,14 @@ from ccai.pychestrate.webservice.agents.factories.long_poll_transport import (
 )
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
+)
+from ccai.pychestrate.webservice.agents.capability_service import (
+    apply_advertisement,
+    list_capabilities_for_client,
+)
+from ccai.pychestrate.webservice.agents.exceptions import (
+    CapabilityRejectedError,
+    UnknownCapabilityKindError,
 )
 from ccai.pychestrate.webservice.clients.exceptions import (
     ClientNotFoundError,
@@ -613,6 +622,94 @@ def handle_client_heartbeat(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def handle_put_client_capabilities(request: Request) -> Response:
+    """
+        ``PUT /api/v1/clients/{client_id}/capabilities`` -- a pod
+        advertises its capabilities (full replace). The mTLS client
+        certificate must match ``client_id``, exactly as the heartbeat
+        and long-poll routes require.
+
+        Body: ``{"advertisements": [{"kind": str, "value": any}, ...]}``.
+        Unknown kinds and malformed entries answer 422.
+
+        :returns: JSON response (200) with the persisted capability
+                  list, or a problem response.
+    """
+    client_id = request.path_params.get("client_id", "")
+    try:
+        _validate_client_id_or_abort(request=request, client_id=client_id)
+        client_cn = _require_mtls_client_cn(request=request)
+        _require_cert_matches_client_id(
+            request=request, client_cn=client_cn, client_id=client_id,
+        )
+        db_session = _resolve_db_session(request=request)
+        if db_session is None:
+            _abort_problem(
+                request=request,
+                status=503,
+                detail="Request-scoped db_session not configured",
+            )
+
+        raw = getattr(request, "body", b"")
+        if callable(raw):
+            raw = raw()
+        try:
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            decoded = json.loads(raw) if raw else {}
+        except (ValueError, UnicodeDecodeError) as xcpt:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="Request body is not valid JSON: {}".format(xcpt),
+            )
+            decoded = {}
+        advertisements = decoded.get("advertisements", None) if isinstance(decoded, dict) else None
+        if not isinstance(advertisements, list):
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Body must be {\"advertisements\": [{\"kind\": ..., \"value\": ...}, ...]}.",
+            )
+
+        try:
+            rows = apply_advertisement(
+                db_session=db_session,
+                client_id=client_id,
+                advertisements=advertisements,
+                actor_user_id=None,
+            )
+        except UnknownCapabilityKindError as xcpt:
+            _abort_problem(
+                request=request, status=422, detail=str(xcpt),
+                extensions={"client_id": client_id, "reason": "unknown_capability_kind"},
+            )
+            rows = []
+        except CapabilityRejectedError as xcpt:
+            _abort_problem(
+                request=request, status=422, detail=str(xcpt),
+                extensions={"client_id": client_id, "reason": "capability_rejected"},
+            )
+            rows = []
+
+        body = []
+        for row in rows:
+            value = row.value_json.get("value") if isinstance(row.value_json, dict) else None
+            body.append({
+                "kind": row.kind,
+                "value": value,
+                "revision_token": row.revision_token,
+                "updated_at": row.updated_at.isoformat() if row.updated_at is not None else None,
+            })
+        _LOGGER.info(
+            "clients.capabilities.advertised client_id=%s kinds=%d", client_id, len(body),
+        )
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
 def register_client_dispatch_routes(*, app: Any, version_prefix: str) -> None:
     """
         Attach the client-pull long-poll routes to a webworks
@@ -632,6 +729,9 @@ def register_client_dispatch_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{client_id}/heartbeat", methods=["GET"],
     )(handle_client_heartbeat)
+    app.attach_route(
+        base + "/{client_id}/capabilities", methods=["PUT"],
+    )(handle_put_client_capabilities)
     return
 
 
@@ -640,6 +740,7 @@ __all__ = [
     "CLIENTS_BASE_PATH",
     "MTLS_CLIENT_CN_ENVIRON_KEY",
     "handle_client_heartbeat",
+    "handle_put_client_capabilities",
     "handle_next_dispatch",
     "register_client_dispatch_routes",
     "set_active_long_poll_transport",

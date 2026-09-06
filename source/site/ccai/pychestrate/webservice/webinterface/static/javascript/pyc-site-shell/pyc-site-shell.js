@@ -11,6 +11,10 @@ import { build_home_view } from "./chrome/home-view.js";
 import { build_not_found_view } from "./chrome/not-found-view.js";
 import { DegradedBanner } from "./chrome/degraded-banner.js";
 import { SessionExpiredToast } from "./chrome/session-toast.js";
+import {
+  build_hidden_surface_notice,
+  match_hidden_route,
+} from "./chrome/hidden-surface-notice.js";
 import { PaletteRegistry } from "./palette/palette-registry.js";
 import { PaletteDialog } from "./palette/palette-dialog.js";
 import {
@@ -472,6 +476,7 @@ class PycSiteShell extends HTMLElement {
     const result = await fetch_nav_manifest(this._navigation_endpoint);
     if (result.ok === true && result.manifest !== null) {
       apply_nav_manifest(this._sidebar_registry, result.manifest);
+      this._show_hidden_surface_notice(result.manifest.ui_profile);
       this._nav_manifest_loaded = true;
       this._nav_manifest_failed = false;
       if (this._nav_degraded_banner !== null) {
@@ -492,6 +497,29 @@ class PycSiteShell extends HTMLElement {
    * paints the home / not-found landing state the failed boot
    * could not produce.
    */
+  /**
+   * 9-ui-profiles: when the current location belongs to a surface the
+   * caller has hidden, show a dismissible notice pointing at the
+   * preferences page. Idempotent per page load.
+   */
+  _show_hidden_surface_notice(ui_profile) {
+    if (ui_profile === null || ui_profile === undefined) {
+      return;
+    }
+    if (this._notices_region === null || this._notices_region === undefined) {
+      return;
+    }
+    if (this._notices_region.querySelector(".pyc-hidden-surface-notice") !== null) {
+      return;
+    }
+    const pathname = window.location.pathname;
+    const route = match_hidden_route(pathname, ui_profile.hidden_routes);
+    if (route === null) {
+      return;
+    }
+    this._notices_region.appendChild(build_hidden_surface_notice(route));
+    return;
+  }
   async _retry_nav_manifest() {
     await this._load_nav_manifest();
     this._render_sidebar_and_empty_state();

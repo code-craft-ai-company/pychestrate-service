@@ -306,6 +306,11 @@ Each feature lists its **Ext:** surface when one exists. Format:
   - **Ext:** `factory: bug_tracker_driver` (Jira, Linear, GitHub Issues, custom).
 - **6-compare-runs** — Side-by-side result/log/artifact diff.
   - **Ext:** `resource: ArtifactDiffViewerExtension`.
+- **6-rpa-orchestration** — Robotic Process Automation jobs: versioned job
+  types, project specifications, work-packet triggers; simple process jobs and
+  tasker-based (taskplus) jobs, both behind a subprocess boundary on the pod.
+  - **Ext:** `factory: rpa_job_type`; `resource: RpaPacketRendererExtension`;
+    `event: entity.rpa.job_started`, `entity.rpa.job_completed`.
 
 ### Layer 7 — Metrics & Analytics
 
@@ -356,6 +361,12 @@ Each feature lists its **Ext:** surface when one exists. Format:
   - Composes tiles from `7-project-dashboards` extension surface.
 - **9-run-detail-ui** — Run page composing log stream + result viewer + artifact browser.
   - Composes renderers from `6-artifact-browser` extension surface.
+- **9-ui-profiles** — Configurable automation surfaces (Build Automation,
+  Testing Automation, Robotic Process Automation, Infrastructure): a
+  deployment default plus per-user override gating navigation, palette,
+  dashboards, and project tabs without touching RBAC.
+  - Surface tags on nav entries, bundles, palette providers, and tiles;
+    `user_preference` table for per-user settings.
 
 ### Layer 10 — Operations
 
@@ -512,6 +523,22 @@ surface (`9-admin-ui`, `9-wc-secret-editor`, `1-feature-flags`,
 **Exit criterion:** external teams can ship a `pychestrate-ext-<name>` package
 against a documented, versioned plugin API without touching the service repo.
 
+### Phase 11 — RPA Domain & UI Profiles
+
+Add `6-rpa-orchestration` as the fourth Layer 6 domain: `job_kind = "rpa"`
+in the Layer 5 envelope, a deployment-wide job type registry with versions,
+project RPA specifications, work-packet triggers (UI, API, watch, pipeline
+step), an `rpa_executor` on the client that runs simple process jobs and
+tasker-based (`taskplus workflow run`) jobs as subprocesses, progress parser
+`rpa.process.v1`, and project/admin pages. Land `9-ui-profiles` so a
+deployment and each user can choose which automation surfaces (Build,
+Testing, RPA, Infrastructure) the shell presents.
+
+**Exit criterion:** an RPA-only deployment shows Projects, RPA, Resources,
+and Admin; a versioned job type can be triggered with a work packet from the
+UI, run on a pod in either mode, cancelled, and inspected with its packet
+redacted and logs live.
+
 ---
 
 ## Dependency Notes
@@ -525,6 +552,10 @@ against a documented, versioned plugin API without touching the service repo.
 - Layer 5 depends on Layer 3 and Layer 0's object store; it is built *before*
   Layer 4 so the first test run is possible without a full resource broker.
 - Layer 6 build/infra reuse Layer 5 entirely — no new dispatch plumbing.
+- `6-rpa-orchestration` also reuses Layer 5 entirely; the only Layer 5 changes
+  are a new `job_kind`, a progress format tag, and a completion branch. The
+  taskplus and tasker frameworks (`ccai.*`) are never imported into the
+  service or the agent process — they run only as subprocesses on pods.
 - Layer 7 is additive; it can start the moment Layer 5 emits run events.
 - Layer 9 WebComponents are introduced incrementally per phase — each component
   lands with the domain that needs it; `WebComponentBundleExtension` registers

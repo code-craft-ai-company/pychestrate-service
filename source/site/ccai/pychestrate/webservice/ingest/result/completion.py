@@ -59,6 +59,15 @@ from ccai.pychestrate.webservice.jobs.run.state.advance import (
 from ccai.pychestrate.webservice.jobs.run.state.advance import (
     advance_to_terminal as _advance_to_terminal,
 )
+from ccai.pychestrate.webservice.orchestration.rpa import (
+    service as rpa_service,
+)
+from ccai.pychestrate.webservice.orchestration.rpa.errors import (
+    RpaJobNotFoundError,
+)
+from ccai.pychestrate.webservice.orchestration.rpa.models import (
+    RpaJobStatus,
+)
 from ccai.pychestrate.webservice.orchestration.build import (
     repository as build_repository,
 )
@@ -93,6 +102,8 @@ from ccai.pychestrate.webservice.orchestration.infra.runs.models import (
 #: caller routes it to :mod:`ingest.result.scanner` instead.
 BUILD_FORMAT_TAG: str = "build"
 PROVISION_FORMAT_TAG: str = "provision"
+#: ``format_tag`` an RPA job result manifest carries (6-rpa-orchestration).
+RPA_FORMAT_TAG: str = "rpa.result.v1"
 
 #: ``TerminalOutcome`` enum values from the OpenAPI spec that map to
 #: a successful build / provision completion. Anything else is
@@ -433,6 +444,83 @@ def complete_build_run(
     return rtnval
 
 
+def complete_rpa_run(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        manifest: Dict[str, Any]
+    ) -> CompletionOutcome:
+    """
+        Ingest a ``format_tag=rpa.result.v1`` ``ResultManifest``.
+
+        Advances the :class:`RpaJob` row to ``SUCCEEDED`` / ``FAILED`` /
+        ``TIMEOUT`` / ``CANCELLED`` from ``manifest.terminal_outcome`` and
+        ``extras.rpa_status``, records the exit code and the uploaded
+        result-tree prefix, and drives the run-state machine terminal.
+        Idempotent on an already-terminal job.
+
+        :raises: RpaJobNotFoundError when no RPA job matches.
+    """
+    terminal_outcome = str(manifest.get("terminal_outcome", ""))
+    succeeded = _is_success_outcome(terminal_outcome=terminal_outcome)
+    cancelled = _is_cancelled_outcome(terminal_outcome=terminal_outcome)
+
+    extras = manifest.get("extras", None)
+    if not isinstance(extras, dict):
+        extras = {}
+    rpa_status = str(extras.get("rpa_status", "") or "")
+    exit_code: Optional[int] = None
+    raw_exit = extras.get("exit_code", None)
+    if isinstance(raw_exit, int) and not isinstance(raw_exit, bool):
+        exit_code = raw_exit
+
+    final_status = RpaJobStatus.SUCCEEDED
+    if cancelled is True or rpa_status == "cancelled":
+        final_status = RpaJobStatus.CANCELLED
+    elif rpa_status == "timeout":
+        final_status = RpaJobStatus.TIMEOUT
+    elif succeeded is False:
+        final_status = RpaJobStatus.FAILED
+
+    notes = str(manifest.get("notes", "") or "")
+    reason = "rpa result manifest: outcome={}".format(terminal_outcome)
+    if len(notes) > 0:
+        reason = reason + "; " + notes
+    result_root_key = str(manifest.get("backend_key_prefix", "") or "") or None
+
+    job_view = rpa_service.apply_run_terminal(
+        db_session=db_session,
+        job_id=run_id,
+        final_status=final_status,
+        exit_code=exit_code,
+        result_root_key=result_root_key,
+        reason=reason,
+    )
+
+    run_state = _advance_run_state_from_outcome(
+        db_session=db_session,
+        run_id=run_id,
+        terminal_outcome=terminal_outcome,
+        reason=reason,
+    )
+
+    files = artifact_files_from_manifest(manifest=manifest)
+    _LOGGER.info(
+        "pychestrate.ingest.result.completion.rpa run_id=%s status=%s run_state=%s files=%d",
+        run_id, job_view.status.value, run_state, len(files),
+    )
+
+    rtnval = CompletionOutcome(
+        run_id=run_id,
+        job_kind=RPA_FORMAT_TAG,
+        domain_state=job_view.status.value,
+        run_state=run_state,
+        artifacts_recorded=len(files),
+        manifest_id=None,
+    )
+    return rtnval
+
+
 def complete_provision_run(
         *,
         db_session: DbSession,
@@ -546,6 +634,8 @@ def complete_provision_run(
 __all__ = [
     "BUILD_FORMAT_TAG",
     "PROVISION_FORMAT_TAG",
+    "RPA_FORMAT_TAG",
+    "complete_rpa_run",
     "TERMINAL_OUTCOME_CANCELLED",
     "TERMINAL_OUTCOME_SUCCESS",
     "GENERIC_ARTIFACT_TYPE",

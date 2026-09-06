@@ -136,6 +136,11 @@ function build_header(options) {
     });
     actions.appendChild(theme_button);
   }
+  const preferences_link = document.createElement("a");
+  preferences_link.href = "/account/preferences";
+  preferences_link.classList.add("pyc-site-shell__preferences-link");
+  preferences_link.textContent = "Preferences";
+  actions.appendChild(preferences_link);
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
@@ -259,12 +264,14 @@ function install_confirm_delegate(root) {
       if (accepted !== true) {
         return;
       }
-      form.dataset.pycConfirmed = "true";
-      if (typeof form.requestSubmit === "function") {
-        form.requestSubmit(submitter !== null && submitter.form === form ? submitter : void 0);
-      } else {
-        form.submit();
-      }
+      window.setTimeout(() => {
+        form.dataset.pycConfirmed = "true";
+        if (typeof form.requestSubmit === "function") {
+          form.requestSubmit(submitter !== null && submitter.form === form ? submitter : void 0);
+        } else {
+          form.submit();
+        }
+      }, 0);
     });
   }, true);
   return;
@@ -701,6 +708,54 @@ var SessionExpiredToast = class {
     return;
   }
 };
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/hidden-surface-notice.js
+var PREFERENCES_PATH = "/account/preferences";
+function path_under_route(pathname, route) {
+  if (typeof route !== "string" || route.length === 0) {
+    return false;
+  }
+  if (pathname === route) {
+    return true;
+  }
+  const prefix = route.endsWith("/") ? route : route + "/";
+  const rtnval = pathname.startsWith(prefix);
+  return rtnval;
+}
+function match_hidden_route(pathname, hidden_routes) {
+  if (Array.isArray(hidden_routes) === false) {
+    return null;
+  }
+  for (const route of hidden_routes) {
+    if (path_under_route(pathname, route) === true) {
+      return route;
+    }
+  }
+  return null;
+}
+function build_hidden_surface_notice(route) {
+  const notice = document.createElement("div");
+  notice.classList.add("alert", "alert-info", "pyc-hidden-surface-notice");
+  notice.setAttribute("role", "status");
+  notice.setAttribute("data-hidden-route", route);
+  const text = document.createElement("span");
+  text.textContent = "This area is hidden from your navigation. ";
+  notice.appendChild(text);
+  const link = document.createElement("a");
+  link.href = PREFERENCES_PATH;
+  link.textContent = "Change your preferences";
+  notice.appendChild(link);
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.classList.add("btn", "btn-sm", "btn-secondary", "pyc-hidden-surface-notice__dismiss");
+  dismiss.textContent = "Dismiss";
+  dismiss.setAttribute("aria-label", "Dismiss hidden-surface notice");
+  dismiss.addEventListener("click", () => {
+    notice.remove();
+  });
+  notice.appendChild(dismiss);
+  return notice;
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/palette/palette-registry.js
 var DEFAULT_PROVIDER_TIMEOUT_MS = 5e3;
@@ -2593,7 +2648,8 @@ function _coerce_manifest(payload) {
     return null;
   }
   const rtnval = {
-    groups: candidate.groups
+    groups: candidate.groups,
+    ui_profile: candidate.ui_profile !== null && typeof candidate.ui_profile === "object" ? candidate.ui_profile : null
   };
   return rtnval;
 }
@@ -3198,6 +3254,7 @@ var PycSiteShell = class extends HTMLElement {
     const result = await fetch_nav_manifest(this._navigation_endpoint);
     if (result.ok === true && result.manifest !== null) {
       apply_nav_manifest(this._sidebar_registry, result.manifest);
+      this._show_hidden_surface_notice(result.manifest.ui_profile);
       this._nav_manifest_loaded = true;
       this._nav_manifest_failed = false;
       if (this._nav_degraded_banner !== null) {
@@ -3218,6 +3275,29 @@ var PycSiteShell = class extends HTMLElement {
    * paints the home / not-found landing state the failed boot
    * could not produce.
    */
+  /**
+   * 9-ui-profiles: when the current location belongs to a surface the
+   * caller has hidden, show a dismissible notice pointing at the
+   * preferences page. Idempotent per page load.
+   */
+  _show_hidden_surface_notice(ui_profile) {
+    if (ui_profile === null || ui_profile === void 0) {
+      return;
+    }
+    if (this._notices_region === null || this._notices_region === void 0) {
+      return;
+    }
+    if (this._notices_region.querySelector(".pyc-hidden-surface-notice") !== null) {
+      return;
+    }
+    const pathname = window.location.pathname;
+    const route = match_hidden_route(pathname, ui_profile.hidden_routes);
+    if (route === null) {
+      return;
+    }
+    this._notices_region.appendChild(build_hidden_surface_notice(route));
+    return;
+  }
   async _retry_nav_manifest() {
     await this._load_nav_manifest();
     this._render_sidebar_and_empty_state();

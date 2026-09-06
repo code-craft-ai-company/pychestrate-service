@@ -1,0 +1,50 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Preferences - Pychestrate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Preferences</h1>
+    <p>Choose which automation surfaces appear in your navigation, project tabs, dashboards, and the palette. Hidden pages stay reachable by URL.</p>
+</div>
+
+{% if override_reset %}
+<div class="alert alert-warning" role="status">
+    Your previous selection no longer matches what this deployment allows, so it was reset to the deployment default. Choose again below.
+</div>
+{% endif %}
+
+<div class="card narrow">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <fieldset class="form-group">
+            <legend>Show me</legend>
+            {% for row in surfaces %}
+            <div class="pyc-choice">
+                <input type="checkbox" id="pref-surface-{{ row.surface }}" name="surfaces" value="{{ row.surface }}" {% if row.enabled %}checked{% endif %}>
+                <label for="pref-surface-{{ row.surface }}">
+                    <span class="strong">{{ row.label }}</span>
+                    <span class="muted small">{{ row.description }}</span>
+                </label>
+            </div>
+            {% endfor %}
+        </fieldset>
+        {% if hidden_labels %}
+        <p class="form-text">Not offered by this deployment: {{ hidden_labels | join(', ') }}.</p>
+        {% endif %}
+        <div class="actions-row mt-lg">
+            <button type="submit" class="btn btn-primary">{{ ui.icon("save") }} Save preferences</button>
+        </div>
+    </form>
+    {% if has_override %}
+    <form method="post" action="{{ url_for('config.account_preferences_reset') }}" class="mt">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-secondary">Use deployment default</button>
+        <span class="muted small">Removes your personal selection.</span>
+    </form>
+    {% else %}
+    <p class="muted small mt">You are using the deployment default.</p>
+    {% endif %}
+</div>
+{% endblock %}
