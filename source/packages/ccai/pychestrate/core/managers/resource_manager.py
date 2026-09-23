@@ -607,41 +607,94 @@ class ResourceManager:
         
         return self._resource_to_response(resource)
     
-    def delete_resource(self, resource_id: int, user_id: str = None) -> None:
+    def delete_resource(self, resource_id: int, user_id: str = None) -> Dict[str, Any]:
         """
-        Delete a resource. Fails if active allocations exist.
-        
+        Delete a resource together with the records that belong to it. Fails if
+        active allocations exist (check them in, or force check-in, first).
+
+        The resource's reservations (including upcoming ones, which cannot be
+        honoured once the device is gone), its allocation history, its health
+        check configuration and health history, its metadata history and its
+        project assignments are removed with it. Those rows all reference the
+        resource through NOT NULL foreign keys, so leaving them made every
+        device with any history undeletable.
+
         :param resource_id: The resource's unique identifier
         :param user_id: The ID of the user deleting the resource
+        :returns: Counts of the dependent records removed, keyed
+                  ``reservations``, ``allocations``, ``health_check_configs``,
+                  ``health_transitions`` and ``metadata_history``
         :raises ResourceNotFoundError: If resource is not found
         :raises ResourceHasAllocationsError: If resource has active allocations
-        
+
         Validates: Requirements 1.4
         """
-        from ccai.pychestrate.core.orm import Resource, Allocation, AllocationStatus
-        
+        from sqlalchemy import delete as sql_delete
+
+        from ccai.pychestrate.core.orm import (
+            Allocation,
+            AllocationStatus,
+            HealthCheckConfig,
+            HealthTransitionLog,
+            Reservation,
+            Resource,
+            ResourceMetadataHistory,
+            project_resources,
+        )
+
         resource = self._db_session.query(Resource).filter(Resource.id == resource_id).first()
-        
+
         if not resource:
             raise ResourceNotFoundError(f"Resource with ID '{resource_id}' not found")
-        
+
         # Check for active allocations
         active_allocations = self._db_session.query(Allocation).filter(
             Allocation.resource_id == resource_id,
             Allocation.status == AllocationStatus.ACTIVE.value
         ).count()
-        
+
         if active_allocations > 0:
             raise ResourceHasAllocationsError(
                 f"Cannot delete resource '{resource.name}' with {active_allocations} active allocation(s)"
             )
-        
+
         resource_name = resource.name
-        
-        # Delete the resource
+
+        # Remove the dependent rows in an order the foreign keys allow:
+        # reservations first (an activated reservation points at its
+        # allocation), then the allocation history, then the health and
+        # metadata records, then the project assignments.
+        removed: Dict[str, Any] = {}
+        removed["reservations"] = self._db_session.query(Reservation).filter(
+            Reservation.resource_id == resource_id
+        ).delete(synchronize_session=False)
+        removed["allocations"] = self._db_session.query(Allocation).filter(
+            Allocation.resource_id == resource_id
+        ).delete(synchronize_session=False)
+        removed["health_check_configs"] = self._db_session.query(HealthCheckConfig).filter(
+            HealthCheckConfig.resource_id == resource_id
+        ).delete(synchronize_session=False)
+        removed["health_transitions"] = self._db_session.query(HealthTransitionLog).filter(
+            HealthTransitionLog.resource_id == resource_id
+        ).delete(synchronize_session=False)
+        removed["metadata_history"] = self._db_session.query(ResourceMetadataHistory).filter(
+            ResourceMetadataHistory.resource_id == resource_id
+        ).delete(synchronize_session=False)
+        self._db_session.execute(
+            sql_delete(project_resources).where(project_resources.c.res_id == resource_id)
+        )
+
+        # Those rows are gone; reload the resource's collections so deleting
+        # the resource does not try to detach children that no longer exist.
+        self._db_session.expire(resource, [
+            'allocations', 'reservations', 'health_check_config',
+            'health_transitions', 'metadata_history',
+        ])
+
+        # Delete the resource (its tag links go with it)
         self._db_session.delete(resource)
         self._db_session.commit()
-        
+
         # Log the resource deletion event
         if self._audit_logger:
             self._audit_logger.log_event(
@@ -649,9 +702,12 @@ class ResourceManager:
                 user_id=str(user_id) if user_id else None,
                 details={
                     "resource_id": resource_id,
-                    "resource_name": resource_name
+                    "resource_name": resource_name,
+                    "removed_records": {key: value for key, value in removed.items() if isinstance(value, int)}
                 }
             )
+
+        return removed
     
     def list_resources(
         self,

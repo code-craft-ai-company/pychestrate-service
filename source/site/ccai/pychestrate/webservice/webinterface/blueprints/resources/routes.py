@@ -525,6 +525,41 @@ def _describe_resource_manager_error(*, exc: Exception) -> Optional[str]:
     return None
 
 
+_REMOVED_RECORD_LABELS = (
+    ("reservations", "reservation", "reservations"),
+    ("allocations", "allocation record", "allocation records"),
+    ("health_check_configs", "health check setting", "health check settings"),
+    ("health_transitions", "health status change", "health status changes"),
+    ("metadata_history", "metadata change", "metadata changes"),
+)
+
+
+def _describe_resource_removal(*, removed: Any) -> str:
+    """
+        The success message for a resource deletion, naming the
+        records removed with it ("Resource deleted, along with 3
+        allocation records and 1 reservation.").
+
+        :param removed: The counts ``delete_resource`` returned.
+
+        :returns: User-facing message.
+    """
+    parts: List[str] = []
+    if isinstance(removed, dict):
+        for key, singular, plural in _REMOVED_RECORD_LABELS:
+            count = removed.get(key, 0)
+            if isinstance(count, int) and count > 0:
+                parts.append("{} {}".format(count, singular if count == 1 else plural))
+    if len(parts) == 0:
+        return "Resource deleted successfully."
+    if len(parts) == 1:
+        listed = parts[0]
+    else:
+        listed = "{} and {}".format(", ".join(parts[:-1]), parts[-1])
+    rtnval = "Resource deleted, along with {}.".format(listed)
+    return rtnval
+
+
 def _describe_allocation_error(*, exc: Exception) -> Optional[str]:
     """
         Map a typed AllocationManager error to a specific,
@@ -1283,11 +1318,11 @@ def handle_resource_delete(request: Request) -> Response:
 
         resource_manager = _build_resource_manager(db_session=db_session)
         try:
-            resource_manager.delete_resource(resource_id, auth.user_id)
+            removed = resource_manager.delete_resource(resource_id, auth.user_id)
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
-                message="Resource deleted successfully.",
+                message=_describe_resource_removal(removed=removed),
                 category=flash.CATEGORY_SUCCESS,
             )
             return response

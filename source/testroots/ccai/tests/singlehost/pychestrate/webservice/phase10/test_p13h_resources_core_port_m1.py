@@ -1933,3 +1933,34 @@ def test_resource_edit_refuses_an_emptied_capacity():
         ([], [("error", "Capacity must be a whole number of at least 1.")]),
     )
     return
+
+
+# ===========================================================================
+# Deleting a device with history (audit finding RES-09)
+# ===========================================================================
+
+
+def test_resource_deletion_message_names_the_history_removed():
+    """
+    **Feature: resources (RES-09 deleting a device with history)**
+    **Property: the success message after deleting a device names the
+    records removed with it.**
+    """
+    message = resources_routes._describe_resource_removal(
+        removed={"reservations": 1, "allocations": 3, "health_check_configs": 0},
+    )
+
+    testbase.assert_equal(message, "Resource deleted, along with 1 reservation and 3 allocation records.")
+    return
+
+
+def test_resource_deletion_message_without_history_is_plain():
+    """
+    **Feature: resources (RES-09 deleting a device with history)**
+    **Property: deleting a device with no history keeps the plain
+    success message.**
+    """
+    message = resources_routes._describe_resource_removal(removed={"reservations": 0})
+
+    testbase.assert_equal(message, "Resource deleted successfully.")
+    return
