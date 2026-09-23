@@ -208,6 +208,26 @@ bumped when the project crosses the preview-to-alpha threshold.
 
 ### Security
 
+- **Session cookies on the HTTPS alpha deploy now carry `Secure`.** The
+  flag followed only `PYCHESTRATE_RUNTIME_ENVIRONMENT`, and the
+  documented deploy runs as `staging` behind nginx on 443, so its
+  session cookies went out without `Secure` although the runbook said
+  `X-Forwarded-Proto` controlled it. Every cookie the service sets is
+  now `Secure` when the request arrived over HTTPS — directly, or
+  through a trusted proxy whose `X-Forwarded-Proto` says `https` — and
+  always in production. Trusted proxies come from the new
+  `PYCHESTRATE_TRUSTED_PROXY_ADDRESSES` (addresses or CIDR networks,
+  `*` for any peer; default `127.0.0.1,::1`). Plain-HTTP development,
+  staging and testing servers keep a working sign-in.
+
+- **The service refuses a KEK file other accounts can access.** The
+  runbook promised a permission check that did not exist; the loader
+  only checked that the file existed and held 32 bytes. A KEK file whose
+  mode grants anything to its group or to other users (anything but
+  `0600` / `0400`) now stops startup with an error that names the file,
+  the mode, and the `chmod` that fixes it. **Upgrade note:** check your
+  key file with `stat -c %a <path>` before upgrading.
+
 - The pods and clients REST surfaces enforced no permission at all —
   every handler gated on session presence only, while their sibling
   resource routes enforced `system:resources.read`. Any authenticated

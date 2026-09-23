@@ -71,9 +71,11 @@ Required
     startup so audit / SIEM tooling can correlate.
 
 ``PYCHESTRATE_KEK_FILE_PATH`` (when ``KEK_SOURCE=file``)
-    Absolute path to a 32-byte file with the KEK material. The
-    runtime checks ``stat`` permissions; chmod 0600 owned by the
-    service user.
+    Absolute path to a file holding at least 32 bytes of KEK
+    material, owned by the service user with mode ``0600`` (or
+    ``0400``). The service refuses to start when the file grants any
+    permission to its group or to other users; the error names the
+    file, the mode it found, and the ``chmod`` that fixes it.
 
 ``PYCHESTRATE_KEK_ENV_VAR`` (when ``KEK_SOURCE=env``)
     Name of the env var carrying the KEK material. The runtime
@@ -199,8 +201,19 @@ The alpha does not terminate TLS in-process; gunicorn binds an HTTP
 listener and the operator fronts it with nginx / traefik / a managed
 load balancer. Required header pass-through:
 
-* ``X-Forwarded-Proto: https`` -- the consumer-UI cookie middleware
-  uses this to set the ``Secure`` cookie attribute.
+* ``X-Forwarded-Proto: https`` -- tells the service the browser used
+  HTTPS, so every cookie it sets (the UI session cookie and the
+  setup-wizard unlock cookie) carries the ``Secure`` attribute. The
+  header is believed only from a trusted proxy: an address listed in
+  ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES`` (comma-separated addresses
+  or CIDR networks, ``*`` for any peer). Unset, the list is the
+  loopback addresses ``127.0.0.1`` and ``::1``, which covers nginx on
+  the same host proxying to ``127.0.0.1:8888`` as below. With
+  ``PYCHESTRATE_RUNTIME_ENVIRONMENT=production`` cookies are always
+  ``Secure``, whatever the header says; in ``development``,
+  ``staging`` and ``testing`` they are ``Secure`` exactly when the
+  request arrived over HTTPS, so a plain-HTTP test server keeps a
+  working sign-in.
 * ``X-Forwarded-For`` -- the modern auth flow's
   ``RequestFingerprint`` derives an IP fingerprint hash from this
   for replay-mitigation.

@@ -21,10 +21,12 @@ __version__ = "1.0.0"
 
 
 import json
+import os
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ccai import testbase
+from ccai.errors.exceptions import ConfigurationError
 from ccai.webworks.routing.response import RedirectResponse, Response
 
 from ccai.pychestrate.webservice.webinterface.foundation import (
@@ -621,4 +623,345 @@ def test_enforce_csrf_or_redirect_redirects_when_session_has_no_token():
     )
     is_redirect = isinstance(result, RedirectResponse)
     testbase.assert_equal(is_redirect, True)
+    return
+
+
+# ===========================================================================
+# cookie_session -- Secure-cookie policy (request scheme / trusted proxy)
+# ===========================================================================
+
+
+_SESSION_SET_COOKIE: str = "pychestrate_ui_session=abc.def; HttpOnly; Path=/; SameSite=Lax"
+
+
+def _https_proxy_environ(*, peer_address: str, forwarded_proto: str) -> Dict[str, Any]:
+    """
+        A WSGI environ for a request a reverse proxy relayed over plain
+        HTTP, announcing the client's scheme in ``X-Forwarded-Proto``.
+    """
+    rtnval = {
+        "REQUEST_METHOD": "POST",
+        "PATH_INFO": "/login",
+        "wsgi.url_scheme": "http",
+        "REMOTE_ADDR": peer_address,
+        "HTTP_X_FORWARDED_PROTO": forwarded_proto,
+    }
+    return rtnval
+
+
+def _plain_http_environ() -> Dict[str, Any]:
+    """
+        A WSGI environ for a browser talking plain HTTP to the service.
+    """
+    rtnval = {
+        "REQUEST_METHOD": "POST",
+        "PATH_INFO": "/login",
+        "wsgi.url_scheme": "http",
+        "REMOTE_ADDR": "127.0.0.1",
+    }
+    return rtnval
+
+
+def _cookie_setting_wsgi_app(environ: Dict[str, Any], start_response: Any) -> List[bytes]:
+    """
+        Stand-in for the service: answers every request with a session
+        cookie and a content type.
+    """
+    start_response(
+        "303 See Other",
+        [
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("Set-Cookie", _SESSION_SET_COOKIE),
+            ("Location", "/"),
+        ],
+    )
+    return [b""]
+
+
+def _headers_after_policy(
+        *,
+        runtime_environment: str,
+        environ: Dict[str, Any],
+        trusted_proxy_addresses: Optional[str] = None
+    ) -> List[Tuple[str, str]]:
+    """
+        Run one request through the Secure-cookie policy wrapper under
+        ``runtime_environment`` and return the headers it handed to the
+        server's ``start_response``.
+    """
+    captured: Dict[str, Any] = {}
+
+    def _start_response(status: str, headers: List[Tuple[str, str]], exc_info: Any = None) -> None:
+        captured["headers"] = headers
+        return None
+
+    saved = os.environ.get("PYCHESTRATE_RUNTIME_ENVIRONMENT", None)
+    os.environ["PYCHESTRATE_RUNTIME_ENVIRONMENT"] = runtime_environment
+    try:
+        wrapped = cookie_session.wrap_wsgi_app_with_secure_cookie_policy(
+            wsgi_app=_cookie_setting_wsgi_app,
+            trusted_proxy_addresses=trusted_proxy_addresses,
+        )
+        list(wrapped(environ, _start_response))
+    finally:
+        if saved is None:
+            os.environ.pop("PYCHESTRATE_RUNTIME_ENVIRONMENT", None)
+        else:
+            os.environ["PYCHESTRATE_RUNTIME_ENVIRONMENT"] = saved
+
+    rtnval = captured["headers"]
+    return rtnval
+
+
+def _set_cookie_value(headers: List[Tuple[str, str]]) -> str:
+    """
+        The single ``Set-Cookie`` value in ``headers``.
+    """
+    values = [value for name, value in headers if name.lower() == "set-cookie"]
+    testbase.assert_equal(len(values), 1)
+    rtnval = values[0]
+    return rtnval
+
+
+def test_environ_is_https_when_wsgi_scheme_is_https():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A request whose WSGI scheme is https (TLS at the server,
+    or a forwarded scheme gunicorn already applied) counts as HTTPS.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw="")
+    environ = {"wsgi.url_scheme": "https", "REMOTE_ADDR": "198.51.100.7"}
+    testbase.assert_equal(
+        cookie_session.environ_is_https(environ=environ, policy=policy), True
+    )
+    return
+
+
+def test_environ_is_https_when_loopback_proxy_forwards_https():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: With the default trust list, X-Forwarded-Proto: https
+    from a proxy on 127.0.0.1 makes the request count as HTTPS.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw=None)
+    environ = _https_proxy_environ(peer_address="127.0.0.1", forwarded_proto="https")
+    testbase.assert_equal(
+        cookie_session.environ_is_https(environ=environ, policy=policy), True
+    )
+    return
+
+
+def test_environ_ignores_forwarded_proto_from_untrusted_peer():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: X-Forwarded-Proto: https from a peer that is not a
+    trusted proxy is ignored.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw=None)
+    environ = _https_proxy_environ(peer_address="203.0.113.9", forwarded_proto="https")
+    testbase.assert_equal(
+        cookie_session.environ_is_https(environ=environ, policy=policy), False
+    )
+    return
+
+
+def test_environ_is_not_https_when_trusted_proxy_forwards_http():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A trusted proxy that reports X-Forwarded-Proto: http
+    leaves the request counted as plain HTTP.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw=None)
+    environ = _https_proxy_environ(peer_address="127.0.0.1", forwarded_proto="http")
+    testbase.assert_equal(
+        cookie_session.environ_is_https(environ=environ, policy=policy), False
+    )
+    return
+
+
+def test_environ_is_https_reads_the_client_facing_forwarded_proto():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: When proxies append to X-Forwarded-Proto, the first
+    (client-facing) value decides: "https, http" counts as HTTPS.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw=None)
+    environ = _https_proxy_environ(peer_address="127.0.0.1", forwarded_proto="https, http")
+    testbase.assert_equal(
+        cookie_session.environ_is_https(environ=environ, policy=policy), True
+    )
+    return
+
+
+def test_default_trusted_proxies_include_ipv4_mapped_loopback():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A dual-stack listener's IPv4-mapped loopback peer
+    (::ffff:127.0.0.1) is trusted by the default list.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw=None)
+    testbase.assert_equal(policy.trusts(peer_address="::ffff:127.0.0.1"), True)
+    return
+
+
+def test_trusted_proxy_network_covers_addresses_inside_it():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A CIDR entry trusts every address inside the network
+    and nothing outside it.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw="10.8.0.0/16")
+    testbase.assert_equal(
+        (policy.trusts(peer_address="10.8.3.4"), policy.trusts(peer_address="10.9.0.1")),
+        (True, False),
+    )
+    return
+
+
+def test_trusted_proxy_star_trusts_any_peer():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: "*" trusts X-Forwarded-Proto from any peer.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw="*")
+    testbase.assert_equal(policy.trusts(peer_address="198.51.100.20"), True)
+    return
+
+
+def test_empty_trusted_proxy_list_trusts_no_peer():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: Setting PYCHESTRATE_TRUSTED_PROXY_ADDRESSES to an empty
+    value trusts no proxy, loopback included.**
+    """
+    policy = cookie_session.parse_trusted_proxy_addresses(raw="")
+    testbase.assert_equal(policy.trusts(peer_address="127.0.0.1"), False)
+    return
+
+
+def test_invalid_trusted_proxy_entry_raises_configuration_error():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A trust-list entry that is not an address, a network or
+    "*" stops startup with a ConfigurationError naming the entry.**
+    """
+    message = None
+    try:
+        cookie_session.parse_trusted_proxy_addresses(raw="127.0.0.1, nginx.local")
+    except ConfigurationError as xcpt:
+        message = str(xcpt)
+    testbase.assert_equal(message is not None and "nginx.local" in message, True)
+    return
+
+
+def test_add_secure_attribute_appends_secure_when_absent():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: add_secure_attribute appends "; Secure" to a
+    Set-Cookie value that lacks it.**
+    """
+    secured = cookie_session.add_secure_attribute(set_cookie_value=_SESSION_SET_COOKIE)
+    testbase.assert_equal(secured, _SESSION_SET_COOKIE + "; Secure")
+    return
+
+
+def test_add_secure_attribute_does_not_duplicate_secure():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A Set-Cookie value that already carries Secure is
+    returned unchanged.**
+    """
+    already_secure = "sid=abc; Path=/; Secure; HttpOnly"
+    secured = cookie_session.add_secure_attribute(set_cookie_value=already_secure)
+    testbase.assert_equal(secured, already_secure)
+    return
+
+
+def test_policy_marks_cookie_secure_for_https_proxy_request_in_staging():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: The documented HTTPS alpha deploy (staging environment,
+    nginx on 127.0.0.1 sending X-Forwarded-Proto: https) gets a Secure
+    session cookie.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="staging",
+        environ=_https_proxy_environ(peer_address="127.0.0.1", forwarded_proto="https"),
+    )
+    testbase.assert_equal(_set_cookie_value(headers).endswith("; Secure"), True)
+    return
+
+
+def test_policy_leaves_cookie_unsecured_for_plain_http_in_staging():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A staging server reached over plain HTTP keeps a cookie
+    without Secure, so sign-in still works there.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="staging",
+        environ=_plain_http_environ(),
+    )
+    testbase.assert_equal(_set_cookie_value(headers), _SESSION_SET_COOKIE)
+    return
+
+
+def test_policy_ignores_https_claim_from_untrusted_peer_in_development():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: In development, X-Forwarded-Proto: https from a peer
+    outside the trust list does not change the cookie.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="development",
+        environ=_https_proxy_environ(peer_address="192.0.2.44", forwarded_proto="https"),
+    )
+    testbase.assert_equal(_set_cookie_value(headers), _SESSION_SET_COOKIE)
+    return
+
+
+def test_policy_honors_configured_proxy_network():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: A proxy listed in the configured trust list (here a
+    CIDR network) marks the cookie Secure when it forwards https.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="staging",
+        environ=_https_proxy_environ(peer_address="10.8.0.5", forwarded_proto="https"),
+        trusted_proxy_addresses="10.8.0.0/24",
+    )
+    testbase.assert_equal(_set_cookie_value(headers).endswith("; Secure"), True)
+    return
+
+
+def test_policy_marks_cookie_secure_in_production_even_over_http():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: Production cookies always carry Secure, whatever the
+    request scheme.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="production",
+        environ=_plain_http_environ(),
+    )
+    testbase.assert_equal(_set_cookie_value(headers).endswith("; Secure"), True)
+    return
+
+
+def test_policy_leaves_other_headers_untouched():
+    """
+    **Feature: DOC-04 secure session cookie**
+    **Property: Only Set-Cookie headers change; every other header is
+    passed through as the application produced it.**
+    """
+    headers = _headers_after_policy(
+        runtime_environment="production",
+        environ=_plain_http_environ(),
+    )
+    others = [(name, value) for name, value in headers if name.lower() != "set-cookie"]
+    testbase.assert_equal(
+        others,
+        [("Content-Type", "text/html; charset=utf-8"), ("Location", "/")],
+    )
     return
