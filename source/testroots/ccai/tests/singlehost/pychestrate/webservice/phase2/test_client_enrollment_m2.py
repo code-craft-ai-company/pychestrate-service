@@ -15,6 +15,10 @@ Covers the M2 spec's core behavior:
   ``is_cert_revoked`` returns ``True`` for it afterwards.
 * A client without a CA installed gets HTTP 503-equivalent
   ``CertificateAuthorityUnavailableError`` when a CSR is supplied.
+* The issued certificate carries the client id as its identity (CN
+  and ``urn:uuid:`` SAN) and is a TLS client certificate (E2E-04).
+* A redemption that fails while signing writes nothing, so the pod
+  name stays free and the same token can be redeemed again.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -53,6 +57,10 @@ from ccai.pychestrate.webservice.clients.models import (
     Client,
     ClientCert,
     ClientRevocation,
+)
+from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
+from ccai.pychestrate.webservice.security.auth.pepper_loader import (
+    set_active_pepper,
 )
 
 from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
@@ -155,9 +163,223 @@ def test_redeem_with_csr_issues_and_persists_cert():
     cert_rows = session.query(ClientCert).filter(ClientCert.client_id == result.client_id).all()
     testbase.assert_equal(len(cert_rows), 1)
     testbase.assert_equal(cert_rows[0].cert_serial, result.cert_serial)
-    testbase.assert_equal(cert_rows[0].subject_cn, pod_name)
+    # The certificate identity is the client id, not the pod name the
+    # CSR carried (E2E-04).
+    testbase.assert_equal(cert_rows[0].subject_cn, result.client_id)
 
     ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def _install_token_pepper() -> None:
+    """
+        Install the password pepper the token issuer hashes secrets
+        with, so these tests do not depend on an earlier module having
+        installed one.
+    """
+    set_active_pepper(pepper=SecretBytes(b"phase2-enrollment-m2-test-pepper"))
+    return
+
+
+def _redeem_with_csr(*, pod_name: str, project_id: str):
+    """
+        Install a dev CA, issue a token for ``pod_name`` and redeem it
+        with a matching CSR.
+
+        :param pod_name: Pod the token is scoped to.
+        :param project_id: Project the token is scoped to.
+
+        :returns: Tuple ``(session, RedemptionResult, parsed issued
+                  certificate)``.
+    """
+    reset_phase2_runtime()
+    _install_token_pepper()
+    ca_adapter.reset_active_ca_for_testing()
+    _install_dev_ca()
+    _engine, session = build_in_memory_session()
+
+    issued = issue_enrollment_token(
+        db_session=session,
+        project_id=project_id,
+        pod_name=pod_name,
+        ttl_seconds=600,
+        one_shot=True,
+        issued_by=None,
+    )
+    result = redeem_enrollment_token(
+        db_session=session,
+        secret=issued.secret,
+        payload=EnrollmentPayload(
+            pod_name=pod_name,
+            agent_version="0.1.0",
+            transport_name="http",
+            extras={},
+            csr_pem=_generate_client_csr(common_name=pod_name),
+        ),
+    )
+    certificate = x509.load_pem_x509_certificate(result.cert_pem)
+    rtnval = (session, result, certificate)
+    return rtnval
+
+
+def test_issued_certificate_common_name_is_the_client_id():
+    """
+    **Feature: 3-client-enrollment (M2) -- one client identity (E2E-04)**
+    **Property: the certificate issued at redemption has Subject CN equal
+    to the assigned client id, which is what the pod routes compare with
+    the client_id in their path -- not the pod name the CSR carried.**
+    """
+    _session, result, certificate = _redeem_with_csr(
+        pod_name="cn-pod", project_id="00000000-0000-0000-0000-000000000011",
+    )
+    try:
+        cn_values = [attr.value for attr in certificate.subject.get_attributes_for_oid(NameOID.COMMON_NAME)]
+        testbase.assert_equal(cn_values, [result.client_id])
+    finally:
+        ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def test_issued_certificate_names_the_client_id_as_uuid_urn_san():
+    """
+    **Feature: 3-client-enrollment (M2) -- one client identity (E2E-04)**
+    **Property: the issued certificate carries the client id as a
+    ``urn:uuid:<client_id>`` URI subject alternative name.**
+    """
+    _session, result, certificate = _redeem_with_csr(
+        pod_name="san-pod", project_id="00000000-0000-0000-0000-000000000012",
+    )
+    try:
+        san = certificate.extensions.get_extension_for_class(x509.SubjectAlternativeName).value
+        uris = san.get_values_for_type(x509.UniformResourceIdentifier)
+        testbase.assert_equal(uris, ["urn:uuid:{}".format(result.client_id)])
+    finally:
+        ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def test_issued_certificate_is_a_tls_client_certificate():
+    """
+    **Feature: 3-client-enrollment (M2) -- one client identity (E2E-04)**
+    **Property: the issued certificate is usable only as a TLS client
+    certificate: extendedKeyUsage is clientAuth and basicConstraints
+    forbids acting as a CA.**
+    """
+    _session, _result, certificate = _redeem_with_csr(
+        pod_name="eku-pod", project_id="00000000-0000-0000-0000-000000000013",
+    )
+    try:
+        eku = certificate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        constraints = certificate.extensions.get_extension_for_class(x509.BasicConstraints).value
+        testbase.assert_equal(
+            (list(eku), constraints.ca),
+            ([x509.oid.ExtendedKeyUsageOID.CLIENT_AUTH], False),
+        )
+    finally:
+        ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def test_issued_certificate_verifies_against_the_returned_chain():
+    """
+    **Feature: 3-client-enrollment (M2) -- one client identity (E2E-04)**
+    **Property: the issued certificate is signed by the CA certificate the
+    redemption returns as its chain, so a TLS terminator that trusts that
+    CA accepts it.**
+    """
+    _session, result, certificate = _redeem_with_csr(
+        pod_name="chain-pod", project_id="00000000-0000-0000-0000-000000000014",
+    )
+    try:
+        ca_certificate = x509.load_pem_x509_certificate(result.cert_chain_pem)
+        certificate.verify_directly_issued_by(ca_certificate)
+        testbase.assert_equal(certificate.issuer, ca_certificate.subject)
+    finally:
+        ca_adapter.reset_active_ca_for_testing()
+    return
+
+
+def test_redeem_that_fails_to_sign_writes_no_client_row():
+    """
+    **Feature: 3-client-enrollment (M2) -- transactional redeem (LD-02)**
+    **Property: when signing fails (no CA installed) the redemption
+    writes no client row, so no phantom client is left behind.**
+    """
+    reset_phase2_runtime()
+    _install_token_pepper()
+    ca_adapter.reset_active_ca_for_testing()
+    _engine, session = build_in_memory_session()
+
+    pod_name = "phantom-pod"
+    issued = issue_enrollment_token(
+        db_session=session,
+        project_id="00000000-0000-0000-0000-000000000015",
+        pod_name=pod_name,
+        ttl_seconds=600,
+        one_shot=True,
+        issued_by=None,
+    )
+    try:
+        redeem_enrollment_token(
+            db_session=session,
+            secret=issued.secret,
+            payload=EnrollmentPayload(
+                pod_name=pod_name, agent_version="0.1.0", transport_name="http",
+                extras={}, csr_pem=_generate_client_csr(common_name=pod_name),
+            ),
+        )
+    except CertificateAuthorityUnavailableError:
+        pass
+
+    testbase.assert_equal(session.query(Client).count(), 0)
+    return
+
+
+def test_redeem_can_be_retried_after_a_signing_failure():
+    """
+    **Feature: 3-client-enrollment (M2) -- transactional redeem (LD-02)**
+    **Property: after a redemption fails because no CA was installed,
+    the same token redeems successfully once a CA is installed -- the
+    failed attempt neither consumed the token nor reserved the pod name
+    (it used to answer 409 "already registered").**
+    """
+    reset_phase2_runtime()
+    _install_token_pepper()
+    ca_adapter.reset_active_ca_for_testing()
+    _engine, session = build_in_memory_session()
+
+    pod_name = "retry-pod"
+    issued = issue_enrollment_token(
+        db_session=session,
+        project_id="00000000-0000-0000-0000-000000000016",
+        pod_name=pod_name,
+        ttl_seconds=600,
+        one_shot=True,
+        issued_by=None,
+    )
+
+    def _redeem():
+        rtnval = redeem_enrollment_token(
+            db_session=session,
+            secret=issued.secret,
+            payload=EnrollmentPayload(
+                pod_name=pod_name, agent_version="0.1.0", transport_name="http",
+                extras={}, csr_pem=_generate_client_csr(common_name=pod_name),
+            ),
+        )
+        return rtnval
+
+    try:
+        _redeem()
+    except CertificateAuthorityUnavailableError:
+        pass
+
+    _install_dev_ca()
+    try:
+        result = _redeem()
+        testbase.assert_equal(result.cert_pem is not None, True)
+    finally:
+        ca_adapter.reset_active_ca_for_testing()
     return
 
 

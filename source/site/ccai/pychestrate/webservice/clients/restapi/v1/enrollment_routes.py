@@ -227,9 +227,10 @@ def _decode_csr_field_or_abort(
 
 def _encode_pem_field(raw: Optional[bytes]) -> str:
     """
-        Encode PEM bytes for transport over the JSON response.
-        Returns empty string when raw is None / empty so the JSON
-        response stays strictly stringly-typed.
+        Encode PEM bytes as base64 for the legacy ``cert_pem`` /
+        ``cert_chain_pem`` response fields. Returns empty string when
+        raw is None / empty so the JSON response stays strictly
+        stringly-typed.
 
         :param raw: PEM bytes or None.
 
@@ -238,6 +239,26 @@ def _encode_pem_field(raw: Optional[bytes]) -> str:
     if raw is None or len(raw) == 0:
         return ""
     rtnval = base64.b64encode(raw).decode("ascii")
+    return rtnval
+
+
+def _pem_text_field(raw: Optional[bytes]) -> str:
+    """
+        Render PEM bytes as the PEM text itself for the contract
+        fields ``client_certificate_pem`` / ``ca_chain_pem``. A client
+        writes these values to disk and hands the files to TLS, which
+        only loads PEM; base64-wrapping them (as the legacy fields do)
+        produced files ``ssl`` refused with ``PEM lib`` /
+        ``NO_CERTIFICATE_OR_CRL_FOUND``. Returns an empty string when
+        no certificate was issued.
+
+        :param raw: PEM bytes or None.
+
+        :returns: PEM text or empty string.
+    """
+    if raw is None or len(raw) == 0:
+        return ""
+    rtnval = raw.decode("ascii")
     return rtnval
 
 
@@ -517,9 +538,11 @@ def handle_redeem_enrollment_token(request: Request) -> Response:
             # -- the certificate was minted and then thrown away.
             # Both spellings are emitted: the contract names for
             # correctness, the originals so nothing built against the
-            # old shape breaks.
-            "client_certificate_pem": _encode_pem_field(result.cert_pem),
-            "ca_chain_pem": _encode_pem_field(result.cert_chain_pem),
+            # old shape breaks. The contract fields carry PEM text,
+            # as their names say and as TLS needs; only the legacy
+            # fields keep the base64 wrapping.
+            "client_certificate_pem": _pem_text_field(result.cert_pem),
+            "ca_chain_pem": _pem_text_field(result.cert_chain_pem),
             "cert_pem": _encode_pem_field(result.cert_pem),
             "cert_chain_pem": _encode_pem_field(result.cert_chain_pem),
             "envelope_signing_keys": envelope_signing_keys,

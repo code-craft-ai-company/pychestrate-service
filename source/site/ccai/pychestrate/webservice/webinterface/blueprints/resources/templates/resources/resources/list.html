@@ -82,7 +82,7 @@
         <tr>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
             <td>{{ resource.resource_type }}</td>
-            <td>{{ resource.pool_name or 'Default' }}</td>
+            <td>{{ resource.pool_name | display }}</td>
             <td>
                 {% set status = resource.health_status %}
                 {% if status == 'online' %}

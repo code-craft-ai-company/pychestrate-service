@@ -3,7 +3,7 @@ import {
   build_flash_notice,
   extract_flash_messages
 } from "./chrome/flash-notices.js";
-import { build_header } from "./chrome/header.js";
+import { build_header, update_theme_toggle } from "./chrome/header.js";
 import { install_confirm_delegate } from "./chrome/confirm-delegate.js";
 import { install_reveal_toggle } from "./chrome/reveal-toggle.js";
 import { install_log_viewer } from "./chrome/log-viewer.js";
@@ -43,7 +43,9 @@ const ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 const ATTR_BRAND_LABEL = "brand-label";
 const NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
 const NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
-const NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+const SIDEBAR_ELEMENT_ID = "pyc-site-shell-sidebar";
+const SIDEBAR_NAV_LABEL = "Primary";
+const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 class PycSiteShell extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -69,6 +71,8 @@ class PycSiteShell extends HTMLElement {
   _nav_manifest_failed;
   _nav_provider_registered;
   _layout;
+  _color_scheme_query;
+  _color_scheme_listener;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -90,6 +94,8 @@ class PycSiteShell extends HTMLElement {
     this._nav_manifest_failed = false;
     this._nav_provider_registered = false;
     this._layout = null;
+    this._color_scheme_query = null;
+    this._color_scheme_listener = null;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
@@ -129,7 +135,11 @@ class PycSiteShell extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
-    _apply_theme_preference(_read_theme_preference());
+    // The shell document's head script (theme-boot.js) already set
+    // data-theme before the first paint; re-applying the stored
+    // choice here only matters when that script could not run.
+    _apply_theme_preference(_read_stored_theme());
+    this._wire_color_scheme_listener();
     this._install_skip_link();
     install_confirm_delegate(document);
     install_reveal_toggle(document);
@@ -167,6 +177,14 @@ class PycSiteShell extends HTMLElement {
         this._global_session_401
       );
       this._global_session_401 = null;
+    }
+    if (this._color_scheme_query !== null && this._color_scheme_listener !== null) {
+      this._color_scheme_query.removeEventListener(
+        "change",
+        this._color_scheme_listener
+      );
+      this._color_scheme_query = null;
+      this._color_scheme_listener = null;
     }
     return;
   }
@@ -224,29 +242,49 @@ class PycSiteShell extends HTMLElement {
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
     // <mj-app-shell> collapses the nav track to width 0 unless the
-    // host carries nav-open. On wide viewports the sidebar starts
-    // open unless the user previously collapsed it (persisted in
-    // localStorage); on narrow viewports <mj-app-shell>'s own
-    // ResizeObserver switches to nav-mode="overlay" and the nav
-    // stays closed until the header toggle opens it.
-    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
+    // host carries nav-open. nav-open states the wide-layout
+    // choice: open unless the user previously collapsed it
+    // (persisted in localStorage). Below the desktop breakpoint
+    // (--mj-shell-breakpoint-nav in pyc-site-shell.css) the layout
+    // measures itself, switches to nav-mode="overlay", and closes
+    // the drawer before the first paint -- so phones and tablets
+    // always start with the content visible and the drawer shut.
+    // Deciding here from a viewport media query instead would
+    // disagree with the layout's own width near the breakpoint.
     const nav_collapsed_preference = _read_nav_collapsed_preference();
-    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    const nav_open_initial = nav_collapsed_preference === false;
     if (nav_open_initial === true) {
       layout.setAttribute("nav-open", "");
     }
+    // Keep the header toggle's aria-expanded in step with the nav
+    // however it changes: the toggle, the backdrop, Escape, or the
+    // layout closing the drawer when it enters overlay mode.
+    layout.addEventListener("mj-shell-nav-toggle", (event) => {
+      if (event.target !== layout) {
+        return;
+      }
+      const toggle_button = this.querySelector(".pyc-site-shell__nav-toggle");
+      if (toggle_button !== null) {
+        toggle_button.setAttribute(
+          "aria-expanded",
+          layout.hasAttribute("nav-open") === true ? "true" : "false"
+        );
+      }
+    });
     this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
       user_display_name: this._read_optional_attribute("user-display-name"),
+      user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       on_theme_toggle: () => {
         this._toggle_theme();
       },
-      current_theme: _read_theme_preference(),
+      current_theme: _read_effective_theme(),
       nav_open_initial,
+      nav_controls_id: SIDEBAR_ELEMENT_ID,
       on_nav_toggle: () => {
         this._toggle_sidebar();
       },
@@ -256,8 +294,13 @@ class PycSiteShell extends HTMLElement {
       }
     });
     layout.appendChild(header);
+    // <mj-side-nav> renders the page's one navigation landmark
+    // (<mj-app-shell> then leaves its nav region unlabelled);
+    // name it here so it is not announced by a catalog key.
     const sidebar = document.createElement("mj-side-nav");
     sidebar.setAttribute("slot", "nav");
+    sidebar.setAttribute("nav-label", SIDEBAR_NAV_LABEL);
+    sidebar.id = SIDEBAR_ELEMENT_ID;
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
@@ -714,8 +757,14 @@ class PycSiteShell extends HTMLElement {
     document.body.insertBefore(link, document.body.firstChild);
     return;
   }
+  /**
+   * Flip between the light and dark theme, starting from what is
+   * on screen now -- the stored choice, or the OS preference when
+   * nothing is stored -- so the first click after an OS-driven
+   * load always changes the theme.
+   */
   _toggle_theme() {
-    const current = _read_theme_preference();
+    const current = _read_effective_theme();
     const next = current === "dark" ? "light" : "dark";
     _apply_theme_preference(next);
     try {
@@ -723,11 +772,34 @@ class PycSiteShell extends HTMLElement {
     } catch (error) {
       // storage unavailable: the choice lasts for this page only
     }
-    const button = document.querySelector(".pyc-site-shell__theme-toggle");
+    this._sync_theme_control();
+    return;
+  }
+  _sync_theme_control() {
+    const button = this.querySelector(".pyc-site-shell__theme-toggle");
     if (button !== null) {
-      button.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
-      button.setAttribute("aria-label", next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+      update_theme_toggle(button, _read_effective_theme());
     }
+    return;
+  }
+  /**
+   * While no theme is stored the page follows the OS preference;
+   * keep the theme control's label right when the OS flips.
+   */
+  _wire_color_scheme_listener() {
+    if (this._color_scheme_listener !== null || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const query = window.matchMedia(DARK_SCHEME_QUERY);
+    if (typeof query.addEventListener !== "function") {
+      return;
+    }
+    const listener = () => {
+      this._sync_theme_control();
+    };
+    query.addEventListener("change", listener);
+    this._color_scheme_query = query;
+    this._color_scheme_listener = listener;
     return;
   }
   _read_optional_attribute(name) {
@@ -743,19 +815,25 @@ class PycSiteShell extends HTMLElement {
       return;
     }
     const next_open = layout.hasAttribute("nav-open") === false;
+    // Only the wide layout's sidebar state is a preference worth
+    // remembering; opening and closing the overlay drawer on a
+    // phone must not collapse the sidebar on the desktop.
+    const is_overlay = layout.getAttribute("nav-mode") === "overlay";
     if (next_open === true) {
       layout.setAttribute("nav-open", "");
     } else {
       layout.removeAttribute("nav-open");
     }
-    _write_nav_collapsed_preference(next_open === false);
+    if (is_overlay === false) {
+      _write_nav_collapsed_preference(next_open === false);
+    }
     const toggle_button = this.querySelector(
       ".pyc-site-shell__nav-toggle"
     );
     if (toggle_button !== null) {
       toggle_button.setAttribute(
         "aria-expanded",
-        next_open === true ? "true" : "false"
+        layout.hasAttribute("nav-open") === true ? "true" : "false"
       );
     }
     return;
@@ -927,13 +1005,20 @@ function _build_sidebar_failure_state(on_retry) {
   return panel;
 }
 /*
- * Sidebar collapse preference. Wrapped in try/catch because
- * localStorage access throws in some privacy modes; the shell
- * just falls back to the default (open) in that case.
+ * Theme preference. The explicit choice lives in localStorage
+ * under THEME_STORAGE_KEY (the shell document's theme-boot.js
+ * reads the same key before the first paint); with no stored
+ * choice the page follows the OS preference. localStorage access
+ * is wrapped in try/catch because it throws in some privacy
+ * modes.
  */
 const THEME_STORAGE_KEY = "pychestrate.ui.theme";
 
-function _read_theme_preference() {
+/*
+ * The explicitly chosen theme ("dark" / "light"), or null when
+ * the user has not chosen one.
+ */
+function _read_stored_theme() {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "dark" || stored === "light") {
@@ -942,27 +1027,41 @@ function _read_theme_preference() {
   } catch (error) {
     // no storage
   }
-  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  return null;
+}
+
+/*
+ * The theme on screen: the stored choice, else the OS preference.
+ */
+function _read_effective_theme() {
+  const stored = _read_stored_theme();
+  if (stored !== null) {
+    return stored;
+  }
+  if (typeof window.matchMedia === "function" && window.matchMedia(DARK_SCHEME_QUERY).matches) {
     return "dark";
   }
   return "light";
 }
 
+/*
+ * Apply a theme to the document: "dark" / "light" pin data-theme;
+ * null removes it so the tokens follow the OS preference.
+ */
 function _apply_theme_preference(theme) {
-  let stored = null;
-  try {
-    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  } catch (error) {
-    stored = null;
-  }
-  if (stored === "dark" || stored === "light") {
-    document.documentElement.setAttribute("data-theme", stored);
+  if (theme === "dark" || theme === "light") {
+    document.documentElement.setAttribute("data-theme", theme);
   } else {
     document.documentElement.removeAttribute("data-theme");
   }
   return;
 }
 
+/*
+ * Sidebar collapse preference. Wrapped in try/catch because
+ * localStorage access throws in some privacy modes; the shell
+ * just falls back to the default (open) in that case.
+ */
 function _read_nav_collapsed_preference() {
   let rtnval = false;
   try {

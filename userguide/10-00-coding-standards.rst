@@ -4,6 +4,23 @@
 Coding Standards and Patterns
 =============================
 
+The standards for code in this repository. The chapters that go with
+this one:
+
+* `Code Organization <10-01-code-organization.rst>`_ -- where code goes.
+* `Naming Conventions <10-02-naming-conventions.rst>`_ -- how it is named.
+* `Testing Patterns and Practices <10-03-testing-patterns-and-practices.rst>`_
+  and `Testing Frameworks <10-04-testing-frameworks.rst>`_ -- how it is
+  tested.
+
+.. toctree::
+   :hidden:
+
+   10-01-code-organization
+   10-02-naming-conventions
+   10-03-testing-patterns-and-practices
+   10-04-testing-frameworks
+
 Zen of Python testing
 =====================
 
@@ -79,9 +96,9 @@ the function.
     add_and_print_list()
     add_and_print_list()
 
-The second call to `add_and_print_list` will print the numbers added to the list from the first call.  This
+The second call to ``add_and_print_list`` will print the numbers added to the list from the first call.  This
 is because default values to callables are only created once and shared by all function users.  When you want
-to use a Mutable instance as a default value, one way to do this is to pass `None` or `...` as the default
+to use a Mutable instance as a default value, one way to do this is to pass ``None`` or ``...`` as the default
 and then create an instance for the Mutable inside of the function, for example.
 
 .. code-block:: python
@@ -510,7 +527,7 @@ as a failure of condition or state associated with the target of the test scenar
 Return Statements
 =================
 
-All functions or methods that are not generators should have a `return` statement. The return
+All functions or methods that are not generators should have a ``return`` statement. The return
 statements are important for four reasons:
 
 * It prevents the formation of appended functionality during a bad code merge
@@ -537,7 +554,7 @@ appended to the previous function in the code. Take the following two functions 
         print("World")
 
 If returns are not present at the end of the functions above, then during a refactor or code
-merge, it is possible for lines of code to be removed, like if the `say_world` function
+merge, it is possible for lines of code to be removed, like if the ``say_world`` function
 declaration was deleted like so:
 
 .. code-block:: python
@@ -547,8 +564,8 @@ declaration was deleted like so:
     
         print("World")
 
-Now, without warning from python, the functionality of the `say_world` function has been appended
-to the `say_hello` function and thus changes the functionality of the `say_hello` function without
+Now, without warning from python, the functionality of the ``say_world`` function has been appended
+to the ``say_hello`` function and thus changes the functionality of the ``say_hello`` function without
 warning.
 
 Now lets look at what would happen if the same thing took place when return statements are utilized
@@ -565,7 +582,7 @@ as in the code below.
         return
 
 In the code above, we clearly mark the end of our functions so python has a better chance of doing
-the correct thing when code is modified incorrectly. If the function declaration for `say_world`
+the correct thing when code is modified incorrectly. If the function declaration for ``say_world``
 is removed like so.
 
 .. code-block:: python
@@ -578,7 +595,7 @@ is removed like so.
         return
 
 In the case above, python will not execute the dangling code and will not append its functionality
-to the `say_hello` method. Also, the python linter can show the remaining code body for `say_world`
+to the ``say_hello`` method. Also, the python linter can show the remaining code body for ``say_world``
 as dead code or unreachable code and complain when it tries to lint the code in the file.
 
 Line Number for Debugging
@@ -604,7 +621,7 @@ so the context of the return value can be examined.
         return rtnval
 
 From looking at the simple example above, you can see that in order to debug the function and
-make sure it is returning the correct answer, it is useful to be able to see the `multiplier`
+make sure it is returning the correct answer, it is useful to be able to see the ``multiplier``
 parameter that is generated locally and is being used to effect the output. Providing a simple
 independent return allows us to see the context that is generating the output value. Another
 example below shows how a function like this might be written that will not provide the same
@@ -620,9 +637,9 @@ this coding style results in reduced quality code. The reason the code is reduce
 because you cannot see the context of the return value being generated.
 
 Code Legibility
-------------
+---------------
 
-Finally, `return` statements are important to improve the legibility of code. Because python code
+Finally, ``return`` statements are important to improve the legibility of code. Because python code
 uses indentation to determine scope, the repeated indentation of successive code blocks can present
 issues with the readability of code. This can particularly be a problem with longer functions.
 
@@ -643,7 +660,7 @@ conditions.
 An experienced Test Framework Architect is aware of this important aspect of test framework APIs that is
 much different from maybe a production API and will design the APIs accordingly.
 
-One pattern that you might see in a production environment for APIs is the use of a `@retry` decorator
+One pattern that you might see in a production environment for APIs is the use of a ``@retry`` decorator
 on an API that might not have 100% reliability.
 
 .. code-block:: python
@@ -661,7 +678,7 @@ several competing goals:
 * Capture detailed data in failure contexts
 * Let tests and higher level code have control of behaviors and expectations
 
-The use of retry decorations negatively impacts these goals. First of all, a `@retry` decoration always
+The use of retry decorations negatively impacts these goals. First of all, a ``@retry`` decoration always
 assumes a call should succeed. Good test framework code **does not assume** or make decisions for the
 code that is controlling the flow of a test. Flow control and error handling should be the responsibility
 of the higher level test code. Good test framework code lets the higher level code **make expectations**
@@ -676,7 +693,7 @@ the APIs.
 The pattern that should be used is to tack on behavior modification parameters to the end of the
 inter-op APIs. Another important aspect of designing APIs and behavior parameters is to be consistent.
 An example of a behavior parameter might be that on every API that modifies the remote state shared by
-devices should have a `sync` parameter to indicate the API should wait for a `sync` of shared state. 
+devices should have a ``sync`` parameter to indicate the API should wait for a ``sync`` of shared state. 
 
 .. code-block:: python
 
@@ -692,7 +709,7 @@ devices should have a `sync` parameter to indicate the API should wait for a `sy
   def rename_member(id: int, new_name: str, old_name: str, sync: bool=True):
       return
 
-Note on the above API(s), the APIs that `add`, `delete` and `modify` data have a sync parameter and
+Note on the above API(s), the APIs that ``add``, ``delete`` and ``modify`` data have a sync parameter and
 the APIs that do not modify state do not offer a sync behavior.
 
 This sort of adding parameters can be a problem when you have lots of different ways you want

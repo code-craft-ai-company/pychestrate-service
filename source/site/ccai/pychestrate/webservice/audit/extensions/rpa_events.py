@@ -71,6 +71,25 @@ class RpaJobTypeRetiredAuditEvents(AuditEventTypeExtension):
     description: str = "An RPA job type was retired."
 
 
+class RpaJobTypeUpdatedAuditEvents(AuditEventTypeExtension):
+    """
+        Canonical audit kind for ``entity.rpa.job_type_updated``.
+    """
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.rpa.job_type_updated"
+    source_topic: str = "entity.rpa.job_type_updated"
+    payload_schema: dict = {
+        "type": "object",
+        "required": ["type_id", "changed_fields"],
+        "properties": {
+            "type_id": {"type": "string"},
+            "changed_fields": {"type": "array", "items": {"type": "string"}},
+            "actor_id": {"type": ["string", "null"]},
+        },
+    }
+    description: str = "An RPA job type's name, description, schema, secret fields or capabilities were edited."
+
+
 class RpaJobStartedAuditEvents(AuditEventTypeExtension):
     """
         Canonical audit kind for ``entity.rpa.job_started`` (a trigger).
@@ -179,6 +198,7 @@ RPA_AUDIT_EVENT_TYPES = (
     RpaJobTypeRegisteredAuditEvents,
     RpaJobTypePublishedAuditEvents,
     RpaJobTypeRetiredAuditEvents,
+    RpaJobTypeUpdatedAuditEvents,
     RpaJobStartedAuditEvents,
     RpaJobCompletedAuditEvents,
     RpaJobFailedAuditEvents,

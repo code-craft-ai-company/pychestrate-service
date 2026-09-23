@@ -12,10 +12,14 @@ dev / test; production wiring (S3, Azure Blob, GCS, SMB / NFS
 mirror) is a follow-on that inherits this same protocol.
 
 The protocol is deliberately narrow: the backup service hands the
-backend a finished archive byte-string plus the backup id, and the
-backend returns an opaque ``archive_uri`` describing where it
-landed. Backends are stateless aside from the destination they
-were configured with.
+backend a finished archive (a file, or for the original byte API a
+byte-string) plus the backup id, and the backend returns an opaque
+``archive_uri`` describing where it landed. Backends are stateless
+aside from the destination they were configured with.
+
+:meth:`store_archive_file` and :meth:`local_archive_path` default to
+the byte API / "not local" so a backend that only implements
+:meth:`write_archive` keeps working.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -25,7 +29,7 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from ccai.pychestrate.webservice.extensions.factory_protocol import (
     FactoryProtocolBase,
@@ -105,3 +109,42 @@ class BackupStorageBackendProtocol(FactoryProtocolBase):
         raise NotImplementedError(
             "Subclasses must implement list_archives"
         )
+
+    @classmethod
+    def store_archive_file(
+            cls,
+            *,
+            backup_id: str,
+            source_path: str
+        ) -> BackupArchiveWriteResult:
+        """
+            Persist a finished archive file. The default reads the file
+            and delegates to :meth:`write_archive`; backends that can
+            move or stream a file override it.
+
+            :param backup_id: The backup record UUID.
+            :param source_path: Local archive file (the backend may
+                                consume it).
+
+            :returns: The :class:`BackupArchiveWriteResult`.
+            :raises: BackupBackendUnavailableError
+        """
+        with open(source_path, "rb") as handle:
+            archive_bytes = handle.read()
+        rtnval = cls.write_archive(backup_id=backup_id, archive_bytes=archive_bytes)
+        return rtnval
+
+    @classmethod
+    def local_archive_path(cls, *, archive_uri: str) -> Optional[str]:
+        """
+            Map an archive URI to a readable local file, for
+            verification and restore. Remote backends return ``None``
+            (the operator fetches the archive and restores from the
+            file).
+
+            :param archive_uri: URI returned by a write.
+
+            :returns: Local path or ``None``.
+        """
+        rtnval = None
+        return rtnval

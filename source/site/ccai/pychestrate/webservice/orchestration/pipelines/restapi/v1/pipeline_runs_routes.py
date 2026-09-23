@@ -60,6 +60,7 @@ from ccai.pychestrate.webservice.orchestration.pipelines.execution import (
     orchestrator as execution_orchestrator,
 )
 from ccai.pychestrate.webservice.orchestration.pipelines.execution.errors import (
+    PipelineMatrixUnsupportedError,
     PipelineRunConflictError,
 )
 from ccai.pychestrate.webservice.orchestration.pipelines.execution.orchestrator import (
@@ -423,7 +424,8 @@ def _decode_trigger_body(
 
         The body carries the pipeline document inline (string or
         object) plus ``commit_sha`` / ``ref`` / ``filename`` and an
-        optional ``matrix`` dimensions object.
+        optional ``matrix`` dimensions object (the orchestrator
+        refuses a non-empty one -- matrix execution is unsupported).
 
         :param request: Incoming webworks request.
         :param body: Decoded JSON object body.
@@ -571,6 +573,14 @@ def handle_trigger_pipeline_run(request: Request) -> Response:
                 status=409,
                 detail=str(xcpt),
                 extensions={"reason": "pipeline_run_conflict"},
+            )
+            view = None  # unreachable
+        except PipelineMatrixUnsupportedError as xcpt:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+                extensions={"reason": "matrix_not_supported"},
             )
             view = None  # unreachable
         except PipelineDagCycleError as xcpt:

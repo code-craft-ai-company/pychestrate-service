@@ -4,12 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <!-- Applies the user's stored light / dark choice to <html>
+         before the first paint (a classic blocking script: a module
+         would run only after the page has painted). -->
+    <script src="{{ static_url('javascript/pyc-site-shell/theme-boot.js') }}"></script>
     <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <!-- codecraftai-webworks mj-* component library: design tokens,
          base stylesheet, and the barrel module that registers every
          <mj-*> custom element. Loaded BEFORE the pyc-* bundles so
-         the components are available when the bundles run. -->
-    <link rel="stylesheet" href="/mj/styles/tokens.css">
+         the components are available when the bundles run. The
+         /mj stylesheets carry a content hash (mj_static_url) so
+         browsers cache them like every other versioned asset. -->
+    <link rel="stylesheet" href="{{ mj_static_url('styles/tokens.css') }}">
     <!-- Pychestrate design tokens: defines every --pyc-* custom
          property the shell and bundles consume, with light + dark
          palettes that flip on the same data-theme / OS-preference
@@ -17,7 +23,7 @@
          tokens.css so the cascade between the packs stays
          deterministic. -->
     <link rel="stylesheet" href="{{ static_url('styles/pyc-tokens.css') }}">
-    <link rel="stylesheet" href="/mj/styles/base.css">
+    <link rel="stylesheet" href="{{ mj_static_url('styles/base.css') }}">
     <script type="module" src="{{ static_url('javascript/pyc-mj-lib/index.js') }}"></script>
     <link rel="stylesheet" href="{{ static_url('javascript/pyc-site-shell/pyc-site-shell.css') }}">
     <!-- Shared classes for the server-rendered fragments (/admin,
@@ -41,6 +47,9 @@
         palette-timeout-ms="5000"
         {%- if user_display_name %}
         user-display-name="{{ user_display_name }}"
+        {%- endif %}
+        {%- if user_login_name %}
+        user-login-name="{{ user_login_name }}"
         {%- endif %}
         {%- if csrf_token %}
         csrf-token="{{ csrf_token }}"

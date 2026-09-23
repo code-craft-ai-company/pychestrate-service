@@ -8,8 +8,15 @@
 Layer 8 hosts the public surface — REST API, webhooks (in /
 out), CLI, embeddable views, and the plugin API. M1 lands the
 in-tree :class:`WebhookNotificationChannel` reference under
-``notification_channel``. M2 widens to email + slack +
-pagerduty channels and adds the inbound webhook parser pack.
+``notification_channel``, the inbound webhook parsers
+(``github``, ``generic``) and the release-channel policies.
+
+``register_service_extensions`` (``app_pychestrate_main``) and
+``bootstrap_runtime`` both register these; before audit ORC-04
+nothing did, so inbound webhook creation failed with "no parser".
+Outbound test events are sent by the ``.../test`` route
+(:mod:`webhooks_out.delivery`); event-driven outbound delivery is
+not wired yet.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -67,9 +74,13 @@ def register_phase8_builtin_extensions() -> None:
 
 def bootstrap_phase8_runtime(*, config: Phase8BootstrapConfig) -> None:
     """
-        Layer-8 runtime bootstrap. M1 only registers extensions;
-        M2 wires the outbound dispatcher worker + the inbound
-        parser pack.
+        Layer-8 runtime bootstrap: registers the Layer-8 extensions
+        (idempotent). No background worker is started -- event-
+        driven outbound delivery is not wired yet.
+
+        :param config: Bootstrap configuration (unused today).
+
+        :returns: None.
     """
     register_phase8_builtin_extensions()
     _ = config

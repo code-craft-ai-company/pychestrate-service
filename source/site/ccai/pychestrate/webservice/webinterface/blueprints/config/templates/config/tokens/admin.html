@@ -1,0 +1,147 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}API Tokens - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>API Tokens &amp; Service Accounts</h1>
+    <p>
+        Service accounts are non-human identities for CI and automation: they have
+        no password, get roles like any user (on the
+        <a href="{{ url_for('config.user_list') }}">Users</a> page), and
+        authenticate with API tokens. Every token acts with its account's
+        permissions and never more. Manage your own tokens under
+        <a href="{{ url_for('config.account_api_tokens') }}">Account &rsaquo; API tokens</a>.
+    </p>
+</div>
+
+{% include "config/tokens/_minted.html" %}
+
+<h2>Service accounts</h2>
+
+{% if can_create_service_accounts %}
+<div class="card narrow mb">
+    <h3 class="card-header">Create a service account</h3>
+    <form method="post" action="{{ url_for('config.service_account_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="sa-login">Login name *</label>
+            <input type="text" id="sa-login" name="login_name" class="form-control" required
+                   pattern="[a-z0-9][a-z0-9._\-]{1,62}" placeholder="e.g. ci-nightly">
+            <p class="form-text">2-63 lower-case letters, digits, '.', '_' or '-'.</p>
+        </div>
+        <div class="form-group">
+            <label for="sa-display">Display name</label>
+            <input type="text" id="sa-display" name="display_name" class="form-control"
+                   maxlength="256" placeholder="e.g. Nightly CI">
+        </div>
+        <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Create service account</button>
+    </form>
+</div>
+{% endif %}
+
+<div class="table-scroll mb" tabindex="0"><table class="data-table">
+    <caption class="visually-hidden">Service accounts</caption>
+    <thead>
+        <tr>
+            <th scope="col">Login name</th>
+            <th scope="col">Display name</th>
+            <th scope="col">Status</th>
+            <th scope="col">Active tokens</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for account in service_accounts %}
+        <tr>
+            <td class="mono">{{ account.login_name }}</td>
+            <td>{{ account.display_name }}</td>
+            <td>{{ ui.status_badge(account.status) }}</td>
+            <td>{{ account.active_token_count }}</td>
+            <td>{{ account.created_at | format_datetime }}</td>
+            <td>
+                {% if can_manage_tokens and account.status == 'ACTIVE' %}
+                <details class="pyc-run-details">
+                    <summary class="btn btn-sm btn-secondary">{{ ui.icon("add") }} Issue token</summary>
+                    <form action="{{ url_for('config.service_account_token_create', user_id=account.user_id) }}"
+                          method="post" class="pyc-run-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <label for="sa-token-name-{{ account.user_id }}">Token name</label>
+                        <input type="text" id="sa-token-name-{{ account.user_id }}" name="name"
+                               class="form-control" required maxlength="128" placeholder="e.g. nightly pipeline">
+                        <label for="sa-token-expires-{{ account.user_id }}">Expires after</label>
+                        <select id="sa-token-expires-{{ account.user_id }}" name="expires_in_days" class="form-control">
+                            {% for days in lifetime_choices %}
+                            <option value="{{ days }}" {% if days == default_lifetime_days %}selected{% endif %}>{{ days }} days</option>
+                            {% endfor %}
+                        </select>
+                        <label for="sa-token-scope-{{ account.user_id }}">Access</label>
+                        <select id="sa-token-scope-{{ account.user_id }}" name="scope" class="form-control">
+                            <option value="read-write" selected>Read and write</option>
+                            <option value="read-only">Read only</option>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary">Issue token</button>
+                    </form>
+                </details>
+                {% else %}
+                <span class="muted">&mdash;</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        {{ ui.empty_state("No service accounts yet", hint="Create one for each CI system or agent that calls the API.", colspan=6) }}
+        {% endfor %}
+    </tbody>
+</table></div>
+
+<h2>All tokens</h2>
+
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <caption class="visually-hidden">Every API token</caption>
+    <thead>
+        <tr>
+            <th scope="col">Account</th>
+            <th scope="col">Name</th>
+            <th scope="col">Token</th>
+            <th scope="col">Access</th>
+            <th scope="col">Status</th>
+            <th scope="col">Last used</th>
+            <th scope="col">Expires</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for token in tokens %}
+        <tr>
+            <td>
+                {{ token.login_name }}
+                {% if token.is_service_account %}<span class="badge badge-info">service account</span>{% endif %}
+            </td>
+            <td>{{ token.name }}</td>
+            <td class="mono">{{ token.token_hint }}&hellip;</td>
+            <td>{{ token.scope }}</td>
+            <td>{{ ui.status_badge(token.status) }}</td>
+            <td>{% if token.last_used_at %}{{ token.last_used_at | format_datetime }}{% else %}never{% endif %}</td>
+            <td>{{ token.expires_at | format_datetime }}</td>
+            <td>
+                {% if can_manage_tokens and token.status == 'active' %}
+                <form action="{{ url_for('config.admin_api_token_revoke', token_id=token.token_id) }}"
+                      method="post" data-confirm="Revoke token '{{ token.name }}' of {{ token.login_name }}?">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                </form>
+                {% else %}
+                <span class="muted">&mdash;</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        {{ ui.empty_state("No API tokens have been issued", colspan=8) }}
+        {% endfor %}
+    </tbody>
+</table></div>
+
+<p class="muted mt">Total: {{ tokens | length }} tokens, {{ service_accounts | length }} service accounts</p>
+{% endblock %}

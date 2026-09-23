@@ -17,7 +17,7 @@ One route:
 * ``GET /api/v1/system/health``
   — aggregate subsystem-health summary.
 
-The document reports three subsystem probes drawn from state the
+The document reports four subsystem probes drawn from state the
 service already maintains:
 
 * ``database`` — whether the per-request middleware attached a
@@ -26,16 +26,21 @@ service already maintains:
   results (one probe per registered backend).
 * ``extension-routes`` — the count of extension-contributed REST
   routes the host discovered at startup.
+* ``job-loop`` — whether pods can enroll, receive signed jobs and
+  upload results (see :mod:`jobs.readiness`).
 
 Each subsystem reports a coarse ``status`` of ``ok`` |
 ``degraded`` | ``error``; the top-level ``status`` is the worst
 of the subsystem statuses.
 
 Error responses are RFC 7807 problem documents per the convention
-in :mod:`api.problem_json_webworks`. The endpoint is RBAC-gated
-on ``system:ui.admin.view`` — the same permission key that gates
-the admin sidebar group — since the health summary is an
-admin-surface read view.
+in :mod:`api.problem_json_webworks`. The subsystem details are
+RBAC-gated on ``system:ui.admin.view`` — the same permission key that
+gates the admin sidebar group. Any other caller, including an
+anonymous monitor, gets the overall status only
+(``{"status", "generated_at", "details": "restricted"}``): the route
+is on the anonymous-access allowlist for monitoring (ORG-F17), and
+``/readyz`` / ``/metrics`` carry the machine-oriented probes.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -111,17 +116,15 @@ def _abort_problem(
     raise _ProblemAbort(response)
 
 
-def _require_admin_view(request: Request) -> None:
+def _require_session(request: Request) -> Any:
     """
-        Require the calling principal to hold
-        ``system:ui.admin.view``. The system-health summary is a
-        read-only admin-surface view but still operator-gated.
+        Resolve the request-scoped db session or abort 503.
 
         :param request: Incoming webworks request.
 
-        :returns: None.
-        :raises: :class:`_ProblemAbort` on missing session /
-                 principal / permission.
+        :returns: SQLAlchemy session.
+        :raises: :class:`_ProblemAbort` when the middleware attached
+                 no session.
     """
     db_session = getattr(request, "db_session", None)
     if db_session is None:
@@ -130,14 +133,24 @@ def _require_admin_view(request: Request) -> None:
             status=503,
             detail="Request-scoped db_session not configured",
         )
+    rtnval = db_session
+    return rtnval
 
+
+def _may_view_details(*, request: Request, db_session: Any) -> bool:
+    """
+        Whether the caller may see the subsystem details: a signed-in
+        principal holding ``system:ui.admin.view``. Everyone else gets
+        the overall status only.
+
+        :param request: Incoming webworks request.
+        :param db_session: Request-scoped session.
+
+        :returns: True for the detailed document.
+    """
     principal = getattr(request, "auth_principal", None)
     if principal is None:
-        _abort_problem(
-            request=request,
-            status=401,
-            detail="Authentication required.",
-        )
+        return False
 
     now = datetime.now(timezone.utc)
     decision = rbac_evaluator.check_permission(
@@ -146,18 +159,8 @@ def _require_admin_view(request: Request) -> None:
         permission_key=SYSTEM_HEALTH_PERMISSION_KEY,
         now=now,
     )
-    if decision.allowed is False:
-        _abort_problem(
-            request=request,
-            status=403,
-            detail="Permission denied: {}".format(
-                SYSTEM_HEALTH_PERMISSION_KEY
-            ),
-            extensions={
-                "required_permission": SYSTEM_HEALTH_PERMISSION_KEY
-            },
-        )
-    return
+    rtnval = decision.allowed is True
+    return rtnval
 
 
 def _worst_status(*, statuses: List[str]) -> str:
@@ -295,6 +298,30 @@ def _probe_extension_routes() -> Dict[str, Any]:
     return rtnval
 
 
+def _probe_job_loop() -> Dict[str, Any]:
+    """
+        Probe the job execution loop's prerequisites (envelope signing
+        key, enrollment CA, presign secret, dispatch transport,
+        client-certificate proxies) via
+        :func:`jobs.readiness.describe_job_loop_readiness`.
+
+        :returns: A subsystem-health dict carrying a ``backends`` list.
+    """
+    try:
+        from ccai.pychestrate.webservice.jobs.readiness import (
+            describe_job_loop_readiness,
+        )
+        rtnval = describe_job_loop_readiness()
+    except Exception as xcpt:  # noqa: BLE001 — purposeful probe isolation
+        rtnval = {
+            "name": "job-loop",
+            "label": "Job Execution Loop",
+            "status": STATUS_ERROR,
+            "detail": "Job-loop probe failed: {}".format(type(xcpt).__name__),
+        }
+    return rtnval
+
+
 def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     """
         Build the aggregate system-health document. Exposed at module
@@ -309,6 +336,7 @@ def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     subsystems.append(_probe_database(request=request))
     subsystems.append(_probe_feature_flags())
     subsystems.append(_probe_extension_routes())
+    subsystems.append(_probe_job_loop())
 
     statuses = [subsystem["status"] for subsystem in subsystems]
     overall = _worst_status(statuses=statuses)
@@ -325,16 +353,28 @@ def build_system_health_document(*, request: Request) -> Dict[str, Any]:
 def handle_system_health(request: Request) -> Response:
     """
         ``GET /api/v1/system/health`` — aggregate subsystem-health
-        summary for the admin surface.
+        summary. The full document (subsystems, backends, reasons) for
+        holders of ``system:ui.admin.view``; the overall status word
+        for everyone else, so monitoring works without an admin
+        session.
 
         :param request: Incoming webworks request.
 
         :returns: JSON response (200) carrying the system-health
-                  document, or an RFC 7807 problem response.
+                  document or its coarse form, or an RFC 7807 problem
+                  response (503 without a request session).
     """
     try:
-        _require_admin_view(request)
-        body = build_system_health_document(request=request)
+        db_session = _require_session(request)
+        document = build_system_health_document(request=request)
+        if _may_view_details(request=request, db_session=db_session) is True:
+            body = document
+        else:
+            body = {
+                "status": document["status"],
+                "generated_at": document["generated_at"],
+                "details": "restricted",
+            }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response

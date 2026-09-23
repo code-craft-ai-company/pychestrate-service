@@ -1,0 +1,59 @@
+# pychestrate-service scheduled backup -- systemd oneshot unit
+#
+# Rendered + installed by ``deployment/deploy-alpha-to-host.sh``
+# next to pychestrate.service; started daily by
+# ``pychestrate-backup.timer``.  Placeholders:
+#   @USER@   -- the deploy user (e.g. myron)
+#
+# What it writes (both under the presence directory, mode 0700):
+#
+#   ~/pychestrate/backups/<id>.backup.tar.gz(.sha256)
+#       consistent database snapshot + run artifacts
+#   ~/pychestrate/backup-keys/<id>.keys.tar
+#       KEK, password pepper and the other service keys -- the
+#       database's secrets cannot be decrypted without it
+#
+# Copy both directories off the host (to DIFFERENT places) after
+# each run; a backup that stays on the host dies with its disk.
+# ``--keep 14`` prunes all but the newest 14 archives and their key
+# bundles.
+#
+# Operator commands:
+#   systemctl list-timers pychestrate-backup.timer
+#   sudo systemctl start pychestrate-backup.service   # back up now
+#   tail -n 50 ~/.pychestrate/backup.log
+#
+# Restore (service stopped) is documented in deployment/README.md
+# ("Backup and restore").
+[Unit]
+Description=pychestrate-service scheduled backup
+Documentation=https://github.com/automationmojo/pychestrate-service
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=@USER@
+Group=@USER@
+WorkingDirectory=/home/@USER@/pychestrate-service
+
+# Same runtime environment as pychestrate.service: the admin
+# pass-through of run-staging-gunicorn composes the database URL,
+# presence directory and key paths exactly as the service sees them.
+Environment="PYCHESTRATE_RUNTIME_ENVIRONMENT=staging"
+Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
+Environment="PYTHONUNBUFFERED=1"
+#Environment="PYCHESTRATE_PRESENCE_DIR=/var/lib/pychestrate"
+
+ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn admin backup create --note scheduled --keep 14
+
+# Stay out of the service's way.
+Nice=10
+IOSchedulingClass=idle
+
+StandardOutput=append:/home/@USER@/.pychestrate/backup.log
+StandardError=append:/home/@USER@/.pychestrate/backup.log
+
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/@USER@/pychestrate-service/.cache /home/@USER@/.pychestrate /home/@USER@/pychestrate

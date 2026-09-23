@@ -40,6 +40,7 @@ __version__ = "1.0.0"
 
 
 import json
+import logging
 
 from typing import Any, Callable, Dict, List, Optional
 
@@ -70,10 +71,13 @@ from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import 
     PROJECTS_PATH,
     ProjectsFormError,
     _describe_failure,
+    _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
 
+
+_rpa_ui_logger = logging.getLogger("pychestrate.ui.rpa")
 
 _ROUTE_TABLE = (
     ("projects.rpa_list", "/{project_id}/rpa", ("GET",)),
@@ -125,6 +129,37 @@ def _resolve_candidates(*, db_session: Any, project_id: str, target_pod_id: Opti
     rtnval = resolve_dispatch_candidates(
         db_session=db_session, project_id=project_id, target_pod_id=target_pod_id,
     )
+    return rtnval
+
+
+def _pod_names(*, db_session: Any) -> Dict[str, str]:
+    """
+        Map every defined pod's id to its name, for pickers that must
+        not ask operators to type raw pod UUIDs.
+    """
+    try:
+        from ccai.pychestrate.webservice.pods.models import PodDefinition  # noqa: E402
+        rows = db_session.query(PodDefinition).filter(PodDefinition.deleted_at.is_(None)).all()
+    except Exception:
+        return {}
+    rtnval = {str(row.pod_id): str(row.pod_name) for row in rows}
+    return rtnval
+
+
+def _pod_choices(*, db_session: Any, pod_ids: Optional[List[str]] = None) -> List[Dict[str, str]]:
+    """
+        ``[{"pod_id", "label"}]`` for a pod picker, sorted by label.
+        ``pod_ids`` limits the choices (e.g. to pods able to run a
+        job); ``None`` lists every defined pod.
+    """
+    names = _pod_names(db_session=db_session)
+    ids = list(names.keys()) if pod_ids is None else list(dict.fromkeys(str(p) for p in pod_ids))
+    rtnval = []
+    for pod_id in ids:
+        name = names.get(pod_id, "")
+        label = "{} ({})".format(name, pod_id[:8]) if len(name) > 0 else pod_id
+        rtnval.append({"pod_id": pod_id, "label": label})
+    rtnval.sort(key=lambda choice: choice["label"].lower())
     return rtnval
 
 
@@ -411,6 +446,7 @@ def _render_rpa_spec_create_form(
     context["project"] = project
     context["job_types"] = job_types
     context["form_data"] = form_data
+    context["pod_choices"] = _pod_choices(db_session=auth.db_session)
     response = _render(
         template_name="projects/rpa/spec_create.html", context=context, status_code=status_code,
     )
@@ -535,6 +571,120 @@ def handle_rpa_spec_create(request: Request) -> Response:
             pass
 
 
+NO_ELIGIBLE_POD_MESSAGE: str = (
+    "No pod can run this job yet. A pod needs at least one enrolled client "
+    "registered to it (Fleet > Pods), and it must offer the capabilities this "
+    "specification and its job type require."
+)
+
+REPLAY_MESSAGE: str = (
+    "An identical run of this specification was submitted less than a minute "
+    "ago, so no new job was started."
+)
+
+
+def _run_availability(*, db_session: Any, project_id: int, spec: Any) -> Dict[str, Any]:
+    """
+        Which pods could run the specification right now, for the Run
+        form: ``{"pods": [{"pod_id", "label"}], "blocked_reason": str}``.
+        ``blocked_reason`` is empty when at least one pod is eligible.
+    """
+    try:
+        candidates = _resolve_candidates(
+            db_session=db_session, project_id=str(project_id), target_pod_id=spec.target_pod_id,
+        )
+    except Exception as exc:
+        _rpa_ui_logger.warning(
+            "pychestrate.ui.rpa.candidates_unavailable spec_id=%s error=%s", spec.spec_id, exc,
+        )
+        rtnval = {"pods": [], "blocked_reason": ""}
+        return rtnval
+    pod_ids = [str(getattr(candidate, "pod_id", "")) for candidate in candidates]
+    rtnval = {
+        "pods": _pod_choices(db_session=db_session, pod_ids=[p for p in pod_ids if len(p) > 0]),
+        "blocked_reason": "" if len(candidates) > 0 else NO_ELIGIBLE_POD_MESSAGE,
+    }
+    return rtnval
+
+
+def _render_spec_detail(
+        *,
+        auth: _AuthResolution,
+        rpa: Any,
+        project: Any,
+        project_id: int,
+        project_manager: Any,
+        spec: Any,
+        run_packet_json: Optional[str] = None,
+        run_errors: Optional[List[str]] = None,
+        replay_job: Any = None,
+        selected_pod_id: str = "",
+        status_code: int = 200
+    ) -> HTMLResponse:
+    """
+        Render the specification page. The run handler re-renders it
+        (instead of redirecting) when a run fails or is a replay, so the
+        packet the operator typed is kept and the reason is shown next
+        to the form.
+    """
+    db_session = auth.db_session
+    recent = rpa.list_jobs(
+        db_session=db_session, project_id=str(project_id), spec_id=spec.spec_id, offset=0, limit=10,
+    )
+    can_manage = _can_manage(
+        project_manager=project_manager, project_id=project_id, user_id=auth.user_id,
+    )
+
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="projects.rpa_spec_detail",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["project"] = project
+    context["spec"] = spec
+    context["recent_jobs"] = list(recent.jobs)
+    context["can_manage"] = can_manage
+    # Secret-declared paths are never shown. The display gets the
+    # redacted packet; the run form leaves out every top-level key
+    # that holds a secret, so the stored default applies unless the
+    # operator types a new value (packets merge at the top level).
+    from ccai.pychestrate.webservice.orchestration.rpa import packet as _rpa_packet  # noqa: E402
+
+    secret_fields = list(getattr(spec, "secret_fields", ()) or ())
+    secret_keys = _rpa_packet.secret_top_level_keys(secret_fields=secret_fields)
+    context["default_packet_json"] = _pretty_json(
+        _rpa_packet.redact_packet(packet=dict(spec.default_packet), secret_fields=secret_fields)
+    )
+    if run_packet_json is None:
+        run_packet_json = _pretty_json(
+            {k: v for k, v in dict(spec.default_packet).items() if k not in secret_keys}
+        )
+    context["run_packet_json"] = run_packet_json
+    context["secret_packet_keys"] = secret_keys
+    context["packet_schema_json"] = (
+        _pretty_json(dict(spec.packet_schema)) if spec.packet_schema else ""
+    )
+    availability = (
+        _run_availability(db_session=db_session, project_id=project_id, spec=spec)
+        if can_manage
+        else {"pods": [], "blocked_reason": ""}
+    )
+    context["run_pods"] = availability["pods"]
+    context["run_blocked_reason"] = availability["blocked_reason"]
+    context["run_errors"] = list(run_errors or [])
+    context["run_selected_pod_id"] = selected_pod_id
+    context["replay_job"] = replay_job
+    context["replay_message"] = REPLAY_MESSAGE if replay_job is not None else ""
+
+    response = _render(
+        template_name="projects/rpa/spec_detail.html", context=context, status_code=status_code,
+    )
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
 def handle_rpa_spec_detail(request: Request) -> Response:
     """
         ``GET /projects/{project_id}/rpa/specs/{spec_id}``.
@@ -561,45 +711,10 @@ def handle_rpa_spec_detail(request: Request) -> Response:
             return spec_or_redirect
         spec = spec_or_redirect
 
-        recent = rpa.list_jobs(
-            db_session=db_session, project_id=str(project_id), spec_id=spec.spec_id, offset=0, limit=10,
+        response = _render_spec_detail(
+            auth=auth, rpa=rpa, project=project, project_id=project_id,
+            project_manager=project_manager, spec=spec,
         )
-        can_manage = _can_manage(
-            project_manager=project_manager, project_id=project_id, user_id=auth.user_id,
-        )
-
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="projects.rpa_spec_detail",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
-        )
-        context["project"] = project
-        context["spec"] = spec
-        context["recent_jobs"] = list(recent.jobs)
-        context["can_manage"] = can_manage
-        # Secret-declared paths are never shown. The display gets the
-        # redacted packet; the run form leaves out every top-level key
-        # that holds a secret, so the stored default applies unless the
-        # operator types a new value (packets merge at the top level).
-        from ccai.pychestrate.webservice.orchestration.rpa import packet as _rpa_packet  # noqa: E402
-
-        secret_fields = list(getattr(spec, "secret_fields", ()) or ())
-        secret_keys = _rpa_packet.secret_top_level_keys(secret_fields=secret_fields)
-        context["default_packet_json"] = _pretty_json(
-            _rpa_packet.redact_packet(packet=dict(spec.default_packet), secret_fields=secret_fields)
-        )
-        context["run_packet_json"] = _pretty_json(
-            {k: v for k, v in dict(spec.default_packet).items() if k not in secret_keys}
-        )
-        context["secret_packet_keys"] = secret_keys
-        context["packet_schema_json"] = (
-            _pretty_json(dict(spec.packet_schema)) if spec.packet_schema else ""
-        )
-
-        response = _render(template_name="projects/rpa/spec_detail.html", context=context)
-        _attach_session_to_response(response=response, session=auth.session)
         return response
     finally:
         try:
@@ -608,11 +723,38 @@ def handle_rpa_spec_detail(request: Request) -> Response:
             pass
 
 
+def _packet_error_lines(*, exc: Exception, request_path: str = "") -> List[str]:
+    """
+        One line per problem for the run form's error list: each schema
+        issue with its path, otherwise the error's own message -- or, for
+        an error not written for users, a log reference instead of its
+        text (PRJ-29).
+    """
+    issues = getattr(exc, "issues", None)
+    if issues:
+        rtnval = ["{}: {}".format(path or "/", message) for path, message in issues]
+        return rtnval
+    if _is_user_facing_error(exc=exc) is not True:
+        rtnval = [_describe_failure(exc=exc, prefix="", request_path=request_path)]
+        return rtnval
+    text = str(exc).strip()
+    first_line = text.splitlines()[0] if len(text) > 0 else "The job could not be started."
+    rtnval = [first_line]
+    return rtnval
+
+
 def handle_rpa_run(request: Request) -> Response:
     """
         ``POST /projects/{project_id}/rpa/specs/{spec_id}/run`` --
         trigger a job with the submitted work packet.
         ``developer``-gated.
+
+        On success, redirect to the new job. When the packet is invalid,
+        no pod can run the job, or the dispatcher refuses, re-render the
+        specification page with the typed packet and the reason (422).
+        When an identical run was submitted inside the idempotency window,
+        re-render with a notice, a link to that job and a "Run anyway"
+        button (which posts ``allow_duplicate=1``).
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -665,49 +807,69 @@ def handle_rpa_run(request: Request) -> Response:
         if isinstance(spec_or_redirect, RedirectResponse):
             return spec_or_redirect
         spec = spec_or_redirect
+        project = project_manager.get_project(project_id)
 
-        detail_url = _url_for_module.url_for(
-            "projects.rpa_spec_detail", project_id=project_id, spec_id=spec_id,
-        )
+        raw_packet = str(single_form.get("work_packet", ""))
+        selected_pod_id = str(single_form.get("target_pod", "") or "").strip()
+        allow_duplicate = str(single_form.get("allow_duplicate", "")).strip() in ("1", "true", "on")
+
+        def _rerender(*, errors: List[str], replay_job: Any = None, status_code: int = 422) -> HTMLResponse:
+            rtnval = _render_spec_detail(
+                auth=auth, rpa=rpa, project=project, project_id=project_id,
+                project_manager=project_manager, spec=spec, run_packet_json=raw_packet,
+                run_errors=errors, replay_job=replay_job, selected_pod_id=selected_pod_id,
+                status_code=status_code,
+            )
+            return rtnval
+
         try:
-            work_packet = _parse_json_object(
-                raw=str(single_form.get("work_packet", "")), field_label="Work packet",
+            work_packet = _parse_json_object(raw=raw_packet, field_label="Work packet")
+            # Check the packet before choosing pods, so a bad packet is
+            # reported as such even when no pod is available.
+            rpa.check_trigger_packet(
+                db_session=db_session, project_id=str(project_id), spec_id=spec_id,
+                work_packet=work_packet,
             )
             candidates = _resolve_candidates(
                 db_session=db_session, project_id=str(project_id), target_pod_id=spec.target_pod_id,
             )
+            if len(selected_pod_id) > 0:
+                candidates = [c for c in candidates if str(getattr(c, "pod_id", "")) == selected_pod_id]
             if len(candidates) == 0:
-                raise ProjectsFormError(
-                    "No enrolled pod is available to run this job. Enroll a client on a pod first."
-                )
+                raise ProjectsFormError(NO_ELIGIBLE_POD_MESSAGE)
             project_slug = str(getattr(project_manager, "slug", "") or getattr(spec, "name", ""))
-            aspects = rpa.RpaTriggerAspects(
-                actor_id=auth.user_id,
-                candidates=candidates,
-                project_slug=project_slug,
-                trigger_cause={"kind": "manual", "via": "web"},
-            )
+            aspect_kwargs: Dict[str, Any] = {
+                "actor_id": auth.user_id,
+                "candidates": candidates,
+                "project_slug": project_slug,
+                "trigger_cause": {"kind": "manual", "via": "web"},
+            }
+            if allow_duplicate is True:
+                aspect_kwargs["idempotency_window_seconds"] = 0
+            aspects = rpa.RpaTriggerAspects(**aspect_kwargs)
             job = rpa.trigger_job(
                 db_session=db_session, project_id=str(project_id), spec_id=spec_id,
                 work_packet=work_packet, aspects=aspects,
             )
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=_url_for_module.url_for(
-                    "projects.rpa_detail", project_id=project_id, job_id=job.job_id,
-                ),
-                message="RPA job {} triggered successfully.".format(job.job_id[:8]),
-                category=flash.CATEGORY_SUCCESS,
-            )
-            return response
         except Exception as exc:
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=detail_url,
-                message=_describe_failure(exc=exc, prefix="Error triggering RPA job: ", request_path=str(getattr(request, "path", ""))),
-                category=flash.CATEGORY_ERROR,
-            )
+            response = _rerender(errors=_packet_error_lines(
+                exc=exc, request_path=str(getattr(request, "path", "")),
+            ))
             return response
+
+        if getattr(job, "replayed", False) is True:
+            response = _rerender(errors=[], replay_job=job, status_code=200)
+            return response
+
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for(
+                "projects.rpa_detail", project_id=project_id, job_id=job.job_id,
+            ),
+            message="RPA job {} triggered successfully.".format(job.job_id[:8]),
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
     finally:
         try:
             db_session.close()

@@ -11,7 +11,6 @@ __version__ = "1.0.0"
 
 from sqlalchemy import (
     Column,
-    DateTime,
     ForeignKey,
     Index,
     String,
@@ -21,6 +20,7 @@ from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -38,8 +38,8 @@ class ResourcePool(PychestratePhase1Base, SerializableModel):
     name = Column(String(128), nullable=False, default="")
     description = Column(String(1024), nullable=False, default="")
     capability_tags = Column(JSON, nullable=False, default=list)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -66,7 +66,7 @@ class ResourcePoolMember(PychestratePhase1Base, SerializableModel):
         nullable=False,
     )
     resource_id = Column(UUIDType(binary=False), nullable=False)
-    added_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    added_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(

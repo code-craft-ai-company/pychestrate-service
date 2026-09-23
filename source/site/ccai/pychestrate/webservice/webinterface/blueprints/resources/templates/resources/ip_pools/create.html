@@ -47,7 +47,7 @@
             <input type="text" id="reserved_ips" name="reserved_ips" class="form-control"
                    value="{{ form_data.reserved_ips if form_data else '' }}"
                    placeholder="192.168.1.1, 192.168.1.2">
-            <p class="form-text">Comma-separated list of IPs to exclude from allocation</p>
+            <p class="form-text">Comma-separated list of IPs to exclude from allocation. The gateway and any DNS servers inside the range are always reserved; you do not need to list them.</p>
         </div>
         
         <div class="form-group">

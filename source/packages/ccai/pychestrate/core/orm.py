@@ -43,6 +43,7 @@ from sqlalchemy.orm import declarative_base, relationship, backref
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 
 class SerializableModel:
     """
@@ -1147,7 +1148,7 @@ class ResourcePool(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the pool's purpose")
     is_default = Column('pool_is_default', Boolean, default=False, nullable=False,
                         doc="Flag indicating if this is the default pool for unassigned resources")
-    created_at = Column('pool_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pool_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the pool was created")
     created_by_id = Column('pool_created_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who created this pool")
@@ -1167,7 +1168,7 @@ class Tag(PychestrateModelBase, SerializableModel):
                   doc="Unique name for the tag (alphanumeric, underscores, hyphens only)")
     description = Column('tag_description', VARCHAR(255), nullable=True,
                          doc="Human-readable description of the tag's purpose")
-    created_at = Column('tag_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('tag_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the tag was created")
 
     resources = relationship('Resource', secondary=resource_tags, back_populates='tags', lazy='selectin')
@@ -1202,9 +1203,9 @@ class Resource(PychestrateModelBase, SerializableModel):
                       doc="Number of concurrent allocations allowed for shared resources")
     health_status = Column('res_health_status', VARCHAR(32), default='online', nullable=False,
                            doc="Current health status (online, offline, degraded, maintenance)")
-    created_at = Column('res_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('res_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the resource was created")
-    updated_at = Column('res_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('res_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the resource was last updated")
     created_by_id = Column('res_created_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who created this resource")
@@ -1247,7 +1248,7 @@ class IPPool(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the IP pool")
     reserved_ips = Column('ippool_reserved_ips', JSON, default=[], nullable=False,
                           doc="List of IP addresses excluded from allocation")
-    created_at = Column('ippool_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('ippool_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the IP pool was created")
     created_by_id = Column('ippool_created_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who created this IP pool")
@@ -1279,11 +1280,11 @@ class IPAllocation(PychestrateModelBase, SerializableModel):
                     doc="Identifier of the job using this IP")
     status = Column('ipalloc_status', VARCHAR(16), default='active', nullable=False,
                     doc="Allocation status (active, released, expired)")
-    checkout_time = Column('ipalloc_checkout_time', DateTime(timezone=True), default=utc_now, nullable=False,
+    checkout_time = Column('ipalloc_checkout_time', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                            doc="Timestamp when the IP was allocated")
-    expected_checkin = Column('ipalloc_expected_checkin', DateTime(timezone=True), nullable=True,
+    expected_checkin = Column('ipalloc_expected_checkin', UtcDateTime(timezone=True), nullable=True,
                               doc="Expected time for IP release (for timeout)")
-    actual_checkin = Column('ipalloc_actual_checkin', DateTime(timezone=True), nullable=True,
+    actual_checkin = Column('ipalloc_actual_checkin', UtcDateTime(timezone=True), nullable=True,
                             doc="Actual time when the IP was released")
     reason = Column('ipalloc_reason', VARCHAR(512), nullable=True,
                     doc="Reason for the allocation")
@@ -1316,11 +1317,11 @@ class Allocation(PychestrateModelBase, SerializableModel):
                   doc="Allocation mode (exclusive or shared)")
     status = Column('alloc_status', VARCHAR(16), default='active', nullable=False,
                     doc="Allocation status (active, released, expired, forced)")
-    checkout_time = Column('alloc_checkout_time', DateTime(timezone=True), default=utc_now, nullable=False,
+    checkout_time = Column('alloc_checkout_time', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                            doc="Timestamp when the resource was allocated")
-    expected_checkin = Column('alloc_expected_checkin', DateTime(timezone=True), nullable=True,
+    expected_checkin = Column('alloc_expected_checkin', UtcDateTime(timezone=True), nullable=True,
                               doc="Expected time for resource release (for timeout)")
-    actual_checkin = Column('alloc_actual_checkin', DateTime(timezone=True), nullable=True,
+    actual_checkin = Column('alloc_actual_checkin', UtcDateTime(timezone=True), nullable=True,
                             doc="Actual time when the resource was released")
     duration_minutes = Column('alloc_duration_minutes', Integer, nullable=True,
                               doc="Total allocation duration in minutes")
@@ -1355,9 +1356,9 @@ class Reservation(PychestrateModelBase, SerializableModel):
                      doc="Reference to the user who made the reservation")
     job_id = Column('resv_job_id', VARCHAR(128), nullable=True, index=True,
                     doc="Identifier of the job for this reservation")
-    start_time = Column('resv_start_time', DateTime(timezone=True), nullable=False,
+    start_time = Column('resv_start_time', UtcDateTime(timezone=True), nullable=False,
                         doc="Start time of the reservation window")
-    end_time = Column('resv_end_time', DateTime(timezone=True), nullable=False,
+    end_time = Column('resv_end_time', UtcDateTime(timezone=True), nullable=False,
                       doc="End time of the reservation window")
     mode = Column('resv_mode', VARCHAR(16), default='exclusive', nullable=False,
                   doc="Reservation mode (exclusive or shared)")
@@ -1365,7 +1366,7 @@ class Reservation(PychestrateModelBase, SerializableModel):
                     doc="Reservation status (pending, active, completed, cancelled)")
     reason = Column('resv_reason', VARCHAR(512), nullable=True,
                     doc="Reason for the reservation")
-    created_at = Column('resv_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('resv_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the reservation was created")
     allocation_id = Column('resv_allocation_id', BigInteger, ForeignKey('allocations.alloc_id'), nullable=True,
                            doc="Reference to the allocation when reservation is activated")
@@ -1400,7 +1401,7 @@ class HealthCheckConfig(PychestrateModelBase, SerializableModel):
                                   doc="Current count of consecutive failures")
     consecutive_successes = Column('hcc_consecutive_successes', Integer, default=0, nullable=False,
                                    doc="Current count of consecutive successes")
-    last_check_time = Column('hcc_last_check_time', DateTime(timezone=True), nullable=True,
+    last_check_time = Column('hcc_last_check_time', UtcDateTime(timezone=True), nullable=True,
                              doc="Timestamp of the last health check")
     last_check_result = Column('hcc_last_check_result', Boolean, nullable=True,
                                doc="Result of the last health check (True=healthy)")
@@ -1434,7 +1435,7 @@ class HealthTransitionLog(PychestrateModelBase, SerializableModel):
                           doc="What triggered the change (user, health_check, system)")
     user_id = Column('htl_user_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                      doc="Reference to the user who triggered the change (if applicable)")
-    timestamp = Column('htl_timestamp', DateTime(timezone=True), default=utc_now, nullable=False,
+    timestamp = Column('htl_timestamp', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                        doc="Timestamp when the transition occurred")
 
     resource = relationship('Resource', back_populates='health_transitions', lazy='selectin')
@@ -1460,7 +1461,7 @@ class ResourceMetadataHistory(PychestrateModelBase, SerializableModel):
                                doc="New metadata value")
     changed_by_id = Column('rmh_changed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who made the change")
-    changed_at = Column('rmh_changed_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    changed_at = Column('rmh_changed_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the change was made")
 
     resource = relationship('Resource', back_populates='metadata_history', lazy='selectin')

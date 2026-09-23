@@ -862,6 +862,20 @@
     border-color: var(--pyc-color-on-error-surface, #b3261e);
 }
 
+/* Preview notice on a page whose backend works only in part (audit
+   ORG-F14). Off the .alert classes so the shell's flash extraction
+   leaves it on the page. */
+.pyc-admin-page-fragment .pyc-preview-notice {
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--pyc-color-border, #c9cdd6);
+    border-left: 4px solid var(--pyc-color-on-warning-surface, #5c3a0d);
+    border-radius: 6px;
+    background: var(--pyc-color-warning-surface, #fff1d6);
+    color: var(--pyc-color-on-surface, #1f2430);
+    font-size: 0.9375rem;
+}
+
 /* Hidden-surface notice rendered inside a fragment (project tabs). Kept
    off the .alert classes so the shell's flash extraction leaves the link
    in place. */
@@ -878,4 +892,27 @@
     background: var(--pyc-color-surface-elevated, #f3f5f9);
     color: var(--pyc-color-on-surface, #1f2430);
     font-size: 0.9375rem;
+}
+
+/* In-page notice tied to a form or section (for example the RPA run card's
+   availability and replay notices). Kept off the .alert classes: the shell
+   lifts every div.alert.alert-* into its own notice region as plain text,
+   which would strip the notice's links and buttons and its context. */
+.pyc-admin-page-fragment .pyc-inline-notice {
+    margin: 0 0 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--pyc-color-border, #c9cdd6);
+    border-left: 4px solid var(--pyc-color-on-warning-surface, #7a4b00);
+    border-radius: 6px;
+    background: var(--pyc-color-warning-surface, #fff4e0);
+    color: var(--pyc-color-on-warning-surface, #5c3a00);
+    font-size: 0.9375rem;
+}
+
+.pyc-admin-page-fragment .pyc-inline-notice p {
+    margin: 0 0 0.5rem;
+}
+
+.pyc-admin-page-fragment .pyc-inline-notice p:last-child {
+    margin-bottom: 0;
 }

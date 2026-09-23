@@ -10,13 +10,12 @@
 </div>
 
 <div class="card narrow">
-    <form method="post" id="reservation-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-
-        {#- The filter controls live inside the reservation form: "Apply"
-            submits the whole form with GET (formmethod), so the route
-            re-renders with the narrowed resource list *and* every value
-            the user has typed so far. Nothing is lost. #}
+    {#- The resource-list filter is its own GET form, outside the
+        reservation form: applying it puts only the pool and type in the
+        URL, never the CSRF token or the typed reservation (audit finding
+        RES-32). The reservation form posts back to the filtered URL, so a
+        failed submit keeps the narrowed list. #}
+    <form method="get" id="reservation-resource-filter">
         <fieldset class="pyc-filter-fieldset">
             <legend>Narrow the resource list</legend>
             <div class="actions-row">
@@ -36,9 +35,14 @@
                     <option value="credential" {% if selector_resource_type == 'credential' %}selected{% endif %}>Credential</option>
                     <option value="generic" {% if selector_resource_type == 'generic' %}selected{% endif %}>Generic</option>
                 </select>
-                <button type="submit" class="btn btn-sm btn-secondary" formmethod="get" formnovalidate>Apply filter</button>
+                <button type="submit" class="btn btn-sm btn-secondary">Apply filter</button>
             </div>
+            <p class="form-text">Narrow the list before filling in the reservation: applying the filter starts a fresh form.</p>
         </fieldset>
+    </form>
+
+    <form method="post" id="reservation-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
         {% if resource_total > resources | length %}
         <div class="alert alert-warning">
@@ -59,14 +63,16 @@
         <div class="form-group">
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
+                   aria-describedby="reservation-zone-note"
                    value="{{ form_data.start_time if form_data else '' }}">
-            <p class="form-text">Times are interpreted in the server's time zone.</p>
         </div>
 
         <div class="form-group">
             <label for="end_time">End Time *</label>
             <input type="datetime-local" id="end_time" name="end_time" class="form-control" required
+                   aria-describedby="reservation-zone-note"
                    value="{{ form_data.end_time if form_data else '' }}">
+            {% include "resources/reservations/_viewer_zone.html" %}
         </div>
 
         <div class="form-group">

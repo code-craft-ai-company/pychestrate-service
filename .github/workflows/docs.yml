@@ -1,0 +1,209 @@
+name: docs
+
+# Documentation checks. The first job needs no private dependencies:
+# it builds the user manual with warnings as errors, checks every
+# relative link and anchor in the documentation, and validates the
+# OpenAPI contract. The second installs the service and runs the
+# operator runbook's smoke-test scripts -- extracted from
+# userguide/13-00-alpha-deployment.rst, so the commands operators copy
+# are the commands CI runs -- against a freshly migrated Postgres.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  docs:
+    name: user manual (sphinx -W), link check, OpenAPI validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the documentation tools into .venv
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --quiet "sphinx==5.3.0" "docutils==0.18.1" "openapi-spec-validator==0.7.2"
+
+      - name: Build the user manual with warnings as errors
+        run: |
+          .venv/bin/sphinx-build -W --keep-going -b html userguide .output/docs/userguide-html
+
+      - name: Check documentation links
+        run: |
+          .venv/bin/python docs/tools/check_doc_links.py
+
+      - name: Validate the OpenAPI contract
+        run: |
+          make openapi-validate
+
+      - name: Upload the built user manual
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: userguide-html
+          path: .output/docs/userguide-html
+          retention-days: 7
+
+  runbook-smoke:
+    name: operator runbook smoke tests (production mode, Postgres 14)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: pychestrate
+          POSTGRES_PASSWORD: pychestrate_ci
+          POSTGRES_DB: pychestrate
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pychestrate"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install poetry
+        run: pipx install poetry
+
+      - name: Configure poetry to use in-tree venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Give the runner access to the private codecraftai-* packages
+        env:
+          CODECRAFTAI_REPO_TOKEN: ${{ secrets.CODECRAFTAI_REPO_TOKEN }}
+          CODECRAFTAI_INDEX_USERNAME: ${{ secrets.CODECRAFTAI_INDEX_USERNAME }}
+          CODECRAFTAI_INDEX_TOKEN: ${{ secrets.CODECRAFTAI_INDEX_TOKEN }}
+        run: |
+          # pyproject.toml takes the packages either from the Code Craft AI
+          # package index or from git repositories; see the runbook's
+          # "CI prerequisite: dependency access".
+          if grep -q 'name = "codecraftai"' pyproject.toml; then
+            if [ -z "${CODECRAFTAI_INDEX_USERNAME}" ] || [ -z "${CODECRAFTAI_INDEX_TOKEN}" ]; then
+              echo "::error::pyproject.toml uses the codecraftai package index;" \
+                   "set the CODECRAFTAI_INDEX_USERNAME and CODECRAFTAI_INDEX_TOKEN secrets."
+              exit 1
+            fi
+            echo "POETRY_HTTP_BASIC_CODECRAFTAI_USERNAME=${CODECRAFTAI_INDEX_USERNAME}" >> "$GITHUB_ENV"
+            echo "POETRY_HTTP_BASIC_CODECRAFTAI_PASSWORD=${CODECRAFTAI_INDEX_TOKEN}" >> "$GITHUB_ENV"
+          else
+            if [ -z "${CODECRAFTAI_REPO_TOKEN}" ]; then
+              echo "::error::CODECRAFTAI_REPO_TOKEN secret is not set" \
+                   "(see the lint-and-build job in test.yml for setup instructions)."
+              exit 1
+            fi
+            git config --global \
+              url."https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/".insteadOf \
+              "https://github.com/automationmojo/"
+          fi
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Provision the secret material (runbook commands, as the runner user)
+        run: |
+          mkdir -m 0700 "$RUNNER_TEMP/keys" "$RUNNER_TEMP/presence"
+          cd "$RUNNER_TEMP/keys"
+          umask 077
+          openssl rand -out active.kek 32
+          openssl rand -out password-pepper 32
+          openssl rand -out ui-cookie-secret 32
+          openssl rand -base64 32 > envelope-signing-key
+          openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+              -subj "/CN=pychestrate-enrollment-ca" \
+              -keyout enrollment-ca.key -out enrollment-ca.crt 2>/dev/null
+          cat enrollment-ca.crt enrollment-ca.key > enrollment-ca.pem
+          rm enrollment-ca.key
+
+      - name: Write the environment file
+        run: |
+          umask 077
+          cat > "$RUNNER_TEMP/pychestrate.env" <<EOF
+          PYCHESTRATE_RUNTIME_ENVIRONMENT=production
+          PYCHESTRATE_DATABASE_URL=postgresql+psycopg2://pychestrate:pychestrate_ci@127.0.0.1:5432/pychestrate
+          PYCHESTRATE_AUTO_CREATE_SCHEMA=false
+          PYCHESTRATE_KEK_SOURCE=file
+          PYCHESTRATE_KEK_ID=kek-ci
+          PYCHESTRATE_KEK_FILE_PATH=$RUNNER_TEMP/keys/active.kek
+          PYCHESTRATE_PASSWORD_PEPPER_SOURCE=file
+          PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH=$RUNNER_TEMP/keys/password-pepper
+          PYCHESTRATE_UI_COOKIE_SECRET_SOURCE=file
+          PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH=$RUNNER_TEMP/keys/ui-cookie-secret
+          PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE=file
+          PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID=envelope-ci
+          PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH=$RUNNER_TEMP/keys/envelope-signing-key
+          PYCHESTRATE_ENROLLMENT_CA_SOURCE=file
+          PYCHESTRATE_ENROLLMENT_CA_ID=enrollment-ca-ci
+          PYCHESTRATE_ENROLLMENT_CA_FILE_PATH=$RUNNER_TEMP/keys/enrollment-ca.pem
+          PYCHESTRATE_RESULT_PRESIGN_SECRET=$(openssl rand -hex 32)
+          PYCHESTRATE_PRESENCE_DIR=$RUNNER_TEMP/presence
+          PYCHESTRATE_BIND_HOST=127.0.0.1
+          PYCHESTRATE_BIND_PORT=8888
+          PYCHESTRATE_WORKERS=2
+          PYCHESTRATE_THREADS=2
+          PYTHONUNBUFFERED=1
+          EOF
+
+      - name: Create the database schema (make db-upgrade)
+        run: |
+          set -a; . "$RUNNER_TEMP/pychestrate.env"; set +a
+          make db-upgrade
+          make db-current
+
+      - name: Start the service (make serve-prod-gunicorn)
+        run: |
+          set -a; . "$RUNNER_TEMP/pychestrate.env"; set +a
+          export PATH="$PWD/.venv/bin:$PATH"
+          export PYTHONPATH="$PWD/source/packages:$PWD/source/site"
+          nohup make serve-prod-gunicorn > "$RUNNER_TEMP/server.log" 2>&1 &
+          for attempt in $(seq 1 120); do
+            if curl -s -o /dev/null http://127.0.0.1:8888/setup/unlock; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the service did not start"
+          cat "$RUNNER_TEMP/server.log"
+          exit 1
+
+      - name: Run the runbook's smoke test before setup
+        run: |
+          python3 docs/tools/extract_code_block.py userguide/13-00-alpha-deployment.rst smoke-before-setup > "$RUNNER_TEMP/smoke-before-setup.sh"
+          bash "$RUNNER_TEMP/smoke-before-setup.sh"
+
+      - name: Create the first administrator headlessly (runbook script)
+        env:
+          TOKEN_FILE: ${{ runner.temp }}/presence/initial-admin-token
+          ADMIN_USER: ci-admin
+          ADMIN_EMAIL: ci-admin@example.com
+          ADMIN_PASSWORD: runbook-ci-password-1
+        run: |
+          python3 docs/tools/extract_code_block.py userguide/13-00-alpha-deployment.rst setup-wizard-headless > "$RUNNER_TEMP/setup-wizard-headless.sh"
+          bash "$RUNNER_TEMP/setup-wizard-headless.sh"
+
+      - name: Run the runbook's smoke test after setup
+        env:
+          ADMIN_USER: ci-admin
+          ADMIN_PASSWORD: runbook-ci-password-1
+        run: |
+          python3 docs/tools/extract_code_block.py userguide/13-00-alpha-deployment.rst smoke-after-setup > "$RUNNER_TEMP/smoke-after-setup.sh"
+          bash "$RUNNER_TEMP/smoke-after-setup.sh"
+
+      - name: Show the service log
+        if: always()
+        run: cat "$RUNNER_TEMP/server.log" || true

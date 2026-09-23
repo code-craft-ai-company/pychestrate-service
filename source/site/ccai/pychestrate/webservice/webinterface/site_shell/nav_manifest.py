@@ -83,6 +83,11 @@ class NavGroup:
     surfaces: Tuple[str, ...] = ()
 
 
+#: Suffix of the label of an entry whose page works only in part
+#: (see the PREVIEW LABELS note above :data:`NAV_ENTRIES`).
+PREVIEW_LABEL_SUFFIX: str = " (preview)"
+
+
 # Group identifiers -- mirror the ``groupId`` values the feature
 # bundles historically registered so existing CSS / tests keep
 # matching.
@@ -150,6 +155,18 @@ NAV_GROUPS: List[NavGroup] = [
 
 # The authoritative entry list. Each entry mirrors the descriptor
 # the corresponding feature bundle historically registered.
+#
+# PREVIEW LABELS (audit ORG-F14): an entry whose page works only in
+# part carries :data:`PREVIEW_LABEL_SUFFIX` in its label, and the page
+# itself says what is missing. Drop the suffix when the missing part
+# ships:
+#
+# * Alert Rules -- rules are evaluated and show their state, but no
+#   notification is sent to their targets.
+# * Webhooks -- inbound deliveries are verified and recorded but start
+#   nothing; outbound subscriptions receive test events only.
+# * Pod Resource Pools -- pools can be managed, but job dispatch does
+#   not allocate from them.
 #
 # INVARIANT: every key named in ``required_permissions`` (here and
 # in NAV_GROUPS) MUST be declared in the in-tree permission
@@ -267,7 +284,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="insights.metric-alerts",
-        label="Alert Rules",
+        label="Alert Rules" + PREVIEW_LABEL_SUFFIX,
         route="/metric-alerts",
         group_id=GROUP_INSIGHTS,
         required_permissions=["system:metric_alerts.read"],
@@ -289,7 +306,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="fleet.resources",
-        label="Resources",
+        label="Pod Resource Pools" + PREVIEW_LABEL_SUFFIX,
         route="/resource-pools",
         group_id=GROUP_FLEET,
         # The /resource-pools surface enforces
@@ -329,18 +346,10 @@ NAV_ENTRIES: List[NavEntry] = [
     # ---- Operations ----------------------------------------------
     NavEntry(
         entry_id="operations.webhooks",
-        label="Webhooks",
+        label="Webhooks" + PREVIEW_LABEL_SUFFIX,
         route="/webhooks",
         group_id=GROUP_OPERATIONS,
         required_permissions=["system:webhooks.read"],
-    ),
-    NavEntry(
-        entry_id="operations.release-channels",
-        surfaces=('build',),
-        label="Release Channels",
-        route="/release-channels",
-        group_id=GROUP_OPERATIONS,
-        required_permissions=["system:release_channels.read"],
     ),
     # ---- System --------------------------------------------------
     NavEntry(
@@ -378,6 +387,18 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/system-health",
         group_id=GROUP_ADMIN,
         required_permissions=["system:ui.admin.view"],
+    ),
+    # Pychestrate's own update channels (canary / beta / stable
+    # releases of the service and agent). Formerly "Release Channels"
+    # under Operations and tagged as a Build Automation surface, which
+    # read as a project's release channels (audit ORC-31). The route
+    # keeps its name so existing links still work.
+    NavEntry(
+        entry_id="admin.pychestrate-updates",
+        label="Pychestrate Updates",
+        route="/release-channels",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:release_channels.read"],
     ),
     NavEntry(
         entry_id="admin.users",
@@ -461,6 +482,16 @@ NAV_ENTRIES: List[NavEntry] = [
         # webinterface/blueprints/config/routes_enrollment.py), so
         # the nav gate matches the page's actual enforcement.
         required_permissions=["system:resources.manage"],
+    ),
+    # Machine identity: service accounts and every API token
+    # (webinterface/blueprints/config/routes_tokens.py). A user's own
+    # tokens live at /account/api-tokens.
+    NavEntry(
+        entry_id="admin.api-tokens",
+        label="API Tokens",
+        route="/admin/api-tokens",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:auth.read"],
     ),
 ]
 
@@ -642,6 +673,7 @@ def build_navigation_manifest(
 
 
 __all__ = [
+    "PREVIEW_LABEL_SUFFIX",
     "NavEntry",
     "validate_manifest_surfaces",
     "governed_entry_counts",

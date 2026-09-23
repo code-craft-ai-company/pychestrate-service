@@ -18,6 +18,11 @@
     <p>Distribution channels for releases</p>
 </div>
 
+<div class="pyc-preview-notice" role="note" data-role="preview-notice">
+    Preview: project release channels cannot be created or changed yet
+    &mdash; no page or API manages them &mdash; so this list stays empty.
+</div>
+
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
         <tr>
@@ -49,7 +54,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No release channels yet. Channels are configured via the API.", colspan=4) }}
+            {{ ui.empty_state("No release channels.", colspan=4) }}
         </tr>
         {% endfor %}
     </tbody>

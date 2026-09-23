@@ -81,8 +81,45 @@ def _read_shell_session(*, request: Any) -> Dict[str, Any]:
         csrf_token = session.get("csrf_token", "")
         if isinstance(csrf_token, str) and len(csrf_token) > 0:
             rtnval["csrf_token"] = csrf_token
+        display_name = _lookup_display_name(user_id=session.get("user_id", None))
+        if display_name is not None:
+            rtnval["display_name"] = display_name
     except Exception:
         return {}
+    return rtnval
+
+
+def _lookup_display_name(*, user_id: Any) -> Optional[str]:
+    """
+        The signed-in user's display name from the identity store, or
+        ``None`` when there is no user id, no such user, no display name,
+        or the store cannot be read (the header then shows the login
+        name).
+
+        :param user_id: The session's user id.
+
+        :returns: The display name or ``None``.
+    """
+    if user_id is None or len(str(user_id)) == 0:
+        return None
+    try:
+        import uuid  # noqa: E402
+
+        from ccai.pychestrate.webservice.identity.users.models import IdentityUser  # noqa: E402
+        from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS  # noqa: E402
+
+        factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+        if factory is None:
+            return None
+        db_session = factory()
+        try:
+            row = db_session.get(IdentityUser, uuid.UUID(str(user_id)))
+            display_name = str(getattr(row, "display_name", "") or "").strip() if row is not None else ""
+        finally:
+            db_session.close()
+    except Exception:
+        return None
+    rtnval = display_name if len(display_name) > 0 else None
     return rtnval
 
 
@@ -159,7 +196,8 @@ def render_shell_document(
         "bundle_stylesheets": _bundle_stylesheets_for(bundle_names=bundle_names),
         "content_html": content_html if content_html is not None else "",
         "csrf_token": session_view.get("csrf_token", ""),
-        "user_display_name": session_view.get("username", ""),
+        "user_display_name": session_view.get("display_name", session_view.get("username", "")),
+        "user_login_name": session_view.get("username", ""),
     }
     rtnval = render_template_response(
         template_name=SHELL_TEMPLATE_NAME,

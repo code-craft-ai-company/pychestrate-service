@@ -13,7 +13,6 @@ import enum
 
 from sqlalchemy import (
     Column,
-    DateTime,
     Enum,
     Index,
     String,
@@ -23,6 +22,7 @@ from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -76,7 +76,7 @@ class ResourceTimelineEvent(PychestratePhase1Base, SerializableModel):
     )
     actor_id = Column(UUIDType(binary=False), nullable=True)
     pod_event_group_id = Column(UUIDType(binary=False), nullable=True)
-    at_ts = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    at_ts = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     payload = Column(JSON, nullable=False, default=dict)
     annotations = Column(JSON, nullable=False, default=dict)
 

@@ -1,6 +1,7 @@
 const WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 const WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 const TEST_EVENT_HISTORY_REFRESH_MS = 1500;
+const WEBHOOKS_PREVIEW_NOTE = "Preview: inbound deliveries are verified and recorded, but they do not start builds or pipelines yet. Outbound subscriptions receive test events only; entity events are not delivered to them yet.";
 const TOAST_STACK_LIMIT = 4;
 function build_integrations_url(project_id) {
   const params = new URLSearchParams();
@@ -63,7 +64,7 @@ function delivery_outcome_tone(outcome) {
     return rtnval2;
   }
   const lowered = outcome.toLowerCase();
-  if (lowered === "delivered" || lowered === "success") {
+  if (lowered === "succeeded" || lowered === "delivered" || lowered === "success") {
     const rtnval2 = "ok";
     return rtnval2;
   }
@@ -71,7 +72,7 @@ function delivery_outcome_tone(outcome) {
     const rtnval2 = "warn";
     return rtnval2;
   }
-  if (lowered === "failed" || lowered === "error") {
+  if (lowered === "failed" || lowered === "rejected_disabled" || lowered === "error") {
     const rtnval2 = "error";
     return rtnval2;
   }
@@ -98,6 +99,39 @@ function create_message_for_status(status, subject) {
   const rtnval = "Failed to create " + subject.toLowerCase() + " (HTTP " + String(status) + ").";
   return rtnval;
 }
+/**
+ * Build a failure message from an RFC 7807 problem body: the generic
+ * status sentence plus the server's first detail line, and the
+ * registered providers when the server listed them. Falls back to the
+ * generic sentence when the body carries no detail.
+ *
+ * @param status The HTTP status code.
+ * @param problem The parsed problem document, or null.
+ * @param subject The thing being created (e.g. "Integration").
+ *
+ * @returns The message to show.
+ */
+function problem_message_for_status(status, problem, subject) {
+  const generic = create_message_for_status(status, subject);
+  if (problem === null || typeof problem !== "object") {
+    const rtnval2 = generic;
+    return rtnval2;
+  }
+  const detail = problem.detail;
+  if (typeof detail !== "string" || detail.trim().length === 0) {
+    const rtnval2 = generic;
+    return rtnval2;
+  }
+  const first_line = detail.split(/\r?\n/)[0].trim();
+  let message = "Failed to create " + subject.toLowerCase() + ": " + first_line;
+  const providers = problem.registered_providers;
+  if (Array.isArray(providers) === true) {
+    const listed = providers.length > 0 ? providers.join(", ") : "none";
+    message = message + " Available providers: " + listed + ".";
+  }
+  const rtnval = message;
+  return rtnval;
+}
 function toggle_message_for_status(status, subject, enabled) {
   const verb = enabled === true ? "enable" : "disable";
   if (status === 200) {
@@ -119,7 +153,24 @@ function toggle_message_for_status(status, subject, enabled) {
   const rtnval = "Failed to " + verb + " the " + subject.toLowerCase() + " (HTTP " + String(status) + ").";
   return rtnval;
 }
-function test_message_for_status(status) {
+function test_message_for_status(status, outcome, delivery) {
+  if (status === 200 && outcome === "succeeded") {
+    const code = delivery !== null && delivery !== void 0 && typeof delivery.response_status === "number" ? " (HTTP " + String(delivery.response_status) + ")" : "";
+    const rtnval2 = "Test event delivered" + code + ".";
+    return rtnval2;
+  }
+  if (status === 200 && outcome === "failed") {
+    let reason = "";
+    if (delivery !== null && delivery !== void 0) {
+      if (typeof delivery.response_excerpt === "string" && delivery.response_excerpt.length > 0 && typeof delivery.response_status !== "number") {
+        reason = delivery.response_excerpt;
+      } else if (typeof delivery.response_status === "number") {
+        reason = "the receiver answered HTTP " + String(delivery.response_status);
+      }
+    }
+    const rtnval2 = reason.length > 0 ? "Test event was not delivered: " + reason + "." : "Test event was not delivered.";
+    return rtnval2;
+  }
   if (status === 202 || status === 200) {
     const rtnval2 = "Test event queued — the delivery history below refreshes in a moment.";
     return rtnval2;
@@ -246,6 +297,12 @@ class PycWebhooks extends HTMLElement {
     heading.classList.add("pyc-ops__heading");
     heading.textContent = "Webhooks";
     root.appendChild(heading);
+    const preview = document.createElement("p");
+    preview.classList.add("pyc-ops__notice", "pyc-ops__notice--preview");
+    preview.setAttribute("data-role", "preview-notice");
+    preview.setAttribute("role", "note");
+    preview.textContent = WEBHOOKS_PREVIEW_NOTE;
+    root.appendChild(preview);
     const controls = document.createElement("div");
     controls.classList.add("pyc-ops__controls");
     const project_label = document.createElement("label");
@@ -610,6 +667,27 @@ class PycWebhooks extends HTMLElement {
         render: (integration) => integration.receiver_path ?? "—"
       },
       {
+        key: "secret_configured",
+        label: "Shared secret",
+        width: "14rem",
+        sortable: false,
+        // The API never returns the secret -- only whether the
+        // vault holds it and under which reference.
+        render: (integration) => {
+          const configured = integration.secret_configured === true;
+          const chip = self._badge(
+            configured === true ? "in vault" : "missing",
+            configured === true ? "ok" : "error"
+          );
+          chip.setAttribute("data-role", "integration-secret");
+          chip.setAttribute(
+            "title",
+            configured === true ? "Stored in the secrets vault as " + String(integration.secret_ref) : "The integration's vault secret no longer exists, so its deliveries cannot be verified."
+          );
+          return chip;
+        }
+      },
+      {
         key: "enabled",
         label: "State",
         width: "8rem",
@@ -791,7 +869,7 @@ class PycWebhooks extends HTMLElement {
       form,
       "Provider",
       "inbound-provider",
-      "github"
+      "generic"
     );
     const hook_input = this._build_field(
       form,
@@ -799,12 +877,31 @@ class PycWebhooks extends HTMLElement {
       "inbound-hook",
       "push"
     );
-    const secret_input = this._build_field(
+    // The shared secret is write-only: it goes to the secrets vault
+    // and is never shown again. An existing vault secret can be named
+    // instead.
+    const secret_label = document.createElement("label");
+    secret_label.classList.add("pyc-ops__field");
+    secret_label.textContent = "Shared secret";
+    const secret_input = document.createElement("mj-password-field");
+    secret_input.classList.add("pyc-ops__input");
+    secret_input.setAttribute("type", "password");
+    secret_input.setAttribute("autocomplete", "new-password");
+    secret_input.setAttribute("data-role", "inbound-secret");
+    secret_input.setAttribute("placeholder", "the HMAC key the sender signs with");
+    secret_label.appendChild(secret_input);
+    form.appendChild(secret_label);
+    const secret_ref_input = this._build_field(
       form,
-      "Secret ref",
-      "inbound-secret",
-      "secret://hooks/github"
+      "Or an existing vault secret",
+      "inbound-secret-ref",
+      "vault secret name (instead of a shared secret)"
     );
+    const secret_note = document.createElement("p");
+    secret_note.classList.add("pyc-ops__note");
+    secret_note.setAttribute("data-role", "inbound-secret-note");
+    secret_note.textContent = "The shared secret is stored in the secrets vault for this project and is never displayed again. Storing it needs permission to write the project's secrets.";
+    form.appendChild(secret_note);
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
     submit.setAttribute("type", "submit");
@@ -821,6 +918,7 @@ class PycWebhooks extends HTMLElement {
         provider_input,
         hook_input,
         secret_input,
+        secret_ref_input,
         submit,
         status
       );
@@ -828,12 +926,21 @@ class PycWebhooks extends HTMLElement {
     region.replaceChildren(form);
     return;
   }
-  async _submit_inbound(provider_input, hook_input, secret_input, submit, status) {
+  async _submit_inbound(provider_input, hook_input, secret_input, secret_ref_input, submit, status) {
     const provider = provider_input.value.trim();
     const hook_name = hook_input.value.trim();
-    const secret_ref = secret_input.value.trim();
-    if (provider.length === 0 || hook_name.length === 0 || secret_ref.length === 0) {
-      status.textContent = "Provider, hook name and secret ref are required.";
+    const secret = typeof secret_input.value === "string" ? secret_input.value : "";
+    const secret_ref = secret_ref_input.value.trim();
+    if (provider.length === 0 || hook_name.length === 0) {
+      status.textContent = "Provider and hook name are required.";
+      return;
+    }
+    if (secret.length === 0 && secret_ref.length === 0) {
+      status.textContent = "Enter the shared secret, or name an existing vault secret.";
+      return;
+    }
+    if (secret.length > 0 && secret_ref.length > 0) {
+      status.textContent = "Enter either a shared secret or a vault secret name, not both.";
       return;
     }
     submit.toggleAttribute("disabled", true);
@@ -841,12 +948,18 @@ class PycWebhooks extends HTMLElement {
     const outcome = await this._do_create_integration(
       provider,
       hook_name,
+      secret,
       secret_ref
     );
+    // Never keep the key in the page after it has been sent.
+    secret_input.value = "";
     submit.toggleAttribute("disabled", false);
-    status.textContent = "";
+    status.textContent = outcome.ok === true ? "" : outcome.message;
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
     if (outcome.ok === true) {
+      provider_input.value = "";
+      hook_input.value = "";
+      secret_ref_input.value = "";
       await this.refreshInbound();
     }
     return;
@@ -857,19 +970,23 @@ class PycWebhooks extends HTMLElement {
    *
    * @param provider The webhook provider name.
    * @param hook_name The hook name.
-   * @param secret_ref The signing-secret reference.
+   * @param secret The shared secret (stored in the vault; write-only),
+   *               or an empty string when ``secret_ref`` is used.
+   * @param secret_ref Name of an existing vault secret, or an empty
+   *                   string when ``secret`` is supplied.
    *
    * @returns The create outcome.
    */
-  async createIntegration(provider, hook_name, secret_ref) {
+  async createIntegration(provider, hook_name, secret, secret_ref = "") {
     const rtnval = await this._do_create_integration(
       provider,
       hook_name,
+      secret,
       secret_ref
     );
     return rtnval;
   }
-  async _do_create_integration(provider, hook_name, secret_ref) {
+  async _do_create_integration(provider, hook_name, secret, secret_ref) {
     if (this._projectId.length === 0) {
       const rtnval2 = {
         ok: false,
@@ -881,10 +998,16 @@ class PycWebhooks extends HTMLElement {
     const payload = {
       project_id: this._projectId,
       provider,
-      hook_name,
-      secret_ref
+      hook_name
     };
+    if (typeof secret === "string" && secret.length > 0) {
+      payload.secret = secret;
+    }
+    if (typeof secret_ref === "string" && secret_ref.length > 0) {
+      payload.secret_ref = secret_ref;
+    }
     let status = 0;
+    let problem = null;
     try {
       const response = await fetch(
         build_integrations_collection_url(),
@@ -899,6 +1022,13 @@ class PycWebhooks extends HTMLElement {
         }
       );
       status = response.status;
+      if (response.ok === false) {
+        try {
+          problem = await response.json();
+        } catch (parse_reason) {
+          problem = null;
+        }
+      }
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.integration_create_failed",
@@ -912,10 +1042,14 @@ class PycWebhooks extends HTMLElement {
       return rtnval2;
     }
     const ok = status === 201 || status === 200;
+    let message = create_message_for_status(status, "Integration");
+    if (ok === false) {
+      message = problem_message_for_status(status, problem, "Integration");
+    }
     const rtnval = {
       ok,
       status,
-      message: create_message_for_status(status, "Integration")
+      message
     };
     return rtnval;
   }
@@ -1201,7 +1335,7 @@ class PycWebhooks extends HTMLElement {
     const outcome = await this._do_test(subscription.subscription_id);
     button.toggleAttribute("disabled", false);
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
-    if (outcome.ok === true) {
+    if (outcome.recorded === true) {
       this._schedule_history_refresh(subscription);
     }
     return;
@@ -1245,6 +1379,8 @@ class PycWebhooks extends HTMLElement {
   }
   async _do_test(subscription_id) {
     let status = 0;
+    let delivery_outcome = "";
+    let delivery = null;
     try {
       const response = await fetch(
         build_subscription_test_url(subscription_id),
@@ -1259,6 +1395,21 @@ class PycWebhooks extends HTMLElement {
         }
       );
       status = response.status;
+      if (response.ok === true) {
+        try {
+          const body = await response.json();
+          if (body !== null && typeof body === "object") {
+            if (typeof body.status === "string") {
+              delivery_outcome = body.status;
+            }
+            if (body.delivery !== null && typeof body.delivery === "object") {
+              delivery = body.delivery;
+            }
+          }
+        } catch (parse_reason) {
+          delivery = null;
+        }
+      }
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.test_event_failed",
@@ -1266,16 +1417,21 @@ class PycWebhooks extends HTMLElement {
       );
       const rtnval2 = {
         ok: false,
+        recorded: false,
         status: 0,
+        outcome: "",
         message: "Failed to reach the webhooks service."
       };
       return rtnval2;
     }
-    const ok = status === 202 || status === 200;
+    const recorded = status === 202 || status === 200;
+    const ok = status === 202 || (status === 200 && delivery_outcome !== "failed");
     const rtnval = {
       ok,
+      recorded,
       status,
-      message: test_message_for_status(status)
+      outcome: delivery_outcome,
+      message: test_message_for_status(status, delivery_outcome, delivery)
     };
     return rtnval;
   }
@@ -1363,6 +1519,20 @@ class PycWebhooks extends HTMLElement {
         label: "HTTP",
         width: "8rem",
         render: (delivery) => delivery.response_status === null || delivery.response_status === void 0 ? "—" : String(delivery.response_status)
+      },
+      {
+        key: "response_excerpt",
+        label: "Detail",
+        width: "20rem",
+        sortable: false,
+        render: (delivery) => {
+          const detail = document.createElement("span");
+          detail.setAttribute("data-role", "delivery-detail");
+          const text = typeof delivery.response_excerpt === "string" && delivery.response_excerpt.length > 0 ? delivery.response_excerpt : "—";
+          detail.textContent = text;
+          detail.title = text;
+          return detail;
+        }
       },
       {
         key: "attempted_at",
@@ -1696,6 +1866,7 @@ class PycWebhooks extends HTMLElement {
 export {
   PycWebhooks,
   TEST_EVENT_HISTORY_REFRESH_MS,
+  WEBHOOKS_PREVIEW_NOTE,
   TOAST_STACK_LIMIT,
   build_in_deliveries_url,
   build_integration_resource_url,
@@ -1709,6 +1880,7 @@ export {
   delivery_outcome_tone,
   format_webhook_timestamp,
   parse_topic_filters,
+  problem_message_for_status,
   test_message_for_status,
   toggle_message_for_status
 };

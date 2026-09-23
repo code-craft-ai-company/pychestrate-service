@@ -1,0 +1,65 @@
+{#-
+    The time zone a reservation form's times are typed in, shown beside
+    the start / end inputs (audit findings RES-02, RES-17). Include it
+    inside the <form>, after the datetime-local inputs; the inputs point
+    at the note with aria-describedby="reservation-zone-note".
+
+    The server renders the pre-filled times in UTC and leaves the hidden
+    ``tz`` field empty. The script below asks the browser for its IANA
+    zone, moves any pre-filled times into that zone, and puts the zone in
+    ``tz`` so the handler reads the typed times in it. Without script the
+    field stays empty and the form is filled in, and read as, UTC. A form
+    shown again after a failed submit already names its zone in ``tz``,
+    so the script leaves it alone.
+-#}
+<input type="hidden" name="tz" value="{{ viewer_timezone }}" data-pyc-viewer-zone>
+<p class="form-text" id="reservation-zone-note">
+    Times are in <strong data-pyc-zone-label>{{ viewer_timezone or 'UTC' }}</strong><span data-pyc-zone-hint>{% if viewer_timezone and viewer_timezone != 'UTC' %}, your browser's time zone; reservation pages list times in UTC{% endif %}</span>.
+</p>
+<script nonce="{{ csp_nonce() }}">
+(function () {
+    var marker = document.currentScript;
+    var form = marker !== null ? marker.closest("form") : null;
+    if (form === null) {
+        return;
+    }
+    var zone_field = form.querySelector("input[data-pyc-viewer-zone]");
+    if (zone_field === null || zone_field.value !== "") {
+        return;
+    }
+    var zone = "";
+    try {
+        zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    } catch (error) {
+        zone = "";
+    }
+    if (zone === "" || zone === "UTC" || zone === "Etc/UTC") {
+        return;
+    }
+    var pad = function (number) {
+        return (number < 10 ? "0" : "") + number;
+    };
+    var inputs = form.querySelectorAll('input[type="datetime-local"]');
+    for (var index = 0; index < inputs.length; index++) {
+        var input = inputs[index];
+        if (input.value.length === 0) {
+            continue;
+        }
+        var instant = new Date(input.value + "Z");
+        if (isNaN(instant.getTime())) {
+            continue;
+        }
+        input.value = instant.getFullYear() + "-" + pad(instant.getMonth() + 1) + "-" + pad(instant.getDate())
+            + "T" + pad(instant.getHours()) + ":" + pad(instant.getMinutes());
+    }
+    zone_field.value = zone;
+    var label = form.querySelector("[data-pyc-zone-label]");
+    if (label !== null) {
+        label.textContent = zone;
+    }
+    var hint = form.querySelector("[data-pyc-zone-hint]");
+    if (hint !== null) {
+        hint.textContent = ", your browser's time zone; reservation pages list times in UTC";
+    }
+})();
+</script>

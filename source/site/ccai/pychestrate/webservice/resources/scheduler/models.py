@@ -13,7 +13,6 @@ import enum
 
 from sqlalchemy import (
     Column,
-    DateTime,
     Enum,
     Float,
     Index,
@@ -24,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -66,11 +66,11 @@ class SchedulerEntry(PychestratePhase1Base, SerializableModel):
     priority = Column(Integer, nullable=False, default=50)
     fair_share_key = Column(String(128), nullable=True)
     fair_share_weight = Column(Float, nullable=False, default=1.0)
-    deadline_at = Column(DateTime(timezone=True), nullable=True)
-    enqueued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    promoted_at = Column(DateTime(timezone=True), nullable=True)
-    dispatched_at = Column(DateTime(timezone=True), nullable=True)
-    cancelled_at = Column(DateTime(timezone=True), nullable=True)
+    deadline_at = Column(UtcDateTime(timezone=True), nullable=True)
+    enqueued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    promoted_at = Column(UtcDateTime(timezone=True), nullable=True)
+    dispatched_at = Column(UtcDateTime(timezone=True), nullable=True)
+    cancelled_at = Column(UtcDateTime(timezone=True), nullable=True)
     state = Column(
         Enum(SchedulerEntryState, name=SCHEDULER_ENTRY_STATE_ENUM),
         nullable=False,

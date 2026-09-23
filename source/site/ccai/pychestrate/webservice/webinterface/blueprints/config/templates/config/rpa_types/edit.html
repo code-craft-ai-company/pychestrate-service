@@ -1,0 +1,62 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}Edit {{ job_type.display_name }} - RPA Job Types - Pychestrate Configuration{% endblock %}
+
+{% block content %}
+<nav aria-label="Breadcrumb">
+    <ol class="breadcrumb">
+        <li><a href="{{ url_for('config.rpa_type_list') }}">RPA Job Types</a></li>
+        <li><a href="{{ url_for('config.rpa_type_detail', type_id=job_type.type_id) }}">{{ job_type.type_id }}</a></li>
+        <li aria-current="page">Edit</li>
+    </ol>
+</nav>
+
+<div class="page-header">
+    <h1>Edit {{ job_type.display_name }} <span class="muted mono small">{{ job_type.type_id }}</span></h1>
+    <p>The type ID and execution mode are fixed once registered; publish a new version to change what runs.</p>
+</div>
+
+<div class="card narrow">
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="form-group">
+            <label for="display_name">Display Name *</label>
+            <input type="text" id="display_name" name="display_name" class="form-control" required maxlength="256"
+                   value="{{ form_data.display_name if form_data else '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="capability_requirements">Required Pod Capabilities</label>
+            <input type="text" id="capability_requirements" name="capability_requirements" class="form-control"
+                   value="{{ form_data.capability_requirements if form_data else '' }}" placeholder="browser, gpu" aria-describedby="capability-help">
+            <div id="capability-help" class="form-text">Comma-separated tags an eligible pod must advertise.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="secret_fields">Secret Packet Fields</label>
+            <input type="text" id="secret_fields" name="secret_fields" class="form-control mono"
+                   value="{{ form_data.secret_fields if form_data else '' }}" placeholder="auth.token, /accounts/*/password" aria-describedby="secret-fields-help">
+            <div id="secret-fields-help" class="form-text">Packet paths redacted in storage and on every page; the real values travel only in the signed envelope.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="packet_schema">Packet Schema (JSON Schema, optional)</label>
+            <textarea id="packet_schema" name="packet_schema" class="form-control mono" rows="10" spellcheck="false"
+                      aria-describedby="packet-schema-help">{{ form_data.packet_schema if form_data else '' }}</textarea>
+            <div id="packet-schema-help" class="form-text">Leave empty to accept any packet. Runs already started keep the schema they were checked against.</div>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else '' }}</textarea>
+        </div>
+
+        <div class="actions-row mt-lg">
+            <button type="submit" class="btn btn-primary">{{ ui.icon("save") }} Save changes</button>
+            <a href="{{ url_for('config.rpa_type_detail', type_id=job_type.type_id) }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -12,7 +12,9 @@ pyc-test-metrics,
 pyc-timeseries-explorer,
 pyc-dashboards-list,
 pyc-dashboard-detail,
-pyc-slos {
+pyc-dashboard-editor,
+pyc-slos,
+pyc-alert-rules {
     --pyc-metrics-fg: var(--pyc-color-on-surface, hsl(210, 22%, 16%));
     --pyc-metrics-fg-muted:
         var(--pyc-color-on-surface-muted, hsl(213, 8%, 47%));
@@ -104,6 +106,12 @@ pyc-slos {
 .pyc-metrics__notice--error {
     background: var(--pyc-metrics-error-surface);
     color: var(--pyc-metrics-error-fg);
+}
+
+/* a page that works only in part says what is missing (ORG-F14) */
+.pyc-metrics__notice--preview {
+    background: var(--pyc-metrics-warn-surface);
+    color: var(--pyc-metrics-warn-fg);
 }
 
 /* roll-up stat cards */

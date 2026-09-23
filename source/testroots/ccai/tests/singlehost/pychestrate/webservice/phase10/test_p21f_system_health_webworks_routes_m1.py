@@ -19,8 +19,8 @@ Tests cover:
 * The success path produces the documented ``{status,
   generated_at, subsystems}`` shape with one subsystem per probe.
 * The top-level status is the worst of the subsystem statuses.
-* The RBAC gate denies a caller without ``system:ui.admin.view``
-  with an RFC 7807 403 problem document.
+* A caller without ``system:ui.admin.view`` gets the overall status
+  only (ORG-F17: monitoring without an admin session).
 * Bootstrap source-smoke: register_system_health_routes is wired
   in ``register_service_extensions``.
 """
@@ -193,7 +193,7 @@ def test_handle_system_health_returns_aggregate_document():
     **Feature: 9-admin-ui PR p21f (system-health route)**
     **Property: Returns 200 with a ``{status, generated_at,
     subsystems}`` document carrying one subsystem per probe
-    (database, feature-flags, extension-routes).**
+    (database, feature-flags, extension-routes, job-loop).**
     """
     _activate_permission_patch(allowed=True)
     try:
@@ -206,12 +206,13 @@ def test_handle_system_health_returns_aggregate_document():
     body = _decode_body(response)
     testbase.assert_equal("status" in body, True)
     testbase.assert_equal("generated_at" in body, True)
-    testbase.assert_equal(len(body["subsystems"]), 3)
+    testbase.assert_equal(len(body["subsystems"]), 4)
 
     names = [subsystem["name"] for subsystem in body["subsystems"]]
     testbase.assert_equal("database" in names, True)
     testbase.assert_equal("feature-flags" in names, True)
     testbase.assert_equal("extension-routes" in names, True)
+    testbase.assert_equal("job-loop" in names, True)
     return
 
 
@@ -265,12 +266,12 @@ def test_worst_status_reduces_to_highest_severity():
 # ---------------------------------------------------------------------------
 
 
-def test_handle_system_health_denies_caller_without_admin_view():
+def test_handle_system_health_gives_a_caller_without_admin_view_the_status_only():
     """
-    **Feature: 9-admin-ui PR p21f (system-health route)**
-    **Property: A caller lacking ``system:ui.admin.view`` gets an
-    RFC 7807 403 problem document rather than the health
-    summary.**
+    **Feature: 9-admin-ui PR p21f (system-health route), ORG-F17**
+    **Property: A caller lacking ``system:ui.admin.view`` gets 200 with
+    the overall status only -- no subsystem details (monitoring needs
+    no admin session).**
     """
     _activate_permission_patch(allowed=False)
     try:
@@ -279,7 +280,11 @@ def test_handle_system_health_denies_caller_without_admin_view():
     finally:
         _deactivate_permission_patch()
 
-    testbase.assert_equal(response.status_code, 403)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, sorted(body.keys())),
+        (200, ["details", "generated_at", "status"]),
+    )
     return
 
 

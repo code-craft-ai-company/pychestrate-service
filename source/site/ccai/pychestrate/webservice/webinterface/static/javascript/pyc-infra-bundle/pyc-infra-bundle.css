@@ -9,6 +9,7 @@
  */
 
 pyc-environments,
+pyc-environment-detail,
 pyc-provisioning-list,
 pyc-provisioning-detail,
 pyc-guards {
@@ -463,4 +464,91 @@ pyc-guards {
     margin: 0.25rem 0 0;
     font-size: var(--pyc-font-size-small, 0.8125rem);
     color: var(--pyc-infra-fg-muted);
+}
+
+.pyc-infra__control-slot {
+    display: block;
+    min-width: 14rem;
+}
+
+/* ---- environment detail (audit ORC-39) ---- */
+
+.pyc-infra__back-link {
+    color: var(--pyc-infra-accent-on-surface);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    text-decoration: none;
+}
+
+.pyc-infra__back-link:hover {
+    text-decoration: underline;
+}
+
+.pyc-infra__detail-body,
+.pyc-infra__section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pyc-infra__detail-body {
+    gap: 1.5rem;
+}
+
+.pyc-infra__section-heading {
+    margin: 0;
+    font-size: var(--pyc-font-size-body, 1rem);
+    font-weight: 600;
+}
+
+.pyc-infra__detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+}
+
+.pyc-infra__detail-field dt {
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    color: var(--pyc-infra-fg-muted);
+}
+
+.pyc-infra__detail-field dd {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    word-break: break-all;
+}
+
+.pyc-infra__attrs {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    border-radius: 0.375rem;
+    background-color: var(--pyc-infra-neutral-surface);
+    font-family: var(--pyc-font-family-mono, monospace);
+    font-size: var(--pyc-font-size-small, 0.875rem);
+}
+
+.pyc-infra__notice {
+    margin: 0;
+    padding: 0.75rem 1rem;
+    border-radius: 0.375rem;
+    background-color: var(--pyc-infra-neutral-surface);
+    color: var(--pyc-infra-fg);
+}
+
+/* a feature that works only in part says what is missing */
+.pyc-infra__notice--preview {
+    background-color: var(--pyc-infra-warn-surface);
+    color: var(--pyc-infra-warn-fg);
+}
+
+.pyc-infra__drift-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+}
+
+.pyc-infra__section > mj-button {
+    align-self: flex-start;
 }

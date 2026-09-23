@@ -1928,6 +1928,10 @@ function build_client_revoke_url(client_id) {
   const rtnval = build_client_detail_url(client_id) + "/revoke";
   return rtnval;
 }
+function build_client_capabilities_url(client_id) {
+  const rtnval = build_client_detail_url(client_id) + "/capabilities";
+  return rtnval;
+}
 function short_id2(client_id) {
   if (typeof client_id !== "string" || client_id.length === 0) {
     const rtnval2 = "";
@@ -2008,6 +2012,59 @@ function capability_tags(attributes) {
     }
     if (typeof value === "number" || typeof value === "boolean") {
       rtnval.push(key + ":" + String(value));
+    }
+  }
+  return rtnval;
+}
+function advertised_capability_tags(capabilities) {
+  const rtnval = [];
+  if (Array.isArray(capabilities) === false) {
+    return rtnval;
+  }
+  const add_tag = (tag) => {
+    if (tag.length > 0 && rtnval.includes(tag) === false) {
+      rtnval.push(tag);
+    }
+  };
+  for (const capability of capabilities) {
+    if (capability === null || typeof capability !== "object") {
+      continue;
+    }
+    const kind = capability.kind;
+    if (typeof kind !== "string" || kind.length === 0) {
+      continue;
+    }
+    add_tag(kind);
+    const value = capability.value;
+    if (kind !== "rpa" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const job_types = Array.isArray(value.job_types) === true ? value.job_types : [];
+    for (const job_type of job_types) {
+      const name = String(job_type);
+      if (name.length > 0) {
+        add_tag("rpa:" + name);
+      }
+    }
+    const tags = Array.isArray(value.tags) === true ? value.tags : [];
+    for (const tag of tags) {
+      add_tag(String(tag));
+    }
+  }
+  return rtnval;
+}
+function latest_capability_update(capabilities) {
+  let rtnval = "";
+  if (Array.isArray(capabilities) === false) {
+    return rtnval;
+  }
+  for (const capability of capabilities) {
+    if (capability === null || typeof capability !== "object") {
+      continue;
+    }
+    const updated_at = capability.updated_at;
+    if (typeof updated_at === "string" && updated_at > rtnval) {
+      rtnval = updated_at;
     }
   }
   return rtnval;
@@ -2861,6 +2918,7 @@ function client_detail_message_for_status(status) {
 var PycClientDetail = class extends HTMLElement {
   _client_id;
   _client;
+  _capabilities;
   _client_status;
   _pod_link;
   _project_names;
@@ -2875,6 +2933,7 @@ var PycClientDetail = class extends HTMLElement {
     super();
     this._client_id = "";
     this._client = null;
+    this._capabilities = [];
     this._client_status = 0;
     this._pod_link = null;
     this._project_names = null;
@@ -3043,6 +3102,7 @@ var PycClientDetail = class extends HTMLElement {
       return;
     }
     this._client = envelope.body;
+    this._capabilities = await this._fetch_capabilities();
     if (this._project_names === null) {
       const projects_outcome = await load_projects();
       if (projects_outcome.ok === true) {
@@ -3086,6 +3146,37 @@ var PycClientDetail = class extends HTMLElement {
       announce_session_expired();
     }
     const rtnval = { ok, status, body };
+    return rtnval;
+  }
+  /**
+   * Fetch the capabilities the pod advertised
+   * (``GET /api/v1/clients/{id}/capabilities``). They live apart from
+   * the operator-set attributes on the client record. A failed fetch
+   * yields an empty list rather than blocking the client view.
+   */
+  async _fetch_capabilities() {
+    let rtnval = [];
+    try {
+      const response = await fetch(
+        build_client_capabilities_url(this._client_id),
+        {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        }
+      );
+      if (response.ok === true) {
+        const body = await response.json();
+        if (Array.isArray(body) === true) {
+          rtnval = body;
+        }
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.clients.capabilities_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
     return rtnval;
   }
   /**
@@ -3416,6 +3507,12 @@ var PycClientDetail = class extends HTMLElement {
     section.appendChild(note);
     return section;
   }
+  /**
+   * Build the "Capabilities & attributes" section: the capabilities
+   * the pod advertised -- shown as the tags dispatch matches a job
+   * type's required capabilities against -- and the attributes
+   * operators set on the client.
+   */
   _build_capabilities(client) {
     const section = document.createElement("section");
     section.classList.add("pyc-client-detail__capabilities");
@@ -3426,8 +3523,9 @@ var PycClientDetail = class extends HTMLElement {
     heading.classList.add("pyc-client-detail__section-heading");
     heading.textContent = "Capabilities & attributes";
     section.appendChild(heading);
-    const tags = capability_tags(client.attributes);
-    if (tags.length === 0) {
+    const advertised = advertised_capability_tags(this._capabilities);
+    const attributes = capability_tags(client.attributes);
+    if (advertised.length === 0 && attributes.length === 0) {
       const empty = document.createElement("p");
       empty.classList.add("pyc-client-detail__status");
       empty.setAttribute("data-role", "capabilities-empty");
@@ -3435,6 +3533,30 @@ var PycClientDetail = class extends HTMLElement {
       section.appendChild(empty);
       return section;
     }
+    if (advertised.length > 0) {
+      let caption = "Advertised by the pod";
+      const updated_at = latest_capability_update(this._capabilities);
+      if (updated_at.length > 0) {
+        caption = caption + " (last update " + format_timestamp2(updated_at) + ")";
+      }
+      section.appendChild(
+        this._build_tag_group("advertised-capabilities", caption, advertised)
+      );
+    }
+    if (attributes.length > 0) {
+      section.appendChild(
+        this._build_tag_group("attribute-tags", "Attributes set by operators", attributes)
+      );
+    }
+    return section;
+  }
+  _build_tag_group(role, caption, tags) {
+    const group = document.createElement("div");
+    group.setAttribute("data-role", role);
+    const label = document.createElement("p");
+    label.classList.add("pyc-client-detail__note");
+    label.textContent = caption;
+    group.appendChild(label);
     const tag_list = document.createElement("div");
     tag_list.classList.add("pyc-client-detail__tag-list");
     for (const tag of tags) {
@@ -3443,8 +3565,8 @@ var PycClientDetail = class extends HTMLElement {
       chip.textContent = tag;
       tag_list.appendChild(chip);
     }
-    section.appendChild(tag_list);
-    return section;
+    group.appendChild(tag_list);
+    return group;
   }
   _append_field(grid, label, value, title) {
     const field = document.createElement("div");
@@ -3663,7 +3785,9 @@ export {
   PycPodsList,
   TERMINAL_POD_STATES,
   TRANSIENT_POD_STATES,
+  advertised_capability_tags,
   announce_session_expired,
+  build_client_capabilities_url,
   build_client_detail_url,
   build_client_revoke_url,
   build_clients_query_url,
@@ -3692,6 +3816,7 @@ export {
   is_transient_pod_state,
   is_valid_client_id,
   is_valid_pod_id,
+  latest_capability_update,
   liveness_tone,
   load_projects,
   member_count,

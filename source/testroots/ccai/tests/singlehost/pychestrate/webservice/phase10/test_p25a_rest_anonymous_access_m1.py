@@ -520,9 +520,18 @@ def _production_route_probe() -> List[Dict[str, Any]]:
     kek_path = os.path.join(workdir, "kek.bin")
     with open(kek_path, "wb") as kek_file:
         kek_file.write(b"\x77" * 32)
+    # The KEK loader refuses a key file its group or other users can read.
+    os.chmod(kek_path, 0o600)
+
+    # A throwaway presence directory: without one the subprocess falls
+    # back to ~/pychestrate and overwrites the developer's own
+    # initial-admin token file on every run.
+    presence_dir = os.path.join(workdir, "presence")
+    os.makedirs(presence_dir, mode=0o700)
 
     env = os.environ.copy()
     env["PYCHESTRATE_DATABASE_URL"] = "sqlite:///" + db_path
+    env["PYCHESTRATE_PRESENCE_DIR"] = presence_dir
     env["PYCHESTRATE_RUNTIME_ENVIRONMENT"] = "testing"
     env["PYCHESTRATE_AUTO_CREATE_SCHEMA"] = "false"
     env["PYCHESTRATE_KEK_SOURCE"] = "file"

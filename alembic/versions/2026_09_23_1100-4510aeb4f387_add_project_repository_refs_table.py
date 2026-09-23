@@ -8,8 +8,8 @@ fires the project's repository watches for them (PRJ-10).
 Purely additive so ``alembic upgrade head`` is non-destructive.
 
 Revision ID: 4510aeb4f387
-Revises: a3b4c5d6e7f8
-Create Date: 2026-09-23 01:00:00+00:00
+Revises: a6ad11324568
+Create Date: 2026-09-23 11:00:00+00:00
 
 """
 from typing import Sequence, Union
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "4510aeb4f387"
-down_revision: Union[str, Sequence[str], None] = "a3b4c5d6e7f8"
+down_revision: Union[str, Sequence[str], None] = "a6ad11324568"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

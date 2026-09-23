@@ -82,7 +82,10 @@ function _severity_for(flash_element) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/header.js
 var LOGOUT_PATH = "/logout";
+var ACCOUNT_PANEL_ID = "pyc-site-shell-account-panel";
 var NAV_TOGGLE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>';
+var SEARCH_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>';
+var CHEVRON_DOWN_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>';
 function build_header(options) {
   const app_bar = document.createElement("mj-app-bar");
   app_bar.setAttribute("slot", "app-bar");
@@ -91,7 +94,8 @@ function build_header(options) {
   if (typeof options.on_nav_toggle === "function") {
     const nav_toggle = build_nav_toggle(
       options.on_nav_toggle,
-      options.nav_open_initial === true
+      options.nav_open_initial === true,
+      options.nav_controls_id
     );
     app_bar.appendChild(nav_toggle);
   }
@@ -112,35 +116,64 @@ function build_header(options) {
     );
     app_bar.appendChild(hint);
   }
+  const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
+  app_bar.appendChild(build_account_menu(options, display_name));
+  return app_bar;
+}
+function build_account_menu(options, display_name) {
   const actions = document.createElement("div");
   actions.setAttribute("slot", "actions");
   actions.classList.add("pyc-site-shell__user-menu");
-  const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
+  const account_button = document.createElement("button");
+  account_button.type = "button";
+  account_button.classList.add("pyc-site-shell__account-button");
+  account_button.setAttribute("aria-expanded", "false");
+  account_button.setAttribute("aria-controls", ACCOUNT_PANEL_ID);
+  const account_prefix = document.createElement("span");
+  account_prefix.classList.add("pyc-site-shell__visually-hidden");
+  account_prefix.textContent = "Account: ";
+  const account_name = document.createElement("span");
+  account_name.classList.add("pyc-site-shell__account-button-name");
+  account_name.textContent = display_name;
+  const account_chevron = document.createElement("span");
+  account_chevron.classList.add("pyc-site-shell__account-button-chevron");
+  account_chevron.setAttribute("aria-hidden", "true");
+  account_chevron.innerHTML = CHEVRON_DOWN_ICON_SVG;
+  account_button.appendChild(account_prefix);
+  account_button.appendChild(account_name);
+  account_button.appendChild(account_chevron);
+  actions.appendChild(account_button);
+  const panel = document.createElement("div");
+  panel.id = ACCOUNT_PANEL_ID;
+  panel.classList.add("pyc-site-shell__account-panel");
+  const login_name = typeof options.user_login_name === "string" ? options.user_login_name : "";
   const name_label = document.createElement("span");
   name_label.classList.add("pyc-site-shell__user-menu-name");
-  name_label.textContent = display_name;
-  actions.appendChild(name_label);
+  name_label.textContent = login_name.length > 0 && login_name !== display_name ? "Signed in as " + display_name + " (" + login_name + ")" : "Signed in as " + display_name;
+  panel.appendChild(name_label);
   if (typeof options.on_theme_toggle === "function") {
     const theme_button = document.createElement("mj-button");
     theme_button.setAttribute("type", "button");
     theme_button.setAttribute("variant", "tertiary");
     theme_button.setAttribute("size", "sm");
     theme_button.classList.add("pyc-site-shell__theme-toggle");
-    const is_dark = options.current_theme === "dark";
-    theme_button.setAttribute("aria-pressed", is_dark ? "true" : "false");
-    theme_button.setAttribute("aria-label", is_dark ? "Switch to light theme" : "Switch to dark theme");
-    theme_button.textContent = "Theme";
     theme_button.addEventListener("click", (event) => {
       event.preventDefault();
       options.on_theme_toggle();
     });
-    actions.appendChild(theme_button);
+    update_theme_toggle(theme_button, options.current_theme);
+    panel.appendChild(theme_button);
   }
   const preferences_link = document.createElement("a");
   preferences_link.href = "/account/preferences";
   preferences_link.classList.add("pyc-site-shell__preferences-link");
   preferences_link.textContent = "Preferences";
-  actions.appendChild(preferences_link);
+  panel.appendChild(preferences_link);
+  const tokens_link = document.createElement("a");
+  tokens_link.href = "/account/api-tokens";
+  tokens_link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__tokens-link");
+  tokens_link.textContent = "API tokens";
+  panel.appendChild(tokens_link);
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
@@ -166,11 +199,60 @@ function build_header(options) {
     document.body.appendChild(form);
     form.submit();
   });
-  actions.appendChild(logout_button);
-  app_bar.appendChild(actions);
-  return app_bar;
+  panel.appendChild(logout_button);
+  actions.appendChild(panel);
+  wire_account_disclosure(actions, account_button, panel);
+  return actions;
 }
-function build_nav_toggle(on_nav_toggle, nav_open_initial) {
+function wire_account_disclosure(container, button, panel) {
+  const set_open = (open) => {
+    button.setAttribute("aria-expanded", open === true ? "true" : "false");
+    if (open === true) {
+      panel.setAttribute("data-open", "");
+    } else {
+      panel.removeAttribute("data-open");
+    }
+  };
+  const is_open = () => panel.hasAttribute("data-open");
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    set_open(is_open() === false);
+  });
+  container.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || is_open() === false) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    set_open(false);
+    button.focus();
+  });
+  container.addEventListener("focusout", (event) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && container.contains(next) === true) {
+      return;
+    }
+    set_open(false);
+  });
+  document.addEventListener("click", (event) => {
+    if (is_open() === false) {
+      return;
+    }
+    if (event.composedPath().includes(container) === true) {
+      return;
+    }
+    set_open(false);
+  });
+  return;
+}
+function update_theme_toggle(theme_button, current_theme) {
+  const is_dark = current_theme === "dark";
+  theme_button.textContent = is_dark === true ? "Theme: Dark" : "Theme: Light";
+  theme_button.setAttribute("title", is_dark === true ? "Switch to the light theme" : "Switch to the dark theme");
+  theme_button.setAttribute("data-theme-state", is_dark === true ? "dark" : "light");
+  return;
+}
+function build_nav_toggle(on_nav_toggle, nav_open_initial, nav_controls_id) {
   const nav_toggle = document.createElement("button");
   nav_toggle.type = "button";
   nav_toggle.setAttribute("slot", "brand");
@@ -181,6 +263,9 @@ function build_nav_toggle(on_nav_toggle, nav_open_initial) {
     "aria-expanded",
     nav_open_initial === true ? "true" : "false"
   );
+  if (typeof nav_controls_id === "string" && nav_controls_id.length > 0) {
+    nav_toggle.setAttribute("aria-controls", nav_controls_id);
+  }
   nav_toggle.innerHTML = NAV_TOGGLE_ICON_SVG;
   nav_toggle.addEventListener("click", (event) => {
     event.preventDefault();
@@ -199,7 +284,16 @@ function build_palette_hint(shortcut_label, on_activate) {
     "Open the command palette to search navigation (" + resolved_label + ")"
   );
   hint.setAttribute("aria-label", "Open the command palette");
-  hint.textContent = resolved_label;
+  hint.setAttribute("aria-keyshortcuts", resolved_label === "\u2318K" ? "Meta+K" : "Control+K");
+  const icon = document.createElement("span");
+  icon.classList.add("pyc-site-shell__palette-hint-icon");
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = SEARCH_ICON_SVG;
+  const shortcut = document.createElement("span");
+  shortcut.classList.add("pyc-site-shell__palette-hint-shortcut");
+  shortcut.textContent = resolved_label;
+  hint.appendChild(icon);
+  hint.appendChild(shortcut);
   hint.addEventListener("click", (event) => {
     event.preventDefault();
     on_activate();
@@ -2504,11 +2598,14 @@ var SidebarRenderer = class {
    * containment guard an Escape aimed at a modal or the command
    * palette would also collapse the accordion and yank focus into
    * the sidebar. No outside-click handler: the accordion is meant
-   * to stay open until the user picks a different major.
+   * to stay open until the user picks a different major. An Escape
+   * something else already handled (defaultPrevented -- e.g. the
+   * overlay drawer closing itself) is left alone, so one keystroke
+   * does one thing.
    */
   _attach_keydown() {
     const on_document_keydown = (event) => {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || event.defaultPrevented === true) {
         return;
       }
       if (this._open_button === null) {
@@ -2857,7 +2954,9 @@ var ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 var ATTR_BRAND_LABEL = "brand-label";
 var NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
 var NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
-var NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+var SIDEBAR_ELEMENT_ID = "pyc-site-shell-sidebar";
+var SIDEBAR_NAV_LABEL = "Primary";
+var DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 var PycSiteShell = class extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -2883,6 +2982,8 @@ var PycSiteShell = class extends HTMLElement {
   _nav_manifest_failed;
   _nav_provider_registered;
   _layout;
+  _color_scheme_query;
+  _color_scheme_listener;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -2904,6 +3005,8 @@ var PycSiteShell = class extends HTMLElement {
     this._nav_manifest_failed = false;
     this._nav_provider_registered = false;
     this._layout = null;
+    this._color_scheme_query = null;
+    this._color_scheme_listener = null;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
@@ -2943,7 +3046,8 @@ var PycSiteShell = class extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
-    _apply_theme_preference(_read_theme_preference());
+    _apply_theme_preference(_read_stored_theme());
+    this._wire_color_scheme_listener();
     this._install_skip_link();
     install_confirm_delegate(document);
     install_reveal_toggle(document);
@@ -2981,6 +3085,14 @@ var PycSiteShell = class extends HTMLElement {
         this._global_session_401
       );
       this._global_session_401 = null;
+    }
+    if (this._color_scheme_query !== null && this._color_scheme_listener !== null) {
+      this._color_scheme_query.removeEventListener(
+        "change",
+        this._color_scheme_listener
+      );
+      this._color_scheme_query = null;
+      this._color_scheme_listener = null;
     }
     return;
   }
@@ -3025,24 +3137,37 @@ var PycSiteShell = class extends HTMLElement {
     this.replaceChildren();
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
-    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
     const nav_collapsed_preference = _read_nav_collapsed_preference();
-    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    const nav_open_initial = nav_collapsed_preference === false;
     if (nav_open_initial === true) {
       layout.setAttribute("nav-open", "");
     }
+    layout.addEventListener("mj-shell-nav-toggle", (event) => {
+      if (event.target !== layout) {
+        return;
+      }
+      const toggle_button = this.querySelector(".pyc-site-shell__nav-toggle");
+      if (toggle_button !== null) {
+        toggle_button.setAttribute(
+          "aria-expanded",
+          layout.hasAttribute("nav-open") === true ? "true" : "false"
+        );
+      }
+    });
     this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
       user_display_name: this._read_optional_attribute("user-display-name"),
+      user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       on_theme_toggle: () => {
         this._toggle_theme();
       },
-      current_theme: _read_theme_preference(),
+      current_theme: _read_effective_theme(),
       nav_open_initial,
+      nav_controls_id: SIDEBAR_ELEMENT_ID,
       on_nav_toggle: () => {
         this._toggle_sidebar();
       },
@@ -3054,6 +3179,8 @@ var PycSiteShell = class extends HTMLElement {
     layout.appendChild(header);
     const sidebar = document.createElement("mj-side-nav");
     sidebar.setAttribute("slot", "nav");
+    sidebar.setAttribute("nav-label", SIDEBAR_NAV_LABEL);
+    sidebar.id = SIDEBAR_ELEMENT_ID;
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
@@ -3483,19 +3610,48 @@ var PycSiteShell = class extends HTMLElement {
     document.body.insertBefore(link, document.body.firstChild);
     return;
   }
+  /**
+   * Flip between the light and dark theme, starting from what is
+   * on screen now -- the stored choice, or the OS preference when
+   * nothing is stored -- so the first click after an OS-driven
+   * load always changes the theme.
+   */
   _toggle_theme() {
-    const current = _read_theme_preference();
+    const current = _read_effective_theme();
     const next = current === "dark" ? "light" : "dark";
     _apply_theme_preference(next);
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch (error) {
     }
-    const button = document.querySelector(".pyc-site-shell__theme-toggle");
+    this._sync_theme_control();
+    return;
+  }
+  _sync_theme_control() {
+    const button = this.querySelector(".pyc-site-shell__theme-toggle");
     if (button !== null) {
-      button.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
-      button.setAttribute("aria-label", next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+      update_theme_toggle(button, _read_effective_theme());
     }
+    return;
+  }
+  /**
+   * While no theme is stored the page follows the OS preference;
+   * keep the theme control's label right when the OS flips.
+   */
+  _wire_color_scheme_listener() {
+    if (this._color_scheme_listener !== null || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const query = window.matchMedia(DARK_SCHEME_QUERY);
+    if (typeof query.addEventListener !== "function") {
+      return;
+    }
+    const listener = () => {
+      this._sync_theme_control();
+    };
+    query.addEventListener("change", listener);
+    this._color_scheme_query = query;
+    this._color_scheme_listener = listener;
     return;
   }
   _read_optional_attribute(name) {
@@ -3511,19 +3667,22 @@ var PycSiteShell = class extends HTMLElement {
       return;
     }
     const next_open = layout.hasAttribute("nav-open") === false;
+    const is_overlay = layout.getAttribute("nav-mode") === "overlay";
     if (next_open === true) {
       layout.setAttribute("nav-open", "");
     } else {
       layout.removeAttribute("nav-open");
     }
-    _write_nav_collapsed_preference(next_open === false);
+    if (is_overlay === false) {
+      _write_nav_collapsed_preference(next_open === false);
+    }
     const toggle_button = this.querySelector(
       ".pyc-site-shell__nav-toggle"
     );
     if (toggle_button !== null) {
       toggle_button.setAttribute(
         "aria-expanded",
-        next_open === true ? "true" : "false"
+        layout.hasAttribute("nav-open") === true ? "true" : "false"
       );
     }
     return;
@@ -3668,7 +3827,7 @@ function _build_sidebar_failure_state(on_retry) {
   return panel;
 }
 var THEME_STORAGE_KEY = "pychestrate.ui.theme";
-function _read_theme_preference() {
+function _read_stored_theme() {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "dark" || stored === "light") {
@@ -3676,20 +3835,21 @@ function _read_theme_preference() {
     }
   } catch (error) {
   }
-  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  return null;
+}
+function _read_effective_theme() {
+  const stored = _read_stored_theme();
+  if (stored !== null) {
+    return stored;
+  }
+  if (typeof window.matchMedia === "function" && window.matchMedia(DARK_SCHEME_QUERY).matches) {
     return "dark";
   }
   return "light";
 }
 function _apply_theme_preference(theme) {
-  let stored = null;
-  try {
-    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  } catch (error) {
-    stored = null;
-  }
-  if (stored === "dark" || stored === "light") {
-    document.documentElement.setAttribute("data-theme", stored);
+  if (theme === "dark" || theme === "light") {
+    document.documentElement.setAttribute("data-theme", theme);
   } else {
     document.documentElement.removeAttribute("data-theme");
   }

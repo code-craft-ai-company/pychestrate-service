@@ -5,12 +5,25 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The CLI is a separate Python package living under
-``source/site/ccai/pychestrate/cli/``. M1 ships the parser,
-credentials loader, transport, and the reference ``pyc project list``
-command end-to-end. Subsequent milestones layer in OIDC device
-login, four output formats, resumable downloads, and the
-``CLISubcommandExtension`` surface.
+The CLI lives under ``source/site/ccai/pychestrate/cli/`` and talks to
+the service only through ``/api/v1``:
+
+* :mod:`entry` -- the dispatcher and console script
+  (:func:`entry.console_main`);
+* :mod:`commands` -- ``login`` / ``logout`` / ``whoami``, ``config``,
+  the commands generated from the server's OpenAPI document, and
+  ``runs wait``;
+* :mod:`credentials` / :mod:`paths` / :mod:`context` -- profiles in
+  ``$XDG_CONFIG_HOME/pychestrate/credentials`` (mode ``0600``) and the
+  ``PYC_SERVER_URL`` / ``PYC_TOKEN`` environment overrides;
+* :mod:`transport` -- HTTP with the profile's API token as a bearer
+  token, no redirect following, and one exception per exit-code
+  category;
+* :mod:`parser` / :mod:`openapi_cache` / :mod:`builtin_operations` --
+  the command tree built from ``/api/v1/_meta/openapi.json`` (cached,
+  with a built-in fallback);
+* :mod:`extensions` -- the ``CLISubcommandExtension`` surface behind
+  ``pyc ext <ext-name> <verb>``.
 """
 
 __author__ = "Code Craft AI LLC"

@@ -26,9 +26,9 @@
             color: var(--pyc-color-on-surface, #1a1a2e);
         }
         .setup-card {
-            width: 100%;
-            max-width: 36rem;
-            margin: 1.5rem;
+            box-sizing: border-box;
+            width: min(36rem, calc(100% - 2rem));
+            margin: 1rem;
             padding: 2rem 2.25rem 1.75rem;
             background: var(--pyc-color-surface, #ffffff);
             border: 1px solid var(--pyc-color-border, #dee2e6);
@@ -58,7 +58,34 @@
             border-radius: 4px;
             font-family: var(--pyc-font-family-mono, ui-monospace, Menlo, monospace);
             font-size: var(--pyc-font-size-small, 0.875rem);
-            overflow-x: auto;
+            /* Long presence-directory paths wrap instead of hiding in a
+               scroll box that keyboards cannot reach. */
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+        .setup-card .copy-block {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-start;
+        }
+        .setup-card .copy-block pre.path {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .setup-card .copy-block .btn {
+            margin-top: 0.4rem;
+            flex: 0 0 auto;
+        }
+        .setup-card .copy-status {
+            min-height: 1.2em;
+            margin: 0.35rem 0 0;
+            color: var(--pyc-color-on-surface-muted, #6c757d);
+            font-size: var(--pyc-font-size-small, 0.875rem);
+        }
+        @media (max-width: 30rem) {
+            .setup-card {
+                padding: 1.5rem 1.1rem 1.25rem;
+            }
         }
         .setup-card .footer {
             margin-top: 1.4rem;
@@ -83,7 +110,7 @@
     <main class="setup-card pyc-admin-page-fragment">
         {% block content %}{% endblock %}
     </main>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
         // Show / hide toggle for secret fields (data-reveal-for="<input id>").
         document.addEventListener("click", function (event) {
             var button = event.target.closest ? event.target.closest("[data-reveal-for]") : null;
@@ -95,6 +122,42 @@
             input.setAttribute("type", revealed ? "password" : "text");
             button.setAttribute("aria-pressed", revealed ? "false" : "true");
             button.textContent = revealed ? "Show" : "Hide";
+        });
+
+        // Copy buttons (data-copy-from="<element id>"). The clipboard API
+        // needs a secure context, which a first-boot http:// address is
+        // not, so fall back to selecting the text and copying it.
+        document.addEventListener("click", function (event) {
+            var button = event.target.closest ? event.target.closest("[data-copy-from]") : null;
+            if (button === null) { return; }
+            var source = document.getElementById(button.getAttribute("data-copy-from"));
+            if (source === null) { return; }
+            var text = source.textContent;
+            var status = document.querySelector(".copy-status");
+            function report(message) {
+                if (status !== null) { status.textContent = message; }
+            }
+            function fallback() {
+                var scratch = document.createElement("textarea");
+                scratch.value = text;
+                scratch.setAttribute("readonly", "");
+                scratch.style.position = "fixed";
+                scratch.style.opacity = "0";
+                document.body.appendChild(scratch);
+                scratch.select();
+                var copied = false;
+                try { copied = document.execCommand("copy"); } catch (ignored) { copied = false; }
+                document.body.removeChild(scratch);
+                button.focus();
+                report(copied ? "Copied to the clipboard." : "Copy failed: select the text and copy it yourself.");
+            }
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () {
+                    report("Copied to the clipboard.");
+                }, fallback);
+            } else {
+                fallback();
+            }
         });
     </script>
 </body>

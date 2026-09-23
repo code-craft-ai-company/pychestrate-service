@@ -97,6 +97,18 @@ class ResultTreeParserProtocol(FactoryProtocolBase):
         raise NotImplementedError("Subclasses must implement parser_tag")
 
     @classmethod
+    def recognizes_tree(cls, *, tree_path: str) -> bool:
+        """
+            Whether the tree under ``tree_path`` is in this parser's
+            format. The scanner uses the first registered parser (in
+            precedence order) that recognizes a tree, and falls back to
+            the first registered parser when none does. The default
+            claims every tree.
+        """
+        rtnval = True
+        return rtnval
+
+    @classmethod
     def parse_tree(cls, *, tree_path: str) -> ParsedResultTree:
         """
             Walk the tree under ``tree_path`` and return its
