@@ -16,7 +16,7 @@
 <p class="form-text" id="reservation-zone-note">
     Times are in <strong data-pyc-zone-label>{{ viewer_timezone or 'UTC' }}</strong><span data-pyc-zone-hint>{% if viewer_timezone and viewer_timezone != 'UTC' %}, your browser's time zone; reservation pages list times in UTC{% endif %}</span>.
 </p>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (function () {
     var marker = document.currentScript;
     var form = marker !== null ? marker.closest("form") : null;
