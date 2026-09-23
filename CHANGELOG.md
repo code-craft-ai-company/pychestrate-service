@@ -12,9 +12,68 @@ and runtime contracts are still in flux. A `-preview` tag does not
 progress to `-alpha` of the same `MAJOR.MINOR` version — the version is
 bumped when the project crosses the preview-to-alpha threshold.
 
+Every git tag has a section below with the same number. The tagging
+commit sets `version` in `pyproject.toml` to that number, and the Sphinx
+documentation reads its release number from there. The OpenAPI document
+(`specs/openapi/pychestrate.yaml`) carries its own `info.version`, which
+counts revisions of the REST contract rather than service releases.
+
+The `v0.1.0-alpha` and `v0.1.0-alpha.2` tags predate the renaming of the
+release line to `v0.0.x-preview` (see `0.0.3-preview` below); they are
+kept for reference and listed in date order.
+
 ## [Unreleased]
 
+Changes on `main` since `v0.0.7-preview`. They ship with the next
+preview tag.
+
 ### Added
+
+- **RPA orchestration** (`specs/6-rpa-orchestration`): Robotic Process
+  Automation joins builds, tests, and infrastructure as a fourth job
+  domain. Administrators register versioned job types (simple process
+  or taskplus tasker); projects bind them through specifications; a
+  trigger merges the work packet over the specification defaults,
+  validates it against the job type's JSON Schema, redacts secret
+  fields, and dispatches a signed `job_kind=rpa` envelope to a capable
+  pod. REST under `/api/v1/rpa` and `/api/v1/projects/{id}/rpa`, project
+  pages, admin registry pages, a pipeline step kind, a watch action,
+  audit kinds, metrics, and the user guide chapter
+  `userguide/19-00-rpa-jobs.rst`.
+
+- **UI profiles** (`specs/9-ui-profiles`): the Build, Testing, RPA, and
+  Infrastructure surfaces can be hidden per deployment
+  (`/admin/ui-profile`, `GET|PUT /api/v1/admin/ui-profile`) and narrowed
+  per user (`/account/preferences`,
+  `/api/v1/me/preferences/ui.surfaces`) without touching permissions.
+  New table `ui_user_preference` (alembic `a3b4c5d6e7f8`). User guide:
+  `userguide/20-00-ui-profiles.rst`.
+
+- **The run lifecycle advances from ingest.** `dispatch-ack`,
+  `progress`, and `results/complete` now drive a run through
+  `DISPATCHING → DISPATCHED → RUNNING → COMPLETED/FAILED`; before this
+  every run stayed in `DISPATCHING`. New `POST /api/v1/runs/{run_id}/cancel`;
+  the service queues the cancel for the pod on the client's heartbeat
+  response.
+
+- **Pod enrollment works end to end.** The client-enrollment CA is
+  configured through `PYCHESTRATE_ENROLLMENT_CA_SOURCE` / `_FILE_PATH` /
+  `_ENV_VAR` / `_ID` (optional; redeem answers 503 without it), and
+  `dev-up` generates a self-signed development CA. The redeem handler
+  reads `bootstrap_secret`, as the OpenAPI contract and
+  `pychestrate-client` do.
+
+- An MCP (Model Context Protocol) endpoint at `/mcp/1/service` with
+  `list_projects`, `get_project`, `create_project`, and `system_health`
+  tools, gated on the same permissions as the REST routes.
+
+- A test mode (`PYCHESTRATE_TEST_MODE`, off by default and refused in
+  production) that seeds a known admin so live-server test suites can
+  sign in, and `development/seed-test-admin.sh` for the same purpose on
+  an existing instance.
+
+- `deployment/renew-cert.sh`, a scoped renewal of the alpha host's
+  Tailscale TLS certificate.
 
 - `GET /api/v1/envelope-signing-keys/jwks.json` — publishes the
   job-envelope signing public keys as a standard RFC 7517 JWK Set
@@ -81,20 +140,25 @@ bumped when the project crosses the preview-to-alpha threshold.
 
 ### Changed
 
-- **Breaking:** Renamed the PR p19g long-poll routes from the
-  `/api/v1/agents/{client_id}/...` namespace to
-  `/api/v1/clients/{client_id}/...` to match the canonical "client"
-  naming for the pod-side runtime. The two affected operations are
-  `GET /clients/{client_id}/dispatches:next` and
-  `GET /clients/{client_id}/heartbeat`. The supporting code module
-  moved from
-  `ccai.pychestrate.webservice.agents.restapi.v1.agent_dispatch_routes`
-  to
-  `ccai.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes`,
-  and the registration symbol from `register_agent_dispatch_routes`
-  to `register_client_dispatch_routes`. No redirect shim is provided
-  — this is an alpha pre-stability rename. OpenAPI spec bumped to
-  `0.0.5-preview` (PR p19h).
+- **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`
+  (the Code Craft AI rebrand), together with the framework
+  dependencies, which are now the `codecraftai-*` packages. Extension
+  packs must update their imports.
+
+- **License:** the MIT license was replaced by a proprietary Code Craft
+  AI end-user license agreement (`LICENSE.txt`); Pychestrate is licensed
+  per organization for on-premises use.
+
+- The consumer web UI carried out the September 2026 UI remediation
+  program (179 audit findings, seven phases; see `ROADMAP.md`): strict
+  templates, `/resources/*` inside the site shell, shell-aware error
+  pages, 404 (not a sign-in prompt) for unknown paths, CSRF-gated sign-in
+  and sign-out, content-hashed static assets, shared fragment styles,
+  inline SVG icons, and accessibility fixes throughout.
+
+- The web UI is built from the `codecraftai-webworks` `mj-*` component
+  library, and one central navigation manifest drives the shell sidebar
+  on every route.
 
 - The admin Users and Roles pages now read and write the modern
   identity and RBAC stores (`identity_users` + `auth_local_credentials`
@@ -256,6 +320,145 @@ bumped when the project crosses the preview-to-alpha threshold.
   rejected it. It now performs the same liveness check the blueprint
   routes use.
 
+- Every `/api/v1/*` request without a signed-in principal is refused
+  with 401 unless the route is on the explicit allowlist in
+  `security/auth/anonymous_access.py` (pod machine-plane routes, signed
+  uploads, webhooks, enrollment redeem, the UI metrics beacon); modules
+  that never checked permissions now declare them. Admin pages answer
+  403 before the handler runs when the caller lacks the page's
+  permission; deactivating a user closes their sessions; health probes
+  can no longer run commands or reach loopback and metadata addresses;
+  project-scoped actions check that the target belongs to the project
+  in the URL; RPA secret packet fields are redacted in REST responses.
+  Earlier, the RBAC binding, secrets, and sessions REST routes were
+  closed to anonymous callers.
+
+### Upgrade notes
+
+- **KEK file mode.** Startup now fails when the KEK file is readable or
+  writable by its group or other users. Run `stat -c %a <kek-file>`; if
+  it prints anything but `600` or `400`, run `chmod 0600 <kek-file>`
+  before upgrading.
+- **Reverse proxy on another host.** `X-Forwarded-Proto` is believed
+  only from `PYCHESTRATE_TRUSTED_PROXY_ADDRESSES` (default loopback). If
+  TLS terminates on another machine, list its address there so session
+  cookies are marked `Secure`.
+- **Anonymous REST access is refused.** Scripts that read `/api/v1/*`
+  without signing in (for example `/api/v1/flags` as a health probe)
+  now get 401.
+- **Namespace rename.** Code that imports `automojo.*` must import
+  `ccai.*`.
+- **CI secret rename.** The workflows read the dependency token from the
+  `CODECRAFTAI_REPO_TOKEN` secret.
+
+## [0.0.7-preview] — 2026-05-20
+
+Developer preview: the full deploy with nginx mutual TLS live, so the
+orchestration-ingest endpoints are reachable by pod client certificates.
+
+### Added
+
+- Alert-rule editor and dashboard-layout editor pages (#249).
+
+### Fixed
+
+- nginx derives the client certificate's common name through a `map`
+  on `$ssl_client_s_dn`, so the orchestration-ingest endpoints receive
+  the pod identity they check (#250).
+
+## [0.0.6-preview] — 2026-05-20
+
+Developer preview: the rest of the specification catalog's REST and UI
+surfaces.
+
+### Added
+
+- REST for blast-radius guards, SLOs, and release channels (#243).
+- Embeddable views (`/embed/{view_key}` with signed URLs) and hardening
+  of the plugin-API surface (#244).
+- Inbound and outbound webhooks over REST (#245).
+- Backup and disaster-recovery domain with REST (#246).
+- UI pages for webhooks, guards, SLOs, and release channels (#247).
+- Shell pages for the admin overview, feature flags, extension registry,
+  and system health (#248).
+
+## [0.0.5-preview] — 2026-05-20
+
+Developer preview: pipelines execute; builds and provisioning stream
+live progress.
+
+### Added
+
+- Source integrations as first-class source references in build
+  envelopes (#241).
+- Generalized progress frames, so build and provisioning runs stream
+  live progress like test runs (#242).
+
+## [0.0.4-preview] — 2026-05-20
+
+Developer preview: the full orchestration loop for tests, builds, and
+provisioning, pipelines, and REST plus UI for projects, resources,
+secrets, metrics, pods, and pipelines.
+
+### Added
+
+- **Site shell** (`specs/9-site-shell`): the `<pyc-site-shell>` web
+  component with a permission-gated sidebar (#203), the `/admin/*`
+  pages inside it (#204), the command palette, keyboard sidebar
+  navigation, mid-session 401 handling and permission-change events
+  (#205), and metrics, property tests, accessibility checks, and the
+  site-shell chapter of the user guide (#206).
+- **The OpenAPI 3.1 contract** for the REST surface,
+  `specs/openapi/pychestrate.yaml` (#207).
+- **Test orchestration loop:** phase-5 bus subscribers and scheduled
+  tasks wired at startup (#208); run-state ingest and run read/list
+  endpoints (#209); nginx mutual TLS for the ingest endpoints (#210);
+  test catalog and trigger-run REST (#211); the test orchestrator
+  constructed at startup (#212); an HTTP long-poll transport for pod
+  clients (#213); server-sent live events for runs (#215); the Ed25519
+  envelope-signing public key over REST and at enrollment (#216);
+  presigned result-upload URLs (#217); a test-run trigger that picks an
+  eligible pod when none is named (#222).
+- **Build, provisioning, and pipelines:** REST for builds, build
+  artifacts, and source integrations (#223), for environments,
+  provisioning runs, and drift (#224), and for pipeline definitions and
+  matrix sharding (#233); build and provisioning dispatch through the
+  job transport (#232, #234); result ingest that brings those runs to a
+  terminal state (#235); pipeline execution by a DAG-walking
+  orchestrator (#239).
+- **REST for projects** (CRUD and members, #226), **metrics** (test
+  metrics, time series, dashboards, #228), **scoped secrets** (#229),
+  and **resource management** (pools, resources, allocations, health,
+  #238).
+- **Pages in the shell** for runs (#218), run detail with live updates
+  (#219), the test catalog (#220), enrollment tokens (#221), builds
+  (#225), infrastructure and provisioning (#227), secrets (#230),
+  metrics and dashboards (#231), pods and clients (#236), pipelines
+  (#237), and resources (#240).
+- `/api/v1/me/*` resolves the signed-in user from the UI session cookie
+  as well as the REST cookie, and an alembic backfill binds the
+  setup-wizard admin to the system-admin role in the modern RBAC tables
+  (#201).
+- `ROADMAP.md` with the milestone definitions of the `v0.0.x-preview`
+  line (#202).
+
+### Changed
+
+- **Breaking:** Renamed the PR p19g long-poll routes from the
+  `/api/v1/agents/{client_id}/...` namespace to
+  `/api/v1/clients/{client_id}/...` to match the canonical "client"
+  naming for the pod-side runtime. The two affected operations are
+  `GET /clients/{client_id}/dispatches:next` and
+  `GET /clients/{client_id}/heartbeat`. The supporting code module
+  moved from
+  `ccai.pychestrate.webservice.agents.restapi.v1.agent_dispatch_routes`
+  to
+  `ccai.pychestrate.webservice.clients.restapi.v1.client_dispatch_routes`,
+  and the registration symbol from `register_agent_dispatch_routes`
+  to `register_client_dispatch_routes`. No redirect shim is provided
+  — this is an alpha pre-stability rename. OpenAPI spec bumped to
+  `0.0.5-preview` (PR p19h, #214).
+
 ## [0.0.3-preview] — 2026-05-17
 
 Renamed the active release line from `v0.1.0-alpha` to `v0.0.x-preview`
@@ -267,9 +470,8 @@ in the git history for reference.
 
 ### Changed
 
-- Active release line is now `v0.0.x-preview`. See
-  [`ROADMAP.md`](ROADMAP.md) for milestone definitions and what
-  `v0.0.3-preview` includes.
+- Active release line is now `v0.0.x-preview`. The milestone
+  definitions arrived with `ROADMAP.md` in `0.0.4-preview`.
 
 ### Added (since `v0.1.0-alpha.2`)
 
@@ -284,18 +486,48 @@ in the git history for reference.
 - **`htmlui/next_validator.NextValidator`** enforcing the
   spec-1-authentication NFR-2 same-origin rules on the `?next` parameter
   (#200).
-- **Cookie bridge in `PychestrateSessionMiddleware`** so `/api/v1/me/*`
-  resolves principals from both the UI signed cookie and the REST
-  DB-backed cookie (#201).
-- **`RbacRoleBinding` seed helper + alembic backfill migration** so the
-  modern RBAC evaluator returns the expected permission set for the
-  setup-wizard-created admin user (#201).
 - **Tailscale-issued HTTPS** at the nginx frontend, with `:80` → `:443`
   redirect to the canonical hostname (#197, #198).
-- **`SECURITY` / `NETWORK` / `RUNTIME` env vars** routed through
-  `PychestrateVariables` (#196).
-- **Phase-11 login-flow tests** (httpx + Playwright) targeting the live
-  HTTPS deploy; 14/14 passing (#195, #201).
+- The site-shell and unified-login specifications,
+  `specs/9-site-shell` (#199).
+
+## [0.1.0-alpha.2] — 2026-05-17
+
+Superseded by the `v0.0.x-preview` line (see `0.0.3-preview`). Adds the
+first-run setup wizard and the systemd + nginx alpha deploy.
+
+### Added
+
+- **First-run setup wizard** (`/setup/unlock`, `/setup/admin`): the
+  service writes a one-time initial-admin token to a file on first
+  boot; whoever can read it creates the first administrator (#188).
+- The database and the wizard token live in the persona presence
+  directory, `~/pychestrate` by default (#189).
+- **Alpha deploy:** a one-shot deploy script and `deployment/` docs
+  (#178), a GitHub Actions deploy over Tailscale (#179), nginx in front
+  of the app (#182), gunicorn under systemd (p13as, #185), and scoped
+  passwordless sudoers for the deploy user (p13aw).
+- `SECURITY` / `NETWORK` / `RUNTIME` environment variables routed
+  through `PychestrateVariables` (#196).
+- Phase-11 login-flow tests (httpx + Playwright) against the deployed
+  alpha (#193, #195), and the `testbase agents` result commands in
+  `AGENTS.md` (#194).
+
+### Changed
+
+- Password hashing for the legacy path uses the webworks standard-library
+  PBKDF2 instead of werkzeug (#183).
+- `run-staging-gunicorn` leaves `PYCHESTRATE_DATABASE_URL` unset so the
+  runtime's presence-directory default applies (#191).
+
+### Fixed
+
+- The setup-wizard migration is part of the active alembic chain
+  (#190).
+- The deploy workflow fails loudly on a Tailscale OAuth 403 (#180);
+  pipx-installed poetry is visible to the deploy's SSH session (#186);
+  sudo steps get a TTY (#185); rsync falls back when only openrsync is
+  available (#184).
 
 ## [0.1.0-alpha] — 2026-05-09
 
@@ -472,4 +704,11 @@ For first-time deployments and CI:
 4. Run `alembic upgrade head` against your production database
    before first start.
 
-[0.1.0-alpha]: https://github.com/automationmojo/pychestrate-service/releases/tag/v0.1.0-alpha
+[Unreleased]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.0.7-preview...HEAD
+[0.0.7-preview]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.0.6-preview...v0.0.7-preview
+[0.0.6-preview]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.0.5-preview...v0.0.6-preview
+[0.0.5-preview]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.0.4-preview...v0.0.5-preview
+[0.0.4-preview]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.0.3-preview...v0.0.4-preview
+[0.0.3-preview]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.1.0-alpha.2...v0.0.3-preview
+[0.1.0-alpha.2]: https://github.com/code-craft-ai-company/pychestrate-service/compare/v0.1.0-alpha...v0.1.0-alpha.2
+[0.1.0-alpha]: https://github.com/code-craft-ai-company/pychestrate-service/releases/tag/v0.1.0-alpha

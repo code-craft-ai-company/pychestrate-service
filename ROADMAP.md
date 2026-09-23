@@ -25,56 +25,69 @@ A `-preview` tag does **not** progress to `-alpha` of the same `MAJOR.MINOR`
 version. When the project crosses the threshold from preview to alpha, the
 version is bumped (e.g. `0.0.x-preview` → `0.1.0-alpha`).
 
-## Where We Are: `v0.0.3-preview` (2026-05-17)
+## Where We Are: `v0.0.7-preview` + unreleased work on `main` (2026-09)
 
-The previously published `v0.1.0-alpha` and `v0.1.0-alpha.2` tags
-overstated the project's maturity — alpha implies feature-complete for a
-slice, and at the time those tags were cut roughly two-thirds of the spec
-catalog was unstarted. Those tags remain in the git history for reference;
-the active line is `v0.0.x-preview`.
+**Status: developer preview.** Use it to evaluate the product and to
+develop it; it is not supported for production use beyond the project
+author and direct collaborators.
 
-What works in `v0.0.3-preview`:
+The latest tag is `v0.0.7-preview` (2026-05-20). `main` carries four
+months of work since then, listed under **Unreleased** in
+[`CHANGELOG.md`](CHANGELOG.md); it ships with the next preview tag. The
+previously published `v0.1.0-alpha` and `v0.1.0-alpha.2` tags overstated
+the project's maturity and remain in the git history for reference only.
 
-- **Layer 0 — Platform foundation:** web app host (gunicorn under systemd,
-  fronted by nginx with Tailscale-issued HTTPS), persistence (SQLite +
-  Postgres via alembic), message bus, object store, system health,
-  extension host scaffolding.
-- **Layer 1 — Identity & auth:** unified `/login`, RBAC on the modern
-  `rbac_evaluator`, users / roles / role bindings (with seed + backfill
-  migration), audit log, secrets, sessions, feature flags, first-run
-  setup wizard at `/setup/*`.
-- **Layer 2 — Domain entities:** projects (dashboard, CRUD, members,
-  repositories, builds, infrastructure, tests, releases, calendar,
-  watches), resources (core CRUD, pools, ip_pools, allocations,
-  reservations, health, tags), variables / scopes, tagging, retention
-  policies, notifications, project templates.
-- **Layer 3 — Client / agent surfaces (partial):** clients, agents, pods
-  REST APIs exist; consumer UI is thinner than for Layer 2.
-- **Deploy + operations:** one-shot deploy script, scoped passwordless
-  sudoers, GitHub Actions deploy via Tailscale, alembic migrations
-  applied automatically per deploy, nginx HTTPS termination.
+### Version numbers
 
-What is explicitly *not* in `v0.0.3-preview` (visible in `specs/` but
-without source implementation):
+| Signal | Where | Meaning |
+|---|---|---|
+| Release | git tag `vX.Y.Z-suffix` | The release. `CHANGELOG.md` has a section per tag. |
+| Package version | `version` in `pyproject.toml` | Set to the tag's number in the tagging commit; the Sphinx documentation reads its release number from it. |
+| REST contract revision | `info.version` in `specs/openapi/pychestrate.yaml` | Counts revisions of the API document; it is not a service release number. |
 
-- The unified site shell + sidebar / command palette / chromeless route
-  registry (in flight as PR3–PR6 of the current refactor).
-- Webhooks-in, release channels, agent upgrade channel,
-  extension-registry UI.
-- Most of phases 4–10 in the spec hierarchy: test orchestration, build
-  orchestration & artifacts, infrastructure orchestration, observability
-  beyond system-health, backup / DR.
-- All `9-*` UI specs beyond admin / project-dashboard / run-detail (which
-  exist as routes but not as a navigation-coherent app).
-- The `1-authentication` SSO providers (OIDC, SAML) — only local-flow
-  works today.
+### What works on `main`
 
-Test coverage in `v0.0.3-preview` is partial: route-level smokes for most
-implemented surfaces plus a 14-test phase-11 suite that exercises the live
-deploy. Approximately 20 phase-10 tests are broken on main due to
-pre-existing `UI_COOKIE_SECRET` infrastructure issues; the gap between
-"route is implemented" and "all CRUD operations on the route are tested
-end-to-end" is significant.
+- **Platform (Layer 0):** the web service under gunicorn (systemd unit
+  and nginx TLS front in the alpha deploy), SQLite or Postgres through
+  alembic migrations, the in-process message bus, object store, system
+  health, the extension host, and the first-run setup wizard.
+- **Identity and access (Layer 1):** sign-in at `/login`, users, roles
+  and role bindings on the modern RBAC evaluator, sessions, audit log,
+  secrets, feature flags; every REST route requires a signed-in
+  principal unless it is on the anonymous-access allowlist.
+- **Domain entities (Layer 2):** projects (members, repositories,
+  builds, infrastructure, tests, releases, release templates, calendar,
+  watches), resources (pools, IP pools, allocations, reservations,
+  health, tags), variables and scopes, retention policies,
+  notifications, project templates.
+- **Pods and orchestration (Layers 3–6):** pod enrollment with a
+  client-certificate CA, signed job envelopes, a long-poll dispatch
+  transport, run ingest with live progress and artifacts; test, build,
+  provisioning, pipeline, and RPA runs.
+- **Web UI (Layer 9):** the site shell (sidebar, command palette,
+  permission-aware navigation), pages for every domain above, and UI
+  profiles that hide the automation domains a team does not use.
+- **Operations:** the alpha deploy scripts (systemd, nginx, mutual TLS
+  for pods, scoped sudoers, certificate renewal), a REST API described
+  by the OpenAPI contract, and an MCP endpoint.
+
+### What is not there yet
+
+- Single sign-on (OIDC, SAML): the auth-provider extension point
+  exists, but only local accounts ship.
+- Multi-host or highly available deployments; the message bus is
+  in-process.
+- A packaged install for outside organizations (container image,
+  installer); the dependencies come from private Code Craft AI
+  repositories.
+
+### Test coverage
+
+About 280 testbase modules under `ccai.tests.singlehost` cover the
+service. Most run in-process; the Playwright and httpx suites in
+`phase11` and `phase12` drive a live server named by
+`PYCHESTRATE_TEST_BASE_URL`. CI runs a subset of the in-process
+modules; see `.github/workflows/test.yml`.
 
 ## Path to `v0.1.0-alpha`
 
@@ -85,18 +98,18 @@ cliff. The slice candidates being considered:
 - **"Operate the test orchestration core."** A pod can be registered, a
   job can be dispatched to its client, the result tree can land in the
   artifact store, and a run can be inspected end-to-end in the UI. This
-  is the most product-defining slice; depends on phases 3 (client plane)
-  and 5 (run state machine, dispatch, results) which are largely
-  unimplemented.
+  is the most product-defining slice. Its phases 3 (client plane) and 5
+  (run state machine, dispatch, results) now exist on `main`; what
+  remains is the loop running reliably against a real enrolled pod,
+  which the September 2026 experience audit found still breaks in
+  places (for example, a cancel does not stop the job on the pod).
 - **"Run pychestrate as an internal Jenkins replacement."** Builds in,
   results out, plus the project/resources surfaces that already work.
   Smaller scope than the orchestration core but still requires the
   client-side agent pieces.
 
-Neither is in scope for `v0.0.x-preview`. The current refactor sequence
-(PR1–PR6) is a prerequisite for either alpha candidate because it
-delivers the navigation shell that the operator surfaces need to compose
-into.
+The navigation shell both candidates compose into shipped with the
+PR1–PR6 sequence below.
 
 ## Path to `v0.1.0-beta`
 
@@ -107,47 +120,47 @@ orchestration & artifacts), Layer 7 (infrastructure orchestration), Layer
 E extension points wired and documented.
 
 Beta also assumes the test coverage gaps in preview are closed — every
-implemented surface has functional tests, the ~20 broken phase-10 tests
-are either fixed or retired, and a Playwright suite covers the unified
-shell's critical paths.
+implemented surface has functional tests, the live-server suites
+(`phase11`, `phase12`) run in CI against a freshly started server, and a
+Playwright suite covers the unified shell's critical paths.
 
 ## REST API Contract
 
 The authoritative contract for the `/api/v1/*` REST surface lives in
 [`specs/openapi/pychestrate.yaml`](specs/openapi/pychestrate.yaml).
-It covers every currently-implemented endpoint and the Phase 3
-minimum-viable test-run slice (planned operations are flagged with
-`x-pychestrate-status: planned`). The same file is consumed by
-`codecraftai-restclient-base`'s `RestClientGenerator` to generate the
-typed `codecraftai-restclient-pychestrate` Python client in a follow-on
-PR, and is the reference the parallel server-side route
-implementations conform to. Every PR that touches the REST surface
-must update this spec in the same PR; `make openapi-validate` is the
-enforcement gate.
+It is meant to cover every implemented endpoint (operations not yet
+implemented are flagged with `x-pychestrate-status: planned`). The same
+file is consumed by `codecraftai-restclient-base`'s `RestClientGenerator`
+to generate the typed `codecraftai-restclient-pychestrate` Python
+client, and is the reference the server-side route implementations
+conform to. Every PR that touches the REST surface must update this spec
+in the same PR. `make openapi-validate` checks that the document is
+valid OpenAPI, not that it matches the live routes; the September 2026
+audit found live routes missing from it and implemented operations
+still flagged `planned`.
 
-## Current Refactor Sequence (PR1–PR6)
+## Site-Shell Refactor Sequence (PR1–PR6) — complete
 
-This is the in-flight work that bridges `-preview` to the navigation
-shell that any alpha workflow will live inside. Tracked here so the
-roadmap reflects current activity:
+The sequence that bridged `-preview` to the navigation shell every
+alpha workflow lives inside. All six landed in `v0.0.3-preview` and
+`v0.0.4-preview`:
 
 - **PR1** — Backend route rename `/config/login` → `/login`,
-  `/config/*` → `/admin/*`, `ui.admin.view` permission. **Merged.**
+  `/config/*` → `/admin/*`, `ui.admin.view` permission (#200).
 - **PR2** — UI/REST session cookie bridge for `/api/v1/me/*`,
-  `RbacRoleBinding` seed + backfill migration. *Open as #201.*
-- **PR3** — M1 site shell skeleton: `<pyc-site-shell>` Web Component,
-  sidebar registry, server-side shell document, chromeless route
-  registry enforcement. *Not started.*
-- **PR4** — Integrate the existing admin UI into the new shell. *Not
-  started.*
+  `RbacRoleBinding` seed + backfill migration (#201).
+- **PR3** — M1 site shell skeleton: `<pyc-site-shell>` web component,
+  sidebar registry, server-side shell document, chromeless route list
+  (#203).
+- **PR4** — The admin UI inside the shell (#204).
 - **PR5** — M2 core behavior: command palette, keyboard sidebar
-  navigation, mid-session 401 handling, permission diff events. *Not
-  started.*
+  navigation, mid-session 401 handling, permission diff events (#205).
 - **PR6** — M3 hardening: property-based tests, client metrics,
-  accessibility audit, Sphinx documentation. *Not started.*
+  accessibility checks, and the site-shell chapter of the user guide,
+  `userguide/17-00-site-shell.rst` (#206).
 
-After PR6 lands, the next milestone-bumping work is to pick one of the
-alpha-slice candidates above and drive its dependencies to completion.
+The next milestone-bumping work is to pick one of the alpha-slice
+candidates above and drive its dependencies to completion.
 
 ## UI Remediation Program (2026-09)
 
