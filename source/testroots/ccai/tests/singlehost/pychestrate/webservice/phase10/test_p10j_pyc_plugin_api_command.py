@@ -278,6 +278,7 @@ def test_unknown_noun_still_produces_supported_command_list():
     )
     testbase.assert_equal(rtnval, exit_codes.EXIT_USAGE_ERROR)
     err_text = err.getvalue()
-    testbase.assert_equal("'project list'" in err_text, True)
+    # API commands use the plural REST noun (CLI-20).
+    testbase.assert_equal("'pyc projects list'" in err_text, True)
     testbase.assert_equal("'plugin-api catalog" in err_text, True)
     return

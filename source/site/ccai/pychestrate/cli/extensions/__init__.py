@@ -10,7 +10,9 @@ External ``pychestrate-ext-<name>`` packs subclass
 ``pyc ext <ext-name>``. The base lives here (under the CLI package)
 rather than under ``webservice.extensions`` because the CLI is
 distributed independently of the service runtime — keeping the base
-co-located keeps the CLI build self-contained.
+co-located keeps the CLI build self-contained. Nothing in this
+package imports the service (see :mod:`cli.extensions.cli_subcommand`
+for how the base still joins the service's plugin-api catalog).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -24,11 +26,11 @@ from ccai.pychestrate.cli.extensions.cli_subcommand import (
     CLISubcommandExtension,
 )
 from ccai.pychestrate.cli.extensions.discovery import (
-    ResolvedExtCommand,
+    ListedExtRoute,
     find_descriptor,
-    find_mounted_route_for_verb,
+    find_listed_route,
     find_subcommand_class,
-    resolve_ext_command,
+    parse_ext_listing,
 )
 from ccai.pychestrate.cli.extensions.example_subcommand import (
     PycExtExampleSubcommand,
@@ -38,10 +40,10 @@ from ccai.pychestrate.cli.extensions.example_subcommand import (
 __all__ = [
     "CLISubcommandDescriptor",
     "CLISubcommandExtension",
+    "ListedExtRoute",
     "PycExtExampleSubcommand",
-    "ResolvedExtCommand",
     "find_descriptor",
-    "find_mounted_route_for_verb",
+    "find_listed_route",
     "find_subcommand_class",
-    "resolve_ext_command",
+    "parse_ext_listing",
 ]

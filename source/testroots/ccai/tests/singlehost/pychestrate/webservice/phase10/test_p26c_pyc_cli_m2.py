@@ -437,7 +437,7 @@ def test_unknown_verb_lists_the_nouns_verbs():
         rc, _out, err = _run(sandbox=sandbox, argv=["projects", "frobnicate"], opener=_FakeServer(),
                              openapi_fetcher=_spec_fetcher)
         testbase.assert_equal(
-            (rc, "create, get-by-slug, list" in err), (exit_codes.EXIT_USAGE_ERROR, True)
+            (rc, "create, get, list" in err), (exit_codes.EXIT_USAGE_ERROR, True)
         )
     finally:
         sandbox.close()
@@ -456,7 +456,7 @@ def test_commands_lists_every_generated_command():
         rc, out, _err = _run(sandbox=sandbox, argv=["commands"], opener=_FakeServer(),
                              openapi_fetcher=_spec_fetcher)
         testbase.assert_equal(
-            (rc, "resource-pools:" in out, "get-by-slug" in out, "/api/v1/projects/{slug}" in out),
+            (rc, "resource-pools:" in out, "  get " in out, "/api/v1/projects/{slug}" in out),
             (exit_codes.EXIT_OK, True, True, True),
         )
     finally:
@@ -530,7 +530,7 @@ def test_paths_are_prefixed_with_the_servers_base_path():
     """
     tree = parser.build_command_tree(openapi_document=SPEC_DOCUMENT)
     testbase.assert_equal(
-        tree.commands[("projects", "get-by-slug")].operation.path_template,
+        tree.commands[("projects", "get")].operation.path_template,
         "/api/v1/projects/{slug}",
     )
     return
@@ -544,7 +544,7 @@ def test_shared_path_item_parameters_are_resolved():
     """
     tree = parser.build_command_tree(openapi_document=SPEC_DOCUMENT)
     testbase.assert_equal(
-        tree.commands[("projects", "get-by-slug")].operation.path_param_names, ("slug",)
+        tree.commands[("projects", "get")].operation.path_param_names, ("slug",)
     )
     return
 
@@ -552,7 +552,8 @@ def test_shared_path_item_parameters_are_resolved():
 def test_singular_noun_and_underscored_verb_resolve():
     """
     **Feature: pyc (ORG-F16)**
-    **Property: 'project get_by_slug' finds 'projects get-by-slug'.**
+    **Property: 'project get_by_slug' (the derived spelling) finds
+    'projects get'.**
     """
     tree = parser.build_command_tree(openapi_document=SPEC_DOCUMENT)
     descriptor = parser.lookup_command(tree=tree, noun="project", verb="get_by_slug")

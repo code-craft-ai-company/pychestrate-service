@@ -11,6 +11,10 @@ not call :func:`sys.exit` or write to the real ``sys.stdout``. Help
 output goes to the context's stdout and raises :class:`ParserExit`
 with status 0; a parse error raises :class:`CliUsageError`, which the
 dispatcher reports and turns into exit code 2.
+
+Options must be spelled out (no ``--per`` for ``--per-page``), and an
+unrecognized option is reported with the closest known ones
+("did you mean '--state'?").
 """
 
 __author__ = "Code Craft AI LLC"
@@ -22,9 +26,21 @@ __version__ = "1.0.0"
 import argparse
 import sys
 
-from typing import Any, Optional, TextIO
+from typing import Any, List, Optional, TextIO
 
+from ccai.pychestrate.cli import suggestions
 from ccai.pychestrate.cli.exceptions import CliUsageError
+
+
+_UNRECOGNIZED_PREFIX: str = "unrecognized arguments: "
+
+#: pyc's global options (accepted anywhere on the line, parsed before
+#: any command's parser runs). They are suggestion candidates too, so a
+#: mistyped global -- or the pod client's "--service-url" -- names the
+#: right spelling.
+GLOBAL_OPTION_NAMES = (
+    "--profile", "--server-url", "--timeout", "--output", "-o", "--fields", "--quiet", "-q",
+)
 
 
 class ParserExit(Exception):
@@ -48,6 +64,7 @@ class CliArgumentParser(argparse.ArgumentParser):
 
     def __init__(self, *args: Any, out_stream: TextIO, err_stream: TextIO, **kwargs: Any) -> None:
         kwargs.setdefault("formatter_class", argparse.RawDescriptionHelpFormatter)
+        kwargs.setdefault("allow_abbrev", False)
         super().__init__(*args, **kwargs)
         self._out_stream: TextIO = out_stream
         self._err_stream: TextIO = err_stream
@@ -67,12 +84,53 @@ class CliArgumentParser(argparse.ArgumentParser):
             self._err_stream.write(message)
         raise ParserExit(status)
 
+    def known_option_strings(self) -> List[str]:
+        """
+            Every listed option spelling of this parser (hidden
+            aliases excluded).
+
+            :returns: Option strings.
+        """
+        known: List[str] = []
+        for action in self._actions:
+            if action.help == argparse.SUPPRESS:
+                continue
+            known.extend(action.option_strings)
+        rtnval = known
+        return rtnval
+
+    def _suggest_for_unrecognized(self, message: str) -> str:
+        """
+            Add "did you mean" hints to argparse's "unrecognized
+            arguments" message.
+
+            :param message: argparse's message.
+
+            :returns: Message (unchanged when nothing is close).
+        """
+        if not message.startswith(_UNRECOGNIZED_PREFIX):
+            return message
+        hints: List[str] = []
+        candidates = self.known_option_strings() + list(GLOBAL_OPTION_NAMES)
+        for token in message[len(_UNRECOGNIZED_PREFIX):].split():
+            if not token.startswith("-"):
+                continue
+            option = token.split("=", 1)[0]
+            hint = suggestions.did_you_mean(word=option, candidates=candidates)
+            if len(hint) > 0:
+                hints.append("{}: {}".format(option, hint))
+        if len(hints) == 0:
+            return message
+        rtnval = "{} ({})".format(message, "; ".join(hints))
+        return rtnval
+
     def error(self, message: str) -> None:
         self.print_usage(self._err_stream)
-        raise CliUsageError("{}: {}".format(self.prog, message))
+        raise CliUsageError("{}: {}".format(self.prog, self._suggest_for_unrecognized(message)))
 
 
 __all__ = [
     "CliArgumentParser",
+    "GLOBAL_OPTION_NAMES",
     "ParserExit",
 ]

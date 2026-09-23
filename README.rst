@@ -79,6 +79,9 @@ Documentation
   operator runbook.
 * `Extensions <userguide/11-00-extensions.rst>`_ -- the extension
   points and how to build an extension pack.
+* `The pyc Command Line <userguide/14-00-pyc-command-line.rst>`_ --
+  ``pyc``, the command line for the REST API, installable on its own
+  (``pipx install ./packages/pychestrate-cli``).
 * `REST API <specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
   contract for ``/api/v1``.
 * `CONTRIBUTING.md <CONTRIBUTING.md>`_, `CHANGELOG.md <CHANGELOG.md>`_,

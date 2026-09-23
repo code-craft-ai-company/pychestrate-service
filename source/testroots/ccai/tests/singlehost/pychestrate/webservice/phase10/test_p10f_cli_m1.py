@@ -616,8 +616,10 @@ def test_entry_project_list_drives_full_path():
         try:
             out = io.StringIO()
             err = io.StringIO()
+            # SAMPLE_OPENAPI_DOCUMENT declares include_archived as a
+            # required query parameter, which pyc enforces.
             rtnval = entry.main(
-                argv=["project", "list"],
+                argv=["project", "list", "--include-archived", "false"],
                 stdout=out,
                 stderr=err,
                 openapi_fetcher=_openapi_fetcher,

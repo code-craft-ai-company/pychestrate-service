@@ -22,6 +22,8 @@ Using Pychestrate
   run them from a project.
 * `Choosing What the UI Shows <20-00-ui-profiles.rst>`_ -- hide the
   automation domains a deployment or a person does not use.
+* `The pyc Command Line <14-00-pyc-command-line.rst>`_ -- every REST
+  operation as a command, for terminals, scripts and CI jobs.
 
 
 Operating Pychestrate
@@ -69,6 +71,7 @@ root. The standards and internals it refers to:
    02-00-getting-started
    19-00-rpa-jobs
    20-00-ui-profiles
+   14-00-pyc-command-line
 
 .. toctree::
    :hidden:

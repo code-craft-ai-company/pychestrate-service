@@ -190,18 +190,27 @@ export CODECRAFTAI_REPO_TOKEN=ghp_xxx     # the same fine-grained
                                        # private codecraftai-* deps
 
 deployment/deploy-alpha-to-host.sh \
-    --host=tc-app-server.local \
-    --user=myron \
-    --port=8888 \
-    --proxy-port=80
+    --host tc-app-server.local \
+    --user myron \
+    --public-hostname tc-app-server.tailb75ce6.ts.net
 ```
 
-All three flags default to the values above so most invocations
-can be just:
+`--host` and `--user` are required; there are no host-specific
+defaults. `--public-hostname` is the name on the TLS certificate
+(nginx redirects there) and defaults to `--host`; `--port` (8888) and
+`--proxy-port` (80) keep their defaults. Values can be given as
+`--option VALUE` or `--option=VALUE`; `--help` lists every option.
 
-```bash
-CODECRAFTAI_REPO_TOKEN=ghp_xxx deployment/deploy-alpha-to-host.sh
-```
+Add `--dry-run` first to see what a deploy would do without changing
+anything: it prints every step (the remote scripts included), runs
+only the read-only SSH checks, and lets `rsync --dry-run
+--itemize-changes` list the files the sync would send and the remote
+files `--delete` would remove (lines starting `*deleting`).
+
+`CODECRAFTAI_REPO_TOKEN` is needed only while `pyproject.toml` pulls
+the private `codecraftai-*` packages from git; when it resolves them
+from a package index, step 3 is skipped and the index's credentials
+must be configured for poetry on the host.
 
 ### `.env` sourcing
 
@@ -615,7 +624,8 @@ and assumes this one-time provisioning is already in place.
 
 ```bash
 CODECRAFTAI_REPO_TOKEN=ghp_xxx \
-    deployment/deploy-alpha-to-host.sh --host=tc-app-server
+    deployment/deploy-alpha-to-host.sh --host tc-app-server --user myron \
+        --public-hostname tc-app-server.tailb75ce6.ts.net
 ```
 
 Subsequent deploys (CI or workstation) are entirely

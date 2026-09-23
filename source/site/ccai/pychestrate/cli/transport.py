@@ -22,6 +22,12 @@ dispatcher can return stable exit codes:
   :class:`ServerUnreachableError` ("cannot reach <url>: <reason>").
 * 4xx / 5xx answers map to one exception class per exit-code category;
   an RFC 7807 problem document is rendered as ``title: detail``.
+* Every request carries an ``X-Request-Id`` header, and every error
+  message names a request id -- the server's (an ``X-Request-Id`` /
+  ``X-Correlation-Id`` answer header, or a ``request_id`` /
+  ``correlation_id`` / ``trace_id`` problem member) when it sends one,
+  else the id pyc sent -- so a failure can be found in the server's,
+  or a proxy's, logs.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -38,9 +44,11 @@ import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 
 from typing import Callable, Dict, Mapping, Optional
 
+from ccai.pychestrate.cli import version
 from ccai.pychestrate.cli.exceptions import (
     AuthenticationError,
     BadRequestError,
@@ -56,7 +64,16 @@ from ccai.pychestrate.cli.models import CliProfile, RestOperation, RestResponse
 
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS: float = 30.0
-USER_AGENT: str = "pyc-cli/1.0 (+https://docs.pychestrate.io)"
+#: ``pyc/<version> python/<version>`` (see :mod:`cli.version`).
+USER_AGENT: str = version.user_agent()
+
+REQUEST_ID_HEADER: str = "X-Request-Id"
+
+#: Answer headers a server may name its request id in.
+_ANSWER_REQUEST_ID_HEADERS = ("x-request-id", "x-correlation-id")
+
+#: Problem-document members a server may name its request id in.
+_PROBLEM_REQUEST_ID_MEMBERS = ("request_id", "correlation_id", "trace_id")
 
 #: Longest non-JSON body excerpt quoted in an error message.
 _BODY_EXCERPT_LIMIT: int = 300
@@ -289,22 +306,78 @@ def _content_type(headers: Mapping[str, str]) -> str:
     return rtnval
 
 
-def describe_error_body(*, status_code: int, response_text: str, headers: Mapping[str, str]) -> str:
+def _parse_problem(response_text: str) -> Optional[Dict]:
+    """
+        The problem document in an error body, if it is one.
+
+        :param response_text: Raw body.
+
+        :returns: Dict or ``None``.
+    """
+    try:
+        parsed = json.loads(response_text) if response_text else None
+    except (TypeError, ValueError):
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
+def answer_request_id(
+        *,
+        headers: Optional[Mapping[str, str]],
+        response_text: str,
+        sent_request_id: Optional[str]
+    ) -> Optional[str]:
+    """
+        The request id to report for an answer: the one the server
+        names (header, then problem member), else the one pyc sent.
+
+        :param headers: Lower-cased answer headers.
+        :param response_text: Raw body.
+        :param sent_request_id: The ``X-Request-Id`` pyc sent.
+
+        :returns: Id or ``None``.
+    """
+    for header_name in _ANSWER_REQUEST_ID_HEADERS:
+        value = (headers or {}).get(header_name, "")
+        if len(str(value).strip()) > 0:
+            rtnval: Optional[str] = str(value).strip()
+            return rtnval
+    problem = _parse_problem(response_text)
+    if problem is not None:
+        for member in _PROBLEM_REQUEST_ID_MEMBERS:
+            value = problem.get(member, None)
+            if value is not None and len(str(value).strip()) > 0:
+                rtnval = str(value).strip()
+                return rtnval
+    rtnval = sent_request_id
+    return rtnval
+
+
+def describe_error_body(
+        *,
+        status_code: int,
+        response_text: str,
+        headers: Mapping[str, str],
+        request_id: Optional[str] = None
+    ) -> str:
     """
         Render an error response for the terminal: a problem document
-        as ``title: detail``, anything else as a short excerpt.
+        as ``title: detail``, anything else as a short excerpt; the
+        request id, when known, follows the status.
 
         :param status_code: HTTP status.
         :param response_text: Raw body.
         :param headers: Lower-cased headers.
+        :param request_id: Request id to name.
 
         :returns: One-line message.
     """
-    problem = None
-    try:
-        problem = json.loads(response_text) if response_text else None
-    except (TypeError, ValueError):
-        problem = None
+    problem = _parse_problem(response_text)
+    status_text = "HTTP {}".format(status_code)
+    if request_id is not None and len(request_id) > 0:
+        status_text = "{}, request id {}".format(status_text, request_id)
 
     if isinstance(problem, dict) and ("title" in problem or "detail" in problem):
         # Server details are often multi-line ("...\nSLUG: x"); keep
@@ -315,11 +388,11 @@ def describe_error_body(*, status_code: int, response_text: str, headers: Mappin
         message = ": ".join(parts)
         if "required_permission" in problem:
             message = "{} (requires {})".format(message, problem["required_permission"])
-        rtnval = "{} (HTTP {})".format(message, status_code)
+        rtnval = "{} ({})".format(message, status_text)
         return rtnval
 
     if _content_type(headers) == "text/html" or "<html" in (response_text or "")[:500].lower():
-        rtnval = "HTTP {}: the server answered with an HTML page".format(status_code)
+        rtnval = "{}: the server answered with an HTML page".format(status_text)
         return rtnval
 
     excerpt = " ".join((response_text or "").split())
@@ -327,7 +400,7 @@ def describe_error_body(*, status_code: int, response_text: str, headers: Mappin
         excerpt = excerpt[:_BODY_EXCERPT_LIMIT] + "..."
     if len(excerpt) == 0:
         excerpt = http.client.responses.get(status_code, "no body")
-    rtnval = "HTTP {}: {}".format(status_code, excerpt)
+    rtnval = "{}: {}".format(status_text, excerpt)
     return rtnval
 
 
@@ -366,7 +439,8 @@ def _classify_status(
         status_code: int,
         response_text: str,
         headers: Optional[Mapping[str, str]] = None,
-        url: str = ""
+        url: str = "",
+        request_id: Optional[str] = None
     ) -> None:
     """
         Reclassify an HTTP answer into the documented exception types
@@ -376,14 +450,18 @@ def _classify_status(
         :param response_text: Decoded response body for diagnostics.
         :param headers: Lower-cased response headers.
         :param url: The requested URL (for messages).
+        :param request_id: The request id to name in the message.
 
         :returns: None (raises on errors).
     """
     resolved_headers: Mapping[str, str] = headers if headers is not None else {}
+    request_id_suffix = ""
+    if request_id is not None and len(request_id) > 0:
+        request_id_suffix = " (request id {})".format(request_id)
 
     if 300 <= status_code < 400:
         raise UnexpectedResponseError(
-            _redirect_message(status_code=status_code, headers=resolved_headers, url=url)
+            _redirect_message(status_code=status_code, headers=resolved_headers, url=url) + request_id_suffix
         )
 
     if 200 <= status_code < 300:
@@ -391,7 +469,7 @@ def _classify_status(
             raise UnexpectedResponseError(
                 "the server answered HTTP {} with an HTML page instead of JSON for {}."
                 " server_url is probably a web-UI page or a proxy, not the service root"
-                " (use https://host[:port]).".format(status_code, url)
+                " (use https://host[:port]).{}".format(status_code, url, request_id_suffix)
             )
         return
 
@@ -399,7 +477,8 @@ def _classify_status(
         return
 
     message = describe_error_body(
-        status_code=status_code, response_text=response_text, headers=resolved_headers
+        status_code=status_code, response_text=response_text, headers=resolved_headers,
+        request_id=request_id,
     )
     if status_code in (400, 422):
         raise BadRequestError(message)
@@ -463,9 +542,11 @@ def execute_request(
         query_params=query_params,
     )
 
+    sent_request_id = uuid.uuid4().hex
     headers: Dict[str, str] = {
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
+        REQUEST_ID_HEADER: sent_request_id,
     }
     if profile.bearer_token is not None and len(profile.bearer_token) > 0:
         headers["Authorization"] = "Bearer {}".format(profile.bearer_token)
@@ -509,6 +590,11 @@ def execute_request(
         response_text=response.raw_text,
         headers=response.headers,
         url=full_url,
+        request_id=answer_request_id(
+            headers=response.headers,
+            response_text=response.raw_text,
+            sent_request_id=headers.get(REQUEST_ID_HEADER, sent_request_id),
+        ),
     )
     rtnval = response
     return rtnval

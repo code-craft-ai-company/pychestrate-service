@@ -138,6 +138,21 @@ preview tag.
 - Shell landing view for `/`, a not-found state for unmatched shell
   routes, and a navigation provider for the command palette.
 
+- **The `pyc` command line grows up** (`specs/8-cli`, user guide
+  `userguide/14-00-pyc-command-line.rst`): every REST operation is a
+  `pyc <noun> <verb>` command with a plural resource noun
+  (`pyc rpa-jobs trigger PROJECT_ID SPEC_ID`; the old tag spellings
+  still work), typed `--kebab-case` flags, request bodies from
+  `--data`, `--from-file` or `--set` with the body's fields in
+  `--help`, help that never contacts the server, "did you mean" for
+  mistyped commands and flags, `table` / `json` / `yaml` / `tsv` /
+  `raw` output (`-o`, `--fields`, `-q`; lists print as JSON arrays),
+  `--all` / `--limit` paging, request ids in error messages, and
+  `pyc version`. It installs on its own, standard library only:
+  `pipx install ./packages/pychestrate-cli`. The OpenAPI document
+  served at `/api/v1/_meta/openapi.json` names the service's version
+  as `info.x-service-version`.
+
 ### Changed
 
 - **Breaking:** the Python namespace moved from `automojo.*` to `ccai.*`

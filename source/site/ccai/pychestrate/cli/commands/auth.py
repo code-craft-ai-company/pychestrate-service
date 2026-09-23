@@ -25,12 +25,11 @@ __version__ = "1.0.0"
 
 
 import getpass
-import json
 
 from dataclasses import replace
 from typing import Any, Dict, Optional, Sequence
 
-from ccai.pychestrate.cli import credentials, exit_codes, transport
+from ccai.pychestrate.cli import credentials, exit_codes, renderer, transport
 from ccai.pychestrate.cli.argparsing import CliArgumentParser
 from ccai.pychestrate.cli.context import (
     PYC_SERVER_URL_ENV_VAR,
@@ -231,8 +230,34 @@ def run_login(*, ctx: CliContext, args: Sequence[str]) -> int:
         )
     )
     ctx.stdout.write("Saved profile '{}' in {} (mode 0600).\n".format(profile_name, path))
+    _warm_command_cache(ctx=ctx, profile=verify_profile)
     rtnval = exit_codes.EXIT_OK
     return rtnval
+
+
+def _warm_command_cache(*, ctx: CliContext, profile: CliProfile) -> None:
+    """
+        Download and cache the server's command list right after a
+        login, so ``--help`` (which never touches the network) knows
+        every API command from the start. Best effort: a failure here
+        is silent; the first API command fetches the list again.
+
+        :param ctx: Invocation context.
+        :param profile: The profile just saved.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.cli import openapi_cache  # noqa: E402
+    from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
+
+    fetcher = ctx.openapi_fetcher
+    if fetcher is None:
+        fetcher = api_commands.build_default_openapi_fetcher(ctx=ctx, profile=profile)
+    try:
+        openapi_cache.load_or_fetch(server_url=profile.server_url, fetch_callable=fetcher, environ=ctx.environ)
+    except Exception:  # noqa: BLE001 -- purposeful: the cache is an optimisation
+        pass
+    return
 
 
 def run_logout(*, ctx: CliContext, args: Sequence[str]) -> int:
@@ -311,15 +336,27 @@ def run_whoami(*, ctx: CliContext, args: Sequence[str]) -> int:
         out_stream=ctx.stdout,
         err_stream=ctx.stderr,
     )
-    command_parser.add_argument("--json", action="store_true", default=False, help="print the raw JSON")
+    command_parser.add_argument(
+        "--json", action="store_true", default=False, help="print the identity document (same as -o json)",
+    )
     namespace = command_parser.parse_args(list(args))
 
     profile = resolve_profile(ctx=ctx)
     if profile.bearer_token is None and profile.mtls_cert_path is None:
         ctx.note("no-token", "note: no API token is configured; run 'pyc login'.")
     identity = fetch_identity(ctx=ctx, profile=profile)
-    if namespace.json is True:
-        ctx.stdout.write(json.dumps(identity, indent=2) + "\n")
+    wants_document = (
+        namespace.json is True
+        or ctx.output.output_format not in (None, renderer.FORMAT_TABLE)
+        or ctx.output.quiet is True
+        or len(ctx.output.fields) > 0
+    )
+    if wants_document is True:
+        ctx.emit_result(
+            value=identity,
+            identifier_fields=("login_name",),
+            default_format=renderer.FORMAT_JSON if namespace.json is True else None,
+        )
         return exit_codes.EXIT_OK
 
     authentication = identity.get("authentication", {}) or {}

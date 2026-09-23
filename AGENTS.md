@@ -475,3 +475,9 @@ user manual and `CHANGELOG.md` updated for user-visible changes.
 The service is not published as a package; it runs from a checkout (see the operator runbook,
 [userguide/13-00-alpha-deployment.rst](userguide/13-00-alpha-deployment.rst)). Its `codecraftai-*` framework
 dependencies come from private Code Craft AI sources declared in `pyproject.toml`.
+
+The `pyc` CLI (`source/site/ccai/pychestrate/cli/`) is also packaged on its own as `pychestrate-cli`
+(`packages/pychestrate-cli/pyproject.toml`; user guide: [userguide/14-00-pyc-command-line.rst](userguide/14-00-pyc-command-line.rst)).
+Keep that package standard-library only -- it must not import `ccai.pychestrate.webservice`, webworks, SQLAlchemy
+or any other service dependency (`test_p27s_pyc_standalone_package_m3` enforces it) -- and change pyc's version
+only in `cli/version.py`.

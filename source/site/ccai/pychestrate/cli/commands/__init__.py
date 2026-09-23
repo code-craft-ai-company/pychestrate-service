@@ -9,7 +9,10 @@
   document (``pyc <noun> <verb>``), plus ``pyc commands``.
 * :mod:`auth` -- ``pyc login``, ``pyc logout``, ``pyc whoami``.
 * :mod:`config` -- ``pyc config init|set|get|unset|profiles|path``.
+* :mod:`ext` -- ``pyc ext list``, ``pyc ext <ext-name> <verb>``,
+  ``pyc plugin-api catalog``.
 * :mod:`runs` -- ``pyc runs wait`` and ``--wait``.
+* :mod:`version` -- ``pyc version``.
 """
 
 __author__ = "Code Craft AI LLC"

@@ -8,7 +8,7 @@
 #                       :80 (nginx)
 #       external  -----------------> nginx ---> 127.0.0.1:8888 (app)
 #       clients                       on
-#                                  tc-app-server
+#                                   --host
 #
 # nginx terminates on the host's external interface and reverse-
 # proxies to the app bound on loopback. Operators access the
@@ -25,10 +25,15 @@
 #      Requires sudo on the remote; the user is prompted
 #      interactively.  Skipped under ``--skip-system-setup``;
 #      replaced with a prerequisite probe.
-#   3. Configure git credentials on the remote so the nine private
-#      ``codecraftai-*`` git-source deps can be cloned (uses
-#      ``CODECRAFTAI_REPO_TOKEN`` from the local env or repo-root
-#      ``.env`` -- the same mechanism as CI).
+#   3. Configure git credentials on the remote so the private
+#      ``codecraftai-*`` dependencies that ``pyproject.toml`` pulls
+#      from GitHub (``git = "https://github.com/automationmojo/..."``
+#      sources) can be cloned, using ``CODECRAFTAI_REPO_TOKEN`` from
+#      the local env or repo-root ``.env`` -- the same mechanism as
+#      CI.  When ``pyproject.toml`` names no such git source (it
+#      resolves the packages from a package index instead), the step
+#      is skipped and no token is needed; the index's credentials
+#      must then be configured for poetry on the host.
 #   4. ``repository-setup/rehome-repository``        -- generates
 #      ``.env`` with PYTHONPATH composition.
 #   5. ``development/setup-environment``             -- creates
@@ -56,23 +61,25 @@
 #   9. probe ``http://<host>:<proxy-port>/`` from the workstation
 #      to confirm nginx + gunicorn are serving end-to-end.
 #
-# Usage:
+# Usage (``--help`` prints the full option list, generated from the
+# option table below):
 #
 #   CODECRAFTAI_REPO_TOKEN=ghp_xxx \
-#       deployment/deploy-alpha-to-host.sh \
-#           [--host=tc-app-server.local] \
-#           [--user=myron] \
-#           [--port=8888] \
-#           [--proxy-port=80] \
-#           [--skip-system-setup]
+#       deployment/deploy-alpha-to-host.sh --host HOST --user USER \
+#           [--port 8888] [--proxy-port 80] [--public-hostname NAME] \
+#           [--client-ca-path PATH] [--skip-system-setup] [--dry-run]
 #
-# Defaults: tc-app-server.local / myron / app-port 8888 / proxy 80.
+# ``--host`` and ``--user`` are required.  Options take their value
+# as ``--option VALUE`` or ``--option=VALUE``.  ``--dry-run`` prints
+# every step without changing anything, locally or on the host: it
+# only runs the read-only SSH check (and, under
+# ``--skip-system-setup``, the tool probe) and shows what the sync
+# would transfer and delete (``rsync --dry-run``).
 #
 # Idempotent: re-running the script syncs new code, refreshes the
 # nginx config, and restarts the service.  KEK / pepper /
 # cookie-secret + the SQLite DB persist across runs (under
-# ``.cache/dev-secrets/`` and ``.cache/dev-db/`` inside the remote
-# checkout).
+# ``.cache/dev-secrets/`` and ``~/pychestrate/`` on the host).
 
 set -euo pipefail
 
@@ -80,17 +87,21 @@ set -euo pipefail
 # Defaults + arg parsing
 # ---------------------------------------------------------------------------
 
-REMOTE_HOST="tc-app-server.local"
-REMOTE_USER="myron"
+# No host-specific defaults: --host and --user name the target.
+REMOTE_HOST=""
+REMOTE_USER=""
 REMOTE_PORT="8888"          # internal app port (nginx proxies to this)
 PROXY_PORT="80"             # external port nginx listens on
 # Canonical public hostname for the deploy -- must match the
 # subject on the TLS cert at /etc/nginx/ssl/pychestrate.crt.
 # The :80 redirect lands users here regardless of what they
-# typed (bare ``tc-app-server`` vs. full tailnet name), so
-# the browser never sees a cert/hostname mismatch.
-PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
+# typed (a short name vs. the full DNS / tailnet name), so the
+# browser never sees a cert/hostname mismatch.  Defaults (after
+# argument parsing) to --host.
+PUBLIC_HOSTNAME=""
 SKIP_SYSTEM_SETUP="false"
+DRY_RUN="false"
+SHOW_HELP="false"
 # Path on the REMOTE to the CA cert used by nginx to verify
 # incoming client certificates for the mTLS-gated routes.  It must
 # be the service's client-enrollment CA -- the CA that signs every
@@ -102,27 +113,119 @@ SKIP_SYSTEM_SETUP="false"
 # elsewhere (PYCHESTRATE_ENROLLMENT_CA_FILE_PATH).
 CLIENT_CA_PATH=""
 
+# One row per option: flag|VALUE name ("" for a switch)|variable|help.
+# The parser and --help both read this table, so the usage text always
+# lists every option the script accepts.
+OPTION_TABLE=(
+    "--host|HOST|REMOTE_HOST|SSH host to deploy to (required)"
+    "--user|USER|REMOTE_USER|SSH user on the host; the service runs as this user (required)"
+    "--port|PORT|REMOTE_PORT|loopback port gunicorn binds (default 8888)"
+    "--proxy-port|PORT|PROXY_PORT|port nginx listens on (default 80)"
+    "--public-hostname|NAME|PUBLIC_HOSTNAME|name on the TLS certificate; nginx redirects there (default: --host)"
+    "--client-ca-path|PATH|CLIENT_CA_PATH|client-enrollment CA certificate on the host (default: the one step 6 writes)"
+    "--skip-system-setup||SKIP_SYSTEM_SETUP|skip the sudo steps (apt, nginx, systemd unit); for CI after a first interactive deploy"
+    "--dry-run||DRY_RUN|print every step and change nothing (only read-only SSH checks and an rsync --dry-run run)"
+    "--help||SHOW_HELP|show this help and exit"
+)
+
+usage() {
+    echo "usage: deployment/deploy-alpha-to-host.sh --host HOST --user USER [options]"
+    echo
+    echo "Deploy this checkout to HOST over SSH: sync it, install its dependencies,"
+    echo "migrate the database, configure nginx and the systemd units, and probe it."
+    echo
+    echo "options:"
+    local row flag value_name variable help_text spelled
+    for row in "${OPTION_TABLE[@]}"; do
+        IFS='|' read -r flag value_name variable help_text <<< "${row}"
+        spelled="${flag}"
+        if [ -n "${value_name}" ]; then
+            spelled="${flag} ${value_name}"
+        fi
+        printf '  %-26s %s\n' "${spelled}" "${help_text}"
+    done
+    echo
+    echo "Options taking a value accept --option VALUE or --option=VALUE."
+    echo
+    echo "environment:"
+    echo "  CODECRAFTAI_REPO_TOKEN     GitHub token for the private codecraftai-* git"
+    echo "                             dependencies (needed while pyproject.toml pulls them"
+    echo "                             from git); read from the repo-root .env when unset."
+    echo
+    echo "exit codes: 0 deployed (or dry run finished); 1 bad arguments; 2 no"
+    echo "  CODECRAFTAI_REPO_TOKEN; 3 SSH not possible without a password; 4 the service"
+    echo "  did not answer the probe; 5 tools missing on the host (--skip-system-setup);"
+    echo "  6 client-enrollment CA certificate missing on the host."
+    echo
+    echo "The header of this script and deployment/README.md describe every step."
+    return 0
+}
+
+option_row() {
+    # Print the OPTION_TABLE row for flag "$1"; fail when there is none.
+    local row
+    for row in "${OPTION_TABLE[@]}"; do
+        if [ "${row%%|*}" = "$1" ]; then
+            printf '%s\n' "${row}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+argument_error() {
+    echo "ERROR: $1" >&2
+    echo "       Run with --help for usage." >&2
+    exit 1
+}
+
 while [ $# -gt 0 ]; do
-    case "$1" in
-        --host=*) REMOTE_HOST="${1#*=}" ;;
-        --user=*) REMOTE_USER="${1#*=}" ;;
-        --port=*) REMOTE_PORT="${1#*=}" ;;
-        --proxy-port=*) PROXY_PORT="${1#*=}" ;;
-        --public-hostname=*) PUBLIC_HOSTNAME="${1#*=}" ;;
-        --client-ca-path=*) CLIENT_CA_PATH="${1#*=}" ;;
-        --skip-system-setup) SKIP_SYSTEM_SETUP="true" ;;
-        --help|-h)
-            sed -n '2,/^set -euo/p' "$0" | sed 's/^# \?//'
-            exit 0
-            ;;
-        *)
-            echo "ERROR: Unknown argument: $1" >&2
-            echo "       Run with --help for usage." >&2
-            exit 1
-            ;;
-    esac
+    ARG="$1"
     shift
+    FLAG="${ARG%%=*}"
+    HAS_INLINE_VALUE="false"
+    if [ "${FLAG}" != "${ARG}" ]; then
+        HAS_INLINE_VALUE="true"
+    fi
+    if [ "${FLAG}" = "-h" ]; then
+        FLAG="--help"
+    fi
+    if ! ROW="$(option_row "${FLAG}")"; then
+        argument_error "Unknown argument: ${ARG}"
+    fi
+    IFS='|' read -r _flag VALUE_NAME VARIABLE _help <<< "${ROW}"
+    if [ -z "${VALUE_NAME}" ]; then
+        if [ "${HAS_INLINE_VALUE}" = "true" ]; then
+            argument_error "${FLAG} takes no value"
+        fi
+        printf -v "${VARIABLE}" '%s' "true"
+        continue
+    fi
+    if [ "${HAS_INLINE_VALUE}" = "true" ]; then
+        VALUE="${ARG#*=}"
+    elif [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then
+        VALUE="$1"
+        shift
+    else
+        argument_error "${FLAG} needs a value: ${FLAG} ${VALUE_NAME} (or ${FLAG}=${VALUE_NAME})"
+    fi
+    if [ -z "${VALUE}" ]; then
+        argument_error "${FLAG} needs a non-empty value"
+    fi
+    printf -v "${VARIABLE}" '%s' "${VALUE}"
 done
+unset ARG FLAG HAS_INLINE_VALUE ROW _flag VALUE_NAME VARIABLE _help VALUE
+
+if [ "${SHOW_HELP}" = "true" ]; then
+    usage
+    exit 0
+fi
+if [ -z "${REMOTE_HOST}" ] || [ -z "${REMOTE_USER}" ]; then
+    argument_error "--host and --user are required (for example --host app-server.example.com --user deploy)"
+fi
+if [ -z "${PUBLIC_HOSTNAME}" ]; then
+    PUBLIC_HOSTNAME="${REMOTE_HOST}"
+fi
 
 REMOTE_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
 REMOTE_PATH="pychestrate-service"  # relative to remote $HOME
@@ -132,6 +235,61 @@ if [ -z "${CLIENT_CA_PATH}" ]; then
 fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# ---------------------------------------------------------------------------
+# --dry-run
+#
+# ``run`` wraps every command that changes something, locally or on
+# the host; with --dry-run it prints the command instead.
+# ``run_remote_script`` does the same for a script fed to ssh on
+# stdin, printing the script.  Read-only checks (the SSH probe, the
+# --skip-system-setup tool probe) run in both modes.
+# ---------------------------------------------------------------------------
+
+shell_words() {
+    # "$@" as one line a shell would read back: words with spaces or
+    # special characters in single quotes.
+    local word quoted line=""
+    for word in "$@"; do
+        case "${word}" in
+            *[!A-Za-z0-9_./:@=+-]*|"")
+                quoted="'${word//\'/\'\\\'\'}'"
+                ;;
+            *)
+                quoted="${word}"
+                ;;
+        esac
+        line="${line:+${line} }${quoted}"
+    done
+    printf '%s\n' "${line}"
+    return 0
+}
+
+run() {
+    if [ "${DRY_RUN}" = "true" ]; then
+        echo "    [dry-run] would run: $(shell_words "$@")"
+        return 0
+    fi
+    "$@"
+}
+
+run_remote_script() {
+    # run_remote_script "<what it does>" ssh-command... ; script on stdin
+    local description="$1"
+    shift
+    if [ "${DRY_RUN}" = "true" ]; then
+        echo "    [dry-run] would run on ${REMOTE_TARGET} (${description}):"
+        sed 's/^/        | /'
+        return 0
+    fi
+    "$@"
+}
+
+# pyproject.toml pulls the private codecraftai-* packages from GitHub
+# when it names git sources for them; only then do the remote's git
+# credentials (step 3) and CODECRAFTAI_REPO_TOKEN matter.
+GIT_SOURCE_DEPENDENCIES="$(grep -c 'git = "https://github.com/automationmojo/' "${REPO_ROOT}/pyproject.toml" 2>/dev/null || true)"
+GIT_SOURCE_DEPENDENCIES="${GIT_SOURCE_DEPENDENCIES:-0}"
 
 # ---------------------------------------------------------------------------
 # Source repo-root .env (if present)
@@ -192,23 +350,27 @@ echo "  source repo  : ${REPO_ROOT}"
 echo "  target       : ${REMOTE_TARGET}"
 echo "  proxy port   : ${PROXY_PORT}    (nginx, public-facing)"
 echo "  app port     : ${REMOTE_PORT}  (gunicorn / dev-up, loopback only)"
+echo "  public name  : ${PUBLIC_HOSTNAME}"
+if [ "${DRY_RUN}" = "true" ]; then
+echo "  mode         : DRY RUN -- nothing is changed, locally or on the host"
+fi
 echo "================================================================"
 echo
 
-if [ -z "${CODECRAFTAI_REPO_TOKEN:-}" ]; then
+if [ "${GIT_SOURCE_DEPENDENCIES}" -gt 0 ] && [ -z "${CODECRAFTAI_REPO_TOKEN:-}" ]; then
     cat >&2 <<EOF
 ERROR: CODECRAFTAI_REPO_TOKEN is not set.
 
-The deploy installs nine private git-source dependencies under the
-'automationmojo' GitHub org.  Without a Personal Access Token, the
-remote's 'poetry install' step will fail.
+pyproject.toml pulls ${GIT_SOURCE_DEPENDENCIES} private dependencies from git
+repositories under the 'automationmojo' GitHub org.  Without a Personal
+Access Token, the remote's 'poetry install' step will fail.
 
 Set the same fine-grained PAT you configured for CI as
 CODECRAFTAI_REPO_TOKEN before re-running.  Required scope on the
 'automationmojo' org: Contents -- Read.
 
   export CODECRAFTAI_REPO_TOKEN=ghp_xxx
-  deployment/deploy-alpha-to-host.sh
+  deployment/deploy-alpha-to-host.sh --host ${REMOTE_HOST} --user ${REMOTE_USER}
 EOF
     exit 2
 fi
@@ -248,7 +410,7 @@ echo
 # that points at a missing bundle.
 # ---------------------------------------------------------------------------
 echo "==> Step 1a: build consumer-UI bundles locally (esbuild)"
-bash "${REPO_ROOT}/development/build-frontend.sh"
+run bash "${REPO_ROOT}/development/build-frontend.sh"
 echo
 
 # ---------------------------------------------------------------------------
@@ -256,7 +418,7 @@ echo
 # ---------------------------------------------------------------------------
 
 echo "==> Step 1/8: rsync repo to ${REMOTE_TARGET}:~/${REMOTE_PATH}/"
-ssh "${REMOTE_TARGET}" "mkdir -p ~/${REMOTE_PATH}"
+run ssh "${REMOTE_TARGET}" "mkdir -p ~/${REMOTE_PATH}"
 
 # ``--info=progress2`` is a rsync 3.1+ flag (single-line live
 # progress display).  macOS Sequoia ships ``openrsync`` (Apple's
@@ -270,8 +432,9 @@ RSYNC_PROGRESS_OPT="--stats"
 if rsync --version 2>/dev/null | grep -qE "version (3|[4-9])\."; then
     RSYNC_PROGRESS_OPT="--info=progress2"
 fi
-
-rsync -az --delete "${RSYNC_PROGRESS_OPT}" \
+sync_tree() {
+    # rsync the checkout to the host; "$@" adds rsync options.
+    rsync -az --delete "$@" \
     --exclude='.venv' \
     --exclude='.output' \
     --exclude='.cache' \
@@ -287,6 +450,16 @@ rsync -az --delete "${RSYNC_PROGRESS_OPT}" \
     --exclude='*.sqlite' \
     --exclude='*.sqlite-journal' \
     "${REPO_ROOT}/" "${REMOTE_TARGET}:~/${REMOTE_PATH}/"
+}
+
+if [ "${DRY_RUN}" = "true" ]; then
+    # rsync itself previews the sync -- every file it would send and
+    # every remote file --delete would remove -- and changes nothing.
+    echo "    [dry-run] rsync --dry-run --itemize-changes (lines starting '*deleting' are removals):"
+    sync_tree --dry-run --itemize-changes
+else
+    sync_tree "${RSYNC_PROGRESS_OPT}"
+fi
 echo
 
 # ---------------------------------------------------------------------------
@@ -361,7 +534,7 @@ EOF
 else
     echo "==> Step 2/8: system packages (apt, pipx poetry, nginx)"
     echo "    [you may be prompted for the remote sudo password]"
-    ssh -tt "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
+    run ssh -tt "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && bash repository-setup/setup-debian-machine"
 fi
 echo
 
@@ -369,10 +542,19 @@ echo
 # Step 3 -- git URL rewrite for private codecraftai-* repos
 # ---------------------------------------------------------------------------
 
-echo "==> Step 3/8: configure git insteadOf for private codecraftai-* deps"
-ssh "${REMOTE_TARGET}" \
-    "git config --global url.\"https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
-echo "    OK"
+if [ "${GIT_SOURCE_DEPENDENCIES}" -eq 0 ]; then
+    echo "==> Step 3/8: SKIPPED -- pyproject.toml pulls no codecraftai-* dependency from git"
+elif [ "${DRY_RUN}" = "true" ]; then
+    # The token is never printed.
+    echo "==> Step 3/8: configure git insteadOf for private codecraftai-* deps"
+    echo "    [dry-run] would run: ssh ${REMOTE_TARGET} git config --global" \
+         "url.https://x-access-token:***@github.com/automationmojo/.insteadOf https://github.com/automationmojo/"
+else
+    echo "==> Step 3/8: configure git insteadOf for private codecraftai-* deps"
+    ssh "${REMOTE_TARGET}" \
+        "git config --global url.\"https://x-access-token:${CODECRAFTAI_REPO_TOKEN}@github.com/automationmojo/\".insteadOf \"https://github.com/automationmojo/\""
+    echo "    OK"
+fi
 echo
 
 # ---------------------------------------------------------------------------
@@ -380,7 +562,7 @@ echo
 # ---------------------------------------------------------------------------
 
 echo "==> Step 4/8: rehome-repository (generates .env)"
-ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 repository-setup/rehome-repository --skip-workspaces"
+run ssh "${REMOTE_TARGET}" "cd ~/${REMOTE_PATH} && python3 repository-setup/rehome-repository --skip-workspaces"
 echo
 
 # ---------------------------------------------------------------------------
@@ -388,7 +570,7 @@ echo
 # ---------------------------------------------------------------------------
 
 echo "==> Step 5/8: setup-environment (venv + poetry install)"
-echo "    (cloning nine private deps -- this can take 60-120 sec)"
+echo "    (installing the private codecraftai-* dependencies -- this can take a few minutes)"
 # ``setup-environment`` is a Python script (shebanged
 # ``#!/usr/bin/env python3``) -- invoke with python3 so its
 # Python source isn't parsed as bash.  Wrap in ``bash -lc``
@@ -396,7 +578,7 @@ echo "    (cloning nine private deps -- this can take 60-120 sec)"
 # pipx-installed tools (specifically ``poetry``) are on PATH;
 # setup-environment subprocesses ``poetry env use`` /
 # ``poetry install`` and would fail otherwise.
-ssh "${REMOTE_TARGET}" "bash -lc 'cd ~/${REMOTE_PATH} && python3 development/setup-environment'"
+run ssh "${REMOTE_TARGET}" "bash -lc 'cd ~/${REMOTE_PATH} && python3 development/setup-environment'"
 echo
 
 # ---------------------------------------------------------------------------
@@ -408,7 +590,7 @@ echo
 # ---------------------------------------------------------------------------
 
 echo "==> Step 6/8: alembic upgrade head (sqlite in ~/pychestrate/)"
-ssh "${REMOTE_TARGET}" <<'EOF'
+run_remote_script "database migration and service secrets" ssh "${REMOTE_TARGET}" <<'EOF'
 set -euo pipefail
 cd ~/pychestrate-service
 # The SQLite DB lives in the pychestrate "presence directory"
@@ -453,7 +635,9 @@ else
     # remote before we render an nginx config that references
     # it -- otherwise ``nginx -t`` would fail and the deploy
     # would refuse to reload.
-    if ! ssh "${REMOTE_TARGET}" "test -f ${CLIENT_CA_PATH}"; then
+    if [ "${DRY_RUN}" = "true" ]; then
+        echo "    [dry-run] would check that ${CLIENT_CA_PATH} exists on ${REMOTE_TARGET} (step 6 creates it)"
+    elif ! ssh "${REMOTE_TARGET}" "test -f ${CLIENT_CA_PATH}"; then
         cat >&2 <<EOF
 ERROR: client-CA cert ${CLIENT_CA_PATH} missing on ${REMOTE_TARGET}.
 
@@ -525,11 +709,11 @@ sudo systemctl reload nginx
 echo "    nginx reloaded; site enabled at ${SITE_ENABLED}"
 NGINX_INSTALL
 
-    scp -q "${NGINX_CONF_LOCAL}"    "${REMOTE_TARGET}:/tmp/pychestrate.nginx.conf"
-    scp -q "${NGINX_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.nginx.install.sh"
+    run scp -q "${NGINX_CONF_LOCAL}"    "${REMOTE_TARGET}:/tmp/pychestrate.nginx.conf"
+    run scp -q "${NGINX_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.nginx.install.sh"
     rm -f "${NGINX_CONF_LOCAL}" "${NGINX_INSTALL_LOCAL}"
 
-    ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.nginx.install.sh && rm -f /tmp/pychestrate.nginx.install.sh"
+    run ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.nginx.install.sh && rm -f /tmp/pychestrate.nginx.install.sh"
 fi
 echo
 
@@ -563,7 +747,7 @@ if [ "${SKIP_SYSTEM_SETUP}" = "true" ]; then
     # operator has not configured passwordless restart, this will
     # hang in CI and time out -- the script's ssh BatchMode probe
     # earlier catches that case.
-    ssh "${REMOTE_TARGET}" "sudo systemctl restart pychestrate.service && sudo systemctl --no-pager status pychestrate.service | head -8"
+    run ssh "${REMOTE_TARGET}" "sudo systemctl restart pychestrate.service && sudo systemctl --no-pager status pychestrate.service | head -8"
 else
     echo "==> Step 8/8: rendering + installing pychestrate.service systemd unit"
     echo "    [you may be prompted for the remote sudo password]"
@@ -649,20 +833,30 @@ echo "pychestrate.service status:"
 sudo systemctl --no-pager status pychestrate.service | head -10
 UNIT_INSTALL
 
-    scp -q "${UNIT_LOCAL}"         "${REMOTE_TARGET}:/tmp/pychestrate.service"
-    scp -q "${BACKUP_UNIT_LOCAL}"  "${REMOTE_TARGET}:/tmp/pychestrate-backup.service"
-    scp -q "${BACKUP_TIMER_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate-backup.timer"
-    scp -q "${LOGROTATE_LOCAL}"    "${REMOTE_TARGET}:/tmp/pychestrate.logrotate"
-    scp -q "${UNIT_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.systemd.install.sh"
+    run scp -q "${UNIT_LOCAL}"         "${REMOTE_TARGET}:/tmp/pychestrate.service"
+    run scp -q "${BACKUP_UNIT_LOCAL}"  "${REMOTE_TARGET}:/tmp/pychestrate-backup.service"
+    run scp -q "${BACKUP_TIMER_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate-backup.timer"
+    run scp -q "${LOGROTATE_LOCAL}"    "${REMOTE_TARGET}:/tmp/pychestrate.logrotate"
+    run scp -q "${UNIT_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.systemd.install.sh"
     rm -f "${UNIT_LOCAL}" "${BACKUP_UNIT_LOCAL}" "${BACKUP_TIMER_LOCAL}" "${LOGROTATE_LOCAL}" "${UNIT_INSTALL_LOCAL}"
 
-    ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.systemd.install.sh && rm -f /tmp/pychestrate.systemd.install.sh"
+    run ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.systemd.install.sh && rm -f /tmp/pychestrate.systemd.install.sh"
 fi
 echo
 
 # ---------------------------------------------------------------------------
 # Probe
 # ---------------------------------------------------------------------------
+
+if [ "${DRY_RUN}" = "true" ]; then
+    echo "==> Probe: [dry-run] would poll http://${REMOTE_HOST}:${PROXY_PORT}/ until it answers"
+    echo
+    echo "================================================================"
+    echo "  DRY RUN COMPLETE -- nothing was changed on ${REMOTE_TARGET}"
+    echo "  or locally.  Run again without --dry-run to deploy."
+    echo "================================================================"
+    exit 0
+fi
 
 echo "==> Probing http://${REMOTE_HOST}:${PROXY_PORT}/"
 sleep 4

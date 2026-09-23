@@ -1,0 +1,53 @@
+# pychestrate-cli -- the "pyc" command line, packaged on its own.
+#
+# The CLI's sources live in the service tree (source/site/ccai/pychestrate/cli)
+# and use only the Python standard library, so this package has no
+# dependencies and installs anywhere Python 3.10+ runs:
+#
+#     pipx install ./packages/pychestrate-cli          (from a checkout)
+#     python3 -m pip wheel --no-deps -w dist ./packages/pychestrate-cli
+#
+# Build it from a full checkout: package-dir points two levels up.
+# The version comes from ccai/pychestrate/cli/version.py (PYC_VERSION),
+# the one place pyc's version is defined.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pychestrate-cli"
+dynamic = ["version"]
+description = "pyc - the command line for the Pychestrate service"
+readme = "README.rst"
+requires-python = ">=3.10"
+authors = [{name = "Code Craft AI LLC"}]
+keywords = ["pychestrate", "cli", "pyc"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Environment :: Console",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Private :: Do Not Upload",
+]
+dependencies = []
+
+[project.scripts]
+pyc = "ccai.pychestrate.cli.entry:console_main"
+
+[tool.setuptools]
+package-dir = {"" = "../../source/site"}
+include-package-data = false
+
+[tool.setuptools.packages.find]
+where = ["../../source/site"]
+include = ["ccai.pychestrate.cli", "ccai.pychestrate.cli.*"]
+namespaces = true
+
+[tool.setuptools.dynamic]
+version = {attr = "ccai.pychestrate.cli.version.PYC_VERSION"}
+
+# Keep setuptools' metadata directory next to this file instead of in
+# source/site (which is on the service's PYTHONPATH).
+[tool.distutils.egg_info]
+egg_base = "."

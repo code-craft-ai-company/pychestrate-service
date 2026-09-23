@@ -11,28 +11,21 @@ invocation it needs two lookups:
 1. ``(ext_name, verb)`` -> :class:`CLISubcommandDescriptor` from a
    loaded :class:`CLISubcommandExtension` subclass — names the
    wrapped REST ``operation_id`` and the descriptor's positional /
-   flag argument lists.
-2. ``(ext_name, verb)`` -> :class:`MountedRoute` from the live
-   ext-router manifest — names the HTTP method and the
-   ``/api/v1/ext/<ext_name><path_suffix>`` URL.
-
-This module performs both walks. The pairing convention M1 enforces
-is ``path_suffix == "/<verb>"`` — a CLI verb maps directly to its
-REST suffix segment. Subcommands declaring a path that does not
-follow the convention surface a clear lookup miss rather than a
-silent dispatch.
+   flag argument lists (:func:`find_subcommand_class`,
+   :func:`find_descriptor`).
+2. ``(ext_name, verb)`` -> the route the server mounts, from the
+   server's own ``GET /api/v1/ext`` listing
+   (:func:`parse_ext_listing` / :func:`find_listed_route`). The pairing
+   convention is ``path_suffix == "/<verb>"`` — a CLI verb maps
+   directly to its REST suffix segment.
 
 The CLI process is not the server: the extension packs installed next
-to ``pyc`` need not be the ones the server loaded, so the dispatcher
-resolves the route half from the server's own ``GET /api/v1/ext``
-listing (:func:`parse_ext_listing` / :func:`find_listed_route`) and
-keeps the in-process manifest walk for tests and tooling.
-
-The walks happen against the live subclass trees (the same path
-``mount_extension_routes`` and ``build_catalog`` use), so production
-runtimes and tests share the discovery code path. Tests inject
-synthetic class lists where needed via the existing
-``mount_extension_routes(extensions=...)`` seam.
+to ``pyc`` need not be the ones the server loaded, so the route half
+always comes from the server's listing. The in-process walk of the
+service's own route manifest lives with the service
+(:mod:`ccai.pychestrate.webservice.extensions.cli_ext_pairing`); this
+module imports nothing outside the standard library and the CLI
+package.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -48,33 +41,6 @@ from ccai.pychestrate.cli.extensions.cli_subcommand import (
     CLISubcommandDescriptor,
     CLISubcommandExtension,
 )
-from ccai.pychestrate.webservice.extensions.ext_router import (
-    MountedRoute,
-    mount_extension_routes,
-)
-
-
-@dataclass(frozen=True)
-class ResolvedExtCommand:
-    """
-        Bundle returned by :func:`resolve_ext_command` carrying every
-        piece the dispatcher needs to drive a single ``pyc ext`` call.
-
-        :param ext_name: ``ext_name`` segment under ``pyc ext``.
-        :param verb: Subcommand verb supplied on the command line.
-        :param subcommand_class: Concrete
-                                 :class:`CLISubcommandExtension`
-                                 subclass declaring the verb.
-        :param descriptor: The matching :class:`CLISubcommandDescriptor`.
-        :param mounted_route: The matching :class:`MountedRoute` from
-                              the ext-router manifest. Carries the
-                              HTTP method and the full URL.
-    """
-    ext_name: str
-    verb: str
-    subcommand_class: Type[CLISubcommandExtension]
-    descriptor: CLISubcommandDescriptor
-    mounted_route: MountedRoute
 
 
 def find_subcommand_class(*, ext_name: str) -> Optional[Type[CLISubcommandExtension]]:
@@ -113,72 +79,6 @@ def find_descriptor(
             rtnval: Optional[CLISubcommandDescriptor] = descriptor
             return rtnval
     rtnval = None
-    return rtnval
-
-
-def find_mounted_route_for_verb(
-        *,
-        ext_name: str,
-        verb: str
-    ) -> Optional[MountedRoute]:
-    """
-        Return the :class:`MountedRoute` whose ``ext_name`` and
-        ``path_suffix`` match the convention ``"/<verb>"``.
-
-        :param ext_name: ``ext_name`` segment under ``pyc ext``.
-        :param verb: Subcommand verb (without leading slash).
-
-        :returns: :class:`MountedRoute` or None.
-    """
-    expected_path_suffix = "/{}".format(verb)
-    manifest = mount_extension_routes(extensions=None)
-    for route in manifest.routes:
-        if route.ext_name == ext_name and route.path_suffix == expected_path_suffix:
-            rtnval: Optional[MountedRoute] = route
-            return rtnval
-    rtnval = None
-    return rtnval
-
-
-def resolve_ext_command(
-        *,
-        ext_name: str,
-        verb: str
-    ) -> Optional[ResolvedExtCommand]:
-    """
-        Look up the descriptor + mounted route pair for a
-        ``pyc ext <ext_name> <verb>`` invocation.
-
-        :param ext_name: ``ext_name`` segment under ``pyc ext``.
-        :param verb: Subcommand verb supplied on the command line.
-
-        :returns: Populated :class:`ResolvedExtCommand` when both
-                  halves resolve; ``None`` when either lookup misses
-                  (the dispatcher renders a tailored diagnostic in
-                  that case).
-    """
-    subcommand_class = find_subcommand_class(ext_name=ext_name)
-    if subcommand_class is None:
-        rtnval: Optional[ResolvedExtCommand] = None
-        return rtnval
-
-    descriptor = find_descriptor(subcommand_class=subcommand_class, verb=verb)
-    if descriptor is None:
-        rtnval = None
-        return rtnval
-
-    mounted_route = find_mounted_route_for_verb(ext_name=ext_name, verb=verb)
-    if mounted_route is None:
-        rtnval = None
-        return rtnval
-
-    rtnval = ResolvedExtCommand(
-        ext_name=ext_name,
-        verb=verb,
-        subcommand_class=subcommand_class,
-        descriptor=descriptor,
-        mounted_route=mounted_route,
-    )
     return rtnval
 
 
@@ -255,3 +155,12 @@ def find_listed_route(
         if route.ext_name == ext_name and route.path_suffix == expected_suffix:
             return route
     return None
+
+
+__all__ = [
+    "ListedExtRoute",
+    "find_descriptor",
+    "find_listed_route",
+    "find_subcommand_class",
+    "parse_ext_listing",
+]

@@ -10,8 +10,8 @@ Wraps the ``ExampleEchoEndpoints`` REST surface declared in p10i.
 service's ``/api/v1/ext/example/echo`` route and prints the response.
 
 This is the catalog's published reference for
-``CLISubcommandExtension`` — external authors copy the shape, the
-M2 router uses it for end-to-end discovery + dispatch tests.
+``CLISubcommandExtension`` — external authors copy the shape, and the
+end-to-end discovery + dispatch tests use it.
 """
 
 __author__ = "Code Craft AI LLC"

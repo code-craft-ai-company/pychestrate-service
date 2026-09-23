@@ -18,103 +18,129 @@
 
 ## Tasks
 
+Status as of September 2026. `[x]` done, `[~]` partly done (the note
+says what is missing), `[ ]` not started. Paths and names in the notes
+are the shipped ones where they differ from `design.md`.
+
 ### M1 — Skeleton
 
 - [x] T1.1 — Stand up the `pychestrate-cli` Python package with
       `pyc` entry point in
       `source/site/ccai/pychestrate/cli/entry.py`.
-      *(Package rooted at ``ccai.pychestrate.cli`` with
-      ``entry`` / ``parser`` / ``credentials`` / ``transport`` /
-      ``openapi_cache`` / ``models`` / ``exit_codes`` /
-      ``exceptions`` modules. Console-script registration in
-      pyproject.toml lands when packaging is updated.)*
+      *(Package rooted at ``ccai.pychestrate.cli``; standard library
+      only. The standalone ``pychestrate-cli`` distribution is
+      ``packages/pychestrate-cli`` (``pipx install
+      ./packages/pychestrate-cli``) with the ``pyc`` console script
+      ``ccai.pychestrate.cli.entry:console_main``; its version is
+      ``cli/version.py`` ``PYC_VERSION``.)*
 - [x] T1.2 — Implement `openapi_cache.load_or_fetch` with
       server-version-aware invalidation.
       *(Cache keyed by SHA-256(server_url) under
-      ``~/.pychestrate/cache/openapi/``; refreshes when the
-      server's ``info.version`` changes; falls back to last-good
-      on transient fetch failure; raises
-      ``OpenApiUnavailableError`` only when both cache and fetch
-      miss. ``PYC_OPENAPI_CACHE_DIR`` env override for tests.)*
+      ``$XDG_CACHE_HOME/pychestrate/openapi/`` (not
+      ``~/.pychestrate/cache/openapi/``); a command uses it for an hour,
+      then fetches again and rewrites it when ``info.version``
+      changed; falls back to last-good on a failed fetch; ``--help``
+      reads it whatever its age and never fetches.
+      ``PYC_OPENAPI_CACHE_DIR`` overrides the location.)*
 - [x] T1.3 — Implement `parser.build_command_tree` from an OpenAPI
       document; emit `pyc <noun> <verb>` argparse structure.
-      *(Convention: ``operationId = "<noun>_<verb>"``; missing /
-      malformed ids skipped (M3 parity check fails the build on
-      gaps). ``build_argparse_for_tree`` lifts the tree into a
-      live argparse parser; ``lookup_command`` resolves
-      ``(noun, verb)`` pairs.)*
+      *(Names come from the operation's ``x-cli`` extension, else
+      ``cli/command_names.py``, else the first tag (noun) and the
+      ``operationId`` without it (verb), with ``read`` /
+      ``get-by-<x>`` spelled ``get`` and ``patch`` ``update``; the
+      derived name stays an alias. Each command builds its own
+      argparse parser: path parameters positional, query parameters
+      typed ``--kebab-case`` flags, bodies from ``--data`` /
+      ``--from-file`` / ``--set``.)*
 - [x] T1.4 — Implement `credentials.load_profile` with `0600`
       enforcement and `--profile` / `PYC_PROFILE` precedence.
-      *(``configparser``-based INI loader; refuses any group/other
-      bit set; ``PYC_CREDENTIALS_PATH`` env override for tests;
-      ``store_token`` writes through with mode 0600 preserved.)*
+      *(``configparser``-based INI loader at
+      ``$XDG_CONFIG_HOME/pychestrate/credentials`` (the pre-XDG
+      ``~/.pychestrate/credentials`` is still read); refuses any
+      group/other bit set; ``PYC_CREDENTIALS_PATH`` overrides the
+      location.)*
 - [x] T1.5 — Implement `transport.execute_request` with mTLS and
       bearer-token auth modes.
-      *(Stdlib ``urllib.request`` opener; bearer header attached
-      from profile; ``ssl.SSLContext`` honors ``verify_tls`` and
-      loads mTLS keypair; status >= 400 reclassified into the
-      documented exception types.)*
+      *(Stdlib ``urllib.request``; the bearer token is a ``pyc_...``
+      API token, which ``/api/v1`` accepts; ``ssl.SSLContext`` honors
+      ``verify_tls`` and loads an mTLS keypair; redirects are never
+      followed; every request carries ``X-Request-Id``; status >= 400
+      is reclassified into the documented exception types.)*
 - [x] T1.6 — Wire `pyc --version`, `pyc --help`,
       `pyc <noun> --help`, `pyc <noun> <verb> --help` — all
       offline, no network.
-      *(``_select_meta_handler`` dispatches all four meta paths
-      before any credentials / network code runs.)*
+      *(Help for API commands is written from the cached document or
+      pyc's built-in commands; unknown commands exit 2 with "did you
+      mean".)*
 - [x] T1.7 — Implement `pyc project list` (end-to-end) as the
       reference path; assert matches
       `GET /api/v1/projects`.
-      *(End-to-end flow: load profile → load_or_fetch OpenAPI →
-      build command tree → resolve project_list operation
-      (synthetic fallback to ``/api/v1/projects`` when missing)
-      → execute_request → emit JSON to stdout. Test seams for
-      profile loader, openapi fetcher, and request opener so the
-      flow is testable without a live server.)*
+      *(``pyc projects list`` (``project`` accepted) sends
+      ``GET /api/v1/projects`` with ``Authorization: Bearer pyc_...``
+      and prints the items.)*
 
 ### M2 — Core Behavior
 
-- [ ] T2.1 — Implement `pyc login` via OIDC Device Authorization
+- [~] T2.1 — Implement `pyc login` via OIDC Device Authorization
       Grant against `/api/v1/auth/oidc/device`; write token via
       `credentials.store_token`.
-- [ ] T2.2 — Implement `pyc logout` that invalidates the token
+      *(``pyc login`` stores an API token the user creates in the web
+      UI (prompt without echo, ``--with-token`` on stdin, or
+      ``PYC_TOKEN``) after checking it against ``GET /api/v1/me``.
+      The device flow is not implemented: the service has no
+      ``/api/v1/auth/oidc/device`` endpoint.)*
+- [x] T2.2 — Implement `pyc logout` that invalidates the token
       server-side and wipes the profile's token block.
-- [ ] T2.3 — Implement `pyc config set` / `get`.
-- [~] T2.4 — Implement every core command for nouns `user`,
+      *(``pyc logout --revoke``; without ``--revoke`` the token is
+      only forgotten locally.)*
+- [x] T2.3 — Implement `pyc config set` / `get`.
+      *(Also ``init``, ``unset``, ``profiles``, ``path``.)*
+- [x] T2.4 — Implement every core command for nouns `user`,
       `project`, `pod`, `client`, `run`, `resource`,
       `reservation`, `artifact`, `metric` using the OpenAPI
       operation registry.
-      *(``pyc plugin-api catalog`` (p10k) and ``pyc ext list``
-      (p10l) wired as the second + third M2 command pairs
-      alongside the earlier ``pyc project list`` reference. All
-      three bypass OpenAPI fetch since the relevant endpoints
-      are stable ``_meta`` paths and flow through
-      transport.execute_request with full exit-code mapping. The
-      remaining M2 nouns (``user``, ``pod``, ``client``, ``run``,
-      ``resource``, ``reservation``, ``artifact``, ``metric``)
-      still pending.)*
-- [ ] T2.5 — Implement `renderer.render` for
+      *(Every operation of the served document is a command; nouns
+      are the plural REST resources (``users``, ``projects``,
+      ``pods``, ``clients``, ``runs``, ``resources``, ``artifacts``,
+      ``metrics``; reservations are ``resource-pools``
+      ``create-reservation`` / ``list-reservations`` /
+      ``release-reservation``).)*
+- [x] T2.5 — Implement `renderer.render` for
       `table | json | yaml | tsv`, with TTY-aware default.
-- [ ] T2.6 — Implement `--fields` column selector with unknown-
+      *(Plus ``raw``; lists print as JSON arrays.)*
+- [x] T2.6 — Implement `--fields` column selector with unknown-
       field rejection (exit `2`).
 - [ ] T2.7 — Implement `prompt.confirm` for destructive verbs;
       honor `--yes`.
 - [ ] T2.8 — Implement `download.resumable_download` with
       `Range` resume and SHA-256 verification.
-- [ ] T2.9 — Declare `CLISubcommandExtension` resource base and
+      *(``pyc artifacts get`` prints the entry; there is no resumable
+      download.)*
+- [x] T2.9 — Declare `CLISubcommandExtension` resource base and
       extend the parser to merge extension subcommands under
       `pyc ext <ext-name>`.
-- [ ] T2.10 — Ship the `PycExtExampleSubcommand` reference
+      *(Routes resolve from the server's ``GET /api/v1/ext``
+      listing.)*
+- [x] T2.10 — Ship the `PycExtExampleSubcommand` reference
       implementation wrapping `ExampleEchoEndpoints`.
 
 ### M3 — Hardening
 
-- [ ] T3.1 — Build-time parity check that fails the CLI build if
+- [x] T3.1 — Build-time parity check that fails the CLI build if
       any OpenAPI operation id has no CLI command or vice versa.
-- [ ] T3.2 — Implement the full exit-code mapping
+      *(A test, ``test_p27p_pyc_command_names_m3``, against
+      ``specs/openapi/pychestrate.yaml``.)*
+- [x] T3.2 — Implement the full exit-code mapping
       (`0|2|3|4|5|6|7|13`).
+      *(Plus ``8`` unreachable, ``10`` / ``11`` for ``--wait``.)*
 - [ ] T3.3 — TTY-aware pager for list output > 200 rows; bypass on
       non-TTY.
 - [ ] T3.4 — Scrub sensitive query parameters from `--verbose`.
+      *(There is no ``--verbose``.)*
 - [ ] T3.5 — Refuse `--insecure` when `CI=true` unless
       `PYC_ALLOW_INSECURE_IN_CI=1`.
+      *(There is no ``--insecure``; a profile with
+      ``verify_tls = false`` is warned about on every command.)*
 - [ ] T3.6 — Opt-in OTLP exporter emitting metrics in NFR-3.
 - [ ] T3.7 — stderr log events `cli.invoked`, `cli.succeeded`,
       `cli.failed`, `cli.credentials_refused`,
@@ -122,25 +148,34 @@
       `cli.confirmation_prompted`.
 - [ ] T3.8 — Add trace spans `cli.parse`, `cli.auth`,
       `cli.request`, `cli.render`, `cli.download`.
-- [ ] T3.9 — Sphinx docs for every command path, the
+- [~] T3.9 — Sphinx docs for every command path, the
       `CLISubcommandExtension` base, and the credentials file
       format.
+      *(User guide chapter ``userguide/14-00-pyc-command-line.rst``;
+      commands are documented by their generated ``--help``.)*
 
 ## Test Tasks
 
-- [ ] TT-1 — Unit tests covering every EARS acceptance criterion in
+- [~] TT-1 — Unit tests covering every EARS acceptance criterion in
       Requirements 1–5.
-- [ ] TT-2 — Hypothesis property tests: Property 1 (`--help`
+      *(``test_p10f``, ``test_p26c``, ``test_p27p``..``test_p27s``;
+      the unimplemented criteria above are not covered.)*
+- [~] TT-2 — Hypothesis property tests: Property 1 (`--help`
       totality on all paths), Property 2 (REST ↔ CLI parity),
       Property 3 (output format byte-stability), 1000 cases each.
-- [ ] TT-3 — Integration test: spin up a stub server exposing the
+      *(Properties 1 and 2 are checked exhaustively over every
+      command of the contract instead of sampled; Hypothesis is not a
+      dependency.)*
+- [~] TT-3 — Integration test: spin up a stub server exposing the
       full OpenAPI document; drive every core command; assert
       matching request for each CLI invocation.
-- [ ] TT-4 — Extension-point test: load
+      *(Every command is built and parsed from the full document;
+      requests are driven for representative commands only.)*
+- [x] TT-4 — Extension-point test: load
       `pychestrate-ext-example`'s `PycExtExampleSubcommand` via
       `E-extension-host`, invoke `pyc ext example echo`, assert
       the REST body matches the CLI arguments byte-for-byte.
-- [ ] TT-5 — Credentials-permission test: create a mode-`0644`
+- [x] TT-5 — Credentials-permission test: create a mode-`0644`
       credentials file, assert `pyc` refuses with exit `13` and
       a stable stderr string.
 - [ ] TT-6 — Resumable-download test: interrupt mid-download, run
