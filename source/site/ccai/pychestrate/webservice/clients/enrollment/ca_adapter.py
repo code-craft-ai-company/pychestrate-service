@@ -22,6 +22,21 @@ The CA adapter owns two responsibilities:
    X.509 certificate plus the metadata the service persists on the
    :class:`ClientCert` row.
 
+Certificate identity
+--------------------
+
+The CSR's Subject CN only proves which pod the requester claims
+(it must equal the pod name the token names). The certificate the
+CA issues is NOT a copy of the CSR subject: its Subject CN, and a
+``urn:uuid:`` URI subject alternative name, carry the client id the
+enrollment service assigns. That client id is the identity every
+pod-facing route checks (the TLS terminator forwards the verified
+certificate CN, and the routes compare it with the ``client_id`` in
+the path), so a pod has exactly one identity end to end: registry
+row, certificate, and URL. The certificate is also marked as a TLS
+client certificate (``extendedKeyUsage=clientAuth``) that cannot
+act as a CA.
+
 The module intentionally does not hold a long-lived reference to the
 plaintext private key. :class:`CaHandle` wraps the key in
 :class:`SecretBytes`; signing loads a ``cryptography`` key object
@@ -38,6 +53,7 @@ __version__ = "1.0.0"
 
 import os
 import secrets
+import uuid
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -46,7 +62,7 @@ from typing import Optional, Tuple
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from cryptography.x509.oid import NameOID
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from ccai.errors.exceptions import ConfigurationError
 
@@ -99,7 +115,10 @@ class SignedCertificate:
         :param pem_public: PEM-encoded signed certificate.
         :param chain_pem: PEM-encoded issuer chain (currently a single
                           CA cert).
-        :param subject_cn: The Subject CN extracted from the CSR.
+        :param subject_cn: The Subject CN of the issued certificate --
+                           the ``issued_subject_cn`` the caller asked
+                           for (the enrolled client id), not the CSR's
+                           CN.
         :param not_before: Validity window start (UTC).
         :param not_after: Validity window end (UTC).
         :param issuer_subject: Subject DN of the issuing CA.
@@ -142,8 +161,14 @@ def get_active_ca() -> CaHandle:
     """
     handle = _ACTIVE_CA
     if handle is None:
-        err_msg_lines = ["No client-enrollment CA is installed."]
-        err_msg_lines.append("HINT: call load_ca_at_startup() + set_active_ca() from the service bootstrap.")
+        err_msg_lines = [
+            "No client-enrollment CA is installed, so this service cannot issue pod client certificates.",
+        ]
+        err_msg_lines.append(
+            "HINT: set PYCHESTRATE_ENROLLMENT_CA_SOURCE=file, PYCHESTRATE_ENROLLMENT_CA_FILE_PATH (one PEM"
+            " file holding the CA certificate and its private key) and PYCHESTRATE_ENROLLMENT_CA_ID, then"
+            " restart the service. development/dev-up and development/run-staging-gunicorn generate one."
+        )
         err_msg = os.linesep.join(err_msg_lines)
         raise CertificateAuthorityUnavailableError(err_msg) from None
     return handle
@@ -231,41 +256,30 @@ def load_ca_at_startup(
     return rtnval
 
 
-def sign_csr(
+def validate_csr(
         *,
         csr_pem: bytes,
-        expected_subject_cn: str,
-        ttl_days: int = DEFAULT_CERT_TTL_DAYS
-    ) -> SignedCertificate:
+        expected_subject_cn: str
+    ) -> x509.CertificateSigningRequest:
     """
-        Sign a PEM-encoded CSR against the active CA and return the
-        issued certificate metadata. The CSR Subject CN must match
-        ``expected_subject_cn``; any mismatch raises
-        :class:`CsrScopeMismatchError` so the caller can translate it
-        to a ``scope_mismatch`` rejection.
+        Parse a PEM-encoded CSR and check it may be signed for an
+        enrollment scoped to ``expected_subject_cn``: it must parse,
+        its self-signature must verify, and its Subject CN must equal
+        the pod name the token names. Nothing is signed or stored, so
+        callers can run this before they write anything.
 
         :param csr_pem: PEM-encoded certificate signing request.
         :param expected_subject_cn: Pod name the enrollment token is
-                                    scoped to — must equal the CSR
-                                    Subject CN.
-        :param ttl_days: Desired certificate validity window in days.
+                                    scoped to.
 
-        :returns: A :class:`SignedCertificate` describing the issued
-                  cert.
-        :raises: CsrValidationError when the CSR cannot be parsed or
-                 its signature does not verify;
+        :returns: The parsed CSR.
+        :raises: CsrValidationError when the CSR is empty, cannot be
+                 parsed or its signature does not verify;
                  CsrScopeMismatchError when the Subject CN does not
-                 match; CertificateAuthorityUnavailableError when no CA
-                 is installed.
+                 match.
     """
     if csr_pem is None or len(csr_pem) == 0:
         err_msg_lines = ["Cannot sign empty CSR."]
-        err_msg = os.linesep.join(err_msg_lines)
-        raise CsrValidationError(err_msg) from None
-
-    if ttl_days <= 0:
-        err_msg_lines = ["ttl_days must be > 0."]
-        err_msg_lines.append("RECEIVED: {}".format(ttl_days))
         err_msg = os.linesep.join(err_msg_lines)
         raise CsrValidationError(err_msg) from None
 
@@ -290,6 +304,61 @@ def sign_csr(
         err_msg = os.linesep.join(err_msg_lines)
         raise CsrScopeMismatchError(err_msg) from None
 
+    rtnval = csr
+    return rtnval
+
+
+def sign_csr(
+        *,
+        csr_pem: bytes,
+        expected_subject_cn: str,
+        issued_subject_cn: str,
+        ttl_days: int = DEFAULT_CERT_TTL_DAYS
+    ) -> SignedCertificate:
+    """
+        Sign a PEM-encoded CSR against the active CA and return the
+        issued certificate metadata. The CSR Subject CN must match
+        ``expected_subject_cn``; any mismatch raises
+        :class:`CsrScopeMismatchError` so the caller can translate it
+        to a ``scope_mismatch`` rejection.
+
+        The issued certificate's subject is ``CN=<issued_subject_cn>``
+        rather than a copy of the CSR subject; see "Certificate
+        identity" in the module docstring.
+
+        :param csr_pem: PEM-encoded certificate signing request.
+        :param expected_subject_cn: Pod name the enrollment token is
+                                    scoped to — must equal the CSR
+                                    Subject CN.
+        :param issued_subject_cn: Identity to issue the certificate
+                                  under: the client id the enrollment
+                                  service assigned. Also published as a
+                                  ``urn:uuid:`` URI subject alternative
+                                  name when it is a UUID.
+        :param ttl_days: Desired certificate validity window in days.
+
+        :returns: A :class:`SignedCertificate` describing the issued
+                  cert.
+        :raises: CsrValidationError when the CSR cannot be parsed or
+                 its signature does not verify, or when
+                 ``issued_subject_cn`` is empty;
+                 CsrScopeMismatchError when the Subject CN does not
+                 match; CertificateAuthorityUnavailableError when no CA
+                 is installed.
+    """
+    if ttl_days <= 0:
+        err_msg_lines = ["ttl_days must be > 0."]
+        err_msg_lines.append("RECEIVED: {}".format(ttl_days))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise CsrValidationError(err_msg) from None
+
+    if issued_subject_cn is None or len(issued_subject_cn) == 0:
+        err_msg_lines = ["Cannot issue a client certificate without an identity (issued_subject_cn is empty)."]
+        err_msg = os.linesep.join(err_msg_lines)
+        raise CsrValidationError(err_msg) from None
+
+    csr = validate_csr(csr_pem=csr_pem, expected_subject_cn=expected_subject_cn)
+
     ca_handle = get_active_ca()
 
     ca_cert = x509.load_pem_x509_certificate(ca_handle.cert_pem)
@@ -307,15 +376,46 @@ def sign_csr(
     )
     serial_int = serial_int | 0x01
 
+    subject_public_key = csr.public_key()
+    is_rsa_key = isinstance(subject_public_key, rsa.RSAPublicKey)
+
     builder = (
         x509.CertificateBuilder()
-        .subject_name(csr.subject)
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, issued_subject_cn)]))
         .issuer_name(ca_cert.subject)
-        .public_key(csr.public_key())
+        .public_key(subject_public_key)
         .serial_number(serial_int)
         .not_valid_before(not_before)
         .not_valid_after(not_after)
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=is_rsa_key,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(subject_public_key), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_cert.public_key()),
+            critical=False,
+        )
     )
+
+    client_uuid_urn = _client_uuid_urn(identity=issued_subject_cn)
+    if client_uuid_urn is not None:
+        builder = builder.add_extension(
+            x509.SubjectAlternativeName([x509.UniformResourceIdentifier(client_uuid_urn)]),
+            critical=False,
+        )
 
     signed_cert = builder.sign(
         private_key=ca_private_key,
@@ -328,11 +428,29 @@ def sign_csr(
         cert_serial=serial_str,
         pem_public=cert_pem,
         chain_pem=ca_handle.cert_pem,
-        subject_cn=subject_cn,
+        subject_cn=issued_subject_cn,
         not_before=not_before,
         not_after=not_after,
         issuer_subject=ca_handle.issuer_subject,
     )
+    return rtnval
+
+
+def _client_uuid_urn(*, identity: str) -> Optional[str]:
+    """
+        Render a client id as an RFC 4122 ``urn:uuid:`` URI for the
+        certificate's subject alternative name.
+
+        :param identity: The issued identity (normally a client UUID).
+
+        :returns: ``urn:uuid:<uuid>`` when ``identity`` is a UUID,
+                  otherwise ``None``.
+    """
+    try:
+        parsed = uuid.UUID(str(identity))
+    except (ValueError, TypeError, AttributeError):
+        return None
+    rtnval = "urn:uuid:{}".format(parsed)
     return rtnval
 
 

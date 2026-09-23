@@ -644,6 +644,91 @@ def test_handle_redeem_decodes_pem_csr_and_emits_base64_cert():
     return
 
 
+def _redeem_body_for_issued_cert(*, cert_pem: bytes, chain_pem: bytes) -> Dict[str, Any]:
+    """
+        Drive the redeem handler against a patched service call that
+        returns an issued certificate, and decode the JSON body.
+
+        :param cert_pem: PEM bytes of the issued certificate.
+        :param chain_pem: PEM bytes of the issuing CA chain.
+
+        :returns: The decoded response body.
+    """
+    result = _FakeRedemptionResult(
+        cert_serial="aabbccdd", cert_pem=cert_pem, cert_chain_pem=chain_pem,
+    )
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=lambda **kwargs: result,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={"bootstrap_secret": "sek-secret", "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\nx\n"},
+        )
+        response = enrollment_routes.handle_redeem_enrollment_token(request)
+    finally:
+        patch.deactivate()
+    rtnval = _decode_body(response)
+    return rtnval
+
+
+def test_handle_redeem_returns_client_certificate_pem_as_pem_text():
+    """
+    **Feature: 3-client-enrollment -- PEM contract fields (E2E-05)**
+    **Property: ``client_certificate_pem`` carries the issued certificate
+    as PEM text, byte for byte -- the file a client writes from it loads
+    in TLS (it used to be base64 of the PEM).**
+    """
+    cert_pem_bytes = b"-----BEGIN CERTIFICATE-----\nMIIBcert\n-----END CERTIFICATE-----\n"
+    body = _redeem_body_for_issued_cert(
+        cert_pem=cert_pem_bytes,
+        chain_pem=b"-----BEGIN CERTIFICATE-----\nMIIBchain\n-----END CERTIFICATE-----\n",
+    )
+    testbase.assert_equal(body["client_certificate_pem"], cert_pem_bytes.decode("ascii"))
+    return
+
+
+def test_handle_redeem_returns_ca_chain_pem_as_pem_text():
+    """
+    **Feature: 3-client-enrollment -- PEM contract fields (E2E-05)**
+    **Property: ``ca_chain_pem`` carries the issuing CA certificate as
+    PEM text, byte for byte.**
+    """
+    chain_pem_bytes = b"-----BEGIN CERTIFICATE-----\nMIIBchain\n-----END CERTIFICATE-----\n"
+    body = _redeem_body_for_issued_cert(
+        cert_pem=b"-----BEGIN CERTIFICATE-----\nMIIBcert\n-----END CERTIFICATE-----\n",
+        chain_pem=chain_pem_bytes,
+    )
+    testbase.assert_equal(body["ca_chain_pem"], chain_pem_bytes.decode("ascii"))
+    return
+
+
+def test_handle_redeem_without_csr_returns_empty_pem_contract_fields():
+    """
+    **Feature: 3-client-enrollment -- PEM contract fields (E2E-05)**
+    **Property: a bearer-only redemption (no CSR, no certificate) returns
+    empty strings for both PEM contract fields.**
+    """
+    result = _FakeRedemptionResult(client_id="c-1")
+    patch = _patch_routes_attr(
+        name="redeem_enrollment_token", value=lambda **kwargs: result,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/enrollment-tokens/redeem",
+            db_session=object(),
+            body={"bootstrap_secret": "sek-secret", "pod_name": "pod-x"},
+        )
+        body = _decode_body(enrollment_routes.handle_redeem_enrollment_token(request))
+    finally:
+        patch.deactivate()
+    testbase.assert_equal(
+        (body["client_certificate_pem"], body["ca_chain_pem"]), ("", ""),
+    )
+    return
+
+
 def test_handle_redeem_decodes_base64_csr_field():
     """
     **Feature: 3-client-enrollment T1.1 (webworks routes)**
