@@ -9,9 +9,16 @@
 <div class="step">
     <h2>1. Read the token from the server</h2>
     <p>The token was generated on first boot and written to:</p>
-    <pre class="path">{{ token_path }}</pre>
+    <div class="copy-block">
+        <pre class="path" id="token-path">{{ token_path }}</pre>
+        <button type="button" class="btn btn-secondary btn-sm" data-copy-from="token-path" aria-label="Copy the token file path">Copy</button>
+    </div>
     <p>From a shell on the server, run:</p>
-    <pre class="path">sudo cat {{ token_path }}</pre>
+    <div class="copy-block">
+        <pre class="path" id="token-command">sudo cat {{ token_path }}</pre>
+        <button type="button" class="btn btn-secondary btn-sm" data-copy-from="token-command" aria-label="Copy the command">Copy</button>
+    </div>
+    <p class="copy-status" role="status" aria-live="polite"></p>
 </div>
 
 <div class="step">

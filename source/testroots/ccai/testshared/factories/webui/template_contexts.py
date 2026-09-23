@@ -584,6 +584,11 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),
+        "field_errors": _by_mode(
+            {"email": "Email address looks invalid.", "password_confirm": "Password and confirmation do not match."},
+            {},
+        ),
+        "first_invalid": _by_mode("email", None),
     },
     "projects/calendar/": {
         "start_date": _by_mode("2026-09-01", ""),
