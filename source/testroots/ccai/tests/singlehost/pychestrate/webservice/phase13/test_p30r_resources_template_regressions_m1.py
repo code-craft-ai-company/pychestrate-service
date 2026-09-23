@@ -36,6 +36,7 @@ from ccai.testshared.factories.webui.template_contexts import (
 from ccai.pychestrate.core.managers.allocation_manager import ReservationResponse
 from ccai.pychestrate.core.managers.ip_pool_manager import IPPoolResponse
 from ccai.pychestrate.core.managers.resource_manager import (
+    ResourcePoolResponse,
     ResourceResponse,
     TagResponse,
 )
@@ -393,4 +394,87 @@ def test_ip_pool_list_does_not_print_raw_ipv6_counts():
     visible = re.sub(r"<[^>]+>", " ", html)
 
     testbase.assert_equal(("18446744073709551615" in visible, "≈ 2⁶⁴" in visible), (False, True))
+    return
+
+
+# ---------------------------------------------------------------------------
+# RES-47: no phantom "Default" pool
+# ---------------------------------------------------------------------------
+
+
+def _pool_less_resource() -> Any:
+    rtnval = build_fixture(
+        ResourceResponse, mode=MODE_SPARSE, overrides={"pool_id": None, "pool_name": None, "tags": []},
+    )
+    return rtnval
+
+
+def test_resource_detail_shows_a_dash_for_no_pool():
+    """
+    **Feature: resources (RES-47 no phantom pool)**
+    **Property: a resource in no pool shows "—" in its Pool row, not a
+    "Default" pool that does not exist.**
+    """
+    html = _render(template_name="resources/resources/detail.html", overrides={"resource": _pool_less_resource()})
+    row = re.search(r'<th scope="row">Pool</th>\s*<td>(.*?)</td>', html, re.DOTALL)
+
+    testbase.assert_equal(row.group(1).strip() if row is not None else None, "—")
+    return
+
+
+def test_resource_list_shows_a_dash_for_no_pool():
+    """
+    **Feature: resources (RES-47 no phantom pool)**
+    **Property: the resource list never labels a pool-less resource as
+    being in a "Default" pool.**
+    """
+    html = _render(
+        template_name="resources/resources/list.html",
+        overrides={"resources": [_pool_less_resource()], "resource_total": 1},
+    )
+
+    testbase.assert_equal(">Default<" in html, False)
+    return
+
+
+def test_health_dashboard_shows_a_dash_for_no_pool():
+    """
+    **Feature: resources (RES-47 no phantom pool)**
+    **Property: the health dashboard never labels a pool-less resource
+    as being in a "Default" pool.**
+    """
+    groups = {"online": [_pool_less_resource()], "degraded": [], "maintenance": [], "offline": []}
+    html = _render(
+        template_name="resources/health/dashboard.html",
+        overrides={"health_groups": groups, "health_counts": {"online": 1, "degraded": 0, "maintenance": 0, "offline": 0}, "total_count": 1},
+    )
+
+    testbase.assert_equal(">Default<" in html, False)
+    return
+
+
+def test_create_form_offers_no_pool_when_none_is_the_default():
+    """
+    **Feature: resources (RES-47 no phantom pool)**
+    **Property: with no pool flagged as the default, the create form's
+    empty choice reads "No pool", not "Default Pool".**
+    """
+    pools = [build_fixture(ResourcePoolResponse, mode=MODE_SPARSE, overrides={"name": "lab-a", "is_default": False})]
+    html = _render(template_name="resources/resources/create.html", overrides={"pools": pools, "form_data": None})
+
+    testbase.assert_equal(re.search(r'<option value="">([^<]*)</option>', html).group(1), "No pool")
+    return
+
+
+def test_create_form_names_the_real_default_pool():
+    """
+    **Feature: resources (RES-47 no phantom pool)**
+    **Property: when a pool is flagged as the default, the empty choice
+    names it ("Default pool (lab-a)"), since that is where the resource
+    goes.**
+    """
+    pools = [build_fixture(ResourcePoolResponse, mode=MODE_SPARSE, overrides={"name": "lab-a", "is_default": True})]
+    html = _render(template_name="resources/resources/create.html", overrides={"pools": pools, "form_data": None})
+
+    testbase.assert_equal(re.search(r'<option value="">([^<]*)</option>', html).group(1), "Default pool (lab-a)")
     return

@@ -50,7 +50,7 @@
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
                 <td>{{ resource.resource_type }}</td>
-                <td>{{ resource.pool_name or 'Default' }}</td>
+                <td>{{ resource.pool_name | display }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -79,7 +79,7 @@
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
                 <td>{{ resource.resource_type }}</td>
-                <td>{{ resource.pool_name or 'Default' }}</td>
+                <td>{{ resource.pool_name | display }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -108,7 +108,7 @@
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
                 <td>{{ resource.resource_type }}</td>
-                <td>{{ resource.pool_name or 'Default' }}</td>
+                <td>{{ resource.pool_name | display }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -138,7 +138,7 @@
             <tr>
                 <td><a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">{{ resource.name }}</a></td>
                 <td>{{ resource.resource_type }}</td>
-                <td>{{ resource.pool_name or 'Default' }}</td>
+                <td>{{ resource.pool_name | display }}</td>
                 <td>{{ resource.current_allocations }}/{{ resource.capacity }}</td>
             </tr>
             {% endfor %}
