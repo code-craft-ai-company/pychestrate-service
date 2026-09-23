@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 usage: development/select-tests [--select SEL]... [--exclude SEL]... [--root DIR]
+                                [--suite PKG] [--base PKG]...
 
 Print the 'testbase testing run' --includes arguments (one per line) that run
 exactly the requested single-host test modules. 'make test' uses it.
@@ -25,6 +26,10 @@ ccai.tests.singlehost.pychestrate.webservice (then .pychestrate, then
 --exclude takes the same selectors and is applied here, by listing every
 remaining module explicitly. With no --select and no --exclude the whole suite
 is one safe include: --includes=ccai.tests.singlehost
+
+--suite and --base let another repository's test tree use the same rules
+(for example the core repository: --suite ccai.tests --base
+ccai.tests.pychestrate --base ccai.tests).
 
 exit status: 0, or 2 when a selector matches nothing.
 """
@@ -66,12 +71,12 @@ def _modules_under(directory: str, testroots: str) -> List[str]:
     return modules
 
 
-def resolve_selector(selector: str, testroots: str) -> Optional[List[str]]:
+def resolve_selector(selector: str, testroots: str, bases: tuple = RELATIVE_BASES) -> Optional[List[str]]:
     """
         The test modules a selector names, or None when it names nothing.
     """
     candidates = [selector] if selector.startswith("ccai.") else [
-        "{}.{}".format(base, selector) for base in RELATIVE_BASES
+        "{}.{}".format(base, selector) for base in bases
     ]
     for dotted in candidates:
         directory = _package_dir(testroots, dotted)
@@ -93,7 +98,7 @@ def resolve_selector(selector: str, testroots: str) -> Optional[List[str]]:
 def main(argv: List[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="development/select-tests",
-        usage="%(prog)s [--select SEL]... [--exclude SEL]... [--root DIR]",
+        usage="%(prog)s [--select SEL]... [--exclude SEL]... [--root DIR] [--suite PKG] [--base PKG]...",
         add_help=True,
         description=__doc__.split("\n\n", 1)[1] if "\n\n" in __doc__ else None,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -102,28 +107,35 @@ def main(argv: List[str]) -> int:
     parser.add_argument("--exclude", action="append", default=[], metavar="SEL")
     default_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "source", "testroots", "ccai")
     parser.add_argument("--root", default=default_root, help="the testbase --root (default: %(default)s)")
+    parser.add_argument("--suite", default=SUITE_PACKAGE, metavar="PKG",
+                        help="the whole suite, run when nothing is selected (default: %(default)s)")
+    parser.add_argument("--base", action="append", default=None, metavar="PKG",
+                        help="package a relative selector is resolved against, in order (repeatable;"
+                             " default: the service's)")
     args = parser.parse_args(argv)
 
     testroots = _testroots_dir(args.root)
+    suite = args.suite
+    bases = tuple(args.base) if args.base else RELATIVE_BASES
 
     if not args.select and not args.exclude:
-        print("--includes={}".format(SUITE_PACKAGE))
+        print("--includes={}".format(suite))
         return 0
 
     selected: List[str] = []
     if args.select:
         for selector in args.select:
-            modules = resolve_selector(selector, testroots)
+            modules = resolve_selector(selector, testroots, bases)
             if modules is None:
                 print("select-tests: '{}' matches no test package or module".format(selector), file=sys.stderr)
                 return 2
             selected.extend(modules)
     else:
-        selected = _modules_under(_package_dir(testroots, SUITE_PACKAGE), testroots)
+        selected = _modules_under(_package_dir(testroots, suite), testroots)
 
     excluded: Set[str] = set()
     for selector in args.exclude:
-        modules = resolve_selector(selector, testroots)
+        modules = resolve_selector(selector, testroots, bases)
         if modules is None:
             print("select-tests: exclude '{}' matches no test package or module".format(selector), file=sys.stderr)
             return 2
