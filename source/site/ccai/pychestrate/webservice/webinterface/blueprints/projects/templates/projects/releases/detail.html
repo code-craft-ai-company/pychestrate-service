@@ -64,6 +64,48 @@
     </table></div>
 </div>
 
+{% if provenance %}
+<div class="card mt">
+    <h2 class="card-header">Created from template</h2>
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <tr>
+            <th scope="row">Template</th>
+            <td>
+                {% if provenance.template_id is not none %}
+                <a href="{{ url_for('projects.release_template_detail', project_id=project.id, template_id=provenance.template_id) }}">{{ provenance.template_name }}</a>
+                {% else %}
+                {{ provenance.template_name | display }} <span class="muted">(template since deleted)</span>
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">Channel</th>
+            <td>{{ provenance.channel | display }}</td>
+        </tr>
+        <tr>
+            <th scope="row">Version pattern</th>
+            <td>{% if provenance.version_pattern %}<code>{{ provenance.version_pattern }}</code>{% else %}&mdash;{% endif %}</td>
+        </tr>
+        <tr>
+            <th scope="row">Repositories</th>
+            <td>
+                {% for repository in provenance.repositories %}
+                {% if repository.name is not none %}<a href="{{ url_for('projects.repository_detail', project_id=project.id, repository_id=repository.id) }}">{{ repository.name }}</a>{% else %}Repository {{ repository.id }} <span class="muted">(removed)</span>{% endif %}{% if not loop.last %}, {% endif %}
+                {% else %}&mdash;{% endfor %}
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">Pipeline</th>
+            <td>{% if provenance.pipeline_json %}<pre class="mono small pyc-pre-scroll">{{ provenance.pipeline_json }}</pre>{% else %}&mdash;{% endif %}</td>
+        </tr>
+        <tr>
+            <th scope="row">Schedule</th>
+            <td>{% if provenance.schedule_json %}<pre class="mono small pyc-pre-scroll">{{ provenance.schedule_json }}</pre>{% else %}&mdash;{% endif %}</td>
+        </tr>
+    </table></div>
+</div>
+{% endif %}
+
 <div class="card mt">
     <h2 class="card-header">Artifacts ({{ artifacts|length }})</h2>
     {% if artifacts %}

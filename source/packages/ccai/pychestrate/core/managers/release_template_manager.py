@@ -695,3 +695,171 @@ class ReleaseTemplateManager:
             )
 
         return
+
+    # -------------------------------------------------------------------
+    # Releases from a template
+    # -------------------------------------------------------------------
+
+    def build_release_request(
+            self,
+            template: ReleaseTemplateResponse,
+            *,
+            version: str,
+            name: Optional[str] = None,
+            description: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None
+        ) -> Any:
+        """
+            Fold a template's defaults into a ``ReleaseCreateRequest``.
+
+            ``version`` is required -- there is no sane template default
+            for an exact release version -- and must match the
+            template's ``version_pattern`` when it has one. ``name`` and
+            ``description`` fall back to the template's. The release
+            metadata records where the release came from
+            (``template_id`` / ``template_name``) and the template's
+            ``channel``, ``version_pattern``, ``repository_ids``,
+            ``pipeline`` and ``schedule`` defaults; keys in ``metadata``
+            overwrite them.
+
+            :param template: The template to apply.
+            :param version: Release version (e.g. ``1.4.0``).
+            :param name: Optional release name.
+            :param description: Optional release description.
+            :param metadata: Optional metadata overrides.
+
+            :returns: ``ReleaseCreateRequest`` for
+                      :meth:`ReleaseManager.create_release`.
+
+            :raises ReleaseTemplateValidationError: missing version, or
+                a version that does not match the template's pattern.
+        """
+        from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
+            ReleaseCreateRequest,
+        )
+
+        effective_version = version.strip() if isinstance(version, str) else ""
+        if len(effective_version) == 0:
+            raise ReleaseTemplateValidationError(
+                "Enter the release version, for example 1.4.0.",
+                field_name="version",
+                error_code="MISSING_VERSION",
+            ) from None
+
+        pattern = template.version_pattern
+        if pattern is not None and len(pattern) > 0:
+            try:
+                matches = re.fullmatch(pattern, effective_version) is not None
+            except re.error:
+                matches = False
+            if matches is False:
+                raise ReleaseTemplateValidationError(
+                    "Version {} does not match this template's version "
+                    "pattern {}.".format(effective_version, pattern),
+                    field_name="version",
+                    error_code="VERSION_PATTERN_MISMATCH",
+                ) from None
+
+        if isinstance(name, str) and len(name.strip()) > 0:
+            effective_name = name.strip()
+        else:
+            effective_name = "{0} {1}".format(template.name, effective_version)
+
+        if isinstance(description, str):
+            effective_description = description
+        else:
+            effective_description = template.description
+
+        merged_metadata: Dict[str, Any] = {}
+        if template.default_channel is not None and len(template.default_channel) > 0:
+            merged_metadata["channel"] = template.default_channel
+        if template.version_pattern is not None and len(template.version_pattern) > 0:
+            merged_metadata["version_pattern"] = template.version_pattern
+        if template.default_repo_ids is not None and len(template.default_repo_ids) > 0:
+            merged_metadata["repository_ids"] = list(template.default_repo_ids)
+        if template.default_pipeline is not None:
+            merged_metadata["pipeline"] = template.default_pipeline
+        if template.default_schedule is not None:
+            merged_metadata["schedule"] = template.default_schedule
+        merged_metadata["template_id"] = template.id
+        merged_metadata["template_name"] = template.name
+
+        if isinstance(metadata, dict):
+            for key, value in metadata.items():
+                merged_metadata[key] = value
+
+        rtnval = ReleaseCreateRequest(
+            version=effective_version,
+            name=effective_name,
+            description=effective_description,
+            metadata=merged_metadata,
+        )
+        return rtnval
+
+    def create_release_from_template(
+            self,
+            project_id: int,
+            template_id: int,
+            *,
+            version: str,
+            name: Optional[str] = None,
+            description: Optional[str] = None,
+            metadata: Optional[Dict[str, Any]] = None,
+            user_id: Optional[str] = None,
+            release_manager: Any = None
+        ) -> Any:
+        """
+            Create a draft release in ``project_id`` from one of the
+            project's release templates (see
+            :meth:`build_release_request` for how the defaults apply).
+
+            :param project_id: Project the release goes into.
+            :param template_id: Template to apply; must belong to the
+                                project.
+            :param version: Release version.
+            :param name: Optional release name.
+            :param description: Optional release description.
+            :param metadata: Optional metadata overrides.
+            :param user_id: Acting user, for the audit trail.
+            :param release_manager: Optional ``ReleaseManager`` (built
+                                    on this manager's session when
+                                    omitted).
+
+            :returns: The ``ReleaseResponse`` of the new release.
+
+            :raises ReleaseTemplateNotFoundError: the template does not
+                exist in the project.
+            :raises ReleaseTemplateValidationError: see
+                :meth:`build_release_request`.
+            :raises ReleaseVersionValidationError: the version is not a
+                semantic version.
+            :raises DuplicateReleaseVersionError: the project already has
+                a release with that version.
+        """
+        template = self.get(template_id)
+        if template is None or template.project_id != project_id:
+            err_msg_lines = ["Release template not found in this project."]
+            err_msg_lines.append("TEMPLATE_ID: {}".format(template_id))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise ReleaseTemplateNotFoundError(err_msg) from None
+
+        release_request = self.build_release_request(
+            template,
+            version=version,
+            name=name,
+            description=description,
+            metadata=metadata,
+        )
+
+        if release_manager is None:
+            from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
+                ReleaseManager,
+            )
+            release_manager = ReleaseManager(self._db_session)
+
+        rtnval = release_manager.create_release(
+            project_id=project_id,
+            request=release_request,
+            user_id=user_id,
+        )
+        return rtnval

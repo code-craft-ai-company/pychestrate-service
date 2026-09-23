@@ -903,85 +903,6 @@ def _release_response_to_dict(release: Any) -> dict:
     return rtnval
 
 
-def _build_release_from_template_request(
-        *,
-        request: Request,
-        template: Any,
-        body: dict
-    ) -> Any:
-    """
-        Fold the template's defaults into a
-        :class:`ReleaseCreateRequest` using any overrides supplied
-        in the request body.
-
-        ``version`` is required on the body -- there is no sane
-        template default for an exact release version. ``name`` /
-        ``description`` fall back to the template's. ``metadata``
-        is the merge target: the template-derived fields
-        (``channel``, ``version_pattern``, ``repository_ids``,
-        ``pipeline``, ``schedule``) are written first, then any
-        body-supplied ``metadata`` keys overwrite them.
-
-        :param request: Incoming webworks request (for error
-                        context).
-        :param template: ``ReleaseTemplateResponse`` row.
-        :param body: Decoded JSON request body.
-
-        :returns: ``ReleaseCreateRequest`` ready to hand to the
-                  release manager.
-    """
-    from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
-        ReleaseCreateRequest,
-    )
-
-    raw_version = body.get("version")
-    if not isinstance(raw_version, str) or len(raw_version.strip()) == 0:
-        _abort_problem(
-            request=request,
-            status=400,
-            detail="``version`` is required (non-empty string).",
-        )
-    effective_version = raw_version.strip()
-
-    raw_name = body.get("name")
-    if isinstance(raw_name, str) and len(raw_name.strip()) > 0:
-        effective_name = raw_name.strip()
-    else:
-        effective_name = "{0} {1}".format(template.name, effective_version)
-
-    raw_description = body.get("description")
-    if isinstance(raw_description, str):
-        effective_description = raw_description
-    else:
-        effective_description = template.description
-
-    merged_metadata: Dict[str, Any] = {}
-    if template.default_channel is not None and len(template.default_channel) > 0:
-        merged_metadata["channel"] = template.default_channel
-    if template.version_pattern is not None and len(template.version_pattern) > 0:
-        merged_metadata["version_pattern"] = template.version_pattern
-    if template.default_repo_ids is not None and len(template.default_repo_ids) > 0:
-        merged_metadata["repository_ids"] = list(template.default_repo_ids)
-    if template.default_pipeline is not None:
-        merged_metadata["pipeline"] = template.default_pipeline
-    if template.default_schedule is not None:
-        merged_metadata["schedule"] = template.default_schedule
-    merged_metadata["template_id"] = template.id
-
-    body_metadata = body.get("metadata")
-    if isinstance(body_metadata, dict):
-        for key, value in body_metadata.items():
-            merged_metadata[key] = value
-
-    rtnval = ReleaseCreateRequest(
-        version=effective_version,
-        name=effective_name,
-        description=effective_description,
-        metadata=merged_metadata,
-    )
-    return rtnval
-
-
 def handle_create_release_from_template(request: Request) -> Response:
     """
         ``POST /api/v1/projects/{project_id}/release-templates/{template_id}/create-release``
@@ -1036,33 +957,47 @@ def handle_create_release_from_template(request: Request) -> Response:
             )
 
         body = _decode_json_or_abort(request=request)
-        release_request = _build_release_from_template_request(
-            request=request,
-            template=template,
-            body=body,
-        )
+        raw_version = body.get("version")
+        if not isinstance(raw_version, str) or len(raw_version.strip()) == 0:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="``version`` is required (non-empty string).",
+            )
+        version = raw_version.strip()
 
         from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
             DuplicateReleaseVersionError,
             ProjectNotFoundError,
-            ReleaseManager,
             ReleaseVersionValidationError,
         )
+        from ccai.pychestrate.core.managers.release_template_manager import (  # noqa: E402
+            ReleaseTemplateNotFoundError,
+            ReleaseTemplateValidationError,
+        )
 
-        release_manager = ReleaseManager(db_session)
+        raw_name = body.get("name")
+        raw_description = body.get("description")
+        raw_metadata = body.get("metadata")
 
         try:
-            release_response = release_manager.create_release(
-                project_id=project_id,
-                request=release_request,
+            release_response = manager.create_release_from_template(
+                project_id,
+                template_id,
+                version=version,
+                name=raw_name if isinstance(raw_name, str) else None,
+                description=(
+                    raw_description if isinstance(raw_description, str) else None
+                ),
+                metadata=raw_metadata if isinstance(raw_metadata, dict) else None,
                 user_id=actor_user_id,
             )
-        except ProjectNotFoundError as xcpt:
+        except (ProjectNotFoundError, ReleaseTemplateNotFoundError) as xcpt:
             _abort_problem(
                 request=request,
                 status=404,
                 detail=str(xcpt),
-                extensions={"project_id": project_id},
+                extensions={"project_id": project_id, "template_id": template_id},
             )
         except DuplicateReleaseVersionError as xcpt:
             _abort_problem(
@@ -1071,19 +1006,22 @@ def handle_create_release_from_template(request: Request) -> Response:
                 detail=str(xcpt),
                 extensions={
                     "project_id": project_id,
-                    "version": release_request.version,
+                    "version": version,
                 },
             )
-        except ReleaseVersionValidationError as xcpt:
+        except (ReleaseVersionValidationError, ReleaseTemplateValidationError) as xcpt:
             _abort_problem(
                 request=request,
                 status=400,
                 detail=str(xcpt),
-                extensions={"version": release_request.version},
+                extensions={"version": version},
             )
 
         body_out = _release_response_to_dict(release_response)
-        rtnval: Response = JSONResponse(status_code=201, body=body_out)
+        # ``content`` is the JSONResponse payload keyword; the old
+        # ``body=`` raised a TypeError after the release had already
+        # been committed, so every call answered 500.
+        rtnval: Response = JSONResponse(content=body_out, status_code=201)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
 

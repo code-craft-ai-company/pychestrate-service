@@ -572,6 +572,25 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "user_search": _by_mode("ali", ""),
         "can_create_users": _by_mode(True, False),
     },
+    "projects/release_templates/": {
+        "can_create_release": _by_mode(True, False),
+        "release_form": _by_mode({"version": "1.4.0", "name": "Spring"}, {}),
+        "release_errors": _by_mode({"version": "Version 1.4 does not match this template's version pattern."}, {}),
+    },
+    "projects/releases/detail": {
+        "provenance": _by_mode(
+            {
+                "template_id": 7,
+                "template_name": "standard",
+                "channel": "stable",
+                "version_pattern": "^\\d+\\.\\d+\\.\\d+$",
+                "repositories": [{"id": 7, "name": "repo-alpha"}, {"id": 8, "name": None}],
+                "pipeline_json": "{\n  \"stages\": []\n}",
+                "schedule_json": "",
+            },
+            None,
+        ),
+    },
     # -- end projects-a audit fixes --------------------------------------
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),

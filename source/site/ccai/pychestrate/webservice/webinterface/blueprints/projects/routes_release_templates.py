@@ -16,12 +16,15 @@ on the F2 ``routes_repositories`` slice.
 * ``GET  /projects/{project_id}/release-templates/{template_id}/edit``
 * ``POST /projects/{project_id}/release-templates/{template_id}/edit``
 * ``POST /projects/{project_id}/release-templates/{template_id}/delete``
+* ``POST /projects/{project_id}/release-templates/{template_id}/create-release``
 
 Permission tiers:
 
 * ``view``      -- list + detail pages.
 * ``developer`` -- create / edit.
 * ``admin``     -- delete.
+* ``release.create`` (administrators and owners) -- create a draft
+  release from a template.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -90,7 +93,16 @@ _ROUTE_TABLE = (
         "/{project_id}/release-templates/{template_id}/delete",
         ("POST",),
     ),
+    (
+        "projects.release_template_create_release",
+        "/{project_id}/release-templates/{template_id}/create-release",
+        ("POST",),
+    ),
 )
+
+#: Project permission needed to create a release from a template
+#: (administrators and owners, see ``ROLE_PERMISSIONS``).
+RELEASE_CREATE_PERMISSION = "release.create"
 
 
 # ---------------------------------------------------------------------------
@@ -693,47 +705,11 @@ def handle_release_template_detail(request: Request) -> Response:
             return template_or_redirect
         template = template_or_redirect
 
-        try:
-            can_manage = project_manager.check_permission(
-                project_id, auth.user_id, "developer"
-            )
-        except Exception:
-            can_manage = False
-
-        try:
-            can_delete = project_manager.check_permission(
-                project_id, auth.user_id, "admin"
-            )
-        except Exception:
-            can_delete = False
-
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="projects.release_template_detail",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
-        )
-        context["project"] = project
-        context["template"] = template
-        context["repository_names"] = _repository_name_map(db_session=db_session, project_id=project_id)
-        context["can_manage"] = can_manage
-        context["can_delete"] = can_delete
-        context["default_pipeline_json"] = (
-            json.dumps(template.default_pipeline, indent=2)
-            if template.default_pipeline is not None else ""
-        )
-        context["default_schedule_json"] = (
-            json.dumps(template.default_schedule, indent=2)
-            if template.default_schedule is not None else ""
-        )
-
-        response = _render(
-            template_name="projects/release_templates/detail.html",
-            context=context,
-        )
-        _attach_session_to_response(
-            response=response, session=auth.session
+        response = _render_template_detail(
+            auth=auth,
+            project=project,
+            template=template,
+            project_manager=project_manager,
         )
         return response
     finally:
@@ -741,6 +717,267 @@ def handle_release_template_detail(request: Request) -> Response:
             db_session.close()
         except Exception:
             pass
+
+
+def _render_template_detail(
+        *,
+        auth: _AuthResolution,
+        project: Any,
+        template: Any,
+        project_manager: Any,
+        status_code: int = 200,
+        release_form: Optional[Dict[str, str]] = None,
+        release_errors: Optional[Dict[str, str]] = None
+    ) -> HTMLResponse:
+    """
+        Render the release-template detail page, including the
+        "Create release" form for users allowed to create releases.
+
+        :param auth: Authenticated request resolution.
+        :param project: The owning project.
+        :param template: The release template.
+        :param project_manager: ProjectManager for the permission probes.
+        :param status_code: HTTP status (400 when re-rendering a
+                            create-release form with errors).
+        :param release_form: Values the user typed into the
+                             create-release form, echoed back.
+        :param release_errors: Field name -> message for the
+                               create-release form.
+
+        :returns: The rendered response.
+    """
+    project_id = project.id
+
+    try:
+        can_manage = project_manager.check_permission(
+            project_id, auth.user_id, "developer"
+        )
+    except Exception:
+        can_manage = False
+
+    try:
+        can_delete = project_manager.check_permission(
+            project_id, auth.user_id, "admin"
+        )
+    except Exception:
+        can_delete = False
+
+    try:
+        can_create_release = project_manager.check_permission(
+            project_id, auth.user_id, RELEASE_CREATE_PERMISSION
+        )
+    except Exception:
+        can_create_release = False
+
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="projects.release_template_detail",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["project"] = project
+    context["template"] = template
+    context["repository_names"] = _repository_name_map(db_session=auth.db_session, project_id=project_id)
+    context["can_manage"] = can_manage
+    context["can_delete"] = can_delete
+    context["can_create_release"] = can_create_release
+    context["release_form"] = release_form if release_form is not None else {}
+    context["release_errors"] = release_errors if release_errors is not None else {}
+    context["default_pipeline_json"] = (
+        json.dumps(template.default_pipeline, indent=2)
+        if template.default_pipeline is not None else ""
+    )
+    context["default_schedule_json"] = (
+        json.dumps(template.default_schedule, indent=2)
+        if template.default_schedule is not None else ""
+    )
+
+    response = _render(
+        template_name="projects/release_templates/detail.html",
+        context=context,
+        status_code=status_code,
+    )
+    _attach_session_to_response(
+        response=response, session=auth.session
+    )
+    return response
+
+
+def handle_release_template_create_release(request: Request) -> Response:
+    """
+        ``POST /projects/{project_id}/release-templates/{template_id}/create-release``.
+        Creates a draft release from the template. Needs the project's
+        ``release.create`` permission (administrators and owners).
+
+        A version that is missing, not a semantic version, outside the
+        template's version pattern, or already released re-renders the
+        template page with the message next to the version field.
+
+        :param request: Incoming webworks request.
+
+        :returns: Redirect to the new release, or the template page with
+                  field errors.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        template_id = _coerce_int(
+            raw=request.path_params.get("template_id", None)
+        )
+
+        project_manager = _build_project_manager(db_session=db_session)
+        resolved = _resolve_project_or_redirect(
+            auth=auth,
+            project_manager=project_manager,
+            project_id=project_id,
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project = resolved
+
+        detail_url = _url_for_module.url_for(
+            "projects.release_template_detail",
+            project_id=project_id,
+            template_id=template_id,
+        ) if template_id is not None else _url_for_module.url_for(
+            "projects.release_template_list", project_id=project_id
+        )
+
+        single_form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=detail_url,
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        deny_response = _require_project_permission_or_redirect(
+            project_manager=project_manager,
+            auth=auth,
+            project_id=project_id,
+            permission=RELEASE_CREATE_PERMISSION,
+            deny_redirect_url=detail_url,
+            deny_message=(
+                "Only project administrators and owners can create "
+                "releases."
+            ),
+        )
+        if deny_response is not None:
+            return deny_response
+
+        template_manager = _build_template_manager(db_session=db_session)
+        template_or_redirect = _resolve_template_or_redirect(
+            auth=auth,
+            template_manager=template_manager,
+            project_id=project_id,
+            template_id=template_id,
+        )
+        if isinstance(template_or_redirect, RedirectResponse):
+            return template_or_redirect
+        template = template_or_redirect
+
+        version = str(single_form.get("version", "")).strip()
+        name = str(single_form.get("name", "")).strip()
+        release_form = {"version": version, "name": name}
+
+        try:
+            release = template_manager.create_release_from_template(
+                project_id,
+                template_id,
+                version=version,
+                name=name if len(name) > 0 else None,
+                user_id=auth.user_id,
+            )
+        except Exception as exc:
+            if _is_release_input_error(exc=exc) is False:
+                raise
+            db_session.rollback()
+            response = _render_template_detail(
+                auth=auth,
+                project=project,
+                template=template,
+                project_manager=project_manager,
+                status_code=400,
+                release_form=release_form,
+                release_errors={
+                    "version": _first_line(
+                        text=getattr(exc, "message", None) or str(exc)
+                    ),
+                },
+            )
+            return response
+
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for(
+                "projects.release_detail",
+                project_id=project_id,
+                release_id=release.id,
+            ),
+            message='Draft release {} created from template "{}".'.format(
+                release.version, template.name
+            ),
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _is_release_input_error(*, exc: BaseException) -> bool:
+    """
+        Whether ``exc`` is a problem with the version the user typed
+        (missing, not semantic, outside the template's pattern, or
+        already released) rather than an internal failure.
+
+        :param exc: The exception raised while creating the release.
+
+        :returns: ``True`` for the four user-input errors.
+    """
+    from ccai.pychestrate.core.managers.release_manager import (  # noqa: E402
+        DuplicateReleaseVersionError,
+        ReleaseVersionValidationError,
+    )
+    from ccai.pychestrate.core.managers.release_template_manager import (  # noqa: E402
+        ReleaseTemplateValidationError,
+    )
+    rtnval = isinstance(
+        exc,
+        (
+            DuplicateReleaseVersionError,
+            ReleaseVersionValidationError,
+            ReleaseTemplateValidationError,
+        ),
+    )
+    return rtnval
+
+
+def _first_line(*, text: str) -> str:
+    """
+        The first line of a (possibly multi-line) manager message.
+
+        :param text: Message text.
+
+        :returns: Its first non-empty line.
+    """
+    for line in str(text).splitlines():
+        if len(line.strip()) > 0:
+            return line.strip()
+    return str(text).strip()
 
 
 def handle_release_template_edit(request: Request) -> Response:
@@ -1050,6 +1287,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "projects.release_template_detail": handle_release_template_detail,
     "projects.release_template_edit": handle_release_template_edit,
     "projects.release_template_delete": handle_release_template_delete,
+    "projects.release_template_create_release": handle_release_template_create_release,
 }
 
 
@@ -1080,4 +1318,5 @@ __all__ = [
     "handle_release_template_detail",
     "handle_release_template_edit",
     "handle_release_template_delete",
+    "handle_release_template_create_release",
 ]

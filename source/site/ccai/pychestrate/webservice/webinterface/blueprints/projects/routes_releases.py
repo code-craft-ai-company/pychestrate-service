@@ -35,6 +35,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -137,6 +139,90 @@ def _build_release_manager(*, db_session: Any) -> Any:
         ReleaseManager,
     )
     rtnval = ReleaseManager(db_session)
+    return rtnval
+
+
+def _build_release_template_manager(*, db_session: Any) -> Any:
+    from ccai.pychestrate.core.managers.release_template_manager import (  # noqa: E402
+        ReleaseTemplateManager,
+    )
+    rtnval = ReleaseTemplateManager(db_session=db_session)
+    return rtnval
+
+
+def _build_repository_manager(*, db_session: Any) -> Any:
+    from ccai.pychestrate.core.managers.repository_manager import (  # noqa: E402
+        RepositoryManager,
+    )
+    rtnval = RepositoryManager(db_session)
+    return rtnval
+
+
+def _release_provenance(
+        *, db_session: Any, project_id: int, metadata: Any
+    ) -> Optional[Dict[str, Any]]:
+    """
+        Describe where a release came from, for the release page.
+
+        Releases created from a release template carry the template's
+        id (and, since templates can be renamed or deleted, its name)
+        and the defaults it contributed -- channel, repositories,
+        pipeline and schedule -- in their metadata. Repository ids are
+        resolved to names; a template that no longer exists is shown by
+        its recorded name without a link.
+
+        :param db_session: Open SQLAlchemy session.
+        :param project_id: The release's project.
+        :param metadata: ``ReleaseResponse.metadata``.
+
+        :returns: A dict for the template, or ``None`` when the release
+                  was not created from a template.
+    """
+    if not isinstance(metadata, dict):
+        return None
+    template_id = metadata.get("template_id", None)
+    if template_id is None:
+        return None
+
+    template = None
+    try:
+        template_manager = _build_release_template_manager(db_session=db_session)
+        template = template_manager.get(int(template_id))
+    except Exception:
+        template = None
+    if template is not None and template.project_id != project_id:
+        template = None
+
+    repository_names: Dict[int, str] = {}
+    try:
+        repository_manager = _build_repository_manager(db_session=db_session)
+        for repository in repository_manager.list_repositories(project_id, limit=500).repositories:
+            repository_names[int(repository.id)] = str(repository.name)
+    except Exception:
+        repository_names = {}
+
+    repositories: List[Dict[str, Any]] = []
+    for raw_id in metadata.get("repository_ids", None) or []:
+        try:
+            repo_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        repositories.append({"id": repo_id, "name": repository_names.get(repo_id, None)})
+
+    pipeline = metadata.get("pipeline", None)
+    schedule = metadata.get("schedule", None)
+    rtnval = {
+        "template_id": template.id if template is not None else None,
+        "template_name": (
+            template.name if template is not None
+            else str(metadata.get("template_name", "") or "")
+        ),
+        "channel": metadata.get("channel", None),
+        "version_pattern": metadata.get("version_pattern", None),
+        "repositories": repositories,
+        "pipeline_json": json.dumps(pipeline, indent=2, sort_keys=True) if pipeline is not None else "",
+        "schedule_json": json.dumps(schedule, indent=2, sort_keys=True) if schedule is not None else "",
+    }
     return rtnval
 
 
@@ -432,6 +518,11 @@ def handle_release_detail(request: Request) -> Response:
         context["artifacts"] = artifacts
         context["channels"] = channels
         context["can_manage"] = can_manage
+        context["provenance"] = _release_provenance(
+            db_session=db_session,
+            project_id=project_id,
+            metadata=getattr(release, "metadata", None),
+        )
 
         response = _render(
             template_name="projects/releases/detail.html",
