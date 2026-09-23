@@ -3628,11 +3628,15 @@ paths:
       summary: Remove a resource from a pool.
       operationId: resource_pools_remove_member
       x-pychestrate-status: planned
-      description: Idempotent on a missing membership.
+      description: |
+        Idempotent on a missing membership. A `pool_id` or
+        `resource_id` that is not a UUID names nothing and answers
+        `404`.
       responses:
         '204': { description: Resource removed from the pool. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /resource-pools/{pool_id}/reservations:
     parameters:
@@ -3807,7 +3811,8 @@ paths:
       x-pychestrate-status: planned
       description: |
         Returns the usage timeline newest-first as a `{items, meta}`
-        page.
+        page. A `resource_id` that is not a UUID names nothing and
+        answers `404`.
       parameters:
         - in: query
           name: limit
@@ -3821,6 +3826,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{project_id}/blast-radius-guards:
     parameters:

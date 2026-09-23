@@ -145,8 +145,8 @@ class _FakeMemberRow:
             self,
             *,
             membership_id: str = "member-1",
-            pool_id: str = "pool-1",
-            resource_id: str = "res-1"
+            pool_id: str = "11111111-1111-4111-8111-000000000001",
+            resource_id: str = "22222222-2222-4222-8222-000000000001"
         ) -> None:
         self.membership_id: str = membership_id
         self.pool_id: str = pool_id
@@ -161,7 +161,7 @@ class _FakeResourceRow:
     def __init__(
             self,
             *,
-            resource_id: str = "res-1",
+            resource_id: str = "22222222-2222-4222-8222-000000000001",
             display_name: str = "lab-device",
             kind: str = "device",
             state: Any = None
@@ -179,7 +179,7 @@ class _FakeHealthRow:
     def __init__(
             self,
             *,
-            resource_id: str = "res-1",
+            resource_id: str = "22222222-2222-4222-8222-000000000001",
             last_outcome: str = "pass"
         ) -> None:
         self.resource_id: str = resource_id
@@ -230,8 +230,8 @@ def _patch_check_permission(*, allowed: bool) -> Any:
 
 def _make_pool_view(
         *,
-        pool_id: str = "pool-1",
-        project_id: str = "proj-1",
+        pool_id: str = "11111111-1111-4111-8111-000000000001",
+        project_id: str = "33333333-3333-4333-8333-000000000001",
         name: str = "lab-pool",
         member_count: int = 0
     ) -> Any:
@@ -250,14 +250,14 @@ def _make_pool_view(
 
 def _make_reservation_view(
         *,
-        reservation_id: str = "rsv-1",
-        resource_id: str = "res-1",
+        reservation_id: str = "44444444-4444-4444-8444-000000000001",
+        resource_id: str = "22222222-2222-4222-8222-000000000001",
         state: Any = None
     ) -> Any:
     resolved_state = state if state is not None else ReservationState.GRANTED
     rtnval = resource_pools_routes.checkout_service.ReservationView(
         reservation_id=reservation_id,
-        project_id="proj-1",
+        project_id="33333333-3333-4333-8333-000000000001",
         resource_id=resource_id,
         requested_by=None,
         mode=ReservationMode.EXCLUSIVE,
@@ -271,10 +271,10 @@ def _make_reservation_view(
     return rtnval
 
 
-def _make_candidate(*, resource_id: str = "res-1") -> Any:
+def _make_candidate(*, resource_id: str = "22222222-2222-4222-8222-000000000001") -> Any:
     rtnval = resource_pools_routes.pools_service.PoolCandidate(
         resource_id=resource_id,
-        pool_id="pool-1",
+        pool_id="11111111-1111-4111-8111-000000000001",
         added_at=datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc),
     )
     return rtnval
@@ -416,14 +416,14 @@ def test_list_returns_page_envelope_on_happy_path():
     )
     list_mock = list_patch.activate()
     list_mock.configure(
-        side_effect=lambda **kwargs: [_make_pool_view(pool_id="pool-1")],
+        side_effect=lambda **kwargs: [_make_pool_view(pool_id="11111111-1111-4111-8111-000000000001")],
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools",
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            query={"project_id": "proj-1", "page": "1", "per_page": "10"},
+            query={"project_id": "33333333-3333-4333-8333-000000000001", "page": "1", "per_page": "10"},
         )
         response = resource_pools_routes.handle_list_resource_pools(request)
     finally:
@@ -432,7 +432,7 @@ def test_list_returns_page_envelope_on_happy_path():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["pool_id"], "pool-1")
+    testbase.assert_equal(body["items"][0]["pool_id"], "11111111-1111-4111-8111-000000000001")
     testbase.assert_equal(body["meta"]["page"], 1)
     testbase.assert_equal(body["meta"]["total"], 1)
     return
@@ -451,9 +451,9 @@ def test_list_paginates_window():
     list_mock = list_patch.activate()
     list_mock.configure(
         side_effect=lambda **kwargs: [
-            _make_pool_view(pool_id="pool-1"),
-            _make_pool_view(pool_id="pool-2"),
-            _make_pool_view(pool_id="pool-3"),
+            _make_pool_view(pool_id="11111111-1111-4111-8111-000000000001"),
+            _make_pool_view(pool_id="11111111-1111-4111-8111-000000000002"),
+            _make_pool_view(pool_id="11111111-1111-4111-8111-000000000003"),
         ],
     )
     try:
@@ -461,7 +461,7 @@ def test_list_paginates_window():
             path="/api/v1/resource-pools",
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            query={"project_id": "proj-1", "page": "2", "per_page": "2"},
+            query={"project_id": "33333333-3333-4333-8333-000000000001", "page": "2", "per_page": "2"},
         )
         response = resource_pools_routes.handle_list_resource_pools(request)
     finally:
@@ -470,7 +470,7 @@ def test_list_paginates_window():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["pool_id"], "pool-3")
+    testbase.assert_equal(body["items"][0]["pool_id"], "11111111-1111-4111-8111-000000000003")
     testbase.assert_equal(body["meta"]["total"], 3)
     return
 
@@ -515,7 +515,7 @@ def test_create_returns_422_on_missing_name():
             path="/api/v1/resource-pools",
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001"},
         )
         response = resource_pools_routes.handle_create_resource_pool(request)
     finally:
@@ -547,7 +547,7 @@ def test_create_returns_409_on_duplicate_name():
             path="/api/v1/resource-pools",
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1", "name": "lab-pool"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001", "name": "lab-pool"},
         )
         response = resource_pools_routes.handle_create_resource_pool(request)
     finally:
@@ -571,7 +571,7 @@ def test_create_returns_201_on_happy_path():
     )
     create_mock = create_patch.activate()
     create_mock.configure(
-        side_effect=lambda **kwargs: _make_pool_view(pool_id="pool-new"),
+        side_effect=lambda **kwargs: _make_pool_view(pool_id="11111111-1111-4111-8111-00000000000e"),
     )
     try:
         request = _FakeRequest(
@@ -579,7 +579,7 @@ def test_create_returns_201_on_happy_path():
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={
-                "project_id": "proj-1",
+                "project_id": "33333333-3333-4333-8333-000000000001",
                 "name": "lab-pool",
                 "capability_tags": ["gpu"],
             },
@@ -590,7 +590,7 @@ def test_create_returns_201_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
-    testbase.assert_equal(body["pool_id"], "pool-new")
+    testbase.assert_equal(body["pool_id"], "11111111-1111-4111-8111-00000000000e")
     return
 
 
@@ -606,7 +606,7 @@ def test_create_returns_403_when_permission_denied():
             path="/api/v1/resource-pools",
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1", "name": "lab-pool"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001", "name": "lab-pool"},
         )
         response = resource_pools_routes.handle_create_resource_pool(request)
     finally:
@@ -643,7 +643,7 @@ def test_read_returns_404_when_pool_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-x",
-            path_params={"pool_id": "pool-x"},
+            path_params={"pool_id": "11111111-1111-4111-8111-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -654,7 +654,7 @@ def test_read_returns_404_when_pool_missing():
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
-    testbase.assert_equal(body["pool_id"], "pool-x")
+    testbase.assert_equal(body["pool_id"], "11111111-1111-4111-8111-00000000000a")
     return
 
 
@@ -671,13 +671,13 @@ def test_read_returns_200_on_happy_path():
     get_mock = get_patch.activate()
     get_mock.configure(
         side_effect=lambda **kwargs: _make_pool_view(
-            pool_id="pool-7", member_count=3,
+            pool_id="11111111-1111-4111-8111-000000000007", member_count=3,
         ),
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-7",
-            path_params={"pool_id": "pool-7"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000007"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -687,7 +687,7 @@ def test_read_returns_200_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
-    testbase.assert_equal(body["pool_id"], "pool-7")
+    testbase.assert_equal(body["pool_id"], "11111111-1111-4111-8111-000000000007")
     testbase.assert_equal(body["member_count"], 3)
     return
 
@@ -712,7 +712,7 @@ def test_delete_returns_404_when_pool_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-x",
-            path_params={"pool_id": "pool-x"},
+            path_params={"pool_id": "11111111-1111-4111-8111-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -749,7 +749,7 @@ def test_delete_returns_204_on_happy_path():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=_Session(),
             auth_principal=_FakePrincipal(),
         )
@@ -785,16 +785,16 @@ def test_list_pool_resources_returns_page_on_happy_path():
     )
     members_mock = members_patch.activate()
     members_mock.configure(
-        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="res-1")],
+        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="22222222-2222-4222-8222-000000000001")],
     )
     inventory_patch, health_patch = _patch_member_enrichment(
-        resource_row=_FakeResourceRow(resource_id="res-1"),
-        health_row=_FakeHealthRow(resource_id="res-1"),
+        resource_row=_FakeResourceRow(resource_id="22222222-2222-4222-8222-000000000001"),
+        health_row=_FakeHealthRow(resource_id="22222222-2222-4222-8222-000000000001"),
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -808,7 +808,7 @@ def test_list_pool_resources_returns_page_on_happy_path():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["resource_id"], "res-1")
+    testbase.assert_equal(body["items"][0]["resource_id"], "22222222-2222-4222-8222-000000000001")
     testbase.assert_equal(body["items"][0]["resource_name"], "lab-device")
     testbase.assert_equal(body["items"][0]["resource_kind"], "device")
     testbase.assert_equal(body["items"][0]["resource_state"], "available")
@@ -834,7 +834,7 @@ def test_list_pool_resources_tolerates_missing_enrichment_rows():
     )
     members_mock = members_patch.activate()
     members_mock.configure(
-        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="res-1")],
+        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="22222222-2222-4222-8222-000000000001")],
     )
     inventory_patch, health_patch = _patch_member_enrichment(
         resource_row=None,
@@ -843,7 +843,7 @@ def test_list_pool_resources_tolerates_missing_enrichment_rows():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -883,10 +883,10 @@ def test_add_pool_resource_returns_404_when_pool_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-x/resources",
-            path_params={"pool_id": "pool-x"},
+            path_params={"pool_id": "11111111-1111-4111-8111-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"resource_id": "res-1"},
+            body={"resource_id": "22222222-2222-4222-8222-000000000001"},
         )
         response = resource_pools_routes.handle_add_pool_resource(request)
     finally:
@@ -908,19 +908,19 @@ def test_add_pool_resource_returns_201_on_happy_path():
     )
     add_mock = add_patch.activate()
     add_mock.configure(
-        side_effect=lambda **kwargs: _FakeMemberRow(resource_id="res-9"),
+        side_effect=lambda **kwargs: _FakeMemberRow(resource_id="22222222-2222-4222-8222-000000000009"),
     )
     inventory_patch, health_patch = _patch_member_enrichment(
-        resource_row=_FakeResourceRow(resource_id="res-9"),
+        resource_row=_FakeResourceRow(resource_id="22222222-2222-4222-8222-000000000009"),
         health_row=None,
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"resource_id": "res-9"},
+            body={"resource_id": "22222222-2222-4222-8222-000000000009"},
         )
         response = resource_pools_routes.handle_add_pool_resource(request)
     finally:
@@ -930,7 +930,7 @@ def test_add_pool_resource_returns_201_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
-    testbase.assert_equal(body["resource_id"], "res-9")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-000000000009")
     testbase.assert_equal(body["resource_name"], "lab-device")
     testbase.assert_equal(body["resource_health"], None)
     return
@@ -951,7 +951,7 @@ def test_remove_pool_resource_returns_204_on_happy_path():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/resources/res-1",
-            path_params={"pool_id": "pool-1", "resource_id": "res-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001", "resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -985,7 +985,7 @@ def test_list_reservations_returns_aggregated_page():
     )
     members_mock = members_patch.activate()
     members_mock.configure(
-        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="res-1")],
+        side_effect=lambda **kwargs: [_FakeMemberRow(resource_id="22222222-2222-4222-8222-000000000001")],
     )
     rsv_patch = create_module_patch(
         resource_pools_routes.checkout_service,
@@ -993,12 +993,12 @@ def test_list_reservations_returns_aggregated_page():
     )
     rsv_mock = rsv_patch.activate()
     rsv_mock.configure(
-        side_effect=lambda **kwargs: [_make_reservation_view(reservation_id="rsv-1")],
+        side_effect=lambda **kwargs: [_make_reservation_view(reservation_id="44444444-4444-4444-8444-000000000001")],
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -1011,7 +1011,7 @@ def test_list_reservations_returns_aggregated_page():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["reservation_id"], "rsv-1")
+    testbase.assert_equal(body["items"][0]["reservation_id"], "44444444-4444-4444-8444-000000000001")
     return
 
 
@@ -1034,10 +1034,10 @@ def test_create_reservation_returns_409_when_pool_empty():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001"},
         )
         response = resource_pools_routes.handle_create_pool_reservation(request)
     finally:
@@ -1073,10 +1073,10 @@ def test_create_reservation_returns_409_when_conflict_rejected():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1", "mode": "exclusive"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001", "mode": "exclusive"},
         )
         response = resource_pools_routes.handle_create_pool_reservation(request)
     finally:
@@ -1099,10 +1099,10 @@ def test_create_reservation_returns_422_on_bad_mode():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1", "mode": "bogus"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001", "mode": "bogus"},
         )
         response = resource_pools_routes.handle_create_pool_reservation(request)
     finally:
@@ -1123,7 +1123,7 @@ def test_create_reservation_returns_201_on_happy_path():
     )
     pick_mock = pick_patch.activate()
     pick_mock.configure(
-        side_effect=lambda **kwargs: _make_candidate(resource_id="res-3"),
+        side_effect=lambda **kwargs: _make_candidate(resource_id="22222222-2222-4222-8222-000000000003"),
     )
     reserve_patch = create_module_patch(
         resource_pools_routes.checkout_service, "reserve",
@@ -1131,16 +1131,16 @@ def test_create_reservation_returns_201_on_happy_path():
     reserve_mock = reserve_patch.activate()
     reserve_mock.configure(
         side_effect=lambda **kwargs: _make_reservation_view(
-            reservation_id="rsv-new", resource_id="res-3",
+            reservation_id="44444444-4444-4444-8444-00000000000e", resource_id="22222222-2222-4222-8222-000000000003",
         ),
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations",
-            path_params={"pool_id": "pool-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"project_id": "proj-1"},
+            body={"project_id": "33333333-3333-4333-8333-000000000001"},
         )
         response = resource_pools_routes.handle_create_pool_reservation(request)
     finally:
@@ -1149,8 +1149,8 @@ def test_create_reservation_returns_201_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
-    testbase.assert_equal(body["reservation_id"], "rsv-new")
-    testbase.assert_equal(body["resource_id"], "res-3")
+    testbase.assert_equal(body["reservation_id"], "44444444-4444-4444-8444-00000000000e")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-000000000003")
     testbase.assert_equal(body["state"], "granted")
     return
 
@@ -1174,7 +1174,7 @@ def test_release_reservation_returns_404_when_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations/rsv-x",
-            path_params={"pool_id": "pool-1", "reservation_id": "rsv-x"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001", "reservation_id": "44444444-4444-4444-8444-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -1206,7 +1206,7 @@ def test_release_reservation_returns_204_on_happy_path():
     try:
         request = _FakeRequest(
             path="/api/v1/resource-pools/pool-1/reservations/rsv-1",
-            path_params={"pool_id": "pool-1", "reservation_id": "rsv-1"},
+            path_params={"pool_id": "11111111-1111-4111-8111-000000000001", "reservation_id": "44444444-4444-4444-8444-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -1217,4 +1217,145 @@ def test_release_reservation_returns_204_on_happy_path():
         release_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 204)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Malformed ids (audit finding RES-38)
+# ---------------------------------------------------------------------------
+
+
+_A_POOL_ID = "11111111-1111-4111-8111-000000000001"
+_A_PROJECT_ID = "33333333-3333-4333-8333-000000000001"
+
+
+def _call_authorised(
+        *,
+        handler: Callable,
+        path_params: Optional[Dict[str, Any]] = None,
+        query: Optional[Dict[str, str]] = None,
+        body: Any = None
+    ) -> Any:
+    """
+        Call ``handler`` as an authorised caller. Returns
+        ``(status_code, decoded_body)``.
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        response = handler(_FakeRequest(
+            path="/api/v1/resource-pools",
+            path_params=path_params,
+            query=query,
+            body=body,
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        ))
+    finally:
+        perm_patch.deactivate()
+    rtnval = (response.status_code, _decode_body(response))
+    return rtnval
+
+
+def test_read_pool_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: GET resource-pools/not-a-uuid answers a 404 problem
+    document instead of a 500.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_read_resource_pool, path_params={"pool_id": "not-a-uuid"},
+    )
+
+    testbase.assert_equal((status, body["type"], body["pool_id"]), (404, PROBLEM_TYPE_NOT_FOUND, "not-a-uuid"))
+    return
+
+
+def test_list_pools_with_a_malformed_project_id_is_a_400_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: GET resource-pools?project_id=not-a-uuid answers 400
+    naming the query parameter.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_list_resource_pools, query={"project_id": "not-a-uuid"},
+    )
+
+    testbase.assert_equal((status, body["invalid_fields"]), (400, ["project_id"]))
+    return
+
+
+def test_create_pool_with_a_malformed_project_id_is_a_422_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: POST resource-pools with project_id "not-a-uuid" answers
+    422 naming the field.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_create_resource_pool,
+        body={"project_id": "not-a-uuid", "name": "android-phones"},
+    )
+
+    testbase.assert_equal((status, body["type"], body["invalid_fields"]), (422, PROBLEM_TYPE_VALIDATION_FAILED, ["project_id"]))
+    return
+
+
+def test_add_member_with_a_malformed_resource_id_is_a_422_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: POST resource-pools/{id}/resources with resource_id
+    "bad" answers 422 naming the field.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_add_pool_resource,
+        path_params={"pool_id": _A_POOL_ID},
+        body={"resource_id": "bad"},
+    )
+
+    testbase.assert_equal((status, body["invalid_fields"]), (422, ["resource_id"]))
+    return
+
+
+def test_remove_member_with_a_malformed_resource_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: DELETE resource-pools/{id}/resources/bad answers 404
+    instead of a 500.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_remove_pool_resource,
+        path_params={"pool_id": _A_POOL_ID, "resource_id": "bad"},
+    )
+
+    testbase.assert_equal((status, body["type"]), (404, PROBLEM_TYPE_NOT_FOUND))
+    return
+
+
+def test_release_reservation_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: DELETE resource-pools/{id}/reservations/bad answers 404
+    instead of a 500.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_release_pool_reservation,
+        path_params={"pool_id": _A_POOL_ID, "reservation_id": "bad"},
+    )
+
+    testbase.assert_equal((status, body["type"]), (404, PROBLEM_TYPE_NOT_FOUND))
+    return
+
+
+def test_reserve_with_a_malformed_preferred_member_is_a_422_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: POST resource-pools/{id}/reservations with a
+    preferred_member that is not a UUID answers 422 naming the field.**
+    """
+    status, body = _call_authorised(
+        handler=resource_pools_routes.handle_create_pool_reservation,
+        path_params={"pool_id": _A_POOL_ID},
+        body={"project_id": _A_PROJECT_ID, "preferred_member": "phone-7"},
+    )
+
+    testbase.assert_equal((status, body["invalid_fields"]), (422, ["preferred_member"]))
     return

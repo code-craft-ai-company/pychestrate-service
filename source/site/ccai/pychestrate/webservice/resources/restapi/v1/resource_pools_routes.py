@@ -47,6 +47,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -361,7 +362,81 @@ def _require_project_id_query(*, request: Request) -> str:
             detail="Query param 'project_id' is required.",
             extensions={"query_param": "project_id"},
         )
-    rtnval = raw
+    rtnval = _require_uuid_value(
+        request=request, value=raw, name="project_id", status=400, source="Query param",
+    )
+    return rtnval
+
+
+def _canonical_uuid(value: Any) -> Optional[str]:
+    """
+        The canonical text of a UUID, or ``None`` when ``value`` is not
+        one.
+
+        :param value: Candidate UUID.
+
+        :returns: Canonical UUID text or None.
+    """
+    try:
+        rtnval = str(uuid.UUID(str(value)))
+    except (TypeError, ValueError, AttributeError):
+        rtnval = None
+    return rtnval
+
+
+def _require_uuid_path_param(*, request: Request, name: str, label: str) -> str:
+    """
+        Read a UUID path parameter. A value that is not a UUID cannot
+        name anything, so it is answered ``404`` like any unknown id
+        (the database layer used to raise on it and the request failed
+        with a ``500``).
+
+        :param request: Incoming webworks request.
+        :param name: Path-parameter name.
+        :param label: What the id names ("Pool"), for the detail.
+
+        :returns: The canonical UUID text.
+    """
+    raw = request.path_params.get(name, "")
+    rtnval = _canonical_uuid(raw)
+    if rtnval is None:
+        _abort_problem(
+            request=request,
+            status=404,
+            detail="{} not found: '{}' is not a {} id.".format(label, raw, label.lower()),
+            extensions={name: raw},
+        )
+    return rtnval
+
+
+def _require_uuid_value(
+        *,
+        request: Request,
+        value: Any,
+        name: str,
+        status: int = 422,
+        source: str = "Field"
+    ) -> str:
+    """
+        Validate a UUID supplied in the body (``422``) or the query
+        string (``400``).
+
+        :param request: Incoming webworks request.
+        :param value: Supplied value.
+        :param name: Field or query-param name.
+        :param status: Problem status for a malformed value.
+        :param source: "Field" or "Query param", for the detail.
+
+        :returns: The canonical UUID text.
+    """
+    rtnval = _canonical_uuid(value)
+    if rtnval is None:
+        _abort_problem(
+            request=request,
+            status=status,
+            detail="{} '{}' must be a UUID.".format(source, name),
+            extensions={"invalid_fields": [name], "raw_value": value},
+        )
     return rtnval
 
 
@@ -595,8 +670,10 @@ def handle_create_resource_pool(request: Request) -> Response:
         )
         body = _decode_json_object_or_abort(request=request)
 
-        project_id = _require_string_field(
-            request=request, body=body, field_name="project_id",
+        project_id = _require_uuid_value(
+            request=request,
+            value=_require_string_field(request=request, body=body, field_name="project_id"),
+            name="project_id",
         )
         name = _require_string_field(
             request=request, body=body, field_name="name",
@@ -658,6 +735,7 @@ def handle_read_resource_pool(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_READ_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
 
         try:
             view = pools_service.get_pool(
@@ -699,6 +777,7 @@ def handle_delete_resource_pool(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_WRITE_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
 
         row = pools_repository.find_pool_by_id(
             db_session=db_session, pool_id=pool_id,
@@ -743,6 +822,7 @@ def handle_list_pool_resources(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_READ_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
 
         try:
             pools_service.get_pool(db_session=db_session, pool_id=pool_id)
@@ -810,9 +890,12 @@ def handle_add_pool_resource(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_WRITE_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
         body = _decode_json_object_or_abort(request=request)
-        resource_id = _require_string_field(
-            request=request, body=body, field_name="resource_id",
+        resource_id = _require_uuid_value(
+            request=request,
+            value=_require_string_field(request=request, body=body, field_name="resource_id"),
+            name="resource_id",
         )
 
         try:
@@ -865,6 +948,8 @@ def handle_remove_pool_resource(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_WRITE_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
+        resource_id = _require_uuid_path_param(request=request, name="resource_id", label="Resource")
 
         pools_service.remove_member(
             db_session=db_session,
@@ -901,6 +986,7 @@ def handle_list_pool_reservations(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_READ_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
 
         try:
             pools_service.get_pool(db_session=db_session, pool_id=pool_id)
@@ -970,9 +1056,12 @@ def handle_create_pool_reservation(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_WRITE_PERMISSION_KEY,
         )
+        pool_id = _require_uuid_path_param(request=request, name="pool_id", label="Pool")
         body = _decode_json_object_or_abort(request=request)
-        project_id = _require_string_field(
-            request=request, body=body, field_name="project_id",
+        project_id = _require_uuid_value(
+            request=request,
+            value=_require_string_field(request=request, body=body, field_name="project_id"),
+            name="project_id",
         )
 
         mode_raw = body.get("mode", "exclusive")
@@ -999,6 +1088,10 @@ def handle_create_pool_reservation(request: Request) -> Response:
         resource_id = body.get("resource_id", None)
         if resource_id is None:
             preferred_member = body.get("preferred_member", None)
+            if preferred_member is not None:
+                preferred_member = _require_uuid_value(
+                    request=request, value=preferred_member, name="preferred_member",
+                )
             aspects = pools_service.AllocationAspects(
                 preferred_member=preferred_member,
             )
@@ -1032,6 +1125,9 @@ def handle_create_pool_reservation(request: Request) -> Response:
                     status=422,
                     detail="Field 'resource_id' must be a non-empty string.",
                 )
+            resource_id = _require_uuid_value(
+                request=request, value=resource_id, name="resource_id",
+            )
 
         try:
             view = checkout_service.reserve(
@@ -1081,6 +1177,10 @@ def handle_release_pool_reservation(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCE_POOLS_WRITE_PERMISSION_KEY,
         )
+        # The pool id only scopes the URL, but a malformed one is still
+        # an unknown pool.
+        _require_uuid_path_param(request=request, name="pool_id", label="Pool")
+        reservation_id = _require_uuid_path_param(request=request, name="reservation_id", label="Reservation")
 
         try:
             checkout_service.release(
