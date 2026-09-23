@@ -82,7 +82,10 @@ function _severity_for(flash_element) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/header.js
 var LOGOUT_PATH = "/logout";
+var ACCOUNT_PANEL_ID = "pyc-site-shell-account-panel";
 var NAV_TOGGLE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></svg>';
+var SEARCH_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>';
+var CHEVRON_DOWN_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 9l6 6 6-6" /></svg>';
 function build_header(options) {
   const app_bar = document.createElement("mj-app-bar");
   app_bar.setAttribute("slot", "app-bar");
@@ -112,14 +115,40 @@ function build_header(options) {
     );
     app_bar.appendChild(hint);
   }
+  const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
+  app_bar.appendChild(build_account_menu(options, display_name));
+  return app_bar;
+}
+function build_account_menu(options, display_name) {
   const actions = document.createElement("div");
   actions.setAttribute("slot", "actions");
   actions.classList.add("pyc-site-shell__user-menu");
-  const display_name = options.user_display_name !== null && options.user_display_name !== void 0 ? options.user_display_name : "Account";
+  const account_button = document.createElement("button");
+  account_button.type = "button";
+  account_button.classList.add("pyc-site-shell__account-button");
+  account_button.setAttribute("aria-expanded", "false");
+  account_button.setAttribute("aria-controls", ACCOUNT_PANEL_ID);
+  const account_prefix = document.createElement("span");
+  account_prefix.classList.add("pyc-site-shell__visually-hidden");
+  account_prefix.textContent = "Account: ";
+  const account_name = document.createElement("span");
+  account_name.classList.add("pyc-site-shell__account-button-name");
+  account_name.textContent = display_name;
+  const account_chevron = document.createElement("span");
+  account_chevron.classList.add("pyc-site-shell__account-button-chevron");
+  account_chevron.setAttribute("aria-hidden", "true");
+  account_chevron.innerHTML = CHEVRON_DOWN_ICON_SVG;
+  account_button.appendChild(account_prefix);
+  account_button.appendChild(account_name);
+  account_button.appendChild(account_chevron);
+  actions.appendChild(account_button);
+  const panel = document.createElement("div");
+  panel.id = ACCOUNT_PANEL_ID;
+  panel.classList.add("pyc-site-shell__account-panel");
   const name_label = document.createElement("span");
   name_label.classList.add("pyc-site-shell__user-menu-name");
   name_label.textContent = display_name;
-  actions.appendChild(name_label);
+  panel.appendChild(name_label);
   if (typeof options.on_theme_toggle === "function") {
     const theme_button = document.createElement("mj-button");
     theme_button.setAttribute("type", "button");
@@ -134,13 +163,13 @@ function build_header(options) {
       event.preventDefault();
       options.on_theme_toggle();
     });
-    actions.appendChild(theme_button);
+    panel.appendChild(theme_button);
   }
   const preferences_link = document.createElement("a");
   preferences_link.href = "/account/preferences";
   preferences_link.classList.add("pyc-site-shell__preferences-link");
   preferences_link.textContent = "Preferences";
-  actions.appendChild(preferences_link);
+  panel.appendChild(preferences_link);
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
@@ -166,9 +195,51 @@ function build_header(options) {
     document.body.appendChild(form);
     form.submit();
   });
-  actions.appendChild(logout_button);
-  app_bar.appendChild(actions);
-  return app_bar;
+  panel.appendChild(logout_button);
+  actions.appendChild(panel);
+  wire_account_disclosure(actions, account_button, panel);
+  return actions;
+}
+function wire_account_disclosure(container, button, panel) {
+  const set_open = (open) => {
+    button.setAttribute("aria-expanded", open === true ? "true" : "false");
+    if (open === true) {
+      panel.setAttribute("data-open", "");
+    } else {
+      panel.removeAttribute("data-open");
+    }
+  };
+  const is_open = () => panel.hasAttribute("data-open");
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    set_open(is_open() === false);
+  });
+  container.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || is_open() === false) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    set_open(false);
+    button.focus();
+  });
+  container.addEventListener("focusout", (event) => {
+    const next = event.relatedTarget;
+    if (next instanceof Node && container.contains(next) === true) {
+      return;
+    }
+    set_open(false);
+  });
+  document.addEventListener("click", (event) => {
+    if (is_open() === false) {
+      return;
+    }
+    if (event.composedPath().includes(container) === true) {
+      return;
+    }
+    set_open(false);
+  });
+  return;
 }
 function build_nav_toggle(on_nav_toggle, nav_open_initial) {
   const nav_toggle = document.createElement("button");
@@ -199,7 +270,16 @@ function build_palette_hint(shortcut_label, on_activate) {
     "Open the command palette to search navigation (" + resolved_label + ")"
   );
   hint.setAttribute("aria-label", "Open the command palette");
-  hint.textContent = resolved_label;
+  hint.setAttribute("aria-keyshortcuts", resolved_label === "\u2318K" ? "Meta+K" : "Control+K");
+  const icon = document.createElement("span");
+  icon.classList.add("pyc-site-shell__palette-hint-icon");
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = SEARCH_ICON_SVG;
+  const shortcut = document.createElement("span");
+  shortcut.classList.add("pyc-site-shell__palette-hint-shortcut");
+  shortcut.textContent = resolved_label;
+  hint.appendChild(icon);
+  hint.appendChild(shortcut);
   hint.addEventListener("click", (event) => {
     event.preventDefault();
     on_activate();
