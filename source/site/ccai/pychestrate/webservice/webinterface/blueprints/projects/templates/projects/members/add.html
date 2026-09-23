@@ -30,15 +30,10 @@
     </form>
 
     {% if not available_users %}
-    {% if user_search %}
-    {% set picker_empty_title = 'No active user matching "' ~ user_search ~ '" can be added.' %}
-    {% else %}
-    {% set picker_empty_title = "Every active user is already a member of this project." %}
-    {% endif %}
     {% if can_create_users %}
-    {{ ui.empty_state(picker_empty_title, "To add someone new, create their account first.", url_for('config.user_create'), "Create a user") }}
+    {{ ui.empty_state(('No active user matching "' ~ user_search ~ '" can be added.') if user_search else 'Every active user is already a member of this project.', "To add someone new, create their account first.", url_for('config.user_create'), "Create a user") }}
     {% else %}
-    {{ ui.empty_state(picker_empty_title, "Ask an administrator to create an account for the person you want to add.") }}
+    {{ ui.empty_state(('No active user matching "' ~ user_search ~ '" can be added.') if user_search else 'Every active user is already a member of this project.', "Ask an administrator to create an account for the person you want to add.") }}
     {% endif %}
     {% endif %}
 

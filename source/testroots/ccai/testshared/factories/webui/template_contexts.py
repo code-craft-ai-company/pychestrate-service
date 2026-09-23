@@ -567,6 +567,12 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "projects/releases/": {
         "artifacts": _many(ReleaseArtifactResponse),
     },
+    # -- projects-a audit fixes (PRJ-*) -----------------------------------
+    "projects/members/": {
+        "user_search": _by_mode("ali", ""),
+        "can_create_users": _by_mode(True, False),
+    },
+    # -- end projects-a audit fixes --------------------------------------
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),
     },
