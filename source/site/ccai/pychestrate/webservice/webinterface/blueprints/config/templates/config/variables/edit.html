@@ -25,7 +25,7 @@
         
         <div class="form-group">
             <label for="value">Value *</label>
-            <textarea id="value" name="value" class="form-control" rows="4" required>{{ variable.value }}</textarea>
+            <textarea id="value" name="value" class="form-control" rows="4" required>{{ format_value(value=variable.value, var_type=variable.var_type) }}</textarea>
             <p class="form-text">
                 {% if variable.var_type.value == 'boolean' %}
                 Use 'true' or 'false'

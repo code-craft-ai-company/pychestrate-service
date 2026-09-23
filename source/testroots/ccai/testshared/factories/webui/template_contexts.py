@@ -538,6 +538,15 @@ def _password_policy_value(key: str) -> Builder:
     return _build
 
 
+def _format_variable_value_builder() -> Builder:
+    def _build(mode: str) -> Any:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
+            format_variable_value,
+        )
+        return format_variable_value
+    return _build
+
+
 DEFAULT_REGISTRY.update({
     "password_rules": _password_policy_value("password_rules"),
     "password_summary": _password_policy_value("password_summary"),
@@ -547,6 +556,7 @@ DEFAULT_REGISTRY.update({
     "password_max_length": _password_policy_value("password_max_length"),
     "password_input_id": _const("password"),
     "value_cleared": _by_mode(True, False),
+    "format_value": _format_variable_value_builder(),
 })
 
 

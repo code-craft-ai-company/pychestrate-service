@@ -44,7 +44,7 @@
                The reveal toggle swaps the mask for the real value per row. #}
             <td class="narrow-sm">
                 <span data-role="variable-masked" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span>
-                <span data-role="variable-value" hidden style="display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">{{ variable.value }}</span>
+                <span data-role="variable-value" hidden style="display: inline-block; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;">{{ format_value(value=variable.value, var_type=variable.var_type) }}</span>
                 <button type="button" class="btn btn-sm btn-secondary" data-role="variable-reveal" aria-pressed="false" aria-label="Show value for {{ variable.name }}">Show</button>
             </td>
             <td>{{ variable.description or '-' }}</td>

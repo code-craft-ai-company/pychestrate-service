@@ -24,10 +24,10 @@
             <td>{{ entry.changed_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
             <td>{{ entry.changed_by or '-' }}</td>
             <td class="truncate">
-                {{ entry.old_value if entry.old_value is not none else '-' }}
+                {{ format_value(value=entry.old_value, var_type=variable.var_type) if entry.old_value is not none else '-' }}
             </td>
             <td class="truncate">
-                {{ entry.new_value if entry.new_value is not none else '-' }}
+                {{ format_value(value=entry.new_value, var_type=variable.var_type) if entry.new_value is not none else '-' }}
             </td>
         </tr>
         {% else %}
