@@ -16,8 +16,9 @@ Public surface:
 
 * :func:`scan_once` — invoked by callers (M1 tests, M2 daemon)
   to scan a single allocation's path and persist what it finds.
-* :class:`TestBaseResultTreeParser` — in-tree
-  ``result_tree_parser`` factory.
+* :class:`TestBaseResultTreeParser`, :class:`JUnitXmlResultTreeParser` —
+  in-tree ``result_tree_parser`` factories; the scanner picks the one
+  that recognizes a tree's format.
 * :func:`register_builtin_extensions`.
 * Persistence: :class:`RunResultSummary`, :class:`TaskResult`,
   :class:`RunArtifact`, :class:`ResultScanAttempt`.
@@ -44,6 +45,9 @@ from ccai.pychestrate.webservice.ingest.result.errors import (
 from ccai.pychestrate.webservice.ingest.result.events import (
     ResultEventTopics,
 )
+from ccai.pychestrate.webservice.ingest.result.factories.junit_xml import (
+    JUnitXmlResultTreeParser,
+)
 from ccai.pychestrate.webservice.ingest.result.factories.testbase_v1 import (
     TestBaseResultTreeParser,
 )
@@ -61,7 +65,9 @@ from ccai.pychestrate.webservice.ingest.result.scanner import (
 
 def register_builtin_extensions() -> None:
     """
-        Register the in-tree ``result_tree_parser`` factory.
+        Register the in-tree ``result_tree_parser`` factories: testbase
+        (the fallback) and JUnit / xUnit XML.
     """
     register_factory_implementation(implementation=TestBaseResultTreeParser)
+    register_factory_implementation(implementation=JUnitXmlResultTreeParser)
     return

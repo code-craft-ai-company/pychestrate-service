@@ -2182,6 +2182,12 @@ paths:
           `artifacts/`, `taskings/`, `tc-by-products/`,
           `diagnostics/` subtrees). The server kicks off the
           `result_tree_parser` extension chain.
+        * `junit-xml` (or any other tag) -- the tree goes through the
+          same chain, which uses the parser that recognizes it: a
+          tree of JUnit / xUnit XML reports (pytest `--junitxml`,
+          Surefire, GoogleTest, go-junit-report, jest-junit, ...) is
+          read by the `junit-xml` parser; a testbase tree by
+          `testbase-v1`.
         * `build` / `provision` -- the run is a build / provisioning
           run. The uploaded tree carries raw artifact files only
           (no per-test records), so the server takes a direct
@@ -7085,9 +7091,10 @@ components:
           type: string
           description: >-
             Job-kind tag selecting the server-side ingest path:
-            `testbase` for a testbase result tree, `build` for a
-            build artifact tree, `provision` for a provisioning
-            artifact tree.
+            `testbase` for a testbase result tree, `junit-xml` for a
+            tree of JUnit / xUnit XML reports, `build` for a build
+            artifact tree, `provision` for a provisioning artifact
+            tree.
         backend_key_prefix:
           type: string
           description: Per-run prefix the agent wrote the tree under
