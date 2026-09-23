@@ -1655,6 +1655,33 @@ class ProjectRepository(PychestrateModelBase, SerializableModel):
     pull_events = relationship('ProjectPullEvent', back_populates='repository', lazy='selectin')
 
 
+class ProjectRepositoryRef(PychestrateModelBase, SerializableModel):
+    """
+        The branches and tags of a project repository as last seen by a
+        fetch. Comparing a fetch with these rows is how new commits,
+        branches and tags are detected (and repository watches fired).
+    """
+    __tablename__ = 'project_repository_refs'
+
+    __table_args__ = (
+        UniqueConstraint('prepo_id', 'prref_kind', 'prref_name', name='uq_project_repository_ref'),
+    )
+
+    id = Column('prref_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    repository_id = Column('prepo_id', BigInteger, ForeignKey('project_repositories.prepo_id'), nullable=False,
+                           index=True, doc="Reference to the repository")
+    kind = Column('prref_kind', VARCHAR(16), nullable=False,
+                  doc="Kind of ref (branch, tag)")
+    name = Column('prref_name', VARCHAR(255), nullable=False,
+                  doc="Branch or tag name, without the refs/heads/ or refs/tags/ prefix")
+    commit_sha = Column('prref_commit_sha', VARCHAR(64), nullable=False,
+                        doc="Commit the ref pointed at (the peeled commit for annotated tags)")
+    first_seen_at = Column('prref_first_seen_at', DateTime(timezone=True), default=utc_now, nullable=False,
+                           doc="Timestamp of the fetch that first saw the ref")
+    updated_at = Column('prref_updated_at', DateTime(timezone=True), default=utc_now, nullable=False,
+                        doc="Timestamp of the fetch that last saw the ref move")
+
+
 
 class ProjectBuildTriggerType(str, enum.Enum):
     """
@@ -2089,6 +2116,7 @@ class ProjectPipelineTriggerType(str, enum.Enum):
     BRANCH_MERGE = 'branch_merge'
     SCHEDULE = 'schedule'
     API = 'api'
+    WATCH = 'watch'
 
 
 class ProjectArtifactType(str, enum.Enum):

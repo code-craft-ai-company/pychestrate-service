@@ -1,17 +1,19 @@
 """
 .. module:: tests.singlehost.pychestrate.webservice.phase10._git_http_server
     :platform: Darwin, Linux, Unix
-    :synopsis: A private Git repository served over HTTP with basic
-               authentication, on 127.0.0.1, for repository credential
-               tests.
+    :synopsis: A Git repository served over HTTP on 127.0.0.1 --
+               private (basic authentication) or public -- for
+               repository credential and watch tests.
 
 .. moduleauthor:: Code Craft AI LLC
 
 :class:`PrivateGitServer` creates a bare repository with one commit on
 ``main`` and serves it with ``git http-backend`` (smart HTTP, so
-``git ls-remote`` works) behind basic authentication. Every request's
-``Authorization`` header is recorded, so a test can tell whether the
-client sent credentials at all and which.
+``git ls-remote`` works), by default behind basic authentication. Every
+request's ``Authorization`` header is recorded, so a test can tell
+whether the client sent credentials at all and which. Its ``commit``,
+``create_branch`` and ``tag`` methods change the repository the way a
+push would.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -27,12 +29,35 @@ import subprocess
 import tempfile
 import threading
 
+from contextlib import contextmanager
+
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, List, Optional, Tuple
+from typing import Any, Iterator, List, Optional, Tuple
 
 
 #: Name of the repository directory under the server root.
 REPOSITORY_DIR_NAME: str = "private.git"
+
+
+@contextmanager
+def isolated_git_config() -> Iterator[None]:
+    """
+        Keep the developer's own git configuration (credential helpers,
+        URL rewrites) out of the git commands the app runs while the
+        block executes.
+    """
+    saved = {key: os.environ.get(key) for key in ("GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM")}
+    os.environ["GIT_CONFIG_GLOBAL"] = os.devnull
+    os.environ["GIT_CONFIG_NOSYSTEM"] = "1"
+    try:
+        yield
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+    return
 
 
 def _isolated_git_env() -> dict:
@@ -75,16 +100,24 @@ def _parse_cgi_output(*, output: bytes) -> Tuple[int, List[Tuple[str, str]], byt
 
 class PrivateGitServer:
     """
-        A bare repository behind basic authentication.
+        A bare repository behind basic authentication (or, with
+        ``require_auth=False``, a public one). :meth:`commit`,
+        :meth:`create_branch` and :meth:`tag` change it the way a push
+        would.
 
         :param username: The user name the server accepts.
         :param password: The password (token) the server accepts.
         :param port: Port to bind on 127.0.0.1 (0 picks a free one).
+        :param require_auth: False serves the repository to anyone.
     """
 
-    def __init__(self, *, username: str, password: str, port: int = 0) -> None:
+    def __init__(
+            self, *, username: str = "x-access-token", password: str = "",
+            port: int = 0, require_auth: bool = True
+        ) -> None:
         self.username: str = username
         self.password: str = password
+        self.require_auth: bool = require_auth
         self.authorizations: List[str] = []
         self.root: str = tempfile.mkdtemp(prefix="pyc-git-http-")
         self.head_sha: str = self._create_repository()
@@ -131,6 +164,64 @@ class PrivateGitServer:
         rtnval = _run_git(args=["rev-parse", "HEAD"], cwd=work)
         return rtnval
 
+    def _push(self, *, refspec: str) -> None:
+        work = os.path.join(self.root, "work")
+        _run_git(
+            args=["push", "-q", os.path.join(self.root, REPOSITORY_DIR_NAME), refspec],
+            cwd=work,
+        )
+        return
+
+    def commit(self, *, branch: str = "main", message: str = "Change") -> str:
+        """
+            Commit a change on ``branch`` (which must exist) and push it.
+
+            :returns: The new commit's SHA.
+        """
+        work = os.path.join(self.root, "work")
+        _run_git(args=["checkout", "-q", branch], cwd=work)
+        with open(os.path.join(work, "CHANGES.txt"), "a") as changes:
+            changes.write(message + "\n")
+        _run_git(args=["add", "CHANGES.txt"], cwd=work)
+        _run_git(
+            args=["-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                  "commit", "-q", "-m", message],
+            cwd=work,
+        )
+        self._push(refspec="{0}:refs/heads/{0}".format(branch))
+        rtnval = _run_git(args=["rev-parse", "HEAD"], cwd=work)
+        if branch == "main":
+            self.head_sha = rtnval
+        return rtnval
+
+    def create_branch(self, *, name: str, start: str = "main") -> str:
+        """
+            Create branch ``name`` at ``start`` and push it.
+
+            :returns: The commit the branch points at.
+        """
+        work = os.path.join(self.root, "work")
+        _run_git(args=["branch", name, start], cwd=work)
+        self._push(refspec="{0}:refs/heads/{0}".format(name))
+        rtnval = _run_git(args=["rev-parse", name], cwd=work)
+        return rtnval
+
+    def tag(self, *, name: str, target: str = "main") -> str:
+        """
+            Create the annotated tag ``name`` on ``target`` and push it.
+
+            :returns: The commit the tag points at.
+        """
+        work = os.path.join(self.root, "work")
+        _run_git(
+            args=["-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                  "tag", "-a", "-m", name, name, target],
+            cwd=work,
+        )
+        self._push(refspec="refs/tags/{0}:refs/tags/{0}".format(name))
+        rtnval = _run_git(args=["rev-parse", target], cwd=work)
+        return rtnval
+
     def _expected_authorization(self) -> str:
         pair = "{}:{}".format(self.username, self.password).encode("utf-8")
         rtnval = "Basic " + base64.b64encode(pair).decode("ascii")
@@ -139,7 +230,7 @@ class PrivateGitServer:
     def _serve(self, *, handler: BaseHTTPRequestHandler) -> None:
         authorization = handler.headers.get("Authorization", "") or ""
         self.authorizations.append(authorization)
-        if authorization != self._expected_authorization():
+        if self.require_auth is True and authorization != self._expected_authorization():
             handler.send_response(401)
             handler.send_header("WWW-Authenticate", 'Basic realm="private"')
             handler.send_header("Content-Length", "0")
@@ -187,4 +278,5 @@ class PrivateGitServer:
 __all__ = [
     "REPOSITORY_DIR_NAME",
     "PrivateGitServer",
+    "isolated_git_config",
 ]

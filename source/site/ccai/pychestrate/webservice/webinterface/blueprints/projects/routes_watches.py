@@ -34,12 +34,18 @@ Permission tiers used here:
 * ``admin`` -- delete (destructive).
 
 The create / edit form's actual posted fields
-(``event_type`` / ``repository_id`` / ``branch_pattern`` /
+(``event_type`` / ``repository_id`` or ``source_spec_id`` /
+``branch_pattern`` / ``tag_pattern`` / ``build_status`` /
 ``action_type`` / ``action_spec_id`` / ``enabled``) are
 translated into the manager's dataclass shape
 (``trigger_source`` / ``source_id`` / ``conditions`` /
 ``actions``) by :func:`_build_watch_create_request` and
 :func:`_build_watch_update_request`.
+
+Watches fire when a repository fetch finds new commits, branches or
+tags, and when a build finishes (see :mod:`watch_events`). The Test
+button checks a sample event against the conditions without running
+anything.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -164,6 +170,35 @@ def _build_watch_manager(*, db_session: Any) -> Any:
     return rtnval
 
 
+#: What starts a watch, in the words the pages use.
+WATCH_TRIGGER_LABELS: Dict[str, str] = {
+    "repository_commit": "New commits on a branch",
+    "repository_branch": "A new branch is created",
+    "repository_tag": "A new tag is created",
+    "build_completion": "A build finishes",
+}
+
+#: What a watch does, in the words the pages use.
+WATCH_ACTION_LABELS: Dict[str, str] = {
+    "trigger_build": "Run a build",
+    "trigger_infra_job": "Run an infrastructure job",
+    "trigger_test_job": "Run a test job",
+    "trigger_pipeline": "Start a release pipeline",
+    "trigger_rpa_job": "Run an RPA job",
+    "send_notification": "Record a notification (not delivered yet)",
+}
+
+
+def _add_watch_labels(*, context: Dict[str, Any]) -> None:
+    """
+        Give a watch template the plain-language trigger and action
+        names.
+    """
+    context["trigger_labels"] = WATCH_TRIGGER_LABELS
+    context["action_labels"] = WATCH_ACTION_LABELS
+    return
+
+
 def _resolve_trigger_source(*, value: str) -> Any:
     """
         Resolve an ``event_type`` form-field value (e.g.
@@ -175,7 +210,10 @@ def _resolve_trigger_source(*, value: str) -> Any:
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchTriggerSource,
     )
-    rtnval = WatchTriggerSource(value)
+    try:
+        rtnval = WatchTriggerSource(value)
+    except ValueError:
+        raise ValueError("Choose what starts the watch.") from None
     return rtnval
 
 
@@ -190,7 +228,10 @@ def _resolve_watch_action(*, value: str) -> Any:
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchAction,
     )
-    rtnval = WatchAction(value)
+    try:
+        rtnval = WatchAction(value)
+    except ValueError:
+        raise ValueError("Choose what the watch does.") from None
     return rtnval
 
 
@@ -228,19 +269,64 @@ def _enumerate_watch_action_values() -> List[str]:
     return rtnval
 
 
-def _build_watch_condition(*, branch_pattern: str) -> Any:
+#: Trigger values whose source is a repository (the others -- build
+#: completion -- name a build specification).
+REPOSITORY_TRIGGERS = ("repository_commit", "repository_branch", "repository_tag")
+
+#: Build results a build-completion watch can wait for ("any" is stored
+#: as no condition).
+BUILD_RESULT_CHOICES = ("any", "succeeded", "failed")
+
+
+def _optional_text(*, value: Optional[str]) -> Optional[str]:
+    text = str(value or "").strip()
+    rtnval = text if len(text) > 0 else None
+    return rtnval
+
+
+def _build_watch_condition(
+        *,
+        branch_pattern: str,
+        tag_pattern: str = "",
+        build_status: str = "",
+        trigger: str = "repository_commit"
+    ) -> Any:
     """
-        Construct a :class:`WatchCondition` from the form's
-        single ``branch_pattern`` field. The dataclass also
-        carries ``tag_pattern`` / ``file_pattern`` / ``build_status``
-        slots, but the create / edit forms only expose a branch
-        pattern today; the other slots stay ``None``.
+        Construct a :class:`WatchCondition` from the form, keeping only
+        the conditions that apply to the trigger: the branch pattern for
+        commits, new branches and finished builds (the branch that was
+        built), the tag pattern for new tags, and the build result for
+        finished builds. A leftover value for another trigger is ignored
+        rather than stored, where it would stop the watch from ever
+        matching.
+
+        :param branch_pattern: Regular expression for the branch name.
+        :param tag_pattern: Regular expression for the tag name.
+        :param build_status: ``any``, ``succeeded`` or ``failed``.
+        :param trigger: The watch's trigger value.
+
+        :raises: ValueError on an unknown build result.
     """
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchCondition,
     )
-    pattern = branch_pattern if len(branch_pattern) > 0 else None
-    rtnval = WatchCondition(branch_pattern=pattern)
+    branch = None
+    tag = None
+    status = None
+    if trigger == "repository_tag":
+        tag = _optional_text(value=tag_pattern)
+    else:
+        branch = _optional_text(value=branch_pattern)
+    if trigger == "build_completion":
+        status = _optional_text(value=build_status)
+        if status is not None and status not in BUILD_RESULT_CHOICES:
+            raise ValueError(
+                "Choose which build results start the watch: succeeded,"
+                " failed, or either."
+            )
+        if status == "any":
+            status = None
+    rtnval = WatchCondition(branch_pattern=branch, tag_pattern=tag, build_status=status)
     return rtnval
 
 
@@ -277,31 +363,40 @@ def _build_watch_create_request(
         *,
         name: str,
         event_type: str,
-        repository_id: int,
+        source_id: int,
         branch_pattern: str,
         action_type: str,
         action_spec_id: Optional[int],
         enabled: bool,
-        description: str
+        description: str,
+        tag_pattern: str = "",
+        build_status: str = ""
     ) -> Any:
     """
         Construct a :class:`WatchCreateRequest` from the create
         form's actual posted fields. Translates the
-        template-side names (``event_type`` / ``repository_id``
-        / ``branch_pattern`` / ``action_type`` /
+        template-side names (``event_type`` / ``branch_pattern`` /
+        ``tag_pattern`` / ``build_status`` / ``action_type`` /
         ``action_spec_id``) to the manager dataclass shape
-        (``trigger_source`` / ``source_id`` / ``conditions`` /
-        ``actions``).
+        (``trigger_source`` / ``conditions`` / ``actions``).
+
+        :param source_id: The repository (repository triggers) or the
+                          build specification (build completion).
 
         :raises: ValueError on an unknown ``event_type`` /
-                 ``action_type``, or when ``action_spec_id`` is
-                 missing.
+                 ``action_type`` / ``build_status``, or when
+                 ``action_spec_id`` is missing.
     """
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchCreateRequest,
     )
     trigger_source = _resolve_trigger_source(value=event_type)
-    conditions = _build_watch_condition(branch_pattern=branch_pattern)
+    conditions = _build_watch_condition(
+        branch_pattern=branch_pattern,
+        tag_pattern=tag_pattern,
+        build_status=build_status,
+        trigger=trigger_source.value,
+    )
     action_config = _build_watch_action_config(
         action_type=action_type,
         action_spec_id=action_spec_id,
@@ -309,7 +404,7 @@ def _build_watch_create_request(
     rtnval = WatchCreateRequest(
         name=name,
         trigger_source=trigger_source,
-        source_id=repository_id,
+        source_id=source_id,
         conditions=conditions,
         actions=[action_config],
         enabled=enabled,
@@ -325,7 +420,10 @@ def _build_watch_update_request(
         action_type: Optional[str],
         action_spec_id: Optional[int],
         enabled: Optional[bool],
-        description: Optional[str]
+        description: Optional[str],
+        tag_pattern: Optional[str] = None,
+        build_status: Optional[str] = None,
+        trigger: str = "repository_commit"
     ) -> Any:
     """
         Construct a :class:`WatchUpdateRequest` from the edit
@@ -334,14 +432,23 @@ def _build_watch_update_request(
         are rebuilt only when the form supplied the
         corresponding field.
 
-        :raises: ValueError on an unknown ``action_type``.
+        :param trigger: The watch's trigger value (it cannot change),
+                        which decides the conditions that apply.
+
+        :raises: ValueError on an unknown ``action_type`` or
+                 ``build_status``.
     """
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
         WatchUpdateRequest,
     )
     conditions = None
-    if branch_pattern is not None:
-        conditions = _build_watch_condition(branch_pattern=branch_pattern)
+    if branch_pattern is not None or tag_pattern is not None or build_status is not None:
+        conditions = _build_watch_condition(
+            branch_pattern=branch_pattern or "",
+            tag_pattern=tag_pattern or "",
+            build_status=build_status or "",
+            trigger=trigger,
+        )
     actions: Optional[List[Any]] = None
     if action_type is not None and action_spec_id is not None:
         actions = [
@@ -610,6 +717,7 @@ def _render_watch_create_form(
     context["build_specs"] = (
         build_specs if build_specs is not None else []
     )
+    _add_watch_labels(context=context)
     response = _render(
         template_name="projects/watches/create.html",
         context=context,
@@ -649,6 +757,7 @@ def _render_watch_edit_form(
     context["build_specs"] = (
         build_specs if build_specs is not None else []
     )
+    _add_watch_labels(context=context)
     response = _render(
         template_name="projects/watches/edit.html",
         context=context,
@@ -716,6 +825,7 @@ def handle_watch_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        _add_watch_labels(context=context)
 
         response = _render(
             template_name="projects/watches/list.html",
@@ -766,48 +876,12 @@ def handle_watch_detail(request: Request) -> Response:
             return watch_or_redirect
         watch = watch_or_redirect
 
-        trigger_log_response = watch_manager.get_trigger_logs(
-            watch_id, limit=20
-        )
-        # The manager returns a WatchTriggerLogListResponse; the
-        # template iterates the rows, so hand it the list. Test
-        # fakes may return a bare list -- accept that too.
-        if isinstance(trigger_log_response, list):
-            trigger_logs = trigger_log_response
-        else:
-            trigger_logs = getattr(trigger_log_response, "logs", None)
-        if trigger_logs is None:
-            trigger_logs = []
-        can_manage = _can_manage(
+        response = _render_watch_detail(
+            auth=auth,
+            project=project,
             project_manager=project_manager,
-            project_id=project_id,
-            user_id=auth.user_id,
-        )
-        can_delete = _can_delete(
-            project_manager=project_manager,
-            project_id=project_id,
-            user_id=auth.user_id,
-        )
-
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="projects.watch_detail",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
-        )
-        context["project"] = project
-        context["watch"] = watch
-        context["trigger_logs"] = trigger_logs
-        context["can_manage"] = can_manage
-        context["can_delete"] = can_delete
-
-        response = _render(
-            template_name="projects/watches/detail.html",
-            context=context,
-        )
-        _attach_session_to_response(
-            response=response, session=auth.session
+            watch_manager=watch_manager,
+            watch=watch,
         )
         return response
     finally:
@@ -815,6 +889,77 @@ def handle_watch_detail(request: Request) -> Response:
             db_session.close()
         except Exception:
             pass
+
+
+def _render_watch_detail(
+        *,
+        auth: _AuthResolution,
+        project: Any,
+        project_manager: Any,
+        watch_manager: Any,
+        watch: Any,
+        test_sample: Optional[Dict[str, str]] = None,
+        test_result: Optional[Dict[str, Any]] = None
+    ) -> HTMLResponse:
+    """
+        Render the watch detail page, with the result of a test when
+        one was just run.
+
+        :param test_sample: The sample event the test used, to refill
+                            the form.
+        :param test_result: What :meth:`WatchManager.test_watch`
+                            returned.
+
+        :returns: The rendered page.
+    """
+    project_id = getattr(project, "id", None)
+    trigger_log_response = watch_manager.get_trigger_logs(
+        watch.id, limit=20
+    )
+    # The manager returns a WatchTriggerLogListResponse; the
+    # template iterates the rows, so hand it the list. Test
+    # fakes may return a bare list -- accept that too.
+    if isinstance(trigger_log_response, list):
+        trigger_logs = trigger_log_response
+    else:
+        trigger_logs = getattr(trigger_log_response, "logs", None)
+    if trigger_logs is None:
+        trigger_logs = []
+    can_manage = _can_manage(
+        project_manager=project_manager,
+        project_id=project_id,
+        user_id=auth.user_id,
+    )
+    can_delete = _can_delete(
+        project_manager=project_manager,
+        project_id=project_id,
+        user_id=auth.user_id,
+    )
+
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="projects.watch_detail",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["project"] = project
+    context["watch"] = watch
+    context["trigger_logs"] = trigger_logs
+    context["can_manage"] = can_manage
+    context["can_delete"] = can_delete
+    context["test_sample"] = test_sample if test_sample is not None else {}
+    context["test_result"] = test_result
+    _add_watch_labels(context=context)
+
+    response = _render(
+        template_name="projects/watches/detail.html",
+        context=context,
+    )
+    _attach_session_to_response(
+        response=response, session=auth.session
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -893,8 +1038,17 @@ def handle_watch_create(request: Request) -> Response:
         repository_id = _coerce_int(
             raw=single_form.get("repository_id", None)
         )
+        source_spec_id = _coerce_int(
+            raw=single_form.get("source_spec_id", None)
+        )
         branch_pattern = str(
             single_form.get("branch_pattern", "")
+        ).strip()
+        tag_pattern = str(
+            single_form.get("tag_pattern", "")
+        ).strip()
+        build_status = str(
+            single_form.get("build_status", "")
         ).strip()
         action_type = str(
             single_form.get("action_type", "")
@@ -914,12 +1068,22 @@ def handle_watch_create(request: Request) -> Response:
             single_form.get("description", "")
         ).strip()
 
-        if repository_id is None:
+        # Repository triggers watch a repository; "a build finishes"
+        # watches a build specification.
+        if event_type == "build_completion":
+            source_id = source_spec_id
+            missing_source_message = (
+                "Choose the build specification whose finished builds"
+                " start this watch."
+            )
+        else:
+            source_id = repository_id
+            missing_source_message = "Choose the repository to watch."
+
+        if source_id is None:
             flash.add_flash(
                 session=auth.session,
-                message=(
-                    "A repository is required to create a watch."
-                ),
+                message=missing_source_message,
                 category=flash.CATEGORY_ERROR,
             )
             return _render_watch_create_form(
@@ -936,8 +1100,10 @@ def handle_watch_create(request: Request) -> Response:
             create_request = _build_watch_create_request(
                 name=name,
                 event_type=event_type,
-                repository_id=repository_id,
+                source_id=source_id,
                 branch_pattern=branch_pattern,
+                tag_pattern=tag_pattern,
+                build_status=build_status,
                 action_type=action_type,
                 action_spec_id=action_spec_id,
                 enabled=enabled,
@@ -1071,6 +1237,19 @@ def handle_watch_edit(request: Request) -> Response:
             ).strip()
         else:
             branch_pattern = None
+        tag_pattern: Optional[str] = (
+            str(single_form.get("tag_pattern", "")).strip()
+            if "tag_pattern" in single_form else None
+        )
+        build_status: Optional[str] = (
+            str(single_form.get("build_status", "")).strip()
+            if "build_status" in single_form else None
+        )
+        # The trigger cannot change; it decides which conditions apply.
+        trigger_value = getattr(
+            getattr(watch, "trigger_source", None), "value",
+            getattr(watch, "trigger_source", None),
+        ) or "repository_commit"
 
         action_type_raw = str(
             single_form.get("action_type", "")
@@ -1099,6 +1278,9 @@ def handle_watch_edit(request: Request) -> Response:
             update_request = _build_watch_update_request(
                 name=name_raw if len(name_raw) > 0 else None,
                 branch_pattern=branch_pattern,
+                tag_pattern=tag_pattern,
+                build_status=build_status,
+                trigger=str(trigger_value),
                 action_type=action_type,
                 action_spec_id=action_spec_id,
                 enabled=enabled,
@@ -1170,8 +1352,9 @@ def _handle_watch_action(
         success_redirect: str,
     ) -> Response:
     """
-        Shared body for the four watch action handlers
-        (``delete`` / ``enable`` / ``disable`` / ``test``).
+        Shared body for the watch action handlers (``delete`` /
+        ``enable`` / ``disable``; ``test`` has its own handler, which
+        shows the result on the detail page).
 
         :param permission: Permission tier required (e.g.
                            ``"developer"`` or ``"admin"``).
@@ -1181,17 +1364,13 @@ def _handle_watch_action(
                                      calls that take a
                                      ``user_id`` second arg
                                      (``delete`` / ``enable`` /
-                                     ``disable``); ``False`` for
-                                     :meth:`WatchManager.test_watch`
-                                     which takes only the id.
+                                     ``disable``); ``False`` for a
+                                     call that takes only the id.
         :param success_falsey_message: When non-``None`` and the
                                        method returns a
                                        falsey-but-not-exception
                                        value, flash this instead
                                        of the success message.
-                                       Used by ``test`` to
-                                       distinguish "no matches"
-                                       from "test failed".
         :param success_redirect: Either ``"watch_list"`` or
                                  ``"watch_detail"``.
     """
@@ -1367,28 +1546,124 @@ def handle_watch_disable(request: Request) -> Response:
     return rtnval
 
 
+#: Sample-event form fields of the watch test, by the event key they fill.
+_TEST_SAMPLE_FIELDS = (
+    ("sample_branch", "branch"),
+    ("sample_tag", "tag"),
+    ("sample_build_status", "build_status"),
+)
+
+
+def _sample_event_from_form(*, form: Dict[str, Any]) -> Dict[str, Any]:
+    """
+        The sample event a watch test checks: the branch, tag and build
+        result typed into the test form (empty fields are left out).
+
+        :param form: The posted form.
+
+        :returns: Event data shaped like the events fetches and builds
+                  fire.
+    """
+    rtnval: Dict[str, Any] = {}
+    for field_name, event_key in _TEST_SAMPLE_FIELDS:
+        value = str(form.get(field_name, "") or "").strip()
+        if len(value) > 0:
+            rtnval[event_key] = value
+    return rtnval
+
+
 def handle_watch_test(request: Request) -> Response:
     """
         ``POST .../{watch_id}/test``. ``developer``-gated.
 
-        :class:`WatchManager.test_watch` returns truthy/falsey;
-        truthy -> success flash, falsey -> info "no matches"
-        flash.
+        Checks the watch's conditions against the sample event typed
+        into the detail page's test form -- a branch, a tag, or a build
+        result -- and shows the detail page again with each condition's
+        result and whether the watch would run its actions. Nothing is
+        run. (The handler used to call ``test_watch`` without the event,
+        which failed with a ``TypeError``.)
     """
-    rtnval = _handle_watch_action(
-        request=request,
-        permission="developer",
-        action_callable_name="test_watch",
-        invokes_with_user_id=False,
-        success_truthy_message="Watch test successful.",
-        success_falsey_message=(
-            "Watch test completed with no matches."
-        ),
-        success_falsey_category=flash.CATEGORY_INFO,
-        error_message_prefix="Error testing watch: ",
-        success_redirect="watch_detail",
-    )
-    return rtnval
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        watch_id = _coerce_int(
+            raw=request.path_params.get("watch_id", None)
+        )
+        single_form = _parse_form_or_empty(request=request)
+        list_fallback_url = (
+            _url_for_module.url_for(
+                "projects.watch_list", project_id=project_id
+            )
+            if project_id is not None
+            else _url_for_module.url_for("projects.project_list")
+        )
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=list_fallback_url,
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        project_manager, project_resolved = _resolve_project_for_action(
+            auth=auth, project_id=project_id, permission="developer"
+        )
+        if isinstance(project_resolved, RedirectResponse):
+            return project_resolved
+        project = project_resolved
+
+        watch_manager = _build_watch_manager(db_session=db_session)
+        watch_resolved = _resolve_owned_watch_or_redirect(
+            auth=auth,
+            watch_manager=watch_manager,
+            project_id=project_id,
+            watch_id=watch_id,
+        )
+        if isinstance(watch_resolved, RedirectResponse):
+            return watch_resolved
+        watch = watch_resolved
+
+        sample = _sample_event_from_form(form=single_form)
+        test_result = None
+        try:
+            test_result = watch_manager.test_watch(watch_id, sample)
+        except Exception:
+            flash.add_flash(
+                session=auth.session,
+                message=(
+                    "The watch could not be tested. Check its patterns"
+                    " on the Edit page."
+                ),
+                category=flash.CATEGORY_ERROR,
+            )
+
+        response = _render_watch_detail(
+            auth=auth,
+            project=project,
+            project_manager=project_manager,
+            watch_manager=watch_manager,
+            watch=watch,
+            test_sample={
+                field_name: str(single_form.get(field_name, "") or "")
+                for field_name, _event_key in _TEST_SAMPLE_FIELDS
+            },
+            test_result=test_result,
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------

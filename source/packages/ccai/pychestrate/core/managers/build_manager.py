@@ -17,6 +17,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
 import os
 import re
 
@@ -29,6 +30,9 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy import or_
 
 from ccai.pychestrate.core.defaults import utc_now
+
+
+_module_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -255,8 +259,17 @@ class BuildNotFoundError(Exception):
 
 class BuildCannotBeCancelledError(Exception):
     """Exception raised when a build cannot be cancelled."""
-    
+
     def __init__(self, message: str, error_code: str = "BUILD_CANNOT_BE_CANCELLED"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
+class BuildAlreadyFinishedError(Exception):
+    """Exception raised when the outcome of a build that already finished is reported."""
+
+    def __init__(self, message: str, error_code: str = "BUILD_ALREADY_FINISHED"):
         self.message = message
         self.error_code = error_code
         super().__init__(self.message)
@@ -397,19 +410,27 @@ class BuildManager:
     Validates: Requirements 4.1-4.5, 5.1, 5.3-5.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None):
+    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None,
+                 event_sink=None):
         """
         Initialize the BuildManager with a database session.
-        
+
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
         :param resource_manager: Optional ResourceManager instance for resource checkout
         :param secret_manager: Optional SecretManager instance for secret resolution
+        :param event_sink: Optional callable
+                           ``(*, trigger_source, source_id, event_data, user_id)``
+                           returning the watch trigger logs, called when a
+                           build finishes. Defaults to the project's watches
+                           with the core action managers (see
+                           :func:`watch_manager.dispatch_watch_event`).
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._resource_manager = resource_manager
         self._secret_manager = secret_manager
+        self._event_sink = event_sink
     
     # =========================================================================
     # Validation Methods
@@ -1040,8 +1061,128 @@ class BuildManager:
                     "previous_status": build.status
                 }
             )
-        
+
         return self._build_to_response(build)
+
+    def complete_build(
+        self,
+        build_id: int,
+        status: JobStatus,
+        user_id: Optional[str] = None
+    ) -> BuildResponse:
+        """
+        Record that a build finished -- succeeded or failed -- and fire the
+        project's build-completion watches for its specification. Whatever
+        runs builds reports their outcome here. A cancelled build did not
+        finish and fires nothing (see :meth:`cancel_build`).
+
+        :param build_id: The build's unique identifier
+        :param status: ``succeeded`` or ``failed``
+        :param user_id: The user reporting the outcome, if any; the
+                        watches' actions run as that user, otherwise as
+                        the project owner
+        :returns: BuildResponse with the updated build data
+        :raises BuildValidationError: If ``status`` is not a finished status
+        :raises BuildNotFoundError: If build is not found
+        :raises BuildAlreadyFinishedError: If the build already finished
+        """
+        from ccai.pychestrate.core.orm import ProjectBuild, ProjectJobStatus
+
+        status_value = status.value if isinstance(status, Enum) else str(status)
+        if status_value not in (ProjectJobStatus.SUCCEEDED.value, ProjectJobStatus.FAILED.value):
+            raise BuildValidationError(
+                f"A build finishes as succeeded or failed, not '{status_value}'",
+                field="status",
+                error_code="INVALID_BUILD_RESULT"
+            )
+
+        build = self._db_session.query(ProjectBuild).filter(
+            ProjectBuild.id == build_id
+        ).first()
+
+        if not build:
+            raise BuildNotFoundError(f"Build with ID '{build_id}' not found")
+
+        active_statuses = [
+            ProjectJobStatus.PENDING.value,
+            ProjectJobStatus.QUEUED.value,
+            ProjectJobStatus.RUNNING.value
+        ]
+        if build.status not in active_statuses:
+            raise BuildAlreadyFinishedError(
+                f"Build with status '{build.status}' has already finished"
+            )
+
+        build.status = status_value
+        build.completed_at = utc_now()
+        if build.started_at:
+            build.duration_seconds = int((build.completed_at - build.started_at).total_seconds())
+
+        self._db_session.commit()
+
+        if self._audit_logger:
+            self._audit_logger.log_event(
+                event_type='build_completed',
+                user_id=str(user_id) if user_id else 'system',
+                details={
+                    "build_id": build.id,
+                    "spec_id": build.spec_id,
+                    "status": status_value
+                }
+            )
+
+        self._fire_build_completion(build=build, user_id=user_id)
+        return self._build_to_response(build)
+
+    def _fire_build_completion(self, *, build, user_id: Optional[str]) -> int:
+        """
+        Fire the build-completion watches of the build's specification.
+        A failing watch never undoes the build's result: the error is
+        logged.
+
+        :param build: The finished ProjectBuild ORM object
+        :param user_id: The user reporting the outcome, if any
+        :returns: How many watches fired
+        """
+        from ccai.pychestrate.core.managers.watch_manager import (
+            WatchTriggerSource, dispatch_watch_event,
+        )
+
+        event_data = {
+            "build_id": build.id,
+            "build_status": build.status,
+            "spec_id": build.spec_id,
+            "project_id": build.project_id,
+            "branch": build.branch,
+            "commit_sha": build.commit_sha,
+        }
+        try:
+            if self._event_sink is not None:
+                trigger_logs = self._event_sink(
+                    trigger_source=WatchTriggerSource.BUILD_COMPLETION,
+                    source_id=build.spec_id,
+                    event_data=event_data,
+                    user_id=user_id,
+                )
+            else:
+                trigger_logs = dispatch_watch_event(
+                    db_session=self._db_session,
+                    trigger_source=WatchTriggerSource.BUILD_COMPLETION,
+                    source_id=build.spec_id,
+                    event_data=event_data,
+                    user_id=user_id,
+                )
+        except Exception:
+            _module_logger.exception(
+                "pychestrate.build.watch_dispatch_failed build_id=%s", event_data["build_id"]
+            )
+            try:
+                self._db_session.rollback()
+            except Exception:
+                pass
+            trigger_logs = []
+        rtnval = len(trigger_logs or [])
+        return rtnval
     
     def list_builds(
         self,

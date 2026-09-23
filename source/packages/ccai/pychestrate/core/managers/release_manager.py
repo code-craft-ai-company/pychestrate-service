@@ -74,6 +74,7 @@ class PipelineTriggerType(str, Enum):
     BRANCH_MERGE = 'branch_merge'
     SCHEDULE = 'schedule'
     API = 'api'
+    WATCH = 'watch'
 
 
 class PipelineRunStatus(str, Enum):

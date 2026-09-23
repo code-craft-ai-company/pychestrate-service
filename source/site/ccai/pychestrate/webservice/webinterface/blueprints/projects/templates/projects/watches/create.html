@@ -15,29 +15,41 @@
 
 <div class="page-header">
     <h1>Create Watch</h1>
-    <p>Set up a new repository event trigger</p>
+    <p>Run something automatically when a repository changes or a build finishes</p>
 </div>
 
 <div class="card">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+
         <div class="form-group">
             <label for="name">Name</label>
-            <input type="text" id="name" name="name" class="form-control" required 
+            <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   placeholder="e.g., Build on Push">
+                   placeholder="e.g., build-on-push">
         </div>
-        
+
         <div class="form-group">
             <label for="description">Description</label>
             <textarea id="description" name="description" class="form-control" rows="2"
                       placeholder="Optional description">{{ form_data.description if form_data else '' }}</textarea>
         </div>
-        
+
+        <h2 class="card-header">When</h2>
+
+        <div class="form-group">
+            <label for="event_type">Start this watch when</label>
+            <select id="event_type" name="event_type" class="form-control" required>
+                {% for event_type in event_types %}
+                <option value="{{ event_type }}" {% if form_data and form_data.event_type == event_type %}selected{% endif %}>{{ trigger_labels.get(event_type, event_type) }}</option>
+                {% endfor %}
+            </select>
+            <p class="form-text">Repository changes are found when someone fetches the repository (Fetch on its page).</p>
+        </div>
+
         <div class="form-group">
             <label for="repository_id">Repository</label>
-            <select id="repository_id" name="repository_id" class="form-control" required>
+            <select id="repository_id" name="repository_id" class="form-control">
                 <option value="">Select a repository</option>
                 {% for repo in repositories %}
                 <option value="{{ repo.id }}" {% if form_data and form_data.repository_id == repo.id|string %}selected{% endif %}>
@@ -45,40 +57,61 @@
                 </option>
                 {% endfor %}
             </select>
+            <p class="form-text">For new commits, new branches and new tags.</p>
         </div>
-        
+
         <div class="form-group">
-            <label for="event_type">Event Type</label>
-            <select id="event_type" name="event_type" class="form-control" required>
-                {% for event_type in event_types %}
-                <option value="{{ event_type }}" {% if form_data and form_data.event_type == event_type %}selected{% endif %}>
-                    {{ event_type }}
+            <label for="source_spec_id">Build specification</label>
+            <select id="source_spec_id" name="source_spec_id" class="form-control">
+                <option value="">Select a build specification</option>
+                {% for spec in build_specs %}
+                <option value="{{ spec.id }}" {% if form_data and form_data.source_spec_id == spec.id|string %}selected{% endif %}>
+                    {{ spec.name }}
                 </option>
                 {% endfor %}
             </select>
+            <p class="form-text">For "A build finishes": the specification whose builds start this watch.</p>
         </div>
-        
+
         <div class="form-group">
-            <label for="branch_pattern">Branch Pattern</label>
+            <label for="branch_pattern">Branch pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else '' }}"
-                   placeholder="e.g., main, feature/*, release-*">
-            <span class="form-text">Regular expression matched against the branch name (for example <code>^release/.*</code>). Leave empty to match every branch.</span>
+                   placeholder="e.g., ^main$ or ^release/">
+            <span class="form-text">Regular expression matched from the start of the branch name (for commits, new branches, and the branch a finished build built). Leave empty to match every branch.</span>
         </div>
-        
+
         <div class="form-group">
-            <label for="action_type">Action Type</label>
+            <label for="tag_pattern">Tag pattern</label>
+            <input type="text" id="tag_pattern" name="tag_pattern" class="form-control"
+                   value="{{ form_data.tag_pattern if form_data else '' }}"
+                   placeholder="e.g., ^v[0-9]+">
+            <span class="form-text">For new tags: regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
+        </div>
+
+        <div class="form-group">
+            <label for="build_status">Build result</label>
+            <select id="build_status" name="build_status" class="form-control">
+                <option value="any" {% if not form_data or form_data.build_status in ('', 'any') %}selected{% endif %}>Succeeded or failed</option>
+                <option value="succeeded" {% if form_data and form_data.build_status == 'succeeded' %}selected{% endif %}>Succeeded</option>
+                <option value="failed" {% if form_data and form_data.build_status == 'failed' %}selected{% endif %}>Failed</option>
+            </select>
+            <p class="form-text">For "A build finishes".</p>
+        </div>
+
+        <h2 class="card-header">Then</h2>
+
+        <div class="form-group">
+            <label for="action_type">Do this</label>
             <select id="action_type" name="action_type" class="form-control" required>
                 {% for action_type in action_types %}
-                <option value="{{ action_type }}" {% if form_data and form_data.action_type == action_type %}selected{% endif %}>
-                    {{ action_type }}
-                </option>
+                <option value="{{ action_type }}" {% if form_data and form_data.action_type == action_type %}selected{% endif %}>{{ action_labels.get(action_type, action_type) }}</option>
                 {% endfor %}
             </select>
         </div>
-        
+
         <div class="form-group">
-            <label for="action_spec_id">Target build specification</label>
+            <label for="action_spec_id">Build specification to run</label>
             <select id="action_spec_id" name="action_spec_id" class="form-control">
                 <option value="">Select a build spec</option>
                 {% for spec in build_specs %}
@@ -87,7 +120,7 @@
                 </option>
                 {% endfor %}
             </select>
-        <p class="form-text">Used when the action is <code>trigger_build</code>.</p>
+        <p class="form-text">For "Run a build". When a commit, branch or tag starts the watch and this specification builds the same repository, the build uses that branch and commit.</p>
         </div>
 
         <div class="form-group">
@@ -95,17 +128,17 @@
             <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
                    value="{{ form_data.action_target_id if form_data else '' }}"
                    placeholder="pipeline, infrastructure specification, or test specification id">
-            <p class="form-text">For <code>trigger_pipeline</code>, <code>trigger_infra_job</code>, <code>trigger_test_job</code>, and <code>send_notification</code>: the id of the thing to run. Takes precedence over the build specification when set.</p>
+            <p class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
-        
+
         <div class="form-group">
             <label>
-                <input type="checkbox" name="enabled" value="true" 
+                <input type="checkbox" name="enabled" value="true"
                        {% if not form_data or form_data.enabled == 'true' %}checked{% endif %}>
                 Enable watch immediately
             </label>
         </div>
-        
+
         <div class="actions-row">
             <button type="submit" class="btn btn-primary">
                 {{ ui.icon("add") }} Create Watch

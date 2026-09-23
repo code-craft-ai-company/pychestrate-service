@@ -96,6 +96,13 @@ class RepositoryResponse:
     last_fetch_time: Optional[datetime]
     created_at: datetime
     credential_secret_ref: Optional[str] = None
+    # Set by fetch_latest: what changed since the previous fetch, and
+    # how many watches that fired.
+    ref_changes: List[Dict[str, Any]] = field(default_factory=list)
+    watches_triggered: int = 0
+    # True when this fetch recorded the branches and tags for the first
+    # time (nothing is reported as new then).
+    refs_first_recorded: bool = False
 
 
 @dataclass
@@ -321,7 +328,8 @@ class RepositoryManager:
         db_session: DbSession,
         audit_logger=None,
         secret_manager=None,
-        credential_resolver: Optional[Callable[[str], str]] = None
+        credential_resolver: Optional[Callable[[str], str]] = None,
+        event_sink: Optional[Callable[..., List[Any]]] = None
     ):
         """
         Initialize the RepositoryManager with a database session.
@@ -336,11 +344,41 @@ class RepositoryManager:
                                     :class:`RepositoryCredentialError` when
                                     the secret cannot be read). Preferred
                                     over ``secret_manager``.
+        :param event_sink: Optional callable
+                           ``(*, trigger_source, source_id, event_data)``
+                           returning the watch trigger logs, called for
+                           each change a fetch finds. Defaults to the
+                           project's watches with the core action
+                           managers (see
+                           :func:`watch_manager.dispatch_watch_event`).
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._secret_manager = secret_manager
         self._credential_resolver = credential_resolver
+        self._event_sink = event_sink if event_sink is not None else self._dispatch_to_watches
+
+    def _dispatch_to_watches(
+        self,
+        *,
+        trigger_source: Any,
+        source_id: int,
+        event_data: Dict[str, Any],
+        user_id: Optional[str] = None
+    ) -> List[Any]:
+        """
+        The default event sink: process the event with the project's
+        watches (their actions run as ``user_id`` or the project owner).
+
+        :returns: The watch trigger logs
+        """
+        from ccai.pychestrate.core.managers.watch_manager import dispatch_watch_event
+
+        rtnval = dispatch_watch_event(
+            db_session=self._db_session, trigger_source=trigger_source,
+            source_id=source_id, event_data=event_data, user_id=user_id,
+        )
+        return rtnval
     
     # =========================================================================
     # Validation Methods
@@ -636,7 +674,13 @@ class RepositoryManager:
         
         for watch in watches:
             watch.is_enabled = False
-        
+
+        # Forget the branches and tags recorded by fetches.
+        from ccai.pychestrate.core.orm import ProjectRepositoryRef
+        self._db_session.query(ProjectRepositoryRef).filter(
+            ProjectRepositoryRef.repository_id == repository_id
+        ).delete(synchronize_session=False)
+
         # Delete the repository
         self._db_session.delete(repository)
         self._db_session.commit()
@@ -942,64 +986,215 @@ class RepositoryManager:
     
     def fetch_latest(self, repository_id: int) -> RepositoryResponse:
         """
-        Fetch latest commit information from the repository.
-        
+        Fetch the repository's branches and tags, record the default
+        branch's latest commit, and fire the project's repository watches
+        for what changed since the previous fetch:
+
+        * a branch that moved -- ``repository_commit``;
+        * a new branch -- ``repository_branch`` and ``repository_commit``;
+        * a new tag -- ``repository_tag``.
+
+        The first fetch of a repository only records its branches and
+        tags (announcing every existing ref would start a build for each).
+
         :param repository_id: The repository's unique identifier
-        :returns: RepositoryResponse with updated commit information
+        :returns: RepositoryResponse with updated commit information; its
+                  ``ref_changes`` lists what changed and
+                  ``watches_triggered`` how many watches fired
         :raises RepositoryNotFoundError: If repository is not found
         :raises RepositoryConnectivityError: If fetch fails
-        
+
         Validates: Requirements 3.4
         """
         from ccai.pychestrate.core.orm import ProjectRepository
-        
+
         repository = self._db_session.query(ProjectRepository).filter(
             ProjectRepository.id == repository_id
         ).first()
-        
+
         if not repository:
             raise RepositoryNotFoundError(f"Repository with ID '{repository_id}' not found")
 
         with self._git_access(repository=repository) as access:
-            # Get the latest commit SHA for the default branch
-            result = self._run_git_command(
-                access['args'] + ['ls-remote', repository.url, f'refs/heads/{repository.default_branch}'],
-                env=access['env'],
-                timeout=30
+            remote_refs = self._list_remote_refs(repository=repository, access=access)
+
+        now = utc_now()
+        repository.last_fetch_time = now
+        commit_sha = remote_refs['branch'].get(repository.default_branch)
+        if commit_sha and commit_sha != repository.last_commit_sha:
+            repository.last_commit_sha = commit_sha
+            # The details of the previous commit no longer apply.
+            repository.last_commit_message = None
+            repository.last_commit_author = None
+            repository.last_commit_time = None
+            commit_info = self._get_commit_details(repository, commit_sha)
+            if commit_info:
+                repository.last_commit_message = commit_info.get('message', '')[:512]
+                repository.last_commit_author = commit_info.get('author', '')[:128]
+                if commit_info.get('time'):
+                    repository.last_commit_time = commit_info['time']
+
+        ref_changes, first_recorded = self._record_refs(
+            repository=repository, remote_refs=remote_refs, now=now
+        )
+        self._db_session.commit()
+
+        watches_triggered = self._dispatch_ref_changes(repository=repository, ref_changes=ref_changes)
+
+        rtnval = self._repository_to_response(repository)
+        rtnval.ref_changes = ref_changes
+        rtnval.watches_triggered = watches_triggered
+        rtnval.refs_first_recorded = first_recorded
+        return rtnval
+
+    def _list_remote_refs(self, *, repository, access: Dict[str, Any]) -> Dict[str, Dict[str, str]]:
+        """
+        List the remote's branches and tags with ``git ls-remote``.
+
+        :param repository: The ProjectRepository ORM object
+        :param access: What :meth:`_git_access` yielded
+        :returns: ``{"branch": {name: sha}, "tag": {name: sha}}``; an
+                  annotated tag maps to the commit it points at
+        :raises RepositoryConnectivityError: If git fails
+        """
+        result = self._run_git_command(
+            access['args'] + ['ls-remote', '--heads', '--tags', repository.url],
+            env=access['env'],
+            timeout=60
+        )
+        if result.returncode != 0:
+            raise RepositoryConnectivityError(
+                self._describe_git_failure(
+                    repository=repository, action="fetch from", stderr=result.stderr,
+                    secrets=access["secrets"],
+                )
             )
 
-            if result.returncode != 0:
-                raise RepositoryConnectivityError(
-                    self._describe_git_failure(
-                        repository=repository, action="fetch from", stderr=result.stderr,
-                        secrets=access["secrets"],
-                    )
-                )
+        branches: Dict[str, str] = {}
+        tags: Dict[str, str] = {}
+        peeled: Dict[str, str] = {}
+        for line in (result.stdout or "").splitlines():
+            parts = line.strip().split("\t")
+            if len(parts) != 2:
+                continue
+            sha, ref = parts[0].strip(), parts[1].strip()
+            if ref.startswith("refs/heads/"):
+                branches[ref[len("refs/heads/"):]] = sha
+            elif ref.startswith("refs/tags/"):
+                name = ref[len("refs/tags/"):]
+                if name.endswith("^{}"):
+                    peeled[name[:-len("^{}")]] = sha
+                else:
+                    tags[name] = sha
+        tags.update(peeled)
+        rtnval = {"branch": branches, "tag": tags}
+        return rtnval
 
-        # Parse the output to get the commit SHA
-        output = result.stdout.strip()
-        if output:
-            parts = output.split()
-            if parts:
-                commit_sha = parts[0]
-                
-                # Update the repository with the latest commit info
-                now = utc_now()
-                repository.last_commit_sha = commit_sha
-                repository.last_fetch_time = now
-                
-                # Try to get more commit details using git log
-                # This requires a clone, so we'll do it in a temp directory
-                commit_info = self._get_commit_details(repository, commit_sha)
-                if commit_info:
-                    repository.last_commit_message = commit_info.get('message', '')[:512]
-                    repository.last_commit_author = commit_info.get('author', '')[:128]
-                    if commit_info.get('time'):
-                        repository.last_commit_time = commit_info['time']
-                
-                self._db_session.commit()
-        
-        return self._repository_to_response(repository)
+    def _record_refs(
+        self,
+        *,
+        repository,
+        remote_refs: Dict[str, Dict[str, str]],
+        now: datetime
+    ) -> Any:
+        """
+        Bring the stored refs in line with the remote and report what
+        changed. Nothing is reported while no refs are stored yet (the
+        first fetch sets the baseline). A tag that moved is recorded but
+        not reported; refs deleted on the remote are forgotten.
+
+        :param repository: The ProjectRepository ORM object
+        :param remote_refs: What :meth:`_list_remote_refs` returned
+        :param now: Timestamp of this fetch
+        :returns: ``(changes, first_recorded)``: the changes, each
+                  ``{"change": "commit" | "branch_created" |
+                  "tag_created", "name", "commit_sha", "previous_sha"}``,
+                  and whether this fetch set the baseline
+        """
+        from ccai.pychestrate.core.orm import ProjectRepositoryRef
+
+        stored = self._db_session.query(ProjectRepositoryRef).filter(
+            ProjectRepositoryRef.repository_id == repository.id
+        ).all()
+        known = {(row.kind, row.name): row for row in stored}
+        baseline = len(stored) == 0
+
+        changes: List[Dict[str, Any]] = []
+        for kind in ("branch", "tag"):
+            for name, sha in sorted(remote_refs.get(kind, {}).items()):
+                row = known.pop((kind, name), None)
+                if row is None:
+                    self._db_session.add(ProjectRepositoryRef(
+                        repository_id=repository.id, kind=kind, name=name[:255],
+                        commit_sha=sha, first_seen_at=now, updated_at=now,
+                    ))
+                    if baseline is False:
+                        changes.append({
+                            "change": "branch_created" if kind == "branch" else "tag_created",
+                            "name": name, "commit_sha": sha, "previous_sha": None,
+                        })
+                elif row.commit_sha != sha:
+                    previous_sha = row.commit_sha
+                    row.commit_sha = sha
+                    row.updated_at = now
+                    if kind == "branch" and baseline is False:
+                        changes.append({
+                            "change": "commit", "name": name, "commit_sha": sha,
+                            "previous_sha": previous_sha,
+                        })
+        for row in known.values():
+            self._db_session.delete(row)
+
+        # An empty remote records nothing, so its first push is the baseline.
+        first_recorded = baseline and len(remote_refs.get("branch", {})) + len(remote_refs.get("tag", {})) > 0
+        rtnval = (changes, first_recorded)
+        return rtnval
+
+    def _dispatch_ref_changes(self, *, repository, ref_changes: List[Dict[str, Any]]) -> int:
+        """
+        Fire the repository watches for each change found by a fetch.
+        A failing watch never fails the fetch: the error is logged.
+
+        :param repository: The ProjectRepository ORM object
+        :param ref_changes: What :meth:`_record_refs` returned
+        :returns: How many watches fired
+        """
+        from ccai.pychestrate.core.managers.watch_manager import WatchTriggerSource
+
+        events = []
+        for change in ref_changes:
+            base = {
+                "repository_id": repository.id,
+                "repository_name": repository.name,
+                "commit_sha": change["commit_sha"],
+            }
+            if change["change"] == "tag_created":
+                events.append((WatchTriggerSource.REPOSITORY_TAG, dict(base, tag=change["name"])))
+                continue
+            commit_event = dict(base, branch=change["name"], previous_sha=change["previous_sha"])
+            if change["change"] == "branch_created":
+                events.append((WatchTriggerSource.REPOSITORY_BRANCH, dict(base, branch=change["name"])))
+                commit_event["created"] = True
+            events.append((WatchTriggerSource.REPOSITORY_COMMIT, commit_event))
+
+        fired = 0
+        for trigger_source, event_data in events:
+            try:
+                trigger_logs = self._event_sink(
+                    trigger_source=trigger_source, source_id=repository.id, event_data=event_data,
+                )
+                fired = fired + len(trigger_logs or [])
+            except Exception:
+                _module_logger.exception(
+                    "pychestrate.repository.watch_dispatch_failed repository_id=%s trigger=%s",
+                    repository.id, trigger_source.value,
+                )
+                try:
+                    self._db_session.rollback()
+                except Exception:
+                    pass
+        rtnval = fired
+        return rtnval
     
     def _get_commit_details(
         self,

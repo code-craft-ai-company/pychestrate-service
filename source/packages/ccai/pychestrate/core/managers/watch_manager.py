@@ -298,7 +298,41 @@ class WatchManager:
         # Optional callable ``(spec_id: str, work_packet: dict, user_id: str) -> job``
         # used by the ``trigger_rpa_job`` action (6-rpa-orchestration).
         self._rpa_trigger = rpa_trigger
-    
+
+    @classmethod
+    def with_action_managers(
+        cls,
+        db_session: DbSession,
+        *,
+        audit_logger=None,
+        rpa_trigger=None
+    ) -> "WatchManager":
+        """
+        A WatchManager that can run every action: the build,
+        infrastructure, test and release managers share ``db_session``.
+
+        :param db_session: SQLAlchemy database session
+        :param audit_logger: Optional AuditLogger instance
+        :param rpa_trigger: Optional ``trigger_rpa_job`` callable (the web
+                            layer supplies it)
+        :returns: WatchManager instance
+        """
+        from ccai.pychestrate.core.managers.build_manager import BuildManager
+        from ccai.pychestrate.core.managers.infrastructure_manager import InfrastructureManager
+        from ccai.pychestrate.core.managers.release_manager import ReleaseManager
+        from ccai.pychestrate.core.managers.test_manager import TestManager
+
+        rtnval = cls(
+            db_session,
+            audit_logger=audit_logger,
+            build_manager=BuildManager(db_session, audit_logger=audit_logger),
+            infra_manager=InfrastructureManager(db_session, audit_logger=audit_logger),
+            test_manager=TestManager(db_session, audit_logger=audit_logger),
+            release_manager=ReleaseManager(db_session, audit_logger=audit_logger),
+            rpa_trigger=rpa_trigger,
+        )
+        return rtnval
+
     # =========================================================================
     # Validation Methods
     # =========================================================================
@@ -622,6 +656,36 @@ class WatchManager:
         return
 
 
+    def _refuse_self_triggering(
+        self,
+        *,
+        trigger_source: Any,
+        source_id: int,
+        actions: List[WatchActionConfig]
+    ) -> None:
+        """
+        Refuse a watch that would feed itself: one started by the builds
+        of a build specification that runs a build of the same
+        specification would start builds forever.
+
+        :param trigger_source: The watch's trigger
+        :param source_id: The watch's source
+        :param actions: The watch's actions
+        :raises WatchValidationError: If an action restarts the watch
+        """
+        source_value = trigger_source.value if isinstance(trigger_source, WatchTriggerSource) else trigger_source
+        if source_value != WatchTriggerSource.BUILD_COMPLETION.value:
+            return
+        for i, action_config in enumerate(actions):
+            if action_config.action == WatchAction.TRIGGER_BUILD and action_config.target_id == source_id:
+                raise WatchValidationError(
+                    "A watch started by the builds of a build specification cannot run "
+                    "that same specification: every build would start another one.",
+                    field=f"actions[{i}].target_id",
+                    error_code="WATCH_TRIGGERS_ITSELF"
+                )
+        return
+
     # =========================================================================
     # Watch CRUD Operations
     # =========================================================================
@@ -674,6 +738,10 @@ class WatchManager:
 
         # Every action must target this project's own specifications
         self._verify_action_targets(project_id, request.actions)
+        self._refuse_self_triggering(
+            trigger_source=request.trigger_source, source_id=request.source_id,
+            actions=request.actions,
+        )
 
         # Create the watch
         now = utc_now()
@@ -828,6 +896,10 @@ class WatchManager:
                         )
 
             self._verify_action_targets(watch.project_id, request.actions)
+            self._refuse_self_triggering(
+                trigger_source=watch.trigger_source, source_id=watch.source_id,
+                actions=request.actions,
+            )
 
             watch.actions_json = self._actions_to_list(request.actions)
         
@@ -1060,6 +1132,57 @@ class WatchManager:
         
         return True
     
+    def _actor_for(self, *, project_id: Optional[int], user_id: Optional[str]) -> Optional[str]:
+        """
+        Whom a watch's actions run as: the user whose action produced the
+        event (for example the one who fetched the repository) or, for
+        events nobody initiated, the project's owner.
+
+        :param project_id: The watch's project
+        :param user_id: The user behind the event, if any
+        :returns: A user ID, or None when the project cannot be found
+        """
+        if user_id:
+            return str(user_id)
+        from ccai.pychestrate.core.orm import Project
+
+        try:
+            project = self._db_session.query(Project).filter(Project.id == project_id).first()
+        except Exception:
+            project = None
+        owner_id = getattr(project, 'owner_id', None) if project is not None else None
+        rtnval = str(owner_id) if owner_id else None
+        return rtnval
+
+    def _build_ref_for(
+        self,
+        *,
+        spec_id: int,
+        event_data: Dict[str, Any]
+    ) -> Dict[str, Optional[str]]:
+        """
+        The branch and commit a watch-triggered build should use: those of
+        the event when it came from the repository the build specification
+        builds, otherwise the specification's own branch.
+
+        :param spec_id: The build specification to run
+        :param event_data: The event that fired the watch
+        :returns: ``{"branch": ..., "commit_sha": ...}`` (values may be None)
+        """
+        from ccai.pychestrate.core.orm import ProjectBuildSpec
+
+        rtnval: Dict[str, Optional[str]] = {"branch": None, "commit_sha": None}
+        repository_id = event_data.get('repository_id')
+        branch = event_data.get('branch')
+        if repository_id is None or not branch:
+            return rtnval
+        spec = self._db_session.query(ProjectBuildSpec).filter(
+            ProjectBuildSpec.id == spec_id
+        ).first()
+        if spec is not None and spec.repository_id == repository_id:
+            rtnval = {"branch": branch, "commit_sha": event_data.get('commit_sha') or None}
+        return rtnval
+
     def _execute_action(
         self,
         action_config: WatchActionConfig,
@@ -1069,10 +1192,17 @@ class WatchManager:
     ) -> Dict[str, Any]:
         """
         Execute a single watch action.
-        
+
+        Builds, infrastructure jobs, test jobs and pipeline runs are
+        created through their managers with the trigger type ``watch``. A
+        build started by a commit, branch or tag event builds that branch
+        and commit when the build specification builds the same
+        repository; a test job started by a build-completion event runs
+        against that build.
+
         :param action_config: The action configuration
         :param event_data: The event data that triggered the action
-        :param user_id: Optional user ID for the action (defaults to system)
+        :param user_id: The user the action runs as (see :meth:`_actor_for`)
         :param project_id: The watch's project; the RPA trigger refuses a
                            specification from any other project
         :returns: Dictionary with action result
@@ -1084,52 +1214,67 @@ class WatchManager:
             'error': None,
             'result_id': None
         }
-        
+        parameters = dict(action_config.parameters or {})
+
         try:
             if action_config.action == WatchAction.TRIGGER_BUILD:
                 if self._build_manager:
-                    # Trigger a build
-                    build_result = self._build_manager.trigger_build_by_spec_id(
-                        spec_id=action_config.target_id,
-                        user_id=user_id or 'system',
-                        trigger_type='watch',
-                        parameters=action_config.parameters
+                    from ccai.pychestrate.core.managers.build_manager import (
+                        BuildTriggerRequest, BuildTriggerType,
+                    )
+                    build_ref = self._build_ref_for(spec_id=action_config.target_id, event_data=event_data)
+                    build_result = self._build_manager.trigger_build(
+                        BuildTriggerRequest(
+                            spec_id=action_config.target_id,
+                            branch=build_ref["branch"],
+                            commit_sha=build_ref["commit_sha"],
+                            parameters=parameters,
+                            trigger_type=BuildTriggerType.WATCH,
+                        ),
+                        user_id
                     )
                     result['success'] = True
                     result['result_id'] = build_result.id if build_result else None
                 else:
                     result['error'] = "Build manager not available"
-            
+
             elif action_config.action == WatchAction.TRIGGER_INFRA_JOB:
                 if self._infra_manager:
-                    # Trigger an infrastructure job
-                    job_result = self._infra_manager.trigger_job_by_spec_id(
-                        spec_id=action_config.target_id,
-                        user_id=user_id or 'system',
-                        action=action_config.parameters.get('action', 'provision'),
-                        variables=action_config.parameters.get('variables', {})
+                    from ccai.pychestrate.core.managers.infrastructure_manager import (
+                        InfraAction, InfraJobTriggerRequest,
+                    )
+                    variables = parameters.get('variables', {}) or {}
+                    job_result = self._infra_manager.trigger_job(
+                        InfraJobTriggerRequest(
+                            spec_id=action_config.target_id,
+                            action=InfraAction(parameters.get('action', 'provision')),
+                            variables=variables if isinstance(variables, dict) else {},
+                        ),
+                        user_id
                     )
                     result['success'] = True
                     result['result_id'] = job_result.id if job_result else None
                 else:
                     result['error'] = "Infrastructure manager not available"
-            
+
             elif action_config.action == WatchAction.TRIGGER_TEST_JOB:
                 if self._test_manager:
-                    # Trigger a test job
-                    job_result = self._test_manager.trigger_job_by_spec_id(
-                        spec_id=action_config.target_id,
-                        user_id=user_id or 'system',
-                        parameters=action_config.parameters
+                    from ccai.pychestrate.core.managers.test_manager import TestJobTriggerRequest
+                    job_result = self._test_manager.trigger_job(
+                        TestJobTriggerRequest(
+                            spec_id=action_config.target_id,
+                            build_id=event_data.get('build_id'),
+                            parameters=parameters,
+                        ),
+                        user_id
                     )
                     result['success'] = True
                     result['result_id'] = job_result.id if job_result else None
                 else:
                     result['error'] = "Test manager not available"
-            
+
             elif action_config.action == WatchAction.TRIGGER_RPA_JOB:
                 if self._rpa_trigger:
-                    parameters = dict(action_config.parameters or {})
                     spec_id = str(parameters.get('spec_id', '') or action_config.target_id)
                     work_packet = parameters.get('work_packet', {}) or {}
                     if not isinstance(work_packet, dict):
@@ -1137,7 +1282,7 @@ class WatchManager:
                     job_result = self._rpa_trigger(
                         spec_id=spec_id,
                         work_packet=work_packet,
-                        user_id=user_id or 'system',
+                        user_id=user_id,
                         project_id=project_id,
                     )
                     result['success'] = True
@@ -1147,43 +1292,55 @@ class WatchManager:
 
             elif action_config.action == WatchAction.TRIGGER_PIPELINE:
                 if self._release_manager:
-                    # Trigger a release pipeline
+                    from ccai.pychestrate.core.managers.release_manager import PipelineTriggerType
+                    variables = parameters.get('variables', {}) or {}
                     run_result = self._release_manager.trigger_pipeline(
                         pipeline_id=action_config.target_id,
-                        trigger_type='watch',
-                        variables=action_config.parameters.get('variables', {}),
-                        user_id=user_id or 'system'
+                        trigger_type=PipelineTriggerType.WATCH,
+                        variables=variables if isinstance(variables, dict) else {},
+                        user_id=user_id
                     )
                     result['success'] = True
                     result['result_id'] = run_result.id if run_result else None
                 else:
                     result['error'] = "Release manager not available"
-            
+
             elif action_config.action == WatchAction.SEND_NOTIFICATION:
-                # For notifications, we just log success
-                # In a real implementation, this would send to a notification service
+                # Notifications are recorded in the trigger log only; no
+                # notification service delivers them yet.
                 result['success'] = True
-                result['notification_sent'] = True
-            
+                result['notification_sent'] = False
+                result['note'] = "Recorded only: notifications are not delivered yet."
+
         except Exception as e:
-            result['error'] = str(e)
-        
+            result['error'] = getattr(e, 'message', None) or str(e)
+            # A failed action must not leave the session unusable for the
+            # watch's other actions and its trigger log.
+            try:
+                self._db_session.rollback()
+            except Exception:
+                pass
+
         return result
-    
+
     def process_event(
         self,
         trigger_source: WatchTriggerSource,
         source_id: int,
-        event_data: Dict[str, Any]
+        event_data: Dict[str, Any],
+        user_id: Optional[str] = None
     ) -> List[WatchTriggerLog]:
         """
         Process an event and trigger matching watches.
-        
+
         :param trigger_source: The type of trigger source
         :param source_id: The ID of the source (repository or build spec)
         :param event_data: The event data containing details like branch, tag, files, etc.
+        :param user_id: The user whose action produced the event; the
+                        watches' actions run as that user, or as the
+                        project owner when None
         :returns: List of WatchTriggerLog for each triggered watch
-        
+
         Validates: Requirements 10.6
         """
         from ccai.pychestrate.core.orm import ProjectWatch, ProjectWatchTriggerLog
@@ -1200,49 +1357,59 @@ class WatchManager:
         ).all()
         
         now = utc_now()
-        
+
         for watch in watches:
             conditions = self._dict_to_conditions(watch.conditions_json)
-            
+
             # Check if conditions match
             if not self._match_conditions(conditions, event_data):
                 continue
-            
+
+            watch_id = watch.id
+            project_id = watch.project_id
+            actor_id = self._actor_for(project_id=project_id, user_id=user_id)
+
             # Execute all actions
             actions = self._list_to_actions(watch.actions_json)
             actions_executed = []
             all_success = True
             error_messages = []
-            
+
             for action_config in actions:
-                action_result = self._execute_action(action_config, event_data, project_id=watch.project_id)
+                action_result = self._execute_action(
+                    action_config, event_data, user_id=actor_id, project_id=project_id
+                )
                 actions_executed.append(action_result)
-                
+
                 if not action_result['success']:
                     all_success = False
                     if action_result.get('error'):
                         error_messages.append(action_result['error'])
-            
+
             # Create trigger log
             trigger_log = ProjectWatchTriggerLog(
-                watch_id=watch.id,
+                watch_id=watch_id,
                 triggered_at=now,
                 trigger_event_json=event_data,
                 actions_executed_json=actions_executed,
                 success=all_success,
                 error_message='; '.join(error_messages) if error_messages else None
             )
-            
+
             self._db_session.add(trigger_log)
-            
+
             # Update watch statistics
             watch.last_trigger_time = now
             watch.trigger_count = (watch.trigger_count or 0) + 1
-            
+
+            # Commit each watch's log on its own, so a failing action of a
+            # later watch (which rolls back) cannot discard it.
+            self._db_session.commit()
+
             trigger_logs.append(self._trigger_log_to_response(trigger_log))
-        
+
         self._db_session.commit()
-        
+
         return trigger_logs
     
     def get_trigger_logs(
@@ -1353,12 +1520,17 @@ class WatchManager:
                 conditions.build_status == 'any' or conditions.build_status == build_status
             )
         
+        # A condition that is not set matches every event.
+        for condition in condition_results.values():
+            condition['applies'] = bool(condition['pattern'])
+
         # Overall match
         overall_match = self._match_conditions(conditions, event_data)
-        
+
         return {
             'watch_id': watch.id,
             'watch_name': watch.name,
+            'trigger_source': watch.trigger_source,
             'enabled': watch.enabled,
             'would_trigger': overall_match and watch.enabled,
             'conditions_match': overall_match,
@@ -1372,3 +1544,36 @@ class WatchManager:
                 for action in actions
             ]
         }
+
+
+# =============================================================================
+# Event dispatch
+# =============================================================================
+
+def dispatch_watch_event(
+    *,
+    db_session: DbSession,
+    trigger_source: WatchTriggerSource,
+    source_id: int,
+    event_data: Dict[str, Any],
+    user_id: Optional[str] = None,
+    rpa_trigger=None
+) -> List[WatchTriggerLog]:
+    """
+    Fire the watches that listen for an event: a fetch that found new
+    commits, branches or tags, or a build that finished.
+
+    :param db_session: SQLAlchemy database session
+    :param trigger_source: The type of event
+    :param source_id: The repository (repository events) or build
+                      specification (build completion) the event is about
+    :param event_data: The event data matched against the watches'
+                       conditions and recorded in their trigger logs
+    :param user_id: The user whose action produced the event; the actions
+                    run as that user, or as the project owner when None
+    :param rpa_trigger: Optional ``trigger_rpa_job`` callable
+    :returns: The trigger logs of the watches that fired
+    """
+    manager = WatchManager.with_action_managers(db_session, rpa_trigger=rpa_trigger)
+    rtnval = manager.process_event(trigger_source, source_id, event_data, user_id=user_id)
+    return rtnval

@@ -1891,7 +1891,7 @@ class ProjectManager:
             ProjectChannelHistory, ProjectReleaseSchedule, ProjectReleaseTemplate,
             ProjectCalendarEvent, ProjectReleaseEvent, ProjectPhaseEvent,
             ProjectReleaseBranch, ProjectMergeEvent, ProjectPullEvent,
-            ProjectWatch, ProjectWatchTriggerLog, project_resources,
+            ProjectWatch, ProjectWatchTriggerLog, ProjectRepositoryRef, project_resources,
         )
         from sqlalchemy import delete as sa_delete
         from sqlalchemy import select
@@ -1963,6 +1963,8 @@ class ProjectManager:
         _delete_where(ProjectCalendarEvent, ProjectCalendarEvent.project_id == project_id)
 
         # Repositories, settings, membership, and the project itself.
+        _delete_where(ProjectRepositoryRef, ProjectRepositoryRef.repository_id.in_(
+            _ids(ProjectRepository.id, ProjectRepository.project_id == project_id)))
         _delete_where(ProjectRepository, ProjectRepository.project_id == project_id)
         _delete_where(ProjectVariable, ProjectVariable.project_id == project_id)
         session.execute(sa_delete(project_resources).where(project_resources.c.proj_id == project_id))

@@ -604,6 +604,33 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "projects/repositories/": {
         "secret_refs": _by_mode(["ci/github-token", "ci/deploy-key"], []),
     },
+    "projects/watches/": {
+        "trigger_labels": _const({
+            "repository_commit": "New commits on a branch",
+            "build_completion": "A build finishes",
+        }),
+        "action_labels": _const({"trigger_build": "Run a build"}),
+        "test_sample": _by_mode({"sample_branch": "main", "sample_build_status": "failed"}, {}),
+        "test_result": _by_mode(
+            {
+                "watch_id": 7,
+                "watch_name": "build-on-push",
+                "trigger_source": "repository_commit",
+                "enabled": True,
+                "would_trigger": False,
+                "conditions_match": False,
+                "condition_results": {
+                    "branch_pattern": {"pattern": "^main$", "value": "dev", "matches": False, "applies": True},
+                    "tag_pattern": {"pattern": None, "value": "", "matches": True, "applies": False},
+                    "file_pattern": {"pattern": None, "value": [], "matches": True, "applies": False},
+                    "build_status": {"pattern": "failed", "value": "failed", "matches": True, "applies": True},
+                },
+                "actions_count": 1,
+                "actions": [{"action": "trigger_build", "target_id": 3}],
+            },
+            None,
+        ),
+    },
     # -- end projects-a audit fixes --------------------------------------
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),

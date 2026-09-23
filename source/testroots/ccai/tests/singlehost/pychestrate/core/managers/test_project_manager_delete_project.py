@@ -58,6 +58,7 @@ from ccai.pychestrate.core.orm import (
     ProjectReleaseSchedule,
     ProjectReleaseTemplate,
     ProjectRepository,
+    ProjectRepositoryRef,
     ProjectStageRun,
     ProjectTestJob,
     ProjectTestResult,
@@ -189,6 +190,7 @@ def _populate_project(*, session: Any, owner_id: Any, name: str) -> int:
     add(ProjectMember(project_id=pid, user_id=owner_id, role="owner"))
     add(ProjectVariable(project_id=pid, name="REGION", value_json='"eu"', var_type="string"))
     repo = add(ProjectRepository(project_id=pid, name="repo", url="https://example.com/r.git", auth_type="none"))
+    add(ProjectRepositoryRef(repository_id=repo.id, kind="branch", name="main", commit_sha="abc1234"))
     spec = add(ProjectBuildSpec(project_id=pid, repository_id=repo.id, name="nightly"))
     build = add(ProjectBuild(
         project_id=pid, spec_id=spec.id, spec_version=1, branch="main", commit_sha="abc1234",
@@ -258,7 +260,7 @@ _OWNED_MODELS = (
     "ProjectRelease", "ProjectReleaseArtifact", "ProjectReleaseChannel", "ProjectChannelHistory",
     "ProjectReleaseSchedule", "ProjectReleaseTemplate", "ProjectCalendarEvent", "ProjectReleaseEvent",
     "ProjectPhaseEvent", "ProjectReleaseBranch", "ProjectMergeEvent", "ProjectPullEvent",
-    "ProjectWatch", "ProjectWatchTriggerLog",
+    "ProjectWatch", "ProjectWatchTriggerLog", "ProjectRepositoryRef",
 )
 
 

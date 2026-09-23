@@ -139,8 +139,9 @@ def _build_repository_manager(
         :param db_session: Open SQLAlchemy session.
         :param user_id: The signed-in user. When given, the manager can
                         read the repository's credential secret from the
-                        secrets vault with that user's permissions (for
-                        the test and fetch actions).
+                        secrets vault with that user's permissions, and
+                        the watches a fetch fires run their actions as
+                        that user (for the test and fetch actions).
 
         :returns: RepositoryManager instance.
     """
@@ -148,15 +149,23 @@ def _build_repository_manager(
         RepositoryManager,
     )
     credential_resolver = None
+    event_sink = None
     if user_id is not None:
         from ccai.pychestrate.webservice.webinterface.blueprints.projects.repository_credentials import (  # noqa: E402
             build_credential_resolver,
         )
+        from ccai.pychestrate.webservice.webinterface.blueprints.projects.watch_events import (  # noqa: E402
+            build_watch_event_sink,
+        )
         credential_resolver = build_credential_resolver(
             db_session=db_session, user_id=user_id
         )
+        event_sink = build_watch_event_sink(
+            db_session=db_session, user_id=user_id
+        )
     rtnval = RepositoryManager(
-        db_session, credential_resolver=credential_resolver
+        db_session, credential_resolver=credential_resolver,
+        event_sink=event_sink,
     )
     return rtnval
 
@@ -1038,7 +1047,8 @@ def _handle_repository_action(
         success_truthy_message: str,
         success_falsey_message: Optional[str],
         success_falsey_category: str,
-        error_message_prefix: str
+        error_message_prefix: str,
+        describe_success: Optional[Callable[[Any], str]] = None
     ) -> Response:
     """
         Shared body for the ``test`` and ``fetch`` action
@@ -1065,6 +1075,9 @@ def _handle_repository_action(
         :param error_message_prefix: Prefix for exception flashes
                                      (e.g. ``"Error testing
                                      repository: "``).
+        :param describe_success: Optional ``(result) -> message`` used
+                                 instead of ``success_truthy_message``
+                                 (fetch reports what it found).
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -1157,10 +1170,13 @@ def _handle_repository_action(
                 )
                 return response
 
+            message = success_truthy_message
+            if describe_success is not None:
+                message = describe_success(result)
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message=success_truthy_message,
+                message=message,
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
@@ -1209,6 +1225,18 @@ def handle_repository_test(request: Request) -> Response:
     return rtnval
 
 
+def _describe_fetch(result: Any) -> str:
+    """
+        The fetch flash: what changed since the previous fetch and how
+        many watches fired (see :mod:`watch_events`). Lazy-imports.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.watch_events import (  # noqa: E402
+        describe_fetch,
+    )
+    rtnval = describe_fetch(repository=result)
+    return rtnval
+
+
 def handle_repository_fetch(request: Request) -> Response:
     """
         ``POST .../{repository_id}/fetch`` -- refresh remote
@@ -1223,6 +1251,7 @@ def handle_repository_fetch(request: Request) -> Response:
         success_falsey_message=None,
         success_falsey_category=flash.CATEGORY_INFO,
         error_message_prefix="Error fetching repository: ",
+        describe_success=_describe_fetch,
     )
     return rtnval
 
