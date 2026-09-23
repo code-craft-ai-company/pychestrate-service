@@ -418,3 +418,75 @@ def count_active_jobs_for_spec(*, db_session: DbSession, spec_id: str) -> int:
         .count()
     )
     return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Project deletion (PRJ-19)
+# ---------------------------------------------------------------------------
+
+
+def count_active_jobs_for_project(*, db_session: DbSession, project_id: str) -> int:
+    """
+        Count the project's RPA jobs that are still pending, dispatching
+        or running.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Project reference as stored on the rows.
+
+        :returns: Number of active jobs.
+    """
+    rtnval = (
+        db_session.query(RpaJob)
+        .filter(RpaJob.project_id == str(project_id))
+        .filter(RpaJob.status.in_([
+            RpaJobStatus.PENDING, RpaJobStatus.DISPATCHING, RpaJobStatus.RUNNING,
+        ]))
+        .count()
+    )
+    return rtnval
+
+
+def delete_project_rows(*, db_session: DbSession, project_id: str) -> Dict[str, int]:
+    """
+        Delete every RPA job, specification and specification revision
+        that belongs to a project, so a deleted project leaves nothing
+        behind for a later project to inherit. Rows are removed child
+        first and explicitly (revisions do not rely on the database's
+        ``ON DELETE CASCADE``, which SQLite does not enforce by default).
+        Does not commit: the caller deletes the project in the same
+        transaction.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Project reference as stored on the rows.
+
+        :returns: Counts of deleted ``jobs``, ``revisions`` and ``specs``.
+    """
+    project_ref = str(project_id)
+    spec_ids = [
+        row[0]
+        for row in db_session.query(RpaSpec.spec_id).filter(RpaSpec.project_id == project_ref).all()
+    ]
+
+    jobs_deleted = (
+        db_session.query(RpaJob)
+        .filter(RpaJob.project_id == project_ref)
+        .delete(synchronize_session=False)
+    )
+    revisions_deleted = 0
+    if len(spec_ids) > 0:
+        revisions_deleted = (
+            db_session.query(RpaSpecRevision)
+            .filter(RpaSpecRevision.spec_id.in_(spec_ids))
+            .delete(synchronize_session=False)
+        )
+    specs_deleted = (
+        db_session.query(RpaSpec)
+        .filter(RpaSpec.project_id == project_ref)
+        .delete(synchronize_session=False)
+    )
+    rtnval = {
+        "jobs": int(jobs_deleted),
+        "revisions": int(revisions_deleted),
+        "specs": int(specs_deleted),
+    }
+    return rtnval

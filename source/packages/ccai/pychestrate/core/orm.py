@@ -1500,6 +1500,14 @@ class Project(PychestrateModelBase, SerializableModel):
     """
     __tablename__ = 'projects'
 
+    # Project ids must never be reused: RPA specifications and jobs
+    # (and the Layer-5 project UUID derived from the id) refer to a
+    # project by id without a foreign key, so a reused id would hand a
+    # deleted project's rows to a new project. PostgreSQL sequences
+    # never reuse values; on SQLite the id is a rowid alias, which
+    # reuses the highest deleted id unless the table is AUTOINCREMENT.
+    __table_args__ = {'sqlite_autoincrement': True}
+
     id = Column('proj_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('proj_name', VARCHAR(128), unique=True, nullable=False, index=True,
                   doc="Unique name for the project (alphanumeric, underscores, hyphens, periods)")

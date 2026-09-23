@@ -264,6 +264,7 @@ class _FakeProjectManager:
         self.create_project_calls: List[Any] = []
         self.update_project_calls: List[Any] = []
         self.delete_project_calls: List[Any] = []
+        self.delete_project_kwargs: List[Dict[str, Any]] = []
         self.add_member_calls: List[Any] = []
         self.update_member_role_calls: List[Any] = []
         self.remove_member_calls: List[Any] = []
@@ -322,8 +323,11 @@ class _FakeProjectManager:
             raise self.update_project_raises
         return
 
-    def delete_project(self, project_id: int, user_id: str) -> None:
+    def delete_project(
+            self, project_id: int, user_id: str, **kwargs: Any
+        ) -> None:
         self.delete_project_calls.append((project_id, user_id))
+        self.delete_project_kwargs.append(dict(kwargs))
         if self.delete_project_raises is not None:
             raise self.delete_project_raises
         return
@@ -1385,6 +1389,47 @@ def test_handle_project_delete_happy_path_redirects_to_list():
         pm = _FakeProjectManager.last_instance
         testbase.assert_equal(
             pm.delete_project_calls, [(7, "u-admin")]
+        )
+    finally:
+        for p in (pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_project_delete_removes_the_projects_rpa_rows_with_it():
+    """
+    **Feature: projects deletion (PRJ-19)**
+    **Property: the delete handler hands delete_project the RPA
+    cleanup (_delete_project_rpa_rows), so the project's RPA
+    specifications and jobs go in the same transaction as the
+    project.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        pm_patch = _patch_project_manager()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7"},
+        )
+        projects_routes.handle_project_delete(request)
+
+        pm = _FakeProjectManager.last_instance
+        cleanup = pm.delete_project_kwargs[0].get("related_rows_cleanup")
+        testbase.assert_equal(
+            cleanup is projects_routes._delete_project_rpa_rows, True
         )
     finally:
         for p in (pm_patch, sm_patch):

@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -709,15 +709,28 @@ class ProjectManager:
         
         return self._project_to_response(project)
     
-    def delete_project(self, project_id: int, user_id: str) -> None:
+    def delete_project(
+        self,
+        project_id: int,
+        user_id: str,
+        *,
+        related_rows_cleanup: Optional[Callable[[DbSession, int], None]] = None
+    ) -> None:
         """
         Delete a project. Fails if active jobs exist.
-        
+
         :param project_id: The project's unique identifier
         :param user_id: The ID of the user deleting the project
+        :param related_rows_cleanup: Optional callable ``(db_session, project_id)``
+                                     that deletes rows other services keep for
+                                     the project without a foreign key (RPA
+                                     specifications and jobs, for example). It
+                                     runs in the same transaction, before the
+                                     project row is deleted; if it raises, the
+                                     whole deletion is rolled back.
         :raises ProjectNotFoundError: If project is not found
         :raises ProjectHasActiveJobsError: If project has active jobs
-        
+
         Validates: Requirements 1.4
         """
         from ccai.pychestrate.core.orm import (
@@ -755,10 +768,19 @@ class ProjectManager:
             )
         
         project_name = project.name
-        
-        # Delete the project (cascades to members, variables, etc.)
-        self._db_session.delete(project)
-        self._db_session.commit()
+
+        try:
+            # Rows other services keep for this project go in the same
+            # transaction, so a failure leaves the project untouched.
+            if related_rows_cleanup is not None:
+                related_rows_cleanup(self._db_session, project_id)
+
+            # Delete the project (cascades to members, variables, etc.)
+            self._db_session.delete(project)
+            self._db_session.commit()
+        except Exception:
+            self._db_session.rollback()
+            raise
         
         # Log the project deletion event
         if self._audit_logger:

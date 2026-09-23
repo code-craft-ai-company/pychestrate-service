@@ -248,6 +248,46 @@ def _build_project_update_request(
     return rtnval
 
 
+def _delete_project_rpa_rows(db_session: Any, project_id: int) -> None:
+    """
+        Related-rows cleanup handed to
+        :meth:`ProjectManager.delete_project`: remove the project's RPA
+        specifications, revisions and jobs in the same transaction.
+
+        RPA rows refer to a project by id without a foreign key, so
+        without this a deleted project's specifications stayed behind
+        and a later project that reused the id showed them as its own.
+        Refuses (and so rolls back the whole deletion) while any of the
+        project's RPA jobs is still pending or running.
+
+        :param db_session: The project manager's open session.
+        :param project_id: Id of the project being deleted.
+
+        :raises ProjectHasActiveJobsError: when RPA jobs are active.
+    """
+    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
+        ProjectHasActiveJobsError,
+    )
+    from ccai.pychestrate.webservice.orchestration.rpa import (  # noqa: E402
+        repository as rpa_repository,
+    )
+
+    project_ref = str(project_id)
+    active_jobs = rpa_repository.count_active_jobs_for_project(
+        db_session=db_session, project_id=project_ref
+    )
+    if active_jobs > 0:
+        raise ProjectHasActiveJobsError(
+            "Cannot delete the project while {} RPA job(s) are still "
+            "pending or running. Wait for them to finish or cancel "
+            "them first.".format(active_jobs)
+        )
+    rpa_repository.delete_project_rows(
+        db_session=db_session, project_id=project_ref
+    )
+    return
+
+
 def _resolve_project_role(*, role_str: str) -> Any:
     """
         Resolve a string to the :class:`ProjectRole` enum value.
@@ -1051,7 +1091,11 @@ def handle_project_delete(request: Request) -> Response:
             return deny_response
 
         try:
-            project_manager.delete_project(project_id, auth.user_id)
+            project_manager.delete_project(
+                project_id,
+                auth.user_id,
+                related_rows_cleanup=_delete_project_rpa_rows,
+            )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),

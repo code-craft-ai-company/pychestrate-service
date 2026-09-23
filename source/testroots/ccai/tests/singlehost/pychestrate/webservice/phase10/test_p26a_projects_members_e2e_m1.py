@@ -19,87 +19,21 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import urllib.parse
 import uuid
-
-from typing import Dict
 
 from ccai import testbase
 
-from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
 from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
-    drive_request,
     ensure_app,
     ensure_seeded_user,
-    extract_csrf_token_from_cookies,
     logged_in_cookies,
 )
-
-
-_FORM_HEADERS: Dict[str, str] = {
-    "Content-Type": "application/x-www-form-urlencoded",
-}
-
-
-def _post_form(
-        *, wsgi_app, path: str, cookies: Dict[str, str], fields: Dict[str, str]
-    ):
-    """
-        POST ``fields`` (plus the session's CSRF token) as a urlencoded
-        form and fold any re-signed session cookie back into
-        ``cookies``.
-
-        :returns: The :class:`WsgiResponse`.
-    """
-    payload = dict(fields)
-    payload["csrf_token"] = extract_csrf_token_from_cookies(cookies=cookies)
-    response = drive_request(
-        wsgi_app=wsgi_app,
-        method="POST",
-        path=path,
-        body=urllib.parse.urlencode(payload).encode("utf-8"),
-        headers=_FORM_HEADERS,
-        cookies=cookies,
-    )
-    cookies.update(response.collect_set_cookies())
-    return response
-
-
-def _get(*, wsgi_app, path: str, cookies: Dict[str, str]):
-    """
-        GET ``path`` with ``cookies`` and fold any re-signed session
-        cookie back into ``cookies``.
-
-        :returns: The :class:`WsgiResponse`.
-    """
-    response = drive_request(
-        wsgi_app=wsgi_app, method="GET", path=path, cookies=cookies,
-    )
-    cookies.update(response.collect_set_cookies())
-    return response
-
-
-def _create_project(*, wsgi_app, cookies: Dict[str, str], prefix: str) -> int:
-    """
-        Create a project through the UI and return its id (parsed from
-        the redirect to the project page).
-    """
-    name = "{}-{}".format(prefix, uuid.uuid4().hex[:8])
-    response = _post_form(
-        wsgi_app=wsgi_app,
-        path="/projects/create",
-        cookies=cookies,
-        fields={"name": name, "description": "", "metadata": ""},
-    )
-    location = response.header("Location") or ""
-    if response.status_code not in (302, 303) or not location.startswith("/projects/"):
-        raise AssertionError(
-            "project create did not redirect to the project: {} {}".format(
-                response.status_code, location
-            )
-        )
-    rtnval = int(location.rstrip("/").split("/")[-1])
-    return rtnval
+from ccai.tests.singlehost.pychestrate.webservice.phase10._projects_ui_helpers import (
+    create_project_via_ui,
+    get_page,
+    open_db_session,
+    post_form,
+)
 
 
 def _seed_membership(*, project_id: int, user_id: str, role: str) -> None:
@@ -112,7 +46,7 @@ def _seed_membership(*, project_id: int, user_id: str, role: str) -> None:
         ProjectRole,
     )
 
-    db_session = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY()
+    db_session = open_db_session()
     try:
         manager = ProjectManager(db_session)
         manager.add_member(project_id, user_id, ProjectRole(role), user_id)
@@ -128,7 +62,7 @@ def _member_role(*, project_id: int, user_id: str):
     """
     from ccai.pychestrate.core.orm import ProjectMember  # noqa: E402
 
-    db_session = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY()
+    db_session = open_db_session()
     try:
         member = (
             db_session.query(ProjectMember)
@@ -153,17 +87,17 @@ def test_admin_adds_a_member_by_uuid_and_the_member_row_appears():
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
     member = ensure_seeded_user(login="e2e-prj01-add")
-    project_id = _create_project(
+    project_id = create_project_via_ui(
         wsgi_app=handle.wsgi_app, cookies=cookies, prefix="prj01-add"
     )
 
-    _post_form(
+    post_form(
         wsgi_app=handle.wsgi_app,
         path="/projects/{}/members/add".format(project_id),
         cookies=cookies,
         fields={"user_id": member.user_id, "role": "developer"},
     )
-    page = _get(
+    page = get_page(
         wsgi_app=handle.wsgi_app,
         path="/projects/{}/members".format(project_id),
         cookies=cookies,
@@ -182,12 +116,12 @@ def test_admin_changes_a_members_role():
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
     member = ensure_seeded_user(login="e2e-prj01-edit")
-    project_id = _create_project(
+    project_id = create_project_via_ui(
         wsgi_app=handle.wsgi_app, cookies=cookies, prefix="prj01-edit"
     )
     _seed_membership(project_id=project_id, user_id=member.user_id, role="viewer")
 
-    _post_form(
+    post_form(
         wsgi_app=handle.wsgi_app,
         path="/projects/{}/members/{}/edit".format(project_id, member.user_id),
         cookies=cookies,
@@ -210,12 +144,12 @@ def test_admin_removes_a_member():
     handle = ensure_app()
     cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
     member = ensure_seeded_user(login="e2e-prj01-remove")
-    project_id = _create_project(
+    project_id = create_project_via_ui(
         wsgi_app=handle.wsgi_app, cookies=cookies, prefix="prj01-remove"
     )
     _seed_membership(project_id=project_id, user_id=member.user_id, role="developer")
 
-    _post_form(
+    post_form(
         wsgi_app=handle.wsgi_app,
         path="/projects/{}/members/{}/remove".format(project_id, member.user_id),
         cookies=cookies,
