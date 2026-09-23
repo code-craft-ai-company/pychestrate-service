@@ -542,6 +542,12 @@ def _compute_test_metrics_rollup(
         Compute a read-time roll-up over the supplied
         result-ingest summary rows.
 
+        ``failed_run_rate`` is the share of runs with at least one
+        failed or errored test. It is not a flake rate: nothing
+        here tells a flaky test from a real failure, so the value
+        is named for what it measures (audit ORC-14; it was
+        published as ``flake_run_rate``).
+
         :param summaries: List of :class:`RunResultSummary` rows.
 
         :returns: ``TestMetricsSummary``-shaped dict.
@@ -586,9 +592,9 @@ def _compute_test_metrics_rollup(
             float(tests_failed + tests_errored) / float(tests_total)
         )
 
-    flake_run_rate = 0.0
+    failed_run_rate = 0.0
     if run_count > 0:
-        flake_run_rate = float(runs_with_failures) / float(run_count)
+        failed_run_rate = float(runs_with_failures) / float(run_count)
 
     average_duration_seconds = 0.0
     if duration_sample_count > 0:
@@ -606,7 +612,7 @@ def _compute_test_metrics_rollup(
         "pass_rate": round(pass_rate, 6),
         "fail_rate": round(fail_rate, 6),
         "runs_with_failures": runs_with_failures,
-        "flake_run_rate": round(flake_run_rate, 6),
+        "failed_run_rate": round(failed_run_rate, 6),
         "average_run_duration_seconds": round(average_duration_seconds, 3),
     }
     return rtnval
@@ -650,9 +656,10 @@ def handle_read_test_metrics(request: Request) -> Response:
         ``GET /api/v1/projects/{project_id}/test-metrics``
 
         Returns a read-time roll-up of testbase / testplus test
-        results for the project: aggregate pass / fail / flake
-        rates, run counts, and duration trends, plus a recent
-        per-run breakdown.
+        results for the project: aggregate pass / fail rates, the
+        failed-run rate (share of runs with any failed or errored
+        test), run counts, and duration trends, plus a recent
+        per-run breakdown. No flake detection is performed.
 
         The metrics domain does not pre-aggregate test results
         into the timeseries store; this endpoint computes the

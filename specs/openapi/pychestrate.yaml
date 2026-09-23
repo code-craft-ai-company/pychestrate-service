@@ -3024,10 +3024,12 @@ paths:
       x-pychestrate-status: planned
       description: |
         Returns a read-time roll-up of testbase / testplus test
-        results for the project: aggregate pass / fail / flake
-        rates, run counts, and duration trends, plus a recent
-        per-run breakdown. The roll-up is computed on read from
-        the persisted result-ingest summary rows.
+        results for the project: aggregate pass / fail rates, the
+        failed-run rate (share of runs with any failed or errored
+        test -- no flake detection is performed), run counts, and
+        duration trends, plus a recent per-run breakdown. The
+        roll-up is computed on read from the persisted result-ingest
+        summary rows.
       parameters:
         - in: query
           name: limit
@@ -8492,7 +8494,15 @@ components:
         pass_rate: { type: number, minimum: 0, maximum: 1 }
         fail_rate: { type: number, minimum: 0, maximum: 1 }
         runs_with_failures: { type: integer, minimum: 0 }
-        flake_run_rate: { type: number, minimum: 0, maximum: 1 }
+        failed_run_rate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            Share of runs with at least one failed or errored test
+            (`runs_with_failures / run_count`). Not a flake rate: no
+            flaky-test detection is performed. Replaces the misnamed
+            `flake_run_rate`.
         average_run_duration_seconds: { type: number, minimum: 0 }
 
     TestMetricsRunEntry:

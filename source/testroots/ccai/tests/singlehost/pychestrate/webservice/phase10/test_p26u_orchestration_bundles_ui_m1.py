@@ -419,3 +419,77 @@ def test_catalog_import_requires_an_include(bundle_browser: ThreadedBrowser):
         ("List at least one testbase include to import.", 0),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# ORC-14 -- the failed-run rate is not called a flake rate
+# ---------------------------------------------------------------------------
+
+
+TEST_METRICS_PATH: str = "/api/v1/projects/{}/test-metrics".format(PROJECT_ID)
+
+
+def _test_metrics_api() -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=PROJECTS_PATH,
+        body={"items": [{"project_id": PROJECT_ID, "slug": "p", "display_name": "P"}], "meta": {"total": 1}},
+    )
+    api.respond(
+        method="GET",
+        path=TEST_METRICS_PATH,
+        body={
+            "project_id": PROJECT_ID,
+            "summary": {
+                "run_count": 4,
+                "tests_total": 40,
+                "tests_passed": 36,
+                "tests_failed": 4,
+                "tests_skipped": 0,
+                "tests_errored": 0,
+                "pass_rate": 0.9,
+                "fail_rate": 0.1,
+                "runs_with_failures": 1,
+                "failed_run_rate": 0.25,
+                "average_run_duration_seconds": 60.0,
+            },
+            "recent_runs": [],
+            "meta": {"run_limit": 500, "run_count": 4},
+        },
+    )
+    return api
+
+
+def test_test_metrics_card_is_labelled_failed_run_rate(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-14 / pyc-metrics-bundle**
+    **Property: the headline card reads "Failed-run rate" and shows the
+    API's failed_run_rate (25%), and no card is called a flake rate.**
+    """
+    api = _test_metrics_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-metrics-bundle")
+        try:
+            mount_element(page=page, tag="pyc-test-metrics")
+            page.wait_for_selector('[data-role="failed-run-rate"]', timeout=5000)
+            rtnval = page.evaluate(
+                "() => { const card = document.querySelector('[data-role=\"failed-run-rate\"]');"
+                " return {"
+                " label: card.querySelector('.pyc-metrics__card-label').textContent,"
+                " value: card.querySelector('.pyc-metrics__card-value').textContent,"
+                " labels: Array.from(document.querySelectorAll('.pyc-metrics__card-label'))"
+                ".map((node) => node.textContent) }; }",
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    shown = bundle_browser.run(_scenario)
+    flake_labels = [label for label in shown["labels"] if "flake" in label.lower()]
+    testbase.assert_equal(
+        (shown["label"], shown["value"], flake_labels),
+        ("Failed-run rate", "25%", []),
+    )
+    return

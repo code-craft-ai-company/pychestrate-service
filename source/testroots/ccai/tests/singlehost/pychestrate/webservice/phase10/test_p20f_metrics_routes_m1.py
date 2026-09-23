@@ -544,8 +544,28 @@ def test_test_metrics_returns_rollup_on_happy_path():
     testbase.assert_equal(body["summary"]["tests_passed"], 18)
     testbase.assert_equal(body["summary"]["pass_rate"], 0.9)
     testbase.assert_equal(body["summary"]["runs_with_failures"], 1)
-    testbase.assert_equal(body["summary"]["flake_run_rate"], 0.5)
+    testbase.assert_equal(body["summary"]["failed_run_rate"], 0.5)
     testbase.assert_equal(body["summary"]["average_run_duration_seconds"], 600.0)
     testbase.assert_equal(len(body["recent_runs"]), 2)
     testbase.assert_equal(body["meta"]["aggregation"], "read_time_rollup")
+    return
+
+
+def test_test_metrics_rollup_names_the_failed_run_rate_for_what_it_is():
+    """
+    **Feature: 7-test-metrics (audit ORC-14)**
+    **Property: the share of runs with any failure is published as
+    failed_run_rate; no field claims to be a flake rate.**
+    """
+    rollup = metrics_routes._compute_test_metrics_rollup(
+        summaries=[
+            _FakeSummary(run_id="run-1", tests_total=4, tests_passed=3, tests_failed=1),
+            _FakeSummary(run_id="run-2", tests_total=4, tests_passed=4, tests_failed=0),
+        ],
+    )
+    flake_named = [key for key in rollup.keys() if "flake" in key]
+    testbase.assert_equal(
+        (rollup.get("failed_run_rate"), flake_named),
+        (0.5, []),
+    )
     return

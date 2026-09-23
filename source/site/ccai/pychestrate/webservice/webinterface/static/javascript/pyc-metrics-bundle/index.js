@@ -438,9 +438,13 @@ var PycTestMetrics = class extends HTMLElement {
         tone: "error"
       },
       {
-        label: "Flake run rate",
-        value: format_rate(rollup.flake_run_rate),
-        tone: "warn"
+        // The share of runs with any failed or errored test -- not a
+        // flake rate: no flaky-test detection exists yet.
+        label: "Failed-run rate",
+        value: format_rate(rollup.failed_run_rate),
+        tone: "warn",
+        role: "failed-run-rate",
+        title: "Share of runs with at least one failed or errored test. This is not a flake rate: flaky tests are not detected yet."
       },
       {
         label: "Runs",
@@ -470,6 +474,12 @@ var PycTestMetrics = class extends HTMLElement {
       const value = document.createElement("span");
       value.classList.add("pyc-metrics__card-value");
       value.textContent = entry.value;
+      if (typeof entry.role === "string") {
+        card.setAttribute("data-role", entry.role);
+      }
+      if (typeof entry.title === "string") {
+        card.setAttribute("title", entry.title);
+      }
       card.appendChild(label);
       card.appendChild(value);
       cards.appendChild(card);
