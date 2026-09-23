@@ -342,8 +342,39 @@ def validate_build_steps(steps: List[Dict[str, Any]]) -> List[str]:
         # Check continue_on_failure field
         if 'continue_on_failure' in step and not isinstance(step.get('continue_on_failure'), bool):
             errors.append(f"Step {i}: 'continue_on_failure' must be a boolean")
-    
+
     return errors
+
+
+def normalize_build_steps(steps: Any) -> Any:
+    """
+    Return the build steps with every optional field present, so readers
+    (the build-spec page, the build runner) never have to guess whether a
+    key exists: ``config`` defaults to ``{}`` and ``continue_on_failure``
+    to ``False``.
+
+    Only the optional fields are filled; required fields (``name``,
+    ``type``) are left to :func:`validate_build_steps`. Anything that is
+    not a list of dictionaries is returned unchanged.
+
+    :param steps: Build step definitions as stored or submitted.
+    :returns: A new list of step dictionaries with the defaults applied.
+    """
+    if not isinstance(steps, list):
+        return steps
+
+    rtnval: List[Any] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            rtnval.append(step)
+            continue
+        normalized = dict(step)
+        if normalized.get('config') is None:
+            normalized['config'] = {}
+        if normalized.get('continue_on_failure') is None:
+            normalized['continue_on_failure'] = False
+        rtnval.append(normalized)
+    return rtnval
 
 
 
@@ -472,7 +503,9 @@ class BuildManager:
             repository_id=spec.repository_id,
             repository_name=repository_name,
             branch=spec.branch,
-            steps=spec.steps_json or [],
+            # Rows written before steps were normalized on save may lack
+            # the optional fields; fill them here too.
+            steps=normalize_build_steps(spec.steps_json or []),
             environment=spec.environment_json or {},
             timeout_minutes=spec.timeout_minutes,
             description=spec.description or "",
@@ -608,7 +641,7 @@ class BuildManager:
             repository_id=request.repository_id,
             name=request.name,
             branch=request.branch,
-            steps_json=request.steps,
+            steps_json=normalize_build_steps(request.steps),
             environment_json=request.environment,
             timeout_minutes=request.timeout_minutes,
             description=request.description or "",
@@ -736,7 +769,7 @@ class BuildManager:
                     field="steps",
                     error_code="INVALID_STEPS"
                 )
-            spec.steps_json = request.steps
+            spec.steps_json = normalize_build_steps(request.steps)
         
         # Update environment if provided
         if request.environment is not None:

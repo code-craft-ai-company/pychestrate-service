@@ -1777,6 +1777,45 @@ def test_handle_member_remove_refuses_self_removal():
 
 
 # ===========================================================================
+# PRJ-02: unexpected errors render the shell's error page
+# ===========================================================================
+
+
+def test_unexpected_handler_error_renders_500_page_with_reference():
+    """
+    **Feature: projects shell wrapper (PRJ-02)**
+    **Property: when a projects handler raises, the shell wrapper answers
+    with the 500 error page whose message carries a log reference
+    instead of the framework's bare JSON 500, and the exception text is
+    not shown.**
+    """
+    _reset_global_state()
+    try:
+        env = _install_stub_environment()
+
+        def _broken_handler(request: Any) -> Response:
+            raise KeyError("steps[0].continue_on_failure is undefined")
+
+        wrapped = projects_routes._wrap_projects_handler_in_shell(
+            _broken_handler
+        )
+        response = wrapped(_FakeRequest(path_params={"project_id": "7"}))
+
+        message = env.last_template.render_calls[-1]["message"]
+        testbase.assert_equal(
+            (
+                response.status_code,
+                "reference:" in message,
+                "continue_on_failure" in message,
+            ),
+            (500, True, False),
+        )
+    finally:
+        _reset_global_state()
+    return
+
+
+# ===========================================================================
 # PRJ-01: member ids are UUIDs
 # ===========================================================================
 

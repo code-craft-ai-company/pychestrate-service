@@ -51,6 +51,7 @@ __version__ = "1.0.0"
 
 
 import json
+import logging
 import uuid
 
 from datetime import datetime
@@ -1621,6 +1622,83 @@ def handle_member_remove(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+_projects_ui_logger = logging.getLogger("pychestrate.ui.projects")
+
+
+def _new_error_reference() -> str:
+    """
+        Mint a short reference that ties a message shown to a user to
+        the log line recording the underlying exception.
+
+        :returns: A 12-character hexadecimal reference.
+    """
+    rtnval = uuid.uuid4().hex[:12]
+    return rtnval
+
+
+def _log_unexpected_error(*, action: str, request_path: str) -> str:
+    """
+        Log the exception being handled (with its traceback) under a new
+        reference. Call from inside an ``except`` block.
+
+        :param action: Short description of what failed (handler name or
+                       user action).
+        :param request_path: Path of the request that failed.
+
+        :returns: The reference to show the user.
+    """
+    reference = _new_error_reference()
+    _projects_ui_logger.exception(
+        "pychestrate.ui.projects.unexpected_error reference=%s action=%s path=%s",
+        reference,
+        action,
+        request_path,
+    )
+    return reference
+
+
+def _render_unexpected_error_page(*, request: Request, action: str) -> Response:
+    """
+        Log the exception being handled and answer with the site
+        shell's 500 page carrying the log reference. Falls back to the
+        chromeless error page when the shell itself cannot render.
+
+        :param request: The request whose handler failed.
+        :param action: Handler name, recorded in the log line.
+
+        :returns: A 500 :class:`Response`.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+        render_error_response,
+    )
+
+    request_path = getattr(request, "path", "")
+    reference = _log_unexpected_error(
+        action=action, request_path=str(request_path)
+    )
+    message = (
+        "This page could not be shown because of an unexpected problem. "
+        "Try again, and if it keeps happening give an administrator this "
+        "reference: {}.".format(reference)
+    )
+    try:
+        rtnval = render_error_response(
+            request=request, status_code=500, message=message
+        )
+    except Exception:
+        _projects_ui_logger.exception(
+            "pychestrate.ui.projects.error_page_failed reference=%s",
+            reference,
+        )
+        rtnval = render_error_response(
+            request=request,
+            status_code=500,
+            message=message,
+            force_chromeless=True,
+        )
+    return rtnval
+
+
 _DEFAULT_PROJECTS_PAGE_TITLE = "Pychestrate"
 
 
@@ -1723,8 +1801,19 @@ def _wrap_projects_handler_in_shell(handler: Any) -> Any:
     )
 
     def _wrapped(request: Request) -> Response:
-        with _ui_profile_scope.request_profile_scope():
-            inner = handler(request)
+        try:
+            with _ui_profile_scope.request_profile_scope():
+                inner = handler(request)
+        except Exception:
+            # An unexpected failure (a template error, a manager bug)
+            # used to escape as the framework's bare JSON 500 with no
+            # shell. Log it under a reference and show the shell's
+            # error page with that reference instead.
+            rtnval = _render_unexpected_error_page(
+                request=request,
+                action=getattr(handler, "__name__", "projects_handler"),
+            )
+            return rtnval
         if isinstance(inner, HTMLResponse) is False:
             return inner
 

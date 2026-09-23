@@ -63,13 +63,13 @@
                 <th scope="row">{{ stage.name }}</th>
                 <td><span class="badge badge-secondary">{{ stage.type }}</span></td>
                 <td>
-                    {% if stage.requires_approval %}
+                    {% if stage.requires_approval is defined and stage.requires_approval %}
                     <span class="badge badge-warning">Yes</span>
                     {% else %}
                     <span class="badge badge-secondary">No</span>
                     {% endif %}
                 </td>
-                <td>{% if stage.continue_on_failure %}Continue{% else %}Stop pipeline{% endif %}</td>
+                <td>{% if stage.continue_on_failure is defined and stage.continue_on_failure %}Continue{% else %}Stop pipeline{% endif %}</td>
             </tr>
             {% endfor %}
         </tbody>

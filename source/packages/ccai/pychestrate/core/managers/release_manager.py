@@ -714,8 +714,41 @@ def validate_pipeline_stages(stages: List[Dict[str, Any]]) -> List[str]:
         # Check continue_on_failure field
         if 'continue_on_failure' in stage and not isinstance(stage.get('continue_on_failure'), bool):
             errors.append(f"Stage {i}: 'continue_on_failure' must be a boolean")
-    
+
     return errors
+
+
+def normalize_pipeline_stages(stages: Any) -> Any:
+    """
+    Return the pipeline stages with every optional field present, so the
+    pipeline page and the runner never meet a missing key: ``config``
+    defaults to ``{}``, ``requires_approval`` and ``continue_on_failure``
+    to ``False``.
+
+    Required fields (``name``, ``type``) are left to
+    :func:`validate_pipeline_stages`. Anything that is not a list of
+    dictionaries is returned unchanged.
+
+    :param stages: Stage definitions as stored or submitted.
+    :returns: A new list of stage dictionaries with the defaults applied.
+    """
+    if not isinstance(stages, list):
+        return stages
+
+    rtnval: List[Any] = []
+    for stage in stages:
+        if not isinstance(stage, dict):
+            rtnval.append(stage)
+            continue
+        normalized = dict(stage)
+        if normalized.get('config') is None:
+            normalized['config'] = {}
+        if normalized.get('requires_approval') is None:
+            normalized['requires_approval'] = False
+        if normalized.get('continue_on_failure') is None:
+            normalized['continue_on_failure'] = False
+        rtnval.append(normalized)
+    return rtnval
 
 
 def validate_pipeline_triggers(triggers: List[str]) -> List[str]:
@@ -1354,7 +1387,9 @@ class ReleaseManager:
             id=pipeline.id,
             project_id=pipeline.project_id,
             name=pipeline.name,
-            stages=pipeline.stages_json or [],
+            # Rows written before stages were normalized on save may lack
+            # the optional fields; fill them here too.
+            stages=normalize_pipeline_stages(pipeline.stages_json or []),
             triggers=pipeline.triggers_json or [],
             variables=pipeline.variables_json or {},
             description=pipeline.description or "",
@@ -1612,7 +1647,7 @@ class ReleaseManager:
         pipeline = ProjectReleasePipeline(
             project_id=project_id,
             name=request.name,
-            stages_json=request.stages,
+            stages_json=normalize_pipeline_stages(request.stages),
             triggers_json=request.triggers,
             variables_json=request.variables,
             description=request.description or "",
@@ -1721,7 +1756,7 @@ class ReleaseManager:
                     field="stages",
                     error_code="INVALID_STAGES"
                 )
-            pipeline.stages_json = request.stages
+            pipeline.stages_json = normalize_pipeline_stages(request.stages)
         
         # Update triggers if provided
         if request.triggers is not None:
