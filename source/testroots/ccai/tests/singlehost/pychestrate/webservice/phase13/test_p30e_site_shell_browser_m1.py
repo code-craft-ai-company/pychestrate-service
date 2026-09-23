@@ -17,7 +17,8 @@ color scheme.
 Covered audit findings: XC-02 (Sign out unreachable on phones),
 LD-13 (serif palette font), XC-03 (nested main landmarks, raw
 landmark names, empty landmarks), XC-26 (drawer open over the
-content at tablet width, focus not trapped, Escape).
+content at tablet width, focus not trapped, Escape), XC-13 (theme
+toggle one click behind, theme applied after first paint).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -432,6 +433,68 @@ def test_desktop_starts_with_the_sidebar_open(browser: Browser):
         state = page.evaluate(LAYOUT_STATE_JS)
         testbase.assert_equal(state["open"], True)
         testbase.assert_true(state["mode"] != "overlay", "desktop layout is in overlay mode")
+    finally:
+        page.context.close()
+    return
+
+
+# ---------------------------------------------------------------------------
+# XC-13: the theme toggle
+# ---------------------------------------------------------------------------
+
+
+def test_first_theme_click_after_an_os_dark_load_switches_to_light(browser: Browser):
+    """
+    **Feature: site shell -- theme**
+    **Property: when the page loaded dark from the OS preference, the
+    first click on the theme control switches it to light.**
+    """
+    page = open_shell_page(browser, color_scheme="dark", **DESKTOP)
+    try:
+        page.locator(".pyc-site-shell__theme-toggle").click()
+        theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
+        testbase.assert_equal(theme, "light")
+    finally:
+        page.context.close()
+    return
+
+
+def test_theme_control_names_the_current_theme(browser: Browser):
+    """
+    **Feature: site shell -- theme**
+    **Property: the theme control states the theme on screen ("Theme:
+    Dark" after an OS-dark load).**
+    """
+    page = open_shell_page(browser, color_scheme="dark", **DESKTOP)
+    try:
+        label = page.locator(".pyc-site-shell__theme-toggle").text_content().strip()
+        testbase.assert_equal(label, "Theme: Dark")
+    finally:
+        page.context.close()
+    return
+
+
+def test_stored_theme_is_applied_before_the_shell_script_runs(browser: Browser):
+    """
+    **Feature: site shell -- theme**
+    **Property: a stored theme choice is on <html> even when the shell
+    bundle has not run (applied from <head>, before the first
+    paint).**
+    """
+    context_options = dict(DESKTOP)
+    context_options["color_scheme"] = "light"
+    page = open_shell_page(
+        browser,
+        blocked_paths=["/static/javascript/pyc-site-shell/index.js"],
+        wait_for_ready=False,
+        **context_options
+    )
+    try:
+        page.evaluate("(key) => window.localStorage.setItem(key, 'dark')", THEME_STORAGE_KEY)
+        page.reload()
+        page.wait_for_load_state("domcontentloaded")
+        theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
+        testbase.assert_equal(theme, "dark")
     finally:
         page.context.close()
     return

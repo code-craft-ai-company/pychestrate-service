@@ -120,14 +120,11 @@ function build_account_menu(options, display_name) {
         theme_button.setAttribute("variant", "tertiary");
         theme_button.setAttribute("size", "sm");
         theme_button.classList.add("pyc-site-shell__theme-toggle");
-        const is_dark = options.current_theme === "dark";
-        theme_button.setAttribute("aria-pressed", is_dark ? "true" : "false");
-        theme_button.setAttribute("aria-label", is_dark ? "Switch to light theme" : "Switch to dark theme");
-        theme_button.textContent = "Theme";
         theme_button.addEventListener("click", (event) => {
             event.preventDefault();
             options.on_theme_toggle();
         });
+        update_theme_toggle(theme_button, options.current_theme);
         panel.appendChild(theme_button);
     }
     // 9-ui-profiles: every signed-in user can narrow which automation
@@ -226,6 +223,20 @@ function wire_account_disclosure(container, button, panel) {
 }
 
 /*
+ * Show the current theme on the theme control: its label reads
+ * "Theme: Light" or "Theme: Dark" (the effective theme, whether
+ * chosen explicitly or following the OS), and its tooltip names
+ * the action.
+ */
+function update_theme_toggle(theme_button, current_theme) {
+    const is_dark = current_theme === "dark";
+    theme_button.textContent = is_dark === true ? "Theme: Dark" : "Theme: Light";
+    theme_button.setAttribute("title", is_dark === true ? "Switch to the light theme" : "Switch to the dark theme");
+    theme_button.setAttribute("data-theme-state", is_dark === true ? "dark" : "light");
+    return;
+}
+
+/*
  * The sidebar collapse toggle. A plain <button> (not <mj-button>)
  * so the hamburger SVG can inherit the header foreground through
  * currentColor without fighting the component's own slots. The
@@ -292,5 +303,6 @@ function build_palette_hint(shortcut_label, on_activate) {
 }
 
 export {
-    build_header
+    build_header,
+    update_theme_toggle
 };

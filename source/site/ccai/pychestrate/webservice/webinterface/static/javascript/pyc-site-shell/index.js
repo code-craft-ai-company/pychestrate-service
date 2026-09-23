@@ -156,14 +156,11 @@ function build_account_menu(options, display_name) {
     theme_button.setAttribute("variant", "tertiary");
     theme_button.setAttribute("size", "sm");
     theme_button.classList.add("pyc-site-shell__theme-toggle");
-    const is_dark = options.current_theme === "dark";
-    theme_button.setAttribute("aria-pressed", is_dark ? "true" : "false");
-    theme_button.setAttribute("aria-label", is_dark ? "Switch to light theme" : "Switch to dark theme");
-    theme_button.textContent = "Theme";
     theme_button.addEventListener("click", (event) => {
       event.preventDefault();
       options.on_theme_toggle();
     });
+    update_theme_toggle(theme_button, options.current_theme);
     panel.appendChild(theme_button);
   }
   const preferences_link = document.createElement("a");
@@ -240,6 +237,13 @@ function wire_account_disclosure(container, button, panel) {
     }
     set_open(false);
   });
+  return;
+}
+function update_theme_toggle(theme_button, current_theme) {
+  const is_dark = current_theme === "dark";
+  theme_button.textContent = is_dark === true ? "Theme: Dark" : "Theme: Light";
+  theme_button.setAttribute("title", is_dark === true ? "Switch to the light theme" : "Switch to the dark theme");
+  theme_button.setAttribute("data-theme-state", is_dark === true ? "dark" : "light");
   return;
 }
 function build_nav_toggle(on_nav_toggle, nav_open_initial, nav_controls_id) {
@@ -2946,6 +2950,7 @@ var NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be inc
 var NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
 var SIDEBAR_ELEMENT_ID = "pyc-site-shell-sidebar";
 var SIDEBAR_NAV_LABEL = "Primary";
+var DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 var PycSiteShell = class extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -2971,6 +2976,8 @@ var PycSiteShell = class extends HTMLElement {
   _nav_manifest_failed;
   _nav_provider_registered;
   _layout;
+  _color_scheme_query;
+  _color_scheme_listener;
   static observedAttributes = [
     ATTR_INITIAL_ROUTE,
     ATTR_PERMISSIONS_ENDPOINT,
@@ -2992,6 +2999,8 @@ var PycSiteShell = class extends HTMLElement {
     this._nav_manifest_failed = false;
     this._nav_provider_registered = false;
     this._layout = null;
+    this._color_scheme_query = null;
+    this._color_scheme_listener = null;
     this._router = null;
     this._sidebar_renderer = null;
     this._main_region = null;
@@ -3031,7 +3040,8 @@ var PycSiteShell = class extends HTMLElement {
     return rtnval;
   }
   connectedCallback() {
-    _apply_theme_preference(_read_theme_preference());
+    _apply_theme_preference(_read_stored_theme());
+    this._wire_color_scheme_listener();
     this._install_skip_link();
     install_confirm_delegate(document);
     install_reveal_toggle(document);
@@ -3069,6 +3079,14 @@ var PycSiteShell = class extends HTMLElement {
         this._global_session_401
       );
       this._global_session_401 = null;
+    }
+    if (this._color_scheme_query !== null && this._color_scheme_listener !== null) {
+      this._color_scheme_query.removeEventListener(
+        "change",
+        this._color_scheme_listener
+      );
+      this._color_scheme_query = null;
+      this._color_scheme_listener = null;
     }
     return;
   }
@@ -3140,7 +3158,7 @@ var PycSiteShell = class extends HTMLElement {
       on_theme_toggle: () => {
         this._toggle_theme();
       },
-      current_theme: _read_theme_preference(),
+      current_theme: _read_effective_theme(),
       nav_open_initial,
       nav_controls_id: SIDEBAR_ELEMENT_ID,
       on_nav_toggle: () => {
@@ -3585,19 +3603,48 @@ var PycSiteShell = class extends HTMLElement {
     document.body.insertBefore(link, document.body.firstChild);
     return;
   }
+  /**
+   * Flip between the light and dark theme, starting from what is
+   * on screen now -- the stored choice, or the OS preference when
+   * nothing is stored -- so the first click after an OS-driven
+   * load always changes the theme.
+   */
   _toggle_theme() {
-    const current = _read_theme_preference();
+    const current = _read_effective_theme();
     const next = current === "dark" ? "light" : "dark";
     _apply_theme_preference(next);
     try {
       window.localStorage.setItem(THEME_STORAGE_KEY, next);
     } catch (error) {
     }
-    const button = document.querySelector(".pyc-site-shell__theme-toggle");
+    this._sync_theme_control();
+    return;
+  }
+  _sync_theme_control() {
+    const button = this.querySelector(".pyc-site-shell__theme-toggle");
     if (button !== null) {
-      button.setAttribute("aria-pressed", next === "dark" ? "true" : "false");
-      button.setAttribute("aria-label", next === "dark" ? "Switch to light theme" : "Switch to dark theme");
+      update_theme_toggle(button, _read_effective_theme());
     }
+    return;
+  }
+  /**
+   * While no theme is stored the page follows the OS preference;
+   * keep the theme control's label right when the OS flips.
+   */
+  _wire_color_scheme_listener() {
+    if (this._color_scheme_listener !== null || typeof window.matchMedia !== "function") {
+      return;
+    }
+    const query = window.matchMedia(DARK_SCHEME_QUERY);
+    if (typeof query.addEventListener !== "function") {
+      return;
+    }
+    const listener = () => {
+      this._sync_theme_control();
+    };
+    query.addEventListener("change", listener);
+    this._color_scheme_query = query;
+    this._color_scheme_listener = listener;
     return;
   }
   _read_optional_attribute(name) {
@@ -3773,7 +3820,7 @@ function _build_sidebar_failure_state(on_retry) {
   return panel;
 }
 var THEME_STORAGE_KEY = "pychestrate.ui.theme";
-function _read_theme_preference() {
+function _read_stored_theme() {
   try {
     const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === "dark" || stored === "light") {
@@ -3781,20 +3828,21 @@ function _read_theme_preference() {
     }
   } catch (error) {
   }
-  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+  return null;
+}
+function _read_effective_theme() {
+  const stored = _read_stored_theme();
+  if (stored !== null) {
+    return stored;
+  }
+  if (typeof window.matchMedia === "function" && window.matchMedia(DARK_SCHEME_QUERY).matches) {
     return "dark";
   }
   return "light";
 }
 function _apply_theme_preference(theme) {
-  let stored = null;
-  try {
-    stored = window.localStorage.getItem(THEME_STORAGE_KEY);
-  } catch (error) {
-    stored = null;
-  }
-  if (stored === "dark" || stored === "light") {
-    document.documentElement.setAttribute("data-theme", stored);
+  if (theme === "dark" || theme === "light") {
+    document.documentElement.setAttribute("data-theme", theme);
   } else {
     document.documentElement.removeAttribute("data-theme");
   }

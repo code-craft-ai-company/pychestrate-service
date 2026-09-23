@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }}</title>
+    <!-- Applies the user's stored light / dark choice to <html>
+         before the first paint (a classic blocking script: a module
+         would run only after the page has painted). -->
+    <script src="{{ static_url('javascript/pyc-site-shell/theme-boot.js') }}"></script>
     <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
     <!-- codecraftai-webworks mj-* component library: design tokens,
          base stylesheet, and the barrel module that registers every
