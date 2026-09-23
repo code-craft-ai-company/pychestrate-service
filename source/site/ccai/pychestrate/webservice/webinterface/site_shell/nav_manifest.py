@@ -348,14 +348,6 @@ NAV_ENTRIES: List[NavEntry] = [
         group_id=GROUP_OPERATIONS,
         required_permissions=["system:webhooks.read"],
     ),
-    NavEntry(
-        entry_id="operations.release-channels",
-        surfaces=('build',),
-        label="Release Channels",
-        route="/release-channels",
-        group_id=GROUP_OPERATIONS,
-        required_permissions=["system:release_channels.read"],
-    ),
     # ---- System --------------------------------------------------
     NavEntry(
         entry_id="system.secrets",
@@ -392,6 +384,18 @@ NAV_ENTRIES: List[NavEntry] = [
         route="/admin/system-health",
         group_id=GROUP_ADMIN,
         required_permissions=["system:ui.admin.view"],
+    ),
+    # Pychestrate's own update channels (canary / beta / stable
+    # releases of the service and agent). Formerly "Release Channels"
+    # under Operations and tagged as a Build Automation surface, which
+    # read as a project's release channels (audit ORC-31). The route
+    # keeps its name so existing links still work.
+    NavEntry(
+        entry_id="admin.pychestrate-updates",
+        label="Pychestrate Updates",
+        route="/release-channels",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:release_channels.read"],
     ),
     NavEntry(
         entry_id="admin.users",

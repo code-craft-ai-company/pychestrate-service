@@ -1179,3 +1179,130 @@ def test_slos_table_calls_the_status_column_achieved(bundle_browser: ThreadedBro
     labels = bundle_browser.run(_scenario)
     testbase.assert_equal(("Achieved" in labels, "Burn-rate" in labels), (True, False))
     return
+
+
+# ---------------------------------------------------------------------------
+# ORC-31 -- "Pychestrate Updates" explains why publishing is unavailable
+# ---------------------------------------------------------------------------
+
+
+RELEASE_CHANNELS_API_PATH: str = "/api/v1/release-channels"
+NO_KEY_REASON: str = (
+    "Publishing is unavailable: this server has no release-signing key, and"
+    " this release cannot load one at startup, so Pychestrate updates cannot"
+    " be signed and published from this server."
+)
+
+
+def _updates_api(*, publishing_available: bool) -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=RELEASE_CHANNELS_API_PATH,
+        body={"items": [], "meta": {
+            "page": 1, "per_page": 50, "total": 0, "next_cursor": None,
+            "publishing_available": publishing_available,
+            "publishing_unavailable_reason": None if publishing_available else NO_KEY_REASON,
+        }},
+    )
+    return api
+
+
+def _open_updates(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-ops-bundle")
+    mount_element(page=page, tag="pyc-release-channels")
+    wait_for_request(page=page, api=api, method="GET", path=RELEASE_CHANNELS_API_PATH)
+    page.wait_for_selector('[data-role="empty-state"]', timeout=5000)
+    rtnval = (context, page)
+    return rtnval
+
+
+def test_updates_page_is_titled_pychestrate_updates(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-31 / pyc-ops-bundle**
+    **Property: the page is titled "Pychestrate Updates" and says the
+    channels carry Pychestrate's own releases, not a project's.**
+    """
+    api = _updates_api(publishing_available=True)
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_updates(browser=browser, api=api)
+        try:
+            rtnval = (
+                page.inner_text("pyc-release-channels h1"),
+                page.inner_text('[data-role="updates-intro"]'),
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    heading, intro = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        (heading, intro.startswith("Releases of the Pychestrate service and agent")),
+        ("Pychestrate Updates", True),
+    )
+    return
+
+
+def test_updates_page_explains_why_publishing_is_unavailable(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-31 / pyc-ops-bundle**
+    **Property: when the server cannot publish (no signing key) the page
+    shows the server's reason and the Publish action is disabled.**
+    """
+    api = _updates_api(publishing_available=False)
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_updates(browser=browser, api=api)
+        try:
+            notice = page.wait_for_selector('[data-role="publishing-unavailable"]', state="visible", timeout=5000)
+            rtnval = (
+                notice.inner_text(),
+                page.get_attribute('[data-role="publish-toggle"]', "disabled") is not None,
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    text, disabled = bundle_browser.run(_scenario)
+    testbase.assert_equal((text, disabled), (NO_KEY_REASON, True))
+    return
+
+
+def test_updates_publish_failure_shows_the_server_reason(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-31 / pyc-ops-bundle**
+    **Property: a refused publish shows the server's problem detail,
+    not "HTTP 503".**
+    """
+    api = _updates_api(publishing_available=True)
+    api.respond(
+        method="POST",
+        path=RELEASE_CHANNELS_API_PATH,
+        status=503,
+        body={"type": "about:blank", "title": "Service Unavailable", "status": 503,
+              "detail": NO_KEY_REASON, "reason": "signing_key_missing"},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_updates(browser=browser, api=api)
+        try:
+            page.click('[data-role="publish-toggle"]')
+            page.wait_for_selector('[data-role="publish-form"]')
+            page.fill('[data-role="publish-component"] input', "service")
+            page.fill('[data-role="publish-version"] input', "1.4.0")
+            page.fill('[data-role="publish-uri"] input', "oci://registry/pychestrate:1.4.0")
+            page.fill('[data-role="publish-sha"] input', "a" * 64)
+            page.click('[data-role="publish-submit"]')
+            page.wait_for_selector('[data-role="toast"][data-tone="error"]', timeout=5000)
+            rtnval = page.inner_text('[data-role="toast"][data-tone="error"]')
+        finally:
+            context.close()
+        return rtnval
+
+    toast_text = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        (NO_KEY_REASON in toast_text, "HTTP 503" in toast_text),
+        (True, False),
+    )
+    return

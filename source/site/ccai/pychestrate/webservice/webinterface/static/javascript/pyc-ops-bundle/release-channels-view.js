@@ -1,4 +1,6 @@
 const RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
+const UPDATES_HEADING = "Pychestrate Updates";
+const UPDATES_INTRO = "Releases of the Pychestrate service and agent, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
 const RELEASE_CHANNEL_VALUES = [
   "canary",
   "beta",
@@ -51,7 +53,18 @@ function release_status_tone(status) {
   const rtnval = "neutral";
   return rtnval;
 }
-function publish_message_for_status(status) {
+function extract_publishing_status(meta) {
+  if (meta === null || meta === void 0 || typeof meta !== "object") {
+    const rtnval2 = { available: true, reason: "" };
+    return rtnval2;
+  }
+  const available = meta.publishing_available !== false;
+  const reason = typeof meta.publishing_unavailable_reason === "string" ? meta.publishing_unavailable_reason : "";
+  const rtnval = { available, reason };
+  return rtnval;
+}
+function publish_message_for_status(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
   if (status === 201 || status === 200) {
     const rtnval2 = "Release published to the channel.";
     return rtnval2;
@@ -61,7 +74,11 @@ function publish_message_for_status(status) {
     return rtnval2;
   }
   if (status === 422) {
-    const rtnval2 = "The publish request was rejected \u2014 check the fields.";
+    const rtnval2 = reason.length > 0 ? "The publish request was rejected: " + reason : "The publish request was rejected \u2014 check the fields.";
+    return rtnval2;
+  }
+  if (status === 503 && reason.length > 0) {
+    const rtnval2 = reason;
     return rtnval2;
   }
   if (status === 403) {
@@ -87,11 +104,17 @@ class PycReleaseChannels extends HTMLElement {
   _publish_region;
   _detail_region;
   _toast_region;
+  _publishing;
+  _publishing_region;
+  _publish_toggle;
   constructor() {
     super();
     this._entries = [];
     this._loading = false;
     this._errored = false;
+    this._publishing = { available: true, reason: "" };
+    this._publishing_region = null;
+    this._publish_toggle = null;
     this._detailChannelId = "";
     this._root = null;
     this._table_region = null;
@@ -134,8 +157,20 @@ class PycReleaseChannels extends HTMLElement {
     root.classList.add("pyc-ops");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-ops__heading");
-    heading.textContent = "Release Channels";
+    heading.textContent = UPDATES_HEADING;
     root.appendChild(heading);
+    const intro = document.createElement("p");
+    intro.classList.add("pyc-ops__note");
+    intro.setAttribute("data-role", "updates-intro");
+    intro.textContent = UPDATES_INTRO;
+    root.appendChild(intro);
+    const publishing_region = document.createElement("p");
+    publishing_region.classList.add("pyc-ops__notice", "pyc-ops__notice--preview");
+    publishing_region.setAttribute("data-role", "publishing-unavailable");
+    publishing_region.setAttribute("role", "note");
+    publishing_region.hidden = true;
+    root.appendChild(publishing_region);
+    this._publishing_region = publishing_region;
     const controls = document.createElement("div");
     controls.classList.add("pyc-ops__controls");
     const publish_button = document.createElement("mj-button");
@@ -147,6 +182,7 @@ class PycReleaseChannels extends HTMLElement {
       this._toggle_publish_form();
     });
     controls.appendChild(publish_button);
+    this._publish_toggle = publish_button;
     const refresh_button = document.createElement("mj-button");
     refresh_button.classList.add("pyc-ops__button");
     refresh_button.setAttribute("type", "button");
@@ -225,10 +261,31 @@ class PycReleaseChannels extends HTMLElement {
       return;
     }
     this._entries = page.items;
+    this._publishing = extract_publishing_status(page.meta);
     this._loading = false;
     this._errored = false;
+    this._render_publishing_state();
     this._render_table_region();
     await this._refresh_open_detail();
+    return;
+  }
+  /**
+   * Say why publishing is unavailable (no release-signing key) and
+   * disable the publish action, instead of letting a publish fail
+   * with a bare HTTP status.
+   */
+  _render_publishing_state() {
+    const available = this._publishing.available === true;
+    if (this._publishing_region !== null) {
+      this._publishing_region.hidden = available;
+      this._publishing_region.textContent = available ? "" : this._publishing.reason.length > 0 ? this._publishing.reason : "Publishing is unavailable on this server.";
+    }
+    if (this._publish_toggle !== null) {
+      this._publish_toggle.toggleAttribute("disabled", available === false);
+    }
+    if (available === false && this._publish_region !== null) {
+      this._publish_region.hidden = true;
+    }
     return;
   }
   /**
@@ -260,7 +317,7 @@ class PycReleaseChannels extends HTMLElement {
       const loading = document.createElement("p");
       loading.classList.add("pyc-ops__notice");
       loading.setAttribute("data-role", "loading-state");
-      loading.textContent = "Loading release channels\u2026";
+      loading.textContent = "Loading published updates\u2026";
       region.replaceChildren(loading);
       return;
     }
@@ -268,7 +325,7 @@ class PycReleaseChannels extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-ops__notice", "pyc-ops__notice--error");
       error.setAttribute("data-role", "error-state");
-      error.textContent = "Failed to load release channels. Try refreshing.";
+      error.textContent = "Failed to load the published updates. Try refreshing.";
       region.replaceChildren(error);
       return;
     }
@@ -276,7 +333,7 @@ class PycReleaseChannels extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-ops__notice");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No releases published to any channel yet";
+      empty.textContent = "No Pychestrate updates published to any channel yet";
       region.replaceChildren(empty);
       return;
     }
@@ -503,6 +560,7 @@ class PycReleaseChannels extends HTMLElement {
       option.textContent = channel;
       channel_select.appendChild(option);
     }
+    channel_select.value = RELEASE_CHANNEL_VALUES[0];
     channel_label.appendChild(channel_select);
     form.appendChild(channel_label);
     const version_input = this._build_field(
@@ -627,6 +685,7 @@ class PycReleaseChannels extends HTMLElement {
     };
     let status = 0;
     let channel_id = "";
+    let detail = "";
     try {
       const response = await fetch(RELEASE_CHANNELS_PATH, {
         method: "POST",
@@ -643,6 +702,15 @@ class PycReleaseChannels extends HTMLElement {
         const entry = body;
         if (entry !== null && typeof entry.channel_id === "string") {
           channel_id = entry.channel_id;
+        }
+      } else {
+        try {
+          const problem = await response.json();
+          if (problem !== null && typeof problem === "object" && typeof problem.detail === "string") {
+            detail = problem.detail;
+          }
+        } catch (parse_reason) {
+          detail = "";
         }
       }
     } catch (reason) {
@@ -663,7 +731,7 @@ class PycReleaseChannels extends HTMLElement {
       ok,
       status,
       channelId: channel_id,
-      message: publish_message_for_status(status)
+      message: publish_message_for_status(status, detail)
     };
     return rtnval;
   }
@@ -730,6 +798,8 @@ class PycReleaseChannels extends HTMLElement {
 export {
   PycReleaseChannels,
   RELEASE_CHANNEL_VALUES,
+  UPDATES_HEADING,
+  extract_publishing_status,
   build_release_channel_url,
   format_release_timestamp,
   format_rollout,

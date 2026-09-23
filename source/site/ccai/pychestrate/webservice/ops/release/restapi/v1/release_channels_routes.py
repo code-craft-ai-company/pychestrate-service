@@ -25,6 +25,14 @@ This REST surface therefore models a release-channel resource as a
 published *release* row -- the smallest unit a channel advertises.
 The ``channel_id`` path parameter is the release UUID.
 
+These channels distribute Pychestrate's own service and agent
+builds (the UI calls the page "Pychestrate Updates"); they are not a
+project's release channels. Publishing signs the release manifest
+with the release-signing key; nothing installs that key at startup
+yet, so the list reports ``meta.publishing_available: false`` with
+the reason, and a publish attempt answers 503 with the same reason
+(audit ORC-31: the UI only showed "HTTP 503").
+
 The following are INTENTIONALLY NOT registered because the M1
 domain ships no capability behind them -- promotion + rollback are
 M2 milestones (see ``ops.release.errors.ReleaseBakeNotMetError`` /
@@ -60,6 +68,7 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
 from ccai.pychestrate.webservice.ops.release import (
+    manifest_signer,
     release_service,
 )
 from ccai.pychestrate.webservice.ops.release.errors import (
@@ -78,6 +87,17 @@ from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 
 
 RELEASE_CHANNELS_PATH = "/release-channels"
+
+#: Why publishing is unavailable when no release-signing key is
+#: installed -- shown by the list meta and the publish 503.
+PUBLISHING_UNAVAILABLE_REASON = (
+    "Publishing is unavailable: this server has no release-signing key,"
+    " and this release cannot load one at startup, so Pychestrate"
+    " updates cannot be signed and published from this server."
+)
+
+#: Problem-document ``reason`` of a publish refused for that cause.
+SIGNING_KEY_MISSING = "signing_key_missing"
 
 RELEASE_CHANNELS_READ_PERMISSION_KEY = "system:release_channels.read"
 RELEASE_CHANNELS_WRITE_PERMISSION_KEY = "system:release_channels.write"
@@ -421,12 +441,36 @@ def _release_record_to_dict(record: Any) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+def publishing_status() -> Dict[str, Any]:
+    """
+        Whether this server can publish a release: it needs an
+        installed release-signing key.
+
+        :returns: ``{"publishing_available": bool,
+                  "publishing_unavailable_reason": str | None}``.
+    """
+    try:
+        manifest_signer.get_active_signing_key()
+    except ReleaseSigningKeyUnavailableError:
+        rtnval: Dict[str, Any] = {
+            "publishing_available": False,
+            "publishing_unavailable_reason": PUBLISHING_UNAVAILABLE_REASON,
+        }
+        return rtnval
+    rtnval = {
+        "publishing_available": True,
+        "publishing_unavailable_reason": None,
+    }
+    return rtnval
+
+
 def handle_list_release_channels(request: Request) -> Response:
     """
         ``GET /api/v1/release-channels``
 
         Query params: ``component``, ``channel``, ``status``,
-        ``page``, ``per_page``.
+        ``page``, ``per_page``. ``meta`` also says whether this server
+        can publish (see :func:`publishing_status`).
 
         :param request: Incoming webworks request.
 
@@ -488,14 +532,16 @@ def handle_list_release_channels(request: Request) -> Response:
         for record in window:
             items.append(_release_record_to_dict(record=record))
 
+        meta: Dict[str, Any] = {
+            "page": page,
+            "per_page": per_page,
+            "total": int(total),
+            "next_cursor": None,
+        }
+        meta.update(publishing_status())
         body = {
             "items": items,
-            "meta": {
-                "page": page,
-                "per_page": per_page,
-                "total": int(total),
-                "next_cursor": None,
-            },
+            "meta": meta,
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
@@ -642,11 +688,12 @@ def handle_create_release_channel(request: Request) -> Response:
                 },
             )
             record = None  # unreachable
-        except ReleaseSigningKeyUnavailableError as xcpt:
+        except ReleaseSigningKeyUnavailableError:
             _abort_problem(
                 request=request,
                 status=503,
-                detail=str(xcpt),
+                detail=PUBLISHING_UNAVAILABLE_REASON,
+                extensions={"reason": SIGNING_KEY_MISSING},
             )
             record = None  # unreachable
         except ValueError as xcpt:
@@ -752,6 +799,9 @@ def register_release_channels_routes(*, app: Any, version_prefix: str) -> None:
 
 
 __all__ = [
+    "PUBLISHING_UNAVAILABLE_REASON",
+    "SIGNING_KEY_MISSING",
+    "publishing_status",
     "RELEASE_CHANNELS_PATH",
     "RELEASE_CHANNELS_READ_PERMISSION_KEY",
     "RELEASE_CHANNELS_WRITE_PERMISSION_KEY",

@@ -38,8 +38,10 @@ from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_TYPE_UNAUTHENTICATED,
     PROBLEM_TYPE_VALIDATION_FAILED,
 )
+from ccai.pychestrate.webservice.ops.release import manifest_signer
 from ccai.pychestrate.webservice.ops.release.errors import (
     ReleaseConflictError,
+    ReleaseSigningKeyUnavailableError,
 )
 from ccai.pychestrate.webservice.ops.release.models import (
     ReleaseChannel,
@@ -51,6 +53,10 @@ from ccai.pychestrate.webservice.ops.release.release_service import (
 )
 from ccai.pychestrate.webservice.ops.release.restapi.v1 import (
     release_channels_routes,
+)
+from ccai.pychestrate.webservice.webinterface.site_shell.nav_manifest import (
+    GROUP_ADMIN,
+    NAV_ENTRIES,
 )
 
 
@@ -525,4 +531,148 @@ def test_read_returns_200_on_happy_path():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(body["channel_id"], "rel-1")
+    return
+
+
+# ---------------------------------------------------------------------------
+# Audit ORC-31 -- "Pychestrate Updates": say why publishing is unavailable
+# ---------------------------------------------------------------------------
+
+
+def _list_with_publishing_state() -> Any:
+    """
+        Run GET release-channels (empty ledger) and return the decoded
+        body.
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    list_patch = create_module_patch(
+        release_channels_routes.release_service, "list_releases",
+    )
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: [])
+    try:
+        request = _FakeRequest(
+            path="/api/v1/release-channels",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = release_channels_routes.handle_list_release_channels(request)
+    finally:
+        list_patch.deactivate()
+        perm_patch.deactivate()
+    rtnval = _decode_body(response)
+    return rtnval
+
+
+def test_list_meta_says_publishing_is_unavailable_without_a_signing_key():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: with no release-signing key installed the list meta
+    says publishing is unavailable and why, so the page can explain it
+    instead of letting a publish end in a bare HTTP 503.**
+    """
+    manifest_signer.reset_for_testing()
+    body = _list_with_publishing_state()
+    testbase.assert_equal(
+        (body["meta"]["publishing_available"], body["meta"]["publishing_unavailable_reason"]),
+        (False, release_channels_routes.PUBLISHING_UNAVAILABLE_REASON),
+    )
+    return
+
+
+def test_list_meta_says_publishing_is_available_with_a_signing_key():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: once a release-signing key is installed the list meta
+    says publishing is available.**
+    """
+    manifest_signer.set_active_signing_key(
+        key=manifest_signer.generate_signing_key(issuer_key_id="orc31-test"),
+    )
+    try:
+        body = _list_with_publishing_state()
+    finally:
+        manifest_signer.reset_for_testing()
+    testbase.assert_equal(
+        (body["meta"]["publishing_available"], body["meta"]["publishing_unavailable_reason"]),
+        (True, None),
+    )
+    return
+
+
+def test_create_without_a_signing_key_explains_the_missing_key():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: a publish refused for the missing signing key answers
+    503 with a detail that explains it and reason
+    signing_key_missing.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    publish_patch = create_module_patch(
+        release_channels_routes.release_service, "publish_release",
+    )
+    publish_mock = publish_patch.activate()
+
+    def _raise(**kwargs: Any) -> Any:
+        raise ReleaseSigningKeyUnavailableError("No active release signing key has been installed.")
+
+    publish_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/release-channels",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={
+                "component": "service",
+                "version": "1.2.3",
+                "channel": "canary",
+                "artifact_uri": "https://x/a.tar.gz",
+                "artifact_sha256": "a" * 64,
+            },
+        )
+        response = release_channels_routes.handle_create_release_channel(request)
+    finally:
+        publish_patch.deactivate()
+        perm_patch.deactivate()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body["detail"], body["reason"]),
+        (503, release_channels_routes.PUBLISHING_UNAVAILABLE_REASON, "signing_key_missing"),
+    )
+    return
+
+
+def _updates_entry() -> Any:
+    matches = [entry for entry in NAV_ENTRIES if entry.route == "/release-channels"]
+    rtnval = matches[0]
+    return rtnval
+
+
+def test_updates_entry_is_named_for_what_it_is():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: the sidebar entry for /release-channels reads
+    "Pychestrate Updates", so it no longer collides with a project's
+    release channels.**
+    """
+    testbase.assert_equal(_updates_entry().label, "Pychestrate Updates")
+    return
+
+
+def test_updates_entry_sits_under_admin():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: the entry lives in the Admin group, not Operations.**
+    """
+    testbase.assert_equal(_updates_entry().group_id, GROUP_ADMIN)
+    return
+
+
+def test_updates_entry_is_not_a_build_surface():
+    """
+    **Feature: Pychestrate Updates -- audit ORC-31**
+    **Property: the entry carries no UI-profile surface tag, so turning
+    Build Automation off does not hide Pychestrate's own updates.**
+    """
+    testbase.assert_equal(_updates_entry().surfaces, ())
     return
