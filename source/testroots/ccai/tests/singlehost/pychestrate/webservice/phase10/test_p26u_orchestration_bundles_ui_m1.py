@@ -1306,3 +1306,249 @@ def test_updates_publish_failure_shows_the_server_reason(bundle_browser: Threade
         (True, False),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# ORC-39 -- environment detail with drift history; no dead-end drift check
+# ---------------------------------------------------------------------------
+
+
+ENVIRONMENT_ID: str = "00000000-0000-4000-8000-0000000e0039"
+ENVIRONMENT_PATH: str = "{}/{}".format(ENVIRONMENTS_PATH, ENVIRONMENT_ID)
+ENVIRONMENT_DRIFT_PATH: str = "{}/drift".format(ENVIRONMENT_PATH)
+NO_SCHEDULE_REASON: str = (
+    "This environment has no drift schedule, and drift schedules cannot be"
+    " set up from the API or the UI yet, so a drift check cannot start."
+)
+DRIFT_PREVIEW: str = (
+    "Drift detection is a preview: a drift check is recorded, but nothing"
+    " processes it yet, so the run stays pending and reports no drift."
+)
+
+
+def _environment_record() -> Dict[str, Any]:
+    rtnval = {
+        "environment_id": ENVIRONMENT_ID, "project_id": PROJECT_ID, "kind_name": "terraform",
+        "name": "staging", "state": "active", "attrs": {"region": "us-east-1"},
+        "last_applied_at": None, "created_at": "2026-09-20T10:00:00+00:00",
+    }
+    return rtnval
+
+
+def _drift_run(*, run_id: str, state: str) -> Dict[str, Any]:
+    rtnval = {
+        "run_id": run_id, "project_id": PROJECT_ID, "environment_id": ENVIRONMENT_ID,
+        "checker_name": "terraform", "state": state, "trigger_kind": "manual",
+        "scheduled_for": "2026-09-21T10:00:00+00:00", "ran_at": None, "drift_count": None,
+        "added": None, "changed": None, "destroyed": None, "final_state_reason": "",
+    }
+    return rtnval
+
+
+def _environments_api() -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=PROJECTS_PATH,
+        body={"items": [{"project_id": PROJECT_ID, "slug": "p", "display_name": "P"}], "meta": {"total": 1}},
+    )
+    api.respond(
+        method="GET",
+        path=ENVIRONMENTS_PATH,
+        body={"items": [_environment_record()], "meta": {"total": 1, "page": 1, "per_page": 25}},
+    )
+    api.respond(
+        method="POST",
+        path=ENVIRONMENTS_PATH,
+        status=201,
+        body={"environment_id": "00000000-0000-4000-8000-0000000e0040"},
+    )
+    api.respond(method="GET", path=ENVIRONMENT_PATH, body=_environment_record())
+    api.respond(
+        method="GET",
+        path=ENVIRONMENT_DRIFT_PATH,
+        body={
+            "environment_id": ENVIRONMENT_ID,
+            "has_report": True,
+            "latest_report": _drift_run(run_id="00000000-0000-4000-8000-0000000d0392", state="pending"),
+            "history": [
+                _drift_run(run_id="00000000-0000-4000-8000-0000000d0392", state="pending"),
+                _drift_run(run_id="00000000-0000-4000-8000-0000000d0391", state="pending"),
+            ],
+            "schedule": None,
+            "check_available": False,
+            "check_unavailable_reason": NO_SCHEDULE_REASON,
+            "dispatch_available": False,
+            "detail": DRIFT_PREVIEW,
+        },
+    )
+    return api
+
+
+def _open_environment_list(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-infra-bundle")
+    mount_element(page=page, tag="pyc-environments")
+    wait_for_request(page=page, api=api, method="GET", path=ENVIRONMENTS_PATH)
+    page.wait_for_selector('[data-environment-id]', timeout=5000)
+    rtnval = (context, page)
+    return rtnval
+
+
+def _open_environment_detail(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-infra-bundle")
+    page.evaluate(
+        "(path) => history.pushState({}, '', path)",
+        "/environments/{}?project_id={}".format(ENVIRONMENT_ID, PROJECT_ID),
+    )
+    mount_element(page=page, tag="pyc-environment-detail")
+    wait_for_request(page=page, api=api, method="GET", path=ENVIRONMENT_DRIFT_PATH)
+    page.wait_for_selector('[data-role="drift-section"]', timeout=5000)
+    rtnval = (context, page)
+    return rtnval
+
+
+def test_environment_name_links_to_its_detail_page(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: an environment's name links to its detail page.**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_list(browser=browser, api=api)
+        try:
+            rtnval = page.get_attribute('[data-role="environment-link"]', "href")
+        finally:
+            context.close()
+        return rtnval
+
+    href = bundle_browser.run(_scenario)
+    testbase.assert_equal(href, "/environments/{}?project_id={}".format(ENVIRONMENT_ID, PROJECT_ID))
+    return
+
+
+def test_environment_list_has_no_dead_end_drift_button(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: the list no longer offers a row "Check Drift" that
+    ended on a 409; the row offers the environment's details.**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_list(browser=browser, api=api)
+        try:
+            rtnval = (
+                page.locator('[data-role="check-drift"]').count(),
+                page.locator('[data-role="view-environment"]').count(),
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    counts = bundle_browser.run(_scenario)
+    testbase.assert_equal(counts, (0, 1))
+    return
+
+
+def test_environment_register_form_is_reset_after_success(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: after a successful registration the form is emptied and
+    closed, so the next registration starts clean.**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_list(browser=browser, api=api)
+        try:
+            page.click('[data-role="register-toggle"]')
+            page.wait_for_selector('[data-role="register-form"]')
+            page.fill('[data-role="register-name"] input', "production")
+            page.fill('[data-role="register-kind"] input', "terraform")
+            page.click('[data-role="register-submit"]')
+            wait_for_request(page=page, api=api, method="POST", path=ENVIRONMENTS_PATH)
+            page.wait_for_selector('[data-role="toast"][data-tone="ok"]', timeout=5000)
+            rtnval = page.evaluate(
+                "() => { const region = document.querySelector('[data-role=\"register-region\"]');"
+                " const name = document.querySelector('[data-role=\"register-name\"]');"
+                " return {hidden: region.hidden, name: name.value}; }",
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    state = bundle_browser.run(_scenario)
+    testbase.assert_equal(state, {"hidden": True, "name": ""})
+    return
+
+
+def test_environment_detail_lists_the_drift_history(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: the environment detail page lists the environment's
+    recorded drift runs.**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_detail(browser=browser, api=api)
+        try:
+            page.wait_for_selector('[data-role="drift-history-table"]', timeout=5000)
+            page.wait_for_timeout(200)
+            rtnval = page.locator('[data-role="drift-history-table"] [data-run-id]').count()
+        finally:
+            context.close()
+        return rtnval
+
+    rows = bundle_browser.run(_scenario)
+    testbase.assert_equal(rows, 2)
+    return
+
+
+def test_environment_detail_labels_drift_detection_a_preview(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: the drift section is headed as a preview and shows why
+    (the server's detail).**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_detail(browser=browser, api=api)
+        try:
+            rtnval = (
+                page.inner_text('[data-role="drift-section"] h2'),
+                page.inner_text('[data-role="drift-preview-notice"]'),
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    heading, notice = bundle_browser.run(_scenario)
+    testbase.assert_equal((heading, notice), ("Drift detection (preview)", DRIFT_PREVIEW))
+    return
+
+
+def test_environment_detail_explains_why_drift_cannot_be_checked(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-39 / pyc-infra-bundle**
+    **Property: without a drift schedule "Check Drift" is disabled and
+    the page says why, instead of dead-ending on a 409.**
+    """
+    api = _environments_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_environment_detail(browser=browser, api=api)
+        try:
+            rtnval = (
+                page.get_attribute('[data-role="check-drift"]', "disabled") is not None,
+                page.inner_text('[data-role="check-unavailable-reason"]'),
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    disabled, reason = bundle_browser.run(_scenario)
+    testbase.assert_equal((disabled, reason), (True, NO_SCHEDULE_REASON))
+    return

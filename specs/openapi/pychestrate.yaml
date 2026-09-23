@@ -3698,7 +3698,8 @@ paths:
         Triggers a manual drift check, persisting a drift run in
         `PENDING` state. The run borrows the environment's drift
         schedule's checker -- an environment with no drift
-        schedule returns `409`. The Layer-5 dispatch handoff is
+        schedule returns `409` with `reason: no_drift_schedule`
+        (no API creates drift schedules yet). The Layer-5 dispatch handoff is
         M2 work -- until then a triggered drift run remains queued
         in `PENDING`. The 202 body is explicit about this: it
         carries `dispatch_available: false` plus a `detail`
@@ -8945,7 +8946,11 @@ components:
       type: object
       description: |
         Current drift status of an environment -- the latest
-        drift run, or `null` when none has been recorded.
+        drift run, or `null` when none has been recorded -- with
+        the environment's recent drift runs, its drift schedule,
+        and whether a manual drift check can start. Drift
+        detection is a preview: recorded checks are not processed
+        yet (`dispatch_available: false`).
       required: [environment_id, has_report]
       properties:
         environment_id: { type: string, format: uuid }
@@ -8954,6 +8959,33 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/DriftReport'
+        history:
+          type: array
+          description: Up to 20 recent drift runs, newest first.
+          items: { $ref: '#/components/schemas/DriftReport' }
+        schedule:
+          type: object
+          nullable: true
+          description: The environment's drift schedule, or null.
+          properties:
+            checker_name: { type: string }
+            cron_expression: { type: string }
+            enabled: { type: boolean }
+            updated_at: { type: string, format: date-time, nullable: true }
+        check_available:
+          type: boolean
+          description: >-
+            Whether `POST .../drift:check` can start a check (it
+            borrows the drift schedule's checker).
+        check_unavailable_reason:
+          type: string
+          nullable: true
+        dispatch_available:
+          type: boolean
+          description: Always `false` in this release.
+        detail:
+          type: string
+          description: Why drift detection is a preview.
 
     # ----------------------------------------------------------------
     # metrics / dashboards / metric_alerts (7-* PR p20f)

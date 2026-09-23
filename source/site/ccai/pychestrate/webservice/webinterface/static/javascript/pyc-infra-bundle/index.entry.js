@@ -1,4 +1,8 @@
 import { PycEnvironments } from "./environments-view.js";
+import {
+  PycEnvironmentDetail,
+  environment_id_from_path
+} from "./environment-detail-view.js";
 import { PycProvisioningList } from "./provisioning-list-view.js";
 import {
   PycProvisioningDetail,
@@ -13,6 +17,7 @@ const ENVIRONMENTS_ROUTE = "/environments";
 const PROVISIONING_ROUTE = "/provisioning-runs";
 const GUARDS_ROUTE = "/blast-radius-guards";
 const ENVIRONMENTS_TAG = "pyc-environments";
+const ENVIRONMENT_DETAIL_TAG = "pyc-environment-detail";
 const PROVISIONING_LIST_TAG = "pyc-provisioning-list";
 const PROVISIONING_DETAIL_TAG = "pyc-provisioning-detail";
 const GUARDS_TAG = "pyc-guards";
@@ -71,6 +76,9 @@ function define_infra_elements() {
   if (customElements.get(ENVIRONMENTS_TAG) === void 0) {
     customElements.define(ENVIRONMENTS_TAG, PycEnvironments);
   }
+  if (customElements.get(ENVIRONMENT_DETAIL_TAG) === void 0) {
+    customElements.define(ENVIRONMENT_DETAIL_TAG, PycEnvironmentDetail);
+  }
   if (customElements.get(PROVISIONING_LIST_TAG) === void 0) {
     customElements.define(PROVISIONING_LIST_TAG, PycProvisioningList);
   }
@@ -91,6 +99,10 @@ function classify_infra_route(path) {
   const query_index = working.indexOf("?");
   if (query_index >= 0) {
     working = working.slice(0, query_index);
+  }
+  if (environment_id_from_path(working).length > 0) {
+    const rtnval2 = "environment-detail";
+    return rtnval2;
   }
   if (working === ENVIRONMENTS_ROUTE || working.startsWith(ENVIRONMENTS_ROUTE + "/") === true) {
     const rtnval2 = "environments";
@@ -115,6 +127,10 @@ function classify_infra_route(path) {
 function tag_for_infra_route(route) {
   if (route === "environments") {
     const rtnval2 = ENVIRONMENTS_TAG;
+    return rtnval2;
+  }
+  if (route === "environment-detail") {
+    const rtnval2 = ENVIRONMENT_DETAIL_TAG;
     return rtnval2;
   }
   if (route === "provisioning-list") {

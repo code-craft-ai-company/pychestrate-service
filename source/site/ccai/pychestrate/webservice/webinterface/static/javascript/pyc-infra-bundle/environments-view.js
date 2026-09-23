@@ -14,6 +14,13 @@ const DRIFT_STATES = [
 ];
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
+const ENVIRONMENTS_ROUTE = "/environments";
+function build_environment_page_href(project_id, environment_id) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  const rtnval = ENVIRONMENTS_ROUTE + "/" + encodeURIComponent(environment_id) + "?" + params.toString();
+  return rtnval;
+}
 function build_environments_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -781,8 +788,13 @@ class PycEnvironments extends HTMLElement {
         label: "Environment",
         width: "16rem",
         render: (environment) => {
-          const name = document.createElement("span");
-          name.classList.add("pyc-infra__env-name");
+          const name = document.createElement("a");
+          name.classList.add("pyc-infra__env-name", "pyc-infra__run-link");
+          name.setAttribute("data-role", "environment-link");
+          name.setAttribute(
+            "href",
+            build_environment_page_href(self._state.projectId, environment.environment_id)
+          );
           name.textContent = environment.name;
           name.title = environment.environment_id;
           return name;
@@ -806,7 +818,7 @@ class PycEnvironments extends HTMLElement {
       },
       {
         key: "drift",
-        label: "Drift",
+        label: "Drift (preview)",
         width: "10rem",
         sortable: false,
         render: (environment) => {
@@ -835,16 +847,18 @@ class PycEnvironments extends HTMLElement {
         width: "9rem",
         sortable: false,
         render: (environment) => {
-          const check_button = document.createElement("mj-button");
-          check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
-          check_button.setAttribute("type", "button");
-          check_button.setAttribute("data-role", "check-drift");
-          check_button.textContent = "Check Drift";
-          check_button.addEventListener("click", () => {
-            check_button.toggleAttribute("disabled", true);
-            void self._on_check_drift(environment, check_button);
-          });
-          return check_button;
+          // Drift checks start from the environment's detail page,
+          // which says whether a check can start and shows the
+          // drift history (a row button dead-ended on a 409).
+          const view_link = document.createElement("a");
+          view_link.classList.add("pyc-infra__run-link", "pyc-infra__row-action");
+          view_link.setAttribute("data-role", "view-environment");
+          view_link.setAttribute(
+            "href",
+            build_environment_page_href(self._state.projectId, environment.environment_id)
+          );
+          view_link.textContent = "Details";
+          return view_link;
         }
       }
     ];
@@ -1153,6 +1167,13 @@ class PycEnvironments extends HTMLElement {
       outcome.ok === true ? "ok" : "error"
     );
     if (outcome.ok === true) {
+      // Start the next registration from an empty form.
+      name_input.value = "";
+      kind_input.value = "";
+      attrs_area.value = "";
+      if (this._register_region !== null) {
+        this._register_region.hidden = true;
+      }
       await this._refresh();
     }
     return;
@@ -1264,11 +1285,13 @@ class PycEnvironments extends HTMLElement {
 }
 export {
   DRIFT_STATES,
+  ENVIRONMENTS_ROUTE,
   ENVIRONMENT_STATES,
   PycEnvironments,
   announce_session_expired,
   build_drift_check_url,
   build_drift_status_url,
+  build_environment_page_href,
   build_environments_collection_url,
   build_environments_query_url,
   drift_check_message_for_status,
