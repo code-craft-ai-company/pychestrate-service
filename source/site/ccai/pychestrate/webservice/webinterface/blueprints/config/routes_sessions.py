@@ -108,6 +108,9 @@ class _SessionRow:
         :param user_agent_full: The full User-Agent header, for a
                                 tooltip.
         :param is_current: The session making this request.
+        :param created_ago: ``created_at`` relative to now ("2 h ago").
+        :param last_activity_ago: ``last_activity`` relative to now.
+        :param expires_in: ``expires_at`` relative to now ("in 27 min").
     """
     session_id: str
     username: str
@@ -119,6 +122,9 @@ class _SessionRow:
     user_id: str = ""
     user_agent_full: str = ""
     is_current: bool = False
+    created_ago: str = ""
+    last_activity_ago: str = ""
+    expires_in: str = ""
 
 
 @dataclass(frozen=True)
@@ -157,6 +163,40 @@ def _normalize_to_utc(*, value: Optional[datetime], fallback: datetime) -> datet
         rtnval = value.replace(tzinfo=timezone.utc)
         return rtnval
     rtnval = value
+    return rtnval
+
+
+def describe_relative_time(*, value: Optional[datetime], now: datetime) -> str:
+    """
+        ``value`` relative to ``now`` in words short enough for a table
+        cell: "just now", "4 min ago", "2 h 5 min ago", "in 27 min",
+        "3 days ago".
+
+        :param value: The moment to describe (naive values are UTC).
+        :param now: The reference moment.
+
+        :returns: The description ("" when ``value`` is None).
+    """
+    if value is None:
+        return ""
+    moment = _normalize_to_utc(value=value, fallback=now)
+    seconds = int(round((moment - now).total_seconds()))
+    future = seconds > 0
+    remaining = abs(seconds)
+    if remaining < 60:
+        rtnval = "in under a minute" if future is True else "just now"
+        return rtnval
+    minutes = remaining // 60
+    if minutes < 60:
+        amount = "{} min".format(minutes)
+    elif minutes < 48 * 60:
+        hours, minutes_left = divmod(minutes, 60)
+        amount = "{} h".format(hours)
+        if minutes_left > 0:
+            amount = "{} h {} min".format(hours, minutes_left)
+    else:
+        amount = "{} days".format(minutes // (24 * 60))
+    rtnval = "in {}".format(amount) if future is True else "{} ago".format(amount)
     return rtnval
 
 
@@ -314,12 +354,13 @@ def _list_active_sessions(
         if client_row is not None:
             client_address = client_row.client_address or ""
             user_agent_full = client_row.user_agent or ""
+        expires_at = session_effective_expiry(session_row=session_row, now=now)
         row = _SessionRow(
             session_id=session_id_str,
             username=username,
             created_at=session_row.opened_at,
             last_activity=session_row.last_seen_at,
-            expires_at=session_effective_expiry(session_row=session_row, now=now),
+            expires_at=expires_at,
             client_ip=client_address,
             user_agent=describe_user_agent(user_agent=user_agent_full),
             user_id=user_id_str,
@@ -328,6 +369,9 @@ def _list_active_sessions(
                 current_session_id is not None
                 and session_id_str == str(current_session_id)
             ),
+            created_ago=describe_relative_time(value=session_row.opened_at, now=now),
+            last_activity_ago=describe_relative_time(value=session_row.last_seen_at, now=now),
+            expires_in=describe_relative_time(value=expires_at, now=now),
         )
         rows.append(row)
 
