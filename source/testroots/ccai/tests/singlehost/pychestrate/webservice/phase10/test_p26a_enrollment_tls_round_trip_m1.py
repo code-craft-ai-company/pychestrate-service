@@ -233,35 +233,6 @@ def _mutual_tls_peer_cn(*, files: Dict[str, Any], server_files: Dict[str, str]) 
     return rtnval
 
 
-def _active_pepper_or_none() -> Any:
-    """
-        The active password pepper, or None when none is loaded.
-    """
-    from ccai.pychestrate.webservice.security.auth.pepper_loader import (  # noqa: E402
-        get_active_pepper,
-    )
-    # ConfigurationError (no pepper loaded) derives from BaseException.
-    try:
-        rtnval = get_active_pepper()
-    except BaseException:
-        rtnval = None
-    return rtnval
-
-
-def _restore_pepper(*, pepper: Any) -> None:
-    """
-        Reinstate ``pepper`` (or clear the pepper when it is None).
-    """
-    from ccai.pychestrate.webservice.security.auth.pepper_loader import (  # noqa: E402
-        reset_active_pepper_for_testing,
-    )
-    if pepper is None:
-        reset_active_pepper_for_testing()
-    else:
-        set_active_pepper(pepper=pepper)
-    return
-
-
 def _round_trip() -> Dict[str, Any]:
     """
         Run the enrollment + file writing once per test run and cache
@@ -269,16 +240,10 @@ def _round_trip() -> Dict[str, Any]:
     """
     if len(_ROUND_TRIP_CACHE) == 0:
         directory = tempfile.mkdtemp(prefix="pyc-p26a-")
-        # The enrollment installs its own password pepper; put back the
-        # one that was active so later tests in the same process (the
-        # phase-10 e2e harness signs in with passwords hashed under it)
-        # are unaffected.
-        previous_pepper = _active_pepper_or_none()
         try:
             files = _enroll_and_write_files(directory=directory)
         finally:
             ca_adapter.reset_active_ca_for_testing()
-            _restore_pepper(pepper=previous_pepper)
         _ROUND_TRIP_CACHE.update(files)
         _ROUND_TRIP_CACHE["directory"] = directory
     rtnval = _ROUND_TRIP_CACHE
