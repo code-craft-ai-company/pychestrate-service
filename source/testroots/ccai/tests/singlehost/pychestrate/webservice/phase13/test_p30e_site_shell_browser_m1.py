@@ -76,6 +76,18 @@ def _right_edge(page: Any, selector: str) -> float:
     return rtnval
 
 
+def _open_account_menu(page: Any) -> None:
+    """
+        Open the account menu (it holds the theme control and Sign out
+        at every width).
+    """
+    page.locator(".pyc-site-shell__account-button").click()
+    page.wait_for_function(
+        "() => document.querySelector('.pyc-site-shell__account-panel').hasAttribute('data-open')"
+    )
+    return
+
+
 def _open_phone_drawer(page: Any) -> None:
     """
         Wait for the phone layout to settle into overlay mode, then
@@ -439,6 +451,55 @@ def test_desktop_starts_with_the_sidebar_open(browser: Browser):
 
 
 # ---------------------------------------------------------------------------
+# XC-09: the account menu at every width
+# ---------------------------------------------------------------------------
+
+
+def test_desktop_header_shows_the_display_name_on_the_account_button(browser: Browser):
+    """
+    **Feature: site shell -- account menu**
+    **Property: at desktop width the header shows the user's display
+    name (not the login name) on the account button, and the menu stays
+    closed until opened.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        name = page.locator(".pyc-site-shell__account-button-name").text_content().strip()
+        testbase.assert_equal(
+            (page.locator(".pyc-site-shell__account-button").is_visible(), name,
+             page.locator(".pyc-site-shell__logout-button").is_visible()),
+            (True, "Ada Admin", False),
+        )
+    finally:
+        page.context.close()
+    return
+
+
+def test_desktop_account_menu_holds_the_account_actions(browser: Browser):
+    """
+    **Feature: site shell -- account menu**
+    **Property: opening the account menu at desktop width shows who is
+    signed in (display and login name), Preferences, API tokens, the
+    theme control and Sign out.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        _open_account_menu(page)
+        panel = page.locator(".pyc-site-shell__account-panel")
+        testbase.assert_equal(
+            (panel.locator(".pyc-site-shell__user-menu-name").text_content().strip(),
+             panel.get_by_role("link", name="Preferences").is_visible(),
+             panel.get_by_role("link", name="API tokens").get_attribute("href"),
+             page.locator(".pyc-site-shell__theme-toggle").is_visible(),
+             page.locator(".pyc-site-shell__logout-button").is_visible()),
+            ("Signed in as Ada Admin (admin)", True, "/account/api-tokens", True, True),
+        )
+    finally:
+        page.context.close()
+    return
+
+
+# ---------------------------------------------------------------------------
 # XC-13: the theme toggle
 # ---------------------------------------------------------------------------
 
@@ -451,6 +512,7 @@ def test_first_theme_click_after_an_os_dark_load_switches_to_light(browser: Brow
     """
     page = open_shell_page(browser, color_scheme="dark", **DESKTOP)
     try:
+        _open_account_menu(page)
         page.locator(".pyc-site-shell__theme-toggle").click()
         theme = page.evaluate("() => document.documentElement.getAttribute('data-theme')")
         testbase.assert_equal(theme, "light")

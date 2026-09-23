@@ -266,11 +266,9 @@ pyc-site-shell:not(:defined)::before {
 }
 
 /*
- * Account controls. Wide viewports: the panel is an inline row
- * (name, theme, preferences, sign out) and the account button is
- * not rendered. Below 768px the row would run off the screen, so
- * the controls collapse behind the account button and open as a
- * dropdown panel (see chrome/header.js).
+ * Account menu: a button showing the display name that opens a
+ * dropdown panel (who is signed in, preferences, API tokens, theme,
+ * sign out) at every width; see chrome/header.js.
  */
 .pyc-site-shell__user-menu {
     position: relative;
@@ -279,115 +277,115 @@ pyc-site-shell:not(:defined)::before {
     gap: var(--mj-space-3, 0.75rem);
 }
 
-.pyc-site-shell__account-panel {
-    display: flex;
-    align-items: center;
-    gap: var(--mj-space-3, 0.75rem);
-}
-
-.pyc-site-shell__account-button {
-    display: none;
-}
-
 .pyc-site-shell__user-menu-name {
     opacity: 0.85;
 }
 
+.pyc-site-shell__account-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    max-width: 16rem;
+    min-height: 2.5rem;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--pyc-site-shell-divider);
+    border-radius: 0.375rem;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.pyc-site-shell__account-button:hover,
+.pyc-site-shell__account-button[aria-expanded="true"] {
+    background-color: var(--pyc-site-shell-surface-hover);
+}
+
+.pyc-site-shell__account-button:focus-visible {
+    outline: var(--pyc-site-shell-focus-ring);
+    outline-offset: -2px;
+}
+
+.pyc-site-shell__account-button-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pyc-site-shell__account-button-chevron {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+}
+
+.pyc-site-shell__account-button-chevron svg {
+    width: 100%;
+    height: 100%;
+}
+
+.pyc-site-shell__account-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    z-index: 1;
+    min-width: 13rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    background-color: var(--pyc-site-shell-surface-elevated);
+    color: var(--pyc-site-shell-on-surface-elevated);
+    border: 1px solid var(--pyc-site-shell-border);
+    border-radius: 0.5rem;
+    box-shadow: var(--pyc-site-shell-shadow-toast);
+}
+
+.pyc-site-shell__account-panel[data-open] {
+    display: flex;
+}
+
+/* Who is signed in, above the actions. */
+.pyc-site-shell__account-panel .pyc-site-shell__user-menu-name {
+    display: block;
+    padding: 0.25rem calc(var(--mj-space-3, 0.75rem) + 1px) 0.5rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--pyc-site-shell-divider);
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+}
+
+/* Text aligned with the small mj-buttons around it (1px border
+ * plus --mj-space-3 padding). */
+.pyc-site-shell__account-panel .pyc-site-shell__preferences-link {
+    display: flex;
+    align-items: center;
+    min-height: 2.5rem;
+    padding: 0 calc(var(--mj-space-3, 0.75rem) + 1px);
+    border-radius: 0.375rem;
+    opacity: 1;
+}
+
+.pyc-site-shell__account-panel .pyc-site-shell__preferences-link:hover {
+    background-color: var(--pyc-site-shell-surface-hover);
+    text-decoration: none;
+}
+
+.pyc-site-shell__account-panel mj-button {
+    display: block;
+}
+
+.pyc-site-shell__account-panel mj-button::part(button) {
+    width: 100%;
+    min-height: 2.5rem;
+    justify-content: flex-start;
+}
+
+/* On a phone the button keeps the header's right edge on screen. */
 @media (max-width: 767px) {
     .pyc-site-shell__account-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
         max-width: 11rem;
-        min-height: 2.5rem;
-        padding: 0.25rem 0.5rem;
-        border: 1px solid var(--pyc-site-shell-divider);
-        border-radius: 0.375rem;
-        background: transparent;
-        color: inherit;
-        font: inherit;
-        cursor: pointer;
-    }
-
-    .pyc-site-shell__account-button:hover,
-    .pyc-site-shell__account-button[aria-expanded="true"] {
-        background-color: var(--pyc-site-shell-surface-hover);
-    }
-
-    .pyc-site-shell__account-button:focus-visible {
-        outline: var(--pyc-site-shell-focus-ring);
-        outline-offset: -2px;
-    }
-
-    .pyc-site-shell__account-button-name {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .pyc-site-shell__account-button-chevron {
-        display: inline-flex;
-        flex-shrink: 0;
-        width: 1rem;
-        height: 1rem;
-    }
-
-    .pyc-site-shell__account-button-chevron svg {
-        width: 100%;
-        height: 100%;
-    }
-
-    .pyc-site-shell__account-panel {
-        display: none;
-        position: absolute;
-        top: calc(100% + 0.5rem);
-        right: 0;
-        z-index: 1;
-        min-width: 13rem;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0.25rem;
-        padding: 0.5rem;
-        background-color: var(--pyc-site-shell-surface-elevated);
-        color: var(--pyc-site-shell-on-surface-elevated);
-        border: 1px solid var(--pyc-site-shell-border);
-        border-radius: 0.5rem;
-        box-shadow: var(--pyc-site-shell-shadow-toast);
-    }
-
-    .pyc-site-shell__account-panel[data-open] {
-        display: flex;
-    }
-
-    /* The account button already shows the name. */
-    .pyc-site-shell__account-panel .pyc-site-shell__user-menu-name {
-        display: none;
-    }
-
-    /* Text aligned with the small mj-buttons around it (1px border
-     * plus --mj-space-3 padding). */
-    .pyc-site-shell__account-panel .pyc-site-shell__preferences-link {
-        display: flex;
-        align-items: center;
-        min-height: 2.5rem;
-        padding: 0 calc(var(--mj-space-3, 0.75rem) + 1px);
-        border-radius: 0.375rem;
-        opacity: 1;
-    }
-
-    .pyc-site-shell__account-panel .pyc-site-shell__preferences-link:hover {
-        background-color: var(--pyc-site-shell-surface-hover);
-        text-decoration: none;
-    }
-
-    .pyc-site-shell__account-panel mj-button {
-        display: block;
-    }
-
-    .pyc-site-shell__account-panel mj-button::part(button) {
-        width: 100%;
-        min-height: 2.5rem;
-        justify-content: flex-start;
     }
 }
 

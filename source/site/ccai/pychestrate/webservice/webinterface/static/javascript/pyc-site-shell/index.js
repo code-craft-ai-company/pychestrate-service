@@ -146,9 +146,10 @@ function build_account_menu(options, display_name) {
   const panel = document.createElement("div");
   panel.id = ACCOUNT_PANEL_ID;
   panel.classList.add("pyc-site-shell__account-panel");
+  const login_name = typeof options.user_login_name === "string" ? options.user_login_name : "";
   const name_label = document.createElement("span");
   name_label.classList.add("pyc-site-shell__user-menu-name");
-  name_label.textContent = display_name;
+  name_label.textContent = login_name.length > 0 && login_name !== display_name ? "Signed in as " + display_name + " (" + login_name + ")" : "Signed in as " + display_name;
   panel.appendChild(name_label);
   if (typeof options.on_theme_toggle === "function") {
     const theme_button = document.createElement("mj-button");
@@ -168,6 +169,11 @@ function build_account_menu(options, display_name) {
   preferences_link.classList.add("pyc-site-shell__preferences-link");
   preferences_link.textContent = "Preferences";
   panel.appendChild(preferences_link);
+  const tokens_link = document.createElement("a");
+  tokens_link.href = "/account/api-tokens";
+  tokens_link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__tokens-link");
+  tokens_link.textContent = "API tokens";
+  panel.appendChild(tokens_link);
   const logout_button = document.createElement("mj-button");
   logout_button.setAttribute("type", "button");
   logout_button.setAttribute("variant", "tertiary");
@@ -3154,6 +3160,7 @@ var PycSiteShell = class extends HTMLElement {
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
       user_display_name: this._read_optional_attribute("user-display-name"),
+      user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       on_theme_toggle: () => {
         this._toggle_theme();
