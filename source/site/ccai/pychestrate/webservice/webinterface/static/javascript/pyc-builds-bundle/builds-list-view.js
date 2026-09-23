@@ -868,12 +868,24 @@ class PycBuildsList extends HTMLElement {
       none_option.textContent = "No source integration registered";
       integration_select.appendChild(none_option);
     } else {
+      // The first integration is preselected -- what the select
+      // shows is what the request sends. "None" keeps the option of
+      // a build whose runner inputs name the repository themselves.
+      const first_id = this._integrations[0].integration_id;
       for (const integration of this._integrations) {
         const option = document.createElement("mj-option");
         option.setAttribute("value", integration.integration_id);
         option.textContent = integration.provider_name + " \xB7 " + integration.repo_key;
+        if (integration.integration_id === first_id) {
+          option.setAttribute("selected", "");
+        }
         integration_select.appendChild(option);
       }
+      const none_option = document.createElement("mj-option");
+      none_option.setAttribute("value", "");
+      none_option.textContent = "None — the runner inputs name the repository";
+      integration_select.appendChild(none_option);
+      integration_select.value = first_id;
     }
     integration_label.appendChild(integration_select);
     form.appendChild(integration_label);
@@ -894,7 +906,7 @@ class PycBuildsList extends HTMLElement {
     const inputs_area = document.createElement("mj-textarea");
     inputs_area.classList.add("pyc-builds__textarea");
     inputs_area.setAttribute("data-role", "trigger-runner-inputs");
-    inputs_area.setAttribute("placeholder", '{"target": "all"}');
+    inputs_area.setAttribute("placeholder", '{"targets": ["all"]}');
     inputs_area.rows = 3;
     inputs_label.appendChild(inputs_area);
     form.appendChild(inputs_label);
@@ -910,7 +922,13 @@ class PycBuildsList extends HTMLElement {
     form.appendChild(status);
     form.addEventListener("submit", (event) => {
       event.preventDefault();
-      void this._submit_trigger(form, runner_input, inputs_area, submit_button);
+      void this._submit_trigger(
+        form,
+        integration_select,
+        runner_input,
+        inputs_area,
+        submit_button
+      );
     });
     this._trigger_region.replaceChildren(form);
     return;
@@ -923,14 +941,20 @@ class PycBuildsList extends HTMLElement {
    *
    * @param runner_kind The runner-kind identifier.
    * @param runner_inputs Free-form runner inputs object.
+   * @param source_integration_id The chosen source integration id,
+   *                              or an empty string for none.
    *
    * @returns The trigger outcome.
    */
-  async triggerBuild(runner_kind, runner_inputs) {
-    const rtnval = await this._do_trigger(runner_kind, runner_inputs);
+  async triggerBuild(runner_kind, runner_inputs, source_integration_id = "") {
+    const rtnval = await this._do_trigger(
+      runner_kind,
+      runner_inputs,
+      source_integration_id
+    );
     return rtnval;
   }
-  async _submit_trigger(form, runner_input, inputs_area, submit_button) {
+  async _submit_trigger(form, integration_select, runner_input, inputs_area, submit_button) {
     const status = form.querySelector('[data-role="trigger-status"]');
     const runner_kind = runner_input.value.trim();
     if (runner_kind.length === 0) {
@@ -956,7 +980,12 @@ class PycBuildsList extends HTMLElement {
     if (status instanceof HTMLElement) {
       status.textContent = "Triggering build\u2026";
     }
-    const outcome = await this._do_trigger(runner_kind, runner_inputs);
+    const source_integration_id = typeof integration_select.value === "string" ? integration_select.value.trim() : "";
+    const outcome = await this._do_trigger(
+      runner_kind,
+      runner_inputs,
+      source_integration_id
+    );
     submit_button.toggleAttribute("disabled", false);
     if (status instanceof HTMLElement) {
       status.textContent = "";
@@ -967,7 +996,7 @@ class PycBuildsList extends HTMLElement {
     }
     return;
   }
-  async _do_trigger(runner_kind, runner_inputs) {
+  async _do_trigger(runner_kind, runner_inputs, source_integration_id = "") {
     if (this._state.projectId.length === 0) {
       const rtnval2 = {
         ok: false,
@@ -981,8 +1010,14 @@ class PycBuildsList extends HTMLElement {
       runner_kind,
       runner_inputs
     };
+    // Send the integration the dialog shows as selected (audit
+    // ORC-30: it used to be dropped); omit it for "None".
+    if (typeof source_integration_id === "string" && source_integration_id.length > 0) {
+      payload.source_integration_id = source_integration_id;
+    }
     let status = 0;
     let build_id = "";
+    let detail = "";
     try {
       const url = build_builds_collection_url(this._state.projectId);
       const response = await fetch(url, {
@@ -1000,6 +1035,15 @@ class PycBuildsList extends HTMLElement {
         const run = body;
         if (run !== null && typeof run.run_id === "string") {
           build_id = run.run_id;
+        }
+      } else if (status === 409 || status === 422) {
+        try {
+          const problem = await response.json();
+          if (problem !== null && typeof problem.detail === "string") {
+            detail = problem.detail.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
+          }
+        } catch (parse_reason) {
+          detail = "";
         }
       }
     } catch (reason) {
@@ -1020,7 +1064,7 @@ class PycBuildsList extends HTMLElement {
       ok,
       status,
       buildId: build_id,
-      message: trigger_message_for_status(status)
+      message: detail.length > 0 ? "Build not triggered: " + detail : trigger_message_for_status(status)
     };
     return rtnval;
   }

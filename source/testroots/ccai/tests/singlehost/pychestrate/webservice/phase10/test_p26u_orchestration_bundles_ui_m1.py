@@ -644,3 +644,113 @@ def test_guards_project_without_environments_says_so(bundle_browser: ThreadedBro
         ("This project has no environments — register one on the Environments page.", 0),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# ORC-30 -- the build trigger sends the chosen source integration
+# ---------------------------------------------------------------------------
+
+
+SOURCE_INTEGRATIONS_PATH: str = "/api/v1/projects/{}/source-integrations".format(PROJECT_ID)
+BUILDS_PATH: str = "/api/v1/projects/{}/builds".format(PROJECT_ID)
+INTEGRATION_APP: str = "00000000-0000-4000-8000-0000000f0001"
+INTEGRATION_LIB: str = "00000000-0000-4000-8000-0000000f0002"
+
+
+def _builds_api() -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=PROJECTS_PATH,
+        body={"items": [{"project_id": PROJECT_ID, "slug": "p", "display_name": "P"}], "meta": {"total": 1}},
+    )
+    api.respond(
+        method="GET",
+        path=SOURCE_INTEGRATIONS_PATH,
+        body={"items": [
+            {"integration_id": INTEGRATION_APP, "project_id": PROJECT_ID,
+             "provider_name": "github", "repo_key": "acme/app"},
+            {"integration_id": INTEGRATION_LIB, "project_id": PROJECT_ID,
+             "provider_name": "github", "repo_key": "acme/lib"},
+        ], "meta": {"total": 2}},
+    )
+    api.respond(method="GET", path=BUILDS_PATH, body={"items": [], "meta": {"total": 0}})
+    api.respond(
+        method="POST",
+        path=BUILDS_PATH,
+        status=202,
+        body={"run_id": "00000000-0000-4000-8000-0000000f00aa", "state": "pending"},
+    )
+    return api
+
+
+def _trigger_build(*, browser: Any, api: FakeApi, choose: Optional[str]) -> Any:
+    """
+        Open the trigger form, optionally pick an integration option by
+        its visible label, fill a makefile build, submit, and return
+        the POST body.
+    """
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-builds-bundle")
+    try:
+        mount_element(page=page, tag="pyc-builds-list")
+        wait_for_request(page=page, api=api, method="GET", path=SOURCE_INTEGRATIONS_PATH)
+        wait_for_request(page=page, api=api, method="GET", path=BUILDS_PATH)
+        page.click('[data-role="trigger-toggle"]')
+        page.wait_for_selector('[data-role="trigger-form"]')
+        if choose is not None:
+            page.click('[data-role="trigger-integration"]')
+            page.get_by_role("option", name=choose).click()
+            page.wait_for_timeout(200)
+        page.fill('[data-role="trigger-runner-kind"] input', "makefile")
+        page.fill('[data-role="trigger-runner-inputs"] textarea', '{"targets": ["all"]}')
+        page.click('[data-role="trigger-submit"]')
+        posted = wait_for_request(page=page, api=api, method="POST", path=BUILDS_PATH)
+    finally:
+        context.close()
+    rtnval = posted[0].body
+    return rtnval
+
+
+def test_build_trigger_sends_the_chosen_source_integration(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-30 / pyc-builds-bundle**
+    **Property: choosing a source integration in the Trigger Build form
+    sends its id as source_integration_id.**
+    """
+    api = _builds_api()
+    body = bundle_browser.run(
+        lambda browser: _trigger_build(browser=browser, api=api, choose="github \u00b7 acme/lib"),
+    )
+    testbase.assert_equal(body.get("source_integration_id"), INTEGRATION_LIB)
+    return
+
+
+def test_build_trigger_sends_the_preselected_integration(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-30 / pyc-builds-bundle**
+    **Property: without touching the picker the request carries the
+    integration the form shows (the first one).**
+    """
+    api = _builds_api()
+    body = bundle_browser.run(
+        lambda browser: _trigger_build(browser=browser, api=api, choose=None),
+    )
+    testbase.assert_equal(body.get("source_integration_id"), INTEGRATION_APP)
+    return
+
+
+def test_build_trigger_without_integration_omits_it(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-30 / pyc-builds-bundle**
+    **Property: choosing "None" sends no source_integration_id.**
+    """
+    api = _builds_api()
+    body = bundle_browser.run(
+        lambda browser: _trigger_build(
+            browser=browser,
+            api=api,
+            choose="None \u2014 the runner inputs name the repository",
+        ),
+    )
+    testbase.assert_equal("source_integration_id" in body, False)
+    return
