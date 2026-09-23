@@ -44,6 +44,10 @@ Environment="PYCHESTRATE_RUNTIME_ENVIRONMENT=staging"
 Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
 Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
+# stdout goes to a file (StandardOutput=append:), where Python would
+# block-buffer it: without this, startup lines such as the
+# initial-admin token path can sit in the buffer indefinitely.
+Environment="PYTHONUNBUFFERED=1"
 
 # Pychestrate "presence directory" -- the canonical home for
 # the application's per-host state. Holds:

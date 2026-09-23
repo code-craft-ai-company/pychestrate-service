@@ -635,7 +635,9 @@ def pychestrate_website_main():
     # in journald / stdout immediately.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    # flush: stdout redirected to a file is block-buffered, and the
+    # server never exits to flush it (LD-11).
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
 
@@ -673,7 +675,8 @@ def pychestrate_website_main():
     print(
         "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={})".format(
             bind_host, bind_port, workers, threads
-        )
+        ),
+        flush=True,
     )
     run_server(app=wsgi_app, host=bind_host, port=bind_port,
                workers=workers, threads=threads)
@@ -712,7 +715,7 @@ def build_wsgi_application_for_production():
     # entry point exactly.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
     app.startup()

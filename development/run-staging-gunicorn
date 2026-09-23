@@ -146,6 +146,9 @@ DEV_DB_PATH="${PRESENCE_DIR}/pychestrate.sqlite"
 # ----------------------------------------------------------------------------
 
 export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-staging}"
+# Unbuffered stdout: under systemd / nohup it is a file, and buffered
+# startup lines (the initial-admin token path) could stay unwritten.
+export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 # PYCHESTRATE_DATABASE_URL is left UNSET on purpose -- the runtime
 # computes the persona-derived default. Operators who want a
 # different URL (e.g. Postgres) should set it in the systemd
