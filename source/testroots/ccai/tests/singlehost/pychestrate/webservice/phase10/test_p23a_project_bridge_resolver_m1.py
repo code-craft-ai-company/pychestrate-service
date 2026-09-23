@@ -61,7 +61,7 @@ def test_resolve_by_slug_returns_row():
         db_session=session, slug="alpha"
     )
     testbase.assert_true(resolved is not None)
-    testbase.assert_equal(resolved.project_id, created.project_id)
+    testbase.assert_equal(str(resolved.project_id), str(created.project_id))
     testbase.assert_equal(resolved.legacy_proj_id, 7)
     return
 
