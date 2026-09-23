@@ -660,6 +660,7 @@ DEFAULT_REGISTRY.update({
     "form_action": _const("/password/set/abc"),
     "idle_timeout_minutes": _const(30),
     "max_lifetime_hours": _const(24),
+    "sessions_by_user": _by_mode({"user_id-0": 3}, {}),
 })
 
 

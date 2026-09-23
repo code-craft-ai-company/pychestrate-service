@@ -529,8 +529,9 @@ def test_register_secrets_routes_attaches_documented_routes():
 def test_register_sessions_routes_attaches_documented_routes():
     """
     **Feature: webworks config sessions port T4.2 (D4)**
-    **Property: register_sessions_routes attaches the two
-    session-admin routes at /admin/sessions*.**
+    **Property: register_sessions_routes attaches the three
+    session-admin routes at /admin/sessions* (list, terminate one,
+    terminate all of a user's).**
     """
     _reset_global_state()
     try:
@@ -543,6 +544,10 @@ def test_register_sessions_routes_attaches_documented_routes():
             ("/admin/sessions", ("GET",)),
             (
                 "/admin/sessions/{session_id}/terminate",
+                ("POST",),
+            ),
+            (
+                "/admin/sessions/user/{user_id}/terminate",
                 ("POST",),
             ),
         }
@@ -984,9 +989,13 @@ def test_handle_session_list_renders_with_active_sessions():
         # The cookie's session_token surfaces as the current
         # session id so the template can badge the own row.
         testbase.assert_equal(ctx["current_session_id"], "tok-abc")
+        # Page 2 of a one-page result is past the end (e.g. after its
+        # last sessions were terminated): the handler asks again for
+        # the last page and renders that (ADM-33).
         testbase.assert_equal(
-            recorder.list_calls, [("alice", 10, 10)]
+            recorder.list_calls, [("alice", 10, 10), ("alice", 0, 10)]
         )
+        testbase.assert_equal(ctx["page"], 1)
     finally:
         for patch in seam_patches:
             patch.deactivate()

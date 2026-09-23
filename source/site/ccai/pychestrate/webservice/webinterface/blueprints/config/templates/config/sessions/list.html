@@ -25,10 +25,26 @@
     .pyc-sessions-table .pyc-sessions-clock {
         display: block;
     }
+    .pyc-sessions-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+    }
+    .pyc-sessions-group form {
+        margin-left: auto;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+{#- The list view (filter, page, page size) every terminate form posts,
+    so the redirect returns to the same view. -#}
+{% macro list_state_fields() -%}
+    <input type="hidden" name="list_username" value="{{ filter_username or '' }}">
+    <input type="hidden" name="list_page" value="{{ page }}">
+    <input type="hidden" name="list_per_page" value="{{ per_page }}">
+{%- endmacro %}
 <div class="page-header">
     <h1>Active Sessions</h1>
     <p>Who is signed in, from where, and until when. A session ends after {{ idle_timeout_minutes }} minutes without activity or {{ max_lifetime_hours }} hours after sign-in, whichever comes first.</p>
@@ -59,11 +75,33 @@
         </tr>
     </thead>
     {% for group in sessions | groupby('username') %}
+    {% set group_user_id = group.list[0].user_id %}
+    {% set group_total = sessions_by_user.get(group_user_id, group.list | length) %}
+    {% set group_is_me = group.list | selectattr('is_current') | list | length > 0 %}
     <tbody>
         <tr>
             <th scope="rowgroup" colspan="6">
-                {{ group.grouper }}
-                <span class="muted small">{{ group.list | length }} session{{ '' if group.list | length == 1 else 's' }}</span>
+                <div class="pyc-sessions-group">
+                    <span>
+                        {{ group.grouper }}
+                        <span class="muted small">{{ group_total }} session{{ '' if group_total == 1 else 's' }}{% if group_total > group.list | length %} ({{ group.list | length }} on this page){% endif %}</span>
+                    </span>
+                    {% if group_is_me %}
+                    {% if group_total > 1 %}
+                    <form action="{{ url_for('config.session_terminate_user', user_id=group_user_id) }}" method="post" data-confirm="Sign out of your other {{ group_total - 1 }} session{{ '' if group_total - 1 == 1 else 's' }}? This one stays signed in.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        {{ list_state_fields() }}
+                        <button type="submit" class="btn btn-sm btn-secondary">Sign out my other sessions</button>
+                    </form>
+                    {% endif %}
+                    {% elif group_total > 1 %}
+                    <form action="{{ url_for('config.session_terminate_user', user_id=group_user_id) }}" method="post" data-confirm="Terminate all {{ group_total }} sessions of {{ group.grouper }}? They are signed out everywhere.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        {{ list_state_fields() }}
+                        <button type="submit" class="btn btn-sm btn-danger">Terminate all {{ group_total }}</button>
+                    </form>
+                    {% endif %}
+                </div>
             </th>
         </tr>
         {% for session in group.list %}
@@ -81,6 +119,7 @@
             <td class="pyc-sessions-actions">
                 <form action="{{ url_for('config.session_terminate', session_id=session.session_id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    {{ list_state_fields() }}
                     {% if session.is_current %}
                     <button type="submit" class="btn btn-sm btn-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Sign out</button>
                     {% else %}

@@ -17,6 +17,15 @@ The session-admin routes served under the config blueprint:
 * ``POST /config/sessions/{session_id}/terminate``         -- terminate a
                                                               specific
                                                               session.
+* ``POST /config/sessions/user/{user_id}/terminate``       -- terminate
+                                                              every session
+                                                              of one user
+                                                              (keeping the
+                                                              caller's own).
+
+Both terminate routes return to the list view the form was posted from
+(filter, page and page size travel in the form), not an unfiltered
+first page.
 
 The sessions surface reads the modern ``auth_sessions`` table (the same
 table the login flow + ``PychestrateSessionMiddleware`` resolve against)
@@ -34,6 +43,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -75,6 +85,11 @@ _ROUTE_TABLE = (
         "/sessions/{session_id}/terminate",
         ("POST",),
     ),
+    (
+        "config.session_terminate_user",
+        "/sessions/user/{user_id}/terminate",
+        ("POST",),
+    ),
 )
 
 # Permission each route enforces server-side (see
@@ -82,7 +97,17 @@ _ROUTE_TABLE = (
 _ROUTE_PERMISSIONS = {
     "config.session_list": "system:auth.read",
     "config.session_terminate": "system:auth.admin",
+    "config.session_terminate_user": "system:auth.admin",
 }
+
+#: Rows per page when the request does not say.
+_DEFAULT_PER_PAGE: int = 20
+
+#: Largest page size a request may ask for.
+_MAX_PER_PAGE: int = 200
+
+#: Longest username filter carried through a terminate round trip.
+_MAX_FILTER_LENGTH: int = 128
 
 
 @dataclass(frozen=True)
@@ -136,9 +161,13 @@ class _SessionPage:
 
         :param rows: The page's session view-models, newest first.
         :param total: Total active sessions matching the filter.
+        :param sessions_by_user: Active sessions per user id (across
+                                 every page), so a user's heading and
+                                 "Terminate all" count them all.
     """
     rows: List[_SessionRow] = field(default_factory=list)
     total: int = 0
+    sessions_by_user: Dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +361,11 @@ def _list_active_sessions(
     total = len(active_sessions)
     page_sessions = active_sessions[offset:offset + limit]
 
+    sessions_by_user: Dict[str, int] = {}
+    for session_row in active_sessions:
+        key = str(session_row.user_id)
+        sessions_by_user[key] = sessions_by_user.get(key, 0) + 1
+
     clients_by_session_id: Dict[str, Any] = {}
     page_ids = [session_row.session_id for session_row in page_sessions]
     if len(page_ids) > 0:
@@ -375,7 +409,7 @@ def _list_active_sessions(
         )
         rows.append(row)
 
-    rtnval = _SessionPage(rows=rows, total=total)
+    rtnval = _SessionPage(rows=rows, total=total, sessions_by_user=sessions_by_user)
     return rtnval
 
 
@@ -411,9 +445,115 @@ def _terminate_session(
     return
 
 
+def _terminate_user_sessions(
+        *,
+        db_session: Any,
+        user_id: Any,
+        actor_user_id: Optional[str],
+        keep_session_id: Optional[str] = None
+    ) -> int:
+    """
+        Terminate every session of one user through the modern session
+        service (one ``entity.session.closed`` per session, attributed
+        to the administrator), keeping ``keep_session_id`` open.
+        Commits.
+
+        :param db_session: Open SQLAlchemy session.
+        :param user_id: The user's id (UUID).
+        :param actor_user_id: The administrator ending the sessions.
+        :param keep_session_id: A session to leave open (the
+                                administrator's own).
+
+        :returns: Number of sessions terminated.
+    """
+    from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+        session_service,
+    )
+
+    rtnval = session_service.close_sessions_for_user(
+        db_session=db_session,
+        user_id=user_id,
+        reason="admin_terminated",
+        actor_user_id=actor_user_id,
+        keep_session_id=keep_session_id,
+    )
+    db_session.commit()
+    return rtnval
+
+
+def _login_name_for(*, db_session: Any, user_id: Any) -> str:
+    """
+        The user's login name for a flash message ("" when unknown).
+    """
+    try:
+        from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
+            IdentityUser,
+        )
+        row = (
+            db_session.query(IdentityUser)
+            .filter(IdentityUser.user_id == user_id)
+            .first()
+        )
+        rtnval = row.login_name if row is not None else ""
+    except Exception:
+        rtnval = ""
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
+
+
+def _list_state_from_form(*, form: Any) -> Dict[str, Any]:
+    """
+        The list view (username filter, page, page size) a terminate
+        form was posted from, validated, so the redirect returns to the
+        same view instead of an unfiltered first page. Anything
+        malformed falls back to the default.
+
+        :param form: The posted form.
+
+        :returns: ``{"username": str, "page": int, "per_page": int}``.
+    """
+    def _field(name: str) -> str:
+        try:
+            value = form.get(name, "")
+        except Exception:
+            value = ""
+        rtnval_inner = str(value or "").strip()
+        return rtnval_inner
+
+    username = _field("list_username")[:_MAX_FILTER_LENGTH]
+    try:
+        page = int(_field("list_page") or "1")
+    except ValueError:
+        page = 1
+    try:
+        per_page = int(_field("list_per_page") or str(_DEFAULT_PER_PAGE))
+    except ValueError:
+        per_page = _DEFAULT_PER_PAGE
+    if page < 1:
+        page = 1
+    if per_page < 1 or per_page > _MAX_PER_PAGE:
+        per_page = _DEFAULT_PER_PAGE
+    rtnval = {"username": username, "page": page, "per_page": per_page}
+    return rtnval
+
+
+def _session_list_url(*, state: Dict[str, Any]) -> str:
+    """
+        The sessions list URL for a list state, carrying only the
+        non-default parts.
+    """
+    rtnval = _url_for_module.url_for(
+        "config.session_list",
+        username=state["username"] if len(state["username"]) > 0 else None,
+        page=state["page"] if state["page"] > 1 else None,
+        per_page=state["per_page"] if state["per_page"] != _DEFAULT_PER_PAGE else None,
+    )
+    return rtnval
+
 
 
 def _session_lifetimes() -> tuple:
@@ -434,7 +574,7 @@ def _session_lifetimes() -> tuple:
 
 def _parse_pagination_params(
         *, request: Request,
-        default_per_page: int = 20
+        default_per_page: int = _DEFAULT_PER_PAGE
     ) -> Dict[str, Any]:
     raw_page = request.query_params.get("page", "1") or "1"
     try:
@@ -452,7 +592,7 @@ def _parse_pagination_params(
         per_page = int(raw_per_page)
     except (TypeError, ValueError):
         per_page = default_per_page
-    if per_page < 1:
+    if per_page < 1 or per_page > _MAX_PER_PAGE:
         per_page = default_per_page
 
     rtnval = {"page": page, "per_page": per_page}
@@ -526,6 +666,17 @@ def handle_session_list(request: Request) -> Response:
         )
         total = session_page.total
         total_pages = (total + params["per_page"] - 1) // params["per_page"]
+        if total_pages > 0 and params["page"] > total_pages:
+            # The page emptied (its last sessions were terminated):
+            # show the last page that still has rows.
+            params["page"] = total_pages
+            session_page = _list_active_sessions(
+                db_session=db_session,
+                filter_username=filter_username,
+                offset=(total_pages - 1) * params["per_page"],
+                limit=params["per_page"],
+                current_session_id=current_session_id,
+            )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -535,6 +686,7 @@ def handle_session_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["sessions"] = session_page.rows
+        context["sessions_by_user"] = session_page.sessions_by_user
         context["idle_timeout_minutes"], context["max_lifetime_hours"] = _session_lifetimes()
         context["filter_username"] = filter_username
         context["current_session_id"] = current_session_id
@@ -582,10 +734,12 @@ def handle_session_terminate(request: Request) -> Response:
             )
             return csrf_redirect
 
+        return_url = _session_list_url(state=_list_state_from_form(form=single_form))
+
         if session_id is None or len(session_id) == 0:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message="Session not found.",
                 category=flash.CATEGORY_ERROR,
             )
@@ -612,7 +766,7 @@ def handle_session_terminate(request: Request) -> Response:
                 return response
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message="Session terminated successfully.",
                 category=flash.CATEGORY_SUCCESS,
             )
@@ -620,11 +774,97 @@ def handle_session_terminate(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message=_describe_terminate_failure(exc=exc),
                 category=flash.CATEGORY_ERROR,
             )
             return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_session_terminate_user(request: Request) -> Response:
+    """
+        ``POST /admin/sessions/user/{user_id}/terminate`` -- terminate
+        every session of one user, then return to the list view the
+        form was posted from. On the administrator's own row it keeps
+        the session making the request ("sign out my other sessions").
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.session_list"),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        return_url = _session_list_url(state=_list_state_from_form(form=single_form))
+
+        try:
+            user_uuid = uuid.UUID(str(request.path_params.get("user_id", "")))
+        except (TypeError, ValueError):
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        is_self = str(user_uuid) == str(auth.user_id)
+        keep_session_id = None
+        if is_self is True:
+            keep_session_id = str(auth.session.get("session_token", "")) or None
+        login_name = _login_name_for(db_session=db_session, user_id=user_uuid)
+
+        try:
+            closed = _terminate_user_sessions(
+                db_session=db_session,
+                user_id=user_uuid,
+                actor_user_id=auth.user_id,
+                keep_session_id=keep_session_id,
+            )
+        except Exception as exc:
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message=_describe_terminate_failure(exc=exc),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        plural = "" if closed == 1 else "s"
+        if is_self is True:
+            message = "Signed out of your {} other session{}; this one stays signed in.".format(closed, plural)
+        else:
+            message = "Terminated {} session{} for {}.".format(
+                closed, plural, login_name if len(login_name) > 0 else "the user"
+            )
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=return_url,
+            message=message,
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
     finally:
         try:
             db_session.close()
@@ -640,6 +880,7 @@ def handle_session_terminate(request: Request) -> Response:
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.session_list": handle_session_list,
     "config.session_terminate": handle_session_terminate,
+    "config.session_terminate_user": handle_session_terminate_user,
 }
 
 
@@ -666,4 +907,5 @@ __all__ = [
     "register_sessions_routes",
     "handle_session_list",
     "handle_session_terminate",
+    "handle_session_terminate_user",
 ]
