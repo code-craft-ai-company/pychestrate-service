@@ -30,7 +30,7 @@
     
     {% if projects %}
     <div class="table-scroll" tabindex="0"><table class="data-table">
-        <th scope="col"ead>
+        <thead>
             <tr>
                 <th scope="col">Name</th>
                 <th scope="col">Description</th>
@@ -69,7 +69,7 @@
         <h2 class="card-header">Recent Builds</h2>
         {% if recent_builds %}
         <div class="table-scroll" tabindex="0"><table class="data-table">
-            <th scope="col"ead><tr><th scope="col">Build</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
+            <thead><tr><th scope="col">Build</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
             <tbody>
                 {% for build in recent_builds %}
                 <tr>
@@ -97,7 +97,7 @@
         <h2 class="card-header">Recent Tests</h2>
         {% if recent_tests %}
         <div class="table-scroll" tabindex="0"><table class="data-table">
-            <th scope="col"ead><tr><th scope="col">Job</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
+            <thead><tr><th scope="col">Job</th><th scope="col">Specification</th><th scope="col">Project</th><th scope="col">Status</th><th scope="col">Created</th></tr></thead>
             <tbody>
                 {% for test in recent_tests %}
                 <tr>

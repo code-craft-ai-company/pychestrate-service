@@ -78,7 +78,7 @@
     <h2 class="card-header split">Recent Jobs <a href="{{ url_for('projects.test_job_list', project_id=project.id, spec_id=spec.id) }}" class="btn btn-sm btn-secondary regular">View all</a></h2>
     {% if recent_jobs %}
     <div class="table-scroll" tabindex="0"><table class="data-table">
-        <th scope="col"ead>
+        <thead>
             <tr>
                 <th scope="col">Job</th>
                 <th scope="col">Status</th>

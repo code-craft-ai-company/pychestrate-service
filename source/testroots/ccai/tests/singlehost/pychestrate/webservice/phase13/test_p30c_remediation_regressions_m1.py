@@ -330,3 +330,32 @@ def test_secrets_view_listens_for_component_change_events():
     testbase.assert_true('addEventListener("mj-change"' in source)
     testbase.assert_equal('input.addEventListener("change"' in source, False)
     return
+
+
+def test_every_template_table_header_is_a_well_formed_thead():
+    """
+    **Feature: UI remediation regression locks (XC-16)**
+    **Property: no server template carries the mangled
+    ``<th scope="col"ead>`` left by a find-and-replace, and every
+    ``<thead>`` it opens is closed -- so tables render one header row,
+    not a stray empty one.**
+    """
+    import re
+
+    from ccai.pychestrate.webservice import webinterface
+
+    root = os.path.dirname(os.path.abspath(webinterface.__file__))
+    malformed = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for filename in filenames:
+            if filename.endswith(".html") is False:
+                continue
+            path = os.path.join(dirpath, filename)
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            opened = len(re.findall(r"<thead\b", text))
+            closed = len(re.findall(r"</thead>", text))
+            if 'scope="col"ead' in text or opened != closed:
+                malformed.append(os.path.relpath(path, root))
+    testbase.assert_equal(sorted(malformed), [])
+    return
