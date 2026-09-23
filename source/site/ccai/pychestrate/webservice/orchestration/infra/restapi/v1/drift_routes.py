@@ -20,7 +20,12 @@ delegation to the in-tree drift-detection facade
 The drift GET surfaces the latest drift run for an environment as
 the current drift status -- the drift domain models a
 :class:`DriftRun` directly; the most-recent run holds the latest
-drift report. ``POST .../drift:check`` triggers a manual drift run
+drift report. It also carries the environment's recent drift runs
+(``history``), its drift schedule, and whether a manual check can
+start (``check_available`` / ``check_unavailable_reason``): a manual
+check borrows the schedule's checker, and nothing in this release
+creates a drift schedule, so the environment detail page can say so
+instead of letting "Check Drift" dead-end on a 409 (audit ORC-39). ``POST .../drift:check`` triggers a manual drift run
 via :func:`orchestration.infra.drift.service.run_now`, which
 borrows the environment's drift schedule's checker. The Layer-5
 dispatch handoff is M2 work; until then a triggered drift run
@@ -80,6 +85,22 @@ DRIFT_CHECK_RECORDED_DETAIL = (
     " in this release; the run will remain PENDING until the"
     " dispatch handoff ships."
 )
+
+#: Why drift detection is a preview -- carried by the drift status.
+DRIFT_PREVIEW_DETAIL = (
+    "Drift detection is a preview: a drift check is recorded, but nothing"
+    " processes it yet, so the run stays pending and reports no drift."
+)
+
+#: Why a manual drift check cannot start for an environment with no
+#: drift schedule (the check borrows the schedule's checker).
+DRIFT_NO_SCHEDULE_REASON = (
+    "This environment has no drift schedule, and drift schedules cannot be"
+    " set up from the API or the UI yet, so a drift check cannot start."
+)
+
+#: How many recent drift runs the drift status carries.
+DRIFT_HISTORY_LIMIT = 20
 
 _LOGGER = logging.getLogger("pychestrate.drift.routes")
 
@@ -363,6 +384,44 @@ def _drift_run_view_to_dict(view: Any) -> Dict[str, Any]:
     return rtnval
 
 
+def _schedule_view_to_dict(view: Any) -> Dict[str, Any]:
+    """
+        Serialize a :class:`DriftScheduleView` for the drift status.
+
+        :param view: Schedule read-model.
+
+        :returns: JSON-friendly dict.
+    """
+    rtnval: Dict[str, Any] = {
+        "checker_name": view.checker_name,
+        "cron_expression": view.cron_expression,
+        "enabled": bool(view.enabled),
+        "updated_at": _iso_or_none(view.updated_at),
+    }
+    return rtnval
+
+
+def _find_schedule(*, db_session: Any, project_id: str, environment_id: str) -> Optional[Any]:
+    """
+        The environment's drift schedule, or ``None``.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Project UUID.
+        :param environment_id: Environment UUID.
+
+        :returns: DriftScheduleView or None.
+    """
+    try:
+        rtnval = drift_service.get_schedule(
+            db_session=db_session,
+            project_id=project_id,
+            environment_id=environment_id,
+        )
+    except DriftScheduleNotFoundError:
+        rtnval = None
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # GET .../environments/{environment_id}/drift
 # ---------------------------------------------------------------------------
@@ -375,7 +434,11 @@ def handle_get_drift_status(request: Request) -> Response:
         Returns the latest drift run for the environment as its
         current drift status. The response carries
         ``{environment_id, has_report, latest_report}`` where
-        ``latest_report`` is ``null`` until a drift run exists.
+        ``latest_report`` is ``null`` until a drift run exists, plus
+        ``history`` (up to :data:`DRIFT_HISTORY_LIMIT` recent runs,
+        newest first), ``schedule`` (or ``null``),
+        ``check_available`` / ``check_unavailable_reason``,
+        ``dispatch_available`` (always ``false``) and ``detail``.
 
         :param request: Incoming webworks request.
 
@@ -406,17 +469,30 @@ def handle_get_drift_status(request: Request) -> Response:
         runs = drift_service.list_drift_runs_for_environment(
             db_session=db_session,
             environment_id=environment_id,
-            limit=1,
+            limit=DRIFT_HISTORY_LIMIT,
         )
+        history = [_drift_run_view_to_dict(view=run) for run in runs]
 
         latest_report: Optional[Dict[str, Any]] = None
-        if len(runs) > 0:
-            latest_report = _drift_run_view_to_dict(view=runs[0])
+        if len(history) > 0:
+            latest_report = history[0]
+
+        schedule = _find_schedule(
+            db_session=db_session,
+            project_id=project_id,
+            environment_id=environment_id,
+        )
 
         body = {
             "environment_id": environment_id,
             "has_report": latest_report is not None,
             "latest_report": latest_report,
+            "history": history,
+            "schedule": _schedule_view_to_dict(view=schedule) if schedule is not None else None,
+            "check_available": schedule is not None,
+            "check_unavailable_reason": None if schedule is not None else DRIFT_NO_SCHEDULE_REASON,
+            "dispatch_available": False,
+            "detail": DRIFT_PREVIEW_DETAIL,
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
@@ -487,12 +563,12 @@ def handle_trigger_drift_check(request: Request) -> Response:
                 environment_id=environment_id,
                 actor_id=actor_id,
             )
-        except DriftScheduleNotFoundError as xcpt:
+        except DriftScheduleNotFoundError:
             _abort_problem(
                 request=request,
                 status=409,
-                detail=str(xcpt),
-                extensions={"environment_id": environment_id},
+                detail=DRIFT_NO_SCHEDULE_REASON,
+                extensions={"environment_id": environment_id, "reason": "no_drift_schedule"},
             )
             view = None  # unreachable
 
@@ -552,6 +628,9 @@ def register_drift_routes(*, app: Any, version_prefix: str) -> None:
 
 
 __all__ = [
+    "DRIFT_HISTORY_LIMIT",
+    "DRIFT_NO_SCHEDULE_REASON",
+    "DRIFT_PREVIEW_DETAIL",
     "DRIFT_PATH_SUFFIX",
     "DRIFT_CHECK_PATH_SUFFIX",
     "DRIFT_READ_PERMISSION_KEY",

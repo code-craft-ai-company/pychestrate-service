@@ -37,11 +37,21 @@ from ccai.pychestrate.webservice.api.problem_json import (
     PROBLEM_TYPE_UNAUTHENTICATED,
     PROBLEM_TYPE_VALIDATION_FAILED,
 )
+from ccai.pychestrate.webservice.orchestration.test.catalog.factories.testbase_project import (
+    TestbaseProjectImporter,
+)
+from ccai.pychestrate.webservice.orchestration.test.catalog.models import (
+    TestCatalogEntry,
+)
 from ccai.pychestrate.webservice.orchestration.test.catalog.payloads import (
     TestCatalogEntryView,
 )
 from ccai.pychestrate.webservice.orchestration.test.restapi.v1 import (
     test_catalog_routes,
+)
+
+from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+    build_in_memory_session,
 )
 
 
@@ -560,4 +570,236 @@ def test_import_returns_422_when_importer_tag_missing():
     testbase.assert_equal(response.status_code, 422)
     body = _decode_body(response)
     testbase.assert_equal("importer_tag" in body["missing_fields"], True)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Audit ORC-06 -- the testbase importer imports what it is given, and an
+# import that finds nothing is refused instead of reported as complete.
+# ---------------------------------------------------------------------------
+
+
+IMPORT_PROJECT_UUID: str = "00000000-0000-4000-8000-0000000c0601"
+
+INCLUDE_A: str = "ccai.tests.singlehost.feature.test_alpha"
+INCLUDE_B: str = "ccai.tests.singlehost.feature.test_beta@#test_one"
+
+
+def _raises_value_error(*, source: Dict[str, Any]) -> bool:
+    raised = False
+    try:
+        TestbaseProjectImporter.import_entries(
+            project_id=IMPORT_PROJECT_UUID, source=source,
+        )
+    except ValueError:
+        raised = True
+    return raised
+
+
+def test_testbase_importer_creates_one_entry_per_include():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: the testbase importer turns each pasted include into a
+    catalog entry keyed by the include.**
+    """
+    payloads = TestbaseProjectImporter.import_entries(
+        project_id=IMPORT_PROJECT_UUID,
+        source={"includes": [INCLUDE_A, INCLUDE_B]},
+    )
+    keys = [payload.entry_key for payload in payloads]
+    testbase.assert_equal(keys, [INCLUDE_A, INCLUDE_B])
+    return
+
+
+def test_testbase_importer_records_the_run_metadata():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: an imported include carries the testbase runner kind,
+    its include, the testbase root, and the branch in raw_metadata.**
+    """
+    payloads = TestbaseProjectImporter.import_entries(
+        project_id=IMPORT_PROJECT_UUID,
+        source={
+            "includes": [INCLUDE_A],
+            "root": "source/testroots/ccai",
+            "ref": "main",
+        },
+    )
+    testbase.assert_equal(
+        payloads[0].raw_metadata,
+        {
+            "runner_kind": "testbase",
+            "includes": [INCLUDE_A],
+            "root": "source/testroots/ccai",
+            "branch": "main",
+        },
+    )
+    return
+
+
+def test_testbase_importer_applies_capability_tags_to_every_include():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: required_capability_tags supplied with the includes are
+    set on every imported entry.**
+    """
+    payloads = TestbaseProjectImporter.import_entries(
+        project_id=IMPORT_PROJECT_UUID,
+        source={
+            "includes": [INCLUDE_A, INCLUDE_B],
+            "required_capability_tags": ["linux"],
+        },
+    )
+    tags = [payload.required_capability_tags for payload in payloads]
+    testbase.assert_equal(tags, [("linux",), ("linux",)])
+    return
+
+
+def test_testbase_importer_refuses_a_source_with_only_root_and_ref():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: the source the old import form sent (root + ref, no
+    tests) is refused rather than importing nothing.**
+    """
+    testbase.assert_equal(
+        _raises_value_error(source={"root": "source/testroots/ccai", "ref": "main"}),
+        True,
+    )
+    return
+
+
+def test_testbase_importer_refuses_an_empty_source():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: an empty source is refused.**
+    """
+    testbase.assert_equal(_raises_value_error(source={}), True)
+    return
+
+
+def test_testbase_importer_refuses_a_malformed_include():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: an include that is not a testbase include expression
+    refuses the whole import.**
+    """
+    testbase.assert_equal(
+        _raises_value_error(source={"includes": [INCLUDE_A, "not a module path"]}),
+        True,
+    )
+    return
+
+
+def test_testbase_importer_refuses_an_entry_without_a_key():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: an entry without entry_key refuses the import instead of
+    being skipped silently.**
+    """
+    testbase.assert_equal(
+        _raises_value_error(source={"entries": [{"display_name": "no key"}]}),
+        True,
+    )
+    return
+
+
+def _import_request(*, session: Any, source: Dict[str, Any]) -> Any:
+    request = _FakeRequest(
+        path="/api/v1/projects/{}/test-catalog:import".format(IMPORT_PROJECT_UUID),
+        path_params={"project_id": IMPORT_PROJECT_UUID},
+        db_session=session,
+        auth_principal=_FakePrincipal(),
+        body={"importer_tag": "testbase-project", "source": source},
+    )
+    return request
+
+
+def _run_import_route(*, session: Any, source: Dict[str, Any], importer: Any) -> Any:
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id=IMPORT_PROJECT_UUID))
+    list_patch = create_module_patch(test_catalog_routes, "list_factory_implementations")
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: (importer,))
+    try:
+        response = test_catalog_routes.handle_import_test_catalog(
+            _import_request(session=session, source=source),
+        )
+    finally:
+        list_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    return response
+
+
+def test_import_route_refuses_a_source_that_lists_no_tests():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: POST test-catalog:import answers 422 with
+    entries_imported 0 when the source lists no tests.**
+    """
+    _engine, session = build_in_memory_session()
+    try:
+        response = _run_import_route(
+            session=session,
+            source={"root": "source/testroots/ccai", "ref": "main"},
+            importer=TestbaseProjectImporter,
+        )
+    finally:
+        session.close()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body.get("entries_imported")),
+        (422, 0),
+    )
+    return
+
+
+class _EmptyImporter:
+    @classmethod
+    def importer_tag(cls) -> str:
+        return "testbase-project"
+
+    @classmethod
+    def import_entries(cls, *, project_id: str, source: Dict[str, Any]):
+        return []
+
+
+def test_import_route_refuses_an_import_that_finds_nothing():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: when an importer returns no entries the route answers
+    422 instead of a 202 "0 imported" summary.**
+    """
+    response = _run_import_route(
+        session=object(),
+        source={"anything": True},
+        importer=_EmptyImporter,
+    )
+    testbase.assert_equal(response.status_code, 422)
+    return
+
+
+def test_import_route_catalogs_pasted_includes():
+    """
+    **Feature: 6-test-catalog (audit ORC-06)**
+    **Property: importing two pasted includes answers 202 with
+    entries_imported 2 and persists both catalog entries.**
+    """
+    _engine, session = build_in_memory_session()
+    try:
+        response = _run_import_route(
+            session=session,
+            source={"includes": [INCLUDE_A, INCLUDE_B]},
+            importer=TestbaseProjectImporter,
+        )
+        stored = sorted(
+            row.entry_key for row in session.query(TestCatalogEntry).all()
+        )
+    finally:
+        session.close()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body["entries_imported"], stored),
+        (202, 2, sorted([INCLUDE_A, INCLUDE_B])),
+    )
     return

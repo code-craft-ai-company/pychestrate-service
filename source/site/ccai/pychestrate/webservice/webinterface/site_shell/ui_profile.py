@@ -82,8 +82,8 @@ SURFACE_DISPLAY: Dict[UiSurface, str] = {
 
 SURFACE_DESCRIPTIONS: Dict[UiSurface, str] = {
     UiSurface.BUILD: (
-        "Builds, pipelines, and release channels: compiling and packaging"
-        " software from source."
+        "Builds and pipelines: compiling and packaging software from"
+        " source."
     ),
     UiSurface.TESTING: (
         "Test runs, the test catalog, and test metrics: executing and"

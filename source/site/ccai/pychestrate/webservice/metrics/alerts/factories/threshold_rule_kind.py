@@ -11,10 +11,21 @@ Required config:
 
 Optional config:
 
-* ``label_filter`` — exact-match label dict.
+* ``label_filter`` — label dict. A series matches when its
+  labels *include* every pair of the filter, so an empty filter
+  reads every series of the metric. When the metric declares a
+  ``project_id`` label and the filter does not set one, the
+  rule's own project is added.
+* ``window_seconds`` — positive integer. For a counter metric
+  the observed value is the sum of the increments recorded in
+  the last ``window_seconds`` (default
+  :data:`DEFAULT_COUNTER_WINDOW_SECONDS`), so "failures > 0"
+  fires while failures keep arriving and resolves once a window
+  passes without one. For a gauge the observed value is the
+  latest matching sample; with ``window_seconds`` set, samples
+  older than the window are ignored.
 
-Evaluation reads the latest sample from the timeseries facade
-matching the label filter and applies ``op`` against
+Evaluation applies ``op`` between the observed value and
 ``threshold``.
 """
 
@@ -25,11 +36,9 @@ __version__ = "1.0.0"
 
 
 import enum
-import hashlib
-import json
-import os
 
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from datetime import timedelta
+from typing import Any, List, Mapping, Optional, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -38,10 +47,19 @@ from ccai.pychestrate.webservice.metrics.alerts.factories.rule_kind_protocol imp
     AlertRuleKindProtocol,
     AlertRuleKindRecord,
 )
-from ccai.pychestrate.webservice.metrics.timeseries import repository as ts_repository
+from ccai.pychestrate.core.defaults import utc_now
+
+from ccai.pychestrate.webservice.metrics.timeseries.selection import (
+    is_counter,
+    select_samples,
+)
 
 
 THRESHOLD_RULE_KIND_NAME: str = "threshold"
+
+#: Window a counter rule sums increments over when the config
+#: sets no ``window_seconds``.
+DEFAULT_COUNTER_WINDOW_SECONDS: int = 3600
 
 
 class ComparisonOp(str, enum.Enum):
@@ -85,11 +103,14 @@ class ThresholdAlertRuleKind(AlertRuleKindProtocol):
         rtnval = AlertRuleKindRecord(
             kind=THRESHOLD_RULE_KIND_NAME,
             description=(
-                "Compare the latest sample of a metric against a numeric "
-                "threshold using one of <, <=, >, >=, ==, !=."
+                "Compare a metric against a numeric threshold using one "
+                "of <, <=, >, >=, ==, !=. Counters are summed over "
+                "window_seconds (default 3600); gauges use the latest "
+                "sample."
             ),
             config_schema_keys=(
                 "metric_name", "threshold", "op", "label_filter",
+                "window_seconds",
             ),
         )
         return rtnval
@@ -136,6 +157,11 @@ class ThresholdAlertRuleKind(AlertRuleKindProtocol):
                     issues.append("'label_filter' values must be strings")
                     break
 
+        window_seconds = config.get("window_seconds", None)
+        if window_seconds is not None:
+            if isinstance(window_seconds, bool) or not isinstance(window_seconds, int) or window_seconds <= 0:
+                issues.append("'window_seconds' must be a positive integer when present")
+
         if len(issues) > 0:
             rtnval: Tuple[bool, Tuple[str, ...]] = (False, tuple(issues))
             return rtnval
@@ -154,14 +180,16 @@ class ThresholdAlertRuleKind(AlertRuleKindProtocol):
         threshold = float(config["threshold"])
         op = config["op"]
         label_filter = dict(config.get("label_filter", {}))
+        window_seconds = config.get("window_seconds", None)
 
-        signature = _label_signature(labels=label_filter)
-        latest = ts_repository.latest_sample_for_signature(
+        observed_value = _observed_value(
             db_session=db_session,
+            project_id=project_id,
             metric_name=metric_name,
-            label_signature=signature,
+            label_filter=label_filter,
+            window_seconds=window_seconds,
         )
-        if latest is None:
+        if observed_value is None:
             rtnval = AlertEvaluationOutcome(
                 fires=False,
                 observed_value=None,
@@ -170,7 +198,7 @@ class ThresholdAlertRuleKind(AlertRuleKindProtocol):
             )
             return rtnval
 
-        observed = float(latest.value)
+        observed = float(observed_value)
         fires = _compare(observed=observed, op=op, threshold=threshold)
         if fires is True:
             reason = "{} {} {}".format(observed, op, threshold)
@@ -205,17 +233,52 @@ def _compare(*, observed: float, op: str, threshold: float) -> bool:
     return rtnval
 
 
-def _label_signature(*, labels: Mapping[str, str]) -> str:
+def _observed_value(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        metric_name: str,
+        label_filter: Mapping[str, str],
+        window_seconds: Optional[int]
+    ) -> Optional[float]:
     """
-        Identical signature derivation as the timeseries
-        facade so threshold reads hit the same row the writes
-        produced.
+        The value a threshold rule compares: the windowed sum of a
+        counter's increments, or a gauge's latest matching sample.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: The rule's project.
+        :param metric_name: Metric the rule reads.
+        :param label_filter: The rule's label filter (subset match).
+        :param window_seconds: The rule's window, or ``None``.
+
+        :returns: The observed value, or ``None`` when a gauge has no
+                  matching sample (a counter with no increments in
+                  its window observes ``0.0``).
     """
-    canonical = json.dumps(
-        {key: labels[key] for key in sorted(labels.keys())},
-        separators=(",", ":"),
-        ensure_ascii=True,
+    if is_counter(metric_name=metric_name) is True:
+        window = window_seconds if window_seconds is not None else DEFAULT_COUNTER_WINDOW_SECONDS
+        rows = select_samples(
+            db_session=db_session,
+            metric_name=metric_name,
+            label_filter=label_filter,
+            project_id=project_id,
+            since=utc_now() - timedelta(seconds=int(window)),
+        )
+        rtnval: Optional[float] = float(sum(row.value for row in rows))
+        return rtnval
+
+    since = None
+    if window_seconds is not None:
+        since = utc_now() - timedelta(seconds=int(window_seconds))
+    rows = select_samples(
+        db_session=db_session,
+        metric_name=metric_name,
+        label_filter=label_filter,
+        project_id=project_id,
+        since=since,
     )
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    rtnval = digest[:32]
+    if len(rows) == 0:
+        rtnval = None
+        return rtnval
+    rtnval = float(rows[0].value)
     return rtnval

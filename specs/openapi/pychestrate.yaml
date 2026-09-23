@@ -2909,6 +2909,16 @@ paths:
         `test_catalog_importer` factory protocol) against the project.
         Each import overwrites entries with the same
         `(project_id, importer_tag, entry_key)` key in place.
+
+        The service cannot walk a testbase project on the pods, so the
+        `testbase-project` importer catalogs the tests the source
+        names: `includes` (testbase include expressions, one entry
+        each, with optional `root`, `ref` and
+        `required_capability_tags`) and / or full `entries`. An import
+        that would add nothing -- an empty source, a malformed include
+        or entry, or an importer that finds no entries -- answers 422
+        with the reason and `entries_imported: 0`; it is never
+        reported as a successful import.
       requestBody:
         required: true
         content:
@@ -2922,6 +2932,7 @@ paths:
               schema: { $ref: '#/components/schemas/TestCatalogImportSummary' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /projects/{project_id}/builds:
     parameters:
@@ -3224,8 +3235,12 @@ paths:
         jobs through the existing build / test / provision dispatch.
         A stage becomes eligible once every stage it `needs` has
         completed successfully; a stage failure skips its dependents
-        and fails the run. An optional `matrix` object requests
-        matrix expansion of the stage set.
+        and fails the run. `build` steps build the run's `commit_sha`
+        (and the branch named by `ref`) unless the step pins its own.
+        `script` steps have no execution path yet: they are reported
+        `failed` ("not executed"), never `completed`. A non-empty
+        `matrix` is refused with 422 (`reason: matrix_not_supported`)
+        because a run executes each stage once.
       requestBody:
         required: true
         content:
@@ -3338,10 +3353,12 @@ paths:
       x-pychestrate-status: planned
       description: |
         Returns a read-time roll-up of testbase / testplus test
-        results for the project: aggregate pass / fail / flake
-        rates, run counts, and duration trends, plus a recent
-        per-run breakdown. The roll-up is computed on read from
-        the persisted result-ingest summary rows.
+        results for the project: aggregate pass / fail rates, the
+        failed-run rate (share of runs with any failed or errored
+        test -- no flake detection is performed), run counts, and
+        duration trends, plus a recent per-run breakdown. The
+        roll-up is computed on read from the persisted result-ingest
+        summary rows.
       parameters:
         - in: query
           name: limit
@@ -3709,7 +3726,8 @@ paths:
         Triggers a manual drift check, persisting a drift run in
         `PENDING` state. The run borrows the environment's drift
         schedule's checker -- an environment with no drift
-        schedule returns `409`. The Layer-5 dispatch handoff is
+        schedule returns `409` with `reason: no_drift_schedule`
+        (no API creates drift schedules yet). The Layer-5 dispatch handoff is
         M2 work -- until then a triggered drift run remains queued
         in `PENDING`. The 202 body is explicit about this: it
         carries `dispatch_available: false` plus a `detail`
@@ -4171,8 +4189,11 @@ paths:
       x-pychestrate-status: planned
       description: >-
         The guards domain is environment scoped; the
-        `environment_id` query param is required. Returns guard
-        attachments as an `{items, meta}` page.
+        `environment_id` query param is required and must be a
+        complete environment UUID (a missing one answers 400, a
+        malformed or partial one 422). A malformed `project_id`
+        answers 404. Returns guard attachments as an
+        `{items, meta}` page.
       parameters:
         - in: query
           name: environment_id
@@ -4197,6 +4218,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
     post:
       tags: [blast_radius_guards]
       summary: Attach a blast-radius guard onto an environment.
@@ -4455,6 +4477,11 @@ paths:
       summary: Publish a release onto a channel.
       operationId: release_channels_create
       x-pychestrate-status: planned
+      description: >-
+        Publishes a Pychestrate service or agent release onto an update
+        channel. Publishing signs the release manifest; when the server
+        has no release-signing key the request answers 503 with
+        `reason: signing_key_missing` and a detail explaining it.
       requestBody:
         required: true
         content:
@@ -4470,6 +4497,11 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+        '503':
+          description: No release-signing key is installed, so the release cannot be signed.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /release-channels/{channel_id}:
     parameters:
@@ -4548,7 +4580,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '503':
+          description: |
+            The service cannot verify the delivery: no database session,
+            or (`reason: secret_unavailable`) the integration's shared
+            secret no longer resolves in the secrets vault.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
 
   /webhooks/in/integrations:
     get:
@@ -4576,6 +4615,14 @@ paths:
       tags: [webhooks]
       summary: Register an inbound webhook integration configuration.
       operationId: webhooks_in_create_integration
+      description: |
+        The integration's shared secret is stored only in the secrets
+        vault. Send the key itself as the write-only `secret` (it is
+        stored as a project secret on the caller's behalf, which needs
+        `system:secrets.admin` or project membership plus
+        `system:project_secrets.write`), or name an existing vault
+        secret the caller may read in `secret_ref`. No response ever
+        contains the key.
       requestBody:
         required: true
         content:
@@ -4588,7 +4635,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookInIntegration' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403':
+          description: |
+            The caller lacks `system:webhooks.write`, may not store the
+            secret in the project's vault scope, or may not read the
+            vault secret named by `secret_ref`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
@@ -4794,18 +4849,24 @@ paths:
       summary: Send a test event for an outbound subscription.
       operationId: webhooks_out_test_subscription
       description: |
-        Builds a signed test event for the subscription and records
-        the delivery attempt. Exposed as a trailing `/test`
-        sub-resource because the route matcher cannot place a
-        literal `:test` action suffix on a param segment.
+        Builds a signed test event for the subscription, POSTs it to
+        the subscription URL and records the attempt with its real
+        outcome: `succeeded` for a 2xx answer, `failed` otherwise
+        (with the receiver's status and a response excerpt, or why
+        the request was not sent). The server does not call
+        loopback, link-local, unspecified, multicast or reserved
+        addresses (or `localhost`) and does not follow redirects.
+        Exposed as a trailing `/test` sub-resource because the route
+        matcher cannot place a literal `:test` action suffix on a
+        param segment.
       requestBody:
         required: false
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WebhookOutTestRequest' }
       responses:
-        '202':
-          description: Test event built and recorded.
+        '200':
+          description: Test event sent (or refused) and recorded.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookOutTestResult' }
@@ -8006,7 +8067,20 @@ components:
         source:
           type: object
           additionalProperties: true
-          description: Importer-specific source descriptor (repo URL, branch, path).
+          description: |
+            Importer-specific source descriptor. For `testbase-project`:
+            `includes` (array of testbase include expressions such as
+            `ccai.tests.singlehost.feature.test_module` or
+            `pkg.module@#test_name`), optional `root` (testbase root on
+            the pod), `ref` (branch, stored as the entry's branch) and
+            `required_capability_tags`; and / or `entries` (full entry
+            objects with `entry_key`, `display_name`, `description`,
+            `required_capability_tags`, `param_schema`, `raw_metadata`).
+          example:
+            includes:
+              - ccai.tests.singlehost.feature.test_module
+            root: source/testroots/ccai
+            ref: main
     TestCatalogImportSummary:
       type: object
       required: [importer_tag, started_at]
@@ -8432,8 +8506,10 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Optional matrix-expansion dimensions. When present the
-            orchestrator records the expanded shard set on the run.
+            Must be absent or empty. Matrix execution is not supported
+            (a run executes each stage once), so a non-empty matrix is
+            refused with 422 instead of being ignored; preview shards
+            with `POST /projects/{project_id}/pipelines:expand-matrix`.
 
     PipelineStepStatus:
       type: object
@@ -8448,7 +8524,11 @@ components:
         kind_name: { type: string }
         job_kind:
           type: string
-          description: Dispatch route -- `build` / `test` / `infra` / `script`.
+          description: |
+            Dispatch route -- `build` / `test` / `infra` / `provision` /
+            `rpa` / `script`. A `script` step is never executed (no
+            executor runs scripts): it ends `failed` with a
+            `final_state_reason` starting "not executed".
         layer5_run_id:
           type: string
           nullable: true
@@ -8927,7 +9007,11 @@ components:
       type: object
       description: |
         Current drift status of an environment -- the latest
-        drift run, or `null` when none has been recorded.
+        drift run, or `null` when none has been recorded -- with
+        the environment's recent drift runs, its drift schedule,
+        and whether a manual drift check can start. Drift
+        detection is a preview: recorded checks are not processed
+        yet (`dispatch_available: false`).
       required: [environment_id, has_report]
       properties:
         environment_id: { type: string, format: uuid }
@@ -8936,6 +9020,33 @@ components:
           nullable: true
           allOf:
             - $ref: '#/components/schemas/DriftReport'
+        history:
+          type: array
+          description: Up to 20 recent drift runs, newest first.
+          items: { $ref: '#/components/schemas/DriftReport' }
+        schedule:
+          type: object
+          nullable: true
+          description: The environment's drift schedule, or null.
+          properties:
+            checker_name: { type: string }
+            cron_expression: { type: string }
+            enabled: { type: boolean }
+            updated_at: { type: string, format: date-time, nullable: true }
+        check_available:
+          type: boolean
+          description: >-
+            Whether `POST .../drift:check` can start a check (it
+            borrows the drift schedule's checker).
+        check_unavailable_reason:
+          type: string
+          nullable: true
+        dispatch_available:
+          type: boolean
+          description: Always `false` in this release.
+        detail:
+          type: string
+          description: Why drift detection is a preview.
 
     # ----------------------------------------------------------------
     # metrics / dashboards / metric_alerts (7-* PR p20f)
@@ -9040,7 +9151,15 @@ components:
         pass_rate: { type: number, minimum: 0, maximum: 1 }
         fail_rate: { type: number, minimum: 0, maximum: 1 }
         runs_with_failures: { type: integer, minimum: 0 }
-        flake_run_rate: { type: number, minimum: 0, maximum: 1 }
+        failed_run_rate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: |
+            Share of runs with at least one failed or errored test
+            (`runs_with_failures / run_count`). Not a flake rate: no
+            flaky-test detection is performed. Replaces the misnamed
+            `flake_run_rate`.
         average_run_duration_seconds: { type: number, minimum: 0 }
 
     TestMetricsRunEntry:
@@ -9194,6 +9313,27 @@ components:
           nullable: true
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        live_state: { $ref: '#/components/schemas/MetricAlertLiveState' }
+
+    MetricAlertLiveState:
+      type: object
+      description: >-
+        The alert evaluator's latest verdict for a rule. `unknown`
+        until the evaluator (every 60 s) has run the rule.
+      required: [state, fire_count, resolve_count]
+      properties:
+        state:
+          type: string
+          enum: [unknown, ok, firing]
+        last_value: { nullable: true }
+        last_threshold: { nullable: true }
+        last_reason: { type: string }
+        last_evaluated_at: { type: string, format: date-time, nullable: true }
+        last_state_changed_at: { type: string, format: date-time, nullable: true }
+        fired_at: { type: string, format: date-time, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        fire_count: { type: integer }
+        resolve_count: { type: integer }
 
     MetricAlertRuleCreateRequest:
       type: object
@@ -9821,7 +9961,20 @@ components:
         items:
           type: array
           items: { $ref: '#/components/schemas/ReleaseChannelEntry' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
+        meta:
+          allOf:
+            - $ref: '#/components/schemas/PageMeta'
+            - type: object
+              properties:
+                publishing_available:
+                  type: boolean
+                  description: >-
+                    Whether this server can publish a release (it needs
+                    an installed release-signing key).
+                publishing_unavailable_reason:
+                  type: string
+                  nullable: true
+                  description: Why publishing is unavailable, or null.
 
     # ----------------------------------------------------------------
     # webhooks (inbound + outbound)
@@ -9856,7 +10009,16 @@ components:
         project_id: { type: string, format: uuid }
         provider: { type: string }
         hook_name: { type: string }
-        secret_ref: { type: string }
+        secret_ref:
+          type: string
+          nullable: true
+          description: |
+            Secrets-vault reference the shared secret is stored under --
+            never the secret itself. `null` when the reference no longer
+            names a vault secret.
+        secret_configured:
+          type: boolean
+          description: Whether the vault holds the integration's shared secret.
         mtls_required: { type: boolean }
         description: { type: string }
         enabled: { type: boolean }
@@ -9869,12 +10031,21 @@ components:
 
     WebhookInIntegrationCreate:
       type: object
-      required: [project_id, provider, hook_name, secret_ref]
+      description: Exactly one of `secret` and `secret_ref` is required.
+      required: [project_id, provider, hook_name]
       properties:
         project_id: { type: string, format: uuid }
         provider: { type: string }
         hook_name: { type: string }
-        secret_ref: { type: string }
+        secret:
+          type: string
+          writeOnly: true
+          description: |
+            The shared HMAC key. Stored in the secrets vault; never
+            returned.
+        secret_ref:
+          type: string
+          description: Name of an existing vault secret the caller may read.
         mtls_required: { type: boolean, default: false }
         description: { type: string }
 
@@ -10002,9 +10173,15 @@ components:
         signature: { type: string, nullable: true }
         outcome:
           type: string
-          enum: [pending, success, failure, retrying]
+          enum: [pending, succeeded, failed, rejected_disabled]
         response_status: { type: integer, nullable: true }
-        response_excerpt: { type: string, nullable: true }
+        response_excerpt:
+          type: string
+          nullable: true
+          description: >-
+            Start of the receiver's response body, or why the request
+            was not sent (`not sent: ...`) or not answered
+            (`not delivered: ...`).
         duration_ms: { type: integer, nullable: true }
         attempted_at: { type: string, format: date-time, nullable: true }
 
@@ -10032,7 +10209,8 @@ components:
       properties:
         status:
           type: string
-          enum: [queued]
+          description: The recorded delivery outcome.
+          enum: [succeeded, failed]
         delivery: { $ref: '#/components/schemas/WebhookOutDelivery' }
 
     # ----------------------------------------------------------------

@@ -29,6 +29,11 @@ attachment (the facade exposes ``disable_attachment`` -- there is
 no hard delete). ``:evaluate`` maps to the facade ``explain``
 preview.
 
+Ids are validated before they reach the UUID-typed columns (audit
+ORC-28): a malformed ``environment_id`` in a query or body answers
+422, and a malformed project or guard id in the path answers 404 --
+never a 500 from the database driver.
+
 Error responses are RFC 7807 problem documents emitted via
 :mod:`api.problem_json_webworks`.
 """
@@ -40,6 +45,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -251,6 +257,15 @@ def _require_project_exists(
 
         :returns: Project ORM row.
     """
+    if _is_uuid(project_id) is False:
+        # A malformed id names no project; answer the same 404 an
+        # unknown one gets instead of failing in the UUID column.
+        _abort_problem(
+            request=request,
+            status=404,
+            detail="Project not found.",
+            extensions={"project_id": project_id},
+        )
     row = projects_repo.get_project_by_id(
         db_session=db_session,
         project_id=project_id,
@@ -263,6 +278,49 @@ def _require_project_exists(
             extensions={"project_id": project_id},
         )
     rtnval = row
+    return rtnval
+
+
+def _is_uuid(value: Any) -> bool:
+    """
+        Whether ``value`` parses as a UUID.
+
+        :param value: Raw value.
+
+        :returns: True for a well-formed UUID.
+    """
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return True
+
+
+def _require_environment_uuid(*, request: Request, name: str, value: str) -> str:
+    """
+        Abort 422 unless the caller-supplied environment id is a
+        complete UUID. Environments are keyed by UUID, so a partial
+        or malformed id can never match -- and would otherwise fail
+        inside the database driver as a 500.
+
+        :param request: Incoming webworks request.
+        :param name: Query param / body field name (for the message).
+        :param value: Raw value.
+
+        :returns: The value, unchanged.
+    """
+    if _is_uuid(value) is False:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail=(
+                "'{}' must be a complete environment id (a UUID);"
+                " pick the environment from the project's environment"
+                " list.".format(name)
+            ),
+            extensions={"invalid_fields": [name], "raw_value": value},
+        )
+    rtnval = value
     return rtnval
 
 
@@ -340,7 +398,7 @@ def _split_guard_id(*, request: Request, guard_id: str) -> Dict[str, str]:
         )
 
     environment_id, _, rule_id = guard_id.partition(GUARD_ID_SEPARATOR)
-    if len(environment_id) == 0 or len(rule_id) == 0:
+    if len(environment_id) == 0 or len(rule_id) == 0 or _is_uuid(environment_id) is False:
         _abort_problem(
             request=request,
             status=404,
@@ -482,6 +540,9 @@ def handle_list_guards(request: Request) -> Response:
                 detail="Query param 'environment_id' is required.",
                 extensions={"query_param": "environment_id"},
             )
+        _require_environment_uuid(
+            request=request, name="environment_id", value=environment_id,
+        )
 
         enabled_only_raw = request.query_params.get("enabled_only", None)
         enabled_only = False
@@ -585,6 +646,9 @@ def handle_create_guard(request: Request) -> Response:
                 detail="Field 'environment_id' is required.",
                 extensions={"missing_fields": ["environment_id"]},
             )
+        _require_environment_uuid(
+            request=request, name="environment_id", value=environment_id,
+        )
 
         rule_id = body.get("rule_id", None)
         if not isinstance(rule_id, str) or len(rule_id) == 0:
@@ -926,6 +990,9 @@ def handle_evaluate_guards(request: Request) -> Response:
                 detail="Field 'environment_id' is required.",
                 extensions={"missing_fields": ["environment_id"]},
             )
+        _require_environment_uuid(
+            request=request, name="environment_id", value=environment_id,
+        )
 
         action = body.get("action", None)
         if not isinstance(action, str) or len(action) == 0:

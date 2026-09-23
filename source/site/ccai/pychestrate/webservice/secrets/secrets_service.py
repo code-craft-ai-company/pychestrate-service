@@ -840,3 +840,88 @@ def delete_secret(
 
     rtnval = None
     return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Service-identity reads (8-webhooks-in, audit ORC-29)
+# ---------------------------------------------------------------------------
+
+
+def read_secret_for_service(
+        *,
+        db_session: DbSession,
+        secret_ref: str,
+        service_identity: str
+    ) -> SecretRead:
+    """
+        Decrypt the active version of a secret on behalf of in-process
+        service code rather than a user.
+
+        Some consumers must resolve a secret reference while serving a
+        request that carries no principal -- the inbound-webhook receiver
+        verifies a provider's HMAC signature with the shared secret an
+        authorized user bound to the integration when configuring it. No
+        principal ACL applies here: the binding step is where the user's
+        right to use the secret was checked (and audited), and this
+        function is only reachable from service code, never from a REST
+        route.
+
+        No audit record is written per read. The callers are machine
+        paths that resolve the same reference on every inbound request;
+        auditing each resolution would let unauthenticated traffic grow
+        the audit chain without bound. The security-relevant events --
+        creating the secret and binding it to its consumer -- are
+        audited where they happen.
+
+        :param db_session: Active SQLAlchemy session.
+        :param secret_ref: Canonical secret reference.
+        :param service_identity: Name of the calling service (for
+                                 example ``"webhooks_in"``); used in
+                                 error messages only.
+
+        :returns: :class:`SecretRead` wrapping the decrypted plaintext.
+        :raises: SecretNotFoundError, SecretVersionExpiredError
+    """
+    record = (
+        db_session.query(SecretRecord).filter(SecretRecord.secret_ref == secret_ref).first()
+    )
+    if record is None:
+        err_msg_lines = ["Cannot resolve secret for service — record not found."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg_lines.append("SERVICE: {}".format(service_identity))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretNotFoundError(err_msg) from None
+
+    version = (
+        db_session.query(SecretVersion)
+        .filter(SecretVersion.version_id == record.current_version_id)
+        .first()
+    )
+    if version is None:
+        err_msg_lines = ["Cannot resolve secret for service — active version missing."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg_lines.append("SERVICE: {}".format(service_identity))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretNotFoundError(err_msg) from None
+
+    if version.state == SecretVersionState.EXPIRED:
+        err_msg_lines = ["Cannot resolve secret for service — active version is expired."]
+        err_msg_lines.append("SECRET_REF: {}".format(secret_ref))
+        err_msg_lines.append("SERVICE: {}".format(service_identity))
+        err_msg_lines.append("VERSION_NUMBER: {}".format(version.version_number))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SecretVersionExpiredError(err_msg) from None
+
+    plaintext = decrypt_ciphertext(
+        ciphertext_bytes=bytes(version.ciphertext_bytes),
+        wrapped_dek=bytes(version.wrapped_dek),
+        secret_ref=secret_ref,
+    )
+
+    rtnval = SecretRead(
+        plaintext=plaintext,
+        secret_ref=secret_ref,
+        version_number=int(version.version_number),
+        metadata=None,
+    )
+    return rtnval

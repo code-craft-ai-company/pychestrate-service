@@ -132,6 +132,8 @@ def _capture_phase_calls() -> Dict[str, Any]:
         "phase3_calls": [],
         "phase5_calls": [],
         "phase6_calls": [],
+        "phase7_calls": [],
+        "phase8_calls": [],
     }
 
     class _FakeKek:
@@ -158,11 +160,21 @@ def _capture_phase_calls() -> Dict[str, Any]:
         state["phase6_calls"].append(config)
         return
 
+    def fake_phase7(*, config: Any) -> None:
+        state["phase7_calls"].append(config)
+        return
+
+    def fake_phase8(*, config: Any) -> None:
+        state["phase8_calls"].append(config)
+        return
+
     p1 = create_module_patch(runtime_bootstrap, "bootstrap_phase1_runtime")
     p2 = create_module_patch(runtime_bootstrap, "bootstrap_phase2_runtime")
     p3 = create_module_patch(runtime_bootstrap, "bootstrap_phase3_runtime")
     p5 = create_module_patch(runtime_bootstrap, "bootstrap_phase5_runtime")
     p6 = create_module_patch(runtime_bootstrap, "bootstrap_phase6_runtime")
+    p7 = create_module_patch(runtime_bootstrap, "bootstrap_phase7_runtime")
+    p8 = create_module_patch(runtime_bootstrap, "bootstrap_phase8_runtime")
 
     m1 = p1.activate()
     m1.configure(side_effect=fake_phase1)
@@ -174,8 +186,12 @@ def _capture_phase_calls() -> Dict[str, Any]:
     m5.configure(side_effect=fake_phase5)
     m6 = p6.activate()
     m6.configure(side_effect=fake_phase6)
+    m7 = p7.activate()
+    m7.configure(side_effect=fake_phase7)
+    m8 = p8.activate()
+    m8.configure(side_effect=fake_phase8)
 
-    state["patches"] = [p1, p2, p3, p5, p6]
+    state["patches"] = [p1, p2, p3, p5, p6, p7, p8]
     return state
 
 
@@ -442,6 +458,51 @@ def test_bootstrap_runtime_calls_phase1_phase2_phase3_in_order():
     return
 
 
+def test_bootstrap_runtime_starts_the_layer7_runtime_with_the_session_factory():
+    """
+    **Feature: runtime bootstrap -- audit ORC-04**
+    **Property: bootstrap_runtime calls bootstrap_phase7_runtime once
+    with the published session factory, so the metric catalog, the
+    metric writer and the alert evaluator start (before ORC-04 the
+    Layer-7 bootstrap had no caller).**
+    """
+    _clear_globals()
+    state = _capture_phase_calls()
+    try:
+        result = bootstrap_runtime(config=_make_config())
+        testbase.assert_equal(len(state["phase7_calls"]), 1)
+        testbase.assert_equal(
+            state["phase7_calls"][0].session_factory is result.session_factory,
+            True,
+        )
+    finally:
+        _release_phase_patches(state=state)
+        _clear_globals()
+    return
+
+
+def test_bootstrap_runtime_registers_the_layer8_extensions():
+    """
+    **Feature: runtime bootstrap -- audit ORC-04**
+    **Property: bootstrap_runtime calls bootstrap_phase8_runtime once
+    with the published session factory, so the inbound webhook
+    parsers and release-channel policies are registered.**
+    """
+    _clear_globals()
+    state = _capture_phase_calls()
+    try:
+        result = bootstrap_runtime(config=_make_config())
+        testbase.assert_equal(len(state["phase8_calls"]), 1)
+        testbase.assert_equal(
+            state["phase8_calls"][0].session_factory is result.session_factory,
+            True,
+        )
+    finally:
+        _release_phase_patches(state=state)
+        _clear_globals()
+    return
+
+
 # ---------------------------------------------------------------------------
 # bootstrap_runtime — schema gate
 # ---------------------------------------------------------------------------
@@ -631,4 +692,50 @@ def test_bootstrap_imports_runtime_bootstrap_and_calls_it_in_main():
     testbase.assert_equal(has_import, True)
     testbase.assert_equal(has_call, True)
     testbase.assert_equal(has_prod_factory, True)
+    return
+
+
+def _register_service_extensions_source() -> str:
+    """
+        The source of ``app_pychestrate_main.register_service_extensions``.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_source_root = os.path.normpath(
+        os.path.join(
+            here, "..", "..", "..", "..", "..", "..", "..", "..",
+            "source", "site",
+        )
+    )
+    bootstrap_path = os.path.join(repo_source_root, "app_pychestrate_main.py")
+    with open(bootstrap_path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    start = text.index("def register_service_extensions(")
+    end = text.index("\ndef ", start + 1)
+    rtnval = text[start:end]
+    return rtnval
+
+
+def test_register_service_extensions_registers_layer7_and_layer8():
+    """
+    **Feature: runtime bootstrap -- audit ORC-04**
+    **Property: register_service_extensions (run on every webworks
+    start) registers the Layer-7 and Layer-8 extensions next to
+    Layers 1-6, so SLO / alert / tile kinds and inbound webhook
+    parsers exist in every process that serves the API.**
+    """
+    body = _register_service_extensions_source()
+    testbase.assert_equal("register_phase7_builtin_extensions()" in body, True)
+    testbase.assert_equal("register_phase8_builtin_extensions()" in body, True)
+    return
+
+
+def test_register_service_extensions_runs_the_view_registry_self_check():
+    """
+    **Feature: runtime bootstrap -- audit ORC-04**
+    **Property: register_service_extensions ends with the view
+    registry self-check, so a start with an empty registry behind a
+    view logs a warning naming the view.**
+    """
+    body = _register_service_extensions_source()
+    testbase.assert_equal("log_view_registry_self_check()" in body, True)
     return

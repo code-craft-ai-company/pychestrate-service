@@ -109,6 +109,15 @@ from ccai.pychestrate.webservice.extensions.phase6_bootstrap import (
     Phase6BootstrapResult,
     bootstrap_phase6_runtime,
 )
+from ccai.pychestrate.webservice.extensions.phase7_bootstrap import (
+    Phase7BootstrapConfig,
+    Phase7BootstrapResult,
+    bootstrap_phase7_runtime,
+)
+from ccai.pychestrate.webservice.extensions.phase8_bootstrap import (
+    Phase8BootstrapConfig,
+    bootstrap_phase8_runtime,
+)
 from ccai.pychestrate.webservice.housekeeping import register_housekeeping_tasks
 from ccai.pychestrate.webservice.jobs.scheduling import SchedulerHandle, default_scheduler
 from ccai.pychestrate.webservice.metadata import (
@@ -271,6 +280,7 @@ class RuntimeBootstrapResult:
     kek: KekHandle
     phase5_scheduler_handle: Optional[SchedulerHandle] = None
     phase6_result: Optional[Phase6BootstrapResult] = None
+    phase7_result: Optional[Phase7BootstrapResult] = None
 
 
 # ---------------------------------------------------------------------------
@@ -969,6 +979,17 @@ def bootstrap_runtime(
     phase6_config = Phase6BootstrapConfig(session_factory=session_factory)
     phase6_result = bootstrap_phase6_runtime(config=phase6_config)
 
+    # Layer 7 (metrics, dashboards, SLOs, alerts) and Layer 8 (public
+    # surface: inbound / outbound webhooks, release channels) were
+    # never bootstrapped, so their registries stayed empty (audit
+    # ORC-04). Layer 7 also loads the metric catalog, attaches the
+    # metric writer, and starts the alert evaluator.
+    phase7_config = Phase7BootstrapConfig(session_factory=session_factory)
+    phase7_result = bootstrap_phase7_runtime(config=phase7_config)
+
+    phase8_config = Phase8BootstrapConfig(session_factory=session_factory)
+    bootstrap_phase8_runtime(config=phase8_config)
+
     # Test-mode admin seeding runs last so the pepper, KEK, session
     # factory, and RBAC seeding helpers are all live. No-op (and OFF) by
     # default; refused in production.
@@ -991,6 +1012,7 @@ def bootstrap_runtime(
         kek=kek,
         phase5_scheduler_handle=phase5_handle,
         phase6_result=phase6_result,
+        phase7_result=phase7_result,
     )
     return rtnval
 

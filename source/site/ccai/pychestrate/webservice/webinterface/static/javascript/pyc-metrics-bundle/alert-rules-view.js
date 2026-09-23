@@ -9,12 +9,20 @@ const PROJECTS_API_PATH = "/api/v1/projects";
 const ALERT_RULES_ROUTE = "/metric-alerts";
 const ALERT_RULE_KIND = "threshold";
 const COMPARISON_OPTIONS = [
-  { value: "gt", label: "greater than" },
-  { value: "gte", label: "greater than or equal" },
-  { value: "lt", label: "less than" },
-  { value: "lte", label: "less than or equal" },
-  { value: "eq", label: "equal to" }
+  { value: ">", label: "greater than" },
+  { value: ">=", label: "greater than or equal" },
+  { value: "<", label: "less than" },
+  { value: "<=", label: "less than or equal" },
+  { value: "==", label: "equal to" },
+  { value: "!=", label: "not equal to" }
 ];
+const DEFAULT_ALERT_WINDOW_SECONDS = 3600;
+const ALERT_RULES_PREVIEW_NOTE = "Preview: enabled rules are evaluated every minute and their state is shown below, but no notification is sent to their targets yet.";
+const ALERT_STATE_LABELS = {
+  firing: "Firing",
+  ok: "OK",
+  unknown: "Not evaluated yet"
+};
 const SEVERITY_OPTIONS = [
   "info",
   "warning",
@@ -24,7 +32,17 @@ function build_alert_rules_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + ALERT_RULES_ROUTE;
   return rtnval;
 }
-function alert_create_message_for_status(status) {
+function problem_detail_of(body) {
+  if (body === null || typeof body !== "object") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const detail = body.detail;
+  const rtnval = typeof detail === "string" ? detail.trim() : "";
+  return rtnval;
+}
+function alert_create_message_for_status(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
   if (status === 201 || status === 200) {
     const rtnval2 = "Alert rule created.";
     return rtnval2;
@@ -34,7 +52,7 @@ function alert_create_message_for_status(status) {
     return rtnval2;
   }
   if (status === 422) {
-    const rtnval2 = "The alert-rule definition was rejected \u2014 check the fields.";
+    const rtnval2 = reason.length > 0 ? "The alert-rule definition was rejected: " + reason : "The alert-rule definition was rejected \u2014 check the fields.";
     return rtnval2;
   }
   if (status === 404) {
@@ -65,8 +83,14 @@ function describe_alert_condition(rule) {
     return rtnval2;
   }
   const record = config;
-  const metric = typeof record.metric === "string" ? record.metric : "";
-  const comparison = typeof record.comparison === "string" ? record.comparison : "";
+  let metric = typeof record.metric_name === "string" ? record.metric_name : "";
+  if (metric.length === 0 && typeof record.metric === "string") {
+    metric = record.metric;
+  }
+  let comparison = typeof record.op === "string" ? record.op : "";
+  if (comparison.length === 0 && typeof record.comparison === "string") {
+    comparison = record.comparison;
+  }
   const threshold = record.threshold;
   if (metric.length === 0 || comparison.length === 0) {
     const rtnval2 = "\u2014";
@@ -77,6 +101,70 @@ function describe_alert_condition(rule) {
     return rtnval2;
   }
   const rtnval = metric + " " + comparison_label(comparison) + " " + String(threshold);
+  return rtnval;
+}
+function alert_state_of(rule) {
+  const live = rule.live_state;
+  if (live === null || live === void 0 || typeof live !== "object") {
+    const rtnval2 = "unknown";
+    return rtnval2;
+  }
+  const state = live.state;
+  if (state === "firing" || state === "ok") {
+    const rtnval2 = state;
+    return rtnval2;
+  }
+  const rtnval = "unknown";
+  return rtnval;
+}
+function alert_state_label(state) {
+  const label = ALERT_STATE_LABELS[state];
+  const rtnval = typeof label === "string" ? label : ALERT_STATE_LABELS.unknown;
+  return rtnval;
+}
+function alert_state_tone(state) {
+  if (state === "firing") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  if (state === "ok") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  const rtnval = "neutral";
+  return rtnval;
+}
+function describe_alert_state(rule) {
+  const live = rule.live_state;
+  if (live === null || live === void 0 || typeof live !== "object") {
+    const rtnval2 = "The evaluator has not run this rule yet.";
+    return rtnval2;
+  }
+  const parts = [];
+  if (typeof live.last_reason === "string" && live.last_reason.length > 0) {
+    parts.push(live.last_reason);
+  }
+  if (typeof live.last_evaluated_at === "string" && live.last_evaluated_at.length > 0) {
+    parts.push("evaluated " + live.last_evaluated_at);
+  } else {
+    parts.push("The evaluator has not run this rule yet.");
+  }
+  const rtnval = parts.join(" \u00B7 ");
+  return rtnval;
+}
+function extract_live_state(raw) {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw) === true) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const record = raw;
+  const rtnval = {
+    state: typeof record.state === "string" ? record.state : "unknown",
+    last_value: typeof record.last_value === "number" ? record.last_value : null,
+    last_reason: typeof record.last_reason === "string" ? record.last_reason : "",
+    last_evaluated_at: typeof record.last_evaluated_at === "string" ? record.last_evaluated_at : null,
+    fire_count: typeof record.fire_count === "number" ? record.fire_count : 0
+  };
   return rtnval;
 }
 function format_alert_window(seconds) {
@@ -155,7 +243,8 @@ function extract_alert_rules(body) {
       config,
       severity: typeof record.severity === "string" ? record.severity : "warning",
       enabled: record.enabled === true,
-      notification_targets: targets
+      notification_targets: targets,
+      live_state: extract_live_state(record.live_state)
     };
     if (typeof record.description === "string") {
       rule.description = record.description;
@@ -221,6 +310,12 @@ class PycAlertRules extends HTMLElement {
     heading.classList.add("pyc-metrics__heading");
     heading.textContent = "Metric Alert Rules";
     root.appendChild(heading);
+    const preview = document.createElement("p");
+    preview.classList.add("pyc-metrics__notice", "pyc-metrics__notice--preview");
+    preview.setAttribute("data-role", "preview-notice");
+    preview.setAttribute("role", "note");
+    preview.textContent = ALERT_RULES_PREVIEW_NOTE;
+    root.appendChild(preview);
     const controls = document.createElement("div");
     controls.classList.add("pyc-metrics__controls");
     const project_label = document.createElement("label");
@@ -515,6 +610,22 @@ class PycAlertRules extends HTMLElement {
         }
       },
       {
+        key: "state",
+        label: "State",
+        width: "10rem",
+        render: (rule) => {
+          const state = alert_state_of(rule);
+          const state_badge = document.createElement("mj-chip");
+          state_badge.classList.add("pyc-metrics__badge");
+          state_badge.setAttribute("data-role", "state-badge");
+          state_badge.setAttribute("data-state", state);
+          state_badge.setAttribute("data-tone", alert_state_tone(state));
+          state_badge.setAttribute("title", describe_alert_state(rule));
+          state_badge.textContent = alert_state_label(state);
+          return state_badge;
+        }
+      },
+      {
         key: "severity",
         label: "Severity",
         width: "10rem",
@@ -617,6 +728,7 @@ class PycAlertRules extends HTMLElement {
         option.textContent = entry.name;
         metric_select.appendChild(option);
       }
+      metric_select.value = this._catalog[0].name;
     }
     metric_label.appendChild(metric_select);
     form.appendChild(metric_label);
@@ -632,6 +744,7 @@ class PycAlertRules extends HTMLElement {
       opt.textContent = option.label;
       comparison_select.appendChild(opt);
     }
+    comparison_select.value = COMPARISON_OPTIONS[0].value;
     comparison_label_el.appendChild(comparison_select);
     form.appendChild(comparison_label_el);
     const threshold_input = this._build_text_field(
@@ -644,7 +757,12 @@ class PycAlertRules extends HTMLElement {
       form,
       "Window (seconds)",
       "create-window",
-      "300"
+      String(DEFAULT_ALERT_WINDOW_SECONDS)
+    );
+    window_input.value = String(DEFAULT_ALERT_WINDOW_SECONDS);
+    window_input.setAttribute(
+      "help-text",
+      "Counter metrics are summed over this window; gauges use their latest sample inside it."
     );
     const severity_label = document.createElement("label");
     severity_label.classList.add("pyc-metrics__field");
@@ -666,6 +784,10 @@ class PycAlertRules extends HTMLElement {
       "Notification targets (comma-separated)",
       "create-targets",
       "ops-pager, slack:#alerts"
+    );
+    targets_input.setAttribute(
+      "help-text",
+      "Saved with the rule; notifications are not sent yet."
     );
     const enabled_label = document.createElement("label");
     enabled_label.classList.add("pyc-metrics__field");
@@ -744,15 +866,15 @@ class PycAlertRules extends HTMLElement {
       return;
     }
     const window_seconds = Number(window_input.value.trim());
-    if (Number.isNaN(window_seconds) === true || window_seconds <= 0) {
+    if (Number.isInteger(window_seconds) === false || window_seconds <= 0) {
       if (status instanceof HTMLElement) {
-        status.textContent = "Window seconds must be a positive number.";
+        status.textContent = "Window seconds must be a positive whole number.";
       }
       return;
     }
     const config = {
-      metric,
-      comparison: comparison_select.value,
+      metric_name: metric,
+      op: comparison_select.value,
       threshold,
       window_seconds
     };
@@ -787,8 +909,9 @@ class PycAlertRules extends HTMLElement {
    * tests can invoke a create without a real form-submit event.
    *
    * @param name Human-facing alert-rule name.
-   * @param config Threshold config (metric, comparison,
-   *               threshold, window_seconds).
+   * @param config Threshold config (metric_name, op,
+   *               threshold, window_seconds) -- the shape the
+   *               ``threshold`` alert-rule kind validates.
    * @param severity Severity level (``info`` / ``warning`` /
    *                  ``critical``).
    * @param enabled Whether the rule is enabled at creation.
@@ -820,8 +943,8 @@ class PycAlertRules extends HTMLElement {
       name,
       kind: ALERT_RULE_KIND,
       config: {
-        metric: config.metric,
-        comparison: config.comparison,
+        metric_name: config.metric_name,
+        op: config.op,
         threshold: config.threshold,
         window_seconds: config.window_seconds
       },
@@ -831,6 +954,7 @@ class PycAlertRules extends HTMLElement {
     };
     let status = 0;
     let rule_id = "";
+    let detail = "";
     try {
       const url = build_alert_rules_collection_url(
         this._state.projectId
@@ -851,6 +975,12 @@ class PycAlertRules extends HTMLElement {
         if (typeof record.rule_id === "string") {
           rule_id = record.rule_id;
         }
+      } else {
+        try {
+          detail = problem_detail_of(await response.json());
+        } catch (parse_reason) {
+          detail = "";
+        }
       }
     } catch (reason) {
       console.warn(
@@ -870,7 +1000,7 @@ class PycAlertRules extends HTMLElement {
       ok,
       status,
       ruleId: rule_id,
-      message: alert_create_message_for_status(status)
+      message: alert_create_message_for_status(status, detail)
     };
     return rtnval;
   }
@@ -899,16 +1029,25 @@ class PycAlertRules extends HTMLElement {
   }
 }
 export {
+  ALERT_RULES_PREVIEW_NOTE,
   ALERT_RULES_ROUTE,
   ALERT_RULE_KIND,
+  ALERT_STATE_LABELS,
   COMPARISON_OPTIONS,
+  DEFAULT_ALERT_WINDOW_SECONDS,
   PycAlertRules,
   SEVERITY_OPTIONS,
   alert_create_message_for_status,
+  alert_state_label,
+  alert_state_of,
+  alert_state_tone,
   build_alert_rules_collection_url,
   comparison_label,
   describe_alert_condition,
+  describe_alert_state,
   extract_alert_rules,
+  extract_live_state,
   format_alert_window,
-  parse_notification_targets
+  parse_notification_targets,
+  problem_detail_of
 };

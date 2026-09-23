@@ -42,8 +42,10 @@ from ccai.pychestrate.webservice.metrics.alerts.errors import (
 )
 from ccai.pychestrate.webservice.metrics.alerts.models import (
     AlertSeverity,
+    AlertState,
 )
 from ccai.pychestrate.webservice.metrics.alerts.service import (
+    AlertLiveStateView,
     AlertRuleView,
 )
 from ccai.pychestrate.webservice.metrics.restapi.v1 import (
@@ -151,6 +153,31 @@ def _patch_project_exists(*, project: Optional[Any]) -> Any:
     )
     mock = patch.activate()
     mock.configure(side_effect=lambda **kwargs: project)
+    return patch
+
+
+def _patch_live_state(*, state: AlertState = AlertState.UNKNOWN) -> Any:
+    """
+        Answer ``get_live_state`` with a canned live state (the fakes
+        above carry no database).
+    """
+    patch = create_module_patch(
+        metric_alerts_routes.alerts_service, "get_live_state",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: AlertLiveStateView(
+        rule_id=kwargs["rule_id"],
+        state=state,
+        last_value=None,
+        last_threshold=None,
+        last_reason="",
+        last_evaluated_at=None,
+        last_state_changed_at=None,
+        fired_at=None,
+        resolved_at=None,
+        fire_count=0,
+        resolve_count=0,
+    ))
     return patch
 
 
@@ -306,6 +333,7 @@ def test_list_returns_page_envelope_on_happy_path():
     )
     list_mock = list_patch.activate()
     list_mock.configure(side_effect=lambda **kwargs: [_make_rule_view()])
+    live_patch = _patch_live_state()
     try:
         request = _FakeRequest(
             path="/api/v1/projects/proj-1/metric-alerts",
@@ -315,6 +343,7 @@ def test_list_returns_page_envelope_on_happy_path():
         )
         response = metric_alerts_routes.handle_list_metric_alerts(request)
     finally:
+        live_patch.deactivate()
         list_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
@@ -324,6 +353,39 @@ def test_list_returns_page_envelope_on_happy_path():
     testbase.assert_equal(body["items"][0]["rule_id"], "rule-1")
     testbase.assert_equal(body["items"][0]["severity"], "warning")
     testbase.assert_equal(body["meta"]["total"], 1)
+    return
+
+
+def test_list_items_carry_the_evaluator_live_state():
+    """
+    **Feature: metric alerts -- audit ORC-04**
+    **Property: each listed rule carries live_state -- the alert
+    evaluator's latest verdict -- so the view can show whether the
+    rule is firing.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    list_patch = create_module_patch(
+        metric_alerts_routes.alerts_service, "list_alert_rules_for_project",
+    )
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: [_make_rule_view()])
+    live_patch = _patch_live_state(state=AlertState.FIRING)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/metric-alerts",
+            path_params={"project_id": "proj-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = metric_alerts_routes.handle_list_metric_alerts(request)
+    finally:
+        live_patch.deactivate()
+        list_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    body = _decode_body(response)
+    testbase.assert_equal(body["items"][0]["live_state"]["state"], "firing")
     return
 
 
@@ -471,6 +533,7 @@ def test_create_returns_201_on_happy_path():
     create_mock.configure(
         side_effect=lambda **kwargs: _make_rule_view(rule_id="rule-new"),
     )
+    live_patch = _patch_live_state()
     try:
         request = _FakeRequest(
             path="/api/v1/projects/proj-1/metric-alerts",
@@ -486,6 +549,7 @@ def test_create_returns_201_on_happy_path():
         )
         response = metric_alerts_routes.handle_create_metric_alert(request)
     finally:
+        live_patch.deactivate()
         create_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
