@@ -256,15 +256,22 @@ def _list_active_sessions(
     return rtnval
 
 
-def _terminate_session(*, db_session: Any, session_id: str) -> None:
+def _terminate_session(
+        *,
+        db_session: Any,
+        session_id: str,
+        actor_user_id: Optional[str] = None
+    ) -> None:
     """
         Terminate a session by id through the modern session service
         (deletes the ``auth_sessions`` row and publishes
-        ``entity.session.closed``). A no-op when the session is already
-        gone.
+        ``entity.session.closed``, which the audit log records under
+        the terminating administrator). A no-op when the session is
+        already gone.
 
         :param db_session: Open SQLAlchemy session.
         :param session_id: Session UUID string to terminate.
+        :param actor_user_id: The administrator ending the session.
 
         :returns: None.
     """
@@ -273,7 +280,10 @@ def _terminate_session(*, db_session: Any, session_id: str) -> None:
     )
 
     session_service.close_session(
-        db_session=db_session, session_id=session_id
+        db_session=db_session,
+        session_id=session_id,
+        reason="admin_terminated",
+        actor_user_id=actor_user_id,
     )
     return
 
@@ -442,7 +452,9 @@ def handle_session_terminate(request: Request) -> Response:
 
         try:
             _terminate_session(
-                db_session=db_session, session_id=session_id
+                db_session=db_session,
+                session_id=session_id,
+                actor_user_id=auth.user_id,
             )
             current_session_id = str(auth.session.get("session_token", ""))
             if session_id == current_session_id:

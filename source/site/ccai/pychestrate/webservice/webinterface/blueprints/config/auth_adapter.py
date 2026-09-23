@@ -201,6 +201,75 @@ def _fingerprint_value(*, raw: str) -> str:
     return rtnval
 
 
+_MAX_REJECTED_LOGIN_LENGTH: int = 128
+
+_REJECTION_REASONS = (
+    ("Too many recent failures", "rate_limited"),
+    ("Account is not active", "account_inactive"),
+    ("Missing", "missing_credentials"),
+)
+
+
+def _rejection_reason(*, message: str) -> str:
+    """
+        Classify a sign-in failure for the audit log.
+
+        :param message: The failure message from ``local_flow``.
+
+        :returns: ``rate_limited``, ``account_inactive``,
+                  ``missing_credentials`` or ``invalid_credentials``.
+    """
+    for prefix, reason in _REJECTION_REASONS:
+        if str(message).startswith(prefix) is True:
+            return reason
+    return "invalid_credentials"
+
+
+def publish_login_rejected(
+        *,
+        login_name: str,
+        message: str,
+        client_address: Optional[str]
+    ) -> None:
+    """
+        Publish ``entity.auth.login.rejected`` so the audit log records
+        the failed sign-in. Published directly on the bus (not the
+        outbox): a failed sign-in commits nothing, and the audit
+        subscriber writes in its own session. Never raises.
+
+        :param login_name: The login name as typed (truncated).
+        :param message: The failure message from ``local_flow``.
+        :param client_address: The client's address, when known.
+
+        :returns: None.
+    """
+    try:
+        from ccai.pychestrate.core.defaults import new_uuid, utc_now  # noqa: E402
+        from ccai.pychestrate.webservice.messaging.event_bus import (  # noqa: E402
+            EntityEvent,
+            publish,
+        )
+        from ccai.pychestrate.webservice.security.auth.events import (  # noqa: E402
+            AuthEventTopics,
+        )
+
+        typed = str(login_name if login_name is not None else "").strip()
+        payload = {
+            "login_name": typed[:_MAX_REJECTED_LOGIN_LENGTH],
+            "reason": _rejection_reason(message=message),
+            "client_address": client_address if client_address else None,
+            "rejected_at": utc_now().isoformat(),
+        }
+        publish(event=EntityEvent(
+            topic=AuthEventTopics.LOGIN_REJECTED,
+            payload=payload,
+            source_event_id=new_uuid(),
+        ))
+    except Exception:  # noqa: BLE001 -- auditing must not break sign-in
+        pass
+    return
+
+
 class ConsumerUISecurityAdapter:
     """
         Thin facade over :mod:`security.auth.local_flow` +
@@ -246,6 +315,11 @@ class ConsumerUISecurityAdapter:
                 db_session=self._db_session,
             )
         except ModernAuthenticationError as exc:
+            publish_login_rejected(
+                login_name=request.username,
+                message=str(exc),
+                client_address=request.client_ip,
+            )
             raise AuthenticationError(str(exc)) from None
         except Exception as exc:
             # Backoff state-machine raises ``AuthenticationError``
@@ -253,6 +327,11 @@ class ConsumerUISecurityAdapter:
             # adapter's exception type so handler ``except``
             # blocks don't have to know about modern exception
             # classes.
+            publish_login_rejected(
+                login_name=request.username,
+                message=str(exc),
+                client_address=request.client_ip,
+            )
             raise AuthenticationError(str(exc)) from None
 
         user_row = (

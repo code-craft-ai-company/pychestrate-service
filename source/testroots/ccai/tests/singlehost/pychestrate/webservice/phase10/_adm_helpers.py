@@ -185,3 +185,89 @@ def open_db_session() -> Any:
     factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     rtnval = factory()
     return rtnval
+
+
+def _current_session_factory() -> Any:
+    """
+        Open a session from whatever factory the harness currently
+        publishes. The runtime bootstrap wired the audit subscriber to
+        the factory of the engine the harness later replaces with a
+        shared in-memory pool, so audit records would land in a
+        database nobody reads.
+
+        :returns: A SQLAlchemy session.
+    """
+    factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
+    rtnval = factory()
+    return rtnval
+
+
+def ensure_audit_wiring() -> None:
+    """
+        Make the audit bus subscriber write to the harness's shared
+        database. Idempotent; re-wires after another test reset the
+        bus.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.webservice.audit.bus_subscriber import (  # noqa: E402
+        wire_bus_subscribers,
+    )
+    from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (  # noqa: E402
+        ensure_seeded_admin,
+    )
+
+    ensure_seeded_admin()
+    wire_bus_subscribers(session_factory=_current_session_factory)
+    return
+
+
+def audit_records_for(*, kind: str, since_sequence: int = 0) -> List[Any]:
+    """
+        The audit records of one kind written after a sequence number,
+        oldest first.
+
+        :param kind: Audit kind.
+        :param since_sequence: Only records with a larger sequence.
+
+        :returns: List of :class:`AuditRecord` (detached copies of the
+                  fields tests read: kind, actor_user_id,
+                  actor_service_identity, target_ref, payload_json).
+    """
+    from ccai.pychestrate.webservice.audit.models import AuditRecord  # noqa: E402
+
+    db_session = open_db_session()
+    try:
+        rows = (
+            db_session.query(AuditRecord)
+            .filter(AuditRecord.kind == kind)
+            .filter(AuditRecord.sequence_number > since_sequence)
+            .order_by(AuditRecord.sequence_number.asc())
+            .all()
+        )
+        rtnval = []
+        for row in rows:
+            db_session.expunge(row)
+            rtnval.append(row)
+    finally:
+        db_session.close()
+    return rtnval
+
+
+def latest_audit_sequence() -> int:
+    """
+        The newest audit record's sequence number (0 when empty).
+
+        :returns: Sequence number.
+    """
+    from sqlalchemy import func  # noqa: E402
+
+    from ccai.pychestrate.webservice.audit.models import AuditRecord  # noqa: E402
+
+    db_session = open_db_session()
+    try:
+        value = db_session.query(func.max(AuditRecord.sequence_number)).scalar()
+    finally:
+        db_session.close()
+    rtnval = int(value) if value is not None else 0
+    return rtnval

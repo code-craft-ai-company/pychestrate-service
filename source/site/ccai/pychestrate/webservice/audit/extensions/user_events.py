@@ -35,3 +35,60 @@ class UserLifecycleAuditEvents(AuditEventTypeExtension):
         },
     }
     description: str = "A new identity user record was created."
+
+
+_USER_CHANGE_SCHEMA = {
+    "type": "object",
+    "required": ["user_id", "login_name"],
+    "properties": {
+        "user_id": {"type": "string"},
+        "login_name": {"type": "string"},
+        "changed_fields": {"type": "array", "items": {"type": "string"}},
+        "actor_user_id": {"type": ["string", "null"]},
+        "client_address": {"type": ["string", "null"]},
+    },
+}
+
+
+class UserUpdatedAuditEvents(AuditEventTypeExtension):
+    """
+        Audit kind for ``entity.user.updated`` (profile fields changed).
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.user.updated"
+    source_topic: str = "entity.user.updated"
+    payload_schema: dict = _USER_CHANGE_SCHEMA
+    description: str = "A user's profile was changed."
+
+
+class UserDeactivatedAuditEvents(AuditEventTypeExtension):
+    """
+        Audit kind for ``entity.user.deactivated``.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.user.deactivated"
+    source_topic: str = "entity.user.deactivated"
+    payload_schema: dict = _USER_CHANGE_SCHEMA
+    description: str = "A user was deactivated and signed out everywhere."
+
+
+class UserReactivatedAuditEvents(AuditEventTypeExtension):
+    """
+        Audit kind for ``entity.user.reactivated``.
+    """
+
+    resource_extension_name: str = "audit_event_type"
+    kind: str = "audit.user.reactivated"
+    source_topic: str = "entity.user.reactivated"
+    payload_schema: dict = _USER_CHANGE_SCHEMA
+    description: str = "A deactivated user was reactivated."
+
+
+USER_AUDIT_EVENT_TYPES = (
+    UserLifecycleAuditEvents,
+    UserUpdatedAuditEvents,
+    UserDeactivatedAuditEvents,
+    UserReactivatedAuditEvents,
+)

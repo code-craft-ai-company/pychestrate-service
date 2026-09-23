@@ -138,7 +138,8 @@ def _svc_create_role(
         db_session: Any,
         name: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> str:
     """
         Create a custom RBAC role carrying the selected catalog
@@ -154,6 +155,7 @@ def _svc_create_role(
         name=name,
         description=description,
         permission_keys=permission_keys,
+        actor_user_id=actor_user_id,
     )
     return rtnval
 
@@ -163,7 +165,8 @@ def _svc_update_role(
         db_session: Any,
         role_id: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> None:
     """
         Update a custom role's description + permission relation.
@@ -178,11 +181,17 @@ def _svc_update_role(
         role_id=role_id,
         description=description,
         permission_keys=permission_keys,
+        actor_user_id=actor_user_id,
     )
     return
 
 
-def _svc_delete_role(*, db_session: Any, role_id: str) -> int:
+def _svc_delete_role(
+        *,
+        db_session: Any,
+        role_id: str,
+        actor_user_id: Optional[str] = None
+    ) -> int:
     """
         Delete a custom role (with its permission rows + bindings).
 
@@ -192,7 +201,7 @@ def _svc_delete_role(*, db_session: Any, role_id: str) -> int:
         identity_admin,
     )
     rtnval = identity_admin.delete_rbac_role(
-        db_session=db_session, role_id=role_id
+        db_session=db_session, role_id=role_id, actor_user_id=actor_user_id
     )
     return rtnval
 
@@ -367,6 +376,7 @@ def handle_role_create(request: Request) -> Response:
                 name=name,
                 description=description,
                 permission_keys=permission_keys,
+                actor_user_id=auth.user_id,
             )
 
             response = _redirect_with_flash(
@@ -564,6 +574,7 @@ def handle_role_edit(request: Request) -> Response:
                         role_id=role_id,
                         description=description,
                         permission_keys=permission_keys,
+                        actor_user_id=auth.user_id,
                     )
 
                     response = _redirect_with_flash(
@@ -682,7 +693,7 @@ def handle_role_delete(request: Request) -> Response:
 
         try:
             removed_count = _svc_delete_role(
-                db_session=db_session, role_id=role_id
+                db_session=db_session, role_id=role_id, actor_user_id=auth.user_id
             )
             if removed_count == 1:
                 consequence = "1 user lost this role."

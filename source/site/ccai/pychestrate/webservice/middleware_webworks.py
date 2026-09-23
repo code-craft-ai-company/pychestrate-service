@@ -232,6 +232,12 @@ class PychestrateSessionMiddleware:
             request.auth_principal = None
             request.actor_user_id = None
 
+        # Audit (ADM-02): rows this request changes in the legacy
+        # core.orm stores are recorded under its principal.
+        _tag_session_for_audit(
+            db_session=db_session, actor_user_id=request.actor_user_id
+        )
+
         return
 
     def _resolve_principal_from_cookies(
@@ -407,6 +413,27 @@ class PychestrateSessionMiddleware:
                 "pychestrate.session.close_failed error=%s", close_exc
             )
         return
+
+
+def _tag_session_for_audit(*, db_session: Any, actor_user_id: Any) -> None:
+    """
+        Tag the request-scoped session with its principal for the audit
+        data-change bridge (see :mod:`audit.data_change_bridge`).
+        Never raises.
+
+        :param db_session: Request-scoped SQLAlchemy session.
+        :param actor_user_id: The resolved principal's user id, or None.
+
+        :returns: None.
+    """
+    try:
+        from ccai.pychestrate.webservice.audit.data_change_bridge import (  # noqa: E402
+            tag_session_actor,
+        )
+        tag_session_actor(db_session=db_session, actor_user_id=actor_user_id)
+    except Exception:
+        pass
+    return
 
 
 def _default_clock() -> datetime:

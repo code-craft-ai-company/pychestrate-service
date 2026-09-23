@@ -3,45 +3,81 @@
 
 {% block title %}Audit Logs - Pychestrate Configuration{% endblock %}
 
+{% block extra_css %}
+<style>
+    .pyc-audit-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem 1rem;
+        align-items: flex-end;
+    }
+    .pyc-audit-filters .form-group {
+        margin: 0;
+    }
+    .pyc-audit-paging {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        align-items: center;
+        margin-top: 0.75rem;
+    }
+    .pyc-audit-when {
+        white-space: nowrap;
+    }
+    .pyc-audit-summary {
+        max-width: 32rem;
+        overflow-wrap: anywhere;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h1>Audit Logs</h1>
-    <p>Review security events and system activity</p>
+    <p>Who did what, when: sign-ins, account and role changes, secrets, and every change made to projects, resources and settings.</p>
 </div>
 
 <div class="card mb">
-    <form method="get" style="display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
-        <div>
-            <label class="field-label" for="audit-event-type">Event Type</label>
-            <select id="audit-event-type" name="event_type" class="form-control w-md">
-                <option value="">All Events</option>
-                {% for event_type in all_event_types %}
-                <option value="{{ event_type }}" {% if selected_event_type == event_type %}selected{% endif %}>
-                    {{ event_type }}
-                </option>
+    <form method="get" class="pyc-audit-filters" aria-label="Filter the audit log">
+        <div class="form-group">
+            <label class="field-label" for="audit-action">Action</label>
+            <select id="audit-action" name="action" class="form-control w-md">
+                <option value="">All actions</option>
+                {% for group in action_groups %}
+                <optgroup label="{{ group.label }}">
+                    {% for action in group.actions %}
+                    <option value="{{ action.kind }}" title="{{ action.description }}" {% if audit_filters.action == action.kind %}selected{% endif %}>{{ action.label }}</option>
+                    {% endfor %}
+                </optgroup>
                 {% endfor %}
             </select>
         </div>
 
-        <div>
-            <label class="field-label" for="audit-username">Username</label>
-            <input type="text" id="audit-username" name="username" class="form-control w-sm" placeholder="Username"
-                   value="{{ filter_username or '' }}">
+        <div class="form-group">
+            <label class="field-label" for="audit-actor">User</label>
+            <input type="text" id="audit-actor" name="actor" class="form-control w-sm" placeholder="Username"
+                   value="{{ audit_filters.actor }}" autocomplete="off" spellcheck="false">
         </div>
 
-        <div>
-            <label class="field-label" for="audit-start">Start Date</label>
-            <input type="datetime-local" id="audit-start" name="start_date" class="form-control w-md"
-                   value="{{ start_date or '' }}">
+        <div class="form-group">
+            <label class="field-label" for="audit-target">Target</label>
+            <input type="text" id="audit-target" name="target" class="form-control w-sm" placeholder="e.g. projects:12"
+                   value="{{ audit_filters.target }}" autocomplete="off" spellcheck="false">
         </div>
 
-        <div>
-            <label class="field-label" for="audit-end">End Date</label>
-            <input type="datetime-local" id="audit-end" name="end_date" class="form-control w-md"
-                   value="{{ end_date or '' }}">
+        <div class="form-group">
+            <label class="field-label" for="audit-since">From (UTC)</label>
+            <input type="datetime-local" id="audit-since" name="since" class="form-control w-md"
+                   value="{{ audit_filters.since }}">
         </div>
 
-        <div>
+        <div class="form-group">
+            <label class="field-label" for="audit-until">To (UTC)</label>
+            <input type="datetime-local" id="audit-until" name="until" class="form-control w-md"
+                   value="{{ audit_filters.until }}">
+        </div>
+
+        <div class="form-group actions-row">
             <button type="submit" class="btn btn-secondary">
                 {{ ui.icon("filter_list") }} Filter
             </button>
@@ -50,51 +86,50 @@
     </form>
 </div>
 
-{% if username_unmatched %}
-<div class="alert alert-warning">
-    No user has the username "{{ filter_username }}" &mdash; showing no entries.
+{% for notice in audit_notices %}
+<div class="alert alert-warning" role="status">{{ notice }} Showing no entries.</div>
+{% endfor %}
+
+<div class="actions-row mb">
+    <span class="muted">{{ audit_total }} matching event{{ '' if audit_total == 1 else 's' }}</span>
+    <a href="{{ export_csv_url }}" class="btn btn-sm btn-secondary">Export CSV</a>
+    <a href="{{ export_jsonl_url }}" class="btn btn-sm btn-secondary">Export JSON Lines</a>
 </div>
-{% endif %}
 
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
         <tr>
-            <th scope="col">Timestamp</th>
-            <th scope="col">Event Type</th>
+            <th scope="col">When (UTC)</th>
             <th scope="col">User</th>
-            <th scope="col">Target User</th>
-            <th scope="col">Client IP</th>
+            <th scope="col">Action</th>
             <th scope="col">Details</th>
+            <th scope="col">Client</th>
         </tr>
     </thead>
     <tbody>
-        {% for log in logs %}
+        {% for row in audit_rows %}
         <tr>
-            <td>{% if log.timestamp %}{{ log.timestamp | format_datetime('%Y-%m-%d %H:%M:%S') }}{% else %}&mdash;{% endif %}</td>
-            <td><span class="badge badge-info">{{ log.event_type.value if log.event_type.value is defined else log.event_type }}</span></td>
-            <td>{{ log.username or log.user_id or '-' }}</td>
-            <td>{{ log.target_username or log.target_user_id or '-' }}</td>
-            <td>{{ log.client_ip or '-' }}</td>
-            <td class="narrow-sm">
-                {% if log.details %}
+            <td class="pyc-audit-when">{% if row.written_at %}{{ row.written_at | format_datetime('%Y-%m-%d %H:%M:%S') }}{% else %}&mdash;{% endif %}</td>
+            <td>{{ row.actor_label }}</td>
+            <td>{{ row.action }}</td>
+            <td class="pyc-audit-summary">
+                {% if row.summary %}{{ row.summary }}{% else %}<span class="muted">&mdash;</span>{% endif %}
                 <details>
-                    <summary style="cursor: pointer; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.details | tojson | truncate(60) }}</summary>
-                    <pre class="pre-block small">{{ log.details | tojson(indent=2) }}</pre>
+                    <summary class="muted small">Record #{{ row.sequence_number }}{% if row.target_ref %} &middot; {{ row.target_ref }}{% endif %}</summary>
+                    <pre class="pre-block small">{{ row.payload_text }}</pre>
                 </details>
-                {% else %}
-                -
-                {% endif %}
             </td>
+            <td>{% if row.client_address %}{{ row.client_address }}{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
         </tr>
         {% else %}
-        <tr>
-            {{ ui.empty_state("No audit logs found", colspan=6) }}
-        </tr>
+            {{ ui.empty_state("No audit events match these filters" if audit_total == 0 else "No audit events on this page", colspan=5) }}
         {% endfor %}
     </tbody>
 </table></div>
 
-{{ ui.pagination('config.audit_log_list', page, total_pages, {'event_type': selected_event_type, 'username': filter_username, 'user_id': filter_user_id if not filter_username else None, 'start_date': start_date, 'end_date': end_date, 'per_page': per_page}, total=total) }}
-
-<p class="muted mt">Total: {{ total }} entries</p>
+<nav class="pyc-audit-paging" aria-label="Audit log pages">
+    {% if newest_url %}<a href="{{ newest_url }}" class="btn btn-sm btn-secondary">&laquo; Newest</a>{% endif %}
+    {% if newer_url %}<a href="{{ newer_url }}" class="btn btn-sm btn-secondary" rel="prev">&lsaquo; Newer</a>{% endif %}
+    {% if older_url %}<a href="{{ older_url }}" class="btn btn-sm btn-secondary" rel="next">Older &rsaquo;</a>{% endif %}
+</nav>
 {% endblock %}

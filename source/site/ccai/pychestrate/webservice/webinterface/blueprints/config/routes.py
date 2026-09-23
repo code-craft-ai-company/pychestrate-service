@@ -1522,6 +1522,30 @@ def _build_login_url_with_next(*, request: Request) -> str:
     return rtnval
 
 
+def _tag_session_for_audit(
+        *, db_session: Any, request: Any, user_id: str
+    ) -> None:
+    """
+        Tag the request's database session with the signed-in user so
+        the audit data-change bridge attributes the rows it changes
+        (see :mod:`audit.data_change_bridge`). Never raises.
+
+        :param db_session: The request's SQLAlchemy session.
+        :param request: Incoming webworks request.
+        :param user_id: The signed-in user's id.
+
+        :returns: None.
+    """
+    try:
+        from ccai.pychestrate.webservice.audit.data_change_bridge import (  # noqa: E402
+            tag_session_actor,
+        )
+        tag_session_actor(db_session=db_session, actor_user_id=user_id)
+    except Exception:
+        pass
+    return
+
+
 def _resolve_authenticated_request(
         *, request: Request
     ) -> _AuthResolution:
@@ -1635,6 +1659,12 @@ def _resolve_authenticated_request(
         )
     except Exception:
         pass
+
+    # Audit (ADM-02): rows this request changes through this session
+    # are recorded under the signed-in user.
+    _tag_session_for_audit(
+        db_session=db_session, request=request, user_id=session_info.user_id
+    )
 
     rtnval = _AuthResolution(
         request=request,

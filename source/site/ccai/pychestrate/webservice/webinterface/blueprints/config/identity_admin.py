@@ -508,20 +508,21 @@ def _ensure_system_binding(
         role_name: str,
         principal_uuid: uuid.UUID,
         actor_user_id: Optional[str]
-    ) -> None:
+    ) -> Optional[str]:
     """
         Idempotently bind ``role_name`` to the user at SYSTEM scope
         (flush only -- the caller owns the commit). Role rows are
         lazily persisted for catalog-declared roles the way
         ``rbac.seeding.ensure_role_persisted`` does for the setup
-        wizard.
+        wizard. A new binding stages ``entity.role.assigned``.
 
         :param db_session: The active SQLAlchemy session.
         :param role_name: Role to bind.
         :param principal_uuid: Target user UUID.
         :param actor_user_id: Acting admin UUID for attribution.
 
-        :returns: None.
+        :returns: The new binding's id, or None when the binding
+                  already existed.
         :raises: AdminValidationError when the role name is unknown.
     """
     from ccai.pychestrate.webservice.security.rbac.models import (
@@ -562,7 +563,7 @@ def _ensure_system_binding(
         .first()
     )
     if existing is not None:
-        return
+        return None
 
     actor_uuid = None
     if actor_user_id is not None and len(str(actor_user_id)) > 0:
@@ -583,22 +584,36 @@ def _ensure_system_binding(
     )
     db_session.add(binding)
     db_session.flush()
-    return
+
+    _publish_role_binding_event(
+        db_session=db_session,
+        topic=_TOPIC_ROLE_ASSIGNED,
+        binding_id=str(binding.binding_id),
+        role_name=role_name,
+        principal_uuid=principal_uuid,
+        actor_user_id=actor_user_id,
+    )
+
+    rtnval = str(binding.binding_id)
+    return rtnval
 
 
 def _remove_system_bindings(
         *,
         db_session: Any,
         role_names: List[str],
-        principal_uuid: uuid.UUID
+        principal_uuid: uuid.UUID,
+        actor_user_id: Optional[str] = None
     ) -> None:
     """
         Remove the user's direct SYSTEM-scope bindings for the given
-        role names (flush only -- the caller owns the commit).
+        role names (flush only -- the caller owns the commit), staging
+        ``entity.role.revoked`` for each.
 
         :param db_session: The active SQLAlchemy session.
         :param role_names: Role names to unbind.
         :param principal_uuid: Target user UUID.
+        :param actor_user_id: Acting admin UUID for attribution.
 
         :returns: None.
     """
@@ -613,7 +628,7 @@ def _remove_system_bindings(
         return
 
     rows = (
-        db_session.query(RbacRoleBinding)
+        db_session.query(RbacRoleBinding, RbacRole.role_name)
         .join(RbacRole, RbacRole.role_id == RbacRoleBinding.role_id)
         .filter(RbacRole.role_name.in_(role_names))
         .filter(RbacRoleBinding.principal_kind == PrincipalKind.USER)
@@ -621,8 +636,17 @@ def _remove_system_bindings(
         .filter(RbacRoleBinding.scope_kind == BindingScope.SYSTEM)
         .all()
     )
-    for row in rows:
+    for row, bound_role_name in rows:
+        binding_id = str(row.binding_id)
         db_session.delete(row)
+        _publish_role_binding_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_REVOKED,
+            binding_id=binding_id,
+            role_name=bound_role_name,
+            principal_uuid=principal_uuid,
+            actor_user_id=actor_user_id,
+        )
     db_session.flush()
     return
 
@@ -654,6 +678,116 @@ def _invalidate_rbac_cache_all() -> None:
 
     rbac_cache.invalidate_all()
     return
+
+
+def _publish_entity_event(
+        *,
+        db_session: Any,
+        topic: str,
+        payload: Dict[str, Any]
+    ) -> None:
+    """
+        Stage an entity event on the session's outbox; it is published
+        (and captured into the audit log) only when the caller's
+        transaction commits. The acting admin's client address, when
+        the request tagged the session with one, rides along.
+
+        :param db_session: The active SQLAlchemy session.
+        :param topic: Entity topic (``entity.user.created`` ...).
+        :param payload: JSON-serializable payload.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import new_uuid
+    from ccai.pychestrate.webservice.audit.data_change_bridge import (
+        session_client_address,
+    )
+    from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
+    from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
+
+    full_payload = dict(payload)
+    if "client_address" not in full_payload:
+        full_payload["client_address"] = session_client_address(
+            db_session=db_session
+        )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=topic,
+            payload=full_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    return
+
+
+def _publish_role_binding_event(
+        *,
+        db_session: Any,
+        topic: str,
+        binding_id: Optional[str],
+        role_name: str,
+        principal_uuid: Any,
+        actor_user_id: Optional[str]
+    ) -> None:
+    """
+        Stage ``entity.role.assigned`` / ``entity.role.revoked`` for a
+        SYSTEM-scope user binding, in the payload shape
+        ``rbac.binding_service`` uses.
+
+        :param db_session: The active SQLAlchemy session.
+        :param topic: ``entity.role.assigned`` or ``entity.role.revoked``.
+        :param binding_id: The binding's id (None when unknown).
+        :param role_name: Role name.
+        :param principal_uuid: The user the binding names.
+        :param actor_user_id: Acting admin UUID.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import utc_now
+
+    payload: Dict[str, Any] = {
+        "binding_id": binding_id,
+        "role_name": role_name,
+        "principal_kind": "USER",
+        "principal_id": str(principal_uuid),
+        "scope_kind": "SYSTEM",
+        "scope_id": None,
+        "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+    }
+    if topic.endswith(".assigned") is True:
+        payload["created_at"] = utc_now().isoformat()
+    else:
+        payload["revoked_at"] = utc_now().isoformat()
+    _publish_entity_event(db_session=db_session, topic=topic, payload=payload)
+    return
+
+
+def _actor_text(*, actor_user_id: Optional[str]) -> Optional[str]:
+    """
+        The acting admin's id as text, or None.
+
+        :param actor_user_id: Acting admin UUID (any form).
+
+        :returns: String or None.
+    """
+    if actor_user_id is None:
+        return None
+    text = str(actor_user_id).strip()
+    if len(text) == 0:
+        return None
+    return text
+
+
+_TOPIC_USER_CREATED: str = "entity.user.created"
+_TOPIC_USER_UPDATED: str = "entity.user.updated"
+_TOPIC_USER_DEACTIVATED: str = "entity.user.deactivated"
+_TOPIC_USER_REACTIVATED: str = "entity.user.reactivated"
+_TOPIC_ROLE_ASSIGNED: str = "entity.role.assigned"
+_TOPIC_ROLE_REVOKED: str = "entity.role.revoked"
+_TOPIC_ROLE_CREATED: str = "entity.role.created"
+_TOPIC_ROLE_UPDATED: str = "entity.role.updated"
+_TOPIC_ROLE_DELETED: str = "entity.role.deleted"
 
 
 def _user_to_view(
@@ -931,6 +1065,19 @@ def create_identity_user(
                 actor_user_id=actor_user_id,
             )
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_USER_CREATED,
+            payload={
+                "user_id": str(user_uuid),
+                "login_name": normalized_login,
+                "provisioning_source": "local",
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+                "created_at": modern_user.created_at.isoformat()
+                if modern_user.created_at is not None else None,
+            },
+        )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1049,6 +1196,20 @@ def update_identity_user(
             'A user with email "{}" already exists.'.format(normalized_email)
         )
 
+    names_before = _read_legacy_names(
+        db_session=db_session, user_ids=[user_uuid]
+    ).get(str(user_uuid), ("", ""))
+    changed_fields: List[str] = []
+    if row.primary_email != normalized_email:
+        changed_fields.append("email")
+    if (row.display_name or "") != display_name:
+        changed_fields.append("display_name")
+    if firstname is not None and names_before[0] != firstname:
+        changed_fields.append("firstname")
+    if lastname is not None and names_before[1] != lastname:
+        changed_fields.append("lastname")
+    was_active = row.status == UserStatus.ACTIVE
+
     try:
         row.primary_email = normalized_email
         row.display_name = display_name
@@ -1090,11 +1251,42 @@ def update_identity_user(
             db_session=db_session,
             role_names=roles_to_remove,
             principal_uuid=user_uuid,
+            actor_user_id=actor_user_id,
         )
 
         if is_active is False:
             # Deactivation must end access now, not at session expiry.
-            _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
+            _close_user_sessions(
+                db_session=db_session,
+                user_uuid=user_uuid,
+                actor_user_id=actor_user_id,
+            )
+
+        user_event_payload = {
+            "user_id": str(user_uuid),
+            "login_name": row.login_name,
+            "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+        }
+        if len(changed_fields) > 0:
+            updated_payload = dict(user_event_payload)
+            updated_payload["changed_fields"] = changed_fields
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_UPDATED,
+                payload=updated_payload,
+            )
+        if was_active is True and is_active is False:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_DEACTIVATED,
+                payload=user_event_payload,
+            )
+        if was_active is False and is_active is True:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_REACTIVATED,
+                payload=user_event_payload,
+            )
 
         db_session.commit()
     except IdentityAdminError:
@@ -1112,14 +1304,22 @@ def update_identity_user(
     return
 
 
-def _close_user_sessions(*, db_session: Any, user_uuid: Any) -> None:
+def _close_user_sessions(
+        *,
+        db_session: Any,
+        user_uuid: Any,
+        actor_user_id: Optional[str] = None,
+        reason: str = "user_deactivated"
+    ) -> None:
     """
-        Close every sign-in session of a user being deactivated, in
-        the caller's transaction. Without this a deactivated user
-        kept every permission until their session expired.
+        Close every sign-in session of a user, in the caller's
+        transaction. Deactivation calls this so a deactivated user
+        does not keep every permission until their session expires.
 
         :param db_session: The active SQLAlchemy session.
         :param user_uuid: Identity user id.
+        :param actor_user_id: The admin who caused the close.
+        :param reason: Why the sessions were closed.
 
         :returns: None.
     """
@@ -1129,7 +1329,8 @@ def _close_user_sessions(*, db_session: Any, user_uuid: Any) -> None:
     close_sessions_for_user(
         db_session=db_session,
         user_id=user_uuid,
-        reason="user_deactivated",
+        reason=reason,
+        actor_user_id=_actor_text(actor_user_id=actor_user_id),
     )
     return
 
@@ -1179,6 +1380,8 @@ def deactivate_identity_user(
             'User "{}" not found.'.format(user_id)
         )
 
+    was_active = row.status == UserStatus.ACTIVE
+
     try:
         row.status = UserStatus.DEACTIVATED
         db_session.flush()
@@ -1198,7 +1401,22 @@ def deactivate_identity_user(
         )
 
         # Deactivation must end access now, not at session expiry.
-        _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
+        _close_user_sessions(
+            db_session=db_session,
+            user_uuid=user_uuid,
+            actor_user_id=actor_user_id,
+        )
+
+        if was_active is True:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_DEACTIVATED,
+                payload={
+                    "user_id": str(user_uuid),
+                    "login_name": row.login_name,
+                    "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+                },
+            )
 
         db_session.commit()
     except Exception as commit_exc:
@@ -1555,7 +1773,8 @@ def create_rbac_role(
         db_session: Any,
         name: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> str:
     """
         Create a custom :class:`RbacRole` with the selected catalog
@@ -1566,6 +1785,7 @@ def create_rbac_role(
         :param name: Role name (must be unique).
         :param description: Role description.
         :param permission_keys: Catalog permission keys to grant.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: The new role's UUID as a string.
         :raises: AdminValidationError, AdminDuplicateError
@@ -1620,6 +1840,17 @@ def create_rbac_role(
             db_session.add(grant_row)
         db_session.flush()
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_CREATED,
+            payload={
+                "role_id": str(role_uuid),
+                "role_name": stripped_name,
+                "permission_keys": sorted(set(permission_keys)),
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1641,7 +1872,8 @@ def update_rbac_role(
         db_session: Any,
         role_id: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> None:
     """
         Update a custom role's description and replace its
@@ -1654,6 +1886,7 @@ def update_rbac_role(
         :param role_id: Role UUID string.
         :param description: New description.
         :param permission_keys: Full desired ALLOW key set.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: None.
         :raises: AdminNotFoundError, BuiltinRoleProtectedError,
@@ -1702,6 +1935,17 @@ def update_rbac_role(
             db_session.add(grant_row)
         db_session.flush()
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_UPDATED,
+            payload={
+                "role_id": str(role.role_id),
+                "role_name": role.role_name,
+                "permission_keys": sorted(set(permission_keys)),
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1718,7 +1962,12 @@ def update_rbac_role(
     return
 
 
-def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
+def delete_rbac_role(
+        *,
+        db_session: Any,
+        role_id: str,
+        actor_user_id: Optional[str] = None
+    ) -> int:
     """
         Delete a custom role, its permission rows, and every binding
         referencing it. Refuses built-in / extension roles and the
@@ -1727,6 +1976,7 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
 
         :param db_session: The active SQLAlchemy session.
         :param role_id: Role UUID string.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: The number of bindings that were removed (the "N
                   users lose this role" count).
@@ -1812,6 +2062,9 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
     )
     removed_binding_count = len(binding_rows)
 
+    deleted_role_id = str(role.role_id)
+    deleted_role_name = role.role_name
+
     try:
         for binding in binding_rows:
             db_session.delete(binding)
@@ -1819,6 +2072,17 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
             db_session.delete(row)
         db_session.delete(role)
         db_session.flush()
+
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_DELETED,
+            payload={
+                "role_id": deleted_role_id,
+                "role_name": deleted_role_name,
+                "removed_binding_count": removed_binding_count,
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
 
         db_session.commit()
     except Exception as commit_exc:

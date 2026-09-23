@@ -249,7 +249,9 @@ def close_sessions_for_user(
         *,
         db_session: DbSession,
         user_id: object,
-        reason: str
+        reason: str,
+        actor_user_id: Optional[str] = None,
+        keep_session_id: Optional[str] = None
     ) -> int:
     """
         Close every open session belonging to ``user_id`` and publish
@@ -261,6 +263,11 @@ def close_sessions_for_user(
         :param user_id: Identity user id (UUID or string).
         :param reason: Why the sessions were closed, recorded on each
                        event (e.g. ``"user_deactivated"``).
+        :param actor_user_id: Who caused the close (an administrator),
+                              recorded on each event so the audit log
+                              attributes it; None for the owner.
+        :param keep_session_id: A session to leave open (the caller's
+                                own, e.g. after a password change).
 
         :returns: Number of sessions closed.
     """
@@ -269,12 +276,18 @@ def close_sessions_for_user(
         .filter(AuthSession.user_id == user_id)
         .all()
     )
+    if keep_session_id is not None:
+        sessions = [
+            session for session in sessions
+            if str(session.session_id) != str(keep_session_id)
+        ]
     closed_at = utc_now().isoformat()
     for session in sessions:
         payload = {
             "session_id": str(session.session_id),
             "user_id": str(session.user_id),
             "reason": reason,
+            "actor_user_id": actor_user_id,
             "closed_at": closed_at,
         }
         event = EntityEvent(
@@ -289,12 +302,24 @@ def close_sessions_for_user(
     return rtnval
 
 
-def close_session(*, db_session: DbSession, session_id: str) -> None:
+def close_session(
+        *,
+        db_session: DbSession,
+        session_id: str,
+        reason: str = "user_logout",
+        actor_user_id: Optional[str] = None
+    ) -> None:
     """
         Close a session and publish ``entity.session.closed``.
 
         :param db_session: Active SQLAlchemy session.
         :param session_id: Session id to close.
+        :param reason: Why the session ended (``"user_logout"`` for a
+                       sign-out, ``"admin_terminated"`` when an
+                       administrator ends someone's session).
+        :param actor_user_id: Who ended it when that is not the
+                              session's owner; recorded so the audit log
+                              attributes the termination.
 
         :returns: None.
     """
@@ -310,7 +335,8 @@ def close_session(*, db_session: DbSession, session_id: str) -> None:
     payload = {
         "session_id": closed_session_id,
         "user_id": closed_user_id,
-        "reason": "user_logout",
+        "reason": reason,
+        "actor_user_id": actor_user_id,
         "closed_at": utc_now().isoformat(),
     }
     event = EntityEvent(

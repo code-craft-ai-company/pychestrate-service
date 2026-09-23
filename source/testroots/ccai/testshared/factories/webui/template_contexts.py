@@ -578,6 +578,36 @@ def _project_choice_groups(mode: str) -> Any:
     return rtnval
 
 
+def _audit_rows(mode: str) -> Any:
+    from ccai.pychestrate.webservice.audit.audit_presenter import AuditRow  # noqa: E402
+    rtnval = build_fixture_list(AuditRow, mode=mode)
+    return rtnval
+
+
+def _action_groups(mode: str) -> Any:
+    from ccai.pychestrate.webservice.audit.audit_query import AuditKindView  # noqa: E402
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        routes_audit,
+    )
+    if mode == MODE_SPARSE:
+        return []
+    views = [
+        AuditKindView(kind="audit.session.opened", area="session", description="A user signed in."),
+        AuditKindView(kind="audit.data.updated", area="data", description="A record was changed."),
+    ]
+    rtnval = routes_audit._action_groups(kind_views=views)
+    return rtnval
+
+
+_AUDIT_FILTERS_POPULATED = {
+    "action": "audit.session.opened", "actor": "admin", "target": "projects:1",
+    "since": "2026-09-01T00:00", "until": "2026-09-30T23:59", "per_page": 50,
+}
+_AUDIT_FILTERS_SPARSE = {
+    "action": "", "actor": "", "target": "", "since": "", "until": "", "per_page": 50,
+}
+
+
 def _minted_with_project(mode: str) -> Any:
     base = _minted(mode)
     if base is None:
@@ -606,6 +636,16 @@ DEFAULT_REGISTRY.update({
         {"project_id": "", "pod_name": "", "ttl_seconds": "", "one_shot": True},
     ),
     "minted": _minted_with_project,
+    "audit_rows": _audit_rows,
+    "audit_total": _by_mode(2, 0),
+    "audit_filters": _by_mode(_AUDIT_FILTERS_POPULATED, _AUDIT_FILTERS_SPARSE),
+    "audit_notices": _by_mode(['No user has the username "ghost".'], []),
+    "action_groups": _action_groups,
+    "older_url": _by_mode("/admin/audit-logs?before=10", None),
+    "newer_url": _by_mode("/admin/audit-logs?after=20", None),
+    "newest_url": _by_mode("/admin/audit-logs", None),
+    "export_csv_url": _const("/admin/audit-logs/export?format=csv"),
+    "export_jsonl_url": _const("/admin/audit-logs/export?format=jsonl"),
 })
 
 
