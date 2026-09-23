@@ -585,7 +585,8 @@ def _build_auth_request(
 
         :param username: Submitted username.
         :param password: Submitted password.
-        :param client_ip: ``X-Forwarded-For`` header (or "").
+        :param client_ip: The client address, trusted-proxy aware
+                          (or "").
         :param user_agent: ``User-Agent`` header (or "").
 
         :returns: AuthRequest instance.
@@ -878,6 +879,32 @@ def _resolve_login_failure_message(*, error: Exception) -> str:
     return rtnval
 
 
+def _begin_forced_password_change_or_none(
+        *, session: Dict[str, Any], error: Exception, next_candidate: Any
+    ) -> Optional[Response]:
+    """
+        When a sign-in failed only because the account's temporary
+        password must be replaced, hand the browser to the change page
+        (see :mod:`routes_password`); otherwise return None.
+
+        :param session: The anonymous cookie session.
+        :param error: The exception ``authenticate`` raised.
+        :param next_candidate: The sign-in form's ``next`` target.
+
+        :returns: A redirect response or None.
+    """
+    try:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_password import (  # noqa: E402
+            begin_forced_password_change,
+        )
+    except Exception:
+        return None
+    rtnval = begin_forced_password_change(
+        session=session, error=error, next_candidate=next_candidate
+    )
+    return rtnval
+
+
 def _resolve_safe_login_next(*, candidate: Optional[str]) -> str:
     """
         Validate a raw ``next`` candidate for embedding in the
@@ -1036,8 +1063,15 @@ def handle_login_submit(request: Request) -> Response:
         client_ip = ""
         user_agent = ""
         try:
-            client_ip = request.headers.get("X-Forwarded-For", "") or ""
-            user_agent = request.headers.get("User-Agent", "") or ""
+            # ADM-16: the real client address (forwarding headers are
+            # honoured only from a trusted proxy), not the raw
+            # X-Forwarded-For header a client can set.
+            from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+                request_user_agent,
+                resolve_client_address,
+            )
+            client_ip = resolve_client_address(request=request)
+            user_agent = request_user_agent(request=request)
         except Exception:
             client_ip = ""
             user_agent = ""
@@ -1052,6 +1086,12 @@ def handle_login_submit(request: Request) -> Response:
         try:
             auth_response = security_manager.authenticate(auth_request)
         except Exception as auth_error:
+            # ADM-04: a temporary password must be replaced first.
+            forced_change = _begin_forced_password_change_or_none(
+                session=session, error=auth_error, next_candidate=next_candidate
+            )
+            if forced_change is not None:
+                return forced_change
             failure_message = _resolve_login_failure_message(
                 error=auth_error
             )
@@ -1421,7 +1461,16 @@ def _require_admin_permission_for(handler: Any, *, permission: str) -> Any:
             from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
                 render_error_response,
             )
-            rtnval = render_error_response(request=request, status_code=403)
+            from ccai.pychestrate.webservice.webinterface.blueprints.config.permission_denied import (  # noqa: E402
+                describe_missing_permission,
+            )
+            # ADM-21: name the missing permission so the viewer can ask
+            # for it.
+            rtnval = render_error_response(
+                request=request,
+                status_code=403,
+                message=describe_missing_permission(permission=permission),
+            )
             return rtnval
 
         rtnval = handler(request)
@@ -1520,6 +1569,37 @@ def _build_login_url_with_next(*, request: Request) -> str:
     encoded_next = quote(next_target, safe="")
     rtnval = "{}?next={}".format(login_path, encoded_next)
     return rtnval
+
+
+def _tag_session_for_audit(
+        *, db_session: Any, request: Any, user_id: str
+    ) -> None:
+    """
+        Tag the request's database session with the signed-in user so
+        the audit data-change bridge attributes the rows it changes
+        (see :mod:`audit.data_change_bridge`). Never raises.
+
+        :param db_session: The request's SQLAlchemy session.
+        :param request: Incoming webworks request.
+        :param user_id: The signed-in user's id.
+
+        :returns: None.
+    """
+    try:
+        from ccai.pychestrate.webservice.audit.data_change_bridge import (  # noqa: E402
+            tag_session_actor,
+        )
+        from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+            resolve_client_address,
+        )
+        tag_session_actor(
+            db_session=db_session,
+            actor_user_id=user_id,
+            client_address=resolve_client_address(request=request),
+        )
+    except Exception:
+        pass
+    return
 
 
 def _resolve_authenticated_request(
@@ -1635,6 +1715,12 @@ def _resolve_authenticated_request(
         )
     except Exception:
         pass
+
+    # Audit (ADM-02): rows this request changes through this session
+    # are recorded under the signed-in user.
+    _tag_session_for_audit(
+        db_session=db_session, request=request, user_id=session_info.user_id
+    )
 
     rtnval = _AuthResolution(
         request=request,
@@ -1882,6 +1968,13 @@ def register_config_routes(*, app: Any) -> None:
         register_enrollment_admin_routes,
     )
     register_enrollment_admin_routes(app=app)
+
+    # ADM-04 -- invite / reset links and the forced password change
+    # (sign-in-free, chromeless).
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_password import (  # noqa: E402
+        register_password_routes,
+    )
+    register_password_routes(app=app)
 
     # Machine identity -- API tokens (/account/api-tokens) and
     # service accounts (/admin/api-tokens).

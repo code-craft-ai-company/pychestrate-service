@@ -17,6 +17,15 @@ The session-admin routes served under the config blueprint:
 * ``POST /config/sessions/{session_id}/terminate``         -- terminate a
                                                               specific
                                                               session.
+* ``POST /config/sessions/user/{user_id}/terminate``       -- terminate
+                                                              every session
+                                                              of one user
+                                                              (keeping the
+                                                              caller's own).
+
+Both terminate routes return to the list view the form was posted from
+(filter, page and page size travel in the form), not an unfiltered
+first page.
 
 The sessions surface reads the modern ``auth_sessions`` table (the same
 table the login flow + ``PychestrateSessionMiddleware`` resolve against)
@@ -34,9 +43,10 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -75,6 +85,11 @@ _ROUTE_TABLE = (
         "/sessions/{session_id}/terminate",
         ("POST",),
     ),
+    (
+        "config.session_terminate_user",
+        "/sessions/user/{user_id}/terminate",
+        ("POST",),
+    ),
 )
 
 # Permission each route enforces server-side (see
@@ -82,7 +97,17 @@ _ROUTE_TABLE = (
 _ROUTE_PERMISSIONS = {
     "config.session_list": "system:auth.read",
     "config.session_terminate": "system:auth.admin",
+    "config.session_terminate_user": "system:auth.admin",
 }
+
+#: Rows per page when the request does not say.
+_DEFAULT_PER_PAGE: int = 20
+
+#: Largest page size a request may ask for.
+_MAX_PER_PAGE: int = 200
+
+#: Longest username filter carried through a terminate round trip.
+_MAX_FILTER_LENGTH: int = 128
 
 
 @dataclass(frozen=True)
@@ -90,17 +115,27 @@ class _SessionRow:
     """
         Template view-model for one active session. Field names match
         what ``config/sessions/list.html`` reads, mapped from the modern
-        :class:`AuthSession` columns.
+        :class:`AuthSession` row and its :class:`AuthSessionClient`.
 
         :param session_id: Session UUID as a string.
         :param username: Login name of the session's user (falls back to
                          the user id when the user row is absent).
         :param created_at: When the session was opened.
         :param last_activity: When the session was last seen.
-        :param expires_at: Absolute expiry timestamp.
-        :param client_ip: IP fingerprint recorded for the session.
-        :param user_agent: User-agent fingerprint recorded for the
-                           session.
+        :param expires_at: When the session ends if nothing else
+                           happens: the earlier of its absolute expiry
+                           and its idle deadline.
+        :param client_ip: The client address recorded at sign-in (""
+                          when it was not recorded).
+        :param user_agent: Readable browser / OS summary ("" when not
+                           recorded).
+        :param user_id: The session's user id.
+        :param user_agent_full: The full User-Agent header, for a
+                                tooltip.
+        :param is_current: The session making this request.
+        :param created_ago: ``created_at`` relative to now ("2 h ago").
+        :param last_activity_ago: ``last_activity`` relative to now.
+        :param expires_in: ``expires_at`` relative to now ("in 27 min").
     """
     session_id: str
     username: str
@@ -109,6 +144,12 @@ class _SessionRow:
     expires_at: Optional[datetime]
     client_ip: str
     user_agent: str
+    user_id: str = ""
+    user_agent_full: str = ""
+    is_current: bool = False
+    created_ago: str = ""
+    last_activity_ago: str = ""
+    expires_in: str = ""
 
 
 @dataclass(frozen=True)
@@ -120,9 +161,13 @@ class _SessionPage:
 
         :param rows: The page's session view-models, newest first.
         :param total: Total active sessions matching the filter.
+        :param sessions_by_user: Active sessions per user id (across
+                                 every page), so a user's heading and
+                                 "Terminate all" count them all.
     """
     rows: List[_SessionRow] = field(default_factory=list)
     total: int = 0
+    sessions_by_user: Dict[str, int] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -150,46 +195,127 @@ def _normalize_to_utc(*, value: Optional[datetime], fallback: datetime) -> datet
     return rtnval
 
 
+def describe_relative_time(*, value: Optional[datetime], now: datetime) -> str:
+    """
+        ``value`` relative to ``now`` in words short enough for a table
+        cell: "just now", "4 min ago", "2 h 5 min ago", "in 27 min",
+        "3 days ago".
+
+        :param value: The moment to describe (naive values are UTC).
+        :param now: The reference moment.
+
+        :returns: The description ("" when ``value`` is None).
+    """
+    if value is None:
+        return ""
+    moment = _normalize_to_utc(value=value, fallback=now)
+    seconds = int(round((moment - now).total_seconds()))
+    future = seconds > 0
+    remaining = abs(seconds)
+    if remaining < 60:
+        rtnval = "in under a minute" if future is True else "just now"
+        return rtnval
+    minutes = remaining // 60
+    if minutes < 60:
+        amount = "{} min".format(minutes)
+    elif minutes < 48 * 60:
+        hours, minutes_left = divmod(minutes, 60)
+        amount = "{} h".format(hours)
+        if minutes_left > 0:
+            amount = "{} h {} min".format(hours, minutes_left)
+    else:
+        amount = "{} days".format(minutes // (24 * 60))
+    rtnval = "in {}".format(amount) if future is True else "{} ago".format(amount)
+    return rtnval
+
+
+def session_idle_deadline(*, session_row: Any, fallback: datetime) -> Optional[datetime]:
+    """
+        When a session ends for inactivity: ``last_seen_at`` plus its
+        idle timeout (None when either is missing).
+
+        :param session_row: The :class:`AuthSession` row.
+        :param fallback: Value used when ``last_seen_at`` is missing.
+
+        :returns: Aware UTC datetime or None.
+    """
+    if session_row.idle_timeout_seconds is None or session_row.last_seen_at is None:
+        return None
+    last_seen = _normalize_to_utc(value=session_row.last_seen_at, fallback=fallback)
+    rtnval = last_seen + timedelta(seconds=int(session_row.idle_timeout_seconds))
+    return rtnval
+
+
+def session_effective_expiry(*, session_row: Any, now: datetime) -> datetime:
+    """
+        The earlier of a session's absolute expiry and its idle deadline
+        -- when it stops working if nothing else happens.
+
+        :param session_row: The :class:`AuthSession` row.
+        :param now: Evaluation time (fallback for missing values).
+
+        :returns: Aware UTC datetime.
+    """
+    absolute = _normalize_to_utc(value=session_row.expires_at, fallback=now)
+    idle = session_idle_deadline(session_row=session_row, fallback=now)
+    if idle is not None and idle < absolute:
+        return idle
+    return absolute
+
+
 def _list_active_sessions(
         *,
         db_session: Any,
         filter_username: Optional[str],
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        current_session_id: Optional[str] = None,
+        now: Optional[datetime] = None
     ) -> _SessionPage:
     """
-        List one page of active (non-expired) sessions from the
-        modern ``auth_sessions`` table, newest first, optionally
-        filtered by the owning user's login name, with the login
-        name joined in.
+        List one page of active sessions from the modern
+        ``auth_sessions`` table, grouped by user (users sorted by login
+        name, each user's sessions most recently active first),
+        optionally filtered by the owning user's login name.
+
+        A session is active only while both its absolute expiry and its
+        idle deadline (``last_seen_at`` + ``idle_timeout_seconds``) are
+        in the future -- the same rule ``session_service.resolve_session``
+        applies. The page used to list idle-expired sessions as active.
 
         The username filter resolves against
-        ``identity_users.login_name`` server-side (the table shows
-        usernames, so the filter takes one too). An unknown
-        username yields an empty page rather than an error.
+        ``identity_users.login_name`` server-side. An unknown username
+        yields an empty page rather than an error.
 
         Expiry filtering happens in Python (not SQL) because SQLite
         returns naive datetimes that cannot be compared to an aware
         "now" inside the query; :func:`_normalize_to_utc` handles
         that normalization per row. Pagination is applied after the
-        expiry filter so page boundaries stay stable.
+        filter so page boundaries stay stable.
 
         :param db_session: Open SQLAlchemy session.
         :param filter_username: Optional login name to filter by.
-        :param offset: Rows to skip (post-expiry-filter).
+        :param offset: Rows to skip (post-filter).
         :param limit: Maximum rows to return.
+        :param current_session_id: The viewer's own session, marked.
+        :param now: Evaluation time (defaults to now).
 
         :returns: A :class:`_SessionPage` with the page's rows and
                   the filtered total.
     """
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        describe_user_agent,
+    )
     from ccai.pychestrate.webservice.security.auth.models import (  # noqa: E402
         AuthSession,
+        AuthSessionClient,
     )
     from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
         IdentityUser,
     )
 
-    now = datetime.now(timezone.utc)
+    if now is None:
+        now = datetime.now(timezone.utc)
 
     query = db_session.query(AuthSession)
 
@@ -206,28 +332,15 @@ def _list_active_sessions(
             AuthSession.user_id == matched_user.user_id
         )
 
-    all_sessions = query.order_by(AuthSession.opened_at.desc()).all()
+    all_sessions = query.all()
 
     active_sessions = []
     for session_row in all_sessions:
-        normalized_expiry = _normalize_to_utc(
-            value=session_row.expires_at, fallback=now
-        )
-        if session_row.expires_at is None or normalized_expiry > now:
+        if session_effective_expiry(session_row=session_row, now=now) > now:
             active_sessions.append(session_row)
 
-    active_sessions.sort(
-        key=lambda candidate: _normalize_to_utc(
-            value=candidate.opened_at, fallback=now
-        ),
-        reverse=True,
-    )
-
-    total = len(active_sessions)
-    page_sessions = active_sessions[offset:offset + limit]
-
     usernames_by_user_id: Dict[str, str] = {}
-    user_ids = [session_row.user_id for session_row in page_sessions]
+    user_ids = list({session_row.user_id for session_row in active_sessions})
     if len(user_ids) > 0:
         user_rows = (
             db_session.query(IdentityUser)
@@ -237,34 +350,85 @@ def _list_active_sessions(
         for user_row in user_rows:
             usernames_by_user_id[str(user_row.user_id)] = user_row.login_name
 
+    def _group_order(candidate: Any) -> Any:
+        user_id_text = str(candidate.user_id)
+        username = usernames_by_user_id.get(user_id_text, user_id_text)
+        last_seen = _normalize_to_utc(value=candidate.last_seen_at, fallback=now)
+        return (username.lower(), -last_seen.timestamp())
+
+    active_sessions.sort(key=_group_order)
+
+    total = len(active_sessions)
+    page_sessions = active_sessions[offset:offset + limit]
+
+    sessions_by_user: Dict[str, int] = {}
+    for session_row in active_sessions:
+        key = str(session_row.user_id)
+        sessions_by_user[key] = sessions_by_user.get(key, 0) + 1
+
+    clients_by_session_id: Dict[str, Any] = {}
+    page_ids = [session_row.session_id for session_row in page_sessions]
+    if len(page_ids) > 0:
+        client_rows = (
+            db_session.query(AuthSessionClient)
+            .filter(AuthSessionClient.session_id.in_(page_ids))
+            .all()
+        )
+        for client_row in client_rows:
+            clients_by_session_id[str(client_row.session_id)] = client_row
+
     rows: List[_SessionRow] = []
     for session_row in page_sessions:
         user_id_str = str(session_row.user_id)
+        session_id_str = str(session_row.session_id)
         username = usernames_by_user_id.get(user_id_str, user_id_str)
+        client_row = clients_by_session_id.get(session_id_str, None)
+        client_address = ""
+        user_agent_full = ""
+        if client_row is not None:
+            client_address = client_row.client_address or ""
+            user_agent_full = client_row.user_agent or ""
+        expires_at = session_effective_expiry(session_row=session_row, now=now)
         row = _SessionRow(
-            session_id=str(session_row.session_id),
+            session_id=session_id_str,
             username=username,
             created_at=session_row.opened_at,
             last_activity=session_row.last_seen_at,
-            expires_at=session_row.expires_at,
-            client_ip=session_row.ip_fingerprint,
-            user_agent=session_row.user_agent_fingerprint,
+            expires_at=expires_at,
+            client_ip=client_address,
+            user_agent=describe_user_agent(user_agent=user_agent_full),
+            user_id=user_id_str,
+            user_agent_full=user_agent_full,
+            is_current=(
+                current_session_id is not None
+                and session_id_str == str(current_session_id)
+            ),
+            created_ago=describe_relative_time(value=session_row.opened_at, now=now),
+            last_activity_ago=describe_relative_time(value=session_row.last_seen_at, now=now),
+            expires_in=describe_relative_time(value=expires_at, now=now),
         )
         rows.append(row)
 
-    rtnval = _SessionPage(rows=rows, total=total)
+    rtnval = _SessionPage(rows=rows, total=total, sessions_by_user=sessions_by_user)
     return rtnval
 
 
-def _terminate_session(*, db_session: Any, session_id: str) -> None:
+def _terminate_session(
+        *,
+        db_session: Any,
+        session_id: str,
+        actor_user_id: Optional[str] = None
+    ) -> None:
     """
         Terminate a session by id through the modern session service
         (deletes the ``auth_sessions`` row and publishes
-        ``entity.session.closed``). A no-op when the session is already
-        gone.
+        ``entity.session.closed``, which the audit log records under
+        the terminating administrator). A no-op when the session is
+        already gone.
 
         :param db_session: Open SQLAlchemy session.
         :param session_id: Session UUID string to terminate.
+        :param actor_user_id: The administrator ending the session.
 
         :returns: None.
     """
@@ -273,9 +437,67 @@ def _terminate_session(*, db_session: Any, session_id: str) -> None:
     )
 
     session_service.close_session(
-        db_session=db_session, session_id=session_id
+        db_session=db_session,
+        session_id=session_id,
+        reason="admin_terminated",
+        actor_user_id=actor_user_id,
     )
     return
+
+
+def _terminate_user_sessions(
+        *,
+        db_session: Any,
+        user_id: Any,
+        actor_user_id: Optional[str],
+        keep_session_id: Optional[str] = None
+    ) -> int:
+    """
+        Terminate every session of one user through the modern session
+        service (one ``entity.session.closed`` per session, attributed
+        to the administrator), keeping ``keep_session_id`` open.
+        Commits.
+
+        :param db_session: Open SQLAlchemy session.
+        :param user_id: The user's id (UUID).
+        :param actor_user_id: The administrator ending the sessions.
+        :param keep_session_id: A session to leave open (the
+                                administrator's own).
+
+        :returns: Number of sessions terminated.
+    """
+    from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+        session_service,
+    )
+
+    rtnval = session_service.close_sessions_for_user(
+        db_session=db_session,
+        user_id=user_id,
+        reason="admin_terminated",
+        actor_user_id=actor_user_id,
+        keep_session_id=keep_session_id,
+    )
+    db_session.commit()
+    return rtnval
+
+
+def _login_name_for(*, db_session: Any, user_id: Any) -> str:
+    """
+        The user's login name for a flash message ("" when unknown).
+    """
+    try:
+        from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
+            IdentityUser,
+        )
+        row = (
+            db_session.query(IdentityUser)
+            .filter(IdentityUser.user_id == user_id)
+            .first()
+        )
+        rtnval = row.login_name if row is not None else ""
+    except Exception:
+        rtnval = ""
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -283,9 +505,76 @@ def _terminate_session(*, db_session: Any, session_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _list_state_from_form(*, form: Any) -> Dict[str, Any]:
+    """
+        The list view (username filter, page, page size) a terminate
+        form was posted from, validated, so the redirect returns to the
+        same view instead of an unfiltered first page. Anything
+        malformed falls back to the default.
+
+        :param form: The posted form.
+
+        :returns: ``{"username": str, "page": int, "per_page": int}``.
+    """
+    def _field(name: str) -> str:
+        try:
+            value = form.get(name, "")
+        except Exception:
+            value = ""
+        rtnval_inner = str(value or "").strip()
+        return rtnval_inner
+
+    username = _field("list_username")[:_MAX_FILTER_LENGTH]
+    try:
+        page = int(_field("list_page") or "1")
+    except ValueError:
+        page = 1
+    try:
+        per_page = int(_field("list_per_page") or str(_DEFAULT_PER_PAGE))
+    except ValueError:
+        per_page = _DEFAULT_PER_PAGE
+    if page < 1:
+        page = 1
+    if per_page < 1 or per_page > _MAX_PER_PAGE:
+        per_page = _DEFAULT_PER_PAGE
+    rtnval = {"username": username, "page": page, "per_page": per_page}
+    return rtnval
+
+
+def _session_list_url(*, state: Dict[str, Any]) -> str:
+    """
+        The sessions list URL for a list state, carrying only the
+        non-default parts.
+    """
+    rtnval = _url_for_module.url_for(
+        "config.session_list",
+        username=state["username"] if len(state["username"]) > 0 else None,
+        page=state["page"] if state["page"] > 1 else None,
+        per_page=state["per_page"] if state["per_page"] != _DEFAULT_PER_PAGE else None,
+    )
+    return rtnval
+
+
+
+def _session_lifetimes() -> tuple:
+    """
+        The sign-in session idle timeout (minutes) and maximum lifetime
+        (hours) the web sign-in uses, for the page's explanation.
+
+        :returns: ``(idle_minutes, lifetime_hours)``.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        auth_adapter,
+    )
+    idle_minutes = int(auth_adapter._DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS // 60)
+    lifetime_hours = int(auth_adapter._DEFAULT_SESSION_MAX_LIFETIME_SECONDS // 3600)
+    rtnval = (idle_minutes, lifetime_hours)
+    return rtnval
+
+
 def _parse_pagination_params(
         *, request: Request,
-        default_per_page: int = 20
+        default_per_page: int = _DEFAULT_PER_PAGE
     ) -> Dict[str, Any]:
     raw_page = request.query_params.get("page", "1") or "1"
     try:
@@ -303,7 +592,7 @@ def _parse_pagination_params(
         per_page = int(raw_per_page)
     except (TypeError, ValueError):
         per_page = default_per_page
-    if per_page < 1:
+    if per_page < 1 or per_page > _MAX_PER_PAGE:
         per_page = default_per_page
 
     rtnval = {"page": page, "per_page": per_page}
@@ -361,21 +650,33 @@ def handle_session_list(request: Request) -> Response:
             request.query_params.get("username", None) or None
         )
 
+        # The cookie's session_token is the AuthSession.session_id
+        # (see auth_adapter) -- the template uses it to mark "This
+        # session" and warn before the operator terminates it.
+        current_session_id = str(
+            auth.session.get("session_token", "")
+        )
+
         session_page = _list_active_sessions(
             db_session=db_session,
             filter_username=filter_username,
             offset=offset,
             limit=params["per_page"],
+            current_session_id=current_session_id,
         )
         total = session_page.total
         total_pages = (total + params["per_page"] - 1) // params["per_page"]
-
-        # The cookie's session_token is the AuthSession.session_id
-        # (see auth_adapter) -- the template uses it to warn before
-        # the operator terminates their own session.
-        current_session_id = str(
-            auth.session.get("session_token", "")
-        )
+        if total_pages > 0 and params["page"] > total_pages:
+            # The page emptied (its last sessions were terminated):
+            # show the last page that still has rows.
+            params["page"] = total_pages
+            session_page = _list_active_sessions(
+                db_session=db_session,
+                filter_username=filter_username,
+                offset=(total_pages - 1) * params["per_page"],
+                limit=params["per_page"],
+                current_session_id=current_session_id,
+            )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -385,6 +686,8 @@ def handle_session_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["sessions"] = session_page.rows
+        context["sessions_by_user"] = session_page.sessions_by_user
+        context["idle_timeout_minutes"], context["max_lifetime_hours"] = _session_lifetimes()
         context["filter_username"] = filter_username
         context["current_session_id"] = current_session_id
         context["page"] = params["page"]
@@ -431,10 +734,12 @@ def handle_session_terminate(request: Request) -> Response:
             )
             return csrf_redirect
 
+        return_url = _session_list_url(state=_list_state_from_form(form=single_form))
+
         if session_id is None or len(session_id) == 0:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message="Session not found.",
                 category=flash.CATEGORY_ERROR,
             )
@@ -442,7 +747,9 @@ def handle_session_terminate(request: Request) -> Response:
 
         try:
             _terminate_session(
-                db_session=db_session, session_id=session_id
+                db_session=db_session,
+                session_id=session_id,
+                actor_user_id=auth.user_id,
             )
             current_session_id = str(auth.session.get("session_token", ""))
             if session_id == current_session_id:
@@ -459,7 +766,7 @@ def handle_session_terminate(request: Request) -> Response:
                 return response
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message="Session terminated successfully.",
                 category=flash.CATEGORY_SUCCESS,
             )
@@ -467,11 +774,97 @@ def handle_session_terminate(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.session_list"),
+                url=return_url,
                 message=_describe_terminate_failure(exc=exc),
                 category=flash.CATEGORY_ERROR,
             )
             return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_session_terminate_user(request: Request) -> Response:
+    """
+        ``POST /admin/sessions/user/{user_id}/terminate`` -- terminate
+        every session of one user, then return to the list view the
+        form was posted from. On the administrator's own row it keeps
+        the session making the request ("sign out my other sessions").
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.session_list"),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        return_url = _session_list_url(state=_list_state_from_form(form=single_form))
+
+        try:
+            user_uuid = uuid.UUID(str(request.path_params.get("user_id", "")))
+        except (TypeError, ValueError):
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        is_self = str(user_uuid) == str(auth.user_id)
+        keep_session_id = None
+        if is_self is True:
+            keep_session_id = str(auth.session.get("session_token", "")) or None
+        login_name = _login_name_for(db_session=db_session, user_id=user_uuid)
+
+        try:
+            closed = _terminate_user_sessions(
+                db_session=db_session,
+                user_id=user_uuid,
+                actor_user_id=auth.user_id,
+                keep_session_id=keep_session_id,
+            )
+        except Exception as exc:
+            try:
+                db_session.rollback()
+            except Exception:
+                pass
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message=_describe_terminate_failure(exc=exc),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        plural = "" if closed == 1 else "s"
+        if is_self is True:
+            message = "Signed out of your {} other session{}; this one stays signed in.".format(closed, plural)
+        else:
+            message = "Terminated {} session{} for {}.".format(
+                closed, plural, login_name if len(login_name) > 0 else "the user"
+            )
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=return_url,
+            message=message,
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
     finally:
         try:
             db_session.close()
@@ -487,6 +880,7 @@ def handle_session_terminate(request: Request) -> Response:
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.session_list": handle_session_list,
     "config.session_terminate": handle_session_terminate,
+    "config.session_terminate_user": handle_session_terminate_user,
 }
 
 
@@ -513,4 +907,5 @@ __all__ = [
     "register_sessions_routes",
     "handle_session_list",
     "handle_session_terminate",
+    "handle_session_terminate_user",
 ]

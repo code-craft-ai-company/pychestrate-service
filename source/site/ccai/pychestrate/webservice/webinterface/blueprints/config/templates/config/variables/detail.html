@@ -22,12 +22,12 @@
         <tr>
             <th scope="row">Value</th>
             <td>
-                <pre class="pre-wrap">{{ variable.value }}</pre>
+                <pre class="pre-wrap">{{ format_value(value=variable.value, var_type=variable.var_type) }}</pre>
             </td>
         </tr>
         <tr>
             <th scope="row">Default</th>
-            <td>{{ variable.default_value if variable.default_value is not none else '-' }}</td>
+            <td>{% if variable.default_value is not none %}<pre class="pre-wrap">{{ format_value(value=variable.default_value, var_type=variable.var_type) }}</pre>{% else %}-{% endif %}</td>
         </tr>
         <tr>
             <th scope="row">Description</th>

@@ -487,8 +487,9 @@ def _register_url_for_endpoints() -> None:
 def test_register_users_routes_attaches_documented_routes():
     """
     **Feature: webworks config users port T2.1 (D2)**
-    **Property: register_users_routes attaches the five user-
-    management routes at /admin/users*.**
+    **Property: register_users_routes attaches the user-
+    management routes at /admin/users*, including the reset-
+    password page and the reset / invite link action (ADM-04).**
     """
     _reset_global_state()
     try:
@@ -503,6 +504,9 @@ def test_register_users_routes_attaches_documented_routes():
             ("/admin/users/{user_id}", ("GET",)),
             ("/admin/users/{user_id}/edit", ("GET", "POST")),
             ("/admin/users/{user_id}/deactivate", ("POST",)),
+            ("/admin/users/{user_id}/reactivate", ("POST",)),
+            ("/admin/users/{user_id}/password", ("GET", "POST")),
+            ("/admin/users/{user_id}/password-link", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:

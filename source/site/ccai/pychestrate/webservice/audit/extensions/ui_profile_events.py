@@ -21,6 +21,7 @@ class UiProfileDeploymentChangedAuditEvents(AuditEventTypeExtension):
     """
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.ui_profile.deployment_changed"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     source_topic: str = "entity.ui_profile.deployment_changed"
     payload_schema: dict = {
         "type": "object",

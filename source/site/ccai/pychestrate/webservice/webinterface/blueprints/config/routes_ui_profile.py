@@ -11,8 +11,10 @@
                                  from the deployment setting, with the
                                  count of navigation entries each
                                  surface governs.
-* ``POST /admin/ui-profile``  -- save the selection
-                                 (``system:ui.profile.manage``).
+* ``POST /admin/ui-profile``  -- save the selection.
+
+Both require ``system:ui.profile.manage``, enforced when the route is
+registered (a viewer without it gets the shared 403 page naming it).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -39,7 +41,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
-    _require_permission_or_redirect,
+    _require_admin_permission_for,
     _resolve_authenticated_request,
     _wrap_admin_handler_in_shell,
 )
@@ -51,6 +53,12 @@ UI_PROFILE_MANAGE_PERMISSION: str = "system:ui.profile.manage"
 _ROUTE_TABLE = (
     ("config.ui_profile", "/ui-profile", ("GET", "POST")),
 )
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``).
+_ROUTE_PERMISSIONS = {
+    "config.ui_profile": UI_PROFILE_MANAGE_PERMISSION,
+}
 
 
 def _governed_entry_counts() -> Dict[str, int]:
@@ -104,15 +112,6 @@ def handle_ui_profile(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=UI_PROFILE_MANAGE_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for("config.dashboard"),
-            deny_message="You do not have permission to change the UI profile.",
-        )
-        if deny_response is not None:
-            return deny_response
-
         if request.method.upper() == "GET":
             deployment = _ui_profile.resolve_deployment_surfaces(db_session=db_session, use_cache=False)
             return _render_page(auth=auth, deployment=deployment)
@@ -176,7 +175,10 @@ def register_ui_profile_routes(*, app: Any) -> None:
         full_path = CONFIG_PATH + relative_path
         _url_for_module.register_endpoint(endpoint=endpoint_name, pattern=full_path)
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

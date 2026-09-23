@@ -17,6 +17,19 @@ The user-management routes served under the config blueprint:
 * ``POST /admin/users/{user_id}/edit``       -- update user.
 * ``POST /admin/users/{user_id}/deactivate`` -- deactivate
                                                 (soft delete).
+* ``POST /admin/users/{user_id}/reactivate`` -- reactivate a
+                                                deactivated user.
+* ``GET  /admin/users/{user_id}/password``   -- reset-password page.
+* ``POST /admin/users/{user_id}/password``   -- set a (temporary)
+                                                password.
+* ``POST /admin/users/{user_id}/password-link`` -- create a single-use
+                                                reset (or invite)
+                                                link to hand to the
+                                                user.
+
+The create form can also create the account *without* a password and
+hand back a single-use invite link instead (the product sends no email
+yet, so the administrator copies the link to the user).
 
 The handlers are backed by
 :mod:`webinterface.blueprints.config.identity_admin`, which reads
@@ -46,7 +59,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
@@ -55,6 +68,9 @@ from ccai.webworks.routing.response import (
     Response,
 )
 
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    password_policy_template_context,
+)
 from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
@@ -90,6 +106,9 @@ _ROUTE_TABLE = (
     ("config.user_detail", "/users/{user_id}", ("GET",)),
     ("config.user_edit", "/users/{user_id}/edit", ("GET", "POST")),
     ("config.user_deactivate", "/users/{user_id}/deactivate", ("POST",)),
+    ("config.user_reactivate", "/users/{user_id}/reactivate", ("POST",)),
+    ("config.user_password", "/users/{user_id}/password", ("GET", "POST")),
+    ("config.user_password_link", "/users/{user_id}/password-link", ("POST",)),
 )
 
 USERS_READ_PERMISSION: str = "system:users.read"
@@ -113,7 +132,14 @@ _ROUTE_PERMISSIONS = {
     "config.user_detail": USERS_READ_PERMISSION,
     "config.user_edit": USERS_WRITE_PERMISSION,
     "config.user_deactivate": USERS_WRITE_PERMISSION,
+    "config.user_reactivate": USERS_WRITE_PERMISSION,
+    "config.user_password": USERS_WRITE_PERMISSION,
+    "config.user_password_link": USERS_WRITE_PERMISSION,
 }
+
+#: ``password_setup`` choices on the create form.
+PASSWORD_SETUP_SET_NOW: str = "password"
+PASSWORD_SETUP_INVITE: str = "invite"
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +282,152 @@ def _svc_deactivate_user(
     return
 
 
+def _svc_reactivate_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> str:
+    """
+        Reactivate a deactivated identity user (and mirror the status).
+
+        :returns: The resulting status text ("active" or "invited").
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.reactivate_identity_user(
+        db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
+    )
+    return rtnval
+
+
+def _status_action_return_url(*, form: Any, user_id: str) -> str:
+    """
+        Where a Deactivate / Reactivate button returns to: the user's
+        detail page when the button was on it (``return_to=detail``),
+        else the user list. Any other value falls back to the list.
+    """
+    return_to = ""
+    try:
+        return_to = str(form.get("return_to", "") or "")
+    except Exception:
+        return_to = ""
+    if return_to == "detail" and len(user_id) > 0:
+        rtnval = _url_for_module.url_for("config.user_detail", user_id=user_id)
+        return rtnval
+    rtnval = _url_for_module.url_for("config.user_list")
+    return rtnval
+
+
+def _svc_create_invited_user(
+        *,
+        db_session: Any,
+        username: str,
+        email: str,
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> Any:
+    """
+        Create an account without a password plus a single-use invite
+        link.
+
+        :returns: ``identity_admin.InvitedUser``.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.create_invited_identity_user(
+        db_session=db_session,
+        username=username,
+        email=email,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
+    )
+    return rtnval
+
+
+def _svc_admin_set_password(
+        *,
+        db_session: Any,
+        user_id: str,
+        password: str,
+        must_change: bool,
+        actor_user_id: Optional[str]
+    ) -> None:
+    """
+        Set a user's password (committing).
+
+        :raises: PasswordPolicyError, PasswordLifecycleError
+    """
+    from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+        password_lifecycle,
+    )
+    try:
+        password_lifecycle.admin_set_password(
+            db_session=db_session,
+            user_id=user_id,
+            new_password=password,
+            must_change=must_change,
+            actor_user_id=actor_user_id,
+        )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        raise
+    return
+
+
+def _svc_issue_password_link(
+        *,
+        db_session: Any,
+        user_id: str,
+        purpose: str,
+        actor_user_id: Optional[str]
+    ) -> Any:
+    """
+        Create a single-use password link (committing).
+
+        :returns: ``password_lifecycle.IssuedPasswordLink``.
+        :raises: PasswordLifecycleError
+    """
+    from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+        password_lifecycle,
+    )
+    try:
+        rtnval = password_lifecycle.issue_password_link(
+            db_session=db_session,
+            user_id=user_id,
+            purpose=purpose,
+            actor_user_id=actor_user_id,
+        )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        raise
+    return rtnval
+
+
+def _password_error_classes() -> Tuple[type, ...]:
+    """
+        The exceptions the password seams raise for a refused request.
+    """
+    from ccai.pychestrate.webservice.security.auth.password_lifecycle import (  # noqa: E402
+        PasswordLifecycleError,
+    )
+    from ccai.pychestrate.webservice.security.auth.password_policy import (  # noqa: E402
+        PasswordPolicyError,
+    )
+    rtnval = (PasswordPolicyError, PasswordLifecycleError)
+    return rtnval
+
+
 def _svc_list_role_options(*, db_session: Any) -> List[Any]:
     """
         List the RBAC roles offered by the role picker on the user
@@ -364,6 +536,90 @@ def _parse_pagination_params(
     return rtnval
 
 
+def _absolute_url(*, request: Request, path: str) -> str:
+    """
+        ``scheme://host`` + ``path`` for a link the administrator copies
+        to the user (built from the address the browser used).
+
+        :param request: Incoming webworks request.
+        :param path: Absolute path.
+
+        :returns: Absolute URL (or ``path`` when the host is unknown).
+    """
+    scheme = getattr(request, "scheme", None)
+    if isinstance(scheme, str) is False or len(scheme) == 0:
+        scheme = "http"
+    host = None
+    try:
+        host = request.headers.get("host", None) or request.headers.get("Host", None)
+    except Exception:
+        host = None
+    if host is None or len(str(host)) == 0:
+        server_name = getattr(request, "host", None)
+        if isinstance(server_name, str) is False or len(server_name) == 0:
+            return path
+        port = getattr(request, "port", None)
+        if isinstance(port, int) is True and port not in (0, 80, 443):
+            host = "{}:{}".format(server_name, port)
+        else:
+            host = server_name
+    rtnval = "{}://{}{}".format(scheme, host, path)
+    return rtnval
+
+
+def _link_view(*, request: Request, link: Any) -> Dict[str, Any]:
+    """
+        What the password page shows for a freshly issued link.
+    """
+    path = _url_for_module.url_for("config.password_link", token=link.secret)
+    rtnval = {
+        "url": _absolute_url(request=request, path=path),
+        "purpose": link.purpose,
+        "expires_at": link.expires_at,
+    }
+    return rtnval
+
+
+def _render_password_page(
+        *,
+        auth: _AuthResolution,
+        user: Any,
+        issued_link: Optional[Dict[str, Any]] = None,
+        problems: Optional[List[str]] = None,
+        just_created: bool = False,
+        status_code: int = 200
+    ) -> Response:
+    """
+        Render ``config/users/password.html``: the reset-link and
+        temporary-password options, and a freshly issued link shown
+        once.
+    """
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="config.user_password",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context.update(password_policy_template_context())
+    context["user"] = user
+    context["issued_link"] = issued_link
+    context["problems"] = problems if problems is not None else []
+    context["just_created"] = just_created
+    context["is_self"] = str(user.id) == str(auth.user_id)
+    response = _render(
+        template_name="config/users/password.html",
+        context=context,
+        status_code=status_code,
+    )
+    # The page can carry a link secret: never cache it, never leak it
+    # through the Referer header.
+    response._headers["Cache-Control"] = "no-store"
+    response._headers["Referrer-Policy"] = "no-referrer"
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -466,6 +722,7 @@ def handle_user_create(request: Request) -> Response:
             )
             context["roles"] = roles
             context["form_data"] = None
+            context.update(password_policy_template_context())
             response = _render(
                 template_name="config/users/create.html",
                 context=context,
@@ -494,6 +751,9 @@ def handle_user_create(request: Request) -> Response:
         username = str(single_form.get("username", "")).strip()
         email = str(single_form.get("email", "")).strip()
         password = str(single_form.get("password", ""))
+        password_setup = str(
+            single_form.get("password_setup", PASSWORD_SETUP_SET_NOW)
+        ).strip()
         display_name = str(single_form.get("display_name", "")).strip()
         firstname = str(single_form.get("firstname", "")).strip()
         lastname = str(single_form.get("lastname", "")).strip()
@@ -516,6 +776,31 @@ def handle_user_create(request: Request) -> Response:
         exc_classes = _admin_exception_classes()
 
         try:
+            if password_setup == PASSWORD_SETUP_INVITE:
+                invited = _svc_create_invited_user(
+                    db_session=db_session,
+                    username=username,
+                    email=email,
+                    display_name=display_name,
+                    firstname=firstname,
+                    lastname=lastname,
+                    role_names=role_names,
+                    actor_user_id=auth.user_id,
+                )
+                # The link secret is shown once, on this response --
+                # never in the flash cookie.
+                new_user = _svc_get_user(
+                    db_session=db_session, user_id=invited.user_id
+                )
+                response = _render_password_page(
+                    auth=auth,
+                    user=new_user,
+                    issued_link=_link_view(request=request, link=invited.link),
+                    just_created=True,
+                    status_code=201,
+                )
+                return response
+
             _svc_create_user(
                 db_session=db_session,
                 username=username,
@@ -569,6 +854,7 @@ def handle_user_create(request: Request) -> Response:
         )
         context["roles"] = roles
         context["form_data"] = form_view
+        context.update(password_policy_template_context())
         response = _render(
             template_name="config/users/create.html",
             context=context,
@@ -830,6 +1116,8 @@ def handle_user_deactivate(request: Request) -> Response:
 
         exc_classes = _admin_exception_classes()
 
+        return_url = _status_action_return_url(form=single_form, user_id=user_id)
+
         try:
             _svc_deactivate_user(
                 db_session=db_session,
@@ -838,7 +1126,7 @@ def handle_user_deactivate(request: Request) -> Response:
             )
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message="User deactivated successfully.",
                 category=flash.CATEGORY_SUCCESS,
             )
@@ -854,7 +1142,7 @@ def handle_user_deactivate(request: Request) -> Response:
         except exc_classes["SelfLockoutError"] as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message=getattr(exc, "message", str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
@@ -862,11 +1150,243 @@ def handle_user_deactivate(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message="Error deactivating user: {}".format(str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
             return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_user_reactivate(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/reactivate`` -- reactivate a
+        deactivated identity user, then return to the list (or the
+        detail page the button was on) with a flash. A local account
+        that never set a password returns to *invited*, and the flash
+        says to send a new invite link.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        user_id = str(request.path_params.get("user_id", ""))
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.user_list"),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        return_url = _status_action_return_url(form=single_form, user_id=user_id)
+        exc_classes = _admin_exception_classes()
+
+        try:
+            status_text = _svc_reactivate_user(
+                db_session=db_session,
+                user_id=user_id,
+                actor_user_id=auth.user_id,
+            )
+        except exc_classes["AdminNotFoundError"]:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except exc_classes["AdminValidationError"] as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message="Error reactivating user: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        message = "User reactivated. They can sign in again."
+        if status_text == "invited":
+            message = (
+                "User reactivated as invited: they have never set a "
+                "password, so send them a new invite link."
+            )
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=return_url,
+            message=message,
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_user_password(request: Request) -> Response:
+    """
+        ``GET /admin/users/{user_id}/password`` -- the reset-password
+        page (reset link or temporary password).
+        ``POST /admin/users/{user_id}/password`` -- set the user's
+        password; by default they must choose a new one at their next
+        sign-in. Their sessions end.
+
+        :param request: Incoming webworks request.
+
+        :returns: The page, or a redirect to the user after a set.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        user_id = str(request.path_params.get("user_id", ""))
+        user = _svc_get_user(db_session=db_session, user_id=user_id)
+        if user is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        if request.method.upper() != "POST":
+            return _render_password_page(auth=auth, user=user)
+
+        single_form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.user_password", user_id=user_id),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(response=csrf_redirect, session=auth.session)
+            return csrf_redirect
+
+        password = str(single_form.get("password", ""))
+        confirm = str(single_form.get("password_confirm", ""))
+        must_change = str(single_form.get("must_change", "")).strip() in ("1", "on", "true", "yes")
+        if password != confirm:
+            return _render_password_page(
+                auth=auth, user=user,
+                problems=["The passwords do not match."], status_code=400,
+            )
+
+        try:
+            _svc_admin_set_password(
+                db_session=db_session,
+                user_id=user_id,
+                password=password,
+                must_change=must_change,
+                actor_user_id=auth.user_id,
+            )
+        except _password_error_classes() as exc:
+            problems = list(getattr(exc, "problems", [])) or [getattr(exc, "message", str(exc))]
+            return _render_password_page(
+                auth=auth, user=user, problems=problems, status_code=400,
+            )
+
+        if must_change is True:
+            message = (
+                'Password set for "{}". They must choose a new one when they '
+                "next sign in; their open sessions were signed out."
+            ).format(user.username)
+        else:
+            message = (
+                'Password set for "{}"; their open sessions were signed out.'
+            ).format(user.username)
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for("config.user_detail", user_id=user_id),
+            message=message,
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_user_password_link(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/password-link`` -- create a
+        single-use link the user opens to choose a password: an invite
+        for an account that has none yet, a reset otherwise. Earlier
+        links stop working. The link is shown once, on this response.
+
+        :param request: Incoming webworks request.
+
+        :returns: The password page carrying the link.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        user_id = str(request.path_params.get("user_id", ""))
+        single_form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.user_password", user_id=user_id),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(response=csrf_redirect, session=auth.session)
+            return csrf_redirect
+
+        user = _svc_get_user(db_session=db_session, user_id=user_id)
+        if user is None:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        purpose = "INVITE" if getattr(user, "status", "") == "invited" else "RESET"
+        try:
+            link = _svc_issue_password_link(
+                db_session=db_session,
+                user_id=user_id,
+                purpose=purpose,
+                actor_user_id=auth.user_id,
+            )
+        except _password_error_classes() as exc:
+            return _render_password_page(
+                auth=auth, user=user,
+                problems=[getattr(exc, "message", str(exc))], status_code=400,
+            )
+
+        return _render_password_page(
+            auth=auth, user=user, issued_link=_link_view(request=request, link=link),
+        )
     finally:
         try:
             db_session.close()
@@ -885,6 +1405,9 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.user_detail": handle_user_detail,
     "config.user_edit": handle_user_edit,
     "config.user_deactivate": handle_user_deactivate,
+    "config.user_reactivate": handle_user_reactivate,
+    "config.user_password": handle_user_password,
+    "config.user_password_link": handle_user_password_link,
 }
 
 
@@ -918,4 +1441,7 @@ __all__ = [
     "handle_user_detail",
     "handle_user_edit",
     "handle_user_deactivate",
+    "handle_user_reactivate",
+    "handle_user_password",
+    "handle_user_password_link",
 ]

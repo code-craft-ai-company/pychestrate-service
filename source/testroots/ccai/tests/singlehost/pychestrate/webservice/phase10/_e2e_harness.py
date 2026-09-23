@@ -161,6 +161,17 @@ _RUNTIME_GLOBALS_SNAPSHOT: Optional[Dict[str, Any]] = None
 # with a KeyError / TemplateNotFound. ``ensure_app`` restores both.
 _URL_FOR_REGISTRY_SNAPSHOT: Optional[Dict[str, str]] = None
 
+# Snapshot of the extension registry (factory implementations such as
+# the password hasher, and resource extensions) and of the password
+# pepper, captured after the one-time app build. Some suites reset the
+# whole registry (and re-register only their own layer) or install
+# their own pepper and leave them that way; a later E2E sign-in then
+# fails ("no registered password_hasher", or a 401 because the seeded
+# users' hashes were made under the harness pepper). ``ensure_app``
+# restores both.
+_EXTENSION_REGISTRY_SNAPSHOT: Optional[Dict[str, Any]] = None
+_PEPPER_SNAPSHOT: Optional[Any] = None
+
 
 def _write_test_kek_file() -> str:
     """
@@ -307,6 +318,51 @@ def _capture_runtime_globals_snapshot() -> None:
         "UI_COOKIE_SECRET": SITE_SHARED_GLOBALS.UI_COOKIE_SECRET,
     }
     _URL_FOR_REGISTRY_SNAPSHOT = get_registry_snapshot()
+    _capture_extension_registry_and_pepper()
+    return
+
+
+def _capture_extension_registry_and_pepper() -> None:
+    """
+        Record the extension registry after the one-time bootstrap (see
+        :data:`_EXTENSION_REGISTRY_SNAPSHOT`; the pepper is recorded by
+        :func:`ensure_pepper_for_tests`, which the seeding calls).
+    """
+    global _EXTENSION_REGISTRY_SNAPSHOT
+    from ccai.pychestrate.webservice.extensions import registry as _registry  # noqa: E402
+    with _registry._REGISTRY_LOCK:
+        _EXTENSION_REGISTRY_SNAPSHOT = {
+            "factories": [
+                implementation
+                for bucket in _registry._FACTORY_IMPLEMENTATIONS.values()
+                for implementation in bucket
+            ],
+            "resources": [
+                (base_class, extension)
+                for base_class, bucket in _registry._RESOURCE_EXTENSIONS.items()
+                for extension in bucket
+            ],
+        }
+    return
+
+
+def _reassert_extension_registry_and_pepper() -> None:
+    """
+        Re-register every snapshotted extension a prior test's reset
+        removed (registration is idempotent, so anything registered
+        since is kept), and put back the harness's password pepper.
+    """
+    from ccai.pychestrate.webservice.extensions import registry as _registry  # noqa: E402
+    from ccai.pychestrate.webservice.security.auth.pepper_loader import (  # noqa: E402
+        set_active_pepper,
+    )
+    if _EXTENSION_REGISTRY_SNAPSHOT is not None:
+        for implementation in _EXTENSION_REGISTRY_SNAPSHOT["factories"]:
+            _registry.register_factory_implementation(implementation=implementation)
+        for base_class, extension in _EXTENSION_REGISTRY_SNAPSHOT["resources"]:
+            _registry.register_resource_extension(base_class=base_class, extension=extension)
+    if _PEPPER_SNAPSHOT is not None:
+        set_active_pepper(pepper=_PEPPER_SNAPSHOT)
     return
 
 
@@ -382,6 +438,7 @@ def ensure_app() -> TestAppHandle:
         _reassert_runtime_globals()
         _install_test_templating()
         _reassert_url_for_registry()
+        _reassert_extension_registry_and_pepper()
         return _APP_HANDLE
     kek_path = _write_test_kek_file()
     _bootstrap_runtime_for_tests(kek_file_path=kek_path)
@@ -677,16 +734,19 @@ def ensure_pepper_for_tests() -> None:
         get_active_pepper,
         set_active_pepper,
     )
+    global _PEPPER_SNAPSHOT
     # NB: ``ccai.errors.exceptions.ConfigurationError``
     # inherits from ``BaseException`` (not ``Exception``), so a
     # plain ``except Exception`` would not catch the
     # "no pepper loaded" raise from ``get_active_pepper``.
     try:
         get_active_pepper()
-        return
     except BaseException:
-        pass
-    set_active_pepper(pepper=SecretBytes(_TEST_PASSWORD_PEPPER))
+        set_active_pepper(pepper=SecretBytes(_TEST_PASSWORD_PEPPER))
+    # The seeded users are hashed under this pepper: remember it so
+    # ``ensure_app`` can put it back if another suite replaces it.
+    if _PEPPER_SNAPSHOT is None:
+        _PEPPER_SNAPSHOT = get_active_pepper()
     return
 
 

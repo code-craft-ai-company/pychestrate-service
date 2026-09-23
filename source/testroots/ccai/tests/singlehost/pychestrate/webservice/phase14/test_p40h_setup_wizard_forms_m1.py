@@ -29,6 +29,9 @@ from typing import Any, Dict, Optional
 
 from ccai import testbase
 
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    password_policy_template_context,
+)
 from ccai.pychestrate.webservice.webinterface.blueprints.setup import routes as setup_routes
 
 from ccai.tests.singlehost.pychestrate.webservice.phase13._template_harness import (
@@ -45,6 +48,9 @@ def _render_admin(*, field_errors: Dict[str, str], first_invalid: Optional[str])
         "field_errors": field_errors,
         "first_invalid": first_invalid,
     }
+    # The handler merges the password policy's rule text, bounds and
+    # pattern into every render (ADM-17).
+    context.update(password_policy_template_context())
     rtnval = strict_environment().get_template("setup/admin.html").render(**context)
     return rtnval
 
@@ -72,11 +78,13 @@ def test_each_setup_problem_is_keyed_to_its_field_in_form_order():
     **Property: validating the create-administrator form names the field
     each problem belongs to, in the order the fields appear.**
     """
+    # A password the policy accepts (ADM-17), so only the three
+    # problems under test are reported.
     field_errors = setup_routes._collect_admin_field_errors(
         login_name="ok-admin",
         email="not-an-email",
-        password="correct-horse-battery",
-        password_confirm="correct-horse-batter",
+        password="Granite-Harbor-47!",
+        password_confirm="Granite-Harbor-47?",
         display_name="",
     )
     testbase.assert_equal(list(field_errors), ["email", "display_name", "password_confirm"])

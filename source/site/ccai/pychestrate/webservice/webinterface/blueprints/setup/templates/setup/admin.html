@@ -56,12 +56,17 @@
         <div class="actions-row">
             <input type="password" id="password" name="password" class="form-control" required
                    {% if first_invalid == "password" %}autofocus{% endif %}
-                   minlength="{{ min_password_length }}" autocomplete="new-password"
-                   aria-describedby="password-help{% if field_errors and 'password' in field_errors %} password-error{% endif %}"
+                   minlength="{{ min_password_length }}" maxlength="{{ password_max_length }}"
+                   pattern="{{ password_pattern }}" title="{{ password_title }}"
+                   autocomplete="new-password"
+                   aria-describedby="password-rules{% if field_errors and 'password' in field_errors %} password-error{% endif %}"
                    {%- if field_errors and 'password' in field_errors %} aria-invalid="true"{% endif %}>
             <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
         </div>
-        <p class="form-text" id="password-help">At least {{ min_password_length }} characters. Your password manager may save it.</p>
+        {% with password_input_id="password" %}
+            {% include "config/_password_rules.html" %}
+        {% endwith %}
+        <p class="form-text">Your password manager may save it.</p>
         {{ ui.field_error(field_errors, "password") }}
     </div>
 

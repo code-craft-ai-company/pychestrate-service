@@ -51,6 +51,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
+    _require_admin_permission_for,
     _require_permission_or_redirect,
     _resolve_authenticated_request,
     _wrap_admin_handler_in_shell,
@@ -69,6 +70,20 @@ _ROUTE_TABLE = (
     ("config.rpa_type_version_state", "/rpa-job-types/{type_id}/versions/{version}/state", ("POST",)),
     ("config.rpa_type_retire", "/rpa-job-types/{type_id}/retire", ("POST",)),
 )
+
+
+# Permission each route enforces server-side before its handler runs
+# (see ``routes._require_admin_permission_for``): a route that accepts
+# POST changes the registry and needs the manage permission; the
+# read-only pages need the read permission. A refused viewer gets the
+# shared 403 page naming the permission (it used to be redirected to
+# the dashboard with a flash -- audit ADM-21).
+_ROUTE_PERMISSIONS = {
+    endpoint_name: (
+        RPA_TYPES_MANAGE_PERMISSION if "POST" in methods else RPA_TYPES_READ_PERMISSION
+    )
+    for endpoint_name, _relative_path, methods in _ROUTE_TABLE
+}
 
 
 def _build_rpa_service() -> Any:
@@ -603,7 +618,10 @@ def register_rpa_types_routes(*, app: Any) -> None:
         full_path = CONFIG_PATH + relative_path
         _url_for_module.register_endpoint(endpoint=endpoint_name, pattern=full_path)
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

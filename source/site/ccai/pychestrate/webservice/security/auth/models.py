@@ -24,6 +24,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
@@ -70,10 +71,40 @@ class AuthSession(PychestratePhase1Base, SerializableModel):
     ip_fingerprint = Column(String(128), nullable=False, default="")
     user_agent_fingerprint = Column(String(128), nullable=False, default="")
 
+    # Where the session was opened from (see AuthSessionClient); the
+    # row is deleted with the session.
+    client = relationship(
+        "AuthSessionClient",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
     __table_args__ = (
         Index("ix_auth_sessions_user_expires", "user_id", "expires_at"),
         Index("ix_auth_sessions_last_seen", "last_seen_at"),
     )
+
+
+class AuthSessionClient(PychestratePhase1Base, SerializableModel):
+    """
+        Where a session was opened from: the client's real address
+        (resolved behind trusted proxies, see
+        :mod:`security.auth.client_address`) and its User-Agent, which
+        the admin sessions page shows. A separate table (rather than
+        columns on ``auth_sessions``) so databases created by the
+        development auto-create path gain it without a migration.
+    """
+
+    __tablename__ = "auth_session_clients"
+
+    session_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("auth_sessions.session_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    client_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
 
 
 class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):
@@ -93,6 +124,48 @@ class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):
     algo_params = Column(JSON, nullable=False, default=dict)
     must_rotate_after = Column(DateTime(timezone=True), nullable=True)
     last_changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+
+
+class PasswordTokenPurpose(enum.Enum):
+    """
+        What a single-use password link is for.
+    """
+    INVITE = "INVITE"
+    RESET = "RESET"
+
+
+class AuthPasswordToken(PychestratePhase1Base, SerializableModel):
+    """
+        Single-use link that lets a user set their own password: an
+        invite for a new account or a reset an administrator issued.
+        Only the SHA-256 digest of the link secret is stored; the
+        secret itself is shown once to the administrator who created
+        it. A token is usable while ``used_at`` and ``revoked_at`` are
+        empty and ``expires_at`` is in the future.
+    """
+
+    __tablename__ = "auth_password_tokens"
+
+    token_id = Column(UUIDType(binary=False), primary_key=True)
+    user_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("identity_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    purpose = Column(
+        Enum(PasswordTokenPurpose, name="auth_password_token_purpose"),
+        nullable=False,
+    )
+    token_hash = Column(String(64), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_by = Column(UUIDType(binary=False), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_auth_password_tokens_user", "user_id"),
+    )
 
 
 class AuthSamlReplayCache(PychestratePhase1Base, SerializableModel):

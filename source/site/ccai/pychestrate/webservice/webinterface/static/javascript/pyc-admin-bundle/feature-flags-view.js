@@ -35,8 +35,20 @@ function next_flag_state(state) {
   const rtnval = FLAG_STATE_ENABLED;
   return rtnval;
 }
-function load_failure_message(status, subject) {
+/**
+ * What to say when a section failed to load.
+ *
+ * @param status HTTP status (0 when the request never completed).
+ * @param subject What was being loaded ("system health").
+ * @param required_permission The permission a 403 problem document
+ *   named (its ``required_permission`` member), when known.
+ */
+function load_failure_message(status, subject, required_permission) {
   if (status === 403) {
+    if (typeof required_permission === "string" && required_permission.length > 0) {
+      const rtnval3 = "You do not have permission to view " + subject + ": it needs the \u201C" + required_permission + "\u201D permission. Ask an administrator for access.";
+      return rtnval3;
+    }
     const rtnval2 = "You do not have permission to view " + subject + ".";
     return rtnval2;
   }
@@ -45,6 +57,25 @@ function load_failure_message(status, subject) {
     return rtnval2;
   }
   const rtnval = "Failed to load " + subject + " (HTTP " + String(status) + "). Try refreshing.";
+  return rtnval;
+}
+/**
+ * The ``required_permission`` member of a 403 problem document
+ * (``""`` when the body is not one).
+ *
+ * @param response The fetch response.
+ */
+async function read_required_permission(response) {
+  try {
+    const body = await response.json();
+    if (body !== null && typeof body === "object" && typeof body.required_permission === "string") {
+      const rtnval2 = body.required_permission;
+      return rtnval2;
+    }
+  } catch (reason) {
+    // Not a JSON problem document.
+  }
+  const rtnval = "";
   return rtnval;
 }
 function toggle_message_for_status(status) {
@@ -431,5 +462,6 @@ export {
   flag_state_tone,
   load_failure_message,
   next_flag_state,
+  read_required_permission,
   toggle_message_for_status
 };

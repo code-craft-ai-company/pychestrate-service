@@ -31,6 +31,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import json
+
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -167,6 +169,59 @@ def _build_variable_update_request(
 # ---------------------------------------------------------------------------
 
 
+def _variable_type_name(*, var_type: Any) -> str:
+    """
+        The lower-case type name (``"json"``, ``"boolean"`` ...) of a
+        :class:`VariableType` enum member or a plain string.
+
+        :param var_type: VariableType member, string, or None.
+
+        :returns: Type name ("" when unknown).
+    """
+    if var_type is None:
+        return ""
+    raw = getattr(var_type, "value", var_type)
+    rtnval = str(raw).strip().lower()
+    return rtnval
+
+
+def format_variable_value(*, value: Any, var_type: Any) -> str:
+    """
+        Render a stored variable value as the text the edit form
+        accepts back. The pages used to print the Python object
+        (``{'a': 1}``, ``True``), which is not JSON, so saving an
+        untouched edit form failed with "Invalid JSON" (audit ADM-09).
+
+        * ``json`` -- ``json.dumps`` with two-space indentation.
+        * ``boolean`` -- ``true`` / ``false``.
+        * everything else -- ``str(value)``.
+        * ``None`` -- an empty string.
+
+        :param value: The deserialized value.
+        :param var_type: The variable's :class:`VariableType` (or its
+                         name).
+
+        :returns: The canonical text form.
+    """
+    if value is None:
+        return ""
+
+    type_name = _variable_type_name(var_type=var_type)
+    if type_name == "json":
+        try:
+            rtnval = json.dumps(value, indent=2, ensure_ascii=False)
+        except (TypeError, ValueError):
+            rtnval = str(value)
+        return rtnval
+
+    if type_name == "boolean" and isinstance(value, bool) is True:
+        rtnval = "true" if value is True else "false"
+        return rtnval
+
+    rtnval = str(value)
+    return rtnval
+
+
 def _parse_pagination_params(
         *, request: Request,
         default_per_page: int = 20
@@ -244,6 +299,7 @@ def handle_variable_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variables"] = result.variables
+        context["format_value"] = format_variable_value
         context["total"] = total
         context["page"] = params["page"]
         context["per_page"] = per_page
@@ -418,6 +474,7 @@ def handle_variable_detail(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variable"] = variable
+        context["format_value"] = format_variable_value
         response = _render(
             template_name="config/variables/detail.html",
             context=context,
@@ -531,6 +588,7 @@ def handle_variable_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variable"] = variable
+        context["format_value"] = format_variable_value
         response = _render(
             template_name="config/variables/edit.html",
             context=context,
@@ -641,6 +699,7 @@ def handle_variable_history(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["variable"] = variable
+        context["format_value"] = format_variable_value
         context["history"] = history
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]

@@ -48,6 +48,12 @@
     {% endif %}
 </div>
 
+<div class="card narrow mt">
+    <h2 class="h3">Password</h2>
+    <p class="form-text">Change the password you sign in with.</p>
+    <a href="{{ url_for('config.account_password') }}" class="btn btn-secondary">Change password</a>
+</div>
+
 <p class="muted mt">
     Command line and automation: <a href="/account/api-tokens">manage your API tokens</a>.
 </p>

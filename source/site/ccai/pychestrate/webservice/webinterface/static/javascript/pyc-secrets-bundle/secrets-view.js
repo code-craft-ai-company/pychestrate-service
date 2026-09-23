@@ -53,6 +53,144 @@ function format_timestamp(value) {
   const rtnval = parsed.toLocaleString();
   return rtnval;
 }
+/**
+ * The date alone ("Sep 23, 2026") for a table cell; the cell's
+ * title carries the full timestamp.
+ *
+ * @param value ISO timestamp.
+ *
+ * @returns Short date text ("—" when absent).
+ */
+function format_date_compact(value) {
+  if (value === null || value === void 0 || value.length === 0) {
+    const rtnval2 = "—";
+    return rtnval2;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = value;
+    return rtnval2;
+  }
+  const rtnval = parsed.toLocaleDateString(void 0, {
+    year: "numeric",
+    month: "short",
+    day: "numeric"
+  });
+  return rtnval;
+}
+const SCOPE_LABELS = {
+  ORG: "Org",
+  PROJECT: "Project",
+  USER: "User"
+};
+/**
+ * The secrets table's columns. ``sortable`` columns get a header
+ * button that cycles ascending / descending / unsorted.
+ */
+const SECRET_TABLE_COLUMNS = [
+  { key: "secret_ref", label: "Name", sortable: true },
+  { key: "scope", label: "Scope", sortable: true },
+  { key: "created_at", label: "Created", sortable: true },
+  { key: "updated_at", label: "Updated", sortable: true },
+  { key: "value", label: "Value", sortable: false },
+  { key: "actions", label: "Actions", sortable: false }
+];
+/**
+ * The text a secret sorts by for one column.
+ *
+ * @param secret The secret metadata row.
+ * @param key The column key.
+ *
+ * @returns Sort text ("" when absent).
+ */
+function secret_sort_text(secret, key) {
+  if (key === "scope") {
+    const rtnval2 = String(secret.scope_kind || "") + " " + String(secret.scope_ref || "");
+    return rtnval2;
+  }
+  const value = secret[key];
+  if (value === null || value === void 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = String(value);
+  return rtnval;
+}
+/**
+ * Order two secrets by one column (numeric-aware, so ISO
+ * timestamps sort chronologically and "key-10" follows "key-9").
+ */
+function compare_secrets(left, right, key) {
+  const rtnval = secret_sort_text(left, key).localeCompare(
+    secret_sort_text(right, key),
+    void 0,
+    { numeric: true, sensitivity: "base" }
+  );
+  return rtnval;
+}
+/**
+ * Text that labels a control for screen readers but is not shown
+ * (e.g. the secret name after "Rotate" in each row).
+ */
+function build_hidden_text(text) {
+  const span = document.createElement("span");
+  span.classList.add("pyc-secrets__visually-hidden");
+  span.textContent = text;
+  return span;
+}
+/**
+ * A small icon-only copy button for a truncated value.
+ *
+ * @param value The text to copy.
+ * @param label The button's accessible name.
+ */
+function build_copy_button(value, label) {
+  const button = document.createElement("mj-copy-button");
+  button.classList.add("pyc-secrets__copy");
+  button.setAttribute("value", value);
+  button.setAttribute("label", label);
+  button.setAttribute("success-label", "Copied");
+  button.setAttribute("size", "sm");
+  button.setAttribute("icon-only", "");
+  const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  icon.setAttribute("slot", "icon-copy");
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("width", "14");
+  icon.setAttribute("height", "14");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("fill", "currentColor");
+  path.setAttribute(
+    "d",
+    "M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"
+  );
+  icon.appendChild(path);
+  button.appendChild(icon);
+  return button;
+}
+/**
+ * A table cell showing a timestamp's date, with the full
+ * timestamp as the title.
+ *
+ * @param label The column label (shown in the narrow card layout).
+ * @param value ISO timestamp.
+ */
+function build_time_cell(label, value) {
+  const cell = document.createElement("td");
+  cell.classList.add("pyc-secrets__time-cell");
+  cell.setAttribute("data-label", label);
+  if (value === null || value === void 0 || value.length === 0) {
+    cell.textContent = "—";
+    return cell;
+  }
+  const time = document.createElement("time");
+  time.setAttribute("datetime", value);
+  time.setAttribute("title", format_timestamp(value));
+  time.textContent = format_date_compact(value);
+  cell.appendChild(time);
+  return cell;
+}
 function reveal_error_message(status) {
   if (status === 403) {
     const rtnval2 = "You don't have access to this secret's value.";
@@ -144,6 +282,11 @@ class PycSecrets extends HTMLElement {
    * Per-secret reveal error message, keyed by secret_ref.
    */
   _reveal_errors;
+  /**
+   * Table sort: the column key ("" for the API's order) and
+   * ``"ascending"`` / ``"descending"``.
+   */
+  _sort;
   constructor() {
     super();
     this._state = {
@@ -166,6 +309,7 @@ class PycSecrets extends HTMLElement {
     this._action_status = null;
     this._revealed = /* @__PURE__ */ new Map();
     this._reveal_errors = /* @__PURE__ */ new Map();
+    this._sort = { key: "", direction: "none" };
   }
   /**
    * Diagnostic accessor used by unit tests to inspect the scope
@@ -248,6 +392,9 @@ class PycSecrets extends HTMLElement {
     table_region.id = "pyc-secrets-tabpanel";
     table_region.setAttribute("role", "region");
     table_region.setAttribute("aria-label", "Secrets in the selected scope");
+    // The region scrolls sideways when the table is wider than it;
+    // a tab stop lets keyboard users scroll it.
+    table_region.tabIndex = 0;
     root.appendChild(table_region);
     this._table_region = table_region;
     const pager = document.createElement("mj-pagination");
@@ -616,6 +763,48 @@ class PycSecrets extends HTMLElement {
     return rtnval;
   }
   /**
+   * Order the (filtered) secrets by the active sort column. Sorting
+   * applies to the whole list before paging.
+   *
+   * @param secrets The secrets to order.
+   *
+   * @returns A sorted copy (the input when no column is active).
+   */
+  _sorted_secrets(secrets) {
+    if (this._sort.key.length === 0) {
+      return secrets;
+    }
+    const key = this._sort.key;
+    const factor = this._sort.direction === "descending" ? -1 : 1;
+    const rtnval = secrets.slice().sort(
+      (left, right) => factor * compare_secrets(left, right, key)
+    );
+    return rtnval;
+  }
+  /**
+   * Cycle a column's sort: ascending, descending, then the API's
+   * order. Keeps keyboard focus on the header button.
+   *
+   * @param key The column key.
+   */
+  _toggle_sort(key) {
+    if (this._sort.key !== key) {
+      this._sort = { key, direction: "ascending" };
+    } else if (this._sort.direction === "ascending") {
+      this._sort = { key, direction: "descending" };
+    } else {
+      this._sort = { key: "", direction: "none" };
+    }
+    this._render_table_region();
+    if (this._table_region !== null) {
+      const button = this._table_region.querySelector('[data-role="sort-' + key + '"]');
+      if (button !== null && typeof button.focus === "function") {
+        button.focus();
+      }
+    }
+    return;
+  }
+  /**
    * Slice the filtered secrets down to the current page.
    *
    * @param filtered The filtered secrets list.
@@ -678,7 +867,7 @@ class PycSecrets extends HTMLElement {
       this._render_pager();
       return;
     }
-    const filtered = this._filtered_secrets();
+    const filtered = this._sorted_secrets(this._filtered_secrets());
     this._state.total = filtered.length;
     if (filtered.length === 0) {
       this._table = null;
@@ -700,116 +889,214 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Build the secrets metadata ``<mj-table>``. The table renders
-   * METADATA only -- name, scope, timestamps -- and NEVER the
-   * value column on initial load. The Value column re-renders from
-   * the transient ``_revealed`` / ``_reveal_errors`` maps when a
-   * row's reveal state changes (see ``_refresh_row``).
+   * Build the secrets metadata table. The table renders METADATA
+   * only -- name, scope, timestamps -- and NEVER a value on initial
+   * load; a row's Value cell re-renders from the transient
+   * ``_revealed`` / ``_reveal_errors`` maps when its reveal state
+   * changes (see ``_refresh_row``).
+   *
+   * A native table in the light DOM rather than ``mj-data-table``
+   * (audit ADM-14): the header scrolls with the rows inside the one
+   * scroll container (the table region) instead of drifting away
+   * from them, the Actions column stays pinned to the region's right
+   * edge when the table is wider than the region, long names and
+   * scope references are truncated with the full text in a tooltip
+   * and a copy button, and a narrow region shows one card per
+   * secret.
    *
    * @param page_rows The current page's secrets.
    */
   _build_table(page_rows) {
-    const self = this;
-    const table = document.createElement("mj-data-table");
+    const table = document.createElement("table");
     table.classList.add("pyc-secrets__table");
-    // Sorting is client-side over the current page; the timestamp
-    // columns sort by their raw ISO strings (chronological order).
-    table.setAttribute("sortable", "");
-    table.setAttribute("resizable", "");
-    table.rowClass = "pyc-secrets__row";
-    table.rowAttrs = (secret) => ({ "data-secret-ref": secret.secret_ref });
-    table.columns = [
-      {
-        key: "secret_ref",
-        label: "Name",
-        width: "20rem",
-        render: (secret) => {
-          const name_code = document.createElement("code");
-          name_code.classList.add("pyc-secrets__ref");
-          name_code.textContent = secret.secret_ref;
-          return name_code;
-        }
-      },
-      {
-        key: "scope",
-        label: "Scope",
-        width: "12rem",
-        render: (secret) => {
-          const badge = document.createElement("mj-chip");
-          badge.classList.add("pyc-secrets__badge");
-          badge.setAttribute("data-scope-kind", secret.scope_kind);
-          let scope_text = secret.scope_kind;
-          if (secret.scope_ref !== null && secret.scope_ref !== void 0 && secret.scope_ref.length > 0) {
-            scope_text = secret.scope_kind + " \xB7 " + secret.scope_ref;
-          }
-          badge.textContent = scope_text;
-          return badge;
-        }
-      },
-      {
-        key: "created_at",
-        label: "Created",
-        width: "12rem",
-        render: (secret) => format_timestamp(secret.created_at)
-      },
-      {
-        key: "updated_at",
-        label: "Updated",
-        width: "12rem",
-        render: (secret) => format_timestamp(secret.updated_at)
-      },
-      {
-        key: "value",
-        label: "Value",
-        width: "16rem",
-        sortable: false,
-        cellClass: "pyc-secrets__value-cell",
-        cellAttrs: () => ({ "data-role": "value-cell" }),
-        render: (secret) => self._build_value_node(secret)
-      },
-      {
-        key: "actions",
-        label: "Actions",
-        width: "18rem",
-        sortable: false,
-        cellClass: "pyc-secrets__actions",
-        render: (secret) => {
-          const fragment = document.createDocumentFragment();
-          const reveal_button = document.createElement("mj-button");
-          reveal_button.classList.add("pyc-secrets__button");
-          reveal_button.setAttribute("type", "button");
-          reveal_button.setAttribute("data-role", "reveal-action");
-          const is_revealed = self._revealed.has(secret.secret_ref);
-          reveal_button.textContent = is_revealed === true ? "Hide value" : "Reveal value";
-          reveal_button.addEventListener("click", () => {
-            void self._toggle_reveal(secret);
-          });
-          fragment.appendChild(reveal_button);
-          const rotate_button = document.createElement("mj-button");
-          rotate_button.classList.add("pyc-secrets__button");
-          rotate_button.setAttribute("type", "button");
-          rotate_button.setAttribute("data-role", "rotate-action");
-          rotate_button.textContent = "Rotate";
-          rotate_button.addEventListener("click", () => {
-            self._open_rotate_form(secret);
-          });
-          fragment.appendChild(rotate_button);
-          const delete_button = document.createElement("mj-button");
-          delete_button.classList.add("pyc-secrets__button", "pyc-secrets__button--danger");
-          delete_button.setAttribute("type", "button");
-          delete_button.setAttribute("data-role", "delete-action");
-          delete_button.textContent = "Delete";
-          delete_button.addEventListener("click", () => {
-            void self._delete_secret(secret);
-          });
-          fragment.appendChild(delete_button);
-          return fragment;
-        }
-      }
-    ];
-    table.rows = page_rows;
+    table.setAttribute("data-role", "secrets-table");
+    const caption = document.createElement("caption");
+    caption.classList.add("pyc-secrets__visually-hidden");
+    caption.textContent = "Secrets in the " + (SCOPE_LABELS[this._state.scopeKind] || this._state.scopeKind) + " scope";
+    table.appendChild(caption);
+    const head = document.createElement("thead");
+    const head_row = document.createElement("tr");
+    for (const column of SECRET_TABLE_COLUMNS) {
+      head_row.appendChild(this._build_header_cell(column));
+    }
+    head.appendChild(head_row);
+    table.appendChild(head);
+    const body = document.createElement("tbody");
+    for (const secret of page_rows) {
+      body.appendChild(this._build_row(secret));
+    }
+    table.appendChild(body);
     this._table = table;
     return table;
+  }
+  /**
+   * Build one column header; sortable columns hold a button that
+   * cycles the sort and report it through ``aria-sort``.
+   *
+   * @param column One of ``SECRET_TABLE_COLUMNS``.
+   */
+  _build_header_cell(column) {
+    const cell = document.createElement("th");
+    cell.setAttribute("scope", "col");
+    cell.setAttribute("data-col-key", column.key);
+    if (column.key === "actions") {
+      cell.classList.add("pyc-secrets__col-actions");
+    }
+    if (column.sortable !== true) {
+      cell.textContent = column.label;
+      return cell;
+    }
+    let direction = "none";
+    if (this._sort.key === column.key) {
+      direction = this._sort.direction;
+    }
+    cell.setAttribute("aria-sort", direction);
+    const button = document.createElement("button");
+    button.setAttribute("type", "button");
+    button.classList.add("pyc-secrets__sort");
+    button.setAttribute("data-role", "sort-" + column.key);
+    button.appendChild(document.createTextNode(column.label));
+    const indicator = document.createElement("span");
+    indicator.classList.add("pyc-secrets__sort-indicator");
+    indicator.setAttribute("aria-hidden", "true");
+    if (direction === "ascending") {
+      indicator.textContent = "▲";
+    } else if (direction === "descending") {
+      indicator.textContent = "▼";
+    } else {
+      indicator.textContent = "↕";
+    }
+    button.appendChild(indicator);
+    button.addEventListener("click", () => {
+      this._toggle_sort(column.key);
+    });
+    cell.appendChild(button);
+    return cell;
+  }
+  /**
+   * Build one secret's row. Every cell carries ``data-label`` so the
+   * narrow card layout can name it.
+   *
+   * @param secret The secret metadata row.
+   */
+  _build_row(secret) {
+    const row = document.createElement("tr");
+    row.classList.add("pyc-secrets__row");
+    row.setAttribute("data-secret-ref", secret.secret_ref);
+    const name_cell = document.createElement("th");
+    name_cell.setAttribute("scope", "row");
+    name_cell.classList.add("pyc-secrets__name-cell");
+    name_cell.setAttribute("data-label", "Name");
+    const name = document.createElement("div");
+    name.classList.add("pyc-secrets__name");
+    const name_code = document.createElement("code");
+    name_code.classList.add("pyc-secrets__ref");
+    name_code.setAttribute("title", secret.secret_ref);
+    name_code.textContent = secret.secret_ref;
+    name.appendChild(name_code);
+    name.appendChild(build_copy_button(secret.secret_ref, "Copy the name " + secret.secret_ref));
+    name_cell.appendChild(name);
+    row.appendChild(name_cell);
+    const scope_cell = document.createElement("td");
+    scope_cell.setAttribute("data-label", "Scope");
+    scope_cell.appendChild(this._build_scope_node(secret));
+    row.appendChild(scope_cell);
+    row.appendChild(build_time_cell("Created", secret.created_at));
+    row.appendChild(build_time_cell("Updated", secret.updated_at));
+    const value_cell = document.createElement("td");
+    value_cell.classList.add("pyc-secrets__value-cell");
+    value_cell.setAttribute("data-role", "value-cell");
+    value_cell.setAttribute("data-label", "Value");
+    value_cell.appendChild(this._build_value_node(secret));
+    row.appendChild(value_cell);
+    const actions_cell = document.createElement("td");
+    actions_cell.classList.add("pyc-secrets__col-actions");
+    actions_cell.setAttribute("data-label", "Actions");
+    actions_cell.appendChild(this._build_actions(secret));
+    row.appendChild(actions_cell);
+    return row;
+  }
+  /**
+   * The scope badge, plus the scope reference (a project or user
+   * id) truncated with its full text in a tooltip and a copy button.
+   *
+   * @param secret The secret metadata row.
+   */
+  _build_scope_node(secret) {
+    const scope = document.createElement("div");
+    scope.classList.add("pyc-secrets__scope");
+    const badge = document.createElement("span");
+    badge.classList.add("pyc-secrets__badge");
+    badge.setAttribute("data-scope-kind", secret.scope_kind);
+    badge.textContent = SCOPE_LABELS[secret.scope_kind] || secret.scope_kind;
+    scope.appendChild(badge);
+    if (secret.scope_ref !== null && secret.scope_ref !== void 0 && secret.scope_ref.length > 0) {
+      const ref = document.createElement("code");
+      ref.classList.add("pyc-secrets__scope-ref-text");
+      ref.setAttribute("title", secret.scope_ref);
+      ref.textContent = secret.scope_ref;
+      scope.appendChild(ref);
+      scope.appendChild(build_copy_button(secret.scope_ref, "Copy the scope reference " + secret.scope_ref));
+    }
+    return scope;
+  }
+  /**
+   * The row's Reveal / Rotate / Delete buttons. Each button's
+   * accessible name includes the secret's name.
+   *
+   * @param secret The secret metadata row.
+   */
+  _build_actions(secret) {
+    const actions = document.createElement("div");
+    actions.classList.add("pyc-secrets__actions");
+    const reveal_button = document.createElement("mj-button");
+    reveal_button.classList.add("pyc-secrets__row-action");
+    reveal_button.setAttribute("type", "button");
+    reveal_button.setAttribute("size", "sm");
+    reveal_button.setAttribute("data-role", "reveal-action");
+    this._sync_reveal_button(reveal_button, secret);
+    reveal_button.addEventListener("click", () => {
+      void this._toggle_reveal(secret);
+    });
+    actions.appendChild(reveal_button);
+    const rotate_button = document.createElement("mj-button");
+    rotate_button.classList.add("pyc-secrets__row-action");
+    rotate_button.setAttribute("type", "button");
+    rotate_button.setAttribute("size", "sm");
+    rotate_button.setAttribute("data-role", "rotate-action");
+    rotate_button.appendChild(document.createTextNode("Rotate"));
+    rotate_button.appendChild(build_hidden_text(" " + secret.secret_ref));
+    rotate_button.addEventListener("click", () => {
+      this._open_rotate_form(secret);
+    });
+    actions.appendChild(rotate_button);
+    const delete_button = document.createElement("mj-button");
+    delete_button.classList.add("pyc-secrets__row-action", "pyc-secrets__row-action--danger");
+    delete_button.setAttribute("type", "button");
+    delete_button.setAttribute("size", "sm");
+    delete_button.setAttribute("data-role", "delete-action");
+    delete_button.appendChild(document.createTextNode("Delete"));
+    delete_button.appendChild(build_hidden_text(" " + secret.secret_ref));
+    delete_button.addEventListener("click", () => {
+      void this._delete_secret(secret);
+    });
+    actions.appendChild(delete_button);
+    return actions;
+  }
+  /**
+   * Set the reveal button's label from the row's reveal state.
+   *
+   * @param button The row's reveal ``mj-button``.
+   * @param secret The secret metadata row.
+   */
+  _sync_reveal_button(button, secret) {
+    const is_revealed = this._revealed.has(secret.secret_ref);
+    const label = is_revealed === true ? "Hide" : "Reveal";
+    button.replaceChildren(
+      document.createTextNode(label),
+      build_hidden_text(" the value of " + secret.secret_ref)
+    );
+    return;
   }
   /**
    * Build the per-secret value-cell node -- the masked placeholder
@@ -888,7 +1175,7 @@ class PycSecrets extends HTMLElement {
       // Plaintext stays on screen for 30 seconds at most.
       window.setTimeout(() => {
         if (this._revealed.delete(secret.secret_ref) === true) {
-          this._render_table_region();
+          this._refresh_row(secret.secret_ref);
         }
       }, 30000);
       this._refresh_row(secret.secret_ref);
@@ -1161,19 +1448,37 @@ class PycSecrets extends HTMLElement {
     return;
   }
   /**
-   * Trigger a re-render of the table after a reveal toggle so the
-   * row's Value + Actions cells pick up the new ``_revealed`` /
-   * ``_reveal_errors`` state. The render callbacks read from those
-   * maps so a single ``rows = …`` re-assignment is enough.
+   * Update one row's Value cell and reveal button in place after a
+   * reveal toggle, from the ``_revealed`` / ``_reveal_errors`` maps.
+   * Updating in place (rather than re-rendering the table) keeps
+   * keyboard focus on the button the user pressed.
    *
-   * @param secret_ref The secret_ref of the row that changed
-   *                    (unused -- the whole page re-renders).
+   * @param secret_ref The secret_ref of the row that changed.
    */
   _refresh_row(secret_ref) {
     if (this._table === null) {
       return;
     }
-    this._table.rows = this._page_slice(this._filtered_secrets());
+    let row = null;
+    for (const candidate of Array.from(this._table.querySelectorAll("tr[data-secret-ref]"))) {
+      if (candidate.getAttribute("data-secret-ref") === secret_ref) {
+        row = candidate;
+        break;
+      }
+    }
+    const secret = this._secrets.find((candidate) => candidate.secret_ref === secret_ref);
+    if (row === null || secret === void 0) {
+      this._render_table_region();
+      return;
+    }
+    const value_cell = row.querySelector('[data-role="value-cell"]');
+    if (value_cell !== null) {
+      value_cell.replaceChildren(this._build_value_node(secret));
+    }
+    const reveal_button = row.querySelector('[data-role="reveal-action"]');
+    if (reveal_button !== null) {
+      this._sync_reveal_button(reveal_button, secret);
+    }
     return;
   }
 }

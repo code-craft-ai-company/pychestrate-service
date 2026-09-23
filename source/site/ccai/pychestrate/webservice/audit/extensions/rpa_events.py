@@ -21,6 +21,7 @@ class RpaJobTypeRegisteredAuditEvents(AuditEventTypeExtension):
     """
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.rpa.job_type_registered"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     source_topic: str = "entity.rpa.job_type_registered"
     payload_schema: dict = {
         "type": "object",
@@ -40,6 +41,7 @@ class RpaJobTypePublishedAuditEvents(AuditEventTypeExtension):
     """
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.rpa.job_type_published"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     source_topic: str = "entity.rpa.job_type_published"
     payload_schema: dict = {
         "type": "object",
@@ -59,6 +61,7 @@ class RpaJobTypeRetiredAuditEvents(AuditEventTypeExtension):
     """
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.rpa.job_type_retired"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     source_topic: str = "entity.rpa.job_type_retired"
     payload_schema: dict = {
         "type": "object",
@@ -78,6 +81,7 @@ class RpaJobTypeUpdatedAuditEvents(AuditEventTypeExtension):
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.rpa.job_type_updated"
     source_topic: str = "entity.rpa.job_type_updated"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     payload_schema: dict = {
         "type": "object",
         "required": ["type_id", "changed_fields"],
@@ -180,6 +184,7 @@ class RpaSpecChangedAuditEvents(AuditEventTypeExtension):
     """
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.rpa.spec_updated"
+    actor_payload_keys: tuple = ("actor_user_id", "actor_id")
     source_topic: str = "entity.rpa.spec_updated"
     payload_schema: dict = {
         "type": "object",
