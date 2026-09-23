@@ -525,10 +525,109 @@ def _describe_resource_manager_error(*, exc: Exception) -> Optional[str]:
         ResourceValidationError,
         TagNotFoundError,
     )
-    if isinstance(exc, typed_errors):
-        rtnval = exc.message
+    if not isinstance(exc, typed_errors):
+        return None
+
+    # The manager's text (ids, codes) is for the log; the person
+    # gets the copy below.
+    _log_refusal(exc=exc)
+    if isinstance(exc, ResourceHasAllocationsError):
+        rtnval = (
+            "This resource is checked out. Check it in, or force a"
+            " check-in, before deleting it."
+        )
         return rtnval
-    return None
+    if isinstance(exc, PoolHasResourcesError):
+        rtnval = "{}. Move or delete them first.".format(exc.message)
+        return rtnval
+    copy = _RESOURCE_ERROR_COPY.get(getattr(exc, "error_code", ""), None)
+    if copy is not None:
+        return copy
+    # Validation and duplicate-name messages are written for people.
+    rtnval = _as_sentence(text=exc.message)
+    return rtnval
+
+
+# User-facing copy for typed manager errors, by error code. The
+# managers' own messages name ids, fields and statuses for the logs;
+# these are what a person sees. A code not listed keeps the manager's
+# message, which for the remaining codes is already written for
+# people.
+_RESOURCE_ERROR_COPY: Dict[str, str] = {
+    "RESOURCE_NOT_FOUND": "That resource no longer exists.",
+    "POOL_NOT_FOUND": "That pool no longer exists.",
+    "TAG_NOT_FOUND": "That tag no longer exists.",
+}
+
+_ALLOCATION_ERROR_COPY: Dict[str, str] = {
+    "TIMES_REQUIRED": "Enter both a start time and an end time.",
+    "END_NOT_AFTER_START": "The end time must be after the start time.",
+    "START_IN_PAST": "The start time has already passed. Choose a start time in the future.",
+    "RESOURCE_NOT_FOUND": "That resource no longer exists.",
+    "ALLOCATION_NOT_FOUND": "That allocation no longer exists.",
+    "ALLOCATION_NOT_ACTIVE": "This allocation has already been checked in.",
+    "NOT_ALLOCATION_OWNER": (
+        "Only the person who checked this resource out can check it in."
+        " An administrator can force a check-in from the allocation's page."
+    ),
+    "NOT_RESERVATION_OWNER": "Only the person who made this reservation can change or cancel it.",
+    "RESERVATION_NOT_FOUND": "That reservation no longer exists.",
+    "RESERVATION_NOT_CANCELLABLE": (
+        "This reservation can no longer be cancelled: it has already"
+        " started, finished or been cancelled."
+    ),
+    "RESERVATION_NOT_MODIFIABLE": (
+        "Only upcoming reservations can be changed; this one has already"
+        " started, finished or been cancelled."
+    ),
+}
+
+
+def _log_refusal(*, exc: Exception) -> None:
+    """
+        Keep the manager's own wording of a refused request in the
+        log, since the person sees friendlier copy instead.
+
+        :param exc: The typed manager error.
+
+        :returns: None.
+    """
+    _LOGGER.info(
+        "Resources request refused [%s]: %s",
+        getattr(exc, "error_code", type(exc).__name__),
+        getattr(exc, "message", str(exc)),
+    )
+    return
+
+
+def _as_sentence(*, text: str) -> str:
+    """
+        End a message passed through from a manager with a full stop,
+        like every other flash on the resources pages.
+
+        :param text: The message.
+
+        :returns: The message ending in punctuation.
+    """
+    stripped = str(text).rstrip()
+    if len(stripped) == 0 or stripped[-1] in ".!?":
+        return stripped
+    rtnval = stripped + "."
+    return rtnval
+
+
+def _format_utc(*, value: Any) -> str:
+    """
+        ``YYYY-MM-DD HH:MM UTC`` for a datetime in a message (the
+        stored times are UTC; a naive one is taken to be UTC).
+
+        :param value: The datetime.
+
+        :returns: The formatted text.
+    """
+    from ccai.pychestrate.core.defaults import ensure_utc  # noqa: E402
+    rtnval = "{} UTC".format(ensure_utc(value).strftime("%Y-%m-%d %H:%M"))
+    return rtnval
 
 
 _REMOVED_RECORD_LABELS = (
@@ -587,10 +686,18 @@ def _describe_allocation_error(*, exc: Exception) -> Optional[str]:
             ConcurrentModificationError,
             LockTimeoutError,
             ReservationConflictError,
+            ResourceOfflineError,
             ResourceUnavailableError,
         )
     except ImportError:
         return None
+
+    if not isinstance(exc, AllocationError):
+        return None
+
+    # The manager's text (ids, field names, statuses) is for the log;
+    # the person gets the copy below.
+    _log_refusal(exc=exc)
 
     if isinstance(exc, ResourceUnavailableError):
         msg_parts = ["{}.".format(exc.message)]
@@ -599,63 +706,85 @@ def _describe_allocation_error(*, exc: Exception) -> Optional[str]:
             if current.username is not None:
                 holder = current.username
             else:
-                holder = "user {}".format(current.user_id)
+                holder = "another user"
             msg_parts.append(
                 "Held by {} (allocation #{}).".format(holder, current.id)
             )
             if current.expected_checkin is not None:
                 msg_parts.append(
-                    "Expected checkin: {}.".format(
-                        current.expected_checkin.strftime("%Y-%m-%d %H:%M")
+                    "Expected check-in: {}.".format(
+                        _format_utc(value=current.expected_checkin)
                     )
                 )
             else:
-                msg_parts.append("No expected checkin time is set.")
+                msg_parts.append("No expected check-in time is set.")
         rtnval = " ".join(msg_parts)
         return rtnval
 
     if isinstance(exc, CapacityExceededError):
-        msg_parts = ["{}.".format(exc.message)]
         if exc.capacity is not None and exc.current_allocations is not None:
-            msg_parts.append(
-                "{} of {} allocation slots are in use.".format(
-                    exc.current_allocations, exc.capacity
+            rtnval = (
+                "All {} allocation slots of this resource are in use ({}"
+                " checked out). Check one in to free a slot.".format(
+                    exc.capacity, exc.current_allocations
                 )
             )
-        msg_parts.append("Check in an allocation to free capacity.")
-        rtnval = " ".join(msg_parts)
+        else:
+            rtnval = (
+                "This resource is at capacity. Check an allocation in to"
+                " free a slot."
+            )
         return rtnval
 
     if isinstance(exc, ReservationConflictError):
-        msg_parts = ["{}.".format(exc.message)]
+        held = []
         for conflict in exc.conflicting_reservations[:3]:
-            msg_parts.append(
-                "Reservation #{} holds {} to {}.".format(
+            held.append(
+                "reservation #{} from {} to {}".format(
                     conflict.id,
-                    conflict.start_time.strftime("%Y-%m-%d %H:%M"),
-                    conflict.end_time.strftime("%Y-%m-%d %H:%M"),
+                    _format_utc(value=conflict.start_time),
+                    _format_utc(value=conflict.end_time),
                 )
             )
-        rtnval = " ".join(msg_parts)
+        if len(held) == 0:
+            rtnval = "The resource is already reserved for part of that time."
+        else:
+            rtnval = (
+                "The resource is already reserved for part of that time:"
+                " {}.".format("; ".join(held))
+            )
+        return rtnval
+
+    if isinstance(exc, ResourceOfflineError):
+        status = getattr(exc, "health_status", None)
+        described = "in maintenance" if status == "maintenance" else (status or "unavailable")
+        rtnval = (
+            "This resource is {} and cannot be checked out until it is"
+            " back online.".format(described)
+        )
         return rtnval
 
     if isinstance(exc, LockTimeoutError):
-        rtnval = "{}. Please try again.".format(exc.message)
+        rtnval = (
+            "Another request is changing this resource right now. Please"
+            " try again."
+        )
         return rtnval
 
     if isinstance(exc, ConcurrentModificationError):
         rtnval = (
-            "{}. Refresh the page and try again.".format(exc.message)
+            "Someone else changed this at the same time. Refresh the page"
+            " and try again."
         )
         return rtnval
 
-    if isinstance(exc, AllocationError):
-        # Remaining typed errors (offline, not-found, not-owner,
-        # invalid-window, no-matching-resource) carry deliberate
-        # user-appropriate messages.
-        rtnval = exc.message
-        return rtnval
-    return None
+    copy = _ALLOCATION_ERROR_COPY.get(getattr(exc, "error_code", ""), None)
+    if copy is not None:
+        return copy
+    # Remaining typed errors (no matching resource, permission) carry
+    # messages written for people.
+    rtnval = _as_sentence(text=exc.message)
+    return rtnval
 
 
 # ---------------------------------------------------------------------------

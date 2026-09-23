@@ -77,6 +77,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _as_sentence,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -287,18 +288,8 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
     except ImportError:
         return None
 
-    if isinstance(exc, CIDROverlapError):
-        msg_parts = ["{}.".format(exc.message)]
-        if len(exc.overlapping_pools) > 0:
-            msg_parts.append(
-                "Overlapping pools: {}.".format(
-                    ", ".join(exc.overlapping_pools)
-                )
-            )
-        rtnval = " ".join(msg_parts)
-        return rtnval
-
     typed_errors = (
+        CIDROverlapError,
         DuplicateIPPoolError,
         IPAllocationNotFoundError,
         IPNotAvailableError,
@@ -310,10 +301,56 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
         IPReservedError,
         NotIPAllocationOwnerError,
     )
-    if isinstance(exc, typed_errors):
-        rtnval = exc.message
+    if not isinstance(exc, typed_errors):
+        return None
+
+    # The manager's text (ids, Python ipaddress wording) is for the
+    # log; the person gets the copy below.
+    _LOGGER.info(
+        "IP pool request refused [%s]: %s",
+        getattr(exc, "error_code", type(exc).__name__),
+        getattr(exc, "message", str(exc)),
+    )
+
+    if isinstance(exc, CIDROverlapError):
+        # Name the overlapping pools once (the manager's message
+        # already listed them, so appending them repeated the list).
+        if len(exc.overlapping_pools) > 0:
+            rtnval = "That range overlaps the IP pool{} {}.".format(
+                "s" if len(exc.overlapping_pools) > 1 else "",
+                ", ".join(exc.overlapping_pools),
+            )
+        else:
+            rtnval = "That range overlaps an existing IP pool."
         return rtnval
-    return None
+
+    if isinstance(exc, IPPoolHasAllocationsError):
+        rtnval = "{}. Check those addresses in first.".format(exc.message)
+        return rtnval
+
+    copy = _IP_POOL_ERROR_COPY.get(getattr(exc, "error_code", ""), None)
+    if copy is not None:
+        return copy
+    # The remaining messages (reserved / unavailable / outside the
+    # range / not an IP address / duplicate name / exhausted) are
+    # written for people.
+    rtnval = _as_sentence(text=exc.message)
+    return rtnval
+
+
+# User-facing copy for typed IPPoolManager errors, by error code (the
+# managers' own messages stay in the log).
+_IP_POOL_ERROR_COPY: Dict[str, str] = {
+    "INVALID_CIDR": (
+        "Enter the range in CIDR notation, such as 192.168.1.0/24 or"
+        " 2001:db8::/64."
+    ),
+    "INVALID_DNS_SERVER": "Each DNS server must be an IP address, such as 8.8.8.8.",
+    "INVALID_POOL_NAME": "Enter a name for the IP pool.",
+    "IP_POOL_NOT_FOUND": "That IP pool no longer exists.",
+    "IP_ALLOCATION_NOT_FOUND": "That IP allocation no longer exists.",
+    "NOT_IP_ALLOCATION_OWNER": "Only the person who checked this address out can check it in.",
+}
 
 
 def _parse_csv_string(*, raw: str) -> List[str]:

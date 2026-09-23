@@ -643,7 +643,8 @@ class AllocationManager:
         # Check if already released
         if allocation.status != AllocationStatus.ACTIVE.value:
             raise AllocationNotFoundError(
-                f"Allocation '{allocation_id}' is not active (status: {allocation.status})"
+                f"Allocation '{allocation_id}' is not active (status: {allocation.status})",
+                error_code="ALLOCATION_NOT_ACTIVE"
             )
         
         # Release the allocation
@@ -696,7 +697,8 @@ class AllocationManager:
         # Check if already released
         if allocation.status != AllocationStatus.ACTIVE.value:
             raise AllocationNotFoundError(
-                f"Allocation '{allocation_id}' is not active (status: {allocation.status})"
+                f"Allocation '{allocation_id}' is not active (status: {allocation.status})",
+                error_code="ALLOCATION_NOT_ACTIVE"
             )
         
         # Force release the allocation
@@ -1152,7 +1154,7 @@ class AllocationManager:
         
         # Validate time window
         if request.start_time is None or request.end_time is None:
-            raise InvalidTimeWindowError("Both start_time and end_time are required")
+            raise InvalidTimeWindowError("Both start_time and end_time are required", error_code="TIMES_REQUIRED")
         
         # A naive time is taken to be UTC (as the database layer stores it), so
         # the comparisons below never mix naive and aware values.
@@ -1160,11 +1162,11 @@ class AllocationManager:
         end_time = ensure_utc(request.end_time)
         
         if start_time >= end_time:
-            raise InvalidTimeWindowError("start_time must be before end_time")
+            raise InvalidTimeWindowError("start_time must be before end_time", error_code="END_NOT_AFTER_START")
         
         now = utc_now()
         if start_time < now:
-            raise InvalidTimeWindowError("start_time cannot be in the past")
+            raise InvalidTimeWindowError("start_time cannot be in the past", error_code="START_IN_PAST")
         
         # Validate mode
         mode = request.mode.lower() if request.mode else "exclusive"
@@ -1241,13 +1243,15 @@ class AllocationManager:
         # Check ownership
         if str(reservation.user_id) != str(user_id):
             raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'"
+                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
+                error_code="NOT_RESERVATION_OWNER"
             )
         
         # Check if reservation can be cancelled
         if reservation.status not in (ReservationStatus.PENDING.value, ReservationStatus.ACTIVE.value):
             raise ReservationNotFoundError(
-                f"Reservation '{reservation_id}' cannot be cancelled (status: {reservation.status})"
+                f"Reservation '{reservation_id}' cannot be cancelled (status: {reservation.status})",
+                error_code="RESERVATION_NOT_CANCELLABLE"
             )
         
         # Cancel the reservation
@@ -1302,13 +1306,15 @@ class AllocationManager:
         # Check ownership
         if str(reservation.user_id) != str(user_id):
             raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'"
+                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
+                error_code="NOT_RESERVATION_OWNER"
             )
         
         # Check if reservation can be modified
         if reservation.status != ReservationStatus.PENDING.value:
             raise ReservationNotFoundError(
-                f"Reservation '{reservation_id}' cannot be modified (status: {reservation.status})"
+                f"Reservation '{reservation_id}' cannot be modified (status: {reservation.status})",
+                error_code="RESERVATION_NOT_MODIFIABLE"
             )
         
         # Determine new time window (naive values are taken to be UTC)
@@ -1317,11 +1323,11 @@ class AllocationManager:
         
         # Validate new time window
         if new_start >= new_end:
-            raise InvalidTimeWindowError("start_time must be before end_time")
+            raise InvalidTimeWindowError("start_time must be before end_time", error_code="END_NOT_AFTER_START")
         
         now = utc_now()
         if new_start < now:
-            raise InvalidTimeWindowError("start_time cannot be in the past")
+            raise InvalidTimeWindowError("start_time cannot be in the past", error_code="START_IN_PAST")
         
         # Check for conflicts with existing reservations (excluding this one)
         conflicts = self.check_reservation_conflicts(

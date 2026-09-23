@@ -1150,8 +1150,14 @@ class IPPoolManager:
         # Determine which IP to allocate
         if request.specific_ip:
             # Compare and store addresses in canonical form
-            specific_ip = canonical_ip(request.specific_ip) or request.specific_ip
-            
+            specific_ip = canonical_ip(request.specific_ip)
+            if specific_ip is None:
+                raise IPPoolValidationError(
+                    f"'{request.specific_ip}' is not a valid IP address",
+                    field="specific_ip",
+                    error_code="INVALID_IP_ADDRESS"
+                )
+
             # Validate specific IP is in pool range
             if not is_ip_in_cidr(specific_ip, pool.cidr):
                 raise IPNotInPoolError(

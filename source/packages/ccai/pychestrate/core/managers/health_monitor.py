@@ -556,22 +556,22 @@ class HealthMonitor:
 
         if config.interval_seconds < 1:
             raise InvalidHealthCheckConfigError(
-                "interval_seconds must be at least 1"
+                "interval_seconds must be at least 1", error_code="INTERVAL_TOO_SHORT"
             )
         
         if config.timeout_seconds < 1:
             raise InvalidHealthCheckConfigError(
-                "timeout_seconds must be at least 1"
+                "timeout_seconds must be at least 1", error_code="TIMEOUT_TOO_SHORT"
             )
         
         if config.failure_threshold < 1:
             raise InvalidHealthCheckConfigError(
-                "failure_threshold must be at least 1"
+                "failure_threshold must be at least 1", error_code="FAILURE_THRESHOLD_TOO_LOW"
             )
         
         if config.success_threshold < 1:
             raise InvalidHealthCheckConfigError(
-                "success_threshold must be at least 1"
+                "success_threshold must be at least 1", error_code="SUCCESS_THRESHOLD_TOO_LOW"
             )
         
         # Get the resource
