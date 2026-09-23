@@ -64,6 +64,7 @@ READY_TIMEOUT_MS: int = 15_000
 
 #: Display name the rendered shell document carries.
 SHELL_USER_DISPLAY_NAME: str = "Ada Admin"
+SHELL_USER_LOGIN_NAME: str = "admin"
 
 #: Dict of API path -> JSON-serializable body (or callable(query) -> body).
 ApiStubs = Dict[str, Any]
@@ -146,6 +147,7 @@ def render_shell_html(*, path: str, bundle_names: List[str]) -> str:
         "content_html": "",
         "csrf_token": "test-csrf-token",
         "user_display_name": SHELL_USER_DISPLAY_NAME,
+        "user_login_name": SHELL_USER_LOGIN_NAME,
     }
     rtnval = template.render(**context)
     return rtnval

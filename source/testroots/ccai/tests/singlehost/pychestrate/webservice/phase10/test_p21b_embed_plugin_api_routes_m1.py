@@ -536,8 +536,11 @@ def test_plugin_api_catalog_denied_is_403():
 def test_list_ext_authorized_returns_listing():
     """
         ``GET /api/v1/ext`` returns the discovered-endpoint listing
-        for an authorized caller.
+        for an authorized caller; before any app has mounted the
+        routes it reports ``dynamic_mount: deferred``.
     """
+    from ccai.pychestrate.webservice.plugin_api.restapi.v1 import ext_mount_routes  # noqa: E402
+    ext_mount_routes.reset_extension_mounts_for_testing()
     patch = _patch_permission(allowed=True)
     try:
         request = _FakeRequest(

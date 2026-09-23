@@ -48,6 +48,9 @@
         {%- if user_display_name %}
         user-display-name="{{ user_display_name }}"
         {%- endif %}
+        {%- if user_login_name %}
+        user-login-name="{{ user_login_name }}"
+        {%- endif %}
         {%- if csrf_token %}
         csrf-token="{{ csrf_token }}"
         {%- endif %}

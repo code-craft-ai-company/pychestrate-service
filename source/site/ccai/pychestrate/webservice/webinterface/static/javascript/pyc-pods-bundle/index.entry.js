@@ -36,11 +36,14 @@ import {
 } from "./pod-detail-view.js";
 import { PycClientsList } from "./clients-list-view.js";
 import {
+  advertised_capability_tags,
   build_clients_query_url,
+  build_client_capabilities_url,
   build_client_detail_url,
   build_client_revoke_url,
   capability_tags,
   clients_load_message_for_status,
+  latest_capability_update,
   perform_client_revoke,
   revoke_message_for_status,
   status_tone,
@@ -227,7 +230,9 @@ export {
   PycPodsList,
   TERMINAL_POD_STATES,
   TRANSIENT_POD_STATES,
+  advertised_capability_tags,
   announce_session_expired,
+  build_client_capabilities_url,
   build_client_detail_url,
   build_client_revoke_url,
   build_clients_query_url,
@@ -256,6 +261,7 @@ export {
   is_transient_pod_state,
   is_valid_client_id,
   is_valid_pod_id,
+  latest_capability_update,
   liveness_tone,
   load_projects,
   member_count,

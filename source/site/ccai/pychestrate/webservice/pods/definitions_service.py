@@ -57,11 +57,19 @@ def create_pod_definition(
         project_id: str,
         pod_name: str,
         spec: Mapping[str, Any],
-        actor_user_id: Optional[str]
+        actor_user_id: Optional[str],
+        commit: bool = True
     ) -> PodDefinition:
     """
         Create a pod definition at version 1 after running every
         registered :class:`PodSpecValidatorProtocol`.
+
+        :param commit: Commit the new definition (the default). Callers
+                       that create the definition as one step of a
+                       larger write -- client enrollment binds the
+                       enrolled client to its pod in the same
+                       transaction -- pass ``False`` and commit
+                       themselves.
 
         :raises: PodSpecValidationError, PodDefinitionAlreadyExistsError,
                  MemberKindNotRegisteredError, SemanticError
@@ -87,7 +95,8 @@ def create_pod_definition(
                 source_event_id=new_uuid(),
             ),
         )
-        db_session.commit()
+        if commit is True:
+            db_session.commit()
 
         err_msg_lines = ["Pod spec failed validation."]
         for err in report.errors:
@@ -148,7 +157,8 @@ def create_pod_definition(
         ),
     )
 
-    db_session.commit()
+    if commit is True:
+        db_session.commit()
 
     rtnval = definition
     return rtnval

@@ -85,7 +85,12 @@ def install_envelope_signer(*, config: EnvelopeSignerBootstrapConfig) -> None:
                 "Envelope signer source 'dev' requires "
                 "PYCHESTRATE_DEV_MODE=1 in the environment.",
             ]
-            err_lines.append("HINT: stage a real signing key and re-run with source='file' or 'env'.")
+            err_lines.append(
+                "HINT: stage a real signing key: set {}=file, {} (base64 32-byte Ed25519 seed) and {}."
+                " development/dev-up and development/run-staging-gunicorn generate one.".format(
+                    ENV_SIGNING_KEY_SOURCE, ENV_SIGNING_KEY_FILE_PATH, ENV_SIGNING_KEY_ID,
+                )
+            )
             err_msg = os.linesep.join(err_lines)
             raise ConfigurationError(err_msg) from None
 
@@ -162,7 +167,8 @@ def install_envelope_signer_from_environment() -> bool:
         install_envelope_signer(config=config)
     except ConfigurationError as xcpt:
         _module_logger.warning(
-            "pychestrate.envelope.signer.not_installed source=%s reason=%s",
+            "pychestrate.envelope.signer.not_installed source=%s reason=%s -- every job dispatch will fail"
+            " until a signing key is installed (System Health > Job Execution Loop shows the state).",
             config.source,
             str(xcpt),
         )

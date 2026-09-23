@@ -37,6 +37,7 @@ from ccai.pychestrate.webservice.extensions.registry import (
 from ccai.pychestrate.webservice.jobs.dispatch import repository
 from ccai.pychestrate.webservice.jobs.dispatch.errors import (
     DispatchNoCandidatesError,
+    DispatchSigningUnavailableError,
     DispatchStrategyNotRegisteredError,
     DispatchTransportError,
 )
@@ -65,6 +66,9 @@ from ccai.pychestrate.webservice.jobs.envelope import (
     build as build_envelope,
     persist_signed_envelope,
     sign as sign_envelope,
+)
+from ccai.pychestrate.webservice.jobs.envelope.errors import (
+    EnvelopeSigningKeyMissingError,
 )
 
 
@@ -198,6 +202,8 @@ class JobDispatcher:
 
             :returns: :class:`DispatchOutcome`.
             :raises: DispatchNoCandidatesError,
+                     DispatchSigningUnavailableError (no envelope
+                     signing key installed; nothing persisted),
                      DispatchStrategyNotRegisteredError,
                      DispatchTransportError, SemanticError.
         """
@@ -243,7 +249,18 @@ class JobDispatcher:
             extension_claims=dict(extension_claims),
         )
         envelope = build_envelope(request=envelope_request)
-        signed = sign_envelope(envelope=envelope)
+        try:
+            signed = sign_envelope(envelope=envelope)
+        except EnvelopeSigningKeyMissingError as xcpt:
+            err_lines = ["Job envelopes cannot be signed: no envelope signing key is installed on this service."]
+            err_lines.append("RUN_ID: {}".format(inputs.run_id))
+            err_lines.append(
+                "FIX: set PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE=file, PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH"
+                " and PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID, then restart the service (development/dev-up and"
+                " development/run-staging-gunicorn generate a key)."
+            )
+            err_msg = os.linesep.join(err_lines)
+            raise DispatchSigningUnavailableError(err_msg) from xcpt
         persist_signed_envelope(db_session=db_session, signed=signed)
 
         now = utc_now()

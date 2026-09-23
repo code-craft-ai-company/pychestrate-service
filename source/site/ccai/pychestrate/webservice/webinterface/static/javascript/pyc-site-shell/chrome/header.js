@@ -2,15 +2,15 @@
  * Build the shell's top app bar as an <mj-app-bar>. The leading
  * "brand" slot carries the sidebar collapse toggle, the brand
  * label, and a quiet command-palette button; the trailing
- * "actions" slot carries the account controls (display name,
- * theme, preferences, sign out). The returned element carries
- * slot="app-bar" so it lands in the <mj-app-shell> app-bar
- * landmark.
+ * "actions" slot carries the account menu. The returned element
+ * carries slot="app-bar" so it lands in the <mj-app-shell>
+ * app-bar landmark.
  *
- * On wide viewports the account controls sit inline. Below the
- * account breakpoint (see pyc-site-shell.css) they collapse
- * behind one account button that discloses them as a dropdown
- * panel, so Sign out stays reachable on a phone.
+ * The account menu is one button showing the user's display name
+ * that discloses a dropdown panel: who is signed in, Preferences,
+ * API tokens, the theme control and Sign out. It works the same at
+ * every width, so Sign out is always one click away and stays
+ * reachable on a phone.
  */
 
 const LOGOUT_PATH = "/logout";
@@ -73,10 +73,8 @@ function build_header(options) {
 }
 
 /*
- * The account controls: an account button (shown only below the
- * account breakpoint) that discloses the panel, and the panel
- * itself, which is an inline row on wide viewports and a
- * dropdown on narrow ones. Disclosure pattern: the button
+ * The account menu: an account button that discloses the panel,
+ * and the panel itself, a dropdown. Disclosure pattern: the button
  * carries aria-expanded / aria-controls; the panel holds plain
  * links and buttons in tab order.
  */
@@ -109,9 +107,14 @@ function build_account_menu(options, display_name) {
     panel.id = ACCOUNT_PANEL_ID;
     panel.classList.add("pyc-site-shell__account-panel");
 
+    // Who is signed in: the display name with the login name the
+    // user signs in with, when the two differ.
+    const login_name = typeof options.user_login_name === "string" ? options.user_login_name : "";
     const name_label = document.createElement("span");
     name_label.classList.add("pyc-site-shell__user-menu-name");
-    name_label.textContent = display_name;
+    name_label.textContent = login_name.length > 0 && login_name !== display_name
+        ? "Signed in as " + display_name + " (" + login_name + ")"
+        : "Signed in as " + display_name;
     panel.appendChild(name_label);
 
     if (typeof options.on_theme_toggle === "function") {
@@ -134,6 +137,13 @@ function build_account_menu(options, display_name) {
     preferences_link.classList.add("pyc-site-shell__preferences-link");
     preferences_link.textContent = "Preferences";
     panel.appendChild(preferences_link);
+
+    // Personal API tokens for the pyc CLI, CI jobs and MCP clients.
+    const tokens_link = document.createElement("a");
+    tokens_link.href = "/account/api-tokens";
+    tokens_link.classList.add("pyc-site-shell__preferences-link", "pyc-site-shell__tokens-link");
+    tokens_link.textContent = "API tokens";
+    panel.appendChild(tokens_link);
 
     // Sign out POSTs to /logout with the CSRF token the shell
     // document carries (csrf-token attribute). Without a token the
@@ -172,13 +182,10 @@ function build_account_menu(options, display_name) {
 }
 
 /*
- * Open / close behavior of the narrow-viewport account panel:
- * the button toggles it; Escape closes it and returns focus to
- * the button; a click outside or focus leaving the menu closes
- * it. The panel's visibility is CSS-driven (the data-open
- * attribute), so on wide viewports -- where the button is not
- * rendered and the panel is always an inline row -- none of this
- * has any visible effect.
+ * Open / close behavior of the account panel: the button toggles
+ * it; Escape closes it and returns focus to the button; a click
+ * outside or focus leaving the menu closes it. The panel's
+ * visibility is CSS-driven (the data-open attribute).
  */
 function wire_account_disclosure(container, button, panel) {
     const set_open = (open) => {

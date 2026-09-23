@@ -19,66 +19,87 @@ the three orchestration-ingest endpoints (worker callbacks):
 (cookie-session UI + API-key REST) keeps working without a
 client cert. The three paths above are gated explicitly in
 nginx (`if ($ssl_client_verify != "SUCCESS") return 401;`) and
-again at the application layer
-(`_require_mtls_client_cn(request)` consumes the
-`SSL_CLIENT_S_DN_CN` WSGI environ key forwarded by nginx).
+again at the application layer: the pod routes (heartbeat,
+dispatch long-poll, capabilities, dispatch-ack, progress,
+results, artifacts) require the verified certificate's CN and
+compare it with the client they act for.
 
-### 1. Bootstrap the client-CA (one-time)
+### How the certificate identity reaches the app
 
-```bash
-deployment/bootstrap-client-ca.sh \
-    --host=tc-app-server.local --user=myron
+nginx forwards the verification result and the certificate CN
+in two **hyphenated** request headers, set in every `location`
+that proxies to the app (`pychestrate.nginx.conf.template`):
+
+```nginx
+proxy_set_header X-Client-Cert-CN     $ssl_client_s_dn_cn;
+proxy_set_header X-Client-Cert-Verify $ssl_client_verify;
 ```
 
-This mints a self-signed root CA on the remote at:
+gunicorn drops request headers whose names contain underscores,
+so the older `SSL_CLIENT_S_DN_CN` header never reached the app
+and every pod call answered 401. The app
+(`clients/mtls_identity.py`) accepts the two headers only when
+the TCP peer is a trusted proxy -- `PYCHESTRATE_TRUSTED_PROXY_ADDRESSES`,
+the variable the Secure-cookie policy uses for `X-Forwarded-Proto`:
+comma-separated IPs / CIDRs or `*`, default `127.0.0.1,::1` (nginx
+on the same host, app bound to loopback); set but empty trusts no
+proxy -- and only when `X-Client-Cert-Verify` is `SUCCESS`. It
+removes both headers before any handler runs and hands the CN to
+the routes as `request.mtls_client_cn`. `proxy_set_header`
+replaces a client-supplied header of the same name, so a pod
+cannot claim another identity through nginx.
 
-- `/etc/nginx/ssl/client-ca.crt` (0644 root) — the cert that
-  nginx loads via `ssl_client_certificate`
-- `/etc/nginx/ssl/client-ca.key` (0600 root) — the private key
-  used to issue client certs against this CA
+### 1. The client-enrollment CA (nginx must trust it)
 
-The script is **idempotent**: re-running it against a host that
-already has the CA in place is a clean no-op (regenerating
-would invalidate previously-issued client certs).
+The service signs every pod's client certificate with its
+**client-enrollment CA** when the pod enrolls, so nginx must
+verify client certificates against that same CA.
 
-You'll be prompted for the remote sudo password **once** —
-the bootstrap is intentionally not in the passwordless-sudo
-scope.
+`development/run-staging-gunicorn` generates the CA on first use:
 
-### 2. Issue a client cert against the CA
+- `.cache/dev-secrets/dev.enrollment-ca.pem` (0600) — certificate
+  and private key, loaded by the service
+  (`PYCHESTRATE_ENROLLMENT_CA_FILE_PATH`)
+- `.cache/dev-secrets/dev.enrollment-ca.crt` (0644) — the
+  certificate alone, for nginx's `ssl_client_certificate`
+
+`deploy-alpha-to-host.sh` runs
+`development/run-staging-gunicorn --provision-only` in step 6 and
+renders `ssl_client_certificate` pointing at
+`dev.enrollment-ca.crt` in the remote checkout. Pass
+`--client-ca-path=<remote path>` only when the service loads its
+enrollment CA from elsewhere; the path must be that CA's
+certificate. (`bootstrap-client-ca.sh` created a separate CA the
+service never signs with; nginx trusting it rejected every
+enrolled pod, so the deploy no longer uses it.)
+
+### 2. Enroll a pod -- the service issues its certificate
+
+Mint an enrollment token for the pod (Admin → Enrollment tokens,
+or `POST /api/v1/enrollment-tokens`), then on the pod:
 
 ```bash
-# Local: generate the worker's keypair + CSR.
-openssl req -new -newkey rsa:2048 -nodes \
-    -keyout client.key -out client.csr \
-    -subj /CN=worker-1
-
-# Remote: sign the CSR with the CA (requires sudo to read the
-# CA private key).
-ssh myron@tc-app-server.local 'sudo openssl x509 -req \
-    -in /dev/stdin \
-    -CA /etc/nginx/ssl/client-ca.crt \
-    -CAkey /etc/nginx/ssl/client-ca.key \
-    -CAcreateserial \
-    -days 365 -sha256' < client.csr > client.crt
+pychestrate-client enroll \
+    --service-url https://tc-app-server.tailb75ce6.ts.net \
+    --token <secret> --name <pod name the token was minted for>
 ```
 
-The CN you set in the CSR is what nginx forwards to the app as
-`SSL_CLIENT_S_DN_CN`. The app uses it to bind the request to
-the calling worker.
+The certificate the service returns has **CN = the pod's client
+id** (plus a `urn:uuid:<client id>` subject alternative name).
+That CN is what nginx forwards as `X-Client-Cert-CN`, and every
+pod route requires it to equal the client id in its path, so
+the registry, the certificate and the URLs share one identity.
+Hand-issued certificates (e.g. `CN=worker-1`) are rejected by the
+pod routes. Enrolling also registers the client on the pod the
+token names (creating a static pod when none is defined), which
+is what makes the pod eligible for dispatch.
 
 ### 3. Present the cert in client traffic
 
 ```bash
-# curl
+# curl (the pod client's own files, ~/.pychestrate-client/)
 curl --cert client.crt --key client.key \
-    -X POST https://tc-app-server.tailb75ce6.ts.net/api/v1/runs/<uuid>/progress \
-    -H 'Content-Type: application/json' \
-    -d '{"percent": 50}'
-
-# python (httpx)
-client = httpx.Client(cert=("client.crt", "client.key"))
-client.post(url, json=payload)
+    https://tc-app-server.tailb75ce6.ts.net/api/v1/clients/$(cat client_id)/heartbeat
 ```
 
 Without a client cert the orchestration-ingest endpoints
@@ -141,7 +162,10 @@ Specifically:
 - `~/pychestrate-service/` — the rsync'd checkout
 - `~/pychestrate-service/.venv/` — poetry-installed deps including gunicorn
 - `~/pychestrate-service/.cache/dev-secrets/` — generated KEK,
-  pepper, UI cookie secret (32 random bytes each, mode 0600)
+  pepper, UI cookie secret (32 random bytes each, mode 0600), the
+  job-envelope signing key, the result-upload presign secret and
+  the client-enrollment CA (`dev.enrollment-ca.pem`, plus its
+  certificate `dev.enrollment-ca.crt` that nginx trusts)
 - `~/pychestrate-service/.cache/dev-db/pychestrate.sqlite` —
   the SQLite database, upgraded to head via alembic
 - `/etc/systemd/system/pychestrate.service` — systemd unit
@@ -222,8 +246,8 @@ The script aborts with a typed error if:
 | 3 | `git config --global url.<base>.insteadOf` | injects the PAT for cloning private `codecraftai-*` deps. |
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
 | 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
-| 6 | `alembic upgrade head` | applies both migrations against `.cache/dev-db/pychestrate.sqlite`. |
-| 7 | nginx site write + reload | renders `deployment/pychestrate.nginx.conf.template` to `/etc/nginx/sites-available/pychestrate`: listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888), gzip on for text responses. Validate a template edit locally with `nginx -t` against a rendered copy before deploying. |
+| 6 | `alembic upgrade head`, `development/run-staging-gunicorn --provision-only` | applies the migrations against `~/pychestrate/pychestrate.sqlite`, then generates the service secrets (including the client-enrollment CA nginx trusts in step 7). |
+| 7 | nginx site write + reload | renders `deployment/pychestrate.nginx.conf.template` to `/etc/nginx/sites-available/pychestrate`: listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888), gzip on for text responses, verifies pod client certificates against the enrollment CA and forwards their identity (`X-Client-Cert-CN` / `X-Client-Cert-Verify`). Validate a template edit locally with `nginx -t` against a rendered copy before deploying. |
 | 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`. |
 | 7 | `make dev-up` (in tmux) | starts the service. tmux session name: `pychestrate`. |
 

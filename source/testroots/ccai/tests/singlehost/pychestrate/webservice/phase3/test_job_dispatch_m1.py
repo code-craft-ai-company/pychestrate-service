@@ -542,3 +542,79 @@ def test_dispatch_strategy_not_registered_is_surfaced():
         testbase.assert_equal("dispatch_strategy" in str(xcpt), True)
     testbase.assert_equal(raised, True)
     return
+
+
+def _dispatch_without_signing_key():
+    """
+        Dispatch with a registered strategy and valid candidates but no
+        envelope signing key installed.
+
+        :returns: Tuple ``(raised exception or None, engine, run_id)``.
+    """
+    _prepare_runtime()
+    envelope_signer.reset_for_testing()  # no signing key installed
+    _engine, session = build_in_memory_session()
+    dispatcher = JobDispatcher(transport=InMemoryTransport())
+    run_id = new_uuid()
+    raised = None
+    try:
+        dispatcher.dispatch(
+            db_session=session,
+            inputs=_build_inputs(run_id=run_id, candidates=_two_candidates()),
+        )
+    except Exception as xcpt:  # noqa: BLE001 -- the test asserts on the type
+        raised = xcpt
+    rtnval = (raised, _engine, run_id)
+    return rtnval
+
+
+def test_dispatch_without_signing_key_raises_a_dispatch_error():
+    """
+    **Feature: 5-job-dispatch -- missing signing key (LD-02)**
+    **Property: with no envelope signing key installed, dispatch raises
+    DispatchSigningUnavailableError -- a DispatchError, which every
+    orchestrator already turns into a recorded dispatch failure -- instead
+    of letting EnvelopeSigningKeyMissingError escape and leave a
+    half-created job.**
+    """
+    from ccai.pychestrate.webservice.jobs.dispatch import (
+        DispatchError,
+        DispatchSigningUnavailableError,
+    )
+    raised, _engine, _run_id = _dispatch_without_signing_key()
+    testbase.assert_equal(
+        (isinstance(raised, DispatchSigningUnavailableError), isinstance(raised, DispatchError)),
+        (True, True),
+    )
+    return
+
+
+def test_dispatch_without_signing_key_names_the_variables_to_set():
+    """
+    **Feature: 5-job-dispatch -- missing signing key (LD-02)**
+    **Property: the failure tells the operator which environment
+    variables install a signing key.**
+    """
+    raised, _engine, _run_id = _dispatch_without_signing_key()
+    message = str(raised)
+    testbase.assert_equal(
+        [name in message for name in (
+            "PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE",
+            "PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH",
+            "PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID",
+        )],
+        [True, True, True],
+    )
+    return
+
+
+def test_dispatch_without_signing_key_persists_no_attempt():
+    """
+    **Feature: 5-job-dispatch -- missing signing key (LD-02)**
+    **Property: the refused dispatch writes no dispatch-attempt row.**
+    """
+    _raised, engine, run_id = _dispatch_without_signing_key()
+    fresh = session_for(engine=engine)
+    count = fresh.query(DispatchAttempt).filter(DispatchAttempt.run_id == run_id).count()
+    testbase.assert_equal(count, 0)
+    return

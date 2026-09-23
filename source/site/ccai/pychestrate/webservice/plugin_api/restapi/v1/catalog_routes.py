@@ -51,6 +51,11 @@ from ccai.pychestrate.webservice.extensions.ext_router import (
     mount_extension_routes,
 )
 from ccai.pychestrate.webservice.plugin_api import runtime as plugin_api_runtime
+from ccai.pychestrate.webservice.plugin_api.restapi.v1.ext_mount_routes import (
+    attach_extension_routes,
+    extension_routes_attached,
+    is_route_mounted,
+)
 from ccai.pychestrate.webservice.plugin_api.catalog_builder import (
     catalog_to_jsonable,
 )
@@ -265,17 +270,11 @@ def handle_list_ext(request: Request) -> Response:
     """
         ``GET /api/v1/ext`` — operator-facing listing of the
         extension-contributed REST endpoints the host has discovered
-        at startup. Each entry is a concrete route mounted under the
-        ``/api/v1/ext/<extension_name>/...`` namespace.
-
-        The dynamic mount itself (binding each
-        :class:`RestEndpointExtension` descriptor to a live webworks
-        route at startup) is a deliberate follow-up: the discovery +
-        collision-validation surface (``ext_router``) is complete and
-        produces the manifest exposed here, but wiring each manifest
-        row to ``app.attach_route`` against the running dispatcher is
-        scoped separately. This listing is the stable observability
-        surface that the dynamic-mount work will populate.
+        at startup, under the ``/api/v1/ext/<extension_name>/...``
+        namespace. :func:`register_catalog_routes` mounts every route
+        whose extension names a handler (see ``ext_mount_routes``);
+        each entry says whether it is ``mounted``, and
+        ``dynamic_mount`` is ``mounted`` once mounting has run.
 
         :param request: Incoming webworks request.
 
@@ -286,10 +285,12 @@ def handle_list_ext(request: Request) -> Response:
         _require_plugin_api_read(request=request)
         manifest = mount_extension_routes(extensions=None)
         items = manifest_to_jsonable(manifest=manifest)
+        for item, route in zip(items, manifest.routes):
+            item["mounted"] = is_route_mounted(route=route)
         body = {
             "items": items,
             "total": len(items),
-            "dynamic_mount": "deferred",
+            "dynamic_mount": "mounted" if extension_routes_attached() else "deferred",
         }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
@@ -334,13 +335,12 @@ def register_catalog_routes(*, app: Any, version_prefix: str) -> None:
     )(handle_read_catalog_entry)
     app.attach_route(base + "/mounts", methods=["GET"])(handle_list_mounts)
 
-    # Operator-facing extension-endpoint listing. The /api/v1/ext/...
-    # namespace is reserved by ext_router for dynamically-mounted
-    # extension routes; this listing exposes the discovered manifest
-    # while the dynamic mount remains a scoped follow-up.
+    # Operator-facing extension-endpoint listing, then the extension
+    # routes themselves under /api/v1/ext/<ext-name>/....
     app.attach_route(
         version_prefix + EXT_LISTING_PATH, methods=["GET"]
     )(handle_list_ext)
+    attach_extension_routes(app=app)
 
     return
 

@@ -245,8 +245,9 @@ def test_register_catalog_routes_attaches_meta_routes_under_version_prefix():
     """
     **Feature: 8-plugin-api T1.5 (webworks routes)**
     **Property: register_catalog_routes attaches the three meta
-    method+path pairs the flask_restx controller exposed, plus the
-    p21b ``/api/v1/ext`` extension-endpoint listing.**
+    method+path pairs the flask_restx controller exposed, the p21b
+    ``/api/v1/ext`` extension-endpoint listing, and then the mounted
+    extension routes (the in-tree example's echo route).**
     """
     app = _FakeApp()
     catalog_routes.register_catalog_routes(app=app, version_prefix="/api/v1")
@@ -256,6 +257,7 @@ def test_register_catalog_routes_attaches_meta_routes_under_version_prefix():
         ("/api/v1/plugin-api/_meta/catalog/{protocol_name}", ("GET",)),
         ("/api/v1/plugin-api/_meta/mounts", ("GET",)),
         ("/api/v1/ext", ("GET",)),
+        ("/api/v1/ext/example/echo", ("GET",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)

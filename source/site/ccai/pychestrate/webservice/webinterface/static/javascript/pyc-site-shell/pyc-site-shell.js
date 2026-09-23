@@ -277,6 +277,7 @@ class PycSiteShell extends HTMLElement {
     const header = build_header({
       brand_label: brand_attr !== null && brand_attr.length > 0 ? brand_attr : "Pychestrate",
       user_display_name: this._read_optional_attribute("user-display-name"),
+      user_login_name: this._read_optional_attribute("user-login-name"),
       csrf_token: this._read_optional_attribute("csrf-token"),
       on_theme_toggle: () => {
         this._toggle_theme();
