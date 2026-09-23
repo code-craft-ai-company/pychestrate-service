@@ -502,63 +502,83 @@ def redeem_enrollment_token(
         err_msg = os.linesep.join(err_msg_lines)
         raise EnrollmentRejectedError(err_msg) from None
 
-    # Generate a fresh bearer token the agent carries on future requests.
-    issuer = _resolve_token_issuer_for_hashing()
-    bearer_bundle: IssuedSecret = issuer.generate(entropy_bits=DEFAULT_TOKEN_ENTROPY_BITS)
-
-    client = register_client(
-        db_session=db_session,
-        project_id=str(matched_row.project_id),
-        pod_name=matched_row.pod_name,
-        bearer_token_hash=bearer_bundle.stored_hash,
-        agent_version=payload.agent_version,
-        transport_name=payload.transport_name,
-    )
-
+    # The client id is minted up front and the CSR is signed BEFORE
+    # any row is written. The certificate carries the client id as
+    # its identity (see ca_adapter), so the id must exist first; and
+    # signing is the step most likely to refuse the request (no CA
+    # installed, CSR scope mismatch). Registering the client first
+    # used to commit a client row and then fail here, leaving a
+    # phantom client that blocked the pod name with a 409 on every
+    # retry.
+    client_id = new_uuid()
     signed_cert: Optional[ca_adapter.SignedCertificate] = None
     if payload.csr_pem is not None and len(payload.csr_pem) > 0:
         signed_cert = ca_adapter.sign_csr(
             csr_pem=payload.csr_pem,
             expected_subject_cn=matched_row.pod_name,
+            issued_subject_cn=client_id,
         )
-        cert_row = ClientCert(
-            cert_serial=signed_cert.cert_serial,
-            client_id=client.client_id,
-            not_before=signed_cert.not_before,
-            not_after=signed_cert.not_after,
-            issuer_subject=signed_cert.issuer_subject,
-            subject_cn=signed_cert.subject_cn,
-            pem_public=signed_cert.pem_public.decode("utf-8"),
-            issued_at=now,
+
+    # Generate a fresh bearer token the agent carries on future requests.
+    issuer = _resolve_token_issuer_for_hashing()
+    bearer_bundle: IssuedSecret = issuer.generate(entropy_bits=DEFAULT_TOKEN_ENTROPY_BITS)
+
+    # The client row, its certificate row and the redeemed token are
+    # written in one transaction.
+    try:
+        client = register_client(
+            db_session=db_session,
+            project_id=str(matched_row.project_id),
+            pod_name=matched_row.pod_name,
+            bearer_token_hash=bearer_bundle.stored_hash,
+            agent_version=payload.agent_version,
+            transport_name=payload.transport_name,
+            client_id=client_id,
+            commit=False,
         )
-        db_session.add(cert_row)
 
-    if matched_row.one_shot is True:
-        matched_row.status = TokenStatus.REDEEMED
-    matched_row.redeemed_at = now
-    matched_row.redeemed_by_client_id = client.client_id
-    db_session.flush()
+        if signed_cert is not None:
+            cert_row = ClientCert(
+                cert_serial=signed_cert.cert_serial,
+                client_id=client.client_id,
+                not_before=signed_cert.not_before,
+                not_after=signed_cert.not_after,
+                issuer_subject=signed_cert.issuer_subject,
+                subject_cn=signed_cert.subject_cn,
+                pem_public=signed_cert.pem_public.decode("utf-8"),
+                issued_at=now,
+            )
+            db_session.add(cert_row)
 
-    enrolled_payload = {
-        "client_id": str(client.client_id),
-        "token_id": str(matched_row.token_id),
-        "project_id": str(matched_row.project_id),
-        "pod_name": matched_row.pod_name,
-        "agent_version": payload.agent_version,
-        "transport_name": payload.transport_name,
-        "enrolled_at": now.isoformat(),
-    }
-    if signed_cert is not None:
-        enrolled_payload["cert_serial"] = signed_cert.cert_serial
-    enqueue_event(
-        db_session=db_session,
-        event=EntityEvent(
-            topic=ClientEventTopics.ENROLLED,
-            payload=enrolled_payload,
-            source_event_id=new_uuid(),
-        ),
-    )
-    db_session.commit()
+        if matched_row.one_shot is True:
+            matched_row.status = TokenStatus.REDEEMED
+        matched_row.redeemed_at = now
+        matched_row.redeemed_by_client_id = client.client_id
+        db_session.flush()
+
+        enrolled_payload = {
+            "client_id": str(client.client_id),
+            "token_id": str(matched_row.token_id),
+            "project_id": str(matched_row.project_id),
+            "pod_name": matched_row.pod_name,
+            "agent_version": payload.agent_version,
+            "transport_name": payload.transport_name,
+            "enrolled_at": now.isoformat(),
+        }
+        if signed_cert is not None:
+            enrolled_payload["cert_serial"] = signed_cert.cert_serial
+        enqueue_event(
+            db_session=db_session,
+            event=EntityEvent(
+                topic=ClientEventTopics.ENROLLED,
+                payload=enrolled_payload,
+                source_event_id=new_uuid(),
+            ),
+        )
+        db_session.commit()
+    except BaseException:
+        db_session.rollback()
+        raise
 
     cert_serial_out: Optional[str] = None
     cert_pem_out: Optional[bytes] = None
