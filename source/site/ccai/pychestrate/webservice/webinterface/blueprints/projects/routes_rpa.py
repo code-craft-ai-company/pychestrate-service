@@ -905,11 +905,21 @@ def build_watch_rpa_trigger(*, db_session: Any) -> Callable[..., Any]:
         Build the ``trigger_rpa_job`` callable the core
         :class:`WatchManager` invokes: ``(spec_id, work_packet, user_id)``
         resolves the specification, picks eligible pods, and triggers
-        the job with ``trigger_cause = watch``.
+        the job with ``trigger_cause = watch``. When the watch's
+        ``project_id`` is given, a specification from any other project
+        is refused.
     """
-    def _trigger(*, spec_id: str, work_packet: Dict[str, Any], user_id: str) -> Any:
+    def _trigger(
+            *, spec_id: str, work_packet: Dict[str, Any], user_id: str,
+            project_id: Optional[Any] = None
+        ) -> Any:
         rpa = _build_rpa_service()
         spec = rpa.get_spec(db_session=db_session, spec_id=spec_id)
+        if project_id is not None and str(spec.project_id) != str(project_id):
+            # A watch may only start RPA jobs in its own project.
+            raise ValueError(
+                "RPA specification {} is not part of project {}.".format(spec_id, project_id)
+            )
         candidates = _resolve_candidates(
             db_session=db_session, project_id=str(spec.project_id), target_pod_id=spec.target_pod_id,
         )

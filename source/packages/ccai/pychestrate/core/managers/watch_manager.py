@@ -572,10 +572,56 @@ class WatchManager:
                 )
             
             repository_id = repository.id
-        
+
         return repository_id
 
-    
+    def _verify_action_targets(self, project_id: int, actions: List[WatchActionConfig]) -> None:
+        """
+        Verify that every action target (build, infrastructure or test
+        specification, or release pipeline) belongs to the watch's project,
+        so a watch can never start work in another project.
+
+        RPA actions name their specification in ``parameters`` and are
+        checked by the RPA trigger when the watch fires; notifications have
+        no target.
+
+        :param project_id: The watch's project ID
+        :param actions: The action configurations to check
+        :raises WatchValidationError: If a target is missing or belongs to
+                                      another project
+        """
+        from ccai.pychestrate.core.orm import (
+            ProjectBuildSpec,
+            ProjectInfraSpec,
+            ProjectReleasePipeline,
+            ProjectTestSpec,
+        )
+
+        target_models = {
+            WatchAction.TRIGGER_BUILD: (ProjectBuildSpec, "build specification"),
+            WatchAction.TRIGGER_INFRA_JOB: (ProjectInfraSpec, "infrastructure specification"),
+            WatchAction.TRIGGER_TEST_JOB: (ProjectTestSpec, "test specification"),
+            WatchAction.TRIGGER_PIPELINE: (ProjectReleasePipeline, "release pipeline"),
+        }
+
+        for i, action_config in enumerate(actions):
+            entry = target_models.get(action_config.action)
+            if entry is None:
+                continue
+            model, label = entry
+            target = self._db_session.query(model).filter(
+                model.id == action_config.target_id,
+                model.project_id == project_id
+            ).first()
+            if not target:
+                raise WatchValidationError(
+                    f"The {label} with ID '{action_config.target_id}' is not part of this project",
+                    field=f"actions[{i}].target_id",
+                    error_code="TARGET_NOT_IN_PROJECT"
+                )
+        return
+
+
     # =========================================================================
     # Watch CRUD Operations
     # =========================================================================
@@ -625,7 +671,10 @@ class WatchManager:
         
         # Verify source exists and get repository_id if applicable
         repository_id = self._verify_source_exists(project_id, request.trigger_source, request.source_id)
-        
+
+        # Every action must target this project's own specifications
+        self._verify_action_targets(project_id, request.actions)
+
         # Create the watch
         now = utc_now()
         
@@ -777,7 +826,9 @@ class WatchManager:
                             field=f"actions[{i}].action",
                             error_code="INVALID_ACTION_TYPE"
                         )
-            
+
+            self._verify_action_targets(watch.project_id, request.actions)
+
             watch.actions_json = self._actions_to_list(request.actions)
         
         # Update enabled if provided
@@ -1013,7 +1064,8 @@ class WatchManager:
         self,
         action_config: WatchActionConfig,
         event_data: Dict[str, Any],
-        user_id: str = None
+        user_id: str = None,
+        project_id: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Execute a single watch action.
@@ -1021,6 +1073,8 @@ class WatchManager:
         :param action_config: The action configuration
         :param event_data: The event data that triggered the action
         :param user_id: Optional user ID for the action (defaults to system)
+        :param project_id: The watch's project; the RPA trigger refuses a
+                           specification from any other project
         :returns: Dictionary with action result
         """
         result = {
@@ -1084,6 +1138,7 @@ class WatchManager:
                         spec_id=spec_id,
                         work_packet=work_packet,
                         user_id=user_id or 'system',
+                        project_id=project_id,
                     )
                     result['success'] = True
                     result['result_id'] = getattr(job_result, 'job_id', None) if job_result else None
@@ -1160,7 +1215,7 @@ class WatchManager:
             error_messages = []
             
             for action_config in actions:
-                action_result = self._execute_action(action_config, event_data)
+                action_result = self._execute_action(action_config, event_data, project_id=watch.project_id)
                 actions_executed.append(action_result)
                 
                 if not action_result['success']:

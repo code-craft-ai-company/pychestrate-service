@@ -313,7 +313,7 @@ def test_watch_trigger_rpa_job_action_calls_bridge():
     class _Job:
         job_id = "job-1"
 
-    def _bridge(*, spec_id: str, work_packet: Dict[str, Any], user_id: str) -> Any:
+    def _bridge(*, spec_id: str, work_packet: Dict[str, Any], user_id: str, project_id: Any = None) -> Any:
         calls.append({"spec_id": spec_id, "work_packet": work_packet, "user_id": user_id})
         return _Job()
 
@@ -377,4 +377,45 @@ def test_capability_tags_flatten_client_capabilities():
     for expected in ("toolchain", "rpa", "rpa:invoice-import@1.0.0", "browser"):
         testbase.assert_true(expected in tags, expected)
     testbase.assert_equal(capability_tags_for_client(db_session=session, client_id=new_uuid()), ())
+    return
+
+
+def test_watch_rpa_bridge_refuses_a_spec_from_another_project():
+    """
+    **Feature: 6-rpa-orchestration (PRJ-04 cross-project guard)**
+    **Property: the RPA watch bridge refuses to start a job when the
+    specification belongs to a different project than the watch, and
+    never reaches trigger_job.**
+    """
+    from ccai.testbase.mocking import create_module_patch
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects import routes_rpa
+
+    triggered: List[Any] = []
+
+    class _Spec:
+        project_id = "7"
+        target_pod_id = None
+        name = "nightly"
+
+    class _Rpa:
+        def get_spec(self, *, db_session: Any, spec_id: str) -> Any:
+            return _Spec()
+
+        def trigger_job(self, **kwargs: Any) -> Any:
+            triggered.append(kwargs)
+            return None
+
+    patch = create_module_patch(routes_rpa, "_build_rpa_service")
+    mock = patch.activate()
+    mock.configure(side_effect=lambda: _Rpa())
+    try:
+        bridge = routes_rpa.build_watch_rpa_trigger(db_session=None)
+        refused = False
+        try:
+            bridge(spec_id="spec-uuid", work_packet={}, user_id="u-1", project_id=8)
+        except ValueError:
+            refused = True
+    finally:
+        patch.deactivate()
+    testbase.assert_equal((refused, triggered), (True, []))
     return
