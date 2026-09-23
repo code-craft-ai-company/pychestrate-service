@@ -646,6 +646,18 @@ DEFAULT_REGISTRY.update({
     "newest_url": _by_mode("/admin/audit-logs", None),
     "export_csv_url": _const("/admin/audit-logs/export?format=csv"),
     "export_jsonl_url": _const("/admin/audit-logs/export?format=jsonl"),
+    "issued_link": _by_mode(
+        {"url": "https://pyc.example.invalid/password/set/abc", "purpose": "RESET",
+         "expires_at": FIXTURE_DATETIME},
+        None,
+    ),
+    "problems": _by_mode(["Password must contain a digit.", "Password must contain a symbol, such as ! # or -."], []),
+    "just_created": _by_mode(True, False),
+    "link_valid": _by_mode(True, False),
+    "invalid_message": _const("This link is not valid. It may have expired or already been used."),
+    "purpose": _by_mode("INVITE", "RESET"),
+    "login_name": _const("jdoe"),
+    "form_action": _const("/password/set/abc"),
 })
 
 

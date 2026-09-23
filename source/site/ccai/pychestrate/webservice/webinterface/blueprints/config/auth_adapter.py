@@ -201,6 +201,25 @@ def _fingerprint_value(*, raw: str) -> str:
     return rtnval
 
 
+class PasswordChangeRequiredError(AuthenticationError):
+    """
+        Raised by :meth:`ConsumerUISecurityAdapter.authenticate` when the
+        credentials are right but an administrator set a temporary
+        password that must be replaced first: no session is opened
+        until the user chooses a new password (audit ADM-04). Callers
+        unaware of it treat it as an ordinary failed sign-in.
+
+        :param user_id: The account.
+        :param login_name: Its login name.
+    """
+
+    def __init__(self, *, user_id: str, login_name: str) -> None:
+        super().__init__("Password change required")
+        self.user_id: str = user_id
+        self.login_name: str = login_name
+        return
+
+
 _MAX_REJECTED_LOGIN_LENGTH: int = 128
 
 _REJECTION_REASONS = (
@@ -341,6 +360,17 @@ class ConsumerUISecurityAdapter:
         )
         if user_row is None:
             raise AuthenticationError("Invalid credentials")
+
+        # A temporary password set by an administrator must be
+        # replaced before the account gets a session.
+        from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+            password_lifecycle,
+        )
+        if password_lifecycle.password_change_required(
+                db_session=self._db_session, user_id=str(user_row.user_id)) is True:
+            raise PasswordChangeRequiredError(
+                user_id=str(user_row.user_id), login_name=user_row.login_name
+            )
 
         fingerprint = RequestFingerprint(
             ip_fingerprint=_fingerprint_value(raw=request.client_ip),
@@ -567,4 +597,6 @@ __all__ = [
     "SessionInfo",
     "AuthenticationError",
     "ConsumerUISecurityAdapter",
+    "PasswordChangeRequiredError",
+    "publish_login_rejected",
 ]

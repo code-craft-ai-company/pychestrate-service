@@ -878,6 +878,32 @@ def _resolve_login_failure_message(*, error: Exception) -> str:
     return rtnval
 
 
+def _begin_forced_password_change_or_none(
+        *, session: Dict[str, Any], error: Exception, next_candidate: Any
+    ) -> Optional[Response]:
+    """
+        When a sign-in failed only because the account's temporary
+        password must be replaced, hand the browser to the change page
+        (see :mod:`routes_password`); otherwise return None.
+
+        :param session: The anonymous cookie session.
+        :param error: The exception ``authenticate`` raised.
+        :param next_candidate: The sign-in form's ``next`` target.
+
+        :returns: A redirect response or None.
+    """
+    try:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_password import (  # noqa: E402
+            begin_forced_password_change,
+        )
+    except Exception:
+        return None
+    rtnval = begin_forced_password_change(
+        session=session, error=error, next_candidate=next_candidate
+    )
+    return rtnval
+
+
 def _resolve_safe_login_next(*, candidate: Optional[str]) -> str:
     """
         Validate a raw ``next`` candidate for embedding in the
@@ -1052,6 +1078,12 @@ def handle_login_submit(request: Request) -> Response:
         try:
             auth_response = security_manager.authenticate(auth_request)
         except Exception as auth_error:
+            # ADM-04: a temporary password must be replaced first.
+            forced_change = _begin_forced_password_change_or_none(
+                session=session, error=auth_error, next_candidate=next_candidate
+            )
+            if forced_change is not None:
+                return forced_change
             failure_message = _resolve_login_failure_message(
                 error=auth_error
             )
@@ -1912,6 +1944,13 @@ def register_config_routes(*, app: Any) -> None:
         register_enrollment_admin_routes,
     )
     register_enrollment_admin_routes(app=app)
+
+    # ADM-04 -- invite / reset links and the forced password change
+    # (sign-in-free, chromeless).
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_password import (  # noqa: E402
+        register_password_routes,
+    )
+    register_password_routes(app=app)
 
     return
 

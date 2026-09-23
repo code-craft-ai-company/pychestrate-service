@@ -42,7 +42,9 @@
             <td>{{ user.email }}</td>
             <td>{{ user.display_name }}</td>
             <td>
-                {% if user.is_active %}
+                {% if user.status == 'invited' %}
+                <span class="badge badge-secondary">Invited</span>
+                {% elif user.is_active %}
                 <span class="badge badge-success">Active</span>
                 {% else %}
                 <span class="badge badge-danger">Inactive</span>

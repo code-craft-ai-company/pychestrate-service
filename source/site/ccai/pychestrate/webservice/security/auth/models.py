@@ -95,6 +95,48 @@ class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):
     last_changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
 
 
+class PasswordTokenPurpose(enum.Enum):
+    """
+        What a single-use password link is for.
+    """
+    INVITE = "INVITE"
+    RESET = "RESET"
+
+
+class AuthPasswordToken(PychestratePhase1Base, SerializableModel):
+    """
+        Single-use link that lets a user set their own password: an
+        invite for a new account or a reset an administrator issued.
+        Only the SHA-256 digest of the link secret is stored; the
+        secret itself is shown once to the administrator who created
+        it. A token is usable while ``used_at`` and ``revoked_at`` are
+        empty and ``expires_at`` is in the future.
+    """
+
+    __tablename__ = "auth_password_tokens"
+
+    token_id = Column(UUIDType(binary=False), primary_key=True)
+    user_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("identity_users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    purpose = Column(
+        Enum(PasswordTokenPurpose, name="auth_password_token_purpose"),
+        nullable=False,
+    )
+    token_hash = Column(String(64), nullable=False, unique=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_by = Column(UUIDType(binary=False), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_auth_password_tokens_user", "user_id"),
+    )
+
+
 class AuthSamlReplayCache(PychestratePhase1Base, SerializableModel):
     """
         Replay cache keyed on ``Response/@ID`` to block SAML replay.

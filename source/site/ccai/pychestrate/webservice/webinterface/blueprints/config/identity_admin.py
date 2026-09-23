@@ -66,6 +66,10 @@ ADMIN_UI_PERMISSION_KEY: str = "system:ui.admin.view"
 
 SYSTEM_ADMIN_ROLE_NAME: str = "system-admin"
 
+USER_STATUS_ACTIVE: str = "active"
+USER_STATUS_INACTIVE: str = "inactive"
+USER_STATUS_INVITED: str = "invited"
+
 _LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -205,6 +209,9 @@ class AdminUserView:
                       scope.
         :param created_at: Identity row creation timestamp.
         :param updated_at: Identity row update timestamp.
+        :param status: ``"active"``, ``"inactive"`` (deactivated) or
+                       ``"invited"`` (created with an invite link, no
+                       password yet).
     """
     id: str
     username: str
@@ -216,6 +223,7 @@ class AdminUserView:
     roles: List[str] = field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    status: str = "active"
 
 
 @dataclass
@@ -257,7 +265,7 @@ def _validate_new_user_fields(
         *,
         username: str,
         email: str,
-        password: str,
+        password: Optional[str],
         display_name: str
     ) -> None:
     """
@@ -266,7 +274,9 @@ def _validate_new_user_fields(
 
         :param username: Submitted login name.
         :param email: Submitted email.
-        :param password: Submitted plaintext password.
+        :param password: Submitted plaintext password; None for an
+                         invited account (the user sets it from the
+                         invite link).
         :param display_name: Submitted display name.
 
         :returns: None.
@@ -284,9 +294,10 @@ def _validate_new_user_fields(
         )
     if display_name is None or len(display_name.strip()) == 0:
         raise AdminValidationError("Display name is required")
-    _validate_password_for_user(
-        password=password, login_name=username, email=email
-    )
+    if password is not None:
+        _validate_password_for_user(
+            password=password, login_name=username, email=email
+        )
     return
 
 
@@ -811,6 +822,12 @@ def _user_to_view(
     from ccai.pychestrate.webservice.identity.users.models import UserStatus
 
     is_active = user.status == UserStatus.ACTIVE
+    if user.status == UserStatus.PENDING:
+        status_text = USER_STATUS_INVITED
+    elif is_active is True:
+        status_text = USER_STATUS_ACTIVE
+    else:
+        status_text = USER_STATUS_INACTIVE
 
     rtnval = AdminUserView(
         id=str(user.user_id),
@@ -823,6 +840,7 @@ def _user_to_view(
         roles=roles,
         created_at=user.created_at,
         updated_at=user.updated_at,
+        status=status_text,
     )
     return rtnval
 
@@ -944,6 +962,19 @@ def get_identity_user(
     return rtnval
 
 
+@dataclass
+class InvitedUser:
+    """
+        Result of :func:`create_invited_identity_user`.
+
+        :param user_id: The new account's UUID.
+        :param link: The single-use invite link (its secret is shown
+                     once and never stored).
+    """
+    user_id: str
+    link: Any
+
+
 def create_identity_user(
         *,
         db_session: Any,
@@ -977,14 +1008,99 @@ def create_identity_user(
         :returns: The new user's UUID as a string.
         :raises: AdminValidationError, AdminDuplicateError
     """
+    if password is None:
+        password = ""
+    user_uuid, _link = _create_identity_user(
+        db_session=db_session,
+        username=username,
+        email=email,
+        password=password,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
+    )
+    rtnval = str(user_uuid)
+    return rtnval
+
+
+def create_invited_identity_user(
+        *,
+        db_session: Any,
+        username: str,
+        email: str,
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> InvitedUser:
+    """
+        Create an account without a password and a single-use invite
+        link for it (audit ADM-04: the product sends no email yet, so
+        the administrator copies the link to the user). The account is
+        ``PENDING`` -- it cannot sign in -- until the user sets a
+        password from the link.
+
+        :param db_session: The active SQLAlchemy session.
+        :param username: Login name (normalized to lower case).
+        :param email: Primary email (normalized to lower case).
+        :param display_name: Display name.
+        :param firstname: First name (legacy mirror only).
+        :param lastname: Last name (legacy mirror only).
+        :param role_names: RBAC role names to bind at SYSTEM scope.
+        :param actor_user_id: Acting admin UUID for attribution.
+
+        :returns: :class:`InvitedUser` carrying the one-time link.
+        :raises: AdminValidationError, AdminDuplicateError
+    """
+    user_uuid, link = _create_identity_user(
+        db_session=db_session,
+        username=username,
+        email=email,
+        password=None,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
+    )
+    rtnval = InvitedUser(user_id=str(user_uuid), link=link)
+    return rtnval
+
+
+def _create_identity_user(
+        *,
+        db_session: Any,
+        username: str,
+        email: str,
+        password: Optional[str],
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> Tuple[uuid.UUID, Any]:
+    """
+        Shared body of :func:`create_identity_user` (``password`` set)
+        and :func:`create_invited_identity_user` (``password`` None:
+        a ``PENDING`` account, no credentials, an invite link).
+
+        :returns: ``(user_uuid, invite_link_or_None)``.
+        :raises: AdminValidationError, AdminDuplicateError
+    """
     from ccai.pychestrate.webservice.identity.users.models import (
         IdentityUser,
         UserStatus,
     )
     from ccai.pychestrate.webservice.security.auth import local_flow
+    from ccai.pychestrate.webservice.security.auth import password_lifecycle
     from ccai.pychestrate.webservice.security.auth.models import (
         AuthLocalCredentials,
     )
+
+    invited = password is None
 
     normalized_login = username.strip().lower()
     normalized_email = email.strip().lower()
@@ -1018,18 +1134,15 @@ def create_identity_user(
     if role_names is None:
         role_names = []
 
+    invite_link = None
     try:
-        encoded_hash, algo_params = local_flow.hash_password(
-            password=password
-        )
-
         user_uuid = uuid.uuid4()
         modern_user = IdentityUser(
             user_id=user_uuid,
             login_name=normalized_login,
             primary_email=normalized_email,
             display_name=display_name,
-            status=UserStatus.ACTIVE,
+            status=UserStatus.PENDING if invited is True else UserStatus.ACTIVE,
             provisioning_source="local",
             external_id=None,
             timezone="UTC",
@@ -1037,13 +1150,17 @@ def create_identity_user(
         db_session.add(modern_user)
         db_session.flush()
 
-        credentials = AuthLocalCredentials(
-            user_id=user_uuid,
-            argon2id_hash=encoded_hash,
-            algo_params=algo_params,
-        )
-        db_session.add(credentials)
-        db_session.flush()
+        if invited is False:
+            encoded_hash, algo_params = local_flow.hash_password(
+                password=password
+            )
+            credentials = AuthLocalCredentials(
+                user_id=user_uuid,
+                argon2id_hash=encoded_hash,
+                algo_params=algo_params,
+            )
+            db_session.add(credentials)
+            db_session.flush()
 
         _upsert_legacy_mirror(
             db_session=db_session,
@@ -1072,11 +1189,20 @@ def create_identity_user(
                 "user_id": str(user_uuid),
                 "login_name": normalized_login,
                 "provisioning_source": "local",
+                "invited": invited,
                 "actor_user_id": _actor_text(actor_user_id=actor_user_id),
                 "created_at": modern_user.created_at.isoformat()
                 if modern_user.created_at is not None else None,
             },
         )
+
+        if invited is True:
+            invite_link = password_lifecycle.issue_password_link(
+                db_session=db_session,
+                user_id=str(user_uuid),
+                purpose="INVITE",
+                actor_user_id=_actor_text(actor_user_id=actor_user_id),
+            )
 
         db_session.commit()
     except IdentityAdminError:
@@ -1092,7 +1218,7 @@ def create_identity_user(
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
 
-    rtnval = str(user_uuid)
+    rtnval = (user_uuid, invite_link)
     return rtnval
 
 
@@ -1209,18 +1335,26 @@ def update_identity_user(
     if lastname is not None and names_before[1] != lastname:
         changed_fields.append("lastname")
     was_active = row.status == UserStatus.ACTIVE
+    if row.status == UserStatus.PENDING:
+        # An invited account has no password yet: the edit form's
+        # Active box neither activates nor deactivates it. The invite
+        # link activates it; Deactivate cancels the invitation.
+        new_status = UserStatus.PENDING
+    elif is_active is True:
+        new_status = UserStatus.ACTIVE
+    else:
+        new_status = UserStatus.DEACTIVATED
+    becomes_inactive = was_active is True and new_status == UserStatus.DEACTIVATED
+    becomes_active = was_active is False and new_status == UserStatus.ACTIVE
 
     try:
         row.primary_email = normalized_email
         row.display_name = display_name
-        if is_active is True:
-            row.status = UserStatus.ACTIVE
-        else:
-            row.status = UserStatus.DEACTIVATED
+        row.status = new_status
         db_session.flush()
 
         legacy_status = _LEGACY_STATUS_ACTIVE
-        if is_active is False:
+        if new_status != UserStatus.ACTIVE:
             legacy_status = _LEGACY_STATUS_INACTIVE
         _upsert_legacy_mirror(
             db_session=db_session,
@@ -1254,7 +1388,7 @@ def update_identity_user(
             actor_user_id=actor_user_id,
         )
 
-        if is_active is False:
+        if new_status == UserStatus.DEACTIVATED:
             # Deactivation must end access now, not at session expiry.
             _close_user_sessions(
                 db_session=db_session,
@@ -1275,13 +1409,13 @@ def update_identity_user(
                 topic=_TOPIC_USER_UPDATED,
                 payload=updated_payload,
             )
-        if was_active is True and is_active is False:
+        if becomes_inactive is True:
             _publish_entity_event(
                 db_session=db_session,
                 topic=_TOPIC_USER_DEACTIVATED,
                 payload=user_event_payload,
             )
-        if was_active is False and is_active is True:
+        if becomes_active is True:
             _publish_entity_event(
                 db_session=db_session,
                 topic=_TOPIC_USER_REACTIVATED,
@@ -2114,7 +2248,12 @@ __all__ = [
     "LastAdminRoleError",
     "SelfLockoutError",
     "count_role_bindings",
+    "InvitedUser",
+    "USER_STATUS_ACTIVE",
+    "USER_STATUS_INACTIVE",
+    "USER_STATUS_INVITED",
     "create_identity_user",
+    "create_invited_identity_user",
     "create_rbac_role",
     "deactivate_identity_user",
     "delete_rbac_role",
