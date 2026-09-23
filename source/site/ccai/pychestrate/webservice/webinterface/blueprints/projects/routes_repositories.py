@@ -68,7 +68,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
     _describe_failure,
+    _field_errors_from,
     _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
@@ -231,7 +233,12 @@ def _resolve_repository_auth_type(*, auth_type_str: str) -> Any:
     from ccai.pychestrate.core.managers.repository_manager import (  # noqa: E402
         RepositoryAuthType,
     )
-    rtnval = RepositoryAuthType(auth_type_str)
+    try:
+        rtnval = RepositoryAuthType(auth_type_str)
+    except ValueError:
+        raise ProjectsFormError(
+            "Choose how the server signs in to the repository."
+        ) from None
     return rtnval
 
 
@@ -515,10 +522,38 @@ def handle_repository_list(request: Request) -> Response:
             pass
 
 
+#: Inputs the repository create form shows errors for.
+_CREATE_FORM_FIELDS = ("name", "url", "auth_type", "credential_secret_ref", "default_branch")
+
+#: Inputs the repository edit form shows errors for.
+_EDIT_FORM_FIELDS = ("name", "credential_secret_ref", "default_branch")
+
+
+def _repository_form_errors(
+        *, exc: BaseException, fields: Any = _CREATE_FORM_FIELDS
+    ) -> Dict[str, str]:
+    """
+        Inline errors for the repository forms: the manager's field, or
+        the credential secret field for a secret that cannot be used.
+
+        :param exc: The exception being handled.
+        :param fields: The inputs the form shows errors for.
+
+        :returns: ``{input name: message}`` (empty: show a message above
+                  the form instead).
+    """
+    if getattr(exc, "error_code", None) == "REPOSITORY_CREDENTIAL_UNAVAILABLE":
+        rtnval = {"credential_secret_ref": getattr(exc, "message", None) or str(exc)}
+    else:
+        rtnval = _field_errors_from(exc=exc, fields=fields)
+    return rtnval
+
+
 def _render_repository_create_form(
         *, auth: _AuthResolution, project: Any,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     auth_types = _enumerate_repository_auth_type_values()
     flashes = flash.consume_flashes(session=auth.session)
@@ -531,6 +566,7 @@ def _render_repository_create_form(
     context["project"] = project
     context["auth_types"] = auth_types
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     context["secret_refs"] = _list_secret_refs(
         db_session=auth.db_session, user_id=auth.user_id
     )
@@ -671,10 +707,22 @@ def handle_repository_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error adding repository: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
+            # A problem with one field is shown next to it; anything
+            # else as a message above the form.
+            errors = _repository_form_errors(exc=exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="Error adding repository: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
+            return _render_repository_create_form(
+                auth=auth, project=project, form_data=form_view,
+                status_code=400, errors=errors,
             )
 
         return _render_repository_create_form(
@@ -853,6 +901,7 @@ def handle_repository_edit(request: Request) -> Response:
         # so the form shows the submitted values rather than the
         # stale database copy.
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -926,13 +975,17 @@ def handle_repository_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Error updating repository: {}".format(
-                        str(exc)
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
+                errors = _repository_form_errors(exc=exc, fields=_EDIT_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(
+                            exc=exc,
+                            prefix="Error updating repository: ",
+                            request_path=str(getattr(request, "path", "")),
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -944,6 +997,7 @@ def handle_repository_edit(request: Request) -> Response:
         context["project"] = project
         context["repository"] = repository
         context["form_data"] = form_view
+        context["errors"] = errors
         context["secret_refs"] = _list_secret_refs(
             db_session=db_session, user_id=auth.user_id
         )

@@ -62,6 +62,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    _field_errors_from,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -103,6 +104,9 @@ _ROUTE_TABLE = (
 #: Project permission needed to create a release from a template
 #: (administrators and owners, see ``ROLE_PERMISSIONS``).
 RELEASE_CREATE_PERMISSION = "release.create"
+
+#: Inputs the template create / edit forms show errors for.
+_TEMPLATE_FORM_FIELDS = ("name", "version_pattern", "default_repo_ids")
 
 
 # ---------------------------------------------------------------------------
@@ -467,7 +471,8 @@ def _render_template_create_form(
         auth: _AuthResolution,
         project: Any,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     """
         Render the create form for a release template.
@@ -477,6 +482,7 @@ def _render_template_create_form(
         :param form_data: Multi-form view for re-rendering after a
                           validation failure.
         :param status_code: HTTP status code.
+        :param errors: Inline field errors (input name -> message).
 
         :returns: Rendered HTML response.
     """
@@ -489,6 +495,7 @@ def _render_template_create_form(
     )
     context["project"] = project
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     response = _render(
         template_name="projects/release_templates/create.html",
         context=context,
@@ -619,25 +626,30 @@ def handle_release_template_create(request: Request) -> Response:
             )
             return response
         except ValueError as exc:
+            errors = {}
             flash.add_flash(
                 session=auth.session,
                 message=str(exc),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error creating release template: {}".format(
-                    str(exc)
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+            # A problem with one field is shown next to it.
+            errors = _field_errors_from(exc=exc, fields=_TEMPLATE_FORM_FIELDS)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error creating release template: {}".format(
+                        str(exc)
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
         response = _render_template_create_form(
             auth=auth,
             project=project,
             form_data=form_view,
             status_code=400,
+            errors=errors,
         )
         return response
     finally:
@@ -1041,6 +1053,7 @@ def handle_release_template_edit(request: Request) -> Response:
         # so the form shows the submitted values rather than the
         # stale database copy.
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1118,13 +1131,16 @@ def handle_release_template_edit(request: Request) -> Response:
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Error updating release template: {}".format(
-                        str(exc)
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
+                # A problem with one field is shown next to it.
+                errors = _field_errors_from(exc=exc, fields=_TEMPLATE_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message="Error updating release template: {}".format(
+                            str(exc)
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -1135,6 +1151,7 @@ def handle_release_template_edit(request: Request) -> Response:
         )
         context["project"] = project
         context["template"] = template
+        context["errors"] = errors
         context["repository_names"] = _repository_name_map(db_session=db_session, project_id=project_id)
         context["form_data"] = form_view
         context["default_pipeline_json"] = (

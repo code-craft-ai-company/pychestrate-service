@@ -592,8 +592,9 @@ def _register_url_for_endpoints() -> None:
 def test_register_builds_routes_attaches_documented_routes():
     """
     **Feature: webworks projects builds T11.1 (F3)**
-    **Property: register_builds_routes attaches the eight build
-    routes at /projects/{id}/builds*.**
+    **Property: register_builds_routes attaches the ten build
+    routes at /projects/{id}/builds* (PRJ-18 added spec edit and
+    delete).**
     """
     _reset_global_state()
     try:
@@ -612,6 +613,14 @@ def test_register_builds_routes_attaches_documented_routes():
             (
                 "/projects/{project_id}/builds/specs/{spec_id}",
                 ("GET",),
+            ),
+            (
+                "/projects/{project_id}/builds/specs/{spec_id}/edit",
+                ("GET", "POST"),
+            ),
+            (
+                "/projects/{project_id}/builds/specs/{spec_id}/delete",
+                ("POST",),
             ),
             (
                 "/projects/{project_id}/builds/{build_id}",

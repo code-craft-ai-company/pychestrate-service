@@ -81,6 +81,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    _field_errors_from,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -186,6 +187,28 @@ WATCH_ACTION_LABELS: Dict[str, str] = {
     "trigger_pipeline": "Start a release pipeline",
     "trigger_rpa_job": "Run an RPA job",
     "send_notification": "Record a notification (not delivered yet)",
+}
+
+
+#: Inputs the create form shows errors for.
+_WATCH_CREATE_FIELDS = (
+    "name", "event_type", "repository_id", "branch_pattern", "tag_pattern",
+    "build_status", "action_type", "action_target_id",
+)
+
+#: Inputs the edit form shows errors for.
+_WATCH_EDIT_FIELDS = (
+    "name", "branch_pattern", "tag_pattern", "build_status", "action_type",
+    "action_target_id",
+)
+
+#: Manager field names -> form input names.
+_WATCH_FIELD_ALIASES: Dict[str, str] = {
+    "trigger_source": "event_type",
+    "source_id": "repository_id",
+    "conditions.build_status": "build_status",
+    "actions[": "action_target_id",
+    "actions": "action_type",
 }
 
 
@@ -343,15 +366,17 @@ def _build_watch_action_config(
                  ``action_spec_id`` is ``None``.
     """
     from ccai.pychestrate.core.managers.watch_manager import (  # noqa: E402
+        WatchAction,
         WatchActionConfig,
     )
-    if action_spec_id is None:
-        raise ValueError(
-            "Choose a target for the action: a build specification"
-            " for trigger_build, or the id of the pipeline, infrastructure"
-            " specification, or test specification for the other actions."
-        )
     action_enum = _resolve_watch_action(value=action_type)
+    # Only notifications need no target.
+    if action_spec_id is None and action_enum != WatchAction.SEND_NOTIFICATION:
+        raise ValueError(
+            "Choose a target for the action: the build specification to"
+            " run, or the id of the pipeline, infrastructure specification"
+            " or test specification."
+        )
     rtnval = WatchActionConfig(
         action=action_enum,
         target_id=action_spec_id,
@@ -700,7 +725,8 @@ def _render_watch_create_form(
         repositories: Any,
         form_data: Optional[MultiFormView],
         status_code: int = 200,
-        build_specs: Optional[List[Any]] = None
+        build_specs: Optional[List[Any]] = None,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -712,6 +738,7 @@ def _render_watch_create_form(
     context["project"] = project
     context["repositories"] = repositories
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     context["event_types"] = _enumerate_trigger_source_values()
     context["action_types"] = _enumerate_watch_action_values()
     context["build_specs"] = (
@@ -737,7 +764,8 @@ def _render_watch_edit_form(
         status_code: int = 200,
         repositories: Optional[List[Any]] = None,
         build_specs: Optional[List[Any]] = None,
-        form_data: Optional[MultiFormView] = None
+        form_data: Optional[MultiFormView] = None,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -749,6 +777,7 @@ def _render_watch_edit_form(
     context["project"] = project
     context["watch"] = watch
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     context["event_types"] = _enumerate_trigger_source_values()
     context["action_types"] = _enumerate_watch_action_values()
     context["repositories"] = (
@@ -1126,11 +1155,16 @@ def handle_watch_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error creating watch: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
+            # A problem with one field is shown next to it.
+            errors = _field_errors_from(
+                exc=exc, fields=_WATCH_CREATE_FIELDS, aliases=_WATCH_FIELD_ALIASES,
             )
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error creating watch: {}".format(str(exc)),
+                    category=flash.CATEGORY_ERROR,
+                )
             return _render_watch_create_form(
                 auth=auth,
                 project=project,
@@ -1138,6 +1172,7 @@ def handle_watch_create(request: Request) -> Response:
                 form_data=form_view,
                 status_code=400,
                 build_specs=build_specs,
+                errors=errors,
             )
     finally:
         try:
@@ -1304,11 +1339,16 @@ def handle_watch_edit(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error updating watch: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
+            # A problem with one field is shown next to it.
+            errors = _field_errors_from(
+                exc=exc, fields=_WATCH_EDIT_FIELDS, aliases=_WATCH_FIELD_ALIASES,
             )
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error updating watch: {}".format(str(exc)),
+                    category=flash.CATEGORY_ERROR,
+                )
             repository_manager = _build_repository_manager(
                 db_session=db_session
             )
@@ -1326,6 +1366,7 @@ def handle_watch_edit(request: Request) -> Response:
                 repositories=repositories,
                 build_specs=build_specs,
                 form_data=form_view,
+                errors=errors,
             )
     finally:
         try:

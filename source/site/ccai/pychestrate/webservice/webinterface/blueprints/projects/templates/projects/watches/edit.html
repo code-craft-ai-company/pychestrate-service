@@ -29,7 +29,8 @@
         <div class="form-group">
             <label for="name">Name</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   value="{{ form_data.name if form_data else watch.name }}">
+                   value="{{ form_data.name if form_data else watch.name }}"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
 
         <div class="form-group">
@@ -51,7 +52,8 @@
             <label for="branch_pattern">Branch pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else (watch.conditions.branch_pattern or '') }}"
-                   placeholder="e.g., ^main$ or ^release/">
+                   placeholder="e.g., ^main$ or ^release/"{{ ui.invalid_attrs(errors, 'branch_pattern') }}>
+            {{ ui.field_error(errors, 'branch_pattern') }}
             <span class="form-text">Regular expression matched from the start of the branch name. Leave empty to match every branch.</span>
         </div>
         {% endif %}
@@ -61,7 +63,8 @@
             <label for="tag_pattern">Tag pattern</label>
             <input type="text" id="tag_pattern" name="tag_pattern" class="form-control"
                    value="{{ form_data.tag_pattern if form_data else (watch.conditions.tag_pattern or '') }}"
-                   placeholder="e.g., ^v[0-9]+">
+                   placeholder="e.g., ^v[0-9]+"{{ ui.invalid_attrs(errors, 'tag_pattern') }}>
+            {{ ui.field_error(errors, 'tag_pattern') }}
             <span class="form-text">Regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
         </div>
         {% endif %}
@@ -74,6 +77,7 @@
                 <option value="succeeded" {% if current_status == 'succeeded' %}selected{% endif %}>Succeeded</option>
                 <option value="failed" {% if current_status == 'failed' %}selected{% endif %}>Failed</option>
             </select>
+            {{ ui.field_error(errors, 'build_status') }}
         </div>
         {% endif %}
 
@@ -86,6 +90,7 @@
                 <option value="{{ action_type }}" {% if (form_data and form_data.action_type == action_type) or (not form_data and primary_action and primary_action.action.value == action_type) %}selected{% endif %}>{{ action_labels.get(action_type, action_type) }}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'action_type') }}
         </div>
 
         <div class="form-group">
@@ -105,7 +110,8 @@
             <label for="action_target_id">Target id for other actions</label>
             <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
                    value="{{ form_data.action_target_id if form_data else '' }}"
-                   placeholder="pipeline, infrastructure specification, or test specification id">
+                   placeholder="pipeline, infrastructure specification, or test specification id"{{ ui.invalid_attrs(errors, 'action_target_id') }}>
+            {{ ui.field_error(errors, 'action_target_id') }}
             <p class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
 

@@ -36,6 +36,7 @@ from ccai.pychestrate.core.managers.release_template_manager import (
 from ccai.pychestrate.core.orm import (
     Project,
     ProjectRelease,
+    ProjectRepository,
     PychestrateModelBase,
 )
 
@@ -56,6 +57,13 @@ def _projects_with_template() -> Any:
         session.add(project)
         session.flush()
         ids[name] = project.id
+    # The template's default repositories must be the project's own.
+    for repo_id in (3, 4):
+        session.add(ProjectRepository(
+            id=repo_id, project_id=ids["alpha"], name="repo-{}".format(repo_id),
+            url="https://example.invalid/repo-{}.git".format(repo_id), auth_type="none",
+            default_branch="main",
+        ))
     session.commit()
     manager = ReleaseTemplateManager(db_session=session)
     template = manager.create(

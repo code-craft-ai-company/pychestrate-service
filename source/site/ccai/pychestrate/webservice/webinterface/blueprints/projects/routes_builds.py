@@ -76,6 +76,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
     _describe_failure,
+    _field_errors_from,
     _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
@@ -130,6 +131,10 @@ _ROUTE_TABLE = (
         ("POST",),
     ),
 )
+
+
+#: Inputs the build specification forms show errors for.
+_SPEC_FORM_FIELDS = ("name", "branch", "steps", "timeout_minutes")
 
 
 # ---------------------------------------------------------------------------
@@ -626,7 +631,8 @@ def _render_build_spec_create_form(
         project: Any,
         repositories: List[Any],
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -638,6 +644,7 @@ def _render_build_spec_create_form(
     context["project"] = project
     context["repositories"] = repositories
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     response = _render(
         template_name="projects/builds/spec_create.html",
         context=context,
@@ -776,19 +783,23 @@ def handle_build_spec_create(request: Request) -> Response:
             )
             return response
         except ValueError as exc:
+            errors: Dict[str, str] = {}
             flash.add_flash(
                 session=auth.session,
                 message=str(exc),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error creating build specification: {}".format(
-                    str(exc)
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+            # A problem with one field is shown next to it.
+            errors = _field_errors_from(exc=exc, fields=_SPEC_FORM_FIELDS)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error creating build specification: {}".format(
+                        str(exc)
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
         repositories = repository_manager.list_repositories(
             project_id, limit=100
@@ -799,6 +810,7 @@ def handle_build_spec_create(request: Request) -> Response:
             repositories=repositories,
             form_data=form_view,
             status_code=400,
+            errors=errors,
         )
     finally:
         try:
@@ -981,6 +993,7 @@ def handle_build_spec_edit(request: Request) -> Response:
 
         form_values = _spec_edit_form_values(spec=spec)
         status_code = 200
+        errors: Dict[str, str] = {}
         if request.method.upper() == "POST":
             single_form = _parse_form_or_empty(request=request)
             csrf_redirect = auth_guard.enforce_csrf_or_redirect(
@@ -1043,15 +1056,18 @@ def handle_build_spec_edit(request: Request) -> Response:
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=_describe_failure(
-                        exc=exc,
-                        prefix="Error saving build specification: ",
-                        request_path=str(getattr(request, "path", "")),
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
+                # A problem with one field is shown next to it.
+                errors = _field_errors_from(exc=exc, fields=_SPEC_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(
+                            exc=exc,
+                            prefix="Error saving build specification: ",
+                            request_path=str(getattr(request, "path", "")),
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
             status_code = 400
 
         repositories = repository_manager.list_repositories(
@@ -1068,6 +1084,7 @@ def handle_build_spec_edit(request: Request) -> Response:
         context["spec"] = spec
         context["repositories"] = repositories
         context["form_values"] = form_values
+        context["errors"] = errors
         response = _render(
             template_name="projects/builds/spec_edit.html",
             context=context,

@@ -27,6 +27,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.managers.git_validation import regex_problem
 
 
 # =============================================================================
@@ -201,9 +202,11 @@ class SourceNotFoundError(Exception):
 class InvalidPatternError(Exception):
     """Exception raised when a regex pattern is invalid."""
     
-    def __init__(self, message: str, pattern: str = None, error_code: str = "INVALID_PATTERN"):
+    def __init__(self, message: str, pattern: str = None, error_code: str = "INVALID_PATTERN",
+                 field: str = None):
         self.message = message
         self.pattern = pattern
+        self.field = field
         self.error_code = error_code
         super().__init__(self.message)
 
@@ -377,19 +380,22 @@ class WatchManager:
         if request.conditions:
             if request.conditions.branch_pattern and not validate_regex_pattern(request.conditions.branch_pattern):
                 raise InvalidPatternError(
-                    f"Invalid branch pattern: {request.conditions.branch_pattern}",
+                    regex_problem(pattern=request.conditions.branch_pattern, what="branch pattern"),
+                    field="branch_pattern",
                     pattern=request.conditions.branch_pattern
                 )
             
             if request.conditions.tag_pattern and not validate_regex_pattern(request.conditions.tag_pattern):
                 raise InvalidPatternError(
-                    f"Invalid tag pattern: {request.conditions.tag_pattern}",
+                    regex_problem(pattern=request.conditions.tag_pattern, what="tag pattern"),
+                    field="tag_pattern",
                     pattern=request.conditions.tag_pattern
                 )
             
             if request.conditions.file_pattern and not validate_regex_pattern(request.conditions.file_pattern):
                 raise InvalidPatternError(
-                    f"Invalid file pattern: {request.conditions.file_pattern}",
+                    regex_problem(pattern=request.conditions.file_pattern, what="file pattern"),
+                    field="file_pattern",
                     pattern=request.conditions.file_pattern
                 )
             
@@ -857,19 +863,22 @@ class WatchManager:
             # Validate patterns
             if request.conditions.branch_pattern and not validate_regex_pattern(request.conditions.branch_pattern):
                 raise InvalidPatternError(
-                    f"Invalid branch pattern: {request.conditions.branch_pattern}",
+                    regex_problem(pattern=request.conditions.branch_pattern, what="branch pattern"),
+                    field="branch_pattern",
                     pattern=request.conditions.branch_pattern
                 )
             
             if request.conditions.tag_pattern and not validate_regex_pattern(request.conditions.tag_pattern):
                 raise InvalidPatternError(
-                    f"Invalid tag pattern: {request.conditions.tag_pattern}",
+                    regex_problem(pattern=request.conditions.tag_pattern, what="tag pattern"),
+                    field="tag_pattern",
                     pattern=request.conditions.tag_pattern
                 )
             
             if request.conditions.file_pattern and not validate_regex_pattern(request.conditions.file_pattern):
                 raise InvalidPatternError(
-                    f"Invalid file pattern: {request.conditions.file_pattern}",
+                    regex_problem(pattern=request.conditions.file_pattern, what="file pattern"),
+                    field="file_pattern",
                     pattern=request.conditions.file_pattern
                 )
             

@@ -363,6 +363,52 @@ class ReleaseTemplateManager:
 
         return
 
+    def _validate_pattern_and_repositories(
+            self,
+            *,
+            project_id: int,
+            version_pattern: Optional[str],
+            default_repo_ids: Optional[List[int]]
+        ) -> None:
+        """
+            Refuse a version pattern that is not a regular expression and
+            default repositories that are not part of the project (both
+            used to be stored as typed).
+
+            :param project_id: The template's project.
+            :param version_pattern: Candidate pattern (``None``: no change).
+            :param default_repo_ids: Candidate repository ids (``None``:
+                                     no change).
+
+            :raises ReleaseTemplateValidationError: On either problem.
+        """
+        from ccai.pychestrate.core.managers.git_validation import regex_problem  # noqa: E402
+        from ccai.pychestrate.core.orm import ProjectRepository  # noqa: E402
+
+        if version_pattern:
+            problem = regex_problem(pattern=version_pattern, what="version pattern")
+            if problem is not None:
+                raise ReleaseTemplateValidationError(
+                    problem, field_name="version_pattern", error_code="INVALID_VERSION_PATTERN"
+                ) from None
+
+        if default_repo_ids:
+            known = {
+                row.id for row in self._db_session.query(ProjectRepository).filter(
+                    ProjectRepository.project_id == project_id
+                ).all()
+            }
+            missing = [repo_id for repo_id in default_repo_ids if repo_id not in known]
+            if len(missing) > 0:
+                raise ReleaseTemplateValidationError(
+                    "Repository {} is not part of this project.".format(
+                        ", ".join(str(repo_id) for repo_id in missing)
+                    ),
+                    field_name="default_repo_ids",
+                    error_code="UNKNOWN_REPOSITORY",
+                ) from None
+        return
+
     # -------------------------------------------------------------------
     # Public API
     # -------------------------------------------------------------------
@@ -460,6 +506,11 @@ class ReleaseTemplateManager:
             require_name=True,
         )
         self._verify_project_exists(project_id=project_id)
+        self._validate_pattern_and_repositories(
+            project_id=project_id,
+            version_pattern=version_pattern,
+            default_repo_ids=repo_ids_value,
+        )
 
         existing = self._db_session.query(ProjectReleaseTemplate).filter(
             ProjectReleaseTemplate.project_id == project_id,
@@ -585,6 +636,11 @@ class ReleaseTemplateManager:
             name=name,
             default_repo_ids=default_repo_ids,
             require_name=False,
+        )
+        self._validate_pattern_and_repositories(
+            project_id=template.project_id,
+            version_pattern=version_pattern,
+            default_repo_ids=list(default_repo_ids) if default_repo_ids is not None else None,
         )
 
         if name is not None and name != template.name:

@@ -25,7 +25,8 @@
         <div class="form-group">
             <label for="name">Specification Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   placeholder="my-build" value="{{ form_data.name if form_data else '' }}">
+                   placeholder="my-build" value="{{ form_data.name if form_data else '' }}"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">
@@ -41,19 +42,22 @@
         <div class="form-group">
             <label for="branch">Branch</label>
             <input type="text" id="branch" name="branch" class="form-control"
-                   value="{{ form_data.branch if form_data else 'main' }}" placeholder="main">
+                   value="{{ form_data.branch if form_data else 'main' }}" placeholder="main"{{ ui.invalid_attrs(errors, 'branch') }}>
+            {{ ui.field_error(errors, 'branch') }}
         </div>
         
         <div class="form-group">
             <label for="timeout_minutes">Timeout (minutes)</label>
             <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control"
-                   value="{{ form_data.timeout_minutes if form_data else '60' }}" min="1" max="480">
+                   value="{{ form_data.timeout_minutes if form_data else '60' }}" min="1" max="480"{{ ui.invalid_attrs(errors, 'timeout_minutes') }}>
+            {{ ui.field_error(errors, 'timeout_minutes') }}
         </div>
         
         <div class="form-group">
             <label for="steps">Build Steps (JSON)</label>
             <textarea id="steps" name="steps" class="form-control" rows="8"
-                      placeholder='[{"name": "checkout", "type": "checkout", "config": {}}, {"name": "build", "type": "script", "config": {"script": "make build"}}]'>{{ form_data.steps if form_data else '[]' }}</textarea>
+                      placeholder='[{"name": "checkout", "type": "checkout", "config": {}}, {"name": "build", "type": "script", "config": {"script": "make build"}}]'{{ ui.invalid_attrs(errors, 'steps') }}>{{ form_data.steps if form_data else '[]' }}</textarea>
+            {{ ui.field_error(errors, 'steps') }}
             <div class="form-text">JSON array of build step definitions</div>
         </div>
         

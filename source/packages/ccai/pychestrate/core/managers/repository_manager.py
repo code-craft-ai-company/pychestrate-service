@@ -37,6 +37,10 @@ from urllib.parse import urlsplit
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.managers.git_validation import (
+    ref_name_problem,
+    repository_url_problem,
+)
 
 
 _module_logger = logging.getLogger(__name__)
@@ -418,6 +422,19 @@ class RepositoryManager:
                     error_code="INVALID_AUTH_TYPE"
                 )
         
+        # The URL must be one git can use (and an SSH URL for SSH keys).
+        url_problem = repository_url_problem(
+            url=request.url, ssh_only=request.auth_type == RepositoryAuthType.SSH_KEY
+        )
+        if url_problem is not None:
+            raise RepositoryValidationError(url_problem, field="url", error_code="INVALID_URL")
+
+        branch_problem = ref_name_problem(name=request.default_branch or "")
+        if branch_problem is not None:
+            raise RepositoryValidationError(
+                branch_problem, field="default_branch", error_code="INVALID_DEFAULT_BRANCH"
+            )
+
         # Validate credential_secret_ref is provided for authenticated types
         if request.auth_type != RepositoryAuthType.NONE and not request.credential_secret_ref:
             raise RepositoryValidationError(
@@ -428,7 +445,7 @@ class RepositoryManager:
                 field="credential_secret_ref",
                 error_code="MISSING_CREDENTIAL_REF"
             )
-    
+
     # =========================================================================
     # Helper Methods
     # =========================================================================
@@ -610,6 +627,11 @@ class RepositoryManager:
         
         # Update default_branch if provided
         if request.default_branch is not None:
+            branch_problem = ref_name_problem(name=request.default_branch)
+            if branch_problem is not None:
+                raise RepositoryValidationError(
+                    branch_problem, field="default_branch", error_code="INVALID_DEFAULT_BRANCH"
+                )
             repository.default_branch = request.default_branch
         
         # Update description if provided
@@ -1021,6 +1043,23 @@ class RepositoryManager:
 
         with self._git_access(repository=repository) as access:
             remote_refs = self._list_remote_refs(repository=repository, access=access)
+
+        # A fetch that cannot see the default branch must not report
+        # "updated" (it used to, keeping the old commit).
+        if repository.default_branch not in remote_refs['branch']:
+            if len(remote_refs['branch']) == 0:
+                message = "The repository has no branches yet."
+            else:
+                message = (
+                    "The repository has no branch named '{}'. Change the default branch "
+                    "on the Edit page (branches: {}).".format(
+                        repository.default_branch,
+                        ", ".join(sorted(remote_refs['branch'].keys())[:10]),
+                    )
+                )
+            raise RepositoryValidationError(
+                message, field="default_branch", error_code="DEFAULT_BRANCH_NOT_FOUND"
+            )
 
         now = utc_now()
         repository.last_fetch_time = now

@@ -1743,6 +1743,37 @@ def _is_user_facing_error(*, exc: BaseException) -> bool:
     return rtnval
 
 
+def _field_errors_from(
+        *, exc: BaseException, fields: Any, aliases: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
+    """
+        The inline form error for a validation failure: the field the
+        manager named (``exc.field``, renamed through ``aliases`` to the
+        form's input name) with the error's message. Empty when the error
+        is not user-facing or names no field the form shows an error
+        for -- the caller then shows the message above the form, so it
+        is never lost.
+
+        :param exc: The exception being handled.
+        :param fields: The input names the form renders errors for.
+        :param aliases: ``{manager field (or prefix ending in "["): form
+                        input name}``.
+
+        :returns: ``{input name: message}`` for ``ui.field_error``.
+    """
+    rtnval: Dict[str, str] = {}
+    field = getattr(exc, "field", None)
+    if _is_user_facing_error(exc=exc) is True and isinstance(field, str) and len(field) > 0:
+        name = field
+        for source, target in (aliases or {}).items():
+            if field == source or (source.endswith("[") and field.startswith(source)):
+                name = target
+                break
+        if name in set(fields):
+            rtnval[name] = getattr(exc, "message", None) or str(exc)
+    return rtnval
+
+
 def _describe_failure(
         *, exc: BaseException, prefix: str, request_path: str
     ) -> str:

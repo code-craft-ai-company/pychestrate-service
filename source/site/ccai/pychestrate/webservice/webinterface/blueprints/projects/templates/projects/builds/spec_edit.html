@@ -26,7 +26,8 @@
         <div class="form-group">
             <label for="name">Specification Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   value="{{ form_values.name }}">
+                   value="{{ form_values.name }}"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
 
         <div class="form-group">
@@ -41,18 +42,21 @@
         <div class="form-group">
             <label for="branch">Branch</label>
             <input type="text" id="branch" name="branch" class="form-control"
-                   value="{{ form_values.branch }}" placeholder="main">
+                   value="{{ form_values.branch }}" placeholder="main"{{ ui.invalid_attrs(errors, 'branch') }}>
+            {{ ui.field_error(errors, 'branch') }}
         </div>
 
         <div class="form-group">
             <label for="timeout_minutes">Timeout (minutes)</label>
             <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control"
-                   value="{{ form_values.timeout_minutes }}" min="1" max="480">
+                   value="{{ form_values.timeout_minutes }}" min="1" max="480"{{ ui.invalid_attrs(errors, 'timeout_minutes') }}>
+            {{ ui.field_error(errors, 'timeout_minutes') }}
         </div>
 
         <div class="form-group">
             <label for="steps">Build Steps (JSON)</label>
-            <textarea id="steps" name="steps" class="form-control" rows="10">{{ form_values.steps }}</textarea>
+            <textarea id="steps" name="steps" class="form-control" rows="10"{{ ui.invalid_attrs(errors, 'steps') }}>{{ form_values.steps }}</textarea>
+            {{ ui.field_error(errors, 'steps') }}
             <div class="form-text">JSON array of build step definitions</div>
         </div>
 

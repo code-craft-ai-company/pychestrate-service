@@ -26,7 +26,8 @@
             <label for="name">Name</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   placeholder="e.g., build-on-push">
+                   placeholder="e.g., build-on-push"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
 
         <div class="form-group">
@@ -44,6 +45,7 @@
                 <option value="{{ event_type }}" {% if form_data and form_data.event_type == event_type %}selected{% endif %}>{{ trigger_labels.get(event_type, event_type) }}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'event_type') }}
             <p class="form-text">Repository changes are found when someone fetches the repository (Fetch on its page).</p>
         </div>
 
@@ -57,6 +59,7 @@
                 </option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'repository_id') }}
             <p class="form-text">For new commits, new branches and new tags.</p>
         </div>
 
@@ -77,7 +80,8 @@
             <label for="branch_pattern">Branch pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else '' }}"
-                   placeholder="e.g., ^main$ or ^release/">
+                   placeholder="e.g., ^main$ or ^release/"{{ ui.invalid_attrs(errors, 'branch_pattern') }}>
+            {{ ui.field_error(errors, 'branch_pattern') }}
             <span class="form-text">Regular expression matched from the start of the branch name (for commits, new branches, and the branch a finished build built). Leave empty to match every branch.</span>
         </div>
 
@@ -85,7 +89,8 @@
             <label for="tag_pattern">Tag pattern</label>
             <input type="text" id="tag_pattern" name="tag_pattern" class="form-control"
                    value="{{ form_data.tag_pattern if form_data else '' }}"
-                   placeholder="e.g., ^v[0-9]+">
+                   placeholder="e.g., ^v[0-9]+"{{ ui.invalid_attrs(errors, 'tag_pattern') }}>
+            {{ ui.field_error(errors, 'tag_pattern') }}
             <span class="form-text">For new tags: regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
         </div>
 
@@ -96,6 +101,7 @@
                 <option value="succeeded" {% if form_data and form_data.build_status == 'succeeded' %}selected{% endif %}>Succeeded</option>
                 <option value="failed" {% if form_data and form_data.build_status == 'failed' %}selected{% endif %}>Failed</option>
             </select>
+            {{ ui.field_error(errors, 'build_status') }}
             <p class="form-text">For "A build finishes".</p>
         </div>
 
@@ -108,6 +114,7 @@
                 <option value="{{ action_type }}" {% if form_data and form_data.action_type == action_type %}selected{% endif %}>{{ action_labels.get(action_type, action_type) }}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'action_type') }}
         </div>
 
         <div class="form-group">
@@ -127,7 +134,8 @@
             <label for="action_target_id">Target id for other actions</label>
             <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
                    value="{{ form_data.action_target_id if form_data else '' }}"
-                   placeholder="pipeline, infrastructure specification, or test specification id">
+                   placeholder="pipeline, infrastructure specification, or test specification id"{{ ui.invalid_attrs(errors, 'action_target_id') }}>
+            {{ ui.field_error(errors, 'action_target_id') }}
             <p class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
 

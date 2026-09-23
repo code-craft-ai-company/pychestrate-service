@@ -30,6 +30,10 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy import or_
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.managers.git_validation import (
+    commit_sha_problem,
+    ref_name_problem,
+)
 
 
 _module_logger = logging.getLogger(__name__)
@@ -199,6 +203,16 @@ class BuildSpecValidationError(Exception):
         self.message = message
         self.field = field
         self.error_code = error_code or "VALIDATION_ERROR"
+        super().__init__(self.message)
+
+
+class BuildValidationError(Exception):
+    """Exception raised when a build request or result is not valid."""
+
+    def __init__(self, message: str, field: str = None, error_code: str = None):
+        self.message = message
+        self.field = field
+        self.error_code = error_code or "BUILD_VALIDATION_ERROR"
         super().__init__(self.message)
 
 
@@ -475,7 +489,11 @@ class BuildManager:
                 field="steps",
                 error_code="INVALID_STEPS"
             )
-    
+
+        branch_problem = ref_name_problem(name=request.branch or "")
+        if branch_problem is not None:
+            raise BuildSpecValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
+
     def validate_spec(self, spec: BuildSpecCreateRequest) -> List[str]:
         """
         Validate build specification syntax. Returns list of errors.
@@ -788,6 +806,9 @@ class BuildManager:
         
         # Update branch if provided
         if request.branch is not None:
+            branch_problem = ref_name_problem(name=request.branch)
+            if branch_problem is not None:
+                raise BuildSpecValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
             spec.branch = request.branch
         
         # Update steps if provided
@@ -1049,7 +1070,18 @@ class BuildManager:
         
         if not spec:
             raise BuildSpecNotFoundError(f"Build specification with ID '{request.spec_id}' not found")
-        
+
+        # A branch or commit that cannot exist is refused rather than
+        # recorded (it used to accept "not-a-sha!!").
+        if request.branch:
+            branch_problem = ref_name_problem(name=request.branch)
+            if branch_problem is not None:
+                raise BuildValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
+        if request.commit_sha:
+            sha_problem = commit_sha_problem(value=request.commit_sha)
+            if sha_problem is not None:
+                raise BuildValidationError(sha_problem, field="commit_sha", error_code="INVALID_COMMIT_SHA")
+
         # Determine branch and commit
         branch = request.branch if request.branch else spec.branch
         commit_sha = request.commit_sha if request.commit_sha else "HEAD"
