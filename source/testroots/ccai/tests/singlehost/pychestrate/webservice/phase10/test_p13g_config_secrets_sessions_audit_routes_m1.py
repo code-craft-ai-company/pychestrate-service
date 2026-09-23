@@ -435,7 +435,8 @@ def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
             db_session: Any,
             filter_username: Optional[str],
             offset: int = 0,
-            limit: int = 20
+            limit: int = 20,
+            current_session_id: Optional[str] = None
         ) -> Any:
         recorder.list_calls.append((filter_username, offset, limit))
         rtnval = config_routes_sessions._SessionPage(

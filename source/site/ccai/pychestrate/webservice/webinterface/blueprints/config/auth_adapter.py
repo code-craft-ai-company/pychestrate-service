@@ -154,8 +154,10 @@ class SessionInfo:
         :param created_at: Session open time.
         :param last_activity: Most-recent observed activity.
         :param expires_at: Session expiry.
-        :param client_ip: IP-fingerprint hash (not raw IP).
-        :param user_agent: User-Agent fingerprint hash.
+        :param client_ip: Always "" from :meth:`validate_token`; the
+                          sessions page reads the recorded client
+                          address itself.
+        :param user_agent: Always "" from :meth:`validate_token`.
     """
     session_id: str
     token: str
@@ -377,6 +379,8 @@ class ConsumerUISecurityAdapter:
             user_agent_fingerprint=_fingerprint_value(
                 raw=request.user_agent
             ),
+            client_address=request.client_ip or None,
+            user_agent=request.user_agent or None,
         )
 
         session = open_session(
@@ -476,8 +480,10 @@ class ConsumerUISecurityAdapter:
             created_at=session_row.opened_at,
             last_activity=session_row.last_seen_at,
             expires_at=session_row.expires_at,
-            client_ip=session_row.ip_fingerprint or "",
-            user_agent=session_row.user_agent_fingerprint or "",
+            # Not loaded here: this runs on every request and no caller
+            # reads them (the sessions page reads auth_session_clients).
+            client_ip="",
+            user_agent="",
         )
         return rtnval
 

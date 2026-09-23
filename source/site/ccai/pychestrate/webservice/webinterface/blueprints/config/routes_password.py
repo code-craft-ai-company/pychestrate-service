@@ -91,20 +91,21 @@ def _password_lifecycle() -> Any:
 
 def _client_ip(*, request: Request) -> str:
     """
-        The client address used to key the sign-in back-off.
+        The client address (trusted-proxy aware) used to key the
+        sign-in back-off.
     """
-    try:
-        rtnval = request.headers.get("X-Forwarded-For", "") or ""
-    except Exception:
-        rtnval = ""
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        resolve_client_address,
+    )
+    rtnval = resolve_client_address(request=request)
     return rtnval
 
 
 def _user_agent(*, request: Request) -> str:
-    try:
-        rtnval = request.headers.get("User-Agent", "") or ""
-    except Exception:
-        rtnval = ""
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        request_user_agent,
+    )
+    rtnval = request_user_agent(request=request)
     return rtnval
 
 

@@ -658,6 +658,8 @@ DEFAULT_REGISTRY.update({
     "purpose": _by_mode("INVITE", "RESET"),
     "login_name": _const("jdoe"),
     "form_action": _const("/password/set/abc"),
+    "idle_timeout_minutes": _const(30),
+    "max_lifetime_hours": _const(24),
 })
 
 

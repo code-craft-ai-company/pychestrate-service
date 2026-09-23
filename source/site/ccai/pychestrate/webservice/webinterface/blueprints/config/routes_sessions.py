@@ -36,7 +36,7 @@ __version__ = "1.0.0"
 import logging
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
@@ -90,17 +90,24 @@ class _SessionRow:
     """
         Template view-model for one active session. Field names match
         what ``config/sessions/list.html`` reads, mapped from the modern
-        :class:`AuthSession` columns.
+        :class:`AuthSession` row and its :class:`AuthSessionClient`.
 
         :param session_id: Session UUID as a string.
         :param username: Login name of the session's user (falls back to
                          the user id when the user row is absent).
         :param created_at: When the session was opened.
         :param last_activity: When the session was last seen.
-        :param expires_at: Absolute expiry timestamp.
-        :param client_ip: IP fingerprint recorded for the session.
-        :param user_agent: User-agent fingerprint recorded for the
-                           session.
+        :param expires_at: When the session ends if nothing else
+                           happens: the earlier of its absolute expiry
+                           and its idle deadline.
+        :param client_ip: The client address recorded at sign-in (""
+                          when it was not recorded).
+        :param user_agent: Readable browser / OS summary ("" when not
+                           recorded).
+        :param user_id: The session's user id.
+        :param user_agent_full: The full User-Agent header, for a
+                                tooltip.
+        :param is_current: The session making this request.
     """
     session_id: str
     username: str
@@ -109,6 +116,9 @@ class _SessionRow:
     expires_at: Optional[datetime]
     client_ip: str
     user_agent: str
+    user_id: str = ""
+    user_agent_full: str = ""
+    is_current: bool = False
 
 
 @dataclass(frozen=True)
@@ -150,46 +160,93 @@ def _normalize_to_utc(*, value: Optional[datetime], fallback: datetime) -> datet
     return rtnval
 
 
+def session_idle_deadline(*, session_row: Any, fallback: datetime) -> Optional[datetime]:
+    """
+        When a session ends for inactivity: ``last_seen_at`` plus its
+        idle timeout (None when either is missing).
+
+        :param session_row: The :class:`AuthSession` row.
+        :param fallback: Value used when ``last_seen_at`` is missing.
+
+        :returns: Aware UTC datetime or None.
+    """
+    if session_row.idle_timeout_seconds is None or session_row.last_seen_at is None:
+        return None
+    last_seen = _normalize_to_utc(value=session_row.last_seen_at, fallback=fallback)
+    rtnval = last_seen + timedelta(seconds=int(session_row.idle_timeout_seconds))
+    return rtnval
+
+
+def session_effective_expiry(*, session_row: Any, now: datetime) -> datetime:
+    """
+        The earlier of a session's absolute expiry and its idle deadline
+        -- when it stops working if nothing else happens.
+
+        :param session_row: The :class:`AuthSession` row.
+        :param now: Evaluation time (fallback for missing values).
+
+        :returns: Aware UTC datetime.
+    """
+    absolute = _normalize_to_utc(value=session_row.expires_at, fallback=now)
+    idle = session_idle_deadline(session_row=session_row, fallback=now)
+    if idle is not None and idle < absolute:
+        return idle
+    return absolute
+
+
 def _list_active_sessions(
         *,
         db_session: Any,
         filter_username: Optional[str],
         offset: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        current_session_id: Optional[str] = None,
+        now: Optional[datetime] = None
     ) -> _SessionPage:
     """
-        List one page of active (non-expired) sessions from the
-        modern ``auth_sessions`` table, newest first, optionally
-        filtered by the owning user's login name, with the login
-        name joined in.
+        List one page of active sessions from the modern
+        ``auth_sessions`` table, grouped by user (users sorted by login
+        name, each user's sessions most recently active first),
+        optionally filtered by the owning user's login name.
+
+        A session is active only while both its absolute expiry and its
+        idle deadline (``last_seen_at`` + ``idle_timeout_seconds``) are
+        in the future -- the same rule ``session_service.resolve_session``
+        applies. The page used to list idle-expired sessions as active.
 
         The username filter resolves against
-        ``identity_users.login_name`` server-side (the table shows
-        usernames, so the filter takes one too). An unknown
-        username yields an empty page rather than an error.
+        ``identity_users.login_name`` server-side. An unknown username
+        yields an empty page rather than an error.
 
         Expiry filtering happens in Python (not SQL) because SQLite
         returns naive datetimes that cannot be compared to an aware
         "now" inside the query; :func:`_normalize_to_utc` handles
         that normalization per row. Pagination is applied after the
-        expiry filter so page boundaries stay stable.
+        filter so page boundaries stay stable.
 
         :param db_session: Open SQLAlchemy session.
         :param filter_username: Optional login name to filter by.
-        :param offset: Rows to skip (post-expiry-filter).
+        :param offset: Rows to skip (post-filter).
         :param limit: Maximum rows to return.
+        :param current_session_id: The viewer's own session, marked.
+        :param now: Evaluation time (defaults to now).
 
         :returns: A :class:`_SessionPage` with the page's rows and
                   the filtered total.
     """
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        describe_user_agent,
+    )
     from ccai.pychestrate.webservice.security.auth.models import (  # noqa: E402
         AuthSession,
+        AuthSessionClient,
     )
     from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
         IdentityUser,
     )
 
-    now = datetime.now(timezone.utc)
+    if now is None:
+        now = datetime.now(timezone.utc)
 
     query = db_session.query(AuthSession)
 
@@ -206,28 +263,15 @@ def _list_active_sessions(
             AuthSession.user_id == matched_user.user_id
         )
 
-    all_sessions = query.order_by(AuthSession.opened_at.desc()).all()
+    all_sessions = query.all()
 
     active_sessions = []
     for session_row in all_sessions:
-        normalized_expiry = _normalize_to_utc(
-            value=session_row.expires_at, fallback=now
-        )
-        if session_row.expires_at is None or normalized_expiry > now:
+        if session_effective_expiry(session_row=session_row, now=now) > now:
             active_sessions.append(session_row)
 
-    active_sessions.sort(
-        key=lambda candidate: _normalize_to_utc(
-            value=candidate.opened_at, fallback=now
-        ),
-        reverse=True,
-    )
-
-    total = len(active_sessions)
-    page_sessions = active_sessions[offset:offset + limit]
-
     usernames_by_user_id: Dict[str, str] = {}
-    user_ids = [session_row.user_id for session_row in page_sessions]
+    user_ids = list({session_row.user_id for session_row in active_sessions})
     if len(user_ids) > 0:
         user_rows = (
             db_session.query(IdentityUser)
@@ -237,18 +281,53 @@ def _list_active_sessions(
         for user_row in user_rows:
             usernames_by_user_id[str(user_row.user_id)] = user_row.login_name
 
+    def _group_order(candidate: Any) -> Any:
+        user_id_text = str(candidate.user_id)
+        username = usernames_by_user_id.get(user_id_text, user_id_text)
+        last_seen = _normalize_to_utc(value=candidate.last_seen_at, fallback=now)
+        return (username.lower(), -last_seen.timestamp())
+
+    active_sessions.sort(key=_group_order)
+
+    total = len(active_sessions)
+    page_sessions = active_sessions[offset:offset + limit]
+
+    clients_by_session_id: Dict[str, Any] = {}
+    page_ids = [session_row.session_id for session_row in page_sessions]
+    if len(page_ids) > 0:
+        client_rows = (
+            db_session.query(AuthSessionClient)
+            .filter(AuthSessionClient.session_id.in_(page_ids))
+            .all()
+        )
+        for client_row in client_rows:
+            clients_by_session_id[str(client_row.session_id)] = client_row
+
     rows: List[_SessionRow] = []
     for session_row in page_sessions:
         user_id_str = str(session_row.user_id)
+        session_id_str = str(session_row.session_id)
         username = usernames_by_user_id.get(user_id_str, user_id_str)
+        client_row = clients_by_session_id.get(session_id_str, None)
+        client_address = ""
+        user_agent_full = ""
+        if client_row is not None:
+            client_address = client_row.client_address or ""
+            user_agent_full = client_row.user_agent or ""
         row = _SessionRow(
-            session_id=str(session_row.session_id),
+            session_id=session_id_str,
             username=username,
             created_at=session_row.opened_at,
             last_activity=session_row.last_seen_at,
-            expires_at=session_row.expires_at,
-            client_ip=session_row.ip_fingerprint,
-            user_agent=session_row.user_agent_fingerprint,
+            expires_at=session_effective_expiry(session_row=session_row, now=now),
+            client_ip=client_address,
+            user_agent=describe_user_agent(user_agent=user_agent_full),
+            user_id=user_id_str,
+            user_agent_full=user_agent_full,
+            is_current=(
+                current_session_id is not None
+                and session_id_str == str(current_session_id)
+            ),
         )
         rows.append(row)
 
@@ -291,6 +370,22 @@ def _terminate_session(
 # ---------------------------------------------------------------------------
 # Local helpers
 # ---------------------------------------------------------------------------
+
+
+def _session_lifetimes() -> tuple:
+    """
+        The sign-in session idle timeout (minutes) and maximum lifetime
+        (hours) the web sign-in uses, for the page's explanation.
+
+        :returns: ``(idle_minutes, lifetime_hours)``.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        auth_adapter,
+    )
+    idle_minutes = int(auth_adapter._DEFAULT_SESSION_IDLE_TIMEOUT_SECONDS // 60)
+    lifetime_hours = int(auth_adapter._DEFAULT_SESSION_MAX_LIFETIME_SECONDS // 3600)
+    rtnval = (idle_minutes, lifetime_hours)
+    return rtnval
 
 
 def _parse_pagination_params(
@@ -371,21 +466,22 @@ def handle_session_list(request: Request) -> Response:
             request.query_params.get("username", None) or None
         )
 
+        # The cookie's session_token is the AuthSession.session_id
+        # (see auth_adapter) -- the template uses it to mark "This
+        # session" and warn before the operator terminates it.
+        current_session_id = str(
+            auth.session.get("session_token", "")
+        )
+
         session_page = _list_active_sessions(
             db_session=db_session,
             filter_username=filter_username,
             offset=offset,
             limit=params["per_page"],
+            current_session_id=current_session_id,
         )
         total = session_page.total
         total_pages = (total + params["per_page"] - 1) // params["per_page"]
-
-        # The cookie's session_token is the AuthSession.session_id
-        # (see auth_adapter) -- the template uses it to warn before
-        # the operator terminates their own session.
-        current_session_id = str(
-            auth.session.get("session_token", "")
-        )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -395,6 +491,7 @@ def handle_session_list(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["sessions"] = session_page.rows
+        context["idle_timeout_minutes"], context["max_lifetime_hours"] = _session_lifetimes()
         context["filter_username"] = filter_username
         context["current_session_id"] = current_session_id
         context["page"] = params["page"]

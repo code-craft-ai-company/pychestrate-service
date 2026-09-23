@@ -245,6 +245,23 @@ from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import HTMLResponse, Response
 
 
+def _wrap_with_peer_address(wsgi_app: Any) -> Any:
+    """
+        Wrap the WSGI app so request handlers can see the socket peer
+        (``REMOTE_ADDR``); see
+        :func:`security.auth.client_address.wrap_wsgi_app_with_peer_address`.
+
+        :param wsgi_app: The WSGI application.
+
+        :returns: The wrapped WSGI application.
+    """
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        wrap_wsgi_app_with_peer_address,
+    )
+    rtnval = wrap_wsgi_app_with_peer_address(wsgi_app)
+    return rtnval
+
+
 def _eager_start_response_wsgi(wsgi_app: Any) -> Any:
     """
         Wrap a webworks-built WSGI app so the bundled
@@ -651,6 +668,9 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # ADM-16: expose the socket peer so handlers can resolve the real
+    # client address behind a trusted proxy.
+    wsgi_app = _wrap_with_peer_address(wsgi_app)
 
     bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
     bind_port = int(PychestrateVariables.PYCHESTRATE_BIND_PORT)
@@ -715,7 +735,7 @@ def build_wsgi_application_for_production():
     )
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
-    rtnval = _eager_start_response_wsgi(rtnval_inner)
+    rtnval = _wrap_with_peer_address(_eager_start_response_wsgi(rtnval_inner))
     return rtnval
 
 if __name__ == "__main__":

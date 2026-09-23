@@ -585,7 +585,8 @@ def _build_auth_request(
 
         :param username: Submitted username.
         :param password: Submitted password.
-        :param client_ip: ``X-Forwarded-For`` header (or "").
+        :param client_ip: The client address, trusted-proxy aware
+                          (or "").
         :param user_agent: ``User-Agent`` header (or "").
 
         :returns: AuthRequest instance.
@@ -1062,8 +1063,15 @@ def handle_login_submit(request: Request) -> Response:
         client_ip = ""
         user_agent = ""
         try:
-            client_ip = request.headers.get("X-Forwarded-For", "") or ""
-            user_agent = request.headers.get("User-Agent", "") or ""
+            # ADM-16: the real client address (forwarding headers are
+            # honoured only from a trusted proxy), not the raw
+            # X-Forwarded-For header a client can set.
+            from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+                request_user_agent,
+                resolve_client_address,
+            )
+            client_ip = resolve_client_address(request=request)
+            user_agent = request_user_agent(request=request)
         except Exception:
             client_ip = ""
             user_agent = ""
@@ -1572,7 +1580,14 @@ def _tag_session_for_audit(
         from ccai.pychestrate.webservice.audit.data_change_bridge import (  # noqa: E402
             tag_session_actor,
         )
-        tag_session_actor(db_session=db_session, actor_user_id=user_id)
+        from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+            resolve_client_address,
+        )
+        tag_session_actor(
+            db_session=db_session,
+            actor_user_id=user_id,
+            client_address=resolve_client_address(request=request),
+        )
     except Exception:
         pass
     return

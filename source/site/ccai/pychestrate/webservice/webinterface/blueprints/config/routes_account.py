@@ -257,10 +257,10 @@ def handle_account_password(request: Request) -> Response:
             )
 
         lifecycle = _password_lifecycle()
-        try:
-            client_ip = request.headers.get("X-Forwarded-For", "") or ""
-        except Exception:
-            client_ip = ""
+        from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+            resolve_client_address,
+        )
+        client_ip = resolve_client_address(request=request)
         try:
             lifecycle.change_own_password(
                 db_session=db_session,

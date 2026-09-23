@@ -24,6 +24,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
 )
+from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
@@ -70,10 +71,40 @@ class AuthSession(PychestratePhase1Base, SerializableModel):
     ip_fingerprint = Column(String(128), nullable=False, default="")
     user_agent_fingerprint = Column(String(128), nullable=False, default="")
 
+    # Where the session was opened from (see AuthSessionClient); the
+    # row is deleted with the session.
+    client = relationship(
+        "AuthSessionClient",
+        uselist=False,
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
     __table_args__ = (
         Index("ix_auth_sessions_user_expires", "user_id", "expires_at"),
         Index("ix_auth_sessions_last_seen", "last_seen_at"),
     )
+
+
+class AuthSessionClient(PychestratePhase1Base, SerializableModel):
+    """
+        Where a session was opened from: the client's real address
+        (resolved behind trusted proxies, see
+        :mod:`security.auth.client_address`) and its User-Agent, which
+        the admin sessions page shows. A separate table (rather than
+        columns on ``auth_sessions``) so databases created by the
+        development auto-create path gain it without a migration.
+    """
+
+    __tablename__ = "auth_session_clients"
+
+    session_id = Column(
+        UUIDType(binary=False),
+        ForeignKey("auth_sessions.session_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    client_address = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
 
 
 class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):

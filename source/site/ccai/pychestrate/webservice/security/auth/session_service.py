@@ -35,19 +35,29 @@ from ccai.pychestrate.webservice.security.auth.exceptions import (
     SessionExpiredError,
     SessionNotFoundError,
 )
-from ccai.pychestrate.webservice.security.auth.models import AuthProviderKind, AuthSession
+from ccai.pychestrate.webservice.security.auth.models import (
+    AuthProviderKind,
+    AuthSession,
+    AuthSessionClient,
+)
 
 
 @dataclass(frozen=True)
 class RequestFingerprint:
     """
-        Client fingerprint captured at session open for replay-mitigation.
+        Client fingerprint captured at session open for replay-mitigation,
+        plus the readable client details the admin sessions page shows.
 
         :param ip_fingerprint: Hash of the remote IP.
         :param user_agent_fingerprint: Hash of the User-Agent header.
+        :param client_address: The client's address (resolved behind
+                               trusted proxies), when known.
+        :param user_agent: The User-Agent header, when known.
     """
     ip_fingerprint: str
     user_agent_fingerprint: str
+    client_address: Optional[str] = None
+    user_agent: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +124,16 @@ def open_session(
     db_session.add(session)
     db_session.flush()
 
+    client_address = _bounded_text(value=request_fingerprint.client_address, limit=64)
+    user_agent = _bounded_text(value=request_fingerprint.user_agent, limit=512)
+    if client_address is not None or user_agent is not None:
+        db_session.add(AuthSessionClient(
+            session_id=session.session_id,
+            client_address=client_address,
+            user_agent=user_agent,
+        ))
+        db_session.flush()
+
     payload = {
         "session_id": session.session_id,
         "user_id": session.user_id,
@@ -121,6 +141,8 @@ def open_session(
         "provider_name": provider_name,
         "mfa_method_name": mfa_method_name,
         "opened_at": session.opened_at.isoformat(),
+        "client_address": client_address,
+        "user_agent": _describe_user_agent(user_agent=user_agent),
     }
     event = EntityEvent(
         topic=AuthEventTopics.SESSION_OPENED,
@@ -131,6 +153,33 @@ def open_session(
     db_session.commit()
 
     rtnval = session
+    return rtnval
+
+
+def _bounded_text(*, value: Optional[str], limit: int) -> Optional[str]:
+    """
+        ``value`` stripped and cut to ``limit`` characters; None when
+        empty.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if len(text) == 0:
+        return None
+    rtnval = text[:limit]
+    return rtnval
+
+
+def _describe_user_agent(*, user_agent: Optional[str]) -> Optional[str]:
+    """
+        A readable browser / OS summary for the audit record.
+    """
+    if user_agent is None:
+        return None
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        describe_user_agent,
+    )
+    rtnval = describe_user_agent(user_agent=user_agent)
     return rtnval
 
 
