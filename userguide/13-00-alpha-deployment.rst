@@ -355,12 +355,11 @@ A minimal ``server`` block:
     }
 
 Pods authenticate to the orchestration endpoints with client
-certificates signed by the enrollment CA, which nginx verifies and
-forwards as the ``SSL_CLIENT_S_DN_CN`` and ``SSL_CLIENT_VERIFY``
-headers. The nginx configuration that
-``deployment/deploy-alpha-to-host.sh`` generates is a working example
-of that setup (``ssl_client_certificate``, ``ssl_verify_client
-optional``, and the header ``map``).
+certificates signed by the enrollment CA, which nginx verifies
+(``ssl_client_certificate`` pointing at ``enrollment-ca.crt``,
+``ssl_verify_client optional``). The nginx configuration that
+``deployment/deploy-alpha-to-host.sh`` generates is the reference for
+that part of the setup.
 
 
 Create the first administrator
