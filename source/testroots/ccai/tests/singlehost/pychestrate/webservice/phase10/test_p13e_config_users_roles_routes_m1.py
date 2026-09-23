@@ -504,6 +504,7 @@ def test_register_users_routes_attaches_documented_routes():
             ("/admin/users/{user_id}", ("GET",)),
             ("/admin/users/{user_id}/edit", ("GET", "POST")),
             ("/admin/users/{user_id}/deactivate", ("POST",)),
+            ("/admin/users/{user_id}/reactivate", ("POST",)),
             ("/admin/users/{user_id}/password", ("GET", "POST")),
             ("/admin/users/{user_id}/password-link", ("POST",)),
         }

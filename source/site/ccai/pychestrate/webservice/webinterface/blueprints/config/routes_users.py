@@ -17,6 +17,8 @@ The user-management routes served under the config blueprint:
 * ``POST /admin/users/{user_id}/edit``       -- update user.
 * ``POST /admin/users/{user_id}/deactivate`` -- deactivate
                                                 (soft delete).
+* ``POST /admin/users/{user_id}/reactivate`` -- reactivate a
+                                                deactivated user.
 * ``GET  /admin/users/{user_id}/password``   -- reset-password page.
 * ``POST /admin/users/{user_id}/password``   -- set a (temporary)
                                                 password.
@@ -104,6 +106,7 @@ _ROUTE_TABLE = (
     ("config.user_detail", "/users/{user_id}", ("GET",)),
     ("config.user_edit", "/users/{user_id}/edit", ("GET", "POST")),
     ("config.user_deactivate", "/users/{user_id}/deactivate", ("POST",)),
+    ("config.user_reactivate", "/users/{user_id}/reactivate", ("POST",)),
     ("config.user_password", "/users/{user_id}/password", ("GET", "POST")),
     ("config.user_password_link", "/users/{user_id}/password-link", ("POST",)),
 )
@@ -129,6 +132,7 @@ _ROUTE_PERMISSIONS = {
     "config.user_detail": USERS_READ_PERMISSION,
     "config.user_edit": USERS_WRITE_PERMISSION,
     "config.user_deactivate": USERS_WRITE_PERMISSION,
+    "config.user_reactivate": USERS_WRITE_PERMISSION,
     "config.user_password": USERS_WRITE_PERMISSION,
     "config.user_password_link": USERS_WRITE_PERMISSION,
 }
@@ -276,6 +280,44 @@ def _svc_deactivate_user(
         db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
     )
     return
+
+
+def _svc_reactivate_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> str:
+    """
+        Reactivate a deactivated identity user (and mirror the status).
+
+        :returns: The resulting status text ("active" or "invited").
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+    rtnval = identity_admin.reactivate_identity_user(
+        db_session=db_session, user_id=user_id, actor_user_id=actor_user_id
+    )
+    return rtnval
+
+
+def _status_action_return_url(*, form: Any, user_id: str) -> str:
+    """
+        Where a Deactivate / Reactivate button returns to: the user's
+        detail page when the button was on it (``return_to=detail``),
+        else the user list. Any other value falls back to the list.
+    """
+    return_to = ""
+    try:
+        return_to = str(form.get("return_to", "") or "")
+    except Exception:
+        return_to = ""
+    if return_to == "detail" and len(user_id) > 0:
+        rtnval = _url_for_module.url_for("config.user_detail", user_id=user_id)
+        return rtnval
+    rtnval = _url_for_module.url_for("config.user_list")
+    return rtnval
 
 
 def _svc_create_invited_user(
@@ -1074,6 +1116,8 @@ def handle_user_deactivate(request: Request) -> Response:
 
         exc_classes = _admin_exception_classes()
 
+        return_url = _status_action_return_url(form=single_form, user_id=user_id)
+
         try:
             _svc_deactivate_user(
                 db_session=db_session,
@@ -1082,7 +1126,7 @@ def handle_user_deactivate(request: Request) -> Response:
             )
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message="User deactivated successfully.",
                 category=flash.CATEGORY_SUCCESS,
             )
@@ -1098,7 +1142,7 @@ def handle_user_deactivate(request: Request) -> Response:
         except exc_classes["SelfLockoutError"] as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message=getattr(exc, "message", str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
@@ -1106,11 +1150,93 @@ def handle_user_deactivate(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("config.user_list"),
+                url=return_url,
                 message="Error deactivating user: {}".format(str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
             return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_user_reactivate(request: Request) -> Response:
+    """
+        ``POST /admin/users/{user_id}/reactivate`` -- reactivate a
+        deactivated identity user, then return to the list (or the
+        detail page the button was on) with a flash. A local account
+        that never set a password returns to *invited*, and the flash
+        says to send a new invite link.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        user_id = str(request.path_params.get("user_id", ""))
+        single_form = _parse_form_or_empty(request=request)
+
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for("config.user_list"),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        return_url = _status_action_return_url(form=single_form, user_id=user_id)
+        exc_classes = _admin_exception_classes()
+
+        try:
+            status_text = _svc_reactivate_user(
+                db_session=db_session,
+                user_id=user_id,
+                actor_user_id=auth.user_id,
+            )
+        except exc_classes["AdminNotFoundError"]:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("config.user_list"),
+                message="User not found.",
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except exc_classes["AdminValidationError"] as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message=getattr(exc, "message", str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+        except Exception as exc:
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=return_url,
+                message="Error reactivating user: {}".format(str(exc)),
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
+
+        message = "User reactivated. They can sign in again."
+        if status_text == "invited":
+            message = (
+                "User reactivated as invited: they have never set a "
+                "password, so send them a new invite link."
+            )
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=return_url,
+            message=message,
+            category=flash.CATEGORY_SUCCESS,
+        )
+        return response
     finally:
         try:
             db_session.close()
@@ -1279,6 +1405,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.user_detail": handle_user_detail,
     "config.user_edit": handle_user_edit,
     "config.user_deactivate": handle_user_deactivate,
+    "config.user_reactivate": handle_user_reactivate,
     "config.user_password": handle_user_password,
     "config.user_password_link": handle_user_password_link,
 }
@@ -1314,6 +1441,7 @@ __all__ = [
     "handle_user_detail",
     "handle_user_edit",
     "handle_user_deactivate",
+    "handle_user_reactivate",
     "handle_user_password",
     "handle_user_password_link",
 ]

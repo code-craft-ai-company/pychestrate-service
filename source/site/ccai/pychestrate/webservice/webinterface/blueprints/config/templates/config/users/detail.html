@@ -40,7 +40,8 @@
                 {% elif user.is_active %}
                 <span class="badge badge-success">Active</span>
                 {% else %}
-                <span class="badge badge-danger">Inactive</span>
+                <span class="badge badge-secondary">Inactive</span>
+                <span class="muted small">Cannot sign in until reactivated.</span>
                 {% endif %}
             </td>
         </tr>
@@ -71,10 +72,19 @@
     <a href="{{ url_for('config.account_password') }}" class="btn btn-secondary">Change my password</a>
     {% endif %}
     {% if user.is_active and user.id != current_user_id %}
-    <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate this user?">
+    <form action="{{ url_for('config.user_deactivate', user_id=user.id) }}" method="post" data-confirm="Deactivate {{ user.username }}? They are signed out everywhere and cannot sign in until reactivated.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="detail">
         <button type="submit" class="btn btn-danger">
             {{ ui.icon("block") }} Deactivate
+        </button>
+    </form>
+    {% elif user.status == 'inactive' and user.id != current_user_id %}
+    <form action="{{ url_for('config.user_reactivate', user_id=user.id) }}" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="return_to" value="detail">
+        <button type="submit" class="btn btn-secondary">
+            {{ ui.icon("check_circle") }} Reactivate
         </button>
     </form>
     {% endif %}

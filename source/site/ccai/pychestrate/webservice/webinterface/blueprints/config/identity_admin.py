@@ -1334,6 +1334,7 @@ def update_identity_user(
         changed_fields.append("firstname")
     if lastname is not None and names_before[1] != lastname:
         changed_fields.append("lastname")
+    status_before = row.status
     was_active = row.status == UserStatus.ACTIVE
     if row.status == UserStatus.PENDING:
         # An invited account has no password yet: the edit form's
@@ -1374,6 +1375,15 @@ def update_identity_user(
         roles_to_remove = [
             name for name in current_roles if name not in role_names
         ]
+        # ADM-26: "Updated" on the user pages never moved. Any change
+        # to the profile, the status or the roles is an update.
+        if (
+            len(changed_fields) > 0
+            or new_status != status_before
+            or len(roles_to_add) > 0
+            or len(roles_to_remove) > 0
+        ):
+            row.updated_at = _utc_now()
         for role_name in roles_to_add:
             _ensure_system_binding(
                 db_session=db_session,
@@ -1436,6 +1446,15 @@ def update_identity_user(
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
     return
+
+
+def _utc_now() -> datetime:
+    """
+        The current time, for ``identity_users.updated_at``.
+    """
+    from ccai.pychestrate.core.defaults import utc_now  # noqa: E402
+    rtnval = utc_now()
+    return rtnval
 
 
 def _close_user_sessions(
@@ -1515,9 +1534,12 @@ def deactivate_identity_user(
         )
 
     was_active = row.status == UserStatus.ACTIVE
+    was_deactivated = row.status == UserStatus.DEACTIVATED
 
     try:
         row.status = UserStatus.DEACTIVATED
+        if was_deactivated is False:
+            row.updated_at = _utc_now()
         db_session.flush()
 
         _upsert_legacy_mirror(
@@ -1563,6 +1585,123 @@ def deactivate_identity_user(
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
     return
+
+
+def _has_local_password(*, db_session: Any, user_uuid: Any) -> bool:
+    """
+        Whether the user has a local password (an invited user who
+        never opened their link has none).
+    """
+    from ccai.pychestrate.webservice.security.auth.models import (  # noqa: E402
+        AuthLocalCredentials,
+    )
+    row = (
+        db_session.query(AuthLocalCredentials)
+        .filter(AuthLocalCredentials.user_id == user_uuid)
+        .first()
+    )
+    rtnval = row is not None
+    return rtnval
+
+
+def reactivate_identity_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> str:
+    """
+        Reactivate a deactivated identity user and mirror the status
+        into the legacy row. A local account that never set a password
+        (a cancelled invitation) goes back to *invited* -- it still
+        cannot sign in until the user opens a new invite link -- rather
+        than showing as active.
+
+        :param db_session: The active SQLAlchemy session.
+        :param user_id: Target user UUID string.
+        :param actor_user_id: Acting admin UUID.
+
+        :returns: The resulting status text: :data:`USER_STATUS_ACTIVE`
+                  or :data:`USER_STATUS_INVITED`.
+        :raises: AdminNotFoundError, AdminValidationError (the user is
+                 not deactivated)
+    """
+    from ccai.pychestrate.webservice.identity.users.models import (
+        IdentityUser,
+        UserStatus,
+    )
+
+    user_uuid = _parse_user_uuid(user_id=user_id)
+    if user_uuid is None:
+        raise AdminNotFoundError(
+            'User "{}" not found.'.format(user_id)
+        )
+
+    row = (
+        db_session.query(IdentityUser)
+        .filter(IdentityUser.user_id == user_uuid)
+        .first()
+    )
+    if row is None:
+        raise AdminNotFoundError(
+            'User "{}" not found.'.format(user_id)
+        )
+    if row.status != UserStatus.DEACTIVATED:
+        raise AdminValidationError(
+            'User "{}" is not deactivated.'.format(row.login_name)
+        )
+
+    new_status = UserStatus.ACTIVE
+    status_text = USER_STATUS_ACTIVE
+    is_local = (row.provisioning_source or "local") == "local"
+    if is_local is True and _has_local_password(db_session=db_session, user_uuid=user_uuid) is False:
+        new_status = UserStatus.PENDING
+        status_text = USER_STATUS_INVITED
+
+    try:
+        row.status = new_status
+        row.updated_at = _utc_now()
+        db_session.flush()
+
+        _upsert_legacy_mirror(
+            db_session=db_session,
+            user_id=user_uuid,
+            login=row.login_name,
+            email=row.primary_email,
+            display_name=(
+                row.display_name if row.display_name is not None else ""
+            ),
+            firstname=None,
+            lastname=None,
+            status=(
+                _LEGACY_STATUS_ACTIVE if new_status == UserStatus.ACTIVE
+                else _LEGACY_STATUS_INACTIVE
+            ),
+            role_names=None,
+        )
+
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_USER_REACTIVATED,
+            payload={
+                "user_id": str(user_uuid),
+                "login_name": row.login_name,
+                "status": status_text,
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
+        db_session.commit()
+    except Exception as commit_exc:
+        db_session.rollback()
+        err_msg_lines = ["Failed to reactivate the user."]
+        err_msg_lines.append("USER_ID: {}".format(user_id))
+        err_msg_lines.append("CAUSE: {}".format(str(commit_exc)))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise RuntimeError(err_msg) from commit_exc
+
+    _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
+    return status_text
 
 
 # ---------------------------------------------------------------------------
@@ -2252,6 +2391,7 @@ __all__ = [
     "USER_STATUS_ACTIVE",
     "USER_STATUS_INACTIVE",
     "USER_STATUS_INVITED",
+    "reactivate_identity_user",
     "create_identity_user",
     "create_invited_identity_user",
     "create_rbac_role",

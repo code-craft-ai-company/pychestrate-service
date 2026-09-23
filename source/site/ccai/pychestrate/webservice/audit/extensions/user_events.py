@@ -44,6 +44,7 @@ _USER_CHANGE_SCHEMA = {
         "user_id": {"type": "string"},
         "login_name": {"type": "string"},
         "changed_fields": {"type": "array", "items": {"type": "string"}},
+        "status": {"type": "string"},
         "actor_user_id": {"type": ["string", "null"]},
         "client_address": {"type": ["string", "null"]},
     },
