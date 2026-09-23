@@ -219,12 +219,25 @@ def _list_project_choices(*, db_session: Any) -> List[ProjectChoice]:
             source=PROJECT_SOURCE_UI,
         ))
 
-    api_rows = (
-        db_session.query(ApiProject)
-        .filter(ApiProject.state == ProjectState.ACTIVE)
-        .order_by(ApiProject.display_name.asc(), ApiProject.slug.asc())
-        .all()
-    )
+    savepoint = db_session.begin_nested()
+    try:
+        api_rows = (
+            db_session.query(ApiProject)
+            .filter(ApiProject.state == ProjectState.ACTIVE)
+            .order_by(ApiProject.display_name.asc(), ApiProject.slug.asc())
+            .all()
+        )
+        savepoint.commit()
+    except OperationalError:
+        # The project registry's table is missing or behind the models
+        # (a database that has not run the latest migration): offer the
+        # web-UI projects rather than failing the whole page.
+        savepoint.rollback()
+        _module_logger.warning(
+            "pychestrate.ui.enrollment.project_registry_unavailable",
+            exc_info=True,
+        )
+        api_rows = []
     for row in api_rows:
         display_name = row.display_name if row.display_name is not None else ""
         label = display_name if len(display_name.strip()) > 0 else row.slug

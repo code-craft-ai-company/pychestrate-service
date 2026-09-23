@@ -242,3 +242,68 @@ def test_token_table_names_the_project():
     row_html = response.text[max(0, row_start - 400):row_start]
     testbase.assert_true(html.escape(name) in row_html, row_html)
     return
+
+
+class _Savepoint:
+    def commit(self) -> None:
+        return
+
+    def rollback(self) -> None:
+        return
+
+
+class _QueryResult:
+    def __init__(self, *, rows=None, error=None) -> None:
+        self._rows = rows or []
+        self._error = error
+        return
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def all(self):
+        if self._error is not None:
+            raise self._error
+        return list(self._rows)
+
+
+class _RegistryBehindSession:
+    """
+        A session whose web-UI project table answers and whose REST
+        project registry table is behind the models (a database that
+        has not run the latest migration).
+    """
+
+    def begin_nested(self) -> _Savepoint:
+        return _Savepoint()
+
+    def query(self, *entities):
+        from sqlalchemy.exc import OperationalError  # noqa: E402
+
+        from ccai.pychestrate.webservice.projects.models import Project as ApiProject  # noqa: E402
+        if entities and entities[0] is ApiProject:
+            return _QueryResult(error=OperationalError(
+                "SELECT ...", {}, Exception("no such column: projects_projects.legacy_proj_id")
+            ))
+        return _QueryResult(rows=[(7, "Lab Seven")])
+
+
+def test_a_project_registry_behind_its_migration_does_not_break_the_page():
+    """
+    **Feature: enrollment project picker (ADM-10)**
+    **Property: when the REST project registry cannot be read, the
+    picker still offers the web-UI projects instead of failing the
+    token page.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_enrollment import (  # noqa: E402
+        _list_project_choices,
+    )
+    choices = _list_project_choices(db_session=_RegistryBehindSession())
+    testbase.assert_equal(
+        [(choice.label, choice.value) for choice in choices],
+        [("Lab Seven", canonical_project_uuid("7"))],
+    )
+    return
