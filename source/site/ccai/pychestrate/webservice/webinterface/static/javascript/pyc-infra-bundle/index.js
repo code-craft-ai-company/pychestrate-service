@@ -1,4 +1,4 @@
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -15,6 +15,13 @@ var DRIFT_STATES = [
 ];
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
+var ENVIRONMENTS_ROUTE = "/environments";
+function build_environment_page_href(project_id, environment_id) {
+  const params = new URLSearchParams();
+  params.set("project_id", project_id);
+  const rtnval = ENVIRONMENTS_ROUTE + "/" + encodeURIComponent(environment_id) + "?" + params.toString();
+  return rtnval;
+}
 function build_environments_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -772,8 +779,13 @@ var PycEnvironments = class extends HTMLElement {
         label: "Environment",
         width: "16rem",
         render: (environment) => {
-          const name = document.createElement("span");
-          name.classList.add("pyc-infra__env-name");
+          const name = document.createElement("a");
+          name.classList.add("pyc-infra__env-name", "pyc-infra__run-link");
+          name.setAttribute("data-role", "environment-link");
+          name.setAttribute(
+            "href",
+            build_environment_page_href(self._state.projectId, environment.environment_id)
+          );
           name.textContent = environment.name;
           name.title = environment.environment_id;
           return name;
@@ -797,7 +809,7 @@ var PycEnvironments = class extends HTMLElement {
       },
       {
         key: "drift",
-        label: "Drift",
+        label: "Drift (preview)",
         width: "10rem",
         sortable: false,
         render: (environment) => {
@@ -826,16 +838,15 @@ var PycEnvironments = class extends HTMLElement {
         width: "9rem",
         sortable: false,
         render: (environment) => {
-          const check_button = document.createElement("mj-button");
-          check_button.classList.add("pyc-infra__button", "pyc-infra__row-action");
-          check_button.setAttribute("type", "button");
-          check_button.setAttribute("data-role", "check-drift");
-          check_button.textContent = "Check Drift";
-          check_button.addEventListener("click", () => {
-            check_button.toggleAttribute("disabled", true);
-            void self._on_check_drift(environment, check_button);
-          });
-          return check_button;
+          const view_link = document.createElement("a");
+          view_link.classList.add("pyc-infra__run-link", "pyc-infra__row-action");
+          view_link.setAttribute("data-role", "view-environment");
+          view_link.setAttribute(
+            "href",
+            build_environment_page_href(self._state.projectId, environment.environment_id)
+          );
+          view_link.textContent = "Details";
+          return view_link;
         }
       }
     ];
@@ -1136,6 +1147,12 @@ var PycEnvironments = class extends HTMLElement {
       outcome.ok === true ? "ok" : "error"
     );
     if (outcome.ok === true) {
+      name_input.value = "";
+      kind_input.value = "";
+      attrs_area.value = "";
+      if (this._register_region !== null) {
+        this._register_region.hidden = true;
+      }
       await this._refresh();
     }
     return;
@@ -1246,7 +1263,482 @@ var PycEnvironments = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environment-detail-view.js
+var PROJECTS_API_PATH2 = "/api/v1/projects";
+var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var DRIFT_SECTION_HEADING = "Drift detection (preview)";
+function environment_id_from_path(path) {
+  if (typeof path !== "string" || path.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const prefix = ENVIRONMENTS_ROUTE + "/";
+  if (path.startsWith(prefix) === false) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  let tail = path.slice(prefix.length);
+  const query_index = tail.indexOf("?");
+  if (query_index >= 0) {
+    tail = tail.slice(0, query_index);
+  }
+  if (tail.endsWith("/") === true) {
+    tail = tail.slice(0, tail.length - 1);
+  }
+  if (UUID_PATTERN.test(tail) === false) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = tail;
+  return rtnval;
+}
+function environment_project_from_search(search) {
+  if (typeof search !== "string" || search.length === 0) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const params = new URLSearchParams(search);
+  const value = params.get("project_id");
+  const rtnval = value === null ? "" : value;
+  return rtnval;
+}
+function build_environment_detail_url(project_id, environment_id) {
+  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/environments/" + encodeURIComponent(environment_id);
+  return rtnval;
+}
+function describe_drift_counts(run) {
+  if (run === null || run === void 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  if (typeof run.drift_count !== "number") {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const parts = [String(run.drift_count) + " drifted"];
+  if (typeof run.added === "number") {
+    parts.push("+" + String(run.added));
+  }
+  if (typeof run.changed === "number") {
+    parts.push("~" + String(run.changed));
+  }
+  if (typeof run.destroyed === "number") {
+    parts.push("-" + String(run.destroyed));
+  }
+  const rtnval = parts.join(" ");
+  return rtnval;
+}
+function drift_check_detail_message(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
+  if (status === 202 || status === 200) {
+    const rtnval2 = "Drift check recorded. Nothing processes it yet, so it stays pending.";
+    return rtnval2;
+  }
+  if (reason.length > 0) {
+    const rtnval2 = reason;
+    return rtnval2;
+  }
+  if (status === 403) {
+    const rtnval2 = "You do not have permission to check drift.";
+    return rtnval2;
+  }
+  const rtnval = "Failed to check drift (HTTP " + String(status) + ").";
+  return rtnval;
+}
+var PycEnvironmentDetail = class extends HTMLElement {
+  _environment_id;
+  _project_id;
+  _environment;
+  _drift;
+  _loading;
+  _errored;
+  _root;
+  _body;
+  _toast_region;
+  constructor() {
+    super();
+    this._environment_id = "";
+    this._project_id = "";
+    this._environment = null;
+    this._drift = null;
+    this._loading = false;
+    this._errored = false;
+    this._root = null;
+    this._body = null;
+    this._toast_region = null;
+  }
+  /**
+   * Observed attributes -- ``environment-id`` and ``project-id``
+   * may be supplied by a host; otherwise they are read from the URL
+   * (``/environments/{id}?project_id=...``) on mount.
+   */
+  static get observedAttributes() {
+    const rtnval = ["environment-id", "project-id"];
+    return rtnval;
+  }
+  /**
+   * Diagnostic accessor used by unit tests.
+   */
+  get detailState() {
+    const rtnval = {
+      environmentId: this._environment_id,
+      projectId: this._project_id,
+      loading: this._loading,
+      errored: this._errored
+    };
+    return rtnval;
+  }
+  connectedCallback() {
+    const attr_environment = this.getAttribute("environment-id");
+    this._environment_id = attr_environment !== null && attr_environment.length > 0 ? attr_environment : environment_id_from_path(window.location.pathname);
+    const attr_project = this.getAttribute("project-id");
+    this._project_id = attr_project !== null && attr_project.length > 0 ? attr_project : environment_project_from_search(window.location.search);
+    this._render_chrome();
+    void this._load();
+    return;
+  }
+  /**
+   * Fetch the environment and its drift status, then render.
+   * Exposed so unit tests can await a load cycle.
+   */
+  async load() {
+    await this._load();
+    return;
+  }
+  async _load() {
+    if (this._environment_id.length === 0 || this._project_id.length === 0) {
+      this._loading = false;
+      this._errored = true;
+      this._render_body();
+      return;
+    }
+    this._loading = true;
+    this._errored = false;
+    this._render_body();
+    const environment = await this._fetch_json(
+      build_environment_detail_url(this._project_id, this._environment_id)
+    );
+    const drift = await this._fetch_json(
+      build_drift_status_url(this._project_id, this._environment_id)
+    );
+    this._environment = environment;
+    this._drift = drift;
+    this._loading = false;
+    this._errored = environment === null;
+    this._render_body();
+    return;
+  }
+  async _fetch_json(url) {
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === false) {
+        throw new Error("fetch failed: HTTP " + String(response.status));
+      }
+      const body = await response.json();
+      const rtnval = body !== null && typeof body === "object" ? body : null;
+      return rtnval;
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.infra.environment_detail_fetch_failed",
+        { url, reason: String(reason) }
+      );
+      const rtnval = null;
+      return rtnval;
+    }
+  }
+  _render_chrome() {
+    const root = document.createElement("section");
+    root.classList.add("pyc-infra");
+    const heading = document.createElement("h1");
+    heading.classList.add("pyc-infra__heading");
+    heading.setAttribute("data-role", "environment-heading");
+    heading.textContent = "Environment";
+    root.appendChild(heading);
+    const back = document.createElement("a");
+    back.classList.add("pyc-infra__back-link");
+    back.setAttribute("href", ENVIRONMENTS_ROUTE);
+    back.setAttribute("data-role", "back-link");
+    back.textContent = "\u2190 All environments";
+    root.appendChild(back);
+    const toast_region = document.createElement("div");
+    toast_region.classList.add("pyc-infra__toast-region");
+    toast_region.setAttribute("data-role", "toast-region");
+    root.appendChild(toast_region);
+    this._toast_region = toast_region;
+    const body = document.createElement("div");
+    body.classList.add("pyc-infra__detail-body");
+    body.setAttribute("data-role", "body");
+    root.appendChild(body);
+    this._body = body;
+    this._root = root;
+    this.replaceChildren(root);
+    return;
+  }
+  _render_body() {
+    if (this._body === null) {
+      return;
+    }
+    const body = this._body;
+    if (this._loading === true) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-infra__status");
+      loading.setAttribute("data-role", "loading-state");
+      loading.textContent = "Loading environment\u2026";
+      body.replaceChildren(loading);
+      return;
+    }
+    if (this._errored === true || this._environment === null) {
+      const error = document.createElement("p");
+      error.classList.add("pyc-infra__status", "pyc-infra__status--error");
+      error.setAttribute("data-role", "error-state");
+      error.textContent = this._environment_id.length === 0 || this._project_id.length === 0 ? "Open an environment from the Environments list." : "Failed to load this environment. Try refreshing.";
+      body.replaceChildren(error);
+      return;
+    }
+    const environment = this._environment;
+    const heading = this._root !== null ? this._root.querySelector('[data-role="environment-heading"]') : null;
+    if (heading instanceof HTMLElement) {
+      heading.textContent = "Environment \u2014 " + String(environment.name ?? "");
+    }
+    body.replaceChildren(
+      this._summary(environment),
+      this._drift_section()
+    );
+    return;
+  }
+  _summary(environment) {
+    const section = document.createElement("section");
+    section.classList.add("pyc-infra__section");
+    section.setAttribute("aria-label", "Environment summary");
+    const grid = document.createElement("dl");
+    grid.classList.add("pyc-infra__detail-grid");
+    grid.setAttribute("data-role", "environment-summary");
+    this._append_field(grid, "Kind", environment.kind_name);
+    const state_badge = document.createElement("mj-chip");
+    state_badge.classList.add("pyc-infra__badge");
+    state_badge.setAttribute("data-tone", environment_state_tone(environment.state));
+    state_badge.textContent = environment.state;
+    this._append_field(grid, "State", state_badge);
+    this._append_field(grid, "Last applied", format_timestamp(environment.last_applied_at));
+    this._append_field(grid, "Registered", format_timestamp(environment.created_at));
+    if (typeof environment.frozen_reason === "string" && environment.frozen_reason.length > 0) {
+      this._append_field(grid, "Frozen because", environment.frozen_reason);
+    }
+    if (typeof environment.archived_reason === "string" && environment.archived_reason.length > 0) {
+      this._append_field(grid, "Archived because", environment.archived_reason);
+    }
+    this._append_field(grid, "Environment id", environment.environment_id);
+    section.appendChild(grid);
+    const attrs_heading = document.createElement("h2");
+    attrs_heading.classList.add("pyc-infra__section-heading");
+    attrs_heading.textContent = "Attributes";
+    section.appendChild(attrs_heading);
+    const attrs = document.createElement("pre");
+    attrs.classList.add("pyc-infra__attrs");
+    attrs.setAttribute("data-role", "environment-attrs");
+    attrs.textContent = JSON.stringify(environment.attrs ?? {}, null, 2);
+    section.appendChild(attrs);
+    return section;
+  }
+  _drift_section() {
+    const section = document.createElement("section");
+    section.classList.add("pyc-infra__section");
+    section.setAttribute("aria-label", "Drift detection");
+    section.setAttribute("data-role", "drift-section");
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-infra__section-heading");
+    heading.textContent = DRIFT_SECTION_HEADING;
+    section.appendChild(heading);
+    const drift = this._drift;
+    const preview = document.createElement("p");
+    preview.classList.add("pyc-infra__notice", "pyc-infra__notice--preview");
+    preview.setAttribute("data-role", "drift-preview-notice");
+    preview.setAttribute("role", "note");
+    preview.textContent = drift !== null && typeof drift.detail === "string" ? drift.detail : "Drift detection is a preview: recorded checks are not processed yet.";
+    section.appendChild(preview);
+    const status_line = document.createElement("p");
+    status_line.classList.add("pyc-infra__drift-status");
+    const status_badge = document.createElement("span");
+    status_badge.classList.add("pyc-infra__badge", "pyc-infra__drift");
+    status_badge.setAttribute("data-role", "drift-indicator");
+    status_badge.setAttribute("data-tone", drift_status_tone(drift));
+    status_badge.textContent = drift_status_label(drift);
+    status_line.append("Latest check: ", status_badge);
+    section.appendChild(status_line);
+    const schedule = drift !== null && drift.schedule !== null && typeof drift.schedule === "object" ? drift.schedule : null;
+    const schedule_line = document.createElement("p");
+    schedule_line.classList.add("pyc-infra__field-caption");
+    schedule_line.setAttribute("data-role", "drift-schedule");
+    schedule_line.textContent = schedule !== null ? "Schedule: " + String(schedule.checker_name) + " (" + String(schedule.cron_expression) + ")" + (schedule.enabled === true ? "" : ", disabled") : "Schedule: none";
+    section.appendChild(schedule_line);
+    const check_available = drift !== null && drift.check_available === true;
+    const check_button = document.createElement("mj-button");
+    check_button.classList.add("pyc-infra__button");
+    check_button.setAttribute("type", "button");
+    check_button.setAttribute("data-role", "check-drift");
+    check_button.textContent = "Check Drift";
+    check_button.toggleAttribute("disabled", check_available === false);
+    check_button.addEventListener("click", () => {
+      if (check_available === false) {
+        return;
+      }
+      check_button.toggleAttribute("disabled", true);
+      void this._on_check_drift(check_button);
+    });
+    section.appendChild(check_button);
+    if (check_available === false) {
+      const reason = document.createElement("p");
+      reason.classList.add("pyc-infra__field-caption");
+      reason.setAttribute("data-role", "check-unavailable-reason");
+      reason.textContent = drift !== null && typeof drift.check_unavailable_reason === "string" ? drift.check_unavailable_reason : "A drift check cannot start for this environment.";
+      section.appendChild(reason);
+    }
+    section.appendChild(this._history(drift));
+    return section;
+  }
+  _history(drift) {
+    const history = drift !== null && Array.isArray(drift.history) === true ? drift.history : [];
+    const wrapper = document.createElement("div");
+    wrapper.classList.add("pyc-infra__table-region");
+    wrapper.setAttribute("data-role", "drift-history");
+    const heading = document.createElement("h3");
+    heading.classList.add("pyc-infra__section-heading");
+    heading.textContent = "Drift history";
+    wrapper.appendChild(heading);
+    if (history.length === 0) {
+      const empty = document.createElement("p");
+      empty.classList.add("pyc-infra__status");
+      empty.setAttribute("data-role", "drift-history-empty");
+      empty.textContent = "No drift checks recorded for this environment.";
+      wrapper.appendChild(empty);
+      return wrapper;
+    }
+    const table = document.createElement("mj-data-table");
+    table.classList.add("pyc-infra__table");
+    table.setAttribute("data-role", "drift-history-table");
+    table.rowAttrs = (run) => ({ "data-run-id": run.run_id });
+    table.columns = [
+      {
+        key: "scheduled_for",
+        label: "Requested",
+        width: "12rem",
+        render: (run) => format_timestamp(run.scheduled_for)
+      },
+      { key: "trigger_kind", label: "Trigger", width: "8rem" },
+      {
+        key: "state",
+        label: "State",
+        width: "9rem",
+        render: (run) => {
+          const badge = document.createElement("span");
+          badge.classList.add("pyc-infra__badge");
+          badge.setAttribute("data-role", "drift-run-state");
+          badge.textContent = run.state;
+          return badge;
+        }
+      },
+      {
+        key: "drift_count",
+        label: "Drift",
+        width: "10rem",
+        sortable: false,
+        render: (run) => describe_drift_counts(run)
+      },
+      { key: "checker_name", label: "Checker", width: "9rem" },
+      {
+        key: "final_state_reason",
+        label: "Detail",
+        width: "16rem",
+        sortable: false,
+        render: (run) => typeof run.final_state_reason === "string" && run.final_state_reason.length > 0 ? run.final_state_reason : "\u2014"
+      }
+    ];
+    table.rows = history;
+    wrapper.appendChild(table);
+    return wrapper;
+  }
+  async _on_check_drift(button) {
+    let status = 0;
+    let detail = "";
+    try {
+      const response = await fetch(
+        build_drift_check_url(this._project_id, this._environment_id),
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" }
+        }
+      );
+      status = response.status;
+      try {
+        const body = await response.json();
+        if (body !== null && typeof body === "object" && typeof body.detail === "string" && response.ok === false) {
+          detail = body.detail;
+        }
+      } catch (parse_reason) {
+        detail = "";
+      }
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.infra.environment_drift_check_failed",
+        { reason: String(reason) }
+      );
+    }
+    button.toggleAttribute("disabled", false);
+    const ok = status === 202 || status === 200;
+    this._show_toast(drift_check_detail_message(status, detail), ok === true ? "ok" : "error");
+    if (ok === true) {
+      await this._load();
+    }
+    return;
+  }
+  _append_field(grid, label, value) {
+    const field = document.createElement("div");
+    field.classList.add("pyc-infra__detail-field");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const detail = document.createElement("dd");
+    if (value instanceof HTMLElement) {
+      detail.appendChild(value);
+    } else {
+      detail.textContent = value === null || value === void 0 || String(value).length === 0 ? "\u2014" : String(value);
+    }
+    field.appendChild(term);
+    field.appendChild(detail);
+    grid.appendChild(field);
+    return;
+  }
+  _show_toast(message, tone) {
+    if (this._toast_region === null) {
+      return;
+    }
+    const toast = document.createElement("div");
+    toast.classList.add("pyc-infra__toast");
+    toast.setAttribute("data-role", "toast");
+    toast.setAttribute("data-tone", tone);
+    const text = document.createElement("span");
+    text.classList.add("pyc-infra__toast-message");
+    text.textContent = message;
+    toast.appendChild(text);
+    const dismiss = document.createElement("mj-button");
+    dismiss.classList.add("pyc-infra__toast-dismiss");
+    dismiss.setAttribute("type", "button");
+    dismiss.setAttribute("aria-label", "Dismiss");
+    dismiss.textContent = "\xD7";
+    dismiss.addEventListener("click", () => {
+      toast.remove();
+    });
+    toast.appendChild(dismiss);
+    this._toast_region.replaceChildren(toast);
+    return;
+  }
+};
+
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
   "pending",
   "running",
@@ -1267,7 +1759,7 @@ var PROVISIONING_ACTIONS = [
   "destroy"
 ];
 var DEFAULT_PER_PAGE2 = 25;
-var PROJECTS_API_PATH2 = "/api/v1/projects";
+var PROJECTS_API_PATH3 = "/api/v1/projects";
 function build_provisioning_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -1276,11 +1768,11 @@ function build_provisioning_query_url(state) {
   params.set("page", String(state.page));
   params.set("per_page", String(state.perPage));
   const query = params.toString();
-  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(state.projectId) + "/provisioning-runs?" + query;
+  const rtnval = PROJECTS_API_PATH3 + "/" + encodeURIComponent(state.projectId) + "/provisioning-runs?" + query;
   return rtnval;
 }
 function build_provisioning_collection_url(project_id) {
-  const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/provisioning-runs";
+  const rtnval = PROJECTS_API_PATH3 + "/" + encodeURIComponent(project_id) + "/provisioning-runs";
   return rtnval;
 }
 function build_provisioning_detail_link(project_id, run_id) {
@@ -1527,7 +2019,7 @@ var PycProvisioningList = class extends HTMLElement {
   async _load_projects() {
     let projects = null;
     try {
-      const response = await fetch(PROJECTS_API_PATH2, {
+      const response = await fetch(PROJECTS_API_PATH3, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -2152,10 +2644,10 @@ var PycProvisioningList = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
-var PROJECTS_API_PATH3 = "/api/v1/projects";
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
+var PROJECTS_API_PATH4 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
-var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var UUID_PATTERN2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function run_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -2197,11 +2689,11 @@ function is_valid_run_id(run_id) {
     const rtnval2 = false;
     return rtnval2;
   }
-  const rtnval = UUID_PATTERN.test(run_id);
+  const rtnval = UUID_PATTERN2.test(run_id);
   return rtnval;
 }
 function build_provisioning_detail_url(project_id, run_id) {
-  const rtnval = PROJECTS_API_PATH3 + "/" + encodeURIComponent(project_id) + "/provisioning-runs/" + encodeURIComponent(run_id);
+  const rtnval = PROJECTS_API_PATH4 + "/" + encodeURIComponent(project_id) + "/provisioning-runs/" + encodeURIComponent(run_id);
   return rtnval;
 }
 var PycProvisioningDetail = class extends HTMLElement {
@@ -2680,10 +3172,10 @@ var PycProvisioningDetail = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/guards-view.js
-var PROJECTS_API_PATH4 = "/api/v1/projects";
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/guards-view.js
+var PROJECTS_API_PATH5 = "/api/v1/projects";
 function build_guards_collection_url(project_id, environment_id) {
-  let url = PROJECTS_API_PATH4 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards";
+  let url = PROJECTS_API_PATH5 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards";
   if (typeof environment_id === "string" && environment_id.length > 0) {
     const params = new URLSearchParams();
     params.set("environment_id", environment_id);
@@ -2693,11 +3185,11 @@ function build_guards_collection_url(project_id, environment_id) {
   return rtnval;
 }
 function build_guard_item_url(project_id, guard_id) {
-  const rtnval = PROJECTS_API_PATH4 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards/" + encodeURIComponent(guard_id);
+  const rtnval = PROJECTS_API_PATH5 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards/" + encodeURIComponent(guard_id);
   return rtnval;
 }
 function build_guards_evaluate_url(project_id) {
-  const rtnval = PROJECTS_API_PATH4 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards:evaluate";
+  const rtnval = PROJECTS_API_PATH5 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards:evaluate";
   return rtnval;
 }
 function format_guard_timestamp(value) {
@@ -2793,6 +3285,29 @@ function parse_actor_roles(raw) {
   }
   return rtnval;
 }
+var UUID_PATTERN3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function is_complete_uuid(value) {
+  if (typeof value !== "string") {
+    const rtnval2 = false;
+    return rtnval2;
+  }
+  const rtnval = UUID_PATTERN3.test(value.trim());
+  return rtnval;
+}
+async function problem_detail_of(response) {
+  try {
+    const body = await response.json();
+    if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+      const rtnval2 = body.detail.split(/\r?\n/)[0].trim();
+      return rtnval2;
+    }
+  } catch (reason) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = "";
+  return rtnval;
+}
 function extract_guard_projects(body) {
   let raw = [];
   if (Array.isArray(body) === true) {
@@ -2828,6 +3343,12 @@ var PycGuards = class extends HTMLElement {
   _projects_notice_region;
   _environments;
   _environmentsAvailable;
+  /**
+   * True when the project's environment list could not be read
+   * (the picker then falls back to typing a full environment id).
+   */
+  _environmentsLoadFailed;
+  _environment_filter_slot;
   _root;
   _table_region;
   _attach_region;
@@ -2841,6 +3362,7 @@ var PycGuards = class extends HTMLElement {
       loading: false,
       errored: false,
       errorStatus: 0,
+      errorDetail: "",
       total: 0
     };
     this._guards = [];
@@ -2850,6 +3372,8 @@ var PycGuards = class extends HTMLElement {
     this._projects_notice_region = null;
     this._environments = [];
     this._environmentsAvailable = false;
+    this._environmentsLoadFailed = false;
+    this._environment_filter_slot = null;
     this._root = null;
     this._table_region = null;
     this._attach_region = null;
@@ -2901,9 +3425,7 @@ var PycGuards = class extends HTMLElement {
     project_select.classList.add("pyc-infra__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
-      this._state.projectId = project_select.value;
-      void this._load_environments();
-      void this._refresh();
+      void this._on_project_changed(project_select.value);
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
@@ -2914,25 +3436,18 @@ var PycGuards = class extends HTMLElement {
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
-      this._state.projectId = project_input.value.trim();
-      void this._load_environments();
-      void this._refresh();
+      void this._on_project_changed(project_input.value.trim());
     });
     controls.appendChild(project_input);
     const env_label = document.createElement("label");
     env_label.classList.add("pyc-infra__field");
-    env_label.textContent = "Environment filter";
-    const env_input = document.createElement("mj-text-field");
-    env_input.classList.add("pyc-infra__input");
-    env_input.setAttribute("type", "text");
-    env_input.setAttribute("placeholder", "environment id (optional)");
-    env_input.setAttribute("data-role", "environment-filter");
-    env_input.addEventListener("change", () => {
-      this._state.environmentFilter = env_input.value.trim();
-      void this._refresh();
-    });
-    env_label.appendChild(env_input);
+    env_label.textContent = "Environment";
+    const env_slot = document.createElement("span");
+    env_slot.classList.add("pyc-infra__control-slot");
+    env_slot.setAttribute("data-role", "environment-filter-slot");
+    env_label.appendChild(env_slot);
     controls.appendChild(env_label);
+    this._environment_filter_slot = env_slot;
     const attach_button = document.createElement("mj-button");
     attach_button.classList.add("pyc-infra__button");
     attach_button.setAttribute("type", "button");
@@ -2991,6 +3506,84 @@ var PycGuards = class extends HTMLElement {
     this._table_region = table_region;
     this._root = root;
     this.replaceChildren(root);
+    this._render_environment_filter();
+    return;
+  }
+  /**
+   * Switch to another project: forget the environment chosen for the
+   * previous one, load the new project's environments (which picks
+   * the first), then load its guards.
+   *
+   * @param project_id The newly selected project id.
+   */
+  async _on_project_changed(project_id) {
+    this._state.projectId = project_id;
+    this._state.environmentFilter = "";
+    await this._load_environments();
+    await this._refresh();
+    return;
+  }
+  /**
+   * Render the environment picker into the controls. With the
+   * project's environments loaded it is a select over them; when
+   * the project has none it says so; only when the list could not
+   * be read does it fall back to typing a full environment id.
+   */
+  _render_environment_filter() {
+    if (this._environment_filter_slot === null) {
+      return;
+    }
+    const slot = this._environment_filter_slot;
+    if (this._state.projectId.length === 0) {
+      const waiting = document.createElement("span");
+      waiting.classList.add("pyc-infra__field-caption");
+      waiting.setAttribute("data-role", "environment-filter-empty");
+      waiting.textContent = "Select a project first";
+      slot.replaceChildren(waiting);
+      return;
+    }
+    if (this._environmentsAvailable === true) {
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-infra__select");
+      select.setAttribute("data-role", "environment-filter");
+      select.setAttribute("aria-label", "Environment");
+      for (const environment of this._environments) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", environment.environment_id);
+        option.textContent = environment.name + " (" + short_id(environment.environment_id) + ")";
+        if (environment.environment_id === this._state.environmentFilter) {
+          option.setAttribute("selected", "");
+        }
+        select.appendChild(option);
+      }
+      select.value = this._state.environmentFilter;
+      select.addEventListener("change", () => {
+        this._state.environmentFilter = select.value;
+        void this._refresh();
+      });
+      slot.replaceChildren(select);
+      return;
+    }
+    if (this._environmentsLoadFailed === false) {
+      const none = document.createElement("span");
+      none.classList.add("pyc-infra__field-caption");
+      none.setAttribute("data-role", "environment-filter-empty");
+      none.textContent = "This project has no environments \u2014 register one on the Environments page.";
+      slot.replaceChildren(none);
+      return;
+    }
+    const input = document.createElement("mj-text-field");
+    input.classList.add("pyc-infra__input");
+    input.setAttribute("type", "text");
+    input.setAttribute("placeholder", "full environment id (UUID)");
+    input.setAttribute("aria-label", "Environment id");
+    input.setAttribute("data-role", "environment-filter");
+    input.value = this._state.environmentFilter;
+    input.addEventListener("change", () => {
+      this._state.environmentFilter = input.value.trim();
+      void this._refresh();
+    });
+    slot.replaceChildren(input);
     return;
   }
   /**
@@ -3006,7 +3599,7 @@ var PycGuards = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH4, {
+      const response = await fetch(PROJECTS_API_PATH5, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -3107,6 +3700,7 @@ var PycGuards = class extends HTMLElement {
   async _load_environments() {
     let environments = [];
     let available = false;
+    let load_failed = false;
     if (this._state.projectId.length > 0) {
       try {
         const url = build_environments_collection_url(
@@ -3117,6 +3711,9 @@ var PycGuards = class extends HTMLElement {
           credentials: "same-origin",
           headers: { Accept: "application/json" }
         });
+        if (response.ok === false) {
+          load_failed = true;
+        }
         if (response.ok === true) {
           const body = await response.json();
           const page = body;
@@ -3136,6 +3733,7 @@ var PycGuards = class extends HTMLElement {
           }
         }
       } catch (reason) {
+        load_failed = true;
         console.warn(
           "pychestrate.ui.infra.guard_environments_fetch_failed",
           { reason: String(reason) }
@@ -3144,6 +3742,18 @@ var PycGuards = class extends HTMLElement {
     }
     this._environments = environments;
     this._environmentsAvailable = available;
+    this._environmentsLoadFailed = load_failed;
+    if (available === true) {
+      const known = environments.some(
+        (environment) => environment.environment_id === this._state.environmentFilter
+      );
+      if (known === false) {
+        this._state.environmentFilter = environments[0].environment_id;
+      }
+    } else if (load_failed === false) {
+      this._state.environmentFilter = "";
+    }
+    this._render_environment_filter();
     if (this._attach_region !== null && this._attach_region.hidden === false) {
       this._render_attach_form();
     }
@@ -3178,7 +3788,7 @@ var PycGuards = class extends HTMLElement {
     const input = document.createElement("mj-text-field");
     input.classList.add("pyc-infra__input");
     input.setAttribute("type", "text");
-    input.setAttribute("placeholder", "environment id (no environments listed for this project)");
+    input.setAttribute("placeholder", "full environment id (UUID) -- no environments listed for this project");
     input.setAttribute("data-role", role);
     input.required = true;
     const rtnval = input;
@@ -3235,9 +3845,19 @@ var PycGuards = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    if (is_complete_uuid(this._state.environmentFilter) === false) {
+      this._guards = [];
+      this._state.loading = false;
+      this._state.errored = true;
+      this._state.errorStatus = 422;
+      this._state.errorDetail = "Enter a complete environment id (a UUID).";
+      this._render_table_region();
+      return;
+    }
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
+    this._state.errorDetail = "";
     this._render_table_region();
     const url = build_guards_collection_url(
       this._state.projectId,
@@ -3245,6 +3865,7 @@ var PycGuards = class extends HTMLElement {
     );
     let page = null;
     let error_status = 0;
+    let error_detail = "";
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -3253,6 +3874,9 @@ var PycGuards = class extends HTMLElement {
       });
       if (response.ok === false) {
         error_status = response.status;
+        if (error_status >= 400 && error_status < 500) {
+          error_detail = await problem_detail_of(response);
+        }
         throw new Error(
           "guards fetch failed: HTTP " + String(response.status)
         );
@@ -3270,6 +3894,7 @@ var PycGuards = class extends HTMLElement {
       this._state.loading = false;
       this._state.errored = true;
       this._state.errorStatus = error_status;
+      this._state.errorDetail = error_detail;
       this._render_table_region();
       return;
     }
@@ -3331,7 +3956,7 @@ var PycGuards = class extends HTMLElement {
         "pyc-infra__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = list_load_message_for_status(
+      error.textContent = this._state.errorDetail.length > 0 ? this._state.errorDetail : list_load_message_for_status(
         this._state.errorStatus,
         "guards"
       );
@@ -3592,6 +4217,12 @@ var PycGuards = class extends HTMLElement {
       }
       return;
     }
+    if (is_complete_uuid(environment_id) === false) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Enter a complete environment id (a UUID).";
+      }
+      return;
+    }
     submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Attaching guard\u2026";
@@ -3640,6 +4271,7 @@ var PycGuards = class extends HTMLElement {
     };
     let status = 0;
     let guard_id = "";
+    let detail = "";
     try {
       const url = build_guards_collection_url(
         this._state.projectId,
@@ -3661,6 +4293,8 @@ var PycGuards = class extends HTMLElement {
         if (guard !== null && typeof guard.guard_id === "string") {
           guard_id = guard.guard_id;
         }
+      } else if (status === 422) {
+        detail = await problem_detail_of(response);
       }
     } catch (reason) {
       console.warn(
@@ -3680,7 +4314,7 @@ var PycGuards = class extends HTMLElement {
       ok,
       status,
       guardId: guard_id,
-      message: attach_message_for_status(status)
+      message: detail.length > 0 ? "Guard not attached: " + detail : attach_message_for_status(status)
     };
     return rtnval;
   }
@@ -3774,6 +4408,12 @@ var PycGuards = class extends HTMLElement {
     if (environment_id.length === 0 || action.length === 0) {
       if (status instanceof HTMLElement) {
         status.textContent = "Environment id and action are required.";
+      }
+      return;
+    }
+    if (is_complete_uuid(environment_id) === false) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Enter a complete environment id (a UUID).";
       }
       return;
     }
@@ -3975,15 +4615,16 @@ var PycGuards = class extends HTMLElement {
   }
 };
 
-// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/index.entry.js
+// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var ENVIRONMENTS_READ_PERMISSION = "system:environments.read";
 var PROVISIONING_READ_PERMISSION = "system:provisioning.read";
 var GUARDS_READ_PERMISSION = "system:guards.read";
-var ENVIRONMENTS_ROUTE = "/environments";
+var ENVIRONMENTS_ROUTE2 = "/environments";
 var PROVISIONING_ROUTE = "/provisioning-runs";
 var GUARDS_ROUTE = "/blast-radius-guards";
 var ENVIRONMENTS_TAG = "pyc-environments";
+var ENVIRONMENT_DETAIL_TAG = "pyc-environment-detail";
 var PROVISIONING_LIST_TAG = "pyc-provisioning-list";
 var PROVISIONING_DETAIL_TAG = "pyc-provisioning-detail";
 var GUARDS_TAG = "pyc-guards";
@@ -4006,7 +4647,7 @@ function ensure_infra_stylesheet() {
 var ENVIRONMENTS_ENTRY = {
   entryId: "orchestration.environments",
   label: "Environments",
-  route: ENVIRONMENTS_ROUTE,
+  route: ENVIRONMENTS_ROUTE2,
   requiredPermissions: [ENVIRONMENTS_READ_PERMISSION],
   group: ORCHESTRATION_GROUP_ID
 };
@@ -4042,6 +4683,9 @@ function define_infra_elements() {
   if (customElements.get(ENVIRONMENTS_TAG) === void 0) {
     customElements.define(ENVIRONMENTS_TAG, PycEnvironments);
   }
+  if (customElements.get(ENVIRONMENT_DETAIL_TAG) === void 0) {
+    customElements.define(ENVIRONMENT_DETAIL_TAG, PycEnvironmentDetail);
+  }
   if (customElements.get(PROVISIONING_LIST_TAG) === void 0) {
     customElements.define(PROVISIONING_LIST_TAG, PycProvisioningList);
   }
@@ -4063,7 +4707,11 @@ function classify_infra_route(path) {
   if (query_index >= 0) {
     working = working.slice(0, query_index);
   }
-  if (working === ENVIRONMENTS_ROUTE || working.startsWith(ENVIRONMENTS_ROUTE + "/") === true) {
+  if (environment_id_from_path(working).length > 0) {
+    const rtnval2 = "environment-detail";
+    return rtnval2;
+  }
+  if (working === ENVIRONMENTS_ROUTE2 || working.startsWith(ENVIRONMENTS_ROUTE2 + "/") === true) {
     const rtnval2 = "environments";
     return rtnval2;
   }
@@ -4086,6 +4734,10 @@ function classify_infra_route(path) {
 function tag_for_infra_route(route) {
   if (route === "environments") {
     const rtnval2 = ENVIRONMENTS_TAG;
+    return rtnval2;
+  }
+  if (route === "environment-detail") {
+    const rtnval2 = ENVIRONMENT_DETAIL_TAG;
     return rtnval2;
   }
   if (route === "provisioning-list") {

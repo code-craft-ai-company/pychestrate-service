@@ -102,6 +102,25 @@ def list_rules_for_project(
     return rtnval
 
 
+def list_enabled_rule_ids(*, db_session: DbSession) -> List[str]:
+    """
+        Every enabled rule's id, across all projects -- the work list
+        of the periodic alert evaluator.
+
+        :param db_session: Active SQLAlchemy session.
+
+        :returns: Rule ids ordered by project then name.
+    """
+    rows = (
+        db_session.query(AlertRule.rule_id)
+        .filter(AlertRule.enabled.is_(True))
+        .order_by(AlertRule.project_id.asc(), AlertRule.name.asc())
+        .all()
+    )
+    rtnval = [str(row[0]) for row in rows]
+    return rtnval
+
+
 def upsert_live_state(
         *,
         db_session: DbSession,

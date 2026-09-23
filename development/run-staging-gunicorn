@@ -61,6 +61,19 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
+usage() {
+    cat <<'USAGE'
+usage: development/run-staging-gunicorn [-h | --help] [--provision-only | admin <command> ...]
+
+Run the staging server under gunicorn, generating any missing staging secrets
+under .cache/ first. Refused when PYCHESTRATE_RUNTIME_ENVIRONMENT=production.
+
+  --provision-only    generate the secrets and exit without starting gunicorn
+  admin <command>     run 'python -m ccai.pychestrate.admin <command> ...' with
+                      the staging environment (for example: admin backup list)
+USAGE
+}
+
 ADMIN_MODE="false"
 PROVISION_ONLY="false"
 if [[ "${1:-}" == "admin" ]]; then
@@ -69,10 +82,11 @@ if [[ "${1:-}" == "admin" ]]; then
 else
     for arg in "$@"; do
         case "${arg}" in
+            -h|--help) usage; exit 0 ;;
             --provision-only) PROVISION_ONLY="true" ;;
             *)
                 echo "run-staging-gunicorn: unknown argument: ${arg}" >&2
-                echo "Usage: development/run-staging-gunicorn [--provision-only | admin <command> ...]" >&2
+                usage >&2
                 exit 2
                 ;;
         esac

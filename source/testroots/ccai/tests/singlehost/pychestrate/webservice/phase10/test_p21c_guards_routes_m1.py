@@ -57,6 +57,15 @@ from ccai.pychestrate.webservice.orchestration.infra.restapi.v1 import (
     guards_routes,
 )
 
+# Side-effect imports so the guard + environment tables attach to the
+# shared metadata before an in-memory ``create_all``.
+from ccai.pychestrate.webservice.orchestration.infra.environment import models as _environment_models  # noqa: F401
+from ccai.pychestrate.webservice.orchestration.infra.guards import models as _guards_models  # noqa: F401
+
+from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+    build_in_memory_session,
+)
+
 
 # ---------------------------------------------------------------------------
 # Fakes
@@ -168,8 +177,8 @@ def _patch_project_exists(*, project: Optional[Any]) -> Any:
 
 def _make_guard_view(
         *,
-        project_id: str = "proj-1",
-        environment_id: str = "env-1",
+        project_id: str = "00000000-0000-4000-8000-00000000c801",
+        environment_id: str = "00000000-0000-4000-8000-00000000c802",
         rule_id: str = "max-concurrent",
         enabled: bool = True
     ) -> Any:
@@ -235,8 +244,8 @@ def test_list_returns_503_when_session_missing():
     **Property: GET guards returns 503 when no db_session is bound.**
     """
     request = _FakeRequest(
-        path="/api/v1/projects/proj-1/blast-radius-guards",
-        path_params={"project_id": "proj-1"},
+        path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+        path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
         db_session=None,
     )
     response = guards_routes.handle_list_guards(request)
@@ -252,8 +261,8 @@ def test_list_returns_401_when_no_principal():
     **Property: GET guards returns 401 when no AuthPrincipal bound.**
     """
     request = _FakeRequest(
-        path="/api/v1/projects/proj-1/blast-radius-guards",
-        path_params={"project_id": "proj-1"},
+        path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+        path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
         db_session=object(),
         auth_principal=None,
     )
@@ -273,8 +282,8 @@ def test_list_returns_403_when_permission_denied():
     perm_patch = _patch_check_permission(allowed=False)
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -297,9 +306,9 @@ def test_list_returns_404_when_project_missing():
     proj_patch = _patch_project_exists(project=None)
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-x/blast-radius-guards",
-            path_params={"project_id": "proj-x"},
-            query={"environment_id": "env-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c8fe/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c8fe"},
+            query={"environment_id": "00000000-0000-4000-8000-00000000c802"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -321,12 +330,12 @@ def test_list_returns_400_when_environment_id_missing():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -346,7 +355,7 @@ def test_list_returns_page_envelope_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     list_patch = create_module_patch(
         guards_routes.guards_service, "list_attachments_for_environment",
@@ -357,9 +366,9 @@ def test_list_returns_page_envelope_on_happy_path():
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
-            query={"environment_id": "env-1", "page": "1", "per_page": "10"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
+            query={"environment_id": "00000000-0000-4000-8000-00000000c802", "page": "1", "per_page": "10"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -371,7 +380,7 @@ def test_list_returns_page_envelope_on_happy_path():
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
     testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["guard_id"], "env-1.max-concurrent")
+    testbase.assert_equal(body["items"][0]["guard_id"], "00000000-0000-4000-8000-00000000c802.max-concurrent")
     testbase.assert_equal(body["meta"]["total"], 1)
     return
 
@@ -388,12 +397,12 @@ def test_create_returns_422_on_missing_body():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body=None,
@@ -416,7 +425,7 @@ def test_create_returns_422_when_rule_unknown():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     set_patch = create_module_patch(
         guards_routes.guards_service, "set_attachment",
@@ -429,11 +438,11 @@ def test_create_returns_422_when_rule_unknown():
     set_mock.configure(side_effect=_raise)
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"environment_id": "env-1", "rule_id": "bogus"},
+            body={"environment_id": "00000000-0000-4000-8000-00000000c802", "rule_id": "bogus"},
         )
         response = guards_routes.handle_create_guard(request)
     finally:
@@ -451,7 +460,7 @@ def test_create_returns_201_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     set_patch = create_module_patch(
         guards_routes.guards_service, "set_attachment",
@@ -460,11 +469,11 @@ def test_create_returns_201_on_happy_path():
     set_mock.configure(side_effect=lambda **kwargs: _make_guard_view())
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"environment_id": "env-1", "rule_id": "max-concurrent"},
+            body={"environment_id": "00000000-0000-4000-8000-00000000c802", "rule_id": "max-concurrent"},
         )
         response = guards_routes.handle_create_guard(request)
     finally:
@@ -490,12 +499,12 @@ def test_read_returns_404_on_malformed_guard_id():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards/bogus",
-            path_params={"project_id": "proj-1", "guard_id": "bogus"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/bogus",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801", "guard_id": "bogus"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -514,7 +523,7 @@ def test_read_returns_200_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     list_patch = create_module_patch(
         guards_routes.guards_service, "list_attachments_for_environment",
@@ -524,12 +533,12 @@ def test_read_returns_200_on_happy_path():
     try:
         request = _FakeRequest(
             path=(
-                "/api/v1/projects/proj-1/blast-radius-guards/"
-                "env-1.max-concurrent"
+                "/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/"
+                "00000000-0000-4000-8000-00000000c802.max-concurrent"
             ),
             path_params={
-                "project_id": "proj-1",
-                "guard_id": "env-1.max-concurrent",
+                "project_id": "00000000-0000-4000-8000-00000000c801",
+                "guard_id": "00000000-0000-4000-8000-00000000c802.max-concurrent",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -557,7 +566,7 @@ def test_patch_returns_200_when_toggling_enabled():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     list_patch = create_module_patch(
         guards_routes.guards_service, "list_attachments_for_environment",
@@ -574,12 +583,12 @@ def test_patch_returns_200_when_toggling_enabled():
     try:
         request = _FakeRequest(
             path=(
-                "/api/v1/projects/proj-1/blast-radius-guards/"
-                "env-1.max-concurrent"
+                "/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/"
+                "00000000-0000-4000-8000-00000000c802.max-concurrent"
             ),
             path_params={
-                "project_id": "proj-1",
-                "guard_id": "env-1.max-concurrent",
+                "project_id": "00000000-0000-4000-8000-00000000c801",
+                "guard_id": "00000000-0000-4000-8000-00000000c802.max-concurrent",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -605,7 +614,7 @@ def test_patch_returns_422_when_enabled_missing():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     list_patch = create_module_patch(
         guards_routes.guards_service, "list_attachments_for_environment",
@@ -615,12 +624,12 @@ def test_patch_returns_422_when_enabled_missing():
     try:
         request = _FakeRequest(
             path=(
-                "/api/v1/projects/proj-1/blast-radius-guards/"
-                "env-1.max-concurrent"
+                "/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/"
+                "00000000-0000-4000-8000-00000000c802.max-concurrent"
             ),
             path_params={
-                "project_id": "proj-1",
-                "guard_id": "env-1.max-concurrent",
+                "project_id": "00000000-0000-4000-8000-00000000c801",
+                "guard_id": "00000000-0000-4000-8000-00000000c802.max-concurrent",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -647,7 +656,7 @@ def test_delete_returns_204_on_happy_path():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     disable_patch = create_module_patch(
         guards_routes.guards_service, "disable_attachment",
@@ -657,12 +666,12 @@ def test_delete_returns_204_on_happy_path():
     try:
         request = _FakeRequest(
             path=(
-                "/api/v1/projects/proj-1/blast-radius-guards/"
-                "env-1.max-concurrent"
+                "/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/"
+                "00000000-0000-4000-8000-00000000c802.max-concurrent"
             ),
             path_params={
-                "project_id": "proj-1",
-                "guard_id": "env-1.max-concurrent",
+                "project_id": "00000000-0000-4000-8000-00000000c801",
+                "guard_id": "00000000-0000-4000-8000-00000000c802.max-concurrent",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -684,7 +693,7 @@ def test_delete_returns_404_when_attachment_missing():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     disable_patch = create_module_patch(
         guards_routes.guards_service, "disable_attachment",
@@ -698,12 +707,12 @@ def test_delete_returns_404_when_attachment_missing():
     try:
         request = _FakeRequest(
             path=(
-                "/api/v1/projects/proj-1/blast-radius-guards/"
-                "env-1.max-concurrent"
+                "/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards/"
+                "00000000-0000-4000-8000-00000000c802.max-concurrent"
             ),
             path_params={
-                "project_id": "proj-1",
-                "guard_id": "env-1.max-concurrent",
+                "project_id": "00000000-0000-4000-8000-00000000c801",
+                "guard_id": "00000000-0000-4000-8000-00000000c802.max-concurrent",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -730,15 +739,15 @@ def test_evaluate_returns_422_when_action_missing():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards:evaluate",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards:evaluate",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"environment_id": "env-1"},
+            body={"environment_id": "00000000-0000-4000-8000-00000000c802"},
         )
         response = guards_routes.handle_evaluate_guards(request)
     finally:
@@ -756,7 +765,7 @@ def test_evaluate_returns_200_with_trace():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     explain_patch = create_module_patch(
         guards_routes.guards_service, "explain",
@@ -776,11 +785,11 @@ def test_evaluate_returns_200_with_trace():
     explain_mock.configure(side_effect=lambda **kwargs: trace)
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards:evaluate",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards:evaluate",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"environment_id": "env-1", "action": "scale-up"},
+            body={"environment_id": "00000000-0000-4000-8000-00000000c802", "action": "scale-up"},
         )
         response = guards_routes.handle_evaluate_guards(request)
     finally:
@@ -803,7 +812,7 @@ def test_evaluate_returns_404_when_environment_missing():
     """
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(
-        project=_FakeProject(project_id="proj-1"),
+        project=_FakeProject(project_id="00000000-0000-4000-8000-00000000c801"),
     )
     explain_patch = create_module_patch(
         guards_routes.guards_service, "explain",
@@ -816,16 +825,150 @@ def test_evaluate_returns_404_when_environment_missing():
     explain_mock.configure(side_effect=_raise)
     try:
         request = _FakeRequest(
-            path="/api/v1/projects/proj-1/blast-radius-guards:evaluate",
-            path_params={"project_id": "proj-1"},
+            path="/api/v1/projects/00000000-0000-4000-8000-00000000c801/blast-radius-guards:evaluate",
+            path_params={"project_id": "00000000-0000-4000-8000-00000000c801"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
-            body={"environment_id": "env-x", "action": "scale-up"},
+            body={"environment_id": "00000000-0000-4000-8000-00000000c8ff", "action": "scale-up"},
         )
         response = guards_routes.handle_evaluate_guards(request)
     finally:
         explain_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Audit ORC-28 -- malformed ids answer 422 / 404, never a 500
+# ---------------------------------------------------------------------------
+#
+# These drive the real guards service against an in-memory database:
+# before the fix a partial id reached the UUID-typed column and the
+# driver raised (a 500 on the live service).
+
+
+GUARDS_PROJECT_ID: str = "00000000-0000-4000-8000-00000000c801"
+PARTIAL_ENVIRONMENT_ID: str = "00000000-0000"
+
+
+def _call_with_real_session(
+        *,
+        handler: Callable,
+        path_params: Dict[str, str],
+        query: Optional[Dict[str, str]] = None,
+        body: Any = None,
+        project: Optional[Any] = None
+    ) -> Any:
+    _engine, session = build_in_memory_session()
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(
+        project=project if project is not None else _FakeProject(project_id=GUARDS_PROJECT_ID),
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/{}/blast-radius-guards".format(
+                path_params.get("project_id", ""),
+            ),
+            path_params=path_params,
+            query=query,
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+            body=body,
+        )
+        response = handler(request)
+    finally:
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+        session.close()
+    return response
+
+
+def test_list_answers_422_for_a_partial_environment_id():
+    """
+    **Feature: 6-blast-radius-guards (audit ORC-28)**
+    **Property: GET guards with a partial environment_id answers 422
+    instead of failing in the database driver.**
+    """
+    response = _call_with_real_session(
+        handler=guards_routes.handle_list_guards,
+        path_params={"project_id": GUARDS_PROJECT_ID},
+        query={"environment_id": PARTIAL_ENVIRONMENT_ID},
+    )
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body.get("invalid_fields")),
+        (422, ["environment_id"]),
+    )
+    return
+
+
+def test_create_answers_422_for_a_partial_environment_id():
+    """
+    **Feature: 6-blast-radius-guards (audit ORC-28)**
+    **Property: POST guards with a partial environment_id answers 422.**
+    """
+    response = _call_with_real_session(
+        handler=guards_routes.handle_create_guard,
+        path_params={"project_id": GUARDS_PROJECT_ID},
+        body={"environment_id": PARTIAL_ENVIRONMENT_ID, "rule_id": "max-concurrent"},
+    )
+    testbase.assert_equal(response.status_code, 422)
+    return
+
+
+def test_evaluate_answers_422_for_a_partial_environment_id():
+    """
+    **Feature: 6-blast-radius-guards (audit ORC-28)**
+    **Property: POST guards:evaluate with a partial environment_id
+    answers 422.**
+    """
+    response = _call_with_real_session(
+        handler=guards_routes.handle_evaluate_guards,
+        path_params={"project_id": GUARDS_PROJECT_ID},
+        body={"environment_id": PARTIAL_ENVIRONMENT_ID, "action": "apply"},
+    )
+    testbase.assert_equal(response.status_code, 422)
+    return
+
+
+def test_read_answers_404_for_a_guard_id_with_a_partial_environment():
+    """
+    **Feature: 6-blast-radius-guards (audit ORC-28)**
+    **Property: GET guards/{guard_id} whose environment part is not a
+    UUID answers 404 (no such guard) instead of a 500.**
+    """
+    response = _call_with_real_session(
+        handler=guards_routes.handle_read_guard,
+        path_params={
+            "project_id": GUARDS_PROJECT_ID,
+            "guard_id": PARTIAL_ENVIRONMENT_ID + ".max-concurrent",
+        },
+    )
+    testbase.assert_equal(response.status_code, 404)
+    return
+
+
+def test_list_answers_404_for_a_malformed_project_id():
+    """
+    **Feature: 6-blast-radius-guards (audit ORC-28)**
+    **Property: a project id that is not a UUID answers 404 before the
+    project lookup reaches the database.**
+    """
+    _engine, session = build_in_memory_session()
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/not-a-uuid/blast-radius-guards",
+            path_params={"project_id": "not-a-uuid"},
+            query={"environment_id": "00000000-0000-4000-8000-00000000c802"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+        )
+        response = guards_routes.handle_list_guards(request)
+    finally:
+        perm_patch.deactivate()
+        session.close()
     testbase.assert_equal(response.status_code, 404)
     return

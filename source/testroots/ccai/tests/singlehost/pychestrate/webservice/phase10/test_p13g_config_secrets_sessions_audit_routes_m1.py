@@ -21,9 +21,9 @@ Tests cover:
   manager-error + unparsable id).
 * session list (happy + filter passthrough), session terminate
   (happy + 404 + manager-error).
-* audit_log_list (happy with filters + pagination, ISO date
-  parse, _resolve_audit_event_type_or_none, default empty
-  AuditLogListResponse handling).
+* audit log date-filter parsing. (The audit page now reads the
+  canonical audit store; its behaviour is covered end to end in
+  test_p31e_adm_audit_pipeline_m1.)
 * Legacy flask scaffold gone:
   ``webinterface.blueprints.config`` no longer exposes
   ``config_blueprint`` / does not import ``endpoints``.
@@ -35,7 +35,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai import testbase
@@ -315,53 +315,6 @@ class _SessionSeamRecorder:
         return
 
 
-class _FakeAuditLogEntry:
-    def __init__(self, *, entry_id: int, event_type_value: str) -> None:
-        self.id: int = entry_id
-        self.event_type = type("ET", (), {"value": event_type_value})()
-        self.timestamp = datetime(2026, 1, 1, 12, 0)
-        self.username: Optional[str] = "admin"
-        self.user_id: Optional[str] = "u-admin"
-        self.target_username: Optional[str] = None
-        self.target_user_id: Optional[str] = None
-        self.client_ip: Optional[str] = None
-        self.details: Optional[Dict[str, Any]] = None
-        return
-
-
-class _FakeAuditLogResponse:
-    def __init__(
-            self, *, entries: List[_FakeAuditLogEntry], total: int = 0
-        ) -> None:
-        self.entries: List[_FakeAuditLogEntry] = entries
-        self.total: int = total
-        self.offset: int = 0
-        self.limit: int = 50
-        return
-
-
-class _FakeAuditLogger:
-    last_instance: Optional["_FakeAuditLogger"] = None
-
-    def __init__(self, db_session: Any) -> None:
-        self.db_session: Any = db_session
-        self.query_logs_response: Optional[_FakeAuditLogResponse] = None
-        self.query_logs_calls: List[Any] = []
-        _FakeAuditLogger.last_instance = self
-        return
-
-    def query_logs(self, query: Any) -> _FakeAuditLogResponse:
-        self.query_logs_calls.append(query)
-        if self.query_logs_response is None:
-            return _FakeAuditLogResponse(entries=[])
-        return self.query_logs_response
-
-
-# ---------------------------------------------------------------------------
-# Setup helpers
-# ---------------------------------------------------------------------------
-
-
 def _install_stub_environment() -> _StubJinjaEnvironment:
     env = _StubJinjaEnvironment()
     templating.set_default_environment(environment=env)
@@ -387,7 +340,6 @@ def _reset_global_state() -> None:
     SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = None
     _FakeSecurityManager.last_instance = None
     _FakeSecretManager.last_instance = None
-    _FakeAuditLogger.last_instance = None
     return
 
 
@@ -483,7 +435,8 @@ def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
             db_session: Any,
             filter_username: Optional[str],
             offset: int = 0,
-            limit: int = 20
+            limit: int = 20,
+            current_session_id: Optional[str] = None
         ) -> Any:
         recorder.list_calls.append((filter_username, offset, limit))
         rtnval = config_routes_sessions._SessionPage(
@@ -492,7 +445,12 @@ def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
         )
         return rtnval
 
-    def _fake_terminate(*, db_session: Any, session_id: str) -> None:
+    def _fake_terminate(
+            *,
+            db_session: Any,
+            session_id: str,
+            actor_user_id: Optional[str] = None
+        ) -> None:
         recorder.terminate_calls.append(session_id)
         if recorder.terminate_raises is not None:
             raise recorder.terminate_raises
@@ -512,69 +470,6 @@ def _patch_session_seams(*, recorder: _SessionSeamRecorder) -> List[Any]:
 
     rtnval = [list_patch, terminate_patch]
     return rtnval
-
-
-def _patch_audit_logger(
-        *, configure: Optional[Callable[[_FakeAuditLogger], None]] = None
-    ) -> Any:
-    def _builder(*, db_session: Any) -> _FakeAuditLogger:
-        instance = _FakeAuditLogger(db_session)
-        if configure is not None:
-            configure(instance)
-        return instance
-
-    patch = create_module_patch(
-        config_routes_audit, "_build_audit_logger"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_audit_log_query_factory() -> Any:
-    class _NS:
-        def __init__(self, **kwargs: Any) -> None:
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-            return
-
-    def _builder(**kwargs: Any) -> _NS:
-        return _NS(**kwargs)
-
-    patch = create_module_patch(
-        config_routes_audit, "_build_audit_log_query"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_builder)
-    return patch
-
-
-def _patch_resolve_audit_event_type_or_none(
-        *, returns: Optional[List[Any]] = None
-    ) -> Any:
-    def _resolve(*, event_type_str: Optional[str]) -> Optional[List[Any]]:
-        return returns
-
-    patch = create_module_patch(
-        config_routes_audit, "_resolve_audit_event_type_or_none"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_resolve)
-    return patch
-
-
-def _patch_resolve_all_audit_event_types(
-        *, returns: List[str]
-    ) -> Any:
-    def _resolve() -> List[str]:
-        return returns
-
-    patch = create_module_patch(
-        config_routes_audit, "_resolve_all_audit_event_types"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_resolve)
-    return patch
 
 
 def _build_authenticated_cookie() -> str:
@@ -634,8 +529,9 @@ def test_register_secrets_routes_attaches_documented_routes():
 def test_register_sessions_routes_attaches_documented_routes():
     """
     **Feature: webworks config sessions port T4.2 (D4)**
-    **Property: register_sessions_routes attaches the two
-    session-admin routes at /admin/sessions*.**
+    **Property: register_sessions_routes attaches the three
+    session-admin routes at /admin/sessions* (list, terminate one,
+    terminate all of a user's).**
     """
     _reset_global_state()
     try:
@@ -650,6 +546,10 @@ def test_register_sessions_routes_attaches_documented_routes():
                 "/admin/sessions/{session_id}/terminate",
                 ("POST",),
             ),
+            (
+                "/admin/sessions/user/{user_id}/terminate",
+                ("POST",),
+            ),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -660,8 +560,9 @@ def test_register_sessions_routes_attaches_documented_routes():
 def test_register_audit_routes_attaches_documented_routes():
     """
     **Feature: webworks config audit port T4.3 (D4)**
-    **Property: register_audit_routes attaches the single
-    audit-log viewer route at /admin/audit-logs.**
+    **Property: register_audit_routes attaches the audit-log
+    viewer at /admin/audit-logs and its export at
+    /admin/audit-logs/export.**
     """
     _reset_global_state()
     try:
@@ -672,6 +573,7 @@ def test_register_audit_routes_attaches_documented_routes():
         )
         expected = {
             ("/admin/audit-logs", ("GET",)),
+            ("/admin/audit-logs/export", ("GET",)),
         }
         testbase.assert_equal(actual, expected)
     finally:
@@ -1087,9 +989,13 @@ def test_handle_session_list_renders_with_active_sessions():
         # The cookie's session_token surfaces as the current
         # session id so the template can badge the own row.
         testbase.assert_equal(ctx["current_session_id"], "tok-abc")
+        # Page 2 of a one-page result is past the end (e.g. after its
+        # last sessions were terminated): the handler asks again for
+        # the last page and renders that (ADM-33).
         testbase.assert_equal(
-            recorder.list_calls, [("alice", 10, 10)]
+            recorder.list_calls, [("alice", 10, 10), ("alice", 0, 10)]
         )
+        testbase.assert_equal(ctx["page"], 1)
     finally:
         for patch in seam_patches:
             patch.deactivate()
@@ -1242,130 +1148,6 @@ def test_handle_session_terminate_missing_id_short_circuits():
 # ===========================================================================
 
 
-def test_handle_audit_log_list_renders_with_filters():
-    """
-    **Feature: webworks config audit port T4.10**
-    **Property: GET /admin/audit-logs renders config/audit/
-    list.html with logs (entries), all_event_types,
-    filter_user_id, selected_event_type, and the original ISO
-    date strings passed back through.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    al_patch = None
-    q_patch = None
-    et_patch = None
-    aet_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        entries = [
-            _FakeAuditLogEntry(entry_id=1, event_type_value="LOGIN_SUCCESS"),
-            _FakeAuditLogEntry(entry_id=2, event_type_value="LOGOUT"),
-        ]
-
-        def _seed(instance: _FakeAuditLogger) -> None:
-            instance.query_logs_response = _FakeAuditLogResponse(
-                entries=entries, total=2
-            )
-            return
-
-        al_patch = _patch_audit_logger(configure=_seed)
-        q_patch = _patch_audit_log_query_factory()
-        # Stub the type resolver so the route doesn't try to import
-        # the real AuditEventType.
-        et_patch = _patch_resolve_audit_event_type_or_none(
-            returns=["LOGIN_SUCCESS"]
-        )
-        aet_patch = _patch_resolve_all_audit_event_types(
-            returns=["LOGIN_SUCCESS", "LOGOUT"]
-        )
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={
-                "page": "1", "per_page": "50",
-                "event_type": "LOGIN_SUCCESS", "user_id": "u-7",
-                "start_date": "2026-01-01T00:00",
-                "end_date": "2026-12-31T23:59",
-            },
-        )
-        response = config_routes_audit.handle_audit_log_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        testbase.assert_equal(
-            env.template_lookups, ["config/audit/list.html"]
-        )
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["logs"], entries)
-        testbase.assert_equal(
-            ctx["all_event_types"], ["LOGIN_SUCCESS", "LOGOUT"]
-        )
-        testbase.assert_equal(ctx["selected_event_type"], "LOGIN_SUCCESS")
-        testbase.assert_equal(ctx["filter_user_id"], "u-7")
-        testbase.assert_equal(ctx["start_date"], "2026-01-01T00:00")
-        testbase.assert_equal(ctx["end_date"], "2026-12-31T23:59")
-        # The query was built with the parsed datetimes + filters.
-        al = _FakeAuditLogger.last_instance
-        testbase.assert_equal(len(al.query_logs_calls), 1)
-        q = al.query_logs_calls[0]
-        testbase.assert_equal(q.user_id, "u-7")
-        testbase.assert_equal(q.event_types, ["LOGIN_SUCCESS"])
-        testbase.assert_equal(q.offset, 0)
-        testbase.assert_equal(q.limit, 50)
-    finally:
-        for p in (aet_patch, et_patch, q_patch, al_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_audit_log_list_handles_empty_response():
-    """
-    **Feature: webworks config audit port T4.10**
-    **Property: A query with no matching entries yields
-    logs=[].**
-    """
-    _reset_global_state()
-    sm_patch = None
-    al_patch = None
-    q_patch = None
-    et_patch = None
-    aet_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        al_patch = _patch_audit_logger()
-        q_patch = _patch_audit_log_query_factory()
-        et_patch = _patch_resolve_audit_event_type_or_none(returns=None)
-        aet_patch = _patch_resolve_all_audit_event_types(returns=[])
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-        )
-        response = config_routes_audit.handle_audit_log_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["logs"], [])
-        testbase.assert_equal(ctx["all_event_types"], [])
-    finally:
-        for p in (aet_patch, et_patch, q_patch, al_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
 def test_parse_iso_datetime_or_none_handles_valid_and_invalid():
     """
     **Feature: webworks config audit port T4.11 (parser)**
@@ -1375,7 +1157,9 @@ def test_parse_iso_datetime_or_none_handles_valid_and_invalid():
     parsed = config_routes_audit._parse_iso_datetime_or_none(
         raw="2026-01-15T10:30"
     )
-    testbase.assert_equal(parsed, datetime(2026, 1, 15, 10, 30))
+    testbase.assert_equal(
+        parsed, datetime(2026, 1, 15, 10, 30, tzinfo=timezone.utc)
+    )
 
     testbase.assert_equal(
         config_routes_audit._parse_iso_datetime_or_none(raw=None), None
@@ -1387,33 +1171,6 @@ def test_parse_iso_datetime_or_none_handles_valid_and_invalid():
         config_routes_audit._parse_iso_datetime_or_none(raw="garbage"),
         None,
     )
-    return
-
-
-def test_audit_log_response_to_entries_handles_dataclass_and_list():
-    """
-    **Feature: webworks config audit port T4.11 (response shape)**
-    **Property: The helper handles both the documented
-    AuditLogListResponse (with .entries) and a bare list (the
-    test fakes may return either shape).**
-    """
-    entries = [_FakeAuditLogEntry(entry_id=1, event_type_value="X")]
-
-    response = _FakeAuditLogResponse(entries=entries, total=1)
-    rtnval = config_routes_audit._audit_log_response_to_entries(
-        response=response
-    )
-    testbase.assert_equal(rtnval, entries)
-
-    rtnval = config_routes_audit._audit_log_response_to_entries(
-        response=entries
-    )
-    testbase.assert_equal(rtnval, entries)
-
-    rtnval = config_routes_audit._audit_log_response_to_entries(
-        response=None
-    )
-    testbase.assert_equal(rtnval, [])
     return
 
 
@@ -1526,139 +1283,6 @@ def test_handle_secret_create_post_unexpected_error_masks_message():
         testbase.assert_equal(generic_present, True)
     finally:
         for p in (rt_patch, cr_patch, secret_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def _patch_resolve_user_id_for_username(
-        *, mapping: Dict[str, str]
-    ) -> Any:
-    """
-        Patch the ``_resolve_user_id_for_username`` seam in
-        ``routes_audit`` with a dict-backed resolver.
-    """
-    def _resolve(*, db_session: Any, username: str) -> Optional[str]:
-        return mapping.get(username, None)
-
-    patch = create_module_patch(
-        config_routes_audit, "_resolve_user_id_for_username"
-    )
-    mock = patch.activate()
-    mock.configure(side_effect=_resolve)
-    return patch
-
-
-def test_handle_audit_log_list_resolves_username_filter():
-    """
-    **Feature: admin UX -- audit username filter**
-    **Property: ?username= resolves to the user id server-side
-    and the audit query filters on that id; total / total_pages
-    land in the context for windowed pagination.**
-    """
-    _reset_global_state()
-    sm_patch = None
-    al_patch = None
-    q_patch = None
-    et_patch = None
-    aet_patch = None
-    user_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        entries = [
-            _FakeAuditLogEntry(entry_id=1, event_type_value="LOGIN_SUCCESS"),
-        ]
-
-        def _seed(instance: _FakeAuditLogger) -> None:
-            instance.query_logs_response = _FakeAuditLogResponse(
-                entries=entries, total=120
-            )
-            return
-
-        al_patch = _patch_audit_logger(configure=_seed)
-        q_patch = _patch_audit_log_query_factory()
-        et_patch = _patch_resolve_audit_event_type_or_none(returns=None)
-        aet_patch = _patch_resolve_all_audit_event_types(returns=[])
-        user_patch = _patch_resolve_user_id_for_username(
-            mapping={"alice": "u-alice"}
-        )
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={"username": "alice", "per_page": "50"},
-        )
-        response = config_routes_audit.handle_audit_log_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["filter_username"], "alice")
-        testbase.assert_equal(ctx["username_unmatched"], False)
-        testbase.assert_equal(ctx["total"], 120)
-        testbase.assert_equal(ctx["total_pages"], 3)
-        al = _FakeAuditLogger.last_instance
-        q = al.query_logs_calls[0]
-        testbase.assert_equal(q.user_id, "u-alice")
-    finally:
-        for p in (
-            user_patch, aet_patch, et_patch, q_patch, al_patch,
-            sm_patch,
-        ):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
-    return
-
-
-def test_handle_audit_log_list_unmatched_username_yields_empty():
-    """
-    **Feature: admin UX -- audit username filter**
-    **Property: An unknown ?username= renders an empty page with
-    username_unmatched=True and never queries the audit logger
-    (no silently-unfiltered results).**
-    """
-    _reset_global_state()
-    sm_patch = None
-    al_patch = None
-    q_patch = None
-    et_patch = None
-    aet_patch = None
-    user_patch = None
-    try:
-        env = _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
-        al_patch = _patch_audit_logger()
-        q_patch = _patch_audit_log_query_factory()
-        et_patch = _patch_resolve_audit_event_type_or_none(returns=None)
-        aet_patch = _patch_resolve_all_audit_event_types(returns=[])
-        user_patch = _patch_resolve_user_id_for_username(mapping={})
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            query_mapping={"username": "ghost"},
-        )
-        response = config_routes_audit.handle_audit_log_list(request)
-
-        testbase.assert_equal(response.status_code, 200)
-        ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(ctx["logs"], [])
-        testbase.assert_equal(ctx["username_unmatched"], True)
-        testbase.assert_equal(ctx["total"], 0)
-        testbase.assert_equal(_FakeAuditLogger.last_instance, None)
-    finally:
-        for p in (
-            user_patch, aet_patch, et_patch, q_patch, al_patch,
-            sm_patch,
-        ):
             if p is not None:
                 p.deactivate()
         _reset_global_state()

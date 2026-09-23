@@ -18,6 +18,11 @@
     <p>Automated release scheduling</p>
 </div>
 
+<div class="pyc-preview-notice" role="note" data-role="preview-notice">
+    Preview: release schedules cannot be created yet, and nothing starts a
+    release when a schedule comes due, so this list stays empty.
+</div>
+
 <div class="table-scroll" tabindex="0"><table class="data-table">
     <thead>
         <tr>
@@ -47,7 +52,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No release schedules yet. Schedules are configured via the API.", colspan=6) }}
+            {{ ui.empty_state("No release schedules.", colspan=6) }}
         </tr>
         {% endfor %}
     </tbody>

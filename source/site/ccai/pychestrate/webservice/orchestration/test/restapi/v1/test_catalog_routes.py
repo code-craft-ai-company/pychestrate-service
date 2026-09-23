@@ -662,6 +662,13 @@ def handle_import_test_catalog(request: Request) -> Response:
         synchronously against the supplied ``source`` descriptor,
         and upserts each returned :class:`ImporterEntryPayload`.
 
+        An import that yields no entries answers 422 rather than a
+        "0 imported" success, and an importer that refuses its source
+        (``ValueError``) answers 422 with its reason. For
+        ``testbase-project`` the source lists testbase ``includes``
+        (plus optional ``root`` / ``ref`` / ``required_capability_tags``)
+        or full ``entries``.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (202) with a
@@ -714,6 +721,19 @@ def handle_import_test_catalog(request: Request) -> Response:
                 project_id=project_id,
                 source=source,
             )
+        except ValueError as xcpt:
+            # The importer refused the source (nothing listed, or a
+            # malformed include / entry): say why, verbatim.
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+                extensions={
+                    "importer_tag": importer_tag,
+                    "entries_imported": 0,
+                },
+            )
+            payloads = []  # unreachable
         except Exception as xcpt:
             _LOGGER.warning(
                 "pychestrate.test_catalog.import.factory_failure project_id=%s tag=%s err=%s",
@@ -728,6 +748,22 @@ def handle_import_test_catalog(request: Request) -> Response:
                 extensions={"importer_tag": importer_tag},
             )
             payloads = []  # unreachable
+
+        if len(payloads) == 0:
+            # An import that finds nothing is not a success (audit
+            # ORC-06): refuse it instead of answering "0 imported".
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=(
+                    "Nothing was imported: the '{}' importer found no"
+                    " entries in the source.".format(importer_tag)
+                ),
+                extensions={
+                    "importer_tag": importer_tag,
+                    "entries_imported": 0,
+                },
+            )
 
         for payload in payloads:
             try:

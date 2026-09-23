@@ -1,0 +1,6 @@
+# GitHub requests a review from these owners on pull requests that touch
+# the matching paths. Documentation changes get a docs review (DOC-07, #395).
+/userguide/                  @myronww
+/docs/                       @myronww
+/specs/                      @myronww
+/.github/workflows/docs.yml  @myronww

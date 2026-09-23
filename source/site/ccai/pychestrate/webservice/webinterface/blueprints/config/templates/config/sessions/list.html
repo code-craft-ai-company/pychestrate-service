@@ -3,16 +3,57 @@
 
 {% block title %}Sessions - Pychestrate Configuration{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* The Actions column stays pinned to the right edge of the
+       scroll container when the table is wider than the page, and
+       the header scrolls with the rows (one container). */
+    .pyc-sessions-table .pyc-sessions-actions {
+        position: sticky;
+        right: 0;
+        background: var(--pyc-color-surface);
+        box-shadow: inset 1px 0 0 var(--pyc-color-divider);
+    }
+    .pyc-sessions-table thead .pyc-sessions-actions {
+        background: var(--pyc-color-surface-elevated);
+    }
+    .pyc-sessions-table .pyc-sessions-when,
+    .pyc-sessions-table .pyc-sessions-address,
+    .pyc-sessions-table .pyc-sessions-actions {
+        white-space: nowrap;
+    }
+    .pyc-sessions-table .pyc-sessions-clock {
+        display: block;
+    }
+    .pyc-sessions-group {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+    }
+    .pyc-sessions-group form {
+        margin-left: auto;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
+{#- The list view (filter, page, page size) every terminate form posts,
+    so the redirect returns to the same view. -#}
+{% macro list_state_fields() -%}
+    <input type="hidden" name="list_username" value="{{ filter_username or '' }}">
+    <input type="hidden" name="list_page" value="{{ page }}">
+    <input type="hidden" name="list_per_page" value="{{ per_page }}">
+{%- endmacro %}
 <div class="page-header">
     <h1>Active Sessions</h1>
-    <p>Monitor and manage active user sessions</p>
+    <p>Who is signed in, from where, and until when. A session ends after {{ idle_timeout_minutes }} minutes without activity or {{ max_lifetime_hours }} hours after sign-in, whichever comes first.</p>
 </div>
 
 <div class="mb">
     <form method="get" class="actions-row">
         <input type="text" name="username" class="form-control w-md" placeholder="Filter by username"
-               value="{{ filter_username or '' }}">
+               aria-label="Filter by username" value="{{ filter_username or '' }}">
         <button type="submit" class="btn btn-secondary">
             {{ ui.icon("filter_list") }} Filter
         </button>
@@ -22,54 +63,81 @@
     </form>
 </div>
 
-<div class="table-scroll" tabindex="0"><table class="data-table">
+<div class="table-scroll" tabindex="0" role="region" aria-label="Active sessions"><table class="data-table pyc-sessions-table">
     <thead>
         <tr>
-            <th scope="col">User</th>
-            <th scope="col">Created</th>
-            <th scope="col">Last Activity</th>
-            <th scope="col">Expires</th>
-            <th scope="col">Client IP</th>
-            <th scope="col">User Agent</th>
-            <th scope="col">Actions</th>
+            <th scope="col">Browser</th>
+            <th scope="col">Client address</th>
+            <th scope="col">Signed in</th>
+            <th scope="col">Last active</th>
+            <th scope="col">Ends</th>
+            <th scope="col" class="pyc-sessions-actions">Actions</th>
         </tr>
     </thead>
+    {% for group in sessions | groupby('username') %}
+    {% set group_user_id = group.list[0].user_id %}
+    {% set group_total = sessions_by_user.get(group_user_id, group.list | length) %}
+    {% set group_is_me = group.list | selectattr('is_current') | list | length > 0 %}
     <tbody>
-        {% for session in sessions %}
+        <tr>
+            <th scope="rowgroup" colspan="6">
+                <div class="pyc-sessions-group">
+                    <span>
+                        {{ group.grouper }}
+                        <span class="muted small">{{ group_total }} session{{ '' if group_total == 1 else 's' }}{% if group_total > group.list | length %} ({{ group.list | length }} on this page){% endif %}</span>
+                    </span>
+                    {% if group_is_me %}
+                    {% if group_total > 1 %}
+                    <form action="{{ url_for('config.session_terminate_user', user_id=group_user_id) }}" method="post" data-confirm="Sign out of your other {{ group_total - 1 }} session{{ '' if group_total - 1 == 1 else 's' }}? This one stays signed in.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        {{ list_state_fields() }}
+                        <button type="submit" class="btn btn-sm btn-secondary">Sign out my other sessions</button>
+                    </form>
+                    {% endif %}
+                    {% elif group_total > 1 %}
+                    <form action="{{ url_for('config.session_terminate_user', user_id=group_user_id) }}" method="post" data-confirm="Terminate all {{ group_total }} sessions of {{ group.grouper }}? They are signed out everywhere.">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        {{ list_state_fields() }}
+                        <button type="submit" class="btn btn-sm btn-danger">Terminate all {{ group_total }}</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </th>
+        </tr>
+        {% for session in group.list %}
         <tr>
             <td>
-                {{ session.username }}
-                {% if session.session_id == current_session_id %}
+                {% if session.user_agent %}<span title="{{ session.user_agent_full }}">{{ session.user_agent }}</span>{% else %}<span class="muted">Not recorded</span>{% endif %}
+                {% if session.is_current %}
                 <span class="badge badge-info">This session</span>
                 {% endif %}
             </td>
-            <td>{% if session.created_at %}{{ session.created_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
-            <td>{% if session.last_activity %}{{ session.last_activity | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
-            <td>{% if session.expires_at %}{{ session.expires_at | format_datetime('%Y-%m-%d %H:%M') }}{% else %}&mdash;{% endif %}</td>
-            <td>{{ session.client_ip or '-' }}</td>
-            <td class="truncate">
-                {{ session.user_agent or '-' }}
-            </td>
-            <td>
+            <td class="pyc-sessions-address">{% if session.client_ip %}<code class="mono">{{ session.client_ip }}</code>{% else %}<span class="muted">Not recorded</span>{% endif %}</td>
+            <td class="pyc-sessions-when">{% if session.created_at %}{{ session.created_ago }}<span class="muted small pyc-sessions-clock">{{ session.created_at | format_datetime('%H:%M') }}</span>{% else %}&mdash;{% endif %}</td>
+            <td class="pyc-sessions-when">{% if session.last_activity %}{{ session.last_activity_ago }}<span class="muted small pyc-sessions-clock">{{ session.last_activity | format_datetime('%H:%M') }}</span>{% else %}&mdash;{% endif %}</td>
+            <td class="pyc-sessions-when">{% if session.expires_at %}{{ session.expires_in }}<span class="muted small pyc-sessions-clock">{{ session.expires_at | format_datetime('%H:%M') }}</span>{% else %}&mdash;{% endif %}</td>
+            <td class="pyc-sessions-actions">
                 <form action="{{ url_for('config.session_terminate', session_id=session.session_id) }}" method="post">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                    {% if session.session_id == current_session_id %}
-                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Terminate</button>
+                    {{ list_state_fields() }}
+                    {% if session.is_current %}
+                    <button type="submit" class="btn btn-sm btn-danger" data-confirm="This is your current session — you will be signed out. Terminate it?">Sign out</button>
                     {% else %}
                     <button type="submit" class="btn btn-sm btn-danger" data-confirm="Terminate this session?">Terminate</button>
                     {% endif %}
                 </form>
             </td>
         </tr>
-        {% else %}
-        <tr>
-            {{ ui.empty_state("No active sessions found", colspan=7) }}
-        </tr>
         {% endfor %}
     </tbody>
+    {% else %}
+    <tbody>
+        {{ ui.empty_state("No active sessions found", colspan=6) }}
+    </tbody>
+    {% endfor %}
 </table></div>
 
 {{ ui.pagination('config.session_list', page, total_pages, {'username': filter_username, 'per_page': per_page}, total=total) }}
 
-<p class="muted mt">Total: {{ total }} active sessions</p>
+<p class="muted mt">Total: {{ total }} active session{{ '' if total == 1 else 's' }}</p>
 {% endblock %}

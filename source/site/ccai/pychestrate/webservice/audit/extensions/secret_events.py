@@ -22,6 +22,11 @@ class SecretAccessedAuditEvents(AuditEventTypeExtension):
 
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.secret.accessed"
+    # secrets_service writes this record inside its own transaction
+    # (audit_writer.capture_event) and publishes the topic for
+    # other subscribers only.
+    captured_inline: bool = True
+    actor_payload_keys: tuple = ("principal_id",)
     source_topic: str = "entity.secret.accessed"
     payload_schema: dict = {
         "type": "object",
@@ -44,6 +49,11 @@ class SecretCreatedAuditEvents(AuditEventTypeExtension):
 
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.secret.created"
+    # secrets_service writes this record inside its own transaction
+    # (audit_writer.capture_event) and publishes the topic for
+    # other subscribers only.
+    captured_inline: bool = True
+    actor_payload_keys: tuple = ("principal_id",)
     source_topic: str = "entity.secret.created"
     payload_schema: dict = {
         "type": "object",
@@ -69,6 +79,11 @@ class SecretUpdatedAuditEvents(AuditEventTypeExtension):
 
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.secret.updated"
+    # secrets_service writes this record inside its own transaction
+    # (audit_writer.capture_event) and publishes the topic for
+    # other subscribers only.
+    captured_inline: bool = True
+    actor_payload_keys: tuple = ("principal_id",)
     source_topic: str = "entity.secret.rotated"
     payload_schema: dict = {
         "type": "object",
@@ -94,6 +109,11 @@ class SecretDeletedAuditEvents(AuditEventTypeExtension):
 
     resource_extension_name: str = "audit_event_type"
     kind: str = "audit.secret.deleted"
+    # secrets_service writes this record inside its own transaction
+    # (audit_writer.capture_event) and publishes the topic for
+    # other subscribers only.
+    captured_inline: bool = True
+    actor_payload_keys: tuple = ("principal_id",)
     source_topic: str = "entity.secret.force_expired"
     payload_schema: dict = {
         "type": "object",

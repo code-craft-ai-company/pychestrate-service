@@ -34,6 +34,14 @@ webhook-conventional terms: ``200``/``202`` on accept,
 The operator-facing integration + delivery routes ARE
 cookie/RBAC gated and emit RFC 7807 problem documents via
 :mod:`api.problem_json_webworks`.
+
+Shared secrets (audit ORC-29): an integration's HMAC key lives
+only in ``1-secrets-vault``. The create route accepts it as the
+write-only ``secret`` field (stored in the vault on the caller's
+behalf) or binds an existing vault secret through ``secret_ref``;
+the configuration row keeps only the vault reference, the
+receiver resolves it through the vault on every delivery, and no
+response ever carries the key.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -43,6 +51,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -53,6 +62,8 @@ from ccai.webworks.routing.response import JSONResponse, Response
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
+from ccai.pychestrate.webservice.projects import repository as projects_repo
+from ccai.pychestrate.webservice.secrets.secret_bytes import SecretBytes
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 from ccai.pychestrate.webservice.webhooks_in import configuration_service
 from ccai.pychestrate.webservice.webhooks_in import repository
@@ -64,6 +75,8 @@ from ccai.pychestrate.webservice.webhooks_in.errors import (
     WebhookConfigurationInvalidError,
     WebhookConfigurationNotFoundError,
     WebhookProviderUnknownError,
+    WebhookSecretAccessDeniedError,
+    WebhookSecretInvalidError,
 )
 
 
@@ -294,6 +307,44 @@ def _parse_positive_int(
     return rtnval
 
 
+def _is_uuid(value: Any) -> bool:
+    """
+        Whether ``value`` parses as a UUID.
+
+        :param value: Raw value.
+
+        :returns: True for a well-formed UUID.
+    """
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return True
+
+
+def _require_uuid(*, request: Request, name: str, value: str) -> str:
+    """
+        Abort 422 unless ``value`` is a well-formed UUID. The id
+        columns are UUID-typed, so a malformed id would otherwise
+        fail inside the database driver as a 500.
+
+        :param request: Incoming webworks request.
+        :param name: Field / parameter name (for error context).
+        :param value: Raw value.
+
+        :returns: The value, unchanged.
+    """
+    if _is_uuid(value) is False:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail="'{}' must be a UUID.".format(name),
+            extensions={"invalid_fields": [name]},
+        )
+    rtnval = value
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Serializers
 # ---------------------------------------------------------------------------
@@ -317,21 +368,39 @@ def _iso_or_none(value: Any) -> Optional[str]:
     return rtnval
 
 
-def _integration_view_to_dict(view: Any) -> Dict[str, Any]:
+def _integration_view_to_dict(
+        view: Any,
+        *,
+        secret_configured: bool
+    ) -> Dict[str, Any]:
     """
         Serialize a :class:`WebhookConfigurationView` to the
         OpenAPI ``WebhookInIntegration`` schema.
 
+        The shared secret is never serialized. ``secret_ref`` is
+        the vault reference the secret is stored under and is
+        echoed only when it names an existing vault secret
+        (``secret_configured``); anything else -- a deleted vault
+        secret, or a row written before secrets moved to the vault
+        -- serializes as ``null`` so a stored value that is not a
+        reference can never leak.
+
         :param view: Configuration read-model.
+        :param secret_configured: Whether ``view.secret_ref`` names
+                                  an existing vault secret.
 
         :returns: JSON-friendly dict.
     """
+    exposed_ref: Optional[str] = None
+    if secret_configured is True:
+        exposed_ref = view.secret_ref
     rtnval: Dict[str, Any] = {
         "webhook_id": str(view.webhook_id),
         "project_id": str(view.project_id),
         "provider": view.provider,
         "hook_name": view.hook_name,
-        "secret_ref": view.secret_ref,
+        "secret_ref": exposed_ref,
+        "secret_configured": bool(secret_configured),
         "mtls_required": bool(view.mtls_required),
         "description": view.description,
         "enabled": bool(view.enabled),
@@ -434,12 +503,24 @@ def handle_receive_webhook(request: Request) -> Response:
     # Try each configured integration's secret. The first one
     # whose signature verifies (or whose dispatch produces a
     # non-401 outcome) wins -- this matches the dispatcher's
-    # "M1 returns every enabled row" contract.
+    # "M1 returns every enabled row" contract. ``secret_ref`` is
+    # a vault reference: the key is resolved through the secrets
+    # vault here and never read from the configuration row.
     last_result: Optional[Any] = None
     for config in configs:
-        # M1 stores the literal shared secret in ``secret_ref``;
-        # the M2 follow-on resolves it through 1-secrets-vault.
-        shared_secret = (config.secret_ref or "").encode("utf-8")
+        shared_secret = configuration_service.resolve_shared_secret(
+            db_session=db_session,
+            secret_ref=config.secret_ref,
+        )
+        if shared_secret is None:
+            _LOGGER.warning(
+                "pychestrate.webhooks_in.receive.secret_unresolved"
+                " webhook_id=%s provider=%s hook_name=%s",
+                str(getattr(config, "webhook_id", "")),
+                provider,
+                hook_name,
+            )
+            continue
         result = dispatch_inbound_webhook(
             db_session=db_session,
             provider=provider,
@@ -456,6 +537,21 @@ def handle_receive_webhook(request: Request) -> Response:
         if result.rejection is not None:
             if result.rejection.status_code != 401:
                 break
+
+    if last_result is None:
+        # Every matching integration's secret reference failed to
+        # resolve (the vault secret was deleted or expired): the
+        # delivery cannot be verified, so nothing is dispatched.
+        rtnval = JSONResponse(
+            content={
+                "status": "rejected",
+                "reason": "secret_unavailable",
+                "provider": provider,
+                "hook_name": hook_name,
+            },
+            status_code=503,
+        )
+        return rtnval
 
     result = last_result
 
@@ -546,6 +642,7 @@ def handle_list_integrations(request: Request) -> Response:
                 detail="Query param 'project_id' is required.",
                 extensions={"query_param": "project_id"},
             )
+        _require_uuid(request=request, name="project_id", value=project_id)
 
         enabled_raw = request.query_params.get("enabled_only", "")
         enabled_only = str(enabled_raw).lower() in ("1", "true", "yes")
@@ -558,7 +655,16 @@ def handle_list_integrations(request: Request) -> Response:
 
         items: List[Dict[str, Any]] = []
         for view in views:
-            items.append(_integration_view_to_dict(view=view))
+            secret_configured = configuration_service.is_secret_ref_stored(
+                db_session=db_session,
+                secret_ref=view.secret_ref,
+            )
+            items.append(
+                _integration_view_to_dict(
+                    view=view,
+                    secret_configured=secret_configured,
+                )
+            )
 
         body = {
             "items": items,
@@ -587,6 +693,17 @@ def handle_create_integration(request: Request) -> Response:
         Registers a new inbound integration configuration
         (an external source + its verification secret).
 
+        The shared secret arrives in exactly one of two forms:
+
+        * ``secret`` -- the HMAC key itself (write-only). It is
+          stored in the secrets vault as a project secret on the
+          caller's behalf; the caller therefore needs the vault's
+          write permission for the project.
+        * ``secret_ref`` -- the name of an existing vault secret
+          the caller may read.
+
+        The response carries the vault reference, never the key.
+
         :param request: Incoming webworks request.
 
         :returns: JSON response (201) carrying the created
@@ -605,7 +722,23 @@ def handle_create_integration(request: Request) -> Response:
         project_id = body.get("project_id", None)
         provider = body.get("provider", None)
         hook_name = body.get("hook_name", None)
+        secret = body.get("secret", None)
         secret_ref = body.get("secret_ref", None)
+
+        invalid: List[str] = []
+        if secret is not None and isinstance(secret, str) is False:
+            invalid.append("secret")
+        if secret_ref is not None and isinstance(secret_ref, str) is False:
+            invalid.append("secret_ref")
+        if len(invalid) > 0:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Fields must be strings: {}.".format(", ".join(invalid)),
+                extensions={"invalid_fields": invalid},
+            )
+        has_secret = isinstance(secret, str) and len(secret) > 0
+        has_secret_ref = isinstance(secret_ref, str) and len(secret_ref) > 0
 
         missing: List[str] = []
         if not isinstance(project_id, str) or len(project_id) == 0:
@@ -614,14 +747,39 @@ def handle_create_integration(request: Request) -> Response:
             missing.append("provider")
         if not isinstance(hook_name, str) or len(hook_name) == 0:
             missing.append("hook_name")
-        if not isinstance(secret_ref, str) or len(secret_ref) == 0:
-            missing.append("secret_ref")
+        if has_secret is False and has_secret_ref is False:
+            missing.append("secret")
         if len(missing) > 0:
             _abort_problem(
                 request=request,
                 status=422,
-                detail="Required fields are missing or empty.",
+                detail=(
+                    "Required fields are missing or empty. The shared"
+                    " secret goes in 'secret' (stored in the secrets"
+                    " vault) or names an existing vault secret in"
+                    " 'secret_ref'."
+                ),
                 extensions={"missing_fields": missing},
+            )
+        if has_secret is True and has_secret_ref is True:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Supply either 'secret' or 'secret_ref', not both.",
+                extensions={"invalid_fields": ["secret", "secret_ref"]},
+            )
+
+        _require_uuid(request=request, name="project_id", value=project_id)
+        project_row = projects_repo.get_project_by_id(
+            db_session=db_session,
+            project_id=project_id,
+        )
+        if project_row is None:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Project not found.",
+                extensions={"project_id": project_id},
             )
 
         mtls_required = body.get("mtls_required", False)
@@ -645,13 +803,19 @@ def handle_create_integration(request: Request) -> Response:
         if principal_user_id is not None:
             actor_id = str(principal_user_id)
 
+        shared_secret: Optional[SecretBytes] = None
+        if has_secret is True:
+            shared_secret = SecretBytes(secret.encode("utf-8"))
+
         try:
-            view = configuration_service.create_webhook(
+            view = configuration_service.create_webhook_with_secret(
                 db_session=db_session,
+                principal=principal,
                 project_id=project_id,
                 provider=provider,
                 hook_name=hook_name,
-                secret_ref=secret_ref,
+                shared_secret=shared_secret,
+                secret_ref=secret_ref if has_secret_ref is True else None,
                 mtls_required=mtls_required,
                 description=description,
                 actor_id=actor_id,
@@ -663,12 +827,32 @@ def handle_create_integration(request: Request) -> Response:
                 detail=str(xcpt),
             )
             view = None  # unreachable
+        except WebhookSecretInvalidError as xcpt:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+                extensions={"invalid_fields": ["secret_ref"]},
+            )
+            view = None  # unreachable
+        except WebhookSecretAccessDeniedError as xcpt:
+            _abort_problem(
+                request=request,
+                status=403,
+                detail=str(xcpt),
+            )
+            view = None  # unreachable
         except WebhookProviderUnknownError as xcpt:
             _abort_problem(
                 request=request,
                 status=422,
                 detail=str(xcpt),
-                extensions={"provider": provider},
+                extensions={
+                    "provider": provider,
+                    "registered_providers": (
+                        configuration_service.list_registered_providers()
+                    ),
+                },
             )
             view = None  # unreachable
         except WebhookConfigurationConflictError as xcpt:
@@ -683,6 +867,11 @@ def handle_create_integration(request: Request) -> Response:
                 },
             )
             view = None  # unreachable
+        finally:
+            # The key has been encrypted into the vault (or the
+            # create failed); zeroize the request's copy either way.
+            if shared_secret is not None:
+                shared_secret.close()
 
         _LOGGER.info(
             "pychestrate.webhooks_in.integration_created project_id=%s"
@@ -693,7 +882,13 @@ def handle_create_integration(request: Request) -> Response:
             str(view.webhook_id),
         )
 
-        body_dict = _integration_view_to_dict(view=view)
+        body_dict = _integration_view_to_dict(
+            view=view,
+            secret_configured=configuration_service.is_secret_ref_stored(
+                db_session=db_session,
+                secret_ref=view.secret_ref,
+            ),
+        )
         rtnval: Response = JSONResponse(content=body_dict, status_code=201)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -742,6 +937,17 @@ def handle_update_integration(request: Request) -> Response:
         if principal_user_id is not None:
             actor_id = str(principal_user_id)
 
+        if _is_uuid(webhook_id) is False:
+            # A malformed id can name no integration; answer the
+            # same 404 an unknown id gets rather than letting the
+            # UUID-typed lookup fail as a 500.
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Webhook configuration not found.",
+                extensions={"webhook_id": webhook_id},
+            )
+
         try:
             if enabled is True:
                 view = configuration_service.enable_webhook(
@@ -771,7 +977,13 @@ def handle_update_integration(request: Request) -> Response:
             enabled,
         )
 
-        body_dict = _integration_view_to_dict(view=view)
+        body_dict = _integration_view_to_dict(
+            view=view,
+            secret_configured=configuration_service.is_secret_ref_stored(
+                db_session=db_session,
+                secret_ref=view.secret_ref,
+            ),
+        )
         rtnval: Response = JSONResponse(content=body_dict, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response

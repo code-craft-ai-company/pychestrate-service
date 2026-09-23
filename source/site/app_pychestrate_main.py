@@ -21,6 +21,15 @@ from ccai.pychestrate.webservice.extensions.phase5_bootstrap import (
 from ccai.pychestrate.webservice.extensions.phase6_bootstrap import (
     register_phase6_builtin_extensions,
 )
+from ccai.pychestrate.webservice.extensions.phase7_bootstrap import (
+    register_phase7_builtin_extensions,
+)
+from ccai.pychestrate.webservice.extensions.phase8_bootstrap import (
+    register_phase8_builtin_extensions,
+)
+from ccai.pychestrate.webservice.extensions.view_registry_self_check import (
+    log_view_registry_self_check,
+)
 from ccai.pychestrate.webservice.extensions.ext_router import (
     mount_extension_routes,
 )
@@ -263,6 +272,23 @@ from ccai.webworks.wsgi.application import create_wsgi_application
 from ccai.webworks.wsgi.server import run_server
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import HTMLResponse, Response
+
+
+def _wrap_with_peer_address(wsgi_app: Any) -> Any:
+    """
+        Wrap the WSGI app so request handlers can see the socket peer
+        (``REMOTE_ADDR``); see
+        :func:`security.auth.client_address.wrap_wsgi_app_with_peer_address`.
+
+        :param wsgi_app: The WSGI application.
+
+        :returns: The wrapped WSGI application.
+    """
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        wrap_wsgi_app_with_peer_address,
+    )
+    rtnval = wrap_wsgi_app_with_peer_address(wsgi_app)
+    return rtnval
 
 
 def _eager_start_response_wsgi(wsgi_app: Any) -> Any:
@@ -529,6 +555,11 @@ def register_service_extensions() -> None:
     register_phase4_builtin_extensions()
     register_phase5_builtin_extensions()
     register_phase6_builtin_extensions()
+    # Layer 7 (metrics / SLOs / alerts / dashboards) and Layer 8
+    # (webhooks, release channels) registries -- previously never
+    # registered (audit ORC-04).
+    register_phase7_builtin_extensions()
+    register_phase8_builtin_extensions()
     build_and_validate_plugin_api_catalog()
     mount_extension_routes()
     register_flags_routes(app=app, version_prefix="/api/v1")
@@ -635,6 +666,9 @@ def register_service_extensions() -> None:
     # explicitly skipped by the catch-all.
     install_shell_default_bundles()
     register_shell_catchall(app=app)
+    # Startup self-check: warn about any view whose extension registry
+    # is empty (audit ORC-04).
+    log_view_registry_self_check()
     return
 
 
@@ -689,6 +723,9 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # ADM-16: expose the socket peer so handlers can resolve the real
+    # client address behind a trusted proxy.
+    wsgi_app = _wrap_with_peer_address(wsgi_app)
     # Cookies carry ``Secure`` for HTTPS requests (direct or through a
     # trusted proxy) and always in production; see cookie_session.
     wsgi_app = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=wsgi_app)
@@ -770,7 +807,8 @@ def build_wsgi_application_for_production():
     )
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
-    rtnval = _eager_start_response_wsgi(rtnval_inner)
+    # ADM-16: expose the socket peer (see pychestrate_website_main).
+    rtnval = _wrap_with_peer_address(_eager_start_response_wsgi(rtnval_inner))
     # Cookies carry ``Secure`` for HTTPS requests (direct or through a
     # trusted proxy) and always in production; see cookie_session.
     rtnval = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=rtnval)

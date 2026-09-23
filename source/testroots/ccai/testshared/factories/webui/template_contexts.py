@@ -563,6 +563,148 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
 
 
 # ---------------------------------------------------------------------------
+# Admin & identity: password rules, password lifecycle, audit, sessions
+# (September 2026 audit fixes). Values come from the product modules so
+# the fixtures cannot drift from what the handlers pass.
+# ---------------------------------------------------------------------------
+
+def _password_policy_value(key: str) -> Builder:
+    def _build(mode: str) -> Any:
+        from ccai.pychestrate.webservice.security.auth.password_policy import (  # noqa: E402
+            password_policy_template_context,
+        )
+        rtnval = password_policy_template_context()[key]
+        return rtnval
+    return _build
+
+
+def _format_variable_value_builder() -> Builder:
+    def _build(mode: str) -> Any:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
+            format_variable_value,
+        )
+        return format_variable_value
+    return _build
+
+
+_FIXTURE_UI_PROJECT_UUID: str = "5a0c2e62-8f7a-5d16-9f4e-3c1b2a0d9e11"
+_FIXTURE_API_PROJECT_UUID: str = "0b6f3c1e-2d4a-4e8b-9c7d-1a2b3c4d5e6f"
+
+
+def _project_choices(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_enrollment import (  # noqa: E402
+        ProjectChoice,
+    )
+    if mode == MODE_SPARSE:
+        return []
+    rtnval = [
+        ProjectChoice(
+            value=_FIXTURE_UI_PROJECT_UUID, label="alpha",
+            detail="web UI project #1", source="ui",
+        ),
+        ProjectChoice(
+            value=_FIXTURE_API_PROJECT_UUID, label="Beta",
+            detail="beta", source="api",
+        ),
+    ]
+    return rtnval
+
+
+def _project_choice_groups(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        routes_enrollment,
+    )
+    rtnval = routes_enrollment._project_choice_groups(choices=_project_choices(mode))
+    return rtnval
+
+
+def _audit_rows(mode: str) -> Any:
+    from ccai.pychestrate.webservice.audit.audit_presenter import AuditRow  # noqa: E402
+    rtnval = build_fixture_list(AuditRow, mode=mode)
+    return rtnval
+
+
+def _action_groups(mode: str) -> Any:
+    from ccai.pychestrate.webservice.audit.audit_query import AuditKindView  # noqa: E402
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        routes_audit,
+    )
+    if mode == MODE_SPARSE:
+        return []
+    views = [
+        AuditKindView(kind="audit.session.opened", area="session", description="A user signed in."),
+        AuditKindView(kind="audit.data.updated", area="data", description="A record was changed."),
+    ]
+    rtnval = routes_audit._action_groups(kind_views=views)
+    return rtnval
+
+
+_AUDIT_FILTERS_POPULATED = {
+    "action": "audit.session.opened", "actor": "admin", "target": "projects:1",
+    "since": "2026-09-01T00:00", "until": "2026-09-30T23:59", "per_page": 50,
+}
+_AUDIT_FILTERS_SPARSE = {
+    "action": "", "actor": "", "target": "", "since": "", "until": "", "per_page": 50,
+}
+
+
+def _minted_with_project(mode: str) -> Any:
+    base = _minted(mode)
+    if base is None:
+        return None
+    rtnval = dict(base)
+    rtnval["project_label"] = "alpha"
+    return rtnval
+
+
+DEFAULT_REGISTRY.update({
+    "password_rules": _password_policy_value("password_rules"),
+    "password_summary": _password_policy_value("password_summary"),
+    "password_pattern": _password_policy_value("password_pattern"),
+    "password_title": _password_policy_value("password_title"),
+    "password_min_length": _password_policy_value("password_min_length"),
+    "password_max_length": _password_policy_value("password_max_length"),
+    "password_input_id": _const("password"),
+    "value_cleared": _by_mode(True, False),
+    "format_value": _format_variable_value_builder(),
+    "project_choices": _project_choices,
+    "project_choice_groups": _project_choice_groups,
+    "project_labels": _by_mode({_FIXTURE_UI_PROJECT_UUID: "alpha"}, {}),
+    "mint_form": _by_mode(
+        {"project_id": _FIXTURE_UI_PROJECT_UUID, "pod_name": "pod-alpha",
+         "ttl_seconds": "3600", "one_shot": True},
+        {"project_id": "", "pod_name": "", "ttl_seconds": "", "one_shot": True},
+    ),
+    "minted": _minted_with_project,
+    "audit_rows": _audit_rows,
+    "audit_total": _by_mode(2, 0),
+    "audit_filters": _by_mode(_AUDIT_FILTERS_POPULATED, _AUDIT_FILTERS_SPARSE),
+    "audit_notices": _by_mode(['No user has the username "ghost".'], []),
+    "action_groups": _action_groups,
+    "older_url": _by_mode("/admin/audit-logs?before=10", None),
+    "newer_url": _by_mode("/admin/audit-logs?after=20", None),
+    "newest_url": _by_mode("/admin/audit-logs", None),
+    "export_csv_url": _const("/admin/audit-logs/export?format=csv"),
+    "export_jsonl_url": _const("/admin/audit-logs/export?format=jsonl"),
+    "issued_link": _by_mode(
+        {"url": "https://pyc.example.invalid/password/set/abc", "purpose": "RESET",
+         "expires_at": FIXTURE_DATETIME},
+        None,
+    ),
+    "problems": _by_mode(["Password must contain a digit.", "Password must contain a symbol, such as ! # or -."], []),
+    "just_created": _by_mode(True, False),
+    "link_valid": _by_mode(True, False),
+    "invalid_message": _const("This link is not valid. It may have expired or already been used."),
+    "purpose": _by_mode("INVITE", "RESET"),
+    "login_name": _const("jdoe"),
+    "form_action": _const("/password/set/abc"),
+    "idle_timeout_minutes": _const(30),
+    "max_lifetime_hours": _const(24),
+    "sessions_by_user": _by_mode({"user_id-0": 3}, {}),
+})
+
+
+# ---------------------------------------------------------------------------
 # Per-template-prefix overrides: longest matching prefix wins
 # ---------------------------------------------------------------------------
 

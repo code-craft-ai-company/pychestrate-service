@@ -35,19 +35,29 @@ from ccai.pychestrate.webservice.security.auth.exceptions import (
     SessionExpiredError,
     SessionNotFoundError,
 )
-from ccai.pychestrate.webservice.security.auth.models import AuthProviderKind, AuthSession
+from ccai.pychestrate.webservice.security.auth.models import (
+    AuthProviderKind,
+    AuthSession,
+    AuthSessionClient,
+)
 
 
 @dataclass(frozen=True)
 class RequestFingerprint:
     """
-        Client fingerprint captured at session open for replay-mitigation.
+        Client fingerprint captured at session open for replay-mitigation,
+        plus the readable client details the admin sessions page shows.
 
         :param ip_fingerprint: Hash of the remote IP.
         :param user_agent_fingerprint: Hash of the User-Agent header.
+        :param client_address: The client's address (resolved behind
+                               trusted proxies), when known.
+        :param user_agent: The User-Agent header, when known.
     """
     ip_fingerprint: str
     user_agent_fingerprint: str
+    client_address: Optional[str] = None
+    user_agent: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -114,6 +124,16 @@ def open_session(
     db_session.add(session)
     db_session.flush()
 
+    client_address = _bounded_text(value=request_fingerprint.client_address, limit=64)
+    user_agent = _bounded_text(value=request_fingerprint.user_agent, limit=512)
+    if client_address is not None or user_agent is not None:
+        db_session.add(AuthSessionClient(
+            session_id=session.session_id,
+            client_address=client_address,
+            user_agent=user_agent,
+        ))
+        db_session.flush()
+
     payload = {
         "session_id": session.session_id,
         "user_id": session.user_id,
@@ -121,6 +141,8 @@ def open_session(
         "provider_name": provider_name,
         "mfa_method_name": mfa_method_name,
         "opened_at": session.opened_at.isoformat(),
+        "client_address": client_address,
+        "user_agent": _describe_user_agent(user_agent=user_agent),
     }
     event = EntityEvent(
         topic=AuthEventTopics.SESSION_OPENED,
@@ -131,6 +153,33 @@ def open_session(
     db_session.commit()
 
     rtnval = session
+    return rtnval
+
+
+def _bounded_text(*, value: Optional[str], limit: int) -> Optional[str]:
+    """
+        ``value`` stripped and cut to ``limit`` characters; None when
+        empty.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if len(text) == 0:
+        return None
+    rtnval = text[:limit]
+    return rtnval
+
+
+def _describe_user_agent(*, user_agent: Optional[str]) -> Optional[str]:
+    """
+        A readable browser / OS summary for the audit record.
+    """
+    if user_agent is None:
+        return None
+    from ccai.pychestrate.webservice.security.auth.client_address import (  # noqa: E402
+        describe_user_agent,
+    )
+    rtnval = describe_user_agent(user_agent=user_agent)
     return rtnval
 
 
@@ -249,7 +298,9 @@ def close_sessions_for_user(
         *,
         db_session: DbSession,
         user_id: object,
-        reason: str
+        reason: str,
+        actor_user_id: Optional[str] = None,
+        keep_session_id: Optional[str] = None
     ) -> int:
     """
         Close every open session belonging to ``user_id`` and publish
@@ -261,6 +312,11 @@ def close_sessions_for_user(
         :param user_id: Identity user id (UUID or string).
         :param reason: Why the sessions were closed, recorded on each
                        event (e.g. ``"user_deactivated"``).
+        :param actor_user_id: Who caused the close (an administrator),
+                              recorded on each event so the audit log
+                              attributes it; None for the owner.
+        :param keep_session_id: A session to leave open (the caller's
+                                own, e.g. after a password change).
 
         :returns: Number of sessions closed.
     """
@@ -269,12 +325,18 @@ def close_sessions_for_user(
         .filter(AuthSession.user_id == user_id)
         .all()
     )
+    if keep_session_id is not None:
+        sessions = [
+            session for session in sessions
+            if str(session.session_id) != str(keep_session_id)
+        ]
     closed_at = utc_now().isoformat()
     for session in sessions:
         payload = {
             "session_id": str(session.session_id),
             "user_id": str(session.user_id),
             "reason": reason,
+            "actor_user_id": actor_user_id,
             "closed_at": closed_at,
         }
         event = EntityEvent(
@@ -289,12 +351,24 @@ def close_sessions_for_user(
     return rtnval
 
 
-def close_session(*, db_session: DbSession, session_id: str) -> None:
+def close_session(
+        *,
+        db_session: DbSession,
+        session_id: str,
+        reason: str = "user_logout",
+        actor_user_id: Optional[str] = None
+    ) -> None:
     """
         Close a session and publish ``entity.session.closed``.
 
         :param db_session: Active SQLAlchemy session.
         :param session_id: Session id to close.
+        :param reason: Why the session ended (``"user_logout"`` for a
+                       sign-out, ``"admin_terminated"`` when an
+                       administrator ends someone's session).
+        :param actor_user_id: Who ended it when that is not the
+                              session's owner; recorded so the audit log
+                              attributes the termination.
 
         :returns: None.
     """
@@ -310,7 +384,8 @@ def close_session(*, db_session: DbSession, session_id: str) -> None:
     payload = {
         "session_id": closed_session_id,
         "user_id": closed_user_id,
-        "reason": "user_logout",
+        "reason": reason,
+        "actor_user_id": actor_user_id,
         "closed_at": utc_now().isoformat(),
     }
     event = EntityEvent(

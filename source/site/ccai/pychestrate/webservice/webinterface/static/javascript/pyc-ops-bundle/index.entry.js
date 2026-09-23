@@ -31,11 +31,11 @@ const WEBHOOKS_ENTRY = {
   group: OPERATIONS_GROUP_ID
 };
 const RELEASE_CHANNELS_ENTRY = {
-  entryId: "operations.release-channels",
-  label: "Release Channels",
+  entryId: "admin.pychestrate-updates",
+  label: "Pychestrate Updates",
   route: RELEASE_CHANNELS_ROUTE,
   requiredPermissions: [RELEASE_CHANNELS_READ_PERMISSION],
-  group: OPERATIONS_GROUP_ID
+  group: "admin"
 };
 function register_ops_sidebar(sidebar) {
   sidebar.registerGroup({
@@ -164,7 +164,9 @@ import {
 import { PycReleaseChannels as PycReleaseChannels2 } from "./release-channels-view.js";
 import {
   RELEASE_CHANNEL_VALUES,
+  UPDATES_HEADING,
   build_release_channel_url,
+  extract_publishing_status,
   format_release_timestamp,
   format_rollout,
   release_status_tone,
@@ -177,6 +179,8 @@ export {
   PycReleaseChannels2 as PycReleaseChannels,
   PycWebhooks2 as PycWebhooks,
   RELEASE_CHANNEL_VALUES,
+  UPDATES_HEADING,
+  extract_publishing_status,
   build_in_deliveries_url,
   build_integrations_collection_url,
   build_integrations_url,

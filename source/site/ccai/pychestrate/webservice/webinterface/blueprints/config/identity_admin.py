@@ -54,12 +54,21 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+# ``MIN_PASSWORD_LENGTH`` is re-exported for callers that read the
+# bound from here; the rules themselves live in
+# security.auth.password_policy.
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    MIN_PASSWORD_LENGTH,
+)
+
 
 ADMIN_UI_PERMISSION_KEY: str = "system:ui.admin.view"
 
 SYSTEM_ADMIN_ROLE_NAME: str = "system-admin"
 
-MIN_PASSWORD_LENGTH: int = 12
+USER_STATUS_ACTIVE: str = "active"
+USER_STATUS_INACTIVE: str = "inactive"
+USER_STATUS_INVITED: str = "invited"
 
 _LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -200,6 +209,9 @@ class AdminUserView:
                       scope.
         :param created_at: Identity row creation timestamp.
         :param updated_at: Identity row update timestamp.
+        :param status: ``"active"``, ``"inactive"`` (deactivated) or
+                       ``"invited"`` (created with an invite link, no
+                       password yet).
     """
     id: str
     username: str
@@ -211,6 +223,7 @@ class AdminUserView:
     roles: List[str] = field(default_factory=list)
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    status: str = "active"
 
 
 @dataclass
@@ -252,7 +265,7 @@ def _validate_new_user_fields(
         *,
         username: str,
         email: str,
-        password: str,
+        password: Optional[str],
         display_name: str
     ) -> None:
     """
@@ -261,7 +274,9 @@ def _validate_new_user_fields(
 
         :param username: Submitted login name.
         :param email: Submitted email.
-        :param password: Submitted plaintext password.
+        :param password: Submitted plaintext password; None for an
+                         invited account (the user sets it from the
+                         invite link).
         :param display_name: Submitted display name.
 
         :returns: None.
@@ -279,11 +294,44 @@ def _validate_new_user_fields(
         )
     if display_name is None or len(display_name.strip()) == 0:
         raise AdminValidationError("Display name is required")
-    if password is None or len(password) < MIN_PASSWORD_LENGTH:
+    if password is not None:
+        _validate_password_for_user(
+            password=password, login_name=username, email=email
+        )
+    return
+
+
+def _validate_password_for_user(
+        *,
+        password: Optional[str],
+        login_name: Optional[str],
+        email: Optional[str]
+    ) -> None:
+    """
+        Enforce the shared password policy
+        (:mod:`security.auth.password_policy`) for a password being
+        set on an account. Every path in this module that stores a
+        password goes through here, so the rules the forms state are
+        the rules the server applies.
+
+        :param password: Candidate plaintext password.
+        :param login_name: The account's login name.
+        :param email: The account's email address.
+
+        :returns: None.
+        :raises: AdminValidationError
+    """
+    from ccai.pychestrate.webservice.security.auth.password_policy import (
+        check_password_against_policy,
+        describe_password_problems,
+    )
+
+    problems = check_password_against_policy(
+        password=password, login_name=login_name, email=email
+    )
+    if len(problems) > 0:
         raise AdminValidationError(
-            "Password must be at least {} characters".format(
-                MIN_PASSWORD_LENGTH
-            )
+            describe_password_problems(problems=problems)
         )
     return
 
@@ -471,20 +519,21 @@ def _ensure_system_binding(
         role_name: str,
         principal_uuid: uuid.UUID,
         actor_user_id: Optional[str]
-    ) -> None:
+    ) -> Optional[str]:
     """
         Idempotently bind ``role_name`` to the user at SYSTEM scope
         (flush only -- the caller owns the commit). Role rows are
         lazily persisted for catalog-declared roles the way
         ``rbac.seeding.ensure_role_persisted`` does for the setup
-        wizard.
+        wizard. A new binding stages ``entity.role.assigned``.
 
         :param db_session: The active SQLAlchemy session.
         :param role_name: Role to bind.
         :param principal_uuid: Target user UUID.
         :param actor_user_id: Acting admin UUID for attribution.
 
-        :returns: None.
+        :returns: The new binding's id, or None when the binding
+                  already existed.
         :raises: AdminValidationError when the role name is unknown.
     """
     from ccai.pychestrate.webservice.security.rbac.models import (
@@ -525,7 +574,7 @@ def _ensure_system_binding(
         .first()
     )
     if existing is not None:
-        return
+        return None
 
     actor_uuid = None
     if actor_user_id is not None and len(str(actor_user_id)) > 0:
@@ -546,22 +595,36 @@ def _ensure_system_binding(
     )
     db_session.add(binding)
     db_session.flush()
-    return
+
+    _publish_role_binding_event(
+        db_session=db_session,
+        topic=_TOPIC_ROLE_ASSIGNED,
+        binding_id=str(binding.binding_id),
+        role_name=role_name,
+        principal_uuid=principal_uuid,
+        actor_user_id=actor_user_id,
+    )
+
+    rtnval = str(binding.binding_id)
+    return rtnval
 
 
 def _remove_system_bindings(
         *,
         db_session: Any,
         role_names: List[str],
-        principal_uuid: uuid.UUID
+        principal_uuid: uuid.UUID,
+        actor_user_id: Optional[str] = None
     ) -> None:
     """
         Remove the user's direct SYSTEM-scope bindings for the given
-        role names (flush only -- the caller owns the commit).
+        role names (flush only -- the caller owns the commit), staging
+        ``entity.role.revoked`` for each.
 
         :param db_session: The active SQLAlchemy session.
         :param role_names: Role names to unbind.
         :param principal_uuid: Target user UUID.
+        :param actor_user_id: Acting admin UUID for attribution.
 
         :returns: None.
     """
@@ -576,7 +639,7 @@ def _remove_system_bindings(
         return
 
     rows = (
-        db_session.query(RbacRoleBinding)
+        db_session.query(RbacRoleBinding, RbacRole.role_name)
         .join(RbacRole, RbacRole.role_id == RbacRoleBinding.role_id)
         .filter(RbacRole.role_name.in_(role_names))
         .filter(RbacRoleBinding.principal_kind == PrincipalKind.USER)
@@ -584,8 +647,17 @@ def _remove_system_bindings(
         .filter(RbacRoleBinding.scope_kind == BindingScope.SYSTEM)
         .all()
     )
-    for row in rows:
+    for row, bound_role_name in rows:
+        binding_id = str(row.binding_id)
         db_session.delete(row)
+        _publish_role_binding_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_REVOKED,
+            binding_id=binding_id,
+            role_name=bound_role_name,
+            principal_uuid=principal_uuid,
+            actor_user_id=actor_user_id,
+        )
     db_session.flush()
     return
 
@@ -619,6 +691,116 @@ def _invalidate_rbac_cache_all() -> None:
     return
 
 
+def _publish_entity_event(
+        *,
+        db_session: Any,
+        topic: str,
+        payload: Dict[str, Any]
+    ) -> None:
+    """
+        Stage an entity event on the session's outbox; it is published
+        (and captured into the audit log) only when the caller's
+        transaction commits. The acting admin's client address, when
+        the request tagged the session with one, rides along.
+
+        :param db_session: The active SQLAlchemy session.
+        :param topic: Entity topic (``entity.user.created`` ...).
+        :param payload: JSON-serializable payload.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import new_uuid
+    from ccai.pychestrate.webservice.audit.data_change_bridge import (
+        session_client_address,
+    )
+    from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
+    from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
+
+    full_payload = dict(payload)
+    if "client_address" not in full_payload:
+        full_payload["client_address"] = session_client_address(
+            db_session=db_session
+        )
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=topic,
+            payload=full_payload,
+            source_event_id=new_uuid(),
+        ),
+    )
+    return
+
+
+def _publish_role_binding_event(
+        *,
+        db_session: Any,
+        topic: str,
+        binding_id: Optional[str],
+        role_name: str,
+        principal_uuid: Any,
+        actor_user_id: Optional[str]
+    ) -> None:
+    """
+        Stage ``entity.role.assigned`` / ``entity.role.revoked`` for a
+        SYSTEM-scope user binding, in the payload shape
+        ``rbac.binding_service`` uses.
+
+        :param db_session: The active SQLAlchemy session.
+        :param topic: ``entity.role.assigned`` or ``entity.role.revoked``.
+        :param binding_id: The binding's id (None when unknown).
+        :param role_name: Role name.
+        :param principal_uuid: The user the binding names.
+        :param actor_user_id: Acting admin UUID.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.core.defaults import utc_now
+
+    payload: Dict[str, Any] = {
+        "binding_id": binding_id,
+        "role_name": role_name,
+        "principal_kind": "USER",
+        "principal_id": str(principal_uuid),
+        "scope_kind": "SYSTEM",
+        "scope_id": None,
+        "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+    }
+    if topic.endswith(".assigned") is True:
+        payload["created_at"] = utc_now().isoformat()
+    else:
+        payload["revoked_at"] = utc_now().isoformat()
+    _publish_entity_event(db_session=db_session, topic=topic, payload=payload)
+    return
+
+
+def _actor_text(*, actor_user_id: Optional[str]) -> Optional[str]:
+    """
+        The acting admin's id as text, or None.
+
+        :param actor_user_id: Acting admin UUID (any form).
+
+        :returns: String or None.
+    """
+    if actor_user_id is None:
+        return None
+    text = str(actor_user_id).strip()
+    if len(text) == 0:
+        return None
+    return text
+
+
+_TOPIC_USER_CREATED: str = "entity.user.created"
+_TOPIC_USER_UPDATED: str = "entity.user.updated"
+_TOPIC_USER_DEACTIVATED: str = "entity.user.deactivated"
+_TOPIC_USER_REACTIVATED: str = "entity.user.reactivated"
+_TOPIC_ROLE_ASSIGNED: str = "entity.role.assigned"
+_TOPIC_ROLE_REVOKED: str = "entity.role.revoked"
+_TOPIC_ROLE_CREATED: str = "entity.role.created"
+_TOPIC_ROLE_UPDATED: str = "entity.role.updated"
+_TOPIC_ROLE_DELETED: str = "entity.role.deleted"
+
+
 def _user_to_view(
         *,
         user: Any,
@@ -640,6 +822,12 @@ def _user_to_view(
     from ccai.pychestrate.webservice.identity.users.models import UserStatus
 
     is_active = user.status == UserStatus.ACTIVE
+    if user.status == UserStatus.PENDING:
+        status_text = USER_STATUS_INVITED
+    elif is_active is True:
+        status_text = USER_STATUS_ACTIVE
+    else:
+        status_text = USER_STATUS_INACTIVE
 
     rtnval = AdminUserView(
         id=str(user.user_id),
@@ -652,6 +840,7 @@ def _user_to_view(
         roles=roles,
         created_at=user.created_at,
         updated_at=user.updated_at,
+        status=status_text,
     )
     return rtnval
 
@@ -773,6 +962,19 @@ def get_identity_user(
     return rtnval
 
 
+@dataclass
+class InvitedUser:
+    """
+        Result of :func:`create_invited_identity_user`.
+
+        :param user_id: The new account's UUID.
+        :param link: The single-use invite link (its secret is shown
+                     once and never stored).
+    """
+    user_id: str
+    link: Any
+
+
 def create_identity_user(
         *,
         db_session: Any,
@@ -806,14 +1008,99 @@ def create_identity_user(
         :returns: The new user's UUID as a string.
         :raises: AdminValidationError, AdminDuplicateError
     """
+    if password is None:
+        password = ""
+    user_uuid, _link = _create_identity_user(
+        db_session=db_session,
+        username=username,
+        email=email,
+        password=password,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
+    )
+    rtnval = str(user_uuid)
+    return rtnval
+
+
+def create_invited_identity_user(
+        *,
+        db_session: Any,
+        username: str,
+        email: str,
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> InvitedUser:
+    """
+        Create an account without a password and a single-use invite
+        link for it (audit ADM-04: the product sends no email yet, so
+        the administrator copies the link to the user). The account is
+        ``PENDING`` -- it cannot sign in -- until the user sets a
+        password from the link.
+
+        :param db_session: The active SQLAlchemy session.
+        :param username: Login name (normalized to lower case).
+        :param email: Primary email (normalized to lower case).
+        :param display_name: Display name.
+        :param firstname: First name (legacy mirror only).
+        :param lastname: Last name (legacy mirror only).
+        :param role_names: RBAC role names to bind at SYSTEM scope.
+        :param actor_user_id: Acting admin UUID for attribution.
+
+        :returns: :class:`InvitedUser` carrying the one-time link.
+        :raises: AdminValidationError, AdminDuplicateError
+    """
+    user_uuid, link = _create_identity_user(
+        db_session=db_session,
+        username=username,
+        email=email,
+        password=None,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        role_names=role_names,
+        actor_user_id=actor_user_id,
+    )
+    rtnval = InvitedUser(user_id=str(user_uuid), link=link)
+    return rtnval
+
+
+def _create_identity_user(
+        *,
+        db_session: Any,
+        username: str,
+        email: str,
+        password: Optional[str],
+        display_name: str,
+        firstname: str,
+        lastname: str,
+        role_names: List[str],
+        actor_user_id: Optional[str]
+    ) -> Tuple[uuid.UUID, Any]:
+    """
+        Shared body of :func:`create_identity_user` (``password`` set)
+        and :func:`create_invited_identity_user` (``password`` None:
+        a ``PENDING`` account, no credentials, an invite link).
+
+        :returns: ``(user_uuid, invite_link_or_None)``.
+        :raises: AdminValidationError, AdminDuplicateError
+    """
     from ccai.pychestrate.webservice.identity.users.models import (
         IdentityUser,
         UserStatus,
     )
     from ccai.pychestrate.webservice.security.auth import local_flow
+    from ccai.pychestrate.webservice.security.auth import password_lifecycle
     from ccai.pychestrate.webservice.security.auth.models import (
         AuthLocalCredentials,
     )
+
+    invited = password is None
 
     normalized_login = username.strip().lower()
     normalized_email = email.strip().lower()
@@ -847,18 +1134,15 @@ def create_identity_user(
     if role_names is None:
         role_names = []
 
+    invite_link = None
     try:
-        encoded_hash, algo_params = local_flow.hash_password(
-            password=password
-        )
-
         user_uuid = uuid.uuid4()
         modern_user = IdentityUser(
             user_id=user_uuid,
             login_name=normalized_login,
             primary_email=normalized_email,
             display_name=display_name,
-            status=UserStatus.ACTIVE,
+            status=UserStatus.PENDING if invited is True else UserStatus.ACTIVE,
             provisioning_source="local",
             external_id=None,
             timezone="UTC",
@@ -866,13 +1150,17 @@ def create_identity_user(
         db_session.add(modern_user)
         db_session.flush()
 
-        credentials = AuthLocalCredentials(
-            user_id=user_uuid,
-            argon2id_hash=encoded_hash,
-            algo_params=algo_params,
-        )
-        db_session.add(credentials)
-        db_session.flush()
+        if invited is False:
+            encoded_hash, algo_params = local_flow.hash_password(
+                password=password
+            )
+            credentials = AuthLocalCredentials(
+                user_id=user_uuid,
+                argon2id_hash=encoded_hash,
+                algo_params=algo_params,
+            )
+            db_session.add(credentials)
+            db_session.flush()
 
         _upsert_legacy_mirror(
             db_session=db_session,
@@ -894,6 +1182,28 @@ def create_identity_user(
                 actor_user_id=actor_user_id,
             )
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_USER_CREATED,
+            payload={
+                "user_id": str(user_uuid),
+                "login_name": normalized_login,
+                "provisioning_source": "local",
+                "invited": invited,
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+                "created_at": modern_user.created_at.isoformat()
+                if modern_user.created_at is not None else None,
+            },
+        )
+
+        if invited is True:
+            invite_link = password_lifecycle.issue_password_link(
+                db_session=db_session,
+                user_id=str(user_uuid),
+                purpose="INVITE",
+                actor_user_id=_actor_text(actor_user_id=actor_user_id),
+            )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -908,7 +1218,7 @@ def create_identity_user(
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
 
-    rtnval = str(user_uuid)
+    rtnval = (user_uuid, invite_link)
     return rtnval
 
 
@@ -1012,17 +1322,40 @@ def update_identity_user(
             'A user with email "{}" already exists.'.format(normalized_email)
         )
 
+    names_before = _read_legacy_names(
+        db_session=db_session, user_ids=[user_uuid]
+    ).get(str(user_uuid), ("", ""))
+    changed_fields: List[str] = []
+    if row.primary_email != normalized_email:
+        changed_fields.append("email")
+    if (row.display_name or "") != display_name:
+        changed_fields.append("display_name")
+    if firstname is not None and names_before[0] != firstname:
+        changed_fields.append("firstname")
+    if lastname is not None and names_before[1] != lastname:
+        changed_fields.append("lastname")
+    status_before = row.status
+    was_active = row.status == UserStatus.ACTIVE
+    if row.status == UserStatus.PENDING:
+        # An invited account has no password yet: the edit form's
+        # Active box neither activates nor deactivates it. The invite
+        # link activates it; Deactivate cancels the invitation.
+        new_status = UserStatus.PENDING
+    elif is_active is True:
+        new_status = UserStatus.ACTIVE
+    else:
+        new_status = UserStatus.DEACTIVATED
+    becomes_inactive = was_active is True and new_status == UserStatus.DEACTIVATED
+    becomes_active = was_active is False and new_status == UserStatus.ACTIVE
+
     try:
         row.primary_email = normalized_email
         row.display_name = display_name
-        if is_active is True:
-            row.status = UserStatus.ACTIVE
-        else:
-            row.status = UserStatus.DEACTIVATED
+        row.status = new_status
         db_session.flush()
 
         legacy_status = _LEGACY_STATUS_ACTIVE
-        if is_active is False:
+        if new_status != UserStatus.ACTIVE:
             legacy_status = _LEGACY_STATUS_INACTIVE
         _upsert_legacy_mirror(
             db_session=db_session,
@@ -1042,6 +1375,15 @@ def update_identity_user(
         roles_to_remove = [
             name for name in current_roles if name not in role_names
         ]
+        # ADM-26: "Updated" on the user pages never moved. Any change
+        # to the profile, the status or the roles is an update.
+        if (
+            len(changed_fields) > 0
+            or new_status != status_before
+            or len(roles_to_add) > 0
+            or len(roles_to_remove) > 0
+        ):
+            row.updated_at = _utc_now()
         for role_name in roles_to_add:
             _ensure_system_binding(
                 db_session=db_session,
@@ -1053,11 +1395,42 @@ def update_identity_user(
             db_session=db_session,
             role_names=roles_to_remove,
             principal_uuid=user_uuid,
+            actor_user_id=actor_user_id,
         )
 
-        if is_active is False:
+        if new_status == UserStatus.DEACTIVATED:
             # Deactivation must end access now, not at session expiry.
-            _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
+            _close_user_sessions(
+                db_session=db_session,
+                user_uuid=user_uuid,
+                actor_user_id=actor_user_id,
+            )
+
+        user_event_payload = {
+            "user_id": str(user_uuid),
+            "login_name": row.login_name,
+            "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+        }
+        if len(changed_fields) > 0:
+            updated_payload = dict(user_event_payload)
+            updated_payload["changed_fields"] = changed_fields
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_UPDATED,
+                payload=updated_payload,
+            )
+        if becomes_inactive is True:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_DEACTIVATED,
+                payload=user_event_payload,
+            )
+        if becomes_active is True:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_REACTIVATED,
+                payload=user_event_payload,
+            )
 
         db_session.commit()
     except IdentityAdminError:
@@ -1075,14 +1448,31 @@ def update_identity_user(
     return
 
 
-def _close_user_sessions(*, db_session: Any, user_uuid: Any) -> None:
+def _utc_now() -> datetime:
     """
-        Close every sign-in session of a user being deactivated, in
-        the caller's transaction. Without this a deactivated user
-        kept every permission until their session expired.
+        The current time, for ``identity_users.updated_at``.
+    """
+    from ccai.pychestrate.core.defaults import utc_now  # noqa: E402
+    rtnval = utc_now()
+    return rtnval
+
+
+def _close_user_sessions(
+        *,
+        db_session: Any,
+        user_uuid: Any,
+        actor_user_id: Optional[str] = None,
+        reason: str = "user_deactivated"
+    ) -> None:
+    """
+        Close every sign-in session of a user, in the caller's
+        transaction. Deactivation calls this so a deactivated user
+        does not keep every permission until their session expires.
 
         :param db_session: The active SQLAlchemy session.
         :param user_uuid: Identity user id.
+        :param actor_user_id: The admin who caused the close.
+        :param reason: Why the sessions were closed.
 
         :returns: None.
     """
@@ -1092,7 +1482,8 @@ def _close_user_sessions(*, db_session: Any, user_uuid: Any) -> None:
     close_sessions_for_user(
         db_session=db_session,
         user_id=user_uuid,
-        reason="user_deactivated",
+        reason=reason,
+        actor_user_id=_actor_text(actor_user_id=actor_user_id),
     )
     return
 
@@ -1142,8 +1533,13 @@ def deactivate_identity_user(
             'User "{}" not found.'.format(user_id)
         )
 
+    was_active = row.status == UserStatus.ACTIVE
+    was_deactivated = row.status == UserStatus.DEACTIVATED
+
     try:
         row.status = UserStatus.DEACTIVATED
+        if was_deactivated is False:
+            row.updated_at = _utc_now()
         db_session.flush()
 
         _upsert_legacy_mirror(
@@ -1161,7 +1557,22 @@ def deactivate_identity_user(
         )
 
         # Deactivation must end access now, not at session expiry.
-        _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
+        _close_user_sessions(
+            db_session=db_session,
+            user_uuid=user_uuid,
+            actor_user_id=actor_user_id,
+        )
+
+        if was_active is True:
+            _publish_entity_event(
+                db_session=db_session,
+                topic=_TOPIC_USER_DEACTIVATED,
+                payload={
+                    "user_id": str(user_uuid),
+                    "login_name": row.login_name,
+                    "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+                },
+            )
 
         db_session.commit()
     except Exception as commit_exc:
@@ -1174,6 +1585,123 @@ def deactivate_identity_user(
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
     return
+
+
+def _has_local_password(*, db_session: Any, user_uuid: Any) -> bool:
+    """
+        Whether the user has a local password (an invited user who
+        never opened their link has none).
+    """
+    from ccai.pychestrate.webservice.security.auth.models import (  # noqa: E402
+        AuthLocalCredentials,
+    )
+    row = (
+        db_session.query(AuthLocalCredentials)
+        .filter(AuthLocalCredentials.user_id == user_uuid)
+        .first()
+    )
+    rtnval = row is not None
+    return rtnval
+
+
+def reactivate_identity_user(
+        *,
+        db_session: Any,
+        user_id: str,
+        actor_user_id: Optional[str]
+    ) -> str:
+    """
+        Reactivate a deactivated identity user and mirror the status
+        into the legacy row. A local account that never set a password
+        (a cancelled invitation) goes back to *invited* -- it still
+        cannot sign in until the user opens a new invite link -- rather
+        than showing as active.
+
+        :param db_session: The active SQLAlchemy session.
+        :param user_id: Target user UUID string.
+        :param actor_user_id: Acting admin UUID.
+
+        :returns: The resulting status text: :data:`USER_STATUS_ACTIVE`
+                  or :data:`USER_STATUS_INVITED`.
+        :raises: AdminNotFoundError, AdminValidationError (the user is
+                 not deactivated)
+    """
+    from ccai.pychestrate.webservice.identity.users.models import (
+        IdentityUser,
+        UserStatus,
+    )
+
+    user_uuid = _parse_user_uuid(user_id=user_id)
+    if user_uuid is None:
+        raise AdminNotFoundError(
+            'User "{}" not found.'.format(user_id)
+        )
+
+    row = (
+        db_session.query(IdentityUser)
+        .filter(IdentityUser.user_id == user_uuid)
+        .first()
+    )
+    if row is None:
+        raise AdminNotFoundError(
+            'User "{}" not found.'.format(user_id)
+        )
+    if row.status != UserStatus.DEACTIVATED:
+        raise AdminValidationError(
+            'User "{}" is not deactivated.'.format(row.login_name)
+        )
+
+    new_status = UserStatus.ACTIVE
+    status_text = USER_STATUS_ACTIVE
+    is_local = (row.provisioning_source or "local") == "local"
+    if is_local is True and _has_local_password(db_session=db_session, user_uuid=user_uuid) is False:
+        new_status = UserStatus.PENDING
+        status_text = USER_STATUS_INVITED
+
+    try:
+        row.status = new_status
+        row.updated_at = _utc_now()
+        db_session.flush()
+
+        _upsert_legacy_mirror(
+            db_session=db_session,
+            user_id=user_uuid,
+            login=row.login_name,
+            email=row.primary_email,
+            display_name=(
+                row.display_name if row.display_name is not None else ""
+            ),
+            firstname=None,
+            lastname=None,
+            status=(
+                _LEGACY_STATUS_ACTIVE if new_status == UserStatus.ACTIVE
+                else _LEGACY_STATUS_INACTIVE
+            ),
+            role_names=None,
+        )
+
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_USER_REACTIVATED,
+            payload={
+                "user_id": str(user_uuid),
+                "login_name": row.login_name,
+                "status": status_text,
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
+        db_session.commit()
+    except Exception as commit_exc:
+        db_session.rollback()
+        err_msg_lines = ["Failed to reactivate the user."]
+        err_msg_lines.append("USER_ID: {}".format(user_id))
+        err_msg_lines.append("CAUSE: {}".format(str(commit_exc)))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise RuntimeError(err_msg) from commit_exc
+
+    _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
+    return status_text
 
 
 # ---------------------------------------------------------------------------
@@ -1518,7 +2046,8 @@ def create_rbac_role(
         db_session: Any,
         name: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> str:
     """
         Create a custom :class:`RbacRole` with the selected catalog
@@ -1529,6 +2058,7 @@ def create_rbac_role(
         :param name: Role name (must be unique).
         :param description: Role description.
         :param permission_keys: Catalog permission keys to grant.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: The new role's UUID as a string.
         :raises: AdminValidationError, AdminDuplicateError
@@ -1583,6 +2113,17 @@ def create_rbac_role(
             db_session.add(grant_row)
         db_session.flush()
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_CREATED,
+            payload={
+                "role_id": str(role_uuid),
+                "role_name": stripped_name,
+                "permission_keys": sorted(set(permission_keys)),
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1604,7 +2145,8 @@ def update_rbac_role(
         db_session: Any,
         role_id: str,
         description: str,
-        permission_keys: List[str]
+        permission_keys: List[str],
+        actor_user_id: Optional[str] = None
     ) -> None:
     """
         Update a custom role's description and replace its
@@ -1617,6 +2159,7 @@ def update_rbac_role(
         :param role_id: Role UUID string.
         :param description: New description.
         :param permission_keys: Full desired ALLOW key set.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: None.
         :raises: AdminNotFoundError, BuiltinRoleProtectedError,
@@ -1665,6 +2208,17 @@ def update_rbac_role(
             db_session.add(grant_row)
         db_session.flush()
 
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_UPDATED,
+            payload={
+                "role_id": str(role.role_id),
+                "role_name": role.role_name,
+                "permission_keys": sorted(set(permission_keys)),
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1681,7 +2235,12 @@ def update_rbac_role(
     return
 
 
-def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
+def delete_rbac_role(
+        *,
+        db_session: Any,
+        role_id: str,
+        actor_user_id: Optional[str] = None
+    ) -> int:
     """
         Delete a custom role, its permission rows, and every binding
         referencing it. Refuses built-in / extension roles and the
@@ -1690,6 +2249,7 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
 
         :param db_session: The active SQLAlchemy session.
         :param role_id: Role UUID string.
+        :param actor_user_id: Acting admin UUID (audit attribution).
 
         :returns: The number of bindings that were removed (the "N
                   users lose this role" count).
@@ -1775,6 +2335,9 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
     )
     removed_binding_count = len(binding_rows)
 
+    deleted_role_id = str(role.role_id)
+    deleted_role_name = role.role_name
+
     try:
         for binding in binding_rows:
             db_session.delete(binding)
@@ -1782,6 +2345,17 @@ def delete_rbac_role(*, db_session: Any, role_id: str) -> int:
             db_session.delete(row)
         db_session.delete(role)
         db_session.flush()
+
+        _publish_entity_event(
+            db_session=db_session,
+            topic=_TOPIC_ROLE_DELETED,
+            payload={
+                "role_id": deleted_role_id,
+                "role_name": deleted_role_name,
+                "removed_binding_count": removed_binding_count,
+                "actor_user_id": _actor_text(actor_user_id=actor_user_id),
+            },
+        )
 
         db_session.commit()
     except Exception as commit_exc:
@@ -1813,7 +2387,13 @@ __all__ = [
     "LastAdminRoleError",
     "SelfLockoutError",
     "count_role_bindings",
+    "InvitedUser",
+    "USER_STATUS_ACTIVE",
+    "USER_STATUS_INACTIVE",
+    "USER_STATUS_INVITED",
+    "reactivate_identity_user",
     "create_identity_user",
+    "create_invited_identity_user",
     "create_rbac_role",
     "deactivate_identity_user",
     "delete_rbac_role",

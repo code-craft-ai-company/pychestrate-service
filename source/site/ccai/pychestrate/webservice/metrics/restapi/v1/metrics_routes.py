@@ -319,8 +319,26 @@ def _parse_iso_datetime(
         )
         parsed = None  # unreachable
 
-    rtnval = parsed
+    rtnval = _as_utc(parsed) if parsed is not None else None
     return rtnval
+
+
+def _as_utc(value: datetime) -> datetime:
+    """
+        Treat a naive datetime as UTC. Sample times round-trip naive
+        from SQLite; comparing them with an aware ``from`` / ``to``
+        bound raised ``TypeError`` (a 500 for every ranged query --
+        the Timeseries view's range presets and every dashboard tile;
+        audit ORC-04).
+
+        :param value: A datetime.
+
+        :returns: A timezone-aware datetime.
+    """
+    if value.tzinfo is None:
+        rtnval = value.replace(tzinfo=timezone.utc)
+        return rtnval
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -374,8 +392,11 @@ def _sample_view_to_point(view: Any) -> Dict[str, Any]:
 
         :returns: JSON-friendly dict.
     """
+    observed_at = view.observed_at
+    if isinstance(observed_at, datetime):
+        observed_at = _as_utc(observed_at)
     rtnval: Dict[str, Any] = {
-        "observed_at": _iso_or_none(view.observed_at),
+        "observed_at": _iso_or_none(observed_at),
         "value": float(view.value),
         "labels": dict(view.labels or {}),
         "label_signature": view.label_signature,
@@ -504,6 +525,8 @@ def handle_query_timeseries(request: Request) -> Response:
         points: List[Dict[str, Any]] = []
         for view in sample_views:
             observed_at = view.observed_at
+            if isinstance(observed_at, datetime):
+                observed_at = _as_utc(observed_at)
             if from_dt is not None and observed_at is not None:
                 if observed_at < from_dt:
                     continue
@@ -541,6 +564,12 @@ def _compute_test_metrics_rollup(
     """
         Compute a read-time roll-up over the supplied
         result-ingest summary rows.
+
+        ``failed_run_rate`` is the share of runs with at least one
+        failed or errored test. It is not a flake rate: nothing
+        here tells a flaky test from a real failure, so the value
+        is named for what it measures (audit ORC-14; it was
+        published as ``flake_run_rate``).
 
         :param summaries: List of :class:`RunResultSummary` rows.
 
@@ -586,9 +615,9 @@ def _compute_test_metrics_rollup(
             float(tests_failed + tests_errored) / float(tests_total)
         )
 
-    flake_run_rate = 0.0
+    failed_run_rate = 0.0
     if run_count > 0:
-        flake_run_rate = float(runs_with_failures) / float(run_count)
+        failed_run_rate = float(runs_with_failures) / float(run_count)
 
     average_duration_seconds = 0.0
     if duration_sample_count > 0:
@@ -606,7 +635,7 @@ def _compute_test_metrics_rollup(
         "pass_rate": round(pass_rate, 6),
         "fail_rate": round(fail_rate, 6),
         "runs_with_failures": runs_with_failures,
-        "flake_run_rate": round(flake_run_rate, 6),
+        "failed_run_rate": round(failed_run_rate, 6),
         "average_run_duration_seconds": round(average_duration_seconds, 3),
     }
     return rtnval
@@ -650,9 +679,10 @@ def handle_read_test_metrics(request: Request) -> Response:
         ``GET /api/v1/projects/{project_id}/test-metrics``
 
         Returns a read-time roll-up of testbase / testplus test
-        results for the project: aggregate pass / fail / flake
-        rates, run counts, and duration trends, plus a recent
-        per-run breakdown.
+        results for the project: aggregate pass / fail rates, the
+        failed-run rate (share of runs with any failed or errored
+        test), run counts, and duration trends, plus a recent
+        per-run breakdown. No flake detection is performed.
 
         The metrics domain does not pre-aggregate test results
         into the timeseries store; this endpoint computes the

@@ -324,6 +324,32 @@ def handle_secret_list(request: Request) -> Response:
             pass
 
 
+#: Form fields whose submitted value is never rendered back into a page.
+_SECRET_VALUE_FIELDS = ("value",)
+
+
+def _form_data_without_secret_value(
+        *, multi_form: Dict[str, List[str]]
+    ) -> Dict[str, List[str]]:
+    """
+        Copy of the submitted form without the secret value, for
+        re-rendering the create form after a failure. The value is
+        the one field that must not come back in the HTML (audit
+        ADM-31: a duplicate name echoed the value into
+        ``value="..."``); the user re-enters it.
+
+        :param multi_form: Parsed form (field -> values).
+
+        :returns: The same mapping minus :data:`_SECRET_VALUE_FIELDS`.
+    """
+    rtnval: Dict[str, List[str]] = {}
+    for field_name, values in multi_form.items():
+        if field_name in _SECRET_VALUE_FIELDS:
+            continue
+        rtnval[field_name] = values
+    return rtnval
+
+
 def handle_secret_create(request: Request) -> Response:
     """
         ``GET /config/secrets/create`` / ``POST /config/secrets/create``.
@@ -348,6 +374,7 @@ def handle_secret_create(request: Request) -> Response:
             )
             context["scopes"] = scopes
             context["form_data"] = None
+            context["value_cleared"] = False
             response = _render(
                 template_name="config/secrets/create.html",
                 context=context,
@@ -360,7 +387,12 @@ def handle_secret_create(request: Request) -> Response:
         # POST
         single_form = _parse_form_or_empty(request=request)
         multi_form = _parse_form_multi(request=request)
-        form_view = MultiFormView(data=multi_form)
+        # A failed create re-renders the form, and the re-render must
+        # never carry the secret value back into the page HTML: drop
+        # it here so the template cannot echo it.
+        form_view = MultiFormView(
+            data=_form_data_without_secret_value(multi_form=multi_form)
+        )
 
         csrf_redirect = auth_guard.enforce_csrf_or_redirect(
             form=single_form,
@@ -420,6 +452,7 @@ def handle_secret_create(request: Request) -> Response:
         )
         context["scopes"] = scopes
         context["form_data"] = form_view
+        context["value_cleared"] = len(value) > 0
         response = _render(
             template_name="config/secrets/create.html",
             context=context,

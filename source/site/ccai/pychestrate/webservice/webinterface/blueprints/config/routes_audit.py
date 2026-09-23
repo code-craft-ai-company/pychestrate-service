@@ -1,30 +1,33 @@
 """
 .. module:: webinterface.blueprints.config.routes_audit
     :platform: Darwin, Linux, Unix, Windows
-    :synopsis: WebWorks-native consumer-facing UI for /config/audit-logs
-               (D4 slice -- audit log viewer).
+    :synopsis: WebWorks-native consumer-facing UI for /admin/audit-logs
+               (the audit log viewer and its export).
 
 .. moduleauthor:: Code Craft AI LLC
 
-The audit-log viewer route served under the config blueprint:
+The audit-log routes served under the config blueprint:
 
-* ``GET /config/audit-logs`` -- paginated audit log viewer with
-                                ``?event_type=`` / ``?username=``
-                                (resolved to a user id
-                                server-side) / ``?user_id=`` /
-                                ``?start_date=`` /
-                                ``?end_date=`` filters. Date
-                                strings are ISO-8601 (the
-                                template's ``<input
-                                type="datetime-local">``
-                                produces this shape).
+* ``GET /admin/audit-logs``        -- the audit log, newest first, with
+                                      action / actor / target / date
+                                      filters and cursor paging.
+* ``GET /admin/audit-logs/export`` -- the filtered log as CSV
+                                      (``?format=csv``, the default) or
+                                      JSON Lines (``?format=jsonl``).
 
-The handler dispatches to :class:`AuditLogger.query_logs` which
-returns an :class:`AuditLogListResponse(entries, total, offset,
-limit)`. The legacy template iterated the response object
-directly; the port hands the template the entries list under the
-existing ``logs`` context name so the template iteration shape
-matches.
+Both read the canonical ``audit_records`` store -- the table the audit
+pipeline actually writes (sign-ins and sign-outs, user / role /
+password / session administration, secrets, RPA, UI-profile changes,
+and every change a signed-in user makes to projects, resources,
+variables and legacy secrets through the data-change bridge). The page
+used to read the legacy ``audit_logs`` table, which nothing wrote to,
+so it was always empty (audit ADM-02).
+
+Query parameters (all optional): ``action`` (an audit kind), ``actor``
+(a username), ``target`` (substring of the target reference, e.g.
+``projects:12`` or ``user:``), ``since`` / ``until`` (ISO date or
+date-time, UTC), ``before`` / ``after`` (sequence-number cursors) and
+``per_page``.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -33,12 +36,15 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+import csv
+import io
+import json
+
+from datetime import datetime, time as _time, timezone
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
-    HTMLResponse,
     RedirectResponse,
     Response,
 )
@@ -60,88 +66,83 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 
 _ROUTE_TABLE = (
     ("config.audit_log_list", "/audit-logs", ("GET",)),
+    ("config.audit_log_export", "/audit-logs/export", ("GET",)),
 )
 
 # Permission each route enforces server-side (see
 # ``routes._require_admin_permission_for``). Audit log.
 _ROUTE_PERMISSIONS = {
     "config.audit_log_list": "system:audit.read",
+    "config.audit_log_export": "system:audit.read",
+}
+
+DEFAULT_PER_PAGE: int = 50
+MAX_PER_PAGE: int = 200
+
+EXPORT_FORMAT_CSV: str = "csv"
+EXPORT_FORMAT_JSONL: str = "jsonl"
+
+EXPORT_COLUMNS: Tuple[str, ...] = (
+    "sequence_number",
+    "written_at",
+    "actor",
+    "actor_user_id",
+    "action",
+    "kind",
+    "target_ref",
+    "summary",
+    "client_address",
+    "record_hash",
+    "payload",
+)
+
+# Readable group names for the action filter, by kind area
+# (``audit.<area>.<verb>``).
+_AREA_LABELS = {
+    "auth": "Sign-in",
+    "session": "Sessions",
+    "user": "Users",
+    "role": "Roles",
+    "data": "Projects, resources, variables and legacy secrets",
+    "secret": "Secrets",
+    "variable": "Variables (API)",
+    "project": "Projects (API)",
+    "rpa": "RPA",
+    "ui_profile": "UI profile",
 }
 
 
 # ---------------------------------------------------------------------------
-# Lazy-import builder seams
+# Lazy-import seams (test-patchable)
 # ---------------------------------------------------------------------------
 
 
-def _build_audit_logger(*, db_session: Any) -> Any:
+def _query_page(*, db_session: Any, audit_query: Any) -> Any:
     """
-        Construct an :class:`AuditLogger`. Lazy-import.
+        One page of audit records. Lazy-import seam.
+
+        :param db_session: Open SQLAlchemy session.
+        :param audit_query: :class:`audit.audit_query.AuditQuery`.
+
+        :returns: :class:`audit.audit_query.AuditPage`.
     """
-    from ccai.pychestrate.core.managers.audit_logger import (  # noqa: E402
-        AuditLogger,
+    from ccai.pychestrate.webservice.audit.audit_query import (  # noqa: E402
+        query_audit_page,
     )
-    rtnval = AuditLogger(db_session)
+    rtnval = query_audit_page(db_session=db_session, audit_query=audit_query)
     return rtnval
 
 
-def _build_audit_log_query(
-        *,
-        event_types: Optional[List[Any]],
-        user_id: Optional[str],
-        start_date: Optional[datetime],
-        end_date: Optional[datetime],
-        offset: int,
-        limit: int
-    ) -> Any:
+def _list_kinds() -> List[Any]:
     """
-        Construct an :class:`AuditLogQuery`. Lazy-import.
+        Every registered audit kind. Lazy-import seam.
+
+        :returns: List of :class:`audit.audit_query.AuditKindView`.
     """
-    from ccai.pychestrate.core.managers.audit_logger import (  # noqa: E402
-        AuditLogQuery,
+    from ccai.pychestrate.webservice.audit.audit_query import (  # noqa: E402
+        list_audit_kinds,
     )
-    rtnval = AuditLogQuery(
-        event_types=event_types,
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date,
-        offset=offset,
-        limit=limit,
-    )
-    return rtnval
-
-
-def _resolve_audit_event_type_or_none(
-        *, event_type_str: Optional[str]
-    ) -> Optional[List[Any]]:
-    """
-        Convert a single event-type string into the
-        ``[AuditEventType]`` list shape ``AuditLogQuery``
-        expects, or ``None`` when the filter is unset / value
-        unknown.
-    """
-    if event_type_str is None or len(event_type_str) == 0:
-        return None
-    try:
-        from ccai.pychestrate.core.orm import AuditEventType  # noqa: E402
-        rtnval = [AuditEventType(event_type_str)]
-        return rtnval
-    except (ValueError, ImportError):
-        return None
-
-
-def _resolve_all_audit_event_types() -> List[str]:
-    """
-        Return every :class:`AuditEventType` value as a string
-        (for the filter <select> dropdown).
-    """
-    try:
-        from ccai.pychestrate.core.orm import AuditEventType  # noqa: E402
-    except ImportError:
-        return []
-    rtnval: List[str] = []
-    for member in AuditEventType:
-        rtnval.append(member.value)
+    rtnval = list_audit_kinds()
     return rtnval
 
 
@@ -165,7 +166,7 @@ def _resolve_user_id_for_username(
 
     user_row = (
         db_session.query(IdentityUser)
-        .filter(IdentityUser.login_name == username)
+        .filter(IdentityUser.login_name == username.strip().lower())
         .first()
     )
     if user_row is None:
@@ -179,63 +180,239 @@ def _resolve_user_id_for_username(
 # ---------------------------------------------------------------------------
 
 
-def _parse_pagination_params(
-        *, request: Request,
-        default_per_page: int = 50
-    ) -> Dict[str, Any]:
-    raw_page = request.query_params.get("page", "1") or "1"
-    try:
-        page = int(raw_page)
-    except (TypeError, ValueError):
-        page = 1
-    if page < 1:
-        page = 1
+def _parse_iso_datetime_or_none(
+        *, raw: Optional[str], end_of_day: bool = False
+    ) -> Optional[datetime]:
+    """
+        Parse an ISO-8601 date (``YYYY-MM-DD``) or date-time
+        (``YYYY-MM-DDTHH:MM``) filter value as UTC. A bare date means
+        the start of that day, or its end when ``end_of_day`` is set
+        (so "until 2026-09-22" includes the whole day). Returns
+        ``None`` on missing or bad input.
 
-    raw_per_page = (
-        request.query_params.get("per_page", str(default_per_page))
-        or str(default_per_page)
-    )
-    try:
-        per_page = int(raw_per_page)
-    except (TypeError, ValueError):
-        per_page = default_per_page
-    if per_page < 1:
-        per_page = default_per_page
+        :param raw: The query-string value.
+        :param end_of_day: Resolve a bare date to its last instant.
 
-    rtnval = {"page": page, "per_page": per_page}
+        :returns: Aware UTC datetime or None.
+    """
+    if raw is None or len(raw.strip()) == 0:
+        return None
+    text = raw.strip()
+    try:
+        if len(text) == 10:
+            day = datetime.fromisoformat(text).date()
+            if end_of_day is True:
+                rtnval = datetime.combine(day, _time.max)
+            else:
+                rtnval = datetime.combine(day, _time.min)
+        else:
+            rtnval = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if rtnval.tzinfo is None:
+        rtnval = rtnval.replace(tzinfo=timezone.utc)
     return rtnval
 
 
-def _parse_iso_datetime_or_none(*, raw: Optional[str]) -> Optional[datetime]:
+def _parse_positive_int_or_none(*, raw: Optional[str]) -> Optional[int]:
     """
-        Parse an ISO-8601 ``YYYY-MM-DDTHH:MM`` (or full ISO)
-        string into a datetime. Returns ``None`` on bad input
-        rather than raising -- matches the legacy handler's
-        try/except ValueError -> pass behavior.
+        Parse a cursor / size parameter.
+
+        :param raw: The query-string value.
+
+        :returns: A positive int or None.
     """
-    if raw is None or len(raw) == 0:
+    if raw is None:
         return None
     try:
-        rtnval = datetime.fromisoformat(raw)
-        return rtnval
+        value = int(str(raw).strip())
     except (TypeError, ValueError):
         return None
+    if value < 1:
+        return None
+    return value
 
 
-def _audit_log_response_to_entries(*, response: Any) -> List[Any]:
+def _read_filters(*, request: Request) -> Dict[str, Any]:
     """
-        Pull the entries list out of an :class:`AuditLogListResponse`,
-        tolerating both the dataclass shape and a bare list (test
-        fakes may return either).
+        The page's filter values from the query string, as typed.
+
+        :param request: Incoming webworks request.
+
+        :returns: Dict of ``action``, ``actor``, ``target``, ``since``,
+                  ``until``, ``per_page``.
     """
-    if response is None:
-        return []
-    entries = getattr(response, "entries", None)
-    if entries is not None:
-        return entries
-    if isinstance(response, list):
-        return response
-    return []
+    params = request.query_params
+
+    def _text(name: str) -> str:
+        value = params.get(name, "") or ""
+        return str(value).strip()
+
+    per_page = _parse_positive_int_or_none(raw=params.get("per_page", None))
+    if per_page is None:
+        per_page = DEFAULT_PER_PAGE
+    if per_page > MAX_PER_PAGE:
+        per_page = MAX_PER_PAGE
+
+    rtnval = {
+        "action": _text("action"),
+        "actor": _text("actor"),
+        "target": _text("target"),
+        "since": _text("since"),
+        "until": _text("until"),
+        "per_page": per_page,
+    }
+    return rtnval
+
+
+def _filter_query_params(*, filters: Dict[str, Any]) -> Dict[str, Any]:
+    """
+        The non-empty filters as query parameters, for building the
+        paging and export links (so they keep the filters).
+
+        :param filters: From :func:`_read_filters`.
+
+        :returns: Dict of parameters (empty values omitted).
+    """
+    rtnval: Dict[str, Any] = {}
+    for name in ("action", "actor", "target", "since", "until"):
+        value = filters.get(name, "")
+        if value is not None and len(str(value)) > 0:
+            rtnval[name] = value
+    if int(filters.get("per_page", DEFAULT_PER_PAGE)) != DEFAULT_PER_PAGE:
+        rtnval["per_page"] = filters["per_page"]
+    return rtnval
+
+
+def _build_audit_query(
+        *,
+        db_session: Any,
+        filters: Dict[str, Any],
+        known_kinds: List[str],
+        before: Optional[int],
+        after: Optional[int]
+    ) -> Tuple[Optional[Any], List[str]]:
+    """
+        Turn the filters into an :class:`AuditQuery`, collecting notices
+        for filters that cannot match anything.
+
+        :param db_session: Open SQLAlchemy session.
+        :param filters: From :func:`_read_filters`.
+        :param known_kinds: Registered audit kinds.
+        :param before: "Older" cursor.
+        :param after: "Newer" cursor.
+
+        :returns: ``(query, notices)``; the query is None when a filter
+                  names something that does not exist (the page then
+                  shows no records and the notice instead of silently
+                  ignoring the filter).
+    """
+    from ccai.pychestrate.webservice.audit.audit_query import (  # noqa: E402
+        AuditQuery,
+    )
+
+    notices: List[str] = []
+    kinds: Tuple[str, ...] = ()
+    if len(filters["action"]) > 0:
+        if filters["action"] in known_kinds:
+            kinds = (filters["action"],)
+        else:
+            notices.append('Unknown action "{}".'.format(filters["action"]))
+
+    actor_user_id: Optional[str] = None
+    if len(filters["actor"]) > 0:
+        actor_user_id = _resolve_user_id_for_username(
+            db_session=db_session, username=filters["actor"]
+        )
+        if actor_user_id is None:
+            notices.append(
+                'No user has the username "{}".'.format(filters["actor"])
+            )
+
+    since = _parse_iso_datetime_or_none(raw=filters["since"])
+    if len(filters["since"]) > 0 and since is None:
+        notices.append('"{}" is not a date.'.format(filters["since"]))
+    until = _parse_iso_datetime_or_none(raw=filters["until"], end_of_day=True)
+    if len(filters["until"]) > 0 and until is None:
+        notices.append('"{}" is not a date.'.format(filters["until"]))
+
+    if len(notices) > 0:
+        return (None, notices)
+
+    target = filters["target"] if len(filters["target"]) > 0 else None
+    audit_query = AuditQuery(
+        kinds=kinds,
+        actor_user_id=actor_user_id,
+        target_contains=target,
+        since=since,
+        until=until,
+        before_sequence=before,
+        after_sequence=after,
+        limit=int(filters["per_page"]),
+    )
+    rtnval = (audit_query, notices)
+    return rtnval
+
+
+def _action_groups(*, kind_views: List[Any]) -> List[Dict[str, Any]]:
+    """
+        The action filter's ``<optgroup>`` sections.
+
+        :param kind_views: Registered kinds.
+
+        :returns: List of ``{"label", "actions": [{"kind", "label",
+                  "description"}]}``.
+    """
+    from ccai.pychestrate.webservice.audit.audit_presenter import (  # noqa: E402
+        action_for_kind,
+    )
+
+    groups: Dict[str, Dict[str, Any]] = {}
+    order: List[str] = []
+    for view in kind_views:
+        area = view.area
+        if area not in groups:
+            groups[area] = {
+                "label": _AREA_LABELS.get(area, area.replace("_", " ").title()),
+                "actions": [],
+            }
+            order.append(area)
+        label = action_for_kind(kind=view.kind)
+        if view.kind == "audit.data.created":
+            label = "Created (project, resource, variable ...)"
+        elif view.kind == "audit.data.updated":
+            label = "Updated (project, resource, variable ...)"
+        elif view.kind == "audit.data.deleted":
+            label = "Deleted (project, resource, variable ...)"
+        groups[area]["actions"].append({
+            "kind": view.kind,
+            "label": label,
+            "description": view.description,
+        })
+    rtnval = [groups[area] for area in order]
+    return rtnval
+
+
+def _describe_records(*, db_session: Any, records: List[Any]) -> List[Any]:
+    """
+        Readable rows for a batch of records (one login-name lookup).
+
+        :param db_session: Open SQLAlchemy session.
+        :param records: :class:`AuditRecord` rows.
+
+        :returns: List of :class:`audit.audit_presenter.AuditRow`.
+    """
+    from ccai.pychestrate.webservice.audit.audit_presenter import (  # noqa: E402
+        describe_audit_record,
+        load_login_names,
+        user_ids_in_records,
+    )
+
+    logins = load_login_names(
+        db_session=db_session, user_ids=user_ids_in_records(records=records)
+    )
+    rtnval = [describe_audit_record(record=record, logins=logins) for record in records]
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +422,11 @@ def _audit_log_response_to_entries(*, response: Any) -> List[Any]:
 
 def handle_audit_log_list(request: Request) -> Response:
     """
-        ``GET /config/audit-logs`` -- paginated audit log viewer.
+        ``GET /admin/audit-logs`` -- the audit log, newest first.
+
+        :param request: Incoming webworks request.
+
+        :returns: HTMLResponse rendering ``config/audit/list.html``.
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -253,70 +434,37 @@ def handle_audit_log_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        params = _parse_pagination_params(request=request)
-        offset = (params["page"] - 1) * params["per_page"]
+        filters = _read_filters(request=request)
+        before = _parse_positive_int_or_none(raw=request.query_params.get("before", None))
+        after = _parse_positive_int_or_none(raw=request.query_params.get("after", None))
 
-        selected_event_type = (
-            request.query_params.get("event_type", None) or None
-        )
-        filter_user_id = (
-            request.query_params.get("user_id", None) or None
-        )
-        filter_username = (
-            request.query_params.get("username", None) or None
-        )
-        start_date_str = (
-            request.query_params.get("start_date", None) or None
-        )
-        end_date_str = (
-            request.query_params.get("end_date", None) or None
+        kind_views = _list_kinds()
+        known_kinds = [view.kind for view in kind_views]
+        audit_query, notices = _build_audit_query(
+            db_session=db_session,
+            filters=filters,
+            known_kinds=known_kinds,
+            before=before,
+            after=after,
         )
 
-        # The filter form takes a username (the table shows
-        # usernames); resolve it to the user id the audit table
-        # stores. A raw ?user_id= keeps working for saved links.
-        username_unmatched = False
-        if filter_username is not None:
-            resolved_user_id = _resolve_user_id_for_username(
-                db_session=db_session, username=filter_username
-            )
-            if resolved_user_id is None:
-                username_unmatched = True
-            else:
-                filter_user_id = resolved_user_id
-
-        start_date = _parse_iso_datetime_or_none(raw=start_date_str)
-        end_date = _parse_iso_datetime_or_none(raw=end_date_str)
-
-        event_types = _resolve_audit_event_type_or_none(
-            event_type_str=selected_event_type
-        )
-
-        if username_unmatched is True:
-            # No user has that login name -- render an empty page
-            # (with a notice) rather than silently showing
-            # unfiltered results.
-            entries = []
-            total = 0
-        else:
-            query = _build_audit_log_query(
-                event_types=event_types,
-                user_id=filter_user_id,
-                start_date=start_date,
-                end_date=end_date,
-                offset=offset,
-                limit=params["per_page"],
-            )
-
-            audit_logger = _build_audit_logger(db_session=db_session)
-            result = audit_logger.query_logs(query)
-            entries = _audit_log_response_to_entries(response=result)
-            total = getattr(result, "total", None)
-            if total is None:
-                total = len(entries)
-
-        total_pages = (total + params["per_page"] - 1) // params["per_page"]
-        all_event_types = _resolve_all_audit_event_types()
+        rows: List[Any] = []
+        total = 0
+        older_url: Optional[str] = None
+        newer_url: Optional[str] = None
+        link_params = _filter_query_params(filters=filters)
+        if audit_query is not None:
+            page = _query_page(db_session=db_session, audit_query=audit_query)
+            rows = _describe_records(db_session=db_session, records=page.records)
+            total = page.total
+            if page.has_older is True and page.oldest_sequence is not None:
+                older_url = _url_for_module.url_for(
+                    "config.audit_log_list", before=page.oldest_sequence, **link_params
+                )
+            if page.has_newer is True and page.newest_sequence is not None:
+                newer_url = _url_for_module.url_for(
+                    "config.audit_log_list", after=page.newest_sequence, **link_params
+                )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -325,18 +473,23 @@ def handle_audit_log_list(request: Request) -> Response:
             flashes=flashes,
             csrf_token=auth.csrf_token,
         )
-        context["logs"] = entries
-        context["all_event_types"] = all_event_types
-        context["selected_event_type"] = selected_event_type
-        context["filter_user_id"] = filter_user_id
-        context["filter_username"] = filter_username
-        context["username_unmatched"] = username_unmatched
-        context["start_date"] = start_date_str
-        context["end_date"] = end_date_str
-        context["page"] = params["page"]
-        context["per_page"] = params["per_page"]
-        context["total"] = total
-        context["total_pages"] = total_pages
+        context["audit_rows"] = rows
+        context["audit_total"] = total
+        context["audit_filters"] = filters
+        context["audit_notices"] = notices
+        context["action_groups"] = _action_groups(kind_views=kind_views)
+        context["older_url"] = older_url
+        context["newer_url"] = newer_url
+        context["newest_url"] = (
+            _url_for_module.url_for("config.audit_log_list", **link_params)
+            if (before is not None or after is not None) else None
+        )
+        context["export_csv_url"] = _url_for_module.url_for(
+            "config.audit_log_export", format=EXPORT_FORMAT_CSV, **link_params
+        )
+        context["export_jsonl_url"] = _url_for_module.url_for(
+            "config.audit_log_export", format=EXPORT_FORMAT_JSONL, **link_params
+        )
 
         response = _render(
             template_name="config/audit/list.html",
@@ -353,6 +506,160 @@ def handle_audit_log_list(request: Request) -> Response:
             pass
 
 
+def _export_row_values(*, row: Any) -> Dict[str, Any]:
+    """
+        One exported record, keyed by :data:`EXPORT_COLUMNS`.
+
+        :param row: :class:`audit.audit_presenter.AuditRow`.
+
+        :returns: Dict of column values.
+    """
+    written_at = ""
+    if row.written_at is not None:
+        written = row.written_at
+        if written.tzinfo is None:
+            written = written.replace(tzinfo=timezone.utc)
+        written_at = written.astimezone(timezone.utc).isoformat()
+    rtnval = {
+        "sequence_number": row.sequence_number,
+        "written_at": written_at,
+        "actor": row.actor_label,
+        "actor_user_id": row.actor_user_id or "",
+        "action": row.action,
+        "kind": row.kind,
+        "target_ref": row.target_ref or "",
+        "summary": row.summary,
+        "client_address": row.client_address or "",
+        "record_hash": row.record_hash_hex,
+        "payload": row.payload,
+    }
+    return rtnval
+
+
+def render_audit_export(*, rows: List[Any], export_format: str) -> bytes:
+    """
+        Serialize readable rows as CSV (payload as a JSON column) or
+        JSON Lines.
+
+        :param rows: :class:`audit.audit_presenter.AuditRow` list.
+        :param export_format: :data:`EXPORT_FORMAT_CSV` or
+                              :data:`EXPORT_FORMAT_JSONL`.
+
+        :returns: The file body.
+    """
+    if export_format == EXPORT_FORMAT_JSONL:
+        lines = []
+        for row in rows:
+            lines.append(json.dumps(
+                _export_row_values(row=row), sort_keys=False, default=str
+            ))
+        text = "\n".join(lines)
+        if len(lines) > 0:
+            text = text + "\n"
+        rtnval = text.encode("utf-8")
+        return rtnval
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(list(EXPORT_COLUMNS))
+    for row in rows:
+        values = _export_row_values(row=row)
+        writer.writerow([
+            json.dumps(values[column], sort_keys=True, default=str)
+            if column == "payload" else values[column]
+            for column in EXPORT_COLUMNS
+        ])
+    rtnval = buffer.getvalue().encode("utf-8")
+    return rtnval
+
+
+def handle_audit_log_export(request: Request) -> Response:
+    """
+        ``GET /admin/audit-logs/export`` -- the filtered audit log as a
+        CSV or JSON Lines attachment, newest first (at most
+        :data:`audit.audit_query.MAX_EXPORT_RECORDS` records).
+
+        :param request: Incoming webworks request.
+
+        :returns: The attachment, or a redirect back to the page with a
+                  notice when a filter cannot match.
+    """
+    from ccai.pychestrate.webservice.audit.audit_query import (  # noqa: E402
+        MAX_EXPORT_RECORDS,
+        iter_audit_records,
+    )
+
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        filters = _read_filters(request=request)
+        export_format = str(request.query_params.get("format", EXPORT_FORMAT_CSV) or EXPORT_FORMAT_CSV).lower()
+        if export_format not in (EXPORT_FORMAT_CSV, EXPORT_FORMAT_JSONL):
+            export_format = EXPORT_FORMAT_CSV
+
+        kind_views = _list_kinds()
+        audit_query, notices = _build_audit_query(
+            db_session=db_session,
+            filters=filters,
+            known_kinds=[view.kind for view in kind_views],
+            before=None,
+            after=None,
+        )
+        if audit_query is None:
+            flash.add_flash(
+                session=auth.session,
+                message="Nothing exported: {}".format(" ".join(notices)),
+                category=flash.CATEGORY_WARNING,
+            )
+            response = RedirectResponse(
+                url=_url_for_module.url_for(
+                    "config.audit_log_list", **_filter_query_params(filters=filters)
+                ),
+                status_code=303,
+            )
+            _attach_session_to_response(response=response, session=auth.session)
+            return response
+
+        rows: List[Any] = []
+        chunk: List[Any] = []
+        for record in iter_audit_records(
+                db_session=db_session,
+                audit_query=audit_query,
+                max_records=MAX_EXPORT_RECORDS):
+            chunk.append(record)
+            if len(chunk) >= 500:
+                rows.extend(_describe_records(db_session=db_session, records=chunk))
+                chunk = []
+        if len(chunk) > 0:
+            rows.extend(_describe_records(db_session=db_session, records=chunk))
+
+        body = render_audit_export(rows=rows, export_format=export_format)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        if export_format == EXPORT_FORMAT_JSONL:
+            content_type = "application/x-ndjson; charset=utf-8"
+        else:
+            content_type = "text/csv; charset=utf-8"
+        headers = {
+            "Content-Type": content_type,
+            "Content-Disposition": 'attachment; filename="pychestrate-audit-{}.{}"'.format(
+                stamp, export_format
+            ),
+            "Cache-Control": "no-store",
+        }
+        if len(rows) >= MAX_EXPORT_RECORDS:
+            headers["X-Pychestrate-Export-Truncated"] = "true"
+        rtnval = Response(status_code=200, headers=headers, body=body)
+        return rtnval
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Registration
 # ---------------------------------------------------------------------------
@@ -360,13 +667,14 @@ def handle_audit_log_list(request: Request) -> Response:
 
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.audit_log_list": handle_audit_log_list,
+    "config.audit_log_export": handle_audit_log_export,
 }
 
 
 def register_audit_routes(*, app: Any) -> None:
     """
-        Attach the audit-log viewer route to a webworks app and
-        register its endpoint name with the url_for shim.
+        Attach the audit-log routes to a webworks app and register
+        their endpoint names with the url_for shim.
     """
     for endpoint_name, relative_path, methods in _ROUTE_TABLE:
         full_path = CONFIG_PATH + relative_path
@@ -383,6 +691,9 @@ def register_audit_routes(*, app: Any) -> None:
 
 
 __all__ = [
+    "EXPORT_COLUMNS",
     "register_audit_routes",
     "handle_audit_log_list",
+    "handle_audit_log_export",
+    "render_audit_export",
 ]

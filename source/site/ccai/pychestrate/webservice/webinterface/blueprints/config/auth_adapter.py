@@ -154,8 +154,10 @@ class SessionInfo:
         :param created_at: Session open time.
         :param last_activity: Most-recent observed activity.
         :param expires_at: Session expiry.
-        :param client_ip: IP-fingerprint hash (not raw IP).
-        :param user_agent: User-Agent fingerprint hash.
+        :param client_ip: Always "" from :meth:`validate_token`; the
+                          sessions page reads the recorded client
+                          address itself.
+        :param user_agent: Always "" from :meth:`validate_token`.
     """
     session_id: str
     token: str
@@ -199,6 +201,94 @@ def _fingerprint_value(*, raw: str) -> str:
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     rtnval = digest[:64]
     return rtnval
+
+
+class PasswordChangeRequiredError(AuthenticationError):
+    """
+        Raised by :meth:`ConsumerUISecurityAdapter.authenticate` when the
+        credentials are right but an administrator set a temporary
+        password that must be replaced first: no session is opened
+        until the user chooses a new password (audit ADM-04). Callers
+        unaware of it treat it as an ordinary failed sign-in.
+
+        :param user_id: The account.
+        :param login_name: Its login name.
+    """
+
+    def __init__(self, *, user_id: str, login_name: str) -> None:
+        super().__init__("Password change required")
+        self.user_id: str = user_id
+        self.login_name: str = login_name
+        return
+
+
+_MAX_REJECTED_LOGIN_LENGTH: int = 128
+
+_REJECTION_REASONS = (
+    ("Too many recent failures", "rate_limited"),
+    ("Account is not active", "account_inactive"),
+    ("Missing", "missing_credentials"),
+)
+
+
+def _rejection_reason(*, message: str) -> str:
+    """
+        Classify a sign-in failure for the audit log.
+
+        :param message: The failure message from ``local_flow``.
+
+        :returns: ``rate_limited``, ``account_inactive``,
+                  ``missing_credentials`` or ``invalid_credentials``.
+    """
+    for prefix, reason in _REJECTION_REASONS:
+        if str(message).startswith(prefix) is True:
+            return reason
+    return "invalid_credentials"
+
+
+def publish_login_rejected(
+        *,
+        login_name: str,
+        message: str,
+        client_address: Optional[str]
+    ) -> None:
+    """
+        Publish ``entity.auth.login.rejected`` so the audit log records
+        the failed sign-in. Published directly on the bus (not the
+        outbox): a failed sign-in commits nothing, and the audit
+        subscriber writes in its own session. Never raises.
+
+        :param login_name: The login name as typed (truncated).
+        :param message: The failure message from ``local_flow``.
+        :param client_address: The client's address, when known.
+
+        :returns: None.
+    """
+    try:
+        from ccai.pychestrate.core.defaults import new_uuid, utc_now  # noqa: E402
+        from ccai.pychestrate.webservice.messaging.event_bus import (  # noqa: E402
+            EntityEvent,
+            publish,
+        )
+        from ccai.pychestrate.webservice.security.auth.events import (  # noqa: E402
+            AuthEventTopics,
+        )
+
+        typed = str(login_name if login_name is not None else "").strip()
+        payload = {
+            "login_name": typed[:_MAX_REJECTED_LOGIN_LENGTH],
+            "reason": _rejection_reason(message=message),
+            "client_address": client_address if client_address else None,
+            "rejected_at": utc_now().isoformat(),
+        }
+        publish(event=EntityEvent(
+            topic=AuthEventTopics.LOGIN_REJECTED,
+            payload=payload,
+            source_event_id=new_uuid(),
+        ))
+    except Exception:  # noqa: BLE001 -- auditing must not break sign-in
+        pass
+    return
 
 
 class ConsumerUISecurityAdapter:
@@ -246,6 +336,11 @@ class ConsumerUISecurityAdapter:
                 db_session=self._db_session,
             )
         except ModernAuthenticationError as exc:
+            publish_login_rejected(
+                login_name=request.username,
+                message=str(exc),
+                client_address=request.client_ip,
+            )
             raise AuthenticationError(str(exc)) from None
         except Exception as exc:
             # Backoff state-machine raises ``AuthenticationError``
@@ -253,6 +348,11 @@ class ConsumerUISecurityAdapter:
             # adapter's exception type so handler ``except``
             # blocks don't have to know about modern exception
             # classes.
+            publish_login_rejected(
+                login_name=request.username,
+                message=str(exc),
+                client_address=request.client_ip,
+            )
             raise AuthenticationError(str(exc)) from None
 
         user_row = (
@@ -263,11 +363,24 @@ class ConsumerUISecurityAdapter:
         if user_row is None:
             raise AuthenticationError("Invalid credentials")
 
+        # A temporary password set by an administrator must be
+        # replaced before the account gets a session.
+        from ccai.pychestrate.webservice.security.auth import (  # noqa: E402
+            password_lifecycle,
+        )
+        if password_lifecycle.password_change_required(
+                db_session=self._db_session, user_id=str(user_row.user_id)) is True:
+            raise PasswordChangeRequiredError(
+                user_id=str(user_row.user_id), login_name=user_row.login_name
+            )
+
         fingerprint = RequestFingerprint(
             ip_fingerprint=_fingerprint_value(raw=request.client_ip),
             user_agent_fingerprint=_fingerprint_value(
                 raw=request.user_agent
             ),
+            client_address=request.client_ip or None,
+            user_agent=request.user_agent or None,
         )
 
         session = open_session(
@@ -367,8 +480,10 @@ class ConsumerUISecurityAdapter:
             created_at=session_row.opened_at,
             last_activity=session_row.last_seen_at,
             expires_at=session_row.expires_at,
-            client_ip=session_row.ip_fingerprint or "",
-            user_agent=session_row.user_agent_fingerprint or "",
+            # Not loaded here: this runs on every request and no caller
+            # reads them (the sessions page reads auth_session_clients).
+            client_ip="",
+            user_agent="",
         )
         return rtnval
 
@@ -488,4 +603,6 @@ __all__ = [
     "SessionInfo",
     "AuthenticationError",
     "ConsumerUISecurityAdapter",
+    "PasswordChangeRequiredError",
+    "publish_login_rejected",
 ]

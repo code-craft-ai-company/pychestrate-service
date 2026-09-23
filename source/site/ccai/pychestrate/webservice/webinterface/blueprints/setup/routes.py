@@ -84,6 +84,11 @@ from ccai.pychestrate.webservice.identity.setup.setup_service import (
     mark_setup_complete_in_process_cache,
 )
 from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    MIN_PASSWORD_LENGTH as POLICY_MIN_PASSWORD_LENGTH,
+    check_password_against_policy,
+    password_policy_template_context,
+)
 from ccai.pychestrate.webservice.webinterface.foundation import (
     templating,
 )
@@ -109,7 +114,7 @@ LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 EMAIL_PATTERN = re.compile(
     r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 )
-MIN_PASSWORD_LENGTH: int = 12
+MIN_PASSWORD_LENGTH: int = POLICY_MIN_PASSWORD_LENGTH
 
 
 # Endpoint registrations -- (endpoint_name, relative_path, methods).
@@ -515,10 +520,14 @@ def _collect_admin_field_errors(
         rtnval["email"] = "Email address looks invalid."
     if len(display_name) == 0:
         rtnval["display_name"] = "Display name is required."
-    if len(password) < MIN_PASSWORD_LENGTH:
-        rtnval["password"] = "Password must be at least {} characters.".format(
-            MIN_PASSWORD_LENGTH
-        )
+    # The first administrator gets the same password rules as every
+    # other account (security.auth.password_policy); every rule the
+    # password breaks is reported under the password field.
+    password_problems = check_password_against_policy(
+        password=password, login_name=login_name, email=email
+    )
+    if len(password_problems) > 0:
+        rtnval["password"] = " ".join(password_problems)
     if password != password_confirm:
         rtnval["password_confirm"] = "Password and confirmation do not match."
     return rtnval
@@ -676,6 +685,7 @@ def handle_admin_form(request: Request) -> Response:
         "field_errors": {},
         "first_invalid": None,
     }
+    context.update(password_policy_template_context())
     rtnval = templating.render_template_response(
         template_name="setup/admin.html",
         context=context,
@@ -752,6 +762,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                 "field_errors": field_errors,
                 "first_invalid": next(iter(field_errors)),
             }
+            context.update(password_policy_template_context())
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
                 context=context,
@@ -786,6 +797,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                 "field_errors": {},
                 "first_invalid": "login_name",
             }
+            context.update(password_policy_template_context())
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
                 context=context,

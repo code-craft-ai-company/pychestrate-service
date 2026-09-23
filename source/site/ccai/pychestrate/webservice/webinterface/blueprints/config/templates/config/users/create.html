@@ -27,14 +27,33 @@
                    value="{{ form_data.email if form_data else '' }}">
         </div>
         
-        <div class="form-group">
+        <fieldset class="form-group">
+            <legend>Password *</legend>
+            <label class="regular">
+                <input type="radio" name="password_setup" value="password"
+                       {% if not form_data or form_data.password_setup != 'invite' %}checked{% endif %}>
+                Set a password now
+            </label>
+            <label class="regular">
+                <input type="radio" name="password_setup" value="invite"
+                       {% if form_data and form_data.password_setup == 'invite' %}checked{% endif %}>
+                Create an invite link &mdash; the user chooses their own password
+            </label>
+            <p class="form-text">Pychestrate does not send email: you copy the invite link and send it to the user.</p>
+        </fieldset>
+
+        <div class="form-group" data-role="password-fields">
             <label for="password">Password *</label>
             <div class="actions-row">
                 <input type="password" id="password" name="password" class="form-control" required
-                       minlength="12" autocomplete="new-password">
+                       minlength="{{ password_min_length }}" maxlength="{{ password_max_length }}"
+                       pattern="{{ password_pattern }}" title="{{ password_title }}"
+                       aria-describedby="password-rules" autocomplete="new-password">
                 <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
             </div>
-            <p class="form-text">Minimum 12 characters with uppercase, lowercase, digit, and special character</p>
+            {% with password_input_id="password" %}
+                {% include "config/_password_rules.html" %}
+            {% endwith %}
         </div>
         
         <div class="form-group">
@@ -79,4 +98,36 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script nonce="{{ csp_nonce() }}">
+    // Invite mode needs no password: hide the field and drop its
+    // browser-side requirements (the server checks either way).
+    (function () {
+        var fields = document.querySelector("[data-role='password-fields']");
+        var input = document.getElementById("password");
+        if (fields === null || input === null) {
+            return;
+        }
+        var pattern = input.getAttribute("pattern");
+        function update() {
+            var chosen = document.querySelector("input[name='password_setup']:checked");
+            var invite = chosen !== null && chosen.value === "invite";
+            fields.hidden = invite;
+            input.required = !invite;
+            if (invite) {
+                input.removeAttribute("pattern");
+                input.value = "";
+            } else if (pattern !== null) {
+                input.setAttribute("pattern", pattern);
+            }
+        }
+        var radios = document.querySelectorAll("input[name='password_setup']");
+        for (var index = 0; index < radios.length; index++) {
+            radios[index].addEventListener("change", update);
+        }
+        update();
+    })();
+</script>
 {% endblock %}

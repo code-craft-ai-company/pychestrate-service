@@ -43,8 +43,12 @@ sibling admin blueprints (variables / resources) use to call their
 managers, rather than proxying the REST surface from the browser.
 
 Server-side ``system:resources.manage`` permission gating is the
-security boundary; the sidebar entry registered in
-``pyc-admin-bundle/index.ts`` gates on the same key for UX only.
+security boundary: every route is registered through
+:func:`routes._require_admin_permission_for`, so a viewer without the
+permission gets the shared 403 page naming it (it used to redirect to
+the dashboard with a flash -- audit ADM-21). The sidebar entry
+registered in ``pyc-admin-bundle/index.ts`` gates on the same key for
+UX only.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -55,7 +59,8 @@ __version__ = "1.0.0"
 
 import logging
 
-from typing import Any, Callable, Dict
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import Response
@@ -72,7 +77,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
-    _require_permission_or_redirect,
+    _require_admin_permission_for,
     _resolve_authenticated_request,
     _wrap_admin_handler_in_shell,
 )
@@ -104,10 +109,47 @@ _ROUTE_TABLE = (
 # it so a single operator role unlocks both surfaces.
 _ADMIN_PERMISSION = "system:resources.manage"
 
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``).
+_ROUTE_PERMISSIONS = {
+    "config.enrollment_token_list": _ADMIN_PERMISSION,
+    "config.enrollment_token_mint": _ADMIN_PERMISSION,
+    "config.enrollment_token_revoke": _ADMIN_PERMISSION,
+}
+
 
 # Default token lifetime offered by the mint form when the operator
 # leaves the TTL field blank: 24 hours.
 _DEFAULT_TTL_SECONDS = 86400
+
+# ``clients_enrollment_tokens.pod_name`` is VARCHAR(128).
+_MAX_POD_LABEL_LENGTH = 128
+
+PROJECT_SOURCE_UI: str = "ui"
+PROJECT_SOURCE_API: str = "api"
+
+
+@dataclass(frozen=True)
+class ProjectChoice:
+    """
+        One entry of the mint form's project picker.
+
+        The token's scope is a project UUID. Projects created in the
+        web UI have integer ids; the run pipeline maps each onto a
+        stable UUID (``rpa.packet.canonical_project_uuid``), so that
+        UUID is what a token for a web-UI project commits to. Projects
+        created through the REST API / CLI already have a UUID.
+
+        :param value: The project UUID the form submits.
+        :param label: What the admin sees (project name).
+        :param detail: Secondary text (slug or web-UI id).
+        :param source: :data:`PROJECT_SOURCE_UI` or
+                       :data:`PROJECT_SOURCE_API`.
+    """
+    value: str
+    label: str
+    detail: str
+    source: str
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +171,82 @@ def _service_list_tokens(*, db_session: Any) -> Any:
         list_enrollment_tokens,
     )
     rtnval = list_enrollment_tokens(db_session=db_session)
+    return rtnval
+
+
+def _list_project_choices(*, db_session: Any) -> List[ProjectChoice]:
+    """
+        Every project a token can be scoped to: the web UI's projects
+        (under their canonical run-pipeline UUID) and the active
+        projects of the REST project registry (under their own UUID).
+        Test-patchable seam.
+
+        :param db_session: Open SQLAlchemy session.
+
+        :returns: Choices, web-UI projects first, each group sorted by
+                  name.
+    """
+    from sqlalchemy.exc import OperationalError  # noqa: E402
+
+    from ccai.pychestrate.core.orm import Project as UiProject  # noqa: E402
+    from ccai.pychestrate.webservice.orchestration.rpa.packet import (  # noqa: E402
+        canonical_project_uuid,
+    )
+    from ccai.pychestrate.webservice.projects.models import (  # noqa: E402
+        Project as ApiProject,
+        ProjectState,
+    )
+
+    rtnval: List[ProjectChoice] = []
+
+    savepoint = db_session.begin_nested()
+    try:
+        ui_rows = (
+            db_session.query(UiProject.id, UiProject.name)
+            .order_by(UiProject.name.asc())
+            .all()
+        )
+        savepoint.commit()
+    except OperationalError:
+        # A development database created without the legacy tables.
+        savepoint.rollback()
+        ui_rows = []
+    for project_id, project_name in ui_rows:
+        rtnval.append(ProjectChoice(
+            value=canonical_project_uuid(str(project_id)),
+            label=str(project_name),
+            detail="web UI project #{}".format(project_id),
+            source=PROJECT_SOURCE_UI,
+        ))
+
+    savepoint = db_session.begin_nested()
+    try:
+        api_rows = (
+            db_session.query(ApiProject)
+            .filter(ApiProject.state == ProjectState.ACTIVE)
+            .order_by(ApiProject.display_name.asc(), ApiProject.slug.asc())
+            .all()
+        )
+        savepoint.commit()
+    except OperationalError:
+        # The project registry's table is missing or behind the models
+        # (a database that has not run the latest migration): offer the
+        # web-UI projects rather than failing the whole page.
+        savepoint.rollback()
+        _module_logger.warning(
+            "pychestrate.ui.enrollment.project_registry_unavailable",
+            exc_info=True,
+        )
+        api_rows = []
+    for row in api_rows:
+        display_name = row.display_name if row.display_name is not None else ""
+        label = display_name if len(display_name.strip()) > 0 else row.slug
+        rtnval.append(ProjectChoice(
+            value=str(row.project_id),
+            label=label,
+            detail=row.slug,
+            source=PROJECT_SOURCE_API,
+        ))
     return rtnval
 
 
@@ -295,6 +413,178 @@ def _describe_enrollment_failure(*, exc: Exception, action: str) -> str:
     return rtnval
 
 
+def _canonical_uuid_text(*, raw: Any) -> Optional[str]:
+    """
+        Canonical lower-case text of a submitted UUID, or None when
+        the value is not a UUID.
+
+        :param raw: Submitted value.
+
+        :returns: Canonical UUID string or None.
+    """
+    import uuid as _uuid  # noqa: E402
+
+    if raw is None:
+        return None
+    try:
+        rtnval = str(_uuid.UUID(str(raw).strip()))
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return rtnval
+
+
+def _empty_mint_form() -> Dict[str, Any]:
+    """
+        Initial values of the mint form.
+
+        :returns: Dict with ``project_id``, ``pod_name``,
+                  ``ttl_seconds`` and ``one_shot``.
+    """
+    rtnval = {
+        "project_id": "",
+        "pod_name": "",
+        "ttl_seconds": "",
+        "one_shot": True,
+    }
+    return rtnval
+
+
+def _validate_mint_form(
+        *,
+        mint_form: Dict[str, Any],
+        choices: List[ProjectChoice]
+    ) -> Dict[str, str]:
+    """
+        Field-level validation of the mint form. The project must be
+        one the picker offered (so a made-up UUID or a web-UI integer
+        id can no longer reach the token table), and the pod label
+        must be present and fit the column.
+
+        :param mint_form: Submitted values (see :func:`_empty_mint_form`).
+        :param choices: The picker's choices.
+
+        :returns: ``{field: message}``; empty when the form is valid.
+    """
+    errors: Dict[str, str] = {}
+
+    submitted_project = str(mint_form.get("project_id", "")).strip()
+    known_values = set(choice.value for choice in choices)
+    if len(submitted_project) == 0:
+        errors["project_id"] = "Choose the project the client will serve."
+    else:
+        canonical = _canonical_uuid_text(raw=submitted_project)
+        if canonical is None or canonical not in known_values:
+            errors["project_id"] = (
+                "That project does not exist. Choose one from the list."
+            )
+
+    pod_label = str(mint_form.get("pod_name", "")).strip()
+    if len(pod_label) == 0:
+        errors["pod_name"] = "Enter the pod label the client will enroll as."
+    elif len(pod_label) > _MAX_POD_LABEL_LENGTH:
+        errors["pod_name"] = "The pod label must be {} characters or fewer.".format(
+            _MAX_POD_LABEL_LENGTH
+        )
+
+    rtnval = errors
+    return rtnval
+
+
+def _project_choice_groups(*, choices: List[ProjectChoice]) -> List[Dict[str, Any]]:
+    """
+        Split the picker's choices into the ``<optgroup>`` sections the
+        template renders: web-UI projects, then REST-registry projects
+        (shown with their slug). Empty sections are omitted.
+
+        :param choices: The picker's choices.
+
+        :returns: List of ``{"label", "choices", "show_detail"}`` dicts.
+    """
+    ui_choices = [c for c in choices if c.source == PROJECT_SOURCE_UI]
+    api_choices = [c for c in choices if c.source == PROJECT_SOURCE_API]
+    rtnval: List[Dict[str, Any]] = []
+    if len(ui_choices) > 0:
+        rtnval.append({
+            "label": "Projects",
+            "choices": ui_choices,
+            "show_detail": False,
+        })
+    if len(api_choices) > 0:
+        rtnval.append({
+            "label": "Projects created through the API or CLI",
+            "choices": api_choices,
+            "show_detail": True,
+        })
+    return rtnval
+
+
+def _project_labels_by_value(*, choices: List[ProjectChoice]) -> Dict[str, str]:
+    """
+        Map each choice's UUID to its display label, for showing
+        project names (not raw UUIDs) in the token table.
+
+        :param choices: The picker's choices.
+
+        :returns: ``{uuid: label}``.
+    """
+    rtnval: Dict[str, str] = {}
+    for choice in choices:
+        rtnval[choice.value] = choice.label
+    return rtnval
+
+
+def _render_token_page(
+        *,
+        auth: Any,
+        db_session: Any,
+        status_code: int = 200,
+        minted: Optional[Dict[str, Any]] = None,
+        errors: Optional[Dict[str, str]] = None,
+        mint_form: Optional[Dict[str, Any]] = None
+    ) -> Response:
+    """
+        Render the token page: mint form (with the project picker and
+        any field errors / kept values), the one-time result panel
+        after a mint, and the token list.
+
+        :param auth: Authenticated request resolution.
+        :param db_session: Open SQLAlchemy session.
+        :param status_code: HTTP status of the page.
+        :param minted: One-time result panel values, or None.
+        :param errors: ``{field: message}`` for the mint form.
+        :param mint_form: Values to pre-fill the mint form with.
+
+        :returns: The rendered page.
+    """
+    tokens = _service_list_tokens(db_session=db_session)
+    choices = _list_project_choices(db_session=db_session)
+
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="config.enrollment_token_list",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["tokens"] = tokens
+    context["default_ttl_seconds"] = _DEFAULT_TTL_SECONDS
+    context["project_choices"] = choices
+    context["project_choice_groups"] = _project_choice_groups(choices=choices)
+    context["project_labels"] = _project_labels_by_value(choices=choices)
+    context["errors"] = errors if errors is not None else {}
+    context["mint_form"] = mint_form if mint_form is not None else _empty_mint_form()
+    if minted is not None:
+        context["minted"] = minted
+
+    response = _render(
+        template_name="config/enrollment/list.html",
+        context=context,
+        status_code=status_code,
+    )
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -318,35 +608,7 @@ def handle_enrollment_token_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
-        tokens = _service_list_tokens(db_session=db_session)
-
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="config.enrollment_token_list",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
-        )
-        context["tokens"] = tokens
-        context["default_ttl_seconds"] = _DEFAULT_TTL_SECONDS
-
-        response = _render(
-            template_name="config/enrollment/list.html",
-            context=context,
-        )
-        _attach_session_to_response(
-            response=response, session=auth.session
-        )
+        response = _render_token_page(auth=auth, db_session=db_session)
         return response
     finally:
         try:
@@ -376,16 +638,6 @@ def handle_enrollment_token_mint(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
         single_form = _parse_form_or_empty(request=request)
 
         csrf_redirect = auth_guard.enforce_csrf_or_redirect(
@@ -403,52 +655,69 @@ def handle_enrollment_token_mint(request: Request) -> Response:
 
         project_id = str(single_form.get("project_id", "")).strip()
         pod_name = str(single_form.get("pod_name", "")).strip()
-        ttl_seconds = _coerce_ttl_seconds(
-            raw=single_form.get("ttl_seconds", None)
-        )
+        ttl_raw = single_form.get("ttl_seconds", None)
+        ttl_seconds = _coerce_ttl_seconds(raw=ttl_raw)
         one_shot_raw = str(single_form.get("one_shot", "")).strip()
         one_shot = one_shot_raw in ("1", "true", "on", "yes")
 
-        if len(project_id) == 0 or len(pod_name) == 0:
-            response = _redirect_with_flash(
-                session=auth.session,
-                url=_url_for_module.url_for(
-                    "config.enrollment_token_list"
-                ),
-                message="Project ID and pod name are both required.",
-                category=flash.CATEGORY_ERROR,
+        # What the admin typed survives every failure below: the page
+        # re-renders with these values and the field-level errors.
+        mint_form = {
+            "project_id": project_id,
+            "pod_name": pod_name,
+            "ttl_seconds": str(ttl_raw).strip() if ttl_raw is not None else "",
+            "one_shot": one_shot,
+        }
+
+        choices = _list_project_choices(db_session=db_session)
+        errors = _validate_mint_form(mint_form=mint_form, choices=choices)
+        if len(errors) > 0:
+            response = _render_token_page(
+                auth=auth,
+                db_session=db_session,
+                status_code=400,
+                errors=errors,
+                mint_form=mint_form,
             )
             return response
 
         try:
             issued = _service_issue_token(
                 db_session=db_session,
-                project_id=project_id,
+                project_id=_canonical_uuid_text(raw=project_id),
                 pod_name=pod_name,
                 ttl_seconds=ttl_seconds,
                 one_shot=one_shot,
                 issued_by=auth.user_id,
             )
         except ValueError as exc:
-            response = _redirect_with_flash(
+            db_session.rollback()
+            flash.add_flash(
                 session=auth.session,
-                url=_url_for_module.url_for(
-                    "config.enrollment_token_list"
-                ),
                 message="Invalid token request: {}".format(str(exc)),
                 category=flash.CATEGORY_ERROR,
             )
+            response = _render_token_page(
+                auth=auth,
+                db_session=db_session,
+                status_code=400,
+                mint_form=mint_form,
+            )
             return response
         except Exception as exc:
-            response = _redirect_with_flash(
+            db_session.rollback()
+            flash.add_flash(
                 session=auth.session,
-                url=_url_for_module.url_for(
-                    "config.enrollment_token_list"
-                ),
                 message=_describe_enrollment_failure(
                     exc=exc, action="minting"
                 ),
                 category=flash.CATEGORY_ERROR,
+            )
+            response = _render_token_page(
+                auth=auth,
+                db_session=db_session,
+                status_code=500,
+                mint_form=mint_form,
             )
             return response
 
@@ -463,31 +732,18 @@ def handle_enrollment_token_mint(request: Request) -> Response:
             " --name {}"
         ).format(service_base_url, issued.secret, pod_name)
 
-        tokens = _service_list_tokens(db_session=db_session)
-
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="config.enrollment_token_list",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
-        )
-        context["tokens"] = tokens
-        context["default_ttl_seconds"] = _DEFAULT_TTL_SECONDS
-        context["minted"] = {
+        minted = {
             "token_id": issued.token_id,
             "pod_name": pod_name,
+            "project_label": _project_labels_by_value(choices=choices).get(
+                issued.project_id, issued.project_id
+            ),
             "secret": issued.secret,
             "enroll_command": enroll_command,
             "run_command": "pychestrate-client run",
         }
-
-        response = _render(
-            template_name="config/enrollment/list.html",
-            context=context,
-        )
-        _attach_session_to_response(
-            response=response, session=auth.session
+        response = _render_token_page(
+            auth=auth, db_session=db_session, minted=minted
         )
         return response
     finally:
@@ -513,16 +769,6 @@ def handle_enrollment_token_revoke(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
         token_id = str(request.path_params.get("token_id", "")).strip()
         single_form = _parse_form_or_empty(request=request)
 
@@ -623,7 +869,10 @@ def register_enrollment_admin_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

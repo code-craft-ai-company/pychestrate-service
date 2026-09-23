@@ -418,6 +418,83 @@ def test_timeseries_returns_points_on_happy_path():
     return
 
 
+def _query_naive_samples(*, query: Dict[str, str]) -> Any:
+    """
+        Run GET timeseries over two samples whose times are naive (as
+        SQLite returns them): one on 2026-05-20, one on 2026-05-10.
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    registry_patch = create_module_patch(
+        metrics_routes.timeseries_service, "get_metric_registry",
+    )
+    registry_mock = registry_patch.activate()
+    registry_mock.configure(
+        side_effect=lambda: _FakeRegistry(definition=_make_definition()),
+    )
+    samples_patch = create_module_patch(
+        metrics_routes.timeseries_service, "list_samples_for_metric",
+    )
+    samples_mock = samples_patch.activate()
+    samples = [
+        SampleView(
+            sample_id="s-new", metric_name="pychestrate_test_runs_total",
+            label_signature="sig-1", labels={"project": "proj-1", "result": "pass"},
+            value=2.0, observed_at=datetime(2026, 5, 20, 12, 0, 0),
+        ),
+        SampleView(
+            sample_id="s-old", metric_name="pychestrate_test_runs_total",
+            label_signature="sig-1", labels={"project": "proj-1", "result": "pass"},
+            value=1.0, observed_at=datetime(2026, 5, 10, 12, 0, 0),
+        ),
+    ]
+    samples_mock.configure(side_effect=lambda **kwargs: samples)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/metrics/timeseries",
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            query=dict(query, metric="pychestrate_test_runs_total"),
+        )
+        response = metrics_routes.handle_query_timeseries(request)
+    finally:
+        samples_patch.deactivate()
+        registry_patch.deactivate()
+        perm_patch.deactivate()
+    rtnval = response
+    return rtnval
+
+
+def test_timeseries_range_query_over_naive_sample_times_filters_by_range():
+    """
+    **Feature: metrics timeseries -- audit ORC-04**
+    **Property: a from/to range query over sample times stored naive
+    (SQLite) answers 200 with the points inside the range -- it raised
+    a naive/aware TypeError (500) for every range preset and every
+    dashboard tile.**
+    """
+    response = _query_naive_samples(query={
+        "from": "2026-05-15T00:00:00.000Z", "to": "2026-05-21T00:00:00.000Z",
+    })
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, [point["value"] for point in body["points"]]),
+        (200, [2.0]),
+    )
+    return
+
+
+def test_timeseries_points_carry_utc_timestamps():
+    """
+    **Feature: metrics timeseries -- audit ORC-04**
+    **Property: point times are serialized with a UTC offset, so a
+    browser does not read a naive time as local time.**
+    """
+    response = _query_naive_samples(query={})
+    body = _decode_body(response)
+    testbase.assert_equal(body["points"][0]["observed_at"], "2026-05-20T12:00:00+00:00")
+    return
+
+
 def test_timeseries_returns_422_on_bad_limit():
     """
     **Feature: 7-test-metrics PR p20f**
@@ -544,8 +621,28 @@ def test_test_metrics_returns_rollup_on_happy_path():
     testbase.assert_equal(body["summary"]["tests_passed"], 18)
     testbase.assert_equal(body["summary"]["pass_rate"], 0.9)
     testbase.assert_equal(body["summary"]["runs_with_failures"], 1)
-    testbase.assert_equal(body["summary"]["flake_run_rate"], 0.5)
+    testbase.assert_equal(body["summary"]["failed_run_rate"], 0.5)
     testbase.assert_equal(body["summary"]["average_run_duration_seconds"], 600.0)
     testbase.assert_equal(len(body["recent_runs"]), 2)
     testbase.assert_equal(body["meta"]["aggregation"], "read_time_rollup")
+    return
+
+
+def test_test_metrics_rollup_names_the_failed_run_rate_for_what_it_is():
+    """
+    **Feature: 7-test-metrics (audit ORC-14)**
+    **Property: the share of runs with any failure is published as
+    failed_run_rate; no field claims to be a flake rate.**
+    """
+    rollup = metrics_routes._compute_test_metrics_rollup(
+        summaries=[
+            _FakeSummary(run_id="run-1", tests_total=4, tests_passed=3, tests_failed=1),
+            _FakeSummary(run_id="run-2", tests_total=4, tests_passed=4, tests_failed=0),
+        ],
+    )
+    flake_named = [key for key in rollup.keys() if "flake" in key]
+    testbase.assert_equal(
+        (rollup.get("failed_run_rate"), flake_named),
+        (0.5, []),
+    )
     return
