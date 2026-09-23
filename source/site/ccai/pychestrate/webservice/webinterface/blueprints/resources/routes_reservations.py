@@ -528,16 +528,17 @@ def handle_reservation_create(request: Request) -> Response:
         )
 
         if method == "GET":
-            # "Apply filter" submits the whole form with GET, so the
-            # draft the user has typed rides along in the query string;
-            # echo it back so narrowing the resource list never wipes
-            # the form.
-            draft: Dict[str, List[str]] = {}
-            for field in ("resource_id", "start_time", "end_time", "mode", "job_id", "reason"):
-                value = request.query_params.get(field, None)
-                if value is not None and len(str(value)) > 0:
-                    draft[field] = [str(value)]
-            form_view: Optional[MultiFormView] = MultiFormView(data=draft) if len(draft) > 0 else None
+            # The resource-list filter is a separate GET form that
+            # carries only pool_id / resource_type; the reservation
+            # draft is never read from (or put into) the URL. A
+            # ``resource_id`` link parameter still pre-selects a
+            # resource.
+            form_view: Optional[MultiFormView] = None
+            preselect = _coerce_int(
+                raw=request.query_params.get("resource_id", None)
+            )
+            if preselect is not None:
+                form_view = MultiFormView(data={"resource_id": [str(preselect)]})
             response = _render_reservation_create_form(
                 auth=auth,
                 resource_manager=resource_manager,

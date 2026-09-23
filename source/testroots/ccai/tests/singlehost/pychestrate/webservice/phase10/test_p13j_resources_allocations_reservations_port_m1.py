@@ -1701,3 +1701,71 @@ def test_resolve_viewer_zone_treats_an_empty_zone_as_utc():
 
     testbase.assert_equal(resolved, timezone.utc)
     return
+
+
+# ---------------------------------------------------------------------------
+# Resource-list filter outside the reservation form (audit finding RES-32)
+# ---------------------------------------------------------------------------
+
+
+def _run_reservation_create_get(*, query: Dict[str, str]) -> Any:
+    """
+        GET the reservation create form with ``query``. Returns the
+        render context the handler passed to the template.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+        patches.append(_patch_allocation_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        patches.append(_patch_resource_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        request = _FakeRequest(
+            method="GET",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            query_mapping=query,
+        )
+        resources_routes_reservations.handle_reservation_create(request)
+        rtnval = env.last_template.render_calls[0]
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_reservation_create_get_does_not_echo_a_draft_from_the_url():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: reservation fields in the query string (reason, times,
+    job id) are not echoed into the form; the draft never rides in a
+    URL.**
+    """
+    ctx = _run_reservation_create_get(query={
+        "pool_id": "2", "reason": "secret rack move", "start_time": "2026-05-04T10:00",
+        "job_id": "job-9", "csrf_token": "leaked",
+    })
+
+    form_data = ctx["form_data"]
+    echoed = None if form_data is None else (form_data.get("reason"), form_data.get("start_time"))
+    testbase.assert_true(echoed is None or echoed == (None, None), repr(echoed))
+    return
+
+
+def test_reservation_create_get_keeps_the_pool_filter():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: the pool / type filter from the query string still
+    narrows the resource selector.**
+    """
+    ctx = _run_reservation_create_get(query={"pool_id": "2", "resource_type": "device"})
+
+    testbase.assert_equal((ctx["selector_pool_id"], ctx["selector_resource_type"]), (2, "device"))
+    return

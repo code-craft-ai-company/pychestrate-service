@@ -21,7 +21,7 @@ __version__ = "1.0.0"
 import re
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ccai import testbase
 
@@ -215,4 +215,55 @@ def test_reservation_forms_carry_the_zone_field():
     )
 
     testbase.assert_true('name="tz" value="America/Los_Angeles"' in html, html[:2000])
+    return
+
+
+# ---------------------------------------------------------------------------
+# RES-32: the resource-list filter is not part of the POST form
+# ---------------------------------------------------------------------------
+
+
+def _forms(*, html: str) -> List[Tuple[str, str]]:
+    """
+        Every ``<form>`` in ``html`` as ``(opening_tag, body)``.
+    """
+    rtnval = [
+        (match.group(1), match.group(2))
+        for match in re.finditer(r"(<form\b[^>]*>)(.*?)</form>", html, re.DOTALL)
+    ]
+    return rtnval
+
+
+def test_reservation_filter_form_carries_only_the_filter_fields():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: "Apply filter" submits a GET form whose only named
+    fields are pool_id and resource_type (no CSRF token, no reservation
+    draft).**
+    """
+    html = _render(
+        template_name="resources/reservations/create.html",
+        overrides={"form_data": None, "viewer_timezone": ""},
+    )
+    get_forms = [body for tag, body in _forms(html=html) if 'method="get"' in tag]
+    names = sorted(set(re.findall(r'\bname="([^"]+)"', get_forms[0]))) if len(get_forms) == 1 else []
+
+    testbase.assert_equal(names, ["pool_id", "resource_type"])
+    return
+
+
+def test_reservation_form_has_no_get_submit_button():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: no button inside the reservation POST form switches it
+    to GET (formmethod="get"), which is what put the CSRF token and the
+    draft in the URL.**
+    """
+    html = _render(
+        template_name="resources/reservations/create.html",
+        overrides={"form_data": None, "viewer_timezone": ""},
+    )
+    post_bodies = [body for tag, body in _forms(html=html) if 'method="post"' in tag]
+
+    testbase.assert_equal(any("formmethod" in body for body in post_bodies), False)
     return
