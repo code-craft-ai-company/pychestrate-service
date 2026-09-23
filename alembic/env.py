@@ -103,6 +103,10 @@ from ccai.pychestrate.webservice.identity.setup import models as _setup_models  
 # target_metadata. Added by PR p21d.
 from ccai.pychestrate.webservice.backup import models as _backup_models  # noqa: E402, F401
 
+# Periodic housekeeping lease table (``housekeeping_lease``). Imported
+# explicitly for the same reason as the backup model above.
+from ccai.pychestrate.webservice.housekeeping import models as _housekeeping_models  # noqa: E402, F401
+
 from ccai.pychestrate.webservice.persistence.schema import (  # noqa: E402
     PychestratePhase1Base,
 )
