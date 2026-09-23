@@ -161,8 +161,14 @@ def get_active_ca() -> CaHandle:
     """
     handle = _ACTIVE_CA
     if handle is None:
-        err_msg_lines = ["No client-enrollment CA is installed."]
-        err_msg_lines.append("HINT: call load_ca_at_startup() + set_active_ca() from the service bootstrap.")
+        err_msg_lines = [
+            "No client-enrollment CA is installed, so this service cannot issue pod client certificates.",
+        ]
+        err_msg_lines.append(
+            "HINT: set PYCHESTRATE_ENROLLMENT_CA_SOURCE=file, PYCHESTRATE_ENROLLMENT_CA_FILE_PATH (one PEM"
+            " file holding the CA certificate and its private key) and PYCHESTRATE_ENROLLMENT_CA_ID, then"
+            " restart the service. development/dev-up and development/run-staging-gunicorn generate one."
+        )
         err_msg = os.linesep.join(err_msg_lines)
         raise CertificateAuthorityUnavailableError(err_msg) from None
     return handle

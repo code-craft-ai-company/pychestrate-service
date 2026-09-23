@@ -17,7 +17,7 @@ One route:
 * ``GET /api/v1/system/health``
   — aggregate subsystem-health summary.
 
-The document reports three subsystem probes drawn from state the
+The document reports four subsystem probes drawn from state the
 service already maintains:
 
 * ``database`` — whether the per-request middleware attached a
@@ -26,6 +26,8 @@ service already maintains:
   results (one probe per registered backend).
 * ``extension-routes`` — the count of extension-contributed REST
   routes the host discovered at startup.
+* ``job-loop`` — whether pods can enroll, receive signed jobs and
+  upload results (see :mod:`jobs.readiness`).
 
 Each subsystem reports a coarse ``status`` of ``ok`` |
 ``degraded`` | ``error``; the top-level ``status`` is the worst
@@ -295,6 +297,30 @@ def _probe_extension_routes() -> Dict[str, Any]:
     return rtnval
 
 
+def _probe_job_loop() -> Dict[str, Any]:
+    """
+        Probe the job execution loop's prerequisites (envelope signing
+        key, enrollment CA, presign secret, dispatch transport,
+        client-certificate proxies) via
+        :func:`jobs.readiness.describe_job_loop_readiness`.
+
+        :returns: A subsystem-health dict carrying a ``backends`` list.
+    """
+    try:
+        from ccai.pychestrate.webservice.jobs.readiness import (
+            describe_job_loop_readiness,
+        )
+        rtnval = describe_job_loop_readiness()
+    except Exception as xcpt:  # noqa: BLE001 — purposeful probe isolation
+        rtnval = {
+            "name": "job-loop",
+            "label": "Job Execution Loop",
+            "status": STATUS_ERROR,
+            "detail": "Job-loop probe failed: {}".format(type(xcpt).__name__),
+        }
+    return rtnval
+
+
 def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     """
         Build the aggregate system-health document. Exposed at module
@@ -309,6 +335,7 @@ def build_system_health_document(*, request: Request) -> Dict[str, Any]:
     subsystems.append(_probe_database(request=request))
     subsystems.append(_probe_feature_flags())
     subsystems.append(_probe_extension_routes())
+    subsystems.append(_probe_job_loop())
 
     statuses = [subsystem["status"] for subsystem in subsystems]
     overall = _worst_status(statuses=statuses)

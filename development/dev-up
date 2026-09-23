@@ -2,10 +2,15 @@
 #
 # Boot a SQLite-backed local Pychestrate webservice for smoke-testing.
 #
-# Generates a per-checkout dev KEK + password pepper under .cache/dev-secrets/
-# (gitignored) and starts the service with PYCHESTRATE_AUTO_CREATE_SCHEMA=true
-# so the empty SQLite file is populated on first boot. Subsequent runs reuse
-# the same SQLite file and the same dev secrets.
+# Generates every per-checkout dev secret a first run needs under
+# .cache/dev-secrets/ (gitignored, mode 0600): KEK, password pepper, UI
+# cookie secret, the client-enrollment CA (pods enroll against it), the
+# job-envelope signing key (every dispatch is signed with it) and the
+# result-upload presign secret. Starts the service with
+# PYCHESTRATE_AUTO_CREATE_SCHEMA=true so the empty SQLite file is populated
+# on first boot. Subsequent runs reuse the same SQLite file and the same dev
+# secrets. Any PYCHESTRATE_* variable already set in the environment wins
+# over the generated default.
 #
 # Refuses to run with PYCHESTRATE_RUNTIME_ENVIRONMENT=production so an
 # operator who copy-pastes never accidentally points this at a real database.
@@ -36,6 +41,18 @@ KEK_FILE="${SECRETS_DIR}/dev.kek"
 PEPPER_FILE="${SECRETS_DIR}/dev.password-pepper"
 UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
 ENROLLMENT_CA_FILE="${SECRETS_DIR}/dev.enrollment-ca.pem"
+# Public half of the enrollment CA, for a local TLS terminator
+# (nginx ``ssl_client_certificate``) that verifies pod certificates.
+ENROLLMENT_CA_CERT_FILE="${SECRETS_DIR}/dev.enrollment-ca.crt"
+# Base64-encoded 32-byte Ed25519 seed for the job-envelope signer
+# (same format as development/run-staging-gunicorn). The loader
+# (jobs/envelope/signer.py) decodes base64 then builds the Ed25519
+# private key from the seed.
+ENVELOPE_SIGNING_KEY_FILE="${SECRETS_DIR}/dev.envelope-signing-key"
+# HMAC secret for presigned result-upload URLs; shared by every
+# worker so an upload may land on a different worker than the
+# presign call.
+RESULT_PRESIGN_SECRET_FILE="${SECRETS_DIR}/dev.result-presign-secret"
 
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
@@ -70,6 +87,24 @@ if [[ ! -s "${ENROLLMENT_CA_FILE}" ]]; then
     chmod 600 "${ENROLLMENT_CA_FILE}"
     rm -rf "${CA_TMP}"
     echo "dev-up: generated ${ENROLLMENT_CA_FILE} (self-signed dev CA)"
+fi
+
+if [[ ! -s "${ENROLLMENT_CA_CERT_FILE}" ]]; then
+    openssl x509 -in "${ENROLLMENT_CA_FILE}" -out "${ENROLLMENT_CA_CERT_FILE}"
+    chmod 644 "${ENROLLMENT_CA_CERT_FILE}"
+    echo "dev-up: wrote ${ENROLLMENT_CA_CERT_FILE} (enrollment CA certificate for a TLS terminator)"
+fi
+
+if [[ ! -s "${ENVELOPE_SIGNING_KEY_FILE}" ]]; then
+    head -c 32 /dev/urandom | base64 > "${ENVELOPE_SIGNING_KEY_FILE}"
+    chmod 600 "${ENVELOPE_SIGNING_KEY_FILE}"
+    echo "dev-up: generated ${ENVELOPE_SIGNING_KEY_FILE} (base64 Ed25519 seed)"
+fi
+
+if [[ ! -s "${RESULT_PRESIGN_SECRET_FILE}" ]]; then
+    head -c 32 /dev/urandom | base64 > "${RESULT_PRESIGN_SECRET_FILE}"
+    chmod 600 "${RESULT_PRESIGN_SECRET_FILE}"
+    echo "dev-up: generated ${RESULT_PRESIGN_SECRET_FILE} (32 random bytes, base64)"
 fi
 
 # ----------------------------------------------------------------------------
@@ -117,6 +152,12 @@ export PYCHESTRATE_ENROLLMENT_CA_SOURCE="${PYCHESTRATE_ENROLLMENT_CA_SOURCE:-fil
 export PYCHESTRATE_ENROLLMENT_CA_FILE_PATH="${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH:-${ENROLLMENT_CA_FILE}}"
 export PYCHESTRATE_ENROLLMENT_CA_ID="${PYCHESTRATE_ENROLLMENT_CA_ID:-dev-enrollment-ca-1}"
 
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_SOURCE:-file}"
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID:-dev-envelope-ed25519-1}"
+export PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH="${PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH:-${ENVELOPE_SIGNING_KEY_FILE}}"
+
+export PYCHESTRATE_RESULT_PRESIGN_SECRET="${PYCHESTRATE_RESULT_PRESIGN_SECRET:-$(cat "${RESULT_PRESIGN_SECRET_FILE}")}"
+
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
 
@@ -135,6 +176,9 @@ echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
 echo "dev-up: ui-cookie-secret=${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH}"
 echo "dev-up: enrollment-ca=${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH}"
+echo "dev-up: enrollment-ca-cert=${ENROLLMENT_CA_CERT_FILE}"
+echo "dev-up: envelope-signing-key=${PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH} (id ${PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID})"
+echo "dev-up: result-presign-secret=${RESULT_PRESIGN_SECRET_FILE}"
 echo "dev-up: presence-dir=${PYCHESTRATE_PRESENCE_DIR}"
 echo
 

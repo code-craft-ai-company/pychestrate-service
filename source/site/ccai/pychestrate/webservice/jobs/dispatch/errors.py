@@ -37,6 +37,18 @@ class DispatchTransportError(DispatchError):
     """
 
 
+class DispatchSigningUnavailableError(DispatchError):
+    """
+        Raised when the dispatch envelope cannot be signed because the
+        service has no envelope signing key installed. Raised before
+        any envelope or attempt row is written, so callers record the
+        job as dispatch-failed exactly as for any other
+        :class:`DispatchError` (the underlying
+        ``EnvelopeSigningKeyMissingError`` used to escape those
+        handlers and leave a half-created job behind).
+    """
+
+
 class DispatchStrategyNotRegisteredError(DispatchError):
     """
         Raised when :func:`resolve_factory_implementation` cannot
