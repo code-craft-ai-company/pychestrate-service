@@ -42,6 +42,7 @@ from typing import Any, Dict, List, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.core.defaults import ensure_utc
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -329,17 +330,22 @@ def _parse_positive_int(
 
 def _iso_or_none(value: Any) -> Optional[str]:
     """
-        ISO-8601 serialize a datetime or return ``None``.
+        Serialize a datetime as RFC 3339 with an explicit UTC offset
+        (``2026-09-22T23:34:26+00:00``), or return ``None``. The
+        database stores UTC; a naive value (SQLite hands those back)
+        is UTC, and sending it without an offset made browsers read it
+        as local time, shifting every time by the viewer's UTC offset
+        (audit finding RES-20).
 
         :param value: Datetime or None.
 
-        :returns: ISO-formatted string or None.
+        :returns: RFC 3339 string or None.
     """
     if value is None:
         rtnval = None
         return rtnval
     if isinstance(value, datetime):
-        rtnval = value.isoformat()
+        rtnval = ensure_utc(value).isoformat()
         return rtnval
     rtnval = str(value)
     return rtnval
