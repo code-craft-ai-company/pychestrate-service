@@ -466,35 +466,49 @@ def test_handle_enrollment_token_list_renders_token_rows():
     return
 
 
-def test_handle_enrollment_token_list_redirects_when_lacks_permission():
+def test_enrollment_token_list_answers_403_when_lacks_permission():
     """
     **Feature: enrollment-admin (p19o)**
-    **Property: A user without system:resources.manage is
-    redirected to the admin dashboard rather than seeing the
-    token list -- the route is the security boundary.**
+    **Property: A user without system:resources.manage gets the 403
+    page from the registered route rather than the token list (or a
+    redirect to the dashboard) -- the route is the security
+    boundary.**
     """
+    from ccai.tests.singlehost.pychestrate.webservice.shared.webworks_test_harness import (  # noqa: E402
+        make_fake_app,
+        make_fake_request,
+    )
     _reset_global_state()
     sm_patch = None
+    list_patch = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
         sm_patch = _patch_security_manager(
             check_permission_response=False
         )
+        list_patch = _patch_service_list(tokens=[])
+        _register_url_for_endpoints()
+        app = make_fake_app()
+        routes_enrollment.register_enrollment_admin_routes(app=app)
+        list_handler = [
+            handler for path, methods, handler in app.calls
+            if path == "/admin/enrollment-tokens"
+        ][0]
 
         cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            cookies={cookie_session.COOKIE_NAME: cookie_value}
+        request = make_fake_request(
+            method="GET",
+            path="/admin/enrollment-tokens",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
         )
-        response = routes_enrollment.handle_enrollment_token_list(
-            request
-        )
+        response = list_handler(request)
 
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(response.status_code, 403)
     finally:
+        if list_patch is not None:
+            list_patch.deactivate()
         if sm_patch is not None:
             sm_patch.deactivate()
         _reset_global_state()

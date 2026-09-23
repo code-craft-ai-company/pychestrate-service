@@ -43,8 +43,12 @@ sibling admin blueprints (variables / resources) use to call their
 managers, rather than proxying the REST surface from the browser.
 
 Server-side ``system:resources.manage`` permission gating is the
-security boundary; the sidebar entry registered in
-``pyc-admin-bundle/index.ts`` gates on the same key for UX only.
+security boundary: every route is registered through
+:func:`routes._require_admin_permission_for`, so a viewer without the
+permission gets the shared 403 page naming it (it used to redirect to
+the dashboard with a flash -- audit ADM-21). The sidebar entry
+registered in ``pyc-admin-bundle/index.ts`` gates on the same key for
+UX only.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -73,7 +77,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
-    _require_permission_or_redirect,
+    _require_admin_permission_for,
     _resolve_authenticated_request,
     _wrap_admin_handler_in_shell,
 )
@@ -104,6 +108,14 @@ _ROUTE_TABLE = (
 # guards its mutating routes with; the enrollment admin page reuses
 # it so a single operator role unlocks both surfaces.
 _ADMIN_PERMISSION = "system:resources.manage"
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``).
+_ROUTE_PERMISSIONS = {
+    "config.enrollment_token_list": _ADMIN_PERMISSION,
+    "config.enrollment_token_mint": _ADMIN_PERMISSION,
+    "config.enrollment_token_revoke": _ADMIN_PERMISSION,
+}
 
 
 # Default token lifetime offered by the mint form when the operator
@@ -583,16 +595,6 @@ def handle_enrollment_token_list(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
         response = _render_token_page(auth=auth, db_session=db_session)
         return response
     finally:
@@ -623,16 +625,6 @@ def handle_enrollment_token_mint(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
         single_form = _parse_form_or_empty(request=request)
 
         csrf_redirect = auth_guard.enforce_csrf_or_redirect(
@@ -764,16 +756,6 @@ def handle_enrollment_token_revoke(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        deny_response = _require_permission_or_redirect(
-            auth=auth,
-            permission=_ADMIN_PERMISSION,
-            deny_redirect_url=_url_for_module.url_for(
-                "config.dashboard"
-            ),
-        )
-        if deny_response is not None:
-            return deny_response
-
         token_id = str(request.path_params.get("token_id", "")).strip()
         single_form = _parse_form_or_empty(request=request)
 
@@ -874,7 +856,10 @@ def register_enrollment_admin_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

@@ -1,4 +1,4 @@
-import { load_failure_message } from "./feature-flags-view.js";
+import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
 const SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
   if (typeof status !== "string") {
@@ -24,6 +24,7 @@ function health_status_tone(status) {
 async function fetch_system_health() {
   let document_body = null;
   let http_status = 0;
+  let required_permission = "";
   try {
     const response = await fetch(SYSTEM_HEALTH_PATH, {
       method: "GET",
@@ -37,6 +38,8 @@ async function fetch_system_health() {
       if (parsed !== null && typeof parsed.status === "string" && Array.isArray(parsed.subsystems) === true) {
         document_body = parsed;
       }
+    } else if (response.status === 403) {
+      required_permission = await read_required_permission(response);
     }
   } catch (reason) {
     console.warn(
@@ -44,7 +47,7 @@ async function fetch_system_health() {
       { reason: String(reason) }
     );
   }
-  const rtnval = { document_body, http_status };
+  const rtnval = { document_body, http_status, required_permission };
   return rtnval;
 }
 class PycSystemHealth extends HTMLElement {
@@ -52,6 +55,7 @@ class PycSystemHealth extends HTMLElement {
   _loading;
   _errored;
   _error_status;
+  _error_permission;
   _body_region;
   constructor() {
     super();
@@ -59,6 +63,7 @@ class PycSystemHealth extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._error_status = 0;
+    this._error_permission = "";
     this._body_region = null;
   }
   /**
@@ -131,6 +136,7 @@ class PycSystemHealth extends HTMLElement {
       this._loading = false;
       this._errored = true;
       this._error_status = outcome.http_status;
+      this._error_permission = outcome.required_permission;
       this._document = null;
       this._render_body();
       return;
@@ -163,7 +169,8 @@ class PycSystemHealth extends HTMLElement {
       error.setAttribute("data-role", "error-state");
       error.textContent = load_failure_message(
         this._error_status,
-        "system health"
+        "system health",
+        this._error_permission
       );
       region.replaceChildren(error);
       return;

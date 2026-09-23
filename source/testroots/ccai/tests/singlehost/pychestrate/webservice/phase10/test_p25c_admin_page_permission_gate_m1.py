@@ -17,8 +17,10 @@ checks it before the handler runs.
 Coverage:
 
 * Every ``/admin/*`` route registered by ``register_config_routes``
-  answers 403 to a signed-in user who holds no permission (the three
-  pages that already gated inside their handlers redirect instead).
+  answers 403 to a signed-in user who holds no permission -- including
+  the UI profile, RPA job type and enrollment token pages, which used
+  to gate inside their handlers and redirect to the dashboard (audit
+  ADM-21).
 * The gate itself -- runs the handler for a holder of the declared
   permission, refuses a user holding only other permissions, sends
   anonymous requests to sign in, and treats a failing permission
@@ -43,10 +45,13 @@ from ccai.pychestrate.webservice.security.rbac import catalog
 from ccai.pychestrate.webservice.webinterface.blueprints.config import (
     routes as config_routes,
     routes_audit,
+    routes_enrollment,
     routes_roles,
+    routes_rpa_types,
     routes_scopes,
     routes_secrets,
     routes_sessions,
+    routes_ui_profile,
     routes_users,
     routes_variables,
 )
@@ -67,14 +72,6 @@ from ccai.tests.singlehost.pychestrate.webservice.shared.webworks_test_harness i
 
 
 _TEST_UI_COOKIE_SECRET: bytes = b"\x00" * 32
-
-#: Admin pages that gated inside their handlers before this change;
-#: they redirect a refused user (with a flash) instead of answering 403.
-_IN_HANDLER_GATED_PREFIXES: Tuple[str, ...] = (
-    "/admin/ui-profile",
-    "/admin/rpa-job-types",
-    "/admin/enrollment-tokens",
-)
 
 _SAMPLE_PATH_PARAMS: Dict[str, str] = {
     "user_id": "u-7",
@@ -238,31 +235,26 @@ def test_every_gated_admin_route_answers_403_to_a_user_without_permissions():
     for method, path, status in _admin_route_responses(
         permission_predicate=_deny_everything
     ):
-        if path.startswith(_IN_HANDLER_GATED_PREFIXES):
-            continue
         if status != 403:
             served.append((method, path, status))
     testbase.assert_equal(served, [])
     return
 
 
-def test_in_handler_gated_admin_routes_redirect_a_user_without_permissions():
+def test_formerly_redirecting_admin_pages_answer_403():
     """
-    **Feature: admin page permission gate (XC-01)**
-    **Property: the admin pages that gate inside their handlers
-    (UI profile, RPA job types, enrollment tokens) redirect a
-    signed-in user who holds no permission instead of serving the
-    page.**
+    **Feature: admin page permission gate (ADM-21)**
+    **Property: the UI profile, RPA job type and enrollment token pages
+    answer a refused user with the 403 page instead of redirecting to
+    the dashboard.**
     """
-    served: List[Tuple[str, str, Any]] = []
-    for method, path, status in _admin_route_responses(
-        permission_predicate=_deny_everything
-    ):
-        if path.startswith(_IN_HANDLER_GATED_PREFIXES) is False:
-            continue
-        if status not in (302, 303):
-            served.append((method, path, status))
-    testbase.assert_equal(served, [])
+    prefixes = ("/admin/ui-profile", "/admin/rpa-job-types", "/admin/enrollment-tokens")
+    statuses = sorted({
+        status
+        for _method, path, status in _admin_route_responses(permission_predicate=_deny_everything)
+        if path.startswith(prefixes)
+    }, key=str)
+    testbase.assert_equal(statuses, [403])
     return
 
 
@@ -384,7 +376,8 @@ def test_every_admin_route_permission_exists_in_the_rbac_catalog():
     declared.update(config_routes._ADMIN_ROUTE_PERMISSIONS)
     for module in (
         routes_users, routes_roles, routes_variables, routes_secrets,
-        routes_scopes, routes_sessions, routes_audit,
+        routes_scopes, routes_sessions, routes_audit, routes_enrollment,
+        routes_ui_profile, routes_rpa_types,
     ):
         declared.update(module._ROUTE_PERMISSIONS)
     declared["users.role_assignment"] = routes_users.ROLE_ASSIGN_PERMISSION

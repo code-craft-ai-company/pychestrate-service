@@ -1461,7 +1461,16 @@ def _require_admin_permission_for(handler: Any, *, permission: str) -> Any:
             from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
                 render_error_response,
             )
-            rtnval = render_error_response(request=request, status_code=403)
+            from ccai.pychestrate.webservice.webinterface.blueprints.config.permission_denied import (  # noqa: E402
+                describe_missing_permission,
+            )
+            # ADM-21: name the missing permission so the viewer can ask
+            # for it.
+            rtnval = render_error_response(
+                request=request,
+                status_code=403,
+                message=describe_missing_permission(permission=permission),
+            )
             return rtnval
 
         rtnval = handler(request)

@@ -1,4 +1,4 @@
-import { load_failure_message } from "./feature-flags-view.js";
+import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
 const EXT_LISTING_PATH = "/api/v1/ext";
 function group_routes_by_extension(routes) {
   const buckets = /* @__PURE__ */ new Map();
@@ -62,6 +62,7 @@ class PycExtensionRegistry extends HTMLElement {
   _loading;
   _errored;
   _error_status;
+  _error_permission;
   _table_region;
   _detail_region;
   constructor() {
@@ -71,6 +72,7 @@ class PycExtensionRegistry extends HTMLElement {
     this._loading = false;
     this._errored = false;
     this._error_status = 0;
+    this._error_permission = "";
     this._table_region = null;
     this._detail_region = null;
   }
@@ -155,6 +157,9 @@ class PycExtensionRegistry extends HTMLElement {
       });
       if (response.ok === false) {
         this._error_status = response.status;
+        if (response.status === 403) {
+          this._error_permission = await read_required_permission(response);
+        }
         throw new Error(
           "ext manifest fetch failed: HTTP " + String(response.status)
         );
@@ -205,7 +210,8 @@ class PycExtensionRegistry extends HTMLElement {
       error.setAttribute("data-role", "error-state");
       error.textContent = load_failure_message(
         this._error_status,
-        "the extension registry"
+        "the extension registry",
+        this._error_permission
       );
       region.replaceChildren(error);
       return;

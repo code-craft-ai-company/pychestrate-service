@@ -7,6 +7,8 @@ import {
   flag_state_tone,
   next_flag_state,
   build_flag_url,
+  load_failure_message,
+  read_required_permission,
   toggle_message_for_status,
   FLAG_STATE_ENABLED,
   FLAG_STATE_RETIRED
@@ -27,6 +29,15 @@ class PycAdminOverview extends HTMLElement {
   _healthErrored;
   _extensionCount;
   _extensionsErrored;
+  /**
+   * Why each section failed: ``{status, permission}`` (the HTTP
+   * status and, for a 403, the permission the problem document
+   * named), so a tile can say "you do not have permission" instead
+   * of "unavailable".
+   */
+  _healthFailure;
+  _flagsFailure;
+  _extensionsFailure;
   _health_region;
   _flags_region;
   _flags_status_region;
@@ -40,6 +51,9 @@ class PycAdminOverview extends HTMLElement {
     this._healthErrored = false;
     this._extensionCount = 0;
     this._extensionsErrored = false;
+    this._healthFailure = { status: 0, permission: "" };
+    this._flagsFailure = { status: 0, permission: "" };
+    this._extensionsFailure = { status: 0, permission: "" };
     this._health_region = null;
     this._flags_region = null;
     this._flags_status_region = null;
@@ -145,6 +159,10 @@ class PycAdminOverview extends HTMLElement {
     const outcome = await fetch_system_health();
     if (outcome.document_body === null) {
       this._healthErrored = true;
+      this._healthFailure = {
+        status: outcome.http_status,
+        permission: outcome.required_permission || ""
+      };
       this._health = null;
       return;
     }
@@ -153,6 +171,7 @@ class PycAdminOverview extends HTMLElement {
   }
   async _load_flags() {
     this._flagsErrored = false;
+    this._flagsFailure = { status: 0, permission: "" };
     let entries = null;
     try {
       const response = await fetch(FLAGS_PATH, {
@@ -160,11 +179,14 @@ class PycAdminOverview extends HTMLElement {
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      this._flagsFailure.status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         if (Array.isArray(body) === true) {
           entries = body;
         }
+      } else if (response.status === 403) {
+        this._flagsFailure.permission = await read_required_permission(response);
       }
     } catch (reason) {
       console.warn(
@@ -194,6 +216,7 @@ class PycAdminOverview extends HTMLElement {
   }
   async _load_extensions() {
     this._extensionsErrored = false;
+    this._extensionsFailure = { status: 0, permission: "" };
     let listing = null;
     try {
       const response = await fetch(EXT_LISTING_PATH, {
@@ -201,12 +224,15 @@ class PycAdminOverview extends HTMLElement {
         credentials: "same-origin",
         headers: { Accept: "application/json" }
       });
+      this._extensionsFailure.status = response.status;
       if (response.ok === true) {
         const body = await response.json();
         const parsed = body;
         if (parsed !== null && Array.isArray(parsed.items) === true) {
           listing = parsed;
         }
+      } else if (response.status === 403) {
+        this._extensionsFailure.permission = await read_required_permission(response);
       }
     } catch (reason) {
       console.warn(
@@ -246,7 +272,11 @@ class PycAdminOverview extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-admin__tile-detail");
       error.setAttribute("data-role", "health-error");
-      error.textContent = "System health unavailable.";
+      error.textContent = load_failure_message(
+        this._healthFailure.status,
+        "system health",
+        this._healthFailure.permission
+      );
       children.push(error);
       region.replaceChildren(...children);
       return;
@@ -311,7 +341,11 @@ class PycAdminOverview extends HTMLElement {
       const error = document.createElement("p");
       error.classList.add("pyc-admin__tile-detail");
       error.setAttribute("data-role", "extension-error");
-      error.textContent = "Extension registry unavailable.";
+      error.textContent = load_failure_message(
+        this._extensionsFailure.status,
+        "the extension registry",
+        this._extensionsFailure.permission
+      );
       children.push(error);
       region.replaceChildren(...children);
       return;
@@ -354,7 +388,11 @@ class PycAdminOverview extends HTMLElement {
         "pyc-admin__notice--error"
       );
       error.setAttribute("data-role", "flags-error");
-      error.textContent = "Failed to load feature flags.";
+      error.textContent = load_failure_message(
+        this._flagsFailure.status,
+        "feature flags",
+        this._flagsFailure.permission
+      );
       region.replaceChildren(error);
       return;
     }
