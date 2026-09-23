@@ -381,6 +381,101 @@ defeats the principle of least privilege.
   (which reaches the target via Tailscale).
 
 
+## Backup and restore
+
+A backup is two files per run, written under the presence directory
+(`~/pychestrate`, mode 0700):
+
+| File | Holds |
+|---|---|
+| `backups/<id>.backup.tar.gz` (+ `.sha256`) | a consistent database snapshot (SQLite online-backup API, or `pg_dump --format=custom` for PostgreSQL) and every run artifact under the artifact root (`~/pychestrate/artifacts`), plus a manifest with checksums, row counts and key fingerprints |
+| `backup-keys/<id>.keys.tar` (0600) | the keys the database is useless without: the KEK (every stored secret is wrapped under it), the password pepper, the UI cookie secret, the job-envelope signing key and the enrollment CA -- whichever are configured |
+
+The archive contains **no key bytes**; keep the two files in
+**different places** so a copied archive alone cannot decrypt the
+secrets inside it.
+
+### Taking backups
+
+- **Scheduled:** the deploy installs `pychestrate-backup.timer`, which
+  runs `pychestrate-backup.service` daily at 02:30 (±15 min, catching up
+  after downtime). It keeps the newest 14 archives. Log:
+  `~/.pychestrate/backup.log`.
+- **On demand:** `sudo systemctl start pychestrate-backup.service`, or
+  `POST /api/v1/backups` (permission `system:backups.write`), or on the
+  host:
+
+  ```bash
+  cd ~/pychestrate-service
+  development/run-staging-gunicorn admin backup create --note "before upgrade"
+  development/run-staging-gunicorn admin backup list
+  ```
+
+A backup is safe to take while the service runs. The REST trigger
+runs inside the request (bounded by gunicorn's worker timeout), so on
+an install with a large artifact tree prefer the systemd unit or the
+command. **Copy both directories off the host after each run** (e.g. `rsync` the archives
+to the NAS and the key bundles to the operator's secret store); a
+backup that stays on the host dies with its disk.
+
+### Rehearsing a restore (verification)
+
+```bash
+development/run-staging-gunicorn admin backup verify \
+    ~/pychestrate/backups/<id>.backup.tar.gz \
+    --keys ~/pychestrate/backup-keys/<id>.keys.tar
+```
+
+checks the archive checksum, the manifest, the database snapshot
+(`PRAGMA integrity_check` and the recorded row counts, or
+`pg_restore --list`), the artifact count, the key fingerprints, and
+that the KEK unwraps the stored data keys -- without touching the live
+system. `POST /api/v1/backups/<id>:restore` with `{"dry_run": true}`
+runs the same checks from the API and returns the restore command.
+
+### Restoring
+
+A restore replaces the database, the artifact root and the key files,
+so it runs with the service **stopped** (the API answers 409 with the
+command instead of restoring itself):
+
+```bash
+sudo systemctl stop pychestrate.service pychestrate-backup.timer
+cd ~/pychestrate-service
+development/run-staging-gunicorn admin backup restore \
+    /path/to/<id>.backup.tar.gz --keys /path/to/<id>.keys.tar --yes
+sudo systemctl start pychestrate.service pychestrate-backup.timer
+```
+
+The restore verifies the backup first and changes nothing if any check
+fails. It then writes each key to the path the environment loads it
+from (refusing to replace a *different* existing key unless
+`--overwrite-keys` is given), swaps the database in (SQLite: the old
+file is kept in `pre-restore-<timestamp>/` next to it; PostgreSQL: the
+current database is first dumped to
+`backups/pre-restore-<timestamp>.pgdump`, then `pg_restore --clean
+--if-exists --single-transaction` runs), and replaces the artifact root
+(the old tree is kept as `artifacts.pre-restore-<timestamp>`). Sign in
+and open a secret afterwards to confirm the KEK and pepper; delete the
+`pre-restore-*` copies once satisfied.
+
+On a **rebuilt host**, deploy first (the deploy generates fresh dev
+keys under `.cache/dev-secrets/` on first start), stop the service, and
+restore with `--overwrite-keys` so the backed-up keys replace the fresh
+ones.
+
+For PostgreSQL, install the `postgresql-client` package matching the
+server version on the host that runs `backup create` / `restore`
+(`PYCHESTRATE_PG_DUMP_PATH` / `PYCHESTRATE_PG_RESTORE_PATH` override the
+tool paths). The password is passed to `pg_dump` / `pg_restore` in
+`PGPASSWORD`, never on the command line.
+
+Locations are configurable (environment or `settings.config`
+`[DATASTORAGE]`): `PYCHESTRATE_BACKUP_ROOT`, `PYCHESTRATE_BACKUP_KEYS_DIR`,
+`PYCHESTRATE_ARTIFACT_ROOT`. A location outside `~/pychestrate` must be
+added to the units' `ReadWritePaths`.
+
+
 ## CI deploy workflow (`.github/workflows/deploy.yml`)
 
 Same script driven from a GitHub Actions runner that has joined

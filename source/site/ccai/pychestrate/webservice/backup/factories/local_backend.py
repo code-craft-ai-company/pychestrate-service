@@ -5,17 +5,18 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-:class:`LocalFilesystemBackupBackend` writes backup archives under
-a configurable root directory (defaults to a ``backups`` directory
-inside the service workspace). It mirrors how
-``secrets.factories.local_backend`` and ``jobs/results`` do local
-storage for dev / test: the only I/O is the archive file itself,
-which keeps the backend trivial to exercise from tests.
+:class:`LocalFilesystemBackupBackend` keeps backup archives in the
+backup root (``PYCHESTRATE_BACKUP_ROOT``, default
+``<presence_dir>/backups``; see :mod:`backup.locations`). The
+directory is created mode 0700 -- archives carry the whole database.
+It is the single-host deployment's backend: an operator copies the
+directory (archives + ``.sha256`` sidecars) off the host on a
+schedule.
 
-The archive is written atomically -- bytes land in a ``.partial``
-sibling and are renamed into place -- so a crash mid-write never
-leaves a half-written archive that a later read could mistake for
-a good backup.
+Writes are atomic -- bytes land in a ``.partial`` sibling (or the
+finished archive is renamed in from the staging directory) -- so a
+crash mid-write never leaves a half-written archive that a later
+read could mistake for a good backup.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -25,8 +26,9 @@ __version__ = "1.0.0"
 
 
 import os
+import shutil
 
-from typing import List
+from typing import List, Optional
 
 from ccai.pychestrate.webservice.backup.errors import (
     BackupBackendUnavailableError,
@@ -35,33 +37,51 @@ from ccai.pychestrate.webservice.backup.factories.storage_backend import (
     BackupArchiveWriteResult,
     BackupStorageBackendProtocol,
 )
+from ccai.pychestrate.webservice.backup.locations import (
+    ENV_BACKUP_ROOT,
+    ensure_private_directory,
+    resolve_backup_root,
+)
 
 
-DEFAULT_BACKUP_ROOT_ENV_VAR: str = "PYCHESTRATE_BACKUP_ROOT"
-DEFAULT_BACKUP_ROOT: str = "/tmp/pychestrate-backups"
+DEFAULT_BACKUP_ROOT_ENV_VAR: str = ENV_BACKUP_ROOT
 
-ARCHIVE_SUFFIX: str = ".backup.tar"
+#: Suffix of the archives :meth:`LocalFilesystemBackupBackend.store_archive_file` writes.
+ARCHIVE_SUFFIX: str = ".backup.tar.gz"
+
+#: Suffix of archives written through the byte API
+#: (:meth:`LocalFilesystemBackupBackend.write_archive`).
+LEGACY_ARCHIVE_SUFFIX: str = ".backup.tar"
+
+FILE_URI_PREFIX: str = "file://"
 
 
-def _resolve_backup_root() -> str:
+def _prepare_root() -> str:
     """
-        Resolve the local backup-root directory from the
-        environment, falling back to a stable default.
+        Resolve and create (mode 0700) the backup root.
 
-        :returns: An absolute directory path.
+        :returns: Absolute directory path.
+        :raises: BackupBackendUnavailableError when it cannot be created.
     """
-    configured = os.environ.get(DEFAULT_BACKUP_ROOT_ENV_VAR, None)
-    if configured is not None and len(configured) > 0:
-        rtnval = configured
-        return rtnval
-    rtnval = DEFAULT_BACKUP_ROOT
+    root = resolve_backup_root()
+    try:
+        ensure_private_directory(path=root)
+    except OSError as xcpt:
+        err_msg_lines = [
+            "Failed to create the local backup root directory.",
+        ]
+        err_msg_lines.append("ROOT: {}".format(root))
+        err_msg_lines.append("CAUSE: {}".format(str(xcpt)))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise BackupBackendUnavailableError(err_msg) from None
+    rtnval = root
     return rtnval
 
 
 class LocalFilesystemBackupBackend(BackupStorageBackendProtocol):
     """
-        Reference ``backup_storage_backend`` that writes archives
-        to the local filesystem. Intended for dev / test wiring.
+        Reference ``backup_storage_backend`` that keeps archives on
+        the local filesystem.
     """
 
     factory_protocol_name: str = "backup_storage_backend"
@@ -86,7 +106,8 @@ class LocalFilesystemBackupBackend(BackupStorageBackendProtocol):
             archive_bytes: bytes
         ) -> BackupArchiveWriteResult:
         """
-            Persist a finished archive under the local backup root.
+            Persist an in-memory archive under the backup root as
+            ``<backup_id>.backup.tar``.
 
             :param backup_id: The backup record UUID.
             :param archive_bytes: The complete archive byte-string.
@@ -94,24 +115,15 @@ class LocalFilesystemBackupBackend(BackupStorageBackendProtocol):
             :returns: The :class:`BackupArchiveWriteResult`.
             :raises: BackupBackendUnavailableError
         """
-        root = _resolve_backup_root()
-        try:
-            os.makedirs(root, exist_ok=True)
-        except OSError as xcpt:
-            err_msg_lines = [
-                "Failed to create the local backup root directory.",
-            ]
-            err_msg_lines.append("ROOT: {}".format(root))
-            err_msg_lines.append("CAUSE: {}".format(str(xcpt)))
-            err_msg = os.linesep.join(err_msg_lines)
-            raise BackupBackendUnavailableError(err_msg) from None
+        root = _prepare_root()
 
-        final_name = backup_id + ARCHIVE_SUFFIX
+        final_name = backup_id + LEGACY_ARCHIVE_SUFFIX
         final_path = os.path.join(root, final_name)
         partial_path = final_path + ".partial"
 
         try:
-            with open(partial_path, "wb") as archive_file:
+            descriptor = os.open(partial_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "wb") as archive_file:
                 archive_file.write(archive_bytes)
             os.replace(partial_path, final_path)
         except OSError as xcpt:
@@ -124,11 +136,81 @@ class LocalFilesystemBackupBackend(BackupStorageBackendProtocol):
             raise BackupBackendUnavailableError(err_msg) from None
 
         size_bytes = len(archive_bytes)
-        archive_uri = "file://" + final_path
+        archive_uri = FILE_URI_PREFIX + final_path
         rtnval = BackupArchiveWriteResult(
             archive_uri=archive_uri,
             size_bytes=size_bytes,
         )
+        return rtnval
+
+    @classmethod
+    def store_archive_file(
+            cls,
+            *,
+            backup_id: str,
+            source_path: str
+        ) -> BackupArchiveWriteResult:
+        """
+            Move a finished archive file into the backup root as
+            ``<backup_id>.backup.tar.gz`` (a rename when the staging
+            directory is on the same filesystem, else copy + rename).
+
+            :param backup_id: The backup record UUID.
+            :param source_path: Finished archive in the staging area.
+
+            :returns: The :class:`BackupArchiveWriteResult`.
+            :raises: BackupBackendUnavailableError
+        """
+        root = _prepare_root()
+        final_path = os.path.join(root, backup_id + ARCHIVE_SUFFIX)
+        partial_path = final_path + ".partial"
+        try:
+            try:
+                os.replace(source_path, final_path)
+            except OSError:
+                shutil.copyfile(source_path, partial_path)
+                os.chmod(partial_path, 0o600)
+                os.replace(partial_path, final_path)
+                os.remove(source_path)
+        except OSError as xcpt:
+            err_msg_lines = [
+                "Failed to store the backup archive in local storage.",
+            ]
+            err_msg_lines.append("PATH: {}".format(final_path))
+            err_msg_lines.append("CAUSE: {}".format(str(xcpt)))
+            err_msg = os.linesep.join(err_msg_lines)
+            raise BackupBackendUnavailableError(err_msg) from None
+
+        rtnval = BackupArchiveWriteResult(
+            archive_uri=FILE_URI_PREFIX + final_path,
+            size_bytes=os.path.getsize(final_path),
+        )
+        return rtnval
+
+    @classmethod
+    def local_archive_uri(cls, *, path: str) -> str:
+        """
+            The URI this backend records for a local archive file.
+
+            :param path: Archive path.
+
+            :returns: ``file://`` URI.
+        """
+        rtnval = FILE_URI_PREFIX + os.path.abspath(path)
+        return rtnval
+
+    @classmethod
+    def local_archive_path(cls, *, archive_uri: str) -> Optional[str]:
+        """
+            Map a ``file://`` archive URI back to its path.
+
+            :param archive_uri: URI returned by a write.
+
+            :returns: Local path, or ``None`` for another scheme.
+        """
+        if archive_uri is None or archive_uri.startswith(FILE_URI_PREFIX) is False:
+            return None
+        rtnval = archive_uri[len(FILE_URI_PREFIX):]
         return rtnval
 
     @classmethod
@@ -139,14 +221,14 @@ class LocalFilesystemBackupBackend(BackupStorageBackendProtocol):
 
             :returns: A list of ``file://`` archive URIs.
         """
-        root = _resolve_backup_root()
+        root = resolve_backup_root()
         rtnval: List[str] = []
         if os.path.isdir(root) is False:
             return rtnval
 
         for entry in sorted(os.listdir(root)):
-            if entry.endswith(ARCHIVE_SUFFIX) is False:
+            if entry.endswith(ARCHIVE_SUFFIX) is False and entry.endswith(LEGACY_ARCHIVE_SUFFIX) is False:
                 continue
             entry_path = os.path.join(root, entry)
-            rtnval.append("file://" + entry_path)
+            rtnval.append(FILE_URI_PREFIX + entry_path)
         return rtnval

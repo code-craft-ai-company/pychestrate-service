@@ -36,11 +36,25 @@
 #   PYCHESTRATE_BIND_HOST=127.0.0.1 \
 #   PYCHESTRATE_BIND_PORT=8888 \
 #       development/run-staging-gunicorn
+#
+#   development/run-staging-gunicorn admin backup create --keep 14
+#       Runs the operator command line (``python -m
+#       ccai.pychestrate.admin ...``) under the same composed
+#       environment instead of gunicorn, so a backup or restore sees
+#       exactly the database, presence directory and key files the
+#       service uses.  Admin mode never generates missing secrets --
+#       on a rebuilt host the restore puts the backed-up keys there.
 
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
+
+ADMIN_MODE="false"
+if [[ "${1:-}" == "admin" ]]; then
+    ADMIN_MODE="true"
+    shift
+fi
 
 # ----------------------------------------------------------------------------
 # Refuse production
@@ -69,6 +83,8 @@ UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
 # the Ed25519 private key from the 32-byte seed.
 ENVELOPE_SIGNING_KEY_FILE="${SECRETS_DIR}/dev.envelope-signing-key"
 
+if [[ "${ADMIN_MODE}" == "false" ]]; then
+
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
     chmod 600 "${KEK_FILE}"
@@ -92,6 +108,8 @@ if [[ ! -s "${UI_COOKIE_SECRET_FILE}" ]]; then
     chmod 600 "${UI_COOKIE_SECRET_FILE}"
     echo "run-staging-gunicorn: generated ${UI_COOKIE_SECRET_FILE} (32 random bytes)"
 fi
+
+fi  # ADMIN_MODE == false
 
 # ----------------------------------------------------------------------------
 # SQLite DB path (alembic-managed; auto-create disabled in staging)
@@ -156,6 +174,19 @@ echo "run-staging-gunicorn: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_POR
 echo "run-staging-gunicorn: workers=${PYCHESTRATE_WORKERS} threads=${PYCHESTRATE_THREADS}"
 echo "run-staging-gunicorn: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo
+
+# ----------------------------------------------------------------------------
+# Admin mode: run the operator command line instead of gunicorn
+# ----------------------------------------------------------------------------
+
+if [[ "${ADMIN_MODE}" == "true" ]]; then
+    if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+        PYTHON="${REPO_ROOT}/.venv/bin/python"
+    else
+        PYTHON="$(command -v python3)"
+    fi
+    exec "${PYTHON}" -m ccai.pychestrate.admin "$@"
+fi
 
 # ----------------------------------------------------------------------------
 # Locate gunicorn (prefer the venv's, fall back to PATH)

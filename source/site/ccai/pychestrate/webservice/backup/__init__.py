@@ -10,15 +10,17 @@ Public surface:
   enum.
 * :class:`BackupAspects`, :class:`BackupRecordView`,
   :func:`trigger_backup`, :func:`get_backup`, :func:`list_backups`,
-  :func:`request_restore` -- the orchestrator facade.
+  :func:`verify_backup`, :func:`plan_restore`,
+  :func:`restore_backup`, :func:`prune_backups` -- the orchestrator
+  facade (see :mod:`backup.service`).
 * :class:`BackupStorageBackendProtocol` factory contract +
   reference :class:`LocalFilesystemBackupBackend`.
 * :class:`BackupEventTopics`.
-* Errors: :class:`BackupError`, :class:`BackupRecordNotFoundError`,
-  :class:`BackupBackendUnavailableError`,
-  :class:`BackupRequestInvalidError`,
-  :class:`BackupRestoreNotImplementedError`.
+* Errors: :class:`BackupError` and its subclasses.
 * :func:`register_builtin_extensions`.
+
+The operator command is ``python -m ccai.pychestrate.admin backup``
+(:mod:`backup.cli`).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -31,11 +33,14 @@ from ccai.pychestrate.webservice.extensions.registry import (
     register_factory_implementation,
 )
 from ccai.pychestrate.webservice.backup.errors import (
+    BackupArchiveInvalidError,
     BackupBackendUnavailableError,
+    BackupDatabaseError,
     BackupError,
+    BackupKeyMaterialError,
     BackupRecordNotFoundError,
     BackupRequestInvalidError,
-    BackupRestoreNotImplementedError,
+    BackupRestoreRequiresOfflineError,
 )
 from ccai.pychestrate.webservice.backup.events import (
     BackupEventTopics,
@@ -55,8 +60,11 @@ from ccai.pychestrate.webservice.backup.service import (
     BackupRecordView,
     get_backup,
     list_backups,
-    request_restore,
+    plan_restore,
+    prune_backups,
+    restore_backup,
     trigger_backup,
+    verify_backup,
 )
 
 
@@ -80,15 +88,21 @@ __all__ = [
     "BackupRecordView",
     "BackupEventTopics",
     "BackupError",
-    "BackupRecordNotFoundError",
+    "BackupArchiveInvalidError",
     "BackupBackendUnavailableError",
+    "BackupDatabaseError",
+    "BackupKeyMaterialError",
+    "BackupRecordNotFoundError",
     "BackupRequestInvalidError",
-    "BackupRestoreNotImplementedError",
+    "BackupRestoreRequiresOfflineError",
     "BackupStorageBackendProtocol",
     "LocalFilesystemBackupBackend",
     "trigger_backup",
     "get_backup",
     "list_backups",
-    "request_restore",
+    "plan_restore",
+    "prune_backups",
+    "restore_backup",
+    "verify_backup",
     "register_builtin_extensions",
 ]

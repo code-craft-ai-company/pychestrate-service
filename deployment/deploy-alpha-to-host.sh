@@ -42,7 +42,9 @@
 #      already in place from a workstation-driven first run).
 #   8. Install ``pychestrate.service`` systemd unit (rendered
 #      from ``deployment/pychestrate.service.template``) + start
-#      / restart the service.  The unit invokes
+#      / restart the service, plus ``pychestrate-backup.service``
+#      / ``.timer`` (daily backup of the database, run artifacts
+#      and keys into ~/pychestrate/backups + backup-keys).  The unit invokes
 #      ``development/run-staging-gunicorn`` which runs gunicorn
 #      against ``build_wsgi_application_for_production()`` with
 #      ``PYCHESTRATE_RUNTIME_ENVIRONMENT=staging`` and binds
@@ -570,6 +572,15 @@ else
         "${REPO_ROOT}/deployment/pychestrate.service.template" \
         > "${UNIT_LOCAL}"
 
+    # Scheduled backup: a oneshot unit + its daily timer.
+    BACKUP_UNIT_LOCAL="$(mktemp)"
+    sed \
+        -e "s|@USER@|${REMOTE_USER}|g" \
+        "${REPO_ROOT}/deployment/pychestrate-backup.service.template" \
+        > "${BACKUP_UNIT_LOCAL}"
+    BACKUP_TIMER_LOCAL="$(mktemp)"
+    cp "${REPO_ROOT}/deployment/pychestrate-backup.timer.template" "${BACKUP_TIMER_LOCAL}"
+
     UNIT_INSTALL_LOCAL="$(mktemp)"
     cat > "${UNIT_INSTALL_LOCAL}" <<UNIT_INSTALL
 #!/usr/bin/env bash
@@ -588,15 +599,28 @@ chmod 0644 ~/.pychestrate/server.log
 mkdir -p ~/pychestrate
 chmod 0700 ~/pychestrate
 
+# Backup archives and key bundles (see pychestrate-backup.service).
+# Both 0700: an archive is the whole database, a key bundle holds
+# the KEK.  Copy them off the host -- to different places.
+mkdir -p ~/pychestrate/backups ~/pychestrate/backup-keys
+chmod 0700 ~/pychestrate/backups ~/pychestrate/backup-keys
+touch ~/.pychestrate/backup.log
+chmod 0644 ~/.pychestrate/backup.log
+
 # \`\`install\`\` combines mv + chown + chmod into a single
 # privileged operation -- shrinks the sudoers whitelist
 # surface in deployment/sudoers.d/pychestrate-deploy.template.
 sudo install -m 0644 -o root -g root \\
     /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
+sudo install -m 0644 -o root -g root \\
+    /tmp/pychestrate-backup.service /etc/systemd/system/pychestrate-backup.service
+sudo install -m 0644 -o root -g root \\
+    /tmp/pychestrate-backup.timer /etc/systemd/system/pychestrate-backup.timer
 
 sudo systemctl daemon-reload
 sudo systemctl enable pychestrate.service
 sudo systemctl restart pychestrate.service
+sudo systemctl enable --now pychestrate-backup.timer
 
 echo
 echo "pychestrate.service status:"
@@ -604,8 +628,10 @@ sudo systemctl --no-pager status pychestrate.service | head -10
 UNIT_INSTALL
 
     scp -q "${UNIT_LOCAL}"         "${REMOTE_TARGET}:/tmp/pychestrate.service"
+    scp -q "${BACKUP_UNIT_LOCAL}"  "${REMOTE_TARGET}:/tmp/pychestrate-backup.service"
+    scp -q "${BACKUP_TIMER_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate-backup.timer"
     scp -q "${UNIT_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.systemd.install.sh"
-    rm -f "${UNIT_LOCAL}" "${UNIT_INSTALL_LOCAL}"
+    rm -f "${UNIT_LOCAL}" "${BACKUP_UNIT_LOCAL}" "${BACKUP_TIMER_LOCAL}" "${UNIT_INSTALL_LOCAL}"
 
     ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.systemd.install.sh && rm -f /tmp/pychestrate.systemd.install.sh"
 fi

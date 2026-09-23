@@ -176,10 +176,12 @@ tags:
       subscription CRUD, delivery history, and test events.
   - name: backups
     description: >-
-      Backup and disaster-recovery -- manually-triggered backups
-      that snapshot the database, object-store references, and
-      secrets metadata into an archive, plus backup listing,
-      status / manifest reads, and restore.
+      Backup and disaster-recovery -- backups that snapshot the
+      database and the run artifacts into an archive and the key
+      material (KEK, password pepper, ...) into a separate key
+      bundle, plus backup listing, status / manifest reads, and
+      restore verification. The restore itself runs offline
+      (`python -m ccai.pychestrate.admin backup restore`).
 
 security:
   - pychestrate_session: []
@@ -4511,10 +4513,13 @@ paths:
       summary: Trigger a backup.
       operationId: backups_create
       description: |
-        Triggers a manual backup. Snapshots the database, object-store
-        references, and secrets metadata into an archive written
-        through the configured `BackupStorageBackend`. Returns the
-        backup record with its terminal status synchronously.
+        Runs a backup now: a consistent database snapshot (SQLite
+        online backup, or `pg_dump --format=custom`) and the run
+        artifacts into an archive written through the configured
+        `BackupStorageBackend`, and the key material into a separate
+        key bundle in the key-bundle directory. Returns the backup
+        record with its terminal status synchronously. A failed run
+        is recorded with status `failed`.
       requestBody:
         required: false
         content:
@@ -4534,6 +4539,16 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+        '500':
+          description: A substrate failed (e.g. a key file could not be read); the run is recorded as failed.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: The storage backend could not accept the archive.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /backups/{backup_id}:
     parameters:
@@ -4563,34 +4578,92 @@ paths:
         schema: { type: string, format: uuid }
     post:
       tags: [backups]
-      summary: Restore from a backup.
+      summary: Verify a backup / get its restore command.
       operationId: backups_restore
       description: |
-        Restore from a completed backup. Restore is scoped as a
-        documented follow-up in this release -- the endpoint
-        validates the target backup and records a restore request,
-        returning `501 Not Implemented` until the restore executor
-        lands.
+        Same operation as `POST /backups/{backup_id}/restore`. The
+        service's router only matches a parameter that fills a whole
+        path segment, so this `:restore` spelling is not reachable
+        until the router supports it; use `/restore`.
+
+        With `{"dry_run": true}`, verifies the backup end to end --
+        archive checksum, manifest, database snapshot integrity and
+        row counts, artifact count, key-bundle fingerprints, and that
+        the KEK unwraps the stored data keys -- and returns the checks
+        plus the command that restores it.
+
+        A restore replaces the database, the run artifacts and the
+        keys the running service has loaded, so the service cannot
+        perform it on itself: without `dry_run` the answer is `409`
+        with the command to run with the service stopped
+        (`restore_command` in the problem document).
       requestBody:
         required: false
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
       responses:
-        '202':
-          description: Restore accepted.
+        '200':
+          description: Verification result (dry run).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BackupRestoreResult' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '501':
-          description: Restore execution is not yet implemented.
+        '409':
+          description: >-
+            Restore must run offline; the problem document carries
+            `restore_command`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /backups/{backup_id}/restore:
+    parameters:
+      - in: path
+        name: backup_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [backups]
+      summary: Verify a backup / get its restore command (reachable spelling of :restore).
+      operationId: backups_restore_subresource
+      description: |
+        With `{"dry_run": true}`, verifies the backup end to end --
+        archive checksum, manifest, database snapshot integrity and
+        row counts, artifact count, key-bundle fingerprints, and that
+        the KEK unwraps the stored data keys -- and returns the checks
+        plus the command that restores it.
+
+        A restore replaces the database, the run artifacts and the
+        keys the running service has loaded, so the service cannot
+        perform it on itself: without `dry_run` the answer is `409`
+        with the command to run with the service stopped
+        (`restore_command` in the problem document).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
+      responses:
+        '200':
+          description: Verification result (dry run).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Restore must run offline; the problem document carries
+            `restore_command`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # ---------------------------------------------------------------------------
   # rpa -- 6-rpa-orchestration (Phase 11)
@@ -9437,24 +9510,54 @@ components:
     BackupManifest:
       type: object
       description: >-
-        Inventory of what a completed backup archive contains.
+        Inventory of what a completed backup archive contains (the
+        archive's own manifest.json). Key bytes are never included --
+        only their fingerprints.
       properties:
+        format: { type: string }
+        format_version: { type: integer }
+        backup_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
         database:
           type: object
           properties:
             included: { type: boolean }
+            dialect: { type: string, enum: [sqlite, postgresql] }
             artifact: { type: string, nullable: true }
             size_bytes: { type: integer, minimum: 0, nullable: true }
+            sha256: { type: string }
+            table_count: { type: integer, minimum: 0 }
+            alembic_revision: { type: string, nullable: true }
+            row_counts:
+              type: object
+              additionalProperties: { type: integer }
         object_store:
           type: object
           properties:
             included: { type: boolean }
+            artifact_root: { type: string }
             object_count: { type: integer, minimum: 0, nullable: true }
+            size_bytes: { type: integer, minimum: 0 }
         secrets:
           type: object
           properties:
             included: { type: boolean }
             entry_count: { type: integer, minimum: 0, nullable: true }
+            key_bundle: { type: string, description: File name of the separate key bundle. }
+            keys:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  key_id: { type: string, nullable: true }
+                  source: { type: string, enum: [file, env] }
+                  origin: { type: string }
+                  sha256: { type: string }
+                  size_bytes: { type: integer }
+            skipped:
+              type: object
+              additionalProperties: { type: string }
 
     BackupRecord:
       type: object
@@ -9499,19 +9602,36 @@ components:
     BackupRestoreRequest:
       type: object
       properties:
-        confirm:
+        dry_run:
           type: boolean
-          description: Operator confirmation that a restore is intended.
+          default: false
+          description: >-
+            Verify the backup and return its restore command. Without
+            it the answer is 409 -- the restore runs offline.
 
     BackupRestoreResult:
       type: object
-      required: [backup_id, status]
+      required: [backup_id, status, checks, restore_command]
       properties:
         backup_id: { type: string, format: uuid }
         status:
           type: string
-          enum: [accepted, not_implemented]
+          enum: [verified, verification_failed]
         detail: { type: string }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, ok, detail]
+            properties:
+              name: { type: string }
+              ok: { type: boolean }
+              detail: { type: string }
+        archive_path: { type: string, nullable: true }
+        key_bundle_path: { type: string, nullable: true }
+        restore_command:
+          type: string
+          description: Command to run on the host with the service stopped.
 
     RpaExecutionMode:
       type: object

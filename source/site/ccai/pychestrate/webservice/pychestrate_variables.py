@@ -106,6 +106,34 @@ def _default_artifact_root() -> str:
     return rtnval
 
 
+def _default_backup_root() -> str:
+    """
+        Compute the default backup-archive directory: ``backups``
+        inside the pychestrate presence directory.
+
+        :returns: Absolute directory path.
+    """
+    presence_dir = PersonaVariables.AM_PRESENCE_DIR
+    expanded_presence = os.path.expanduser(presence_dir)
+    rtnval = os.path.join(expanded_presence, "backups")
+    return rtnval
+
+
+def _default_backup_keys_dir() -> str:
+    """
+        Compute the default key-bundle directory: ``backup-keys``
+        inside the pychestrate presence directory -- a sibling of the
+        archive directory so the two can be copied to different
+        places.
+
+        :returns: Absolute directory path.
+    """
+    presence_dir = PersonaVariables.AM_PRESENCE_DIR
+    expanded_presence = os.path.expanduser(presence_dir)
+    rtnval = os.path.join(expanded_presence, "backup-keys")
+    return rtnval
+
+
 class PychestrateVariablesDesc(AppVarSet):
     """
         Declarative pychestrate variable descriptors.
@@ -138,6 +166,22 @@ class PychestrateVariablesDesc(AppVarSet):
         section=SECTION_DATASTORAGE,
         source=VariableSource.BOTH,
         default=_default_artifact_root,
+    )
+
+    # Where backup archives (database + run artifacts) are written.
+    PYCHESTRATE_BACKUP_ROOT = AppVarDesc(
+        section=SECTION_DATASTORAGE,
+        source=VariableSource.BOTH,
+        default=_default_backup_root,
+    )
+
+    # Where each backup's key bundle (KEK, password pepper, ...) is
+    # written -- kept apart from the archives so the two can be
+    # stored separately.
+    PYCHESTRATE_BACKUP_KEYS_DIR = AppVarDesc(
+        section=SECTION_DATASTORAGE,
+        source=VariableSource.BOTH,
+        default=_default_backup_keys_dir,
     )
 
     # ------------------------------------------------------------------
@@ -338,6 +382,12 @@ class PychestrateVariables:
     )
     PYCHESTRATE_ARTIFACT_ROOT = AppVarAccessor(
         PychestrateVariablesDesc.PYCHESTRATE_ARTIFACT_ROOT
+    )
+    PYCHESTRATE_BACKUP_ROOT = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_BACKUP_ROOT
+    )
+    PYCHESTRATE_BACKUP_KEYS_DIR = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_BACKUP_KEYS_DIR
     )
 
     PYCHESTRATE_KEK_SOURCE = AppVarAccessor(

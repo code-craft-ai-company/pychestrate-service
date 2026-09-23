@@ -59,6 +59,10 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #                                  checkout: ProtectHome mounts
 #                                  it read-only and every deploy
 #                                  rsyncs it with --delete.
+#   * backups/, backup-keys/   -- backup archives and their key
+#                                  bundles (POST /api/v1/backups
+#                                  and pychestrate-backup.timer);
+#                                  copy both off the host.
 #   * logs/                    -- future home for application
 #                                  logs (the alpha still tees
 #                                  gunicorn stdout to
