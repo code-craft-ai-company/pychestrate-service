@@ -2895,8 +2895,12 @@ paths:
         jobs through the existing build / test / provision dispatch.
         A stage becomes eligible once every stage it `needs` has
         completed successfully; a stage failure skips its dependents
-        and fails the run. An optional `matrix` object requests
-        matrix expansion of the stage set.
+        and fails the run. `build` steps build the run's `commit_sha`
+        (and the branch named by `ref`) unless the step pins its own.
+        `script` steps have no execution path yet: they are reported
+        `failed` ("not executed"), never `completed`. A non-empty
+        `matrix` is refused with 422 (`reason: matrix_not_supported`)
+        because a run executes each stage once.
       requestBody:
         required: true
         content:
@@ -7850,8 +7854,10 @@ components:
           type: object
           additionalProperties: true
           description: |
-            Optional matrix-expansion dimensions. When present the
-            orchestrator records the expanded shard set on the run.
+            Must be absent or empty. Matrix execution is not supported
+            (a run executes each stage once), so a non-empty matrix is
+            refused with 422 instead of being ignored; preview shards
+            with `POST /projects/{project_id}/pipelines:expand-matrix`.
 
     PipelineStepStatus:
       type: object
@@ -7866,7 +7872,11 @@ components:
         kind_name: { type: string }
         job_kind:
           type: string
-          description: Dispatch route -- `build` / `test` / `infra` / `script`.
+          description: |
+            Dispatch route -- `build` / `test` / `infra` / `provision` /
+            `rpa` / `script`. A `script` step is never executed (no
+            executor runs scripts): it ends `failed` with a
+            `final_state_reason` starting "not executed".
         layer5_run_id:
           type: string
           nullable: true

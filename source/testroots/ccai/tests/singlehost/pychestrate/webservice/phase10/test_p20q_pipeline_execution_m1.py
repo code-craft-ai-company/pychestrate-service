@@ -213,6 +213,7 @@ class _FakeBuildServiceModule:
 
     def __init__(self) -> None:
         self.triggered: List[str] = []
+        self.inputs_seen: List[Any] = []
         self._counter: int = 0
         self.BuildRunInputs = _FakeBuildInputs
         self.BuildTriggerAspects = _FakeBuildAspects
@@ -223,6 +224,7 @@ class _FakeBuildServiceModule:
         self._counter = self._counter + 1
         run_id = "00000000-0000-4000-8000-0000000b{:04d}".format(self._counter)
         self.triggered.append(run_id)
+        self.inputs_seen.append(inputs)
         rtnval = _FakeOutcome(run_id=run_id)
         return rtnval
 
@@ -768,4 +770,235 @@ def test_read_returns_404_when_run_missing():
         perm_patch.deactivate()
         session.close()
     testbase.assert_equal(response.status_code, 404)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Audit ORG-F15 -- no step or run reports success for work not done
+# ---------------------------------------------------------------------------
+
+
+def _script_only_document() -> bytes:
+    """
+        A single-stage pipeline whose only step is a ``script`` step.
+    """
+    document = json.dumps({
+        "schema_version": 1,
+        "name": "scripted",
+        "stages": [
+            {
+                "id": "lint",
+                "steps": [
+                    {"id": "run-lint", "kind": "script",
+                     "inputs": {"commands": ["make lint"]}},
+                ],
+            },
+        ],
+    })
+    rtnval = document.encode("utf-8")
+    return rtnval
+
+
+def _trigger_script_pipeline(*, session: Any) -> Any:
+    orchestrator = _make_orchestrator(
+        session_factory=lambda: session,
+        build_module=_FakeBuildServiceModule(),
+        test_orch=_FakeTestOrchestrator(),
+    )
+    inputs = PipelineTriggerInputs(
+        project_id=PROJECT_UUID,
+        project_slug="proj",
+        commit_sha="abc123",
+        ref="main",
+        filename="pipeline.json",
+        document_bytes=_script_only_document(),
+    )
+    rtnval = orchestrator.trigger_pipeline(db_session=session, inputs=inputs)
+    return rtnval
+
+
+def test_script_step_is_not_reported_completed():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: a script step, which nothing can execute, ends FAILED
+    rather than COMPLETED.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    try:
+        view = _trigger_script_pipeline(session=session)
+        step_state = view.stages[0].steps[0].state
+    finally:
+        session.close()
+    testbase.assert_equal(step_state, StepState.FAILED)
+    return
+
+
+def test_script_step_reason_says_it_was_not_executed():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: the script step's final_state_reason states that it was
+    not executed.**
+    """
+    from ccai.pychestrate.webservice.orchestration.pipelines.execution.orchestrator import (
+        SCRIPT_STEP_NOT_EXECUTED_REASON,
+    )
+
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    try:
+        view = _trigger_script_pipeline(session=session)
+        reason = view.stages[0].steps[0].final_state_reason
+    finally:
+        session.close()
+    testbase.assert_equal(reason, SCRIPT_STEP_NOT_EXECUTED_REASON)
+    return
+
+
+def test_pipeline_with_a_script_step_does_not_complete():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: a run whose script step could not execute ends FAILED,
+    never COMPLETED.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    try:
+        view = _trigger_script_pipeline(session=session)
+        final = definition_service.get_pipeline_run(
+            db_session=session, run_id=view.run_id,
+        )
+    finally:
+        session.close()
+    testbase.assert_equal(final.state, PipelineRunState.FAILED)
+    return
+
+
+def test_build_step_builds_the_pipeline_commit():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: a build step is dispatched with the run's commit_sha and
+    branch in its runner inputs.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    try:
+        build_module = _FakeBuildServiceModule()
+        orchestrator = _make_orchestrator(
+            session_factory=lambda: session,
+            build_module=build_module,
+            test_orch=_FakeTestOrchestrator(),
+        )
+        inputs = PipelineTriggerInputs(
+            project_id=PROJECT_UUID,
+            project_slug="proj",
+            commit_sha="0123456789abcdef0123456789abcdef01234567",
+            ref="refs/heads/release-7",
+            filename="pipeline.json",
+            document_bytes=_two_stage_document(),
+        )
+        orchestrator.trigger_pipeline(db_session=session, inputs=inputs)
+        runner_inputs = build_module.inputs_seen[0].runner_inputs
+    finally:
+        session.close()
+    testbase.assert_equal(
+        (runner_inputs.get("commit_sha"), runner_inputs.get("branch")),
+        ("0123456789abcdef0123456789abcdef01234567", "release-7"),
+    )
+    return
+
+
+def test_build_step_keeps_a_commit_it_pins_itself():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: a build step that pins its own commit_sha keeps it.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    document = json.dumps({
+        "schema_version": 1,
+        "name": "pinned",
+        "stages": [
+            {
+                "id": "build",
+                "steps": [
+                    {"id": "compile", "kind": "build",
+                     "inputs": {"image": "python:3.12",
+                                "commit_sha": "feedface"}},
+                ],
+            },
+        ],
+    }).encode("utf-8")
+    try:
+        build_module = _FakeBuildServiceModule()
+        orchestrator = _make_orchestrator(
+            session_factory=lambda: session,
+            build_module=build_module,
+            test_orch=_FakeTestOrchestrator(),
+        )
+        inputs = PipelineTriggerInputs(
+            project_id=PROJECT_UUID,
+            project_slug="proj",
+            commit_sha="abc123",
+            ref="main",
+            filename="pipeline.json",
+            document_bytes=document,
+        )
+        orchestrator.trigger_pipeline(db_session=session, inputs=inputs)
+        pinned = build_module.inputs_seen[0].runner_inputs.get("commit_sha")
+    finally:
+        session.close()
+    testbase.assert_equal(pinned, "feedface")
+    return
+
+
+def test_trigger_route_refuses_a_matrix_it_cannot_execute():
+    """
+    **Feature: 6-pipeline-execution (audit ORG-F15)**
+    **Property: POST pipeline-runs with a non-empty matrix answers 422
+    matrix_not_supported instead of running the stages once and
+    reporting success.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(
+        project=_FakeProject(project_id=PROJECT_UUID),
+    )
+    build_module = _FakeBuildServiceModule()
+    orchestrator = _make_orchestrator(
+        session_factory=lambda: session,
+        build_module=build_module,
+        test_orch=_FakeTestOrchestrator(),
+    )
+    pipeline_runs_routes.execution_orchestrator.set_active_pipeline_orchestrator(
+        orchestrator=orchestrator,
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/{}/pipeline-runs".format(PROJECT_UUID),
+            path_params={"project_id": PROJECT_UUID},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+            body={
+                "commit_sha": "abc123",
+                "ref": "main",
+                "filename": "pipeline.json",
+                "document": json.loads(_two_stage_document().decode("utf-8")),
+                "matrix": {"python": ["3.11", "3.12"]},
+            },
+        )
+        response = pipeline_runs_routes.handle_trigger_pipeline_run(request)
+    finally:
+        pipeline_runs_routes.execution_orchestrator.set_active_pipeline_orchestrator(
+            orchestrator=None,
+        )
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+        session.close()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body.get("reason"), len(build_module.triggered)),
+        (422, "matrix_not_supported", 0),
+    )
     return
