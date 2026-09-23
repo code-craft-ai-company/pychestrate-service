@@ -65,4 +65,33 @@
 </table></div>
 
 {{ ui.pagination('projects.member_list', page, total_pages, {'project_id': project.id}) }}
+
+<div class="card mt">
+    <h2 class="card-header">Access through global roles</h2>
+    <p class="muted">These people can open every project, including this one, because of a role assigned on their user page. Their access is not managed here.</p>
+    {% if global_access %}
+    <div class="table-scroll" tabindex="0"><table class="data-table">
+        <thead>
+            <tr>
+                <th scope="col">Username</th>
+                <th scope="col">Display Name</th>
+                <th scope="col">Access on every project</th>
+                <th scope="col">Granted by</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in global_access %}
+            <tr>
+                <td>{{ entry.username }}</td>
+                <td>{{ entry.display_name | display }}</td>
+                <td><span class="badge badge-info">{{ entry.role }}</span></td>
+                <td>{{ entry.roles | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table></div>
+    {% else %}
+    {{ ui.empty_state("Nobody has a global project role.") }}
+    {% endif %}
+</div>
 {% endblock %}

@@ -104,7 +104,10 @@ NAV_GROUPS: List[NavGroup] = [
         group_id=GROUP_PROJECTS,
         label="Projects",
         icon="projects",
-        required_permissions=["system:projects.read"],
+        # Derived for project members and global project-role holders
+        # (system administrators included) -- see
+        # blueprints/projects/project_access.py (PRJ-17).
+        required_permissions=["system:projects.access"],
     ),
     NavGroup(
         group_id=GROUP_ORCHESTRATION,
@@ -165,7 +168,7 @@ NAV_ENTRIES: List[NavEntry] = [
         label="All Projects",
         route="/projects",
         group_id=GROUP_PROJECTS,
-        required_permissions=["system:projects.read"],
+        required_permissions=["system:projects.access"],
     ),
     # ---- Orchestration -------------------------------------------
     NavEntry(

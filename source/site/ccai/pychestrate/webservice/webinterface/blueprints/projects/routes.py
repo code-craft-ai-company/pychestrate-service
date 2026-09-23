@@ -155,16 +155,18 @@ _FUTURE_ENDPOINT_PATTERNS: tuple = ()
 
 def _build_project_manager(*, db_session: Any) -> Any:
     """
-        Construct a :class:`ProjectManager`. Lazy-imports.
+        Construct a :class:`ProjectManager` whose permission checks
+        and project lists honour global project roles as well as
+        membership (see :mod:`project_access`). Lazy-imports.
 
         :param db_session: Open SQLAlchemy session.
 
         :returns: ProjectManager instance.
     """
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 
@@ -298,6 +300,39 @@ def _resolve_project_role(*, role_str: str) -> Any:
         ProjectRole,
     )
     rtnval = ProjectRole(role_str)
+    return rtnval
+
+
+#: What each project role may do, shown next to the role picker. The
+#: global ``project-*`` roles (assigned on a user's page) give the
+#: matching role on every project.
+PROJECT_ROLE_DESCRIPTIONS: Dict[str, str] = {
+    "owner": "Owner - everything, including deleting the project (global role: project-owner)",
+    "administrator": "Administrator - manage members, settings and releases",
+    "developer": "Developer - run builds, tests, infrastructure and RPA jobs (global role: project-editor)",
+    "viewer": "Viewer - read-only access (global role: project-viewer)",
+}
+
+
+def _list_global_project_access(*, db_session: Any) -> List[Dict[str, Any]]:
+    """
+        Users who can open every project through a global role, for the
+        Members page. Lazy-imports; any failure yields an empty list.
+
+        :param db_session: Open SQLAlchemy session.
+
+        :returns: Rows from :func:`project_access.list_global_project_access`.
+    """
+    try:
+        from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+            list_global_project_access,
+        )
+        rtnval = list_global_project_access(db_session=db_session)
+    except Exception:
+        _projects_ui_logger.exception(
+            "pychestrate.ui.projects.global_access_lookup_failed"
+        )
+        rtnval = []
     return rtnval
 
 
@@ -1208,6 +1243,10 @@ def handle_member_list(request: Request) -> Response:
         context["members"] = members
         context["can_manage"] = can_manage
         context["current_user_id"] = auth.user_id
+        context["global_access"] = _list_global_project_access(
+            db_session=db_session
+        )
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
@@ -1352,6 +1391,7 @@ def handle_member_add(request: Request) -> Response:
         context["project"] = project
         context["available_users"] = available_users
         context["roles"] = roles
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         context["form_data"] = form_data
         context["user_search"] = user_search
         context["can_create_users"] = _has_permission(
@@ -1502,6 +1542,7 @@ def handle_member_edit(request: Request) -> Response:
         context["project"] = project
         context["member"] = member
         context["roles"] = roles
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         response = _render(
             template_name="projects/members/edit.html",
             context=context,

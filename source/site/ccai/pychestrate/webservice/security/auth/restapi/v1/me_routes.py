@@ -115,7 +115,10 @@ def _evaluate_held_system_permissions(
         Walks the system-scoped half of the in-tree permission
         catalog and runs :func:`rbac_evaluator.check_permission`
         for each key. A single permission evaluation failure is
-        treated as not-held and does not abort the walk.
+        treated as not-held and does not abort the walk. Adds the
+        derived ``system:projects.access`` key for users who can use
+        at least one project (see
+        :mod:`webinterface.blueprints.projects.project_access`).
 
         :param db_session: Request-scoped db session.
         :param principal: The authenticated ``AuthPrincipal``.
@@ -147,6 +150,21 @@ def _evaluate_held_system_permissions(
 
         if decision.allowed is True:
             held_keys.append(permission_key)
+
+    # -- projects access (PRJ-17) ---------------------------------------
+    # ``system:projects.access`` is not bound through a role: it is
+    # derived for every user who can use at least one project, as a
+    # project member or through a global project role, so the site
+    # shell shows the Projects area to them.
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        navigation_permission_keys,
+    )
+    for derived_key in navigation_permission_keys(
+            db_session=db_session, user_id=principal.user_id):
+        if derived_key not in held_keys:
+            held_keys.append(derived_key)
+    held_keys.sort()
+    # -- end projects access --------------------------------------------
 
     return held_keys
 

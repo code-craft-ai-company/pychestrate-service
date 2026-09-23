@@ -31,14 +31,13 @@
             <label for="role">Role *</label>
             <select id="role" name="role" class="form-control" required>
                 {% for role in roles %}
-                <option value="{{ role }}" {% if role == member.role.value %}selected{% endif %}>{{ role }}</option>
+                <option value="{{ role }}" {% if role == member.role.value %}selected{% endif %}>{{ role_descriptions[role] if role in role_descriptions else role }}</option>
                 {% endfor %}
             </select>
             <div class="form-text">
-                <strong>Owner:</strong> Full control<br>
-                <strong>Administrator:</strong> Manage members and settings<br>
-                <strong>Developer:</strong> Create and manage jobs<br>
-                <strong>Viewer:</strong> Read-only access
+                The role applies to this project only. A global project role
+                (project-owner, project-editor or project-viewer) assigned on the
+                user's page gives access to every project.
             </div>
         </div>
         

@@ -203,6 +203,13 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:projects.members.manage": (
         "Manage project member bindings via the REST surface"
     ),
+    # Shows the Projects area in the site shell. Derived for every
+    # user who can use at least one project -- as a project member or
+    # through a global project role -- rather than bound through a
+    # role (webinterface.blueprints.projects.project_access; PRJ-17).
+    "system:projects.access": (
+        "Use the Projects area (derived from project membership and project roles)"
+    ),
     # 7-test-metrics / 7-metrics-ingest PR p20f: metric-query REST
     # surface (GET /api/v1/metrics/catalog, /metrics/timeseries,
     # and .../projects/{id}/test-metrics).

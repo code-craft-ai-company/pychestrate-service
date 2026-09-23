@@ -54,14 +54,14 @@
             <label for="role">Role *</label>
             <select id="role" name="role" class="form-control" required>
                 {% for role in roles %}
-                <option value="{{ role }}" {% if (form_data and form_data.role == role) or (not form_data and role == 'developer') %}selected{% endif %}>{{ role }}</option>
+                <option value="{{ role }}" {% if (form_data and form_data.role == role) or (not form_data and role == 'developer') %}selected{% endif %}>{{ role_descriptions[role] if role in role_descriptions else role }}</option>
                 {% endfor %}
             </select>
             <div class="form-text">
-                <strong>Owner:</strong> Full control<br>
-                <strong>Administrator:</strong> Manage members and settings<br>
-                <strong>Developer:</strong> Create and manage jobs<br>
-                <strong>Viewer:</strong> Read-only access
+                The role applies to this project only. To give someone the same
+                access to every project, an administrator can assign the matching
+                global role (project-owner, project-editor or project-viewer) on
+                their user page.
             </div>
         </div>
         

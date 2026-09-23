@@ -571,6 +571,16 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "projects/members/": {
         "user_search": _by_mode("ali", ""),
         "can_create_users": _by_mode(True, False),
+        "roles": _const(["owner", "administrator", "developer", "viewer"]),
+        "role_descriptions": _const({
+            "owner": "Owner - everything",
+            "developer": "Developer - run jobs",
+        }),
+        "global_access": _by_mode(
+            [{"user_id": "user_id-7", "username": "bob", "display_name": "Bob",
+              "role": "developer", "roles": ["project-editor"]}],
+            [],
+        ),
     },
     "projects/release_templates/": {
         "can_create_release": _by_mode(True, False),

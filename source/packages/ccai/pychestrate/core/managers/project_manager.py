@@ -407,6 +407,15 @@ def deserialize_variable_value(json_str: str, var_type: str) -> Any:
 # Permission Definitions
 # =============================================================================
 
+# Ordering used when a user holds a role through more than one path
+# (project membership and a global role): the strongest one applies.
+PROJECT_ROLE_RANK = {
+    ProjectRole.VIEWER: 1,
+    ProjectRole.DEVELOPER: 2,
+    ProjectRole.ADMINISTRATOR: 3,
+    ProjectRole.OWNER: 4,
+}
+
 # Role permissions mapping
 ROLE_PERMISSIONS = {
     ProjectRole.OWNER: {
@@ -486,16 +495,123 @@ class ProjectManager:
     # Mask value for sensitive variables
     SENSITIVE_MASK = "********"
     
-    def __init__(self, db_session: DbSession, audit_logger=None):
+    def __init__(
+        self,
+        db_session: DbSession,
+        audit_logger=None,
+        access_resolver: Optional[Callable[[str], Optional[ProjectRole]]] = None
+    ):
         """
         Initialize the ProjectManager with a database session.
-        
+
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
+        :param access_resolver: Optional callable ``(user_id) -> ProjectRole | None``
+                                returning the role a user holds on *every*
+                                project through deployment-wide grants (a
+                                global ``project-*`` role, or the system
+                                projects permissions). Supplied by the web
+                                layer, which knows the RBAC tables; without
+                                it, access comes from project membership
+                                alone.
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
-    
+        self._access_resolver = access_resolver
+        self._global_roles: Dict[str, Optional[ProjectRole]] = {}
+
+    # =========================================================================
+    # Access resolution
+    # =========================================================================
+
+    def get_global_role(self, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the role ``user_id`` holds on every project through
+        deployment-wide grants, or ``None``. The answer is cached for the
+        lifetime of this manager (one request).
+
+        :param user_id: The user's unique identifier
+        :returns: The global ProjectRole, or None
+        """
+        if self._access_resolver is None or user_id is None:
+            return None
+        key = str(user_id)
+        if key not in self._global_roles:
+            try:
+                resolved = self._access_resolver(key)
+            except Exception:
+                # Access checks fail closed: an unreadable grant is no grant.
+                resolved = None
+            self._global_roles[key] = resolved
+        rtnval = self._global_roles[key]
+        return rtnval
+
+    def get_member_role(self, project_id: int, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the role ``user_id`` holds as a member of the project, or
+        ``None`` when the user is not a member.
+
+        :param project_id: The project's unique identifier
+        :param user_id: The user's unique identifier
+        :returns: The member's ProjectRole, or None
+        """
+        from ccai.pychestrate.core.orm import ProjectMember
+
+        member = self._db_session.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        if not member:
+            return None
+        try:
+            rtnval = ProjectRole(member.role)
+        except ValueError:
+            rtnval = None
+        return rtnval
+
+    def get_effective_role(self, project_id: int, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the strongest role ``user_id`` holds on the project: their
+        membership role or the role granted on every project by a global
+        role, whichever ranks higher (viewer < developer < administrator <
+        owner).
+
+        :param project_id: The project's unique identifier
+        :param user_id: The user's unique identifier
+        :returns: The effective ProjectRole, or None when the user has no
+                  access to the project
+        """
+        candidates = [
+            role for role in (
+                self.get_member_role(project_id, user_id),
+                self.get_global_role(user_id),
+            )
+            if role is not None
+        ]
+        if len(candidates) == 0:
+            return None
+        rtnval = max(candidates, key=lambda role: PROJECT_ROLE_RANK[role])
+        return rtnval
+
+    def has_any_project_access(self, user_id: str) -> bool:
+        """
+        Whether the user can use the Projects area at all: they are a
+        member of at least one project, or a global role gives them access
+        to every project.
+
+        :param user_id: The user's unique identifier
+        :returns: True when the user has access to some project
+        """
+        from ccai.pychestrate.core.orm import ProjectMember
+
+        if self.get_global_role(user_id) is not None:
+            return True
+        membership = self._db_session.query(ProjectMember.id).filter(
+            ProjectMember.user_id == user_id
+        ).first()
+        rtnval = membership is not None
+        return rtnval
+
     # =========================================================================
     # Validation Methods
     # =========================================================================
@@ -803,25 +919,30 @@ class ProjectManager:
         search: str = None
     ) -> ProjectListResponse:
         """
-        List projects the user has access to.
-        
+        List projects the user has access to: every project when a global
+        role gives them access to all projects, otherwise the projects they
+        are a member of.
+
         :param user_id: The user's ID (for permission filtering)
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
         :param search: Optional search string for project name or description
         :returns: ProjectListResponse with paginated project list
-        
+
         Validates: Requirements 1.5, 14.6
         """
         from ccai.pychestrate.core.orm import Project, ProjectMember
         from sqlalchemy import or_
-        
-        # Get projects where user is a member
-        query = self._db_session.query(Project).join(
-            ProjectMember, Project.id == ProjectMember.project_id
-        ).filter(
-            ProjectMember.user_id == user_id
-        )
+
+        if self.get_global_role(user_id) is not None:
+            query = self._db_session.query(Project)
+        else:
+            # Get projects where user is a member
+            query = self._db_session.query(Project).join(
+                ProjectMember, Project.id == ProjectMember.project_id
+            ).filter(
+                ProjectMember.user_id == user_id
+            )
         
         # Apply search filter
         if search:
@@ -1144,6 +1265,10 @@ class ProjectManager:
         * **Granular permission strings** defined in :data:`ROLE_PERMISSIONS`
           (e.g. ``'project.update'``, ``'build.trigger'``).
 
+        The user's role is the strongest of their project membership and
+        the role a global grant gives them on every project (see
+        :meth:`get_effective_role`).
+
         :param project_id: The project's unique identifier
         :param user_id: The user's unique identifier
         :param permission: The permission to check.
@@ -1151,18 +1276,12 @@ class ProjectManager:
 
         Validates: Requirements 14.4
         """
-        from ccai.pychestrate.core.orm import ProjectMember
+        role = self.get_effective_role(project_id, user_id)
 
-        # Check if user is a member
-        member = self._db_session.query(ProjectMember).filter(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == user_id
-        ).first()
-
-        if not member:
+        if role is None:
             return False
 
-        role_str = member.role
+        role_str = role.value
 
         # --- Role-level shortcuts (used by the web-UI routes) ----------------
         if permission == "view":
