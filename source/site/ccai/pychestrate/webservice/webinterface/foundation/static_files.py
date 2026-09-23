@@ -220,14 +220,102 @@ def build_static_url(relative_path: str) -> str:
 def install_static_url_global(*, environment: Any) -> None:
     """
         Attach :func:`build_static_url` to a jinja environment as the
-        ``static_url`` global.
+        ``static_url`` global, and :func:`build_mj_static_url` as the
+        ``mj_static_url`` global.
 
         :param environment: :class:`jinja2.Environment`.
 
         :returns: None.
     """
     environment.globals["static_url"] = build_static_url
+    environment.globals["mj_static_url"] = build_mj_static_url
     return
+
+
+# ---------------------------------------------------------------------------
+# Versioned URLs for the component-library assets mounted at /mj
+# ---------------------------------------------------------------------------
+
+MJ_STATIC_URL_PREFIX: str = "/mj/"
+
+_MJ_STATIC_URL_CACHE: Dict[str, Tuple[float, int, str]] = {}
+_mj_static_url_root: Optional[str] = None
+
+
+def configure_mj_static_url_root(*, static_root: Optional[str]) -> None:
+    """
+        Point :func:`build_mj_static_url` at the directory served under
+        ``/mj``. Optional: by default the builder resolves the
+        installed ``codecraftai-webworks`` package's ``static/``
+        directory, the same directory the bootstrap mounts at ``/mj``.
+        Passing ``None`` restores that default.
+
+        :param static_root: Absolute path to the directory, or ``None``.
+
+        :returns: None.
+    """
+    global _mj_static_url_root
+    _mj_static_url_root = static_root
+    _MJ_STATIC_URL_CACHE.clear()
+    return
+
+
+def _resolve_mj_static_url_root() -> Optional[str]:
+    """
+        The directory served under ``/mj``: the configured root, else
+        the installed webworks package's ``static/`` directory.
+
+        :returns: Absolute path, or ``None`` when it cannot be found.
+    """
+    if _mj_static_url_root is not None:
+        return _mj_static_url_root
+    try:
+        import ccai.webworks as webworks_package  # noqa: E402
+    except Exception:
+        return None
+    rtnval = os.path.join(os.path.dirname(webworks_package.__file__), "static")
+    return rtnval
+
+
+def build_mj_static_url(relative_path: str) -> str:
+    """
+        Build a cache-busting URL for a component-library asset served
+        under ``/mj`` (``/mj/styles/tokens.css?v=<content hash>``), the
+        ``/mj`` counterpart of :func:`build_static_url`. Versioned URLs
+        are served ``immutable`` by :func:`serve_static_file`, so the
+        shell stops revalidating the library stylesheets on every page.
+        A file that cannot be found is returned un-versioned so the
+        page still links it.
+
+        Installed on the jinja environment as the ``mj_static_url``
+        global.
+
+        :param relative_path: Path under the ``/mj`` root, e.g.
+                              ``"styles/tokens.css"``.
+
+        :returns: URL string.
+    """
+    clean = str(relative_path).lstrip("/")
+    base_url = MJ_STATIC_URL_PREFIX + clean
+    root = _resolve_mj_static_url_root()
+    if root is None:
+        return base_url
+    full_path = os.path.join(root, clean)
+    try:
+        stat_result = os.stat(full_path)
+    except OSError:
+        return base_url
+    cached = _MJ_STATIC_URL_CACHE.get(clean, None)
+    if cached is not None and cached[0] == stat_result.st_mtime and cached[1] == stat_result.st_size:
+        digest = cached[2]
+    else:
+        hasher = hashlib.sha1()
+        with open(full_path, "rb") as fh:
+            hasher.update(fh.read())
+        digest = hasher.hexdigest()[:12]
+        _MJ_STATIC_URL_CACHE[clean] = (stat_result.st_mtime, stat_result.st_size, digest)
+    rtnval = "{}?v={}".format(base_url, digest)
+    return rtnval
 
 
 def register_favicon_route(*, app: Any, favicon_path: str) -> None:
@@ -322,8 +410,11 @@ def register_static_routes(
 
 
 __all__ = [
+    "build_mj_static_url",
     "build_static_url",
+    "configure_mj_static_url_root",
     "configure_static_url_root",
+    "MJ_STATIC_URL_PREFIX",
     "install_static_url_global",
     "register_favicon_route",
     "DEFAULT_CONTENT_TYPE",
