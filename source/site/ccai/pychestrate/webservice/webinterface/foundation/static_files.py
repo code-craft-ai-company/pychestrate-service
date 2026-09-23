@@ -35,6 +35,20 @@ The :mod:`mimetypes` stdlib module guesses the type from the
 file extension. Unknown extensions fall back to
 ``application/octet-stream`` -- safe default that browsers do
 not render.
+
+Compression
+-----------
+
+Text assets (JavaScript, CSS, SVG, JSON, plain text) of at least
+:data:`MIN_COMPRESSIBLE_BYTES` are sent ``Content-Encoding: gzip``
+when the request's ``Accept-Encoding`` allows it, so a deployment
+without a compressing reverse proxy does not ship the 1.6 MB
+component library uncompressed on every page. The gzip body and
+the file bytes are cached in process per file (keyed by path,
+mtime and size), so an asset is read, hashed and compressed once
+per release rather than on every request. Each representation
+carries its own ETag and every text asset answers
+``Vary: Accept-Encoding`` so shared caches keep them apart.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -43,11 +57,14 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import gzip
 import logging
 import mimetypes
 import hashlib
 import os
+import threading
 
+from dataclasses import dataclass
 from typing import Dict, Tuple, Any, Optional
 
 from ccai.webworks.routing.request import Request
@@ -58,6 +75,39 @@ _module_logger = logging.getLogger(__name__)
 
 
 DEFAULT_CONTENT_TYPE: str = "application/octet-stream"
+
+#: Content types worth gzip-encoding. Images other than SVG and web
+#: fonts are already compressed, so they are always sent as-is.
+COMPRESSIBLE_CONTENT_TYPES = frozenset((
+    "application/javascript",
+    "application/json",
+    "application/manifest+json",
+    "application/xml",
+    "image/svg+xml",
+    "text/css",
+    "text/html",
+    "text/javascript",
+    "text/plain",
+    "text/xml",
+))
+
+#: Files smaller than this are sent uncompressed: below ~1 KiB the
+#: gzip framing overhead eats most of the saving.
+MIN_COMPRESSIBLE_BYTES: int = 1024
+
+#: zlib level used for static assets. Level 6 is the usual
+#: size / CPU balance; the result is cached, so it is paid once per
+#: file per release.
+GZIP_COMPRESSION_LEVEL: int = 6
+
+#: Files larger than this are not held in the in-process cache; they
+#: are read (and compressed) per request instead.
+MAX_CACHED_ASSET_BYTES: int = 16 * 1024 * 1024
+
+#: Suffix appended inside the quotes of the ETag of the gzip
+#: representation, so the two representations never share a
+#: validator.
+GZIP_ETAG_SUFFIX: str = "-gzip"
 
 
 def serve_static_file(
@@ -102,27 +152,40 @@ def serve_static_file(
     if os.path.isfile(resolved_candidate) is False:
         return _not_found_response()
 
-    with open(resolved_candidate, "rb") as fh:
-        body_bytes = fh.read()
-    content_type, _ = mimetypes.guess_type(resolved_candidate)
-    if content_type is None:
-        content_type = DEFAULT_CONTENT_TYPE
+    asset = _load_static_asset(file_path=resolved_candidate)
 
     # Caching: a versioned URL (``?v=<content hash>``, built by
     # :func:`build_static_url`) is immutable for a year; a bare URL
     # must revalidate on every use. Either way an ETag lets the
     # browser skip the body when nothing changed.
-    etag = '"{}"'.format(hashlib.sha256(body_bytes).hexdigest()[:32])
     if _request_has_version_param(request=request) is True:
         cache_control = "public, max-age=31536000, immutable"
     else:
         cache_control = "no-cache"
+
+    send_gzip = False
+    if asset.compressible is True:
+        send_gzip = _request_accepts_gzip(request=request)
+
+    if send_gzip is True:
+        body_bytes = _gzip_body_for(asset=asset)
+        etag = asset.gzip_etag
+    else:
+        body_bytes = asset.body
+        etag = asset.etag
+
     headers = {
-        "Content-Type": content_type,
+        "Content-Type": asset.content_type,
         "Cache-Control": cache_control,
         "ETag": etag,
     }
+    if asset.compressible is True:
+        headers["Vary"] = "Accept-Encoding"
+    if send_gzip is True:
+        headers["Content-Encoding"] = "gzip"
+
     if _if_none_match_matches(request=request, etag=etag) is True:
+        headers.pop("Content-Encoding", None)
         rtnval = Response(status_code=304, body=b"", headers=headers)
         return rtnval
     rtnval = Response(
@@ -131,6 +194,167 @@ def serve_static_file(
         headers=headers,
     )
     return rtnval
+
+
+@dataclass
+class _StaticAsset:
+    """
+        One static file as served: its bytes, content type, strong
+        ETag, and (filled in lazily) its gzip representation.
+
+        :ivar mtime_ns: File modification time the entry was built
+                        from; a change invalidates the entry.
+        :ivar size: File size the entry was built from.
+        :ivar body: Identity (uncompressed) bytes.
+        :ivar content_type: Guessed ``Content-Type``.
+        :ivar etag: Quoted strong ETag of the identity bytes.
+        :ivar compressible: Whether the asset is worth gzip-encoding.
+        :ivar gzip_etag: Quoted ETag of the gzip representation.
+        :ivar gzip_body: Cached gzip bytes, or ``None`` until the
+                         first gzip request.
+    """
+    mtime_ns: int
+    size: int
+    body: bytes
+    content_type: str
+    etag: str
+    compressible: bool
+    gzip_etag: str
+    gzip_body: Optional[bytes] = None
+
+
+_STATIC_ASSET_CACHE: Dict[str, _StaticAsset] = {}
+_STATIC_ASSET_CACHE_LOCK = threading.Lock()
+
+
+def _is_compressible(*, content_type: str, size: int) -> bool:
+    """
+        Decide whether an asset is worth gzip-encoding.
+
+        :param content_type: Guessed content type (no parameters).
+        :param size: Size of the identity body in bytes.
+
+        :returns: True for text types of at least
+                  :data:`MIN_COMPRESSIBLE_BYTES`.
+    """
+    if size < MIN_COMPRESSIBLE_BYTES:
+        return False
+    rtnval = content_type in COMPRESSIBLE_CONTENT_TYPES
+    return rtnval
+
+
+def _load_static_asset(*, file_path: str) -> _StaticAsset:
+    """
+        Return the cached :class:`_StaticAsset` for ``file_path``,
+        (re)building it when the file's mtime or size changed.
+
+        :param file_path: Resolved absolute path inside the static
+                          root.
+
+        :returns: The asset entry.
+    """
+    stat_result = os.stat(file_path)
+    with _STATIC_ASSET_CACHE_LOCK:
+        cached = _STATIC_ASSET_CACHE.get(file_path, None)
+    if cached is not None:
+        if cached.mtime_ns == stat_result.st_mtime_ns and cached.size == stat_result.st_size:
+            return cached
+
+    with open(file_path, "rb") as fh:
+        body_bytes = fh.read()
+    content_type, _ = mimetypes.guess_type(file_path)
+    if content_type is None:
+        content_type = DEFAULT_CONTENT_TYPE
+    digest = hashlib.sha256(body_bytes).hexdigest()[:32]
+    asset = _StaticAsset(
+        mtime_ns=stat_result.st_mtime_ns,
+        size=stat_result.st_size,
+        body=body_bytes,
+        content_type=content_type,
+        etag='"{}"'.format(digest),
+        compressible=_is_compressible(content_type=content_type, size=len(body_bytes)),
+        gzip_etag='"{}{}"'.format(digest, GZIP_ETAG_SUFFIX),
+    )
+    if len(body_bytes) <= MAX_CACHED_ASSET_BYTES:
+        with _STATIC_ASSET_CACHE_LOCK:
+            _STATIC_ASSET_CACHE[file_path] = asset
+    rtnval = asset
+    return rtnval
+
+
+def _gzip_body_for(*, asset: _StaticAsset) -> bytes:
+    """
+        Return the gzip representation of an asset, compressing it
+        on first use. ``mtime=0`` keeps the output byte-stable so the
+        representation matches its ETag across processes.
+
+        :param asset: Cached asset entry.
+
+        :returns: gzip-encoded bytes.
+    """
+    if asset.gzip_body is not None:
+        return asset.gzip_body
+    compressed = gzip.compress(
+        asset.body, compresslevel=GZIP_COMPRESSION_LEVEL, mtime=0,
+    )
+    asset.gzip_body = compressed
+    rtnval = compressed
+    return rtnval
+
+
+def _request_accepts_gzip(*, request: Request) -> bool:
+    """
+        Parse ``Accept-Encoding`` and decide whether a gzip body is
+        acceptable (``gzip`` or ``*`` listed with a non-zero q-value,
+        and ``gzip`` not explicitly refused).
+
+        :param request: Incoming webworks request.
+
+        :returns: True when the response may be gzip-encoded.
+    """
+    try:
+        header = request.headers.get("Accept-Encoding", None)
+    except Exception:
+        header = None
+    if header is None:
+        return False
+
+    gzip_quality: Optional[float] = None
+    wildcard_quality: Optional[float] = None
+    for part in str(header).split(","):
+        pieces = [piece.strip() for piece in part.split(";")]
+        coding = pieces[0].lower()
+        if len(coding) == 0:
+            continue
+        quality = 1.0
+        for param in pieces[1:]:
+            if param.lower().startswith("q="):
+                try:
+                    quality = float(param[2:])
+                except ValueError:
+                    quality = 0.0
+        if coding in ("gzip", "x-gzip"):
+            gzip_quality = quality
+        elif coding == "*":
+            wildcard_quality = quality
+
+    if gzip_quality is not None:
+        rtnval = gzip_quality > 0.0
+        return rtnval
+    rtnval = wildcard_quality is not None and wildcard_quality > 0.0
+    return rtnval
+
+
+def reset_static_asset_cache_for_testing() -> None:
+    """
+        Drop every cached static asset. Tests call this when they
+        rewrite a file in place faster than the mtime resolution.
+
+        :returns: None.
+    """
+    with _STATIC_ASSET_CACHE_LOCK:
+        _STATIC_ASSET_CACHE.clear()
+    return
 
 
 def _request_has_version_param(*, request: Request) -> bool:
@@ -143,14 +367,46 @@ def _request_has_version_param(*, request: Request) -> bool:
 
 
 def _if_none_match_matches(*, request: Request, etag: str) -> bool:
+    """
+        Evaluate ``If-None-Match`` against ``etag`` with the weak
+        comparison RFC 9110 prescribes for this header: a ``W/``
+        prefix on either side is ignored, so a validator a proxy
+        weakened still revalidates.
+
+        :param request: Incoming webworks request.
+        :param etag: Quoted ETag of the representation being served.
+
+        :returns: True when the client's copy is current.
+    """
     try:
         header = request.headers.get("If-None-Match", None)
     except Exception:
         header = None
     if header is None:
         return False
+    target = _opaque_etag(etag)
     candidates = [part.strip() for part in str(header).split(",")]
-    rtnval = etag in candidates or "*" in candidates
+    for candidate in candidates:
+        if candidate == "*":
+            return True
+        if _opaque_etag(candidate) == target:
+            return True
+    rtnval = False
+    return rtnval
+
+
+def _opaque_etag(value: str) -> str:
+    """
+        Strip the weakness indicator from an entity tag.
+
+        :param value: Entity tag, possibly ``W/``-prefixed.
+
+        :returns: The quoted opaque tag.
+    """
+    stripped = value.strip()
+    if stripped.startswith("W/"):
+        stripped = stripped[2:]
+    rtnval = stripped
     return rtnval
 
 
@@ -326,7 +582,11 @@ __all__ = [
     "configure_static_url_root",
     "install_static_url_global",
     "register_favicon_route",
+    "COMPRESSIBLE_CONTENT_TYPES",
     "DEFAULT_CONTENT_TYPE",
+    "GZIP_ETAG_SUFFIX",
+    "MIN_COMPRESSIBLE_BYTES",
+    "reset_static_asset_cache_for_testing",
     "serve_static_file",
     "register_static_routes",
 ]

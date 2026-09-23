@@ -124,10 +124,12 @@ def build_jinja_environment(
 def install_template_globals(*, environment: jinja2.Environment) -> None:
     """
         Install every global the consumer-UI templates rely on:
-        ``url_for`` (route registry shim) and ``static_url``
-        (content-hashed static asset URLs). Production bootstrap and
-        the test harnesses all call this one function so the set of
-        globals can never drift between them.
+        ``url_for`` (route registry shim), ``static_url``
+        (content-hashed static asset URLs), ``ui_profile`` and
+        ``csp_nonce`` (the response's Content-Security-Policy script
+        nonce). Production bootstrap and the test harnesses all call
+        this one function so the set of globals can never drift
+        between them.
 
         :param environment: Configured jinja2 environment.
 
@@ -142,9 +144,15 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     from ccai.pychestrate.webservice.webinterface.site_shell.ui_profile import (  # noqa: E402
         install_ui_profile_global,
     )
+    from ccai.pychestrate.webservice.hardening.security_headers import (  # noqa: E402
+        install_csp_nonce_global,
+    )
     install_url_for_global(environment=environment)
     install_static_url_global(environment=environment)
     install_ui_profile_global(environment=environment)
+    # ``csp_nonce()`` -- inline <script> blocks must carry the
+    # response's Content-Security-Policy nonce to run.
+    install_csp_nonce_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
     environment.filters["input_datetime"] = input_datetime_filter
     environment.filters["humanize_count"] = humanize_count_filter

@@ -63,6 +63,9 @@ from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
 from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     register_system_health_routes,
 )
+from ccai.pychestrate.webservice.system.restapi.v1.operations_routes import (
+    register_operations_routes,
+)
 from ccai.pychestrate.webservice.mcp.service_endpoint import (
     MCP_MIDDLEWARE_PREFIX,
     register_mcp_service_routes,
@@ -237,6 +240,9 @@ from ccai.pychestrate.webservice.webinterface.foundation.url_for import (
 from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
 from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
+)
+from ccai.pychestrate.webservice.hardening.platform_wsgi import (
+    wrap_platform_wsgi_application,
 )
 from ccai.webworks.webapplication import establish_webapp_persona
 from ccai.webworks.wsgi.application import create_wsgi_application
@@ -515,6 +521,9 @@ def register_service_extensions() -> None:
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
     register_system_health_routes(app=app, version_prefix="/api/v1")
+    # Liveness / readiness probes and Prometheus /metrics (top level,
+    # no session; see system.operations).
+    register_operations_routes(app=app)
     # MCP server endpoint for agents (fixed path /mcp/1/service, not
     # under the versioned REST prefix).
     register_mcp_service_routes(app=app)
@@ -626,7 +635,9 @@ def pychestrate_website_main():
     # in journald / stdout immediately.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    # flush: stdout redirected to a file is block-buffered, and the
+    # server never exits to flush it (LD-11).
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
 
@@ -651,6 +662,11 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
+    wsgi_app = wrap_platform_wsgi_application(
+        wsgi_app=wsgi_app, runtime_environment=runtime_config.runtime_environment,
+    )
 
     bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
     bind_port = int(PychestrateVariables.PYCHESTRATE_BIND_PORT)
@@ -660,7 +676,8 @@ def pychestrate_website_main():
     print(
         "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={})".format(
             bind_host, bind_port, workers, threads
-        )
+        ),
+        flush=True,
     )
     run_server(app=wsgi_app, host=bind_host, port=bind_port,
                workers=workers, threads=threads)
@@ -699,7 +716,7 @@ def build_wsgi_application_for_production():
     # entry point exactly.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
     app.startup()
@@ -716,6 +733,11 @@ def build_wsgi_application_for_production():
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     rtnval = _eager_start_response_wsgi(rtnval_inner)
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
+    rtnval = wrap_platform_wsgi_application(
+        wsgi_app=rtnval, runtime_environment=runtime_config.runtime_environment,
+    )
     return rtnval
 
 if __name__ == "__main__":

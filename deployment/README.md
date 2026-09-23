@@ -150,8 +150,11 @@ Specifically:
   gunicorn against `build_wsgi_application_for_production()`
   bound to `127.0.0.1:8888`
 - `/etc/nginx/sites-available/pychestrate` — nginx site config,
-  rendered + symlinked to `sites-enabled/`, listening on port 80
-  and reverse-proxying to `127.0.0.1:8888`
+  rendered from `deployment/pychestrate.nginx.conf.template` +
+  symlinked to `sites-enabled/`, listening on port 80 (redirect)
+  and 443, reverse-proxying to `127.0.0.1:8888` and gzip-compressing
+  HTML / JavaScript / CSS / JSON / SVG responses (the ~1.6 MB mj-*
+  component library goes out as ~370 KB)
 - `~/.pychestrate/server.log` — tee'd stdout / stderr from the
   service (also available via `journalctl -u pychestrate`)
 
@@ -220,7 +223,7 @@ The script aborts with a typed error if:
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
 | 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
 | 6 | `alembic upgrade head` | applies both migrations against `.cache/dev-db/pychestrate.sqlite`. |
-| 7 | nginx site write + reload | `/etc/nginx/sites-available/pychestrate` listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888). |
+| 7 | nginx site write + reload | renders `deployment/pychestrate.nginx.conf.template` to `/etc/nginx/sites-available/pychestrate`: listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888), gzip on for text responses. Validate a template edit locally with `nginx -t` against a rendered copy before deploying. |
 | 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`. |
 | 7 | `make dev-up` (in tmux) | starts the service. tmux session name: `pychestrate`. |
 
@@ -376,6 +379,133 @@ defeats the principle of least privilege.
   at step 1. Run from a host that has direct LAN access to the
   target, or use the GitHub Actions deploy workflow below
   (which reaches the target via Tailscale).
+
+
+## Monitoring
+
+| Endpoint | Auth | Answers |
+|---|---|---|
+| `GET /livez` (also `/__health/live`) | none | `200 {"status": "live"}` while the process serves HTTP -- use for restart decisions |
+| `GET /readyz` (also `/healthz`, `/__health/ready`) | none | `200 {"status": "ready"}`, or `503 {"status": "not_ready", "failing": ["database"]}` when the database does not answer `SELECT 1` within 3 s -- use for traffic decisions |
+| `GET /api/v1/system/health` | none / admin | overall status word for anyone; subsystem details with `system:ui.admin.view` |
+| `GET /metrics` | bearer token | Prometheus text: process start, request counts and latency per worker, readiness, runs by state, backups by status and `pychestrate_backup_last_success_timestamp_seconds` (alert when it is older than ~26 h), internal event counters |
+
+The probes reveal nothing but a status word and check names, and they
+pass the first-run setup gate. `/metrics` needs `Authorization: Bearer
+<token>`, the token being the contents of `PYCHESTRATE_METRICS_TOKEN_FILE`
+(`run-staging-gunicorn` generates `.cache/dev-secrets/dev.metrics-token`);
+set `PYCHESTRATE_METRICS_PUBLIC=true` to serve it without a token only
+where the network or proxy already restricts it. Scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: pychestrate
+    scheme: https
+    authorization:
+      credentials_file: /etc/prometheus/pychestrate-metrics-token
+    static_configs:
+      - targets: ["tc-app-server.tailb75ce6.ts.net"]
+```
+
+Counters and latency histograms are per gunicorn worker (series carry
+a `pid` label; sum them). `~/.pychestrate/server.log` and `backup.log`
+are rotated daily or past 100 MB, 14 kept, by
+`/etc/logrotate.d/pychestrate` (from `pychestrate.logrotate.template`).
+
+
+## Backup and restore
+
+A backup is two files per run, written under the presence directory
+(`~/pychestrate`, mode 0700):
+
+| File | Holds |
+|---|---|
+| `backups/<id>.backup.tar.gz` (+ `.sha256`) | a consistent database snapshot (SQLite online-backup API, or `pg_dump --format=custom` for PostgreSQL) and every run artifact under the artifact root (`~/pychestrate/artifacts`), plus a manifest with checksums, row counts and key fingerprints |
+| `backup-keys/<id>.keys.tar` (0600) | the keys the database is useless without: the KEK (every stored secret is wrapped under it), the password pepper, the UI cookie secret, the job-envelope signing key and the enrollment CA -- whichever are configured |
+
+The archive contains **no key bytes**; keep the two files in
+**different places** so a copied archive alone cannot decrypt the
+secrets inside it.
+
+### Taking backups
+
+- **Scheduled:** the deploy installs `pychestrate-backup.timer`, which
+  runs `pychestrate-backup.service` daily at 02:30 (±15 min, catching up
+  after downtime). It keeps the newest 14 archives. Log:
+  `~/.pychestrate/backup.log`.
+- **On demand:** `sudo systemctl start pychestrate-backup.service`, or
+  `POST /api/v1/backups` (permission `system:backups.write`), or on the
+  host:
+
+  ```bash
+  cd ~/pychestrate-service
+  development/run-staging-gunicorn admin backup create --note "before upgrade"
+  development/run-staging-gunicorn admin backup list
+  ```
+
+A backup is safe to take while the service runs. The REST trigger
+runs inside the request (bounded by gunicorn's worker timeout), so on
+an install with a large artifact tree prefer the systemd unit or the
+command. **Copy both directories off the host after each run** (e.g. `rsync` the archives
+to the NAS and the key bundles to the operator's secret store); a
+backup that stays on the host dies with its disk.
+
+### Rehearsing a restore (verification)
+
+```bash
+development/run-staging-gunicorn admin backup verify \
+    ~/pychestrate/backups/<id>.backup.tar.gz \
+    --keys ~/pychestrate/backup-keys/<id>.keys.tar
+```
+
+checks the archive checksum, the manifest, the database snapshot
+(`PRAGMA integrity_check` and the recorded row counts, or
+`pg_restore --list`), the artifact count, the key fingerprints, and
+that the KEK unwraps the stored data keys -- without touching the live
+system. `POST /api/v1/backups/<id>:restore` with `{"dry_run": true}`
+runs the same checks from the API and returns the restore command.
+
+### Restoring
+
+A restore replaces the database, the artifact root and the key files,
+so it runs with the service **stopped** (the API answers 409 with the
+command instead of restoring itself):
+
+```bash
+sudo systemctl stop pychestrate.service pychestrate-backup.timer
+cd ~/pychestrate-service
+development/run-staging-gunicorn admin backup restore \
+    /path/to/<id>.backup.tar.gz --keys /path/to/<id>.keys.tar --yes
+sudo systemctl start pychestrate.service pychestrate-backup.timer
+```
+
+The restore verifies the backup first and changes nothing if any check
+fails. It then writes each key to the path the environment loads it
+from (refusing to replace a *different* existing key unless
+`--overwrite-keys` is given), swaps the database in (SQLite: the old
+file is kept in `pre-restore-<timestamp>/` next to it; PostgreSQL: the
+current database is first dumped to
+`backups/pre-restore-<timestamp>.pgdump`, then `pg_restore --clean
+--if-exists --single-transaction` runs), and replaces the artifact root
+(the old tree is kept as `artifacts.pre-restore-<timestamp>`). Sign in
+and open a secret afterwards to confirm the KEK and pepper; delete the
+`pre-restore-*` copies once satisfied.
+
+On a **rebuilt host**, deploy first (the deploy generates fresh dev
+keys under `.cache/dev-secrets/` on first start), stop the service, and
+restore with `--overwrite-keys` so the backed-up keys replace the fresh
+ones.
+
+For PostgreSQL, install the `postgresql-client` package matching the
+server version on the host that runs `backup create` / `restore`
+(`PYCHESTRATE_PG_DUMP_PATH` / `PYCHESTRATE_PG_RESTORE_PATH` override the
+tool paths). The password is passed to `pg_dump` / `pg_restore` in
+`PGPASSWORD`, never on the command line.
+
+Locations are configurable (environment or `settings.config`
+`[DATASTORAGE]`): `PYCHESTRATE_BACKUP_ROOT`, `PYCHESTRATE_BACKUP_KEYS_DIR`,
+`PYCHESTRATE_ARTIFACT_ROOT`. A location outside `~/pychestrate` must be
+added to the units' `ReadWritePaths`.
 
 
 ## CI deploy workflow (`.github/workflows/deploy.yml`)

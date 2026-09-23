@@ -166,15 +166,23 @@ def test_results_complete_returns_400_when_required_fields_missing():
 def test_results_complete_returns_202_on_happy_path():
     """
     **Feature: 5-run-state-machine PR p19c**
-    **Property: A well-formed manifest triggers scan_once and
-    the handler returns 202 echoing the terminal outcome.**
+    **Property: A well-formed manifest triggers scan_once on the
+    manifest's prefix anchored under the artifact root, and the
+    handler returns 202 echoing the terminal outcome.**
     """
+    import os
+    import tempfile
+
+    from ccai.pychestrate.webservice.jobs.results import artifact_root
+
     captured: Dict[str, Any] = {}
 
     def fake_scan(**kwargs: Any) -> Any:
         captured.update(kwargs)
         return _FakeOutcome()
 
+    root = tempfile.mkdtemp(prefix="p19c-artifacts-")
+    artifact_root.set_artifact_root_override(root=root)
     run_patch = _patch_find_run(exists=True)
     scan_patch = create_module_patch(runs_routes.result_scanner, "scan_once")
     scan_mock = scan_patch.activate()
@@ -191,11 +199,13 @@ def test_results_complete_returns_202_on_happy_path():
     finally:
         scan_patch.deactivate()
         run_patch.deactivate()
+        artifact_root.set_artifact_root_override(root=None)
+        os.rmdir(root)
     testbase.assert_equal(response.status_code, 202)
     body = _decode_body(response)
     testbase.assert_equal(body["run_id"], "run-1")
     testbase.assert_equal(body["terminal_outcome"], "success")
-    testbase.assert_equal(captured["tree_path"], "runs/run-1/")
+    testbase.assert_equal(captured["tree_path"], os.path.join(root, "runs", "run-1"))
     return
 
 
