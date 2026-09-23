@@ -1118,28 +1118,50 @@ def handle_resource_edit(request: Request) -> Response:
                 )
                 return csrf_redirect
 
-            description = str(
-                single_form.get("description", "")
-            ).strip()
-            capacity = _coerce_int(
-                raw=single_form.get("capacity", None)
-            )
-            tags = list(multi_form.get("tags", []))
-            metadata_str = str(single_form.get("metadata", "")).strip()
+            # A field the form submitted is an explicit value even when
+            # it is empty: clearing the description, unticking every
+            # tag or emptying the metadata saves exactly that. Only a
+            # field the form did not send at all means "no change".
+            description: Optional[str] = None
+            if "description" in multi_form:
+                description = str(
+                    single_form.get("description", "")
+                ).strip()
+            capacity_raw: Optional[str] = None
+            if "capacity" in multi_form:
+                capacity_raw = str(
+                    single_form.get("capacity", "")
+                ).strip()
+            # Unticked checkboxes are not submitted, so the form sends a
+            # ``tags_present`` marker whenever it shows the tag list; with
+            # the marker and no ``tags`` the resource ends up untagged.
+            tags: Optional[List[str]] = None
+            if "tags_present" in multi_form or "tags" in multi_form:
+                tags = list(multi_form.get("tags", []))
+            metadata_str: Optional[str] = None
+            if "metadata" in multi_form:
+                metadata_str = str(single_form.get("metadata", "")).strip()
 
             try:
-                metadata = _parse_metadata_json_or_default(
-                    raw=metadata_str, default=None
-                )
+                capacity: Optional[int] = None
+                if capacity_raw is not None:
+                    capacity = _coerce_int(raw=capacity_raw)
+                    if capacity is None or capacity < 1:
+                        raise ValueError(
+                            "Capacity must be a whole number of at least 1."
+                        )
+                metadata: Optional[Dict[str, Any]] = None
+                if metadata_str is not None:
+                    metadata = _parse_metadata_json_or_default(
+                        raw=metadata_str, default={}
+                    )
                 # Health status is deliberately NOT editable here:
                 # status changes must go through the health page,
                 # which records a reason in the audit trail.
                 update_request = _build_resource_update_request(
-                    description=(
-                        description if len(description) > 0 else None
-                    ),
+                    description=description,
                     metadata=metadata,
-                    tags=tags if len(tags) > 0 else None,
+                    tags=tags,
                     capacity=capacity,
                     health_status=None,
                 )

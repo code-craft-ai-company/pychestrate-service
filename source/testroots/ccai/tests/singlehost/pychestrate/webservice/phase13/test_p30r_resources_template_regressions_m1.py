@@ -35,6 +35,10 @@ from ccai.testshared.factories.webui.template_contexts import (
 
 from ccai.pychestrate.core.managers.allocation_manager import ReservationResponse
 from ccai.pychestrate.core.managers.ip_pool_manager import IPPoolResponse
+from ccai.pychestrate.core.managers.resource_manager import (
+    ResourceResponse,
+    TagResponse,
+)
 from ccai.pychestrate.webservice.webinterface.foundation import templating
 
 from ccai.tests.singlehost.pychestrate.webservice.phase13._template_harness import (
@@ -291,4 +295,47 @@ def test_ip_pool_detail_shows_the_gateway_as_reserved():
     row_text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>|\{#.*?#\}", "", row.group(1))).strip() if row is not None else ""
 
     testbase.assert_equal(row_text, "10.20.30.1 (gateway)")
+    return
+
+
+# ---------------------------------------------------------------------------
+# RES-07: the resource edit form says when its tag list was shown
+# ---------------------------------------------------------------------------
+
+
+def _resource_edit_html() -> str:
+    resource = build_fixture(
+        ResourceResponse, mode=MODE_SPARSE, overrides={"tags": ["alpha", "zeta-beyond-the-list"]},
+    )
+    listed = [build_fixture(TagResponse, mode=MODE_SPARSE, overrides={"name": "alpha"})]
+    rtnval = _render(
+        template_name="resources/resources/edit.html",
+        overrides={"resource": resource, "all_tags": listed, "form_data": None},
+    )
+    return rtnval
+
+
+def test_resource_edit_form_marks_that_the_tag_list_was_shown():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: the edit form carries the hidden tags_present marker with
+    its tag checkboxes, so unticking every tag can be told apart from
+    "no tag list".**
+    """
+    html = _resource_edit_html()
+
+    testbase.assert_true('name="tags_present"' in html, html[:1500])
+    return
+
+
+def test_resource_edit_form_keeps_tags_beyond_the_listed_page():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: a tag on the resource that is not in the listed tags is
+    still rendered, ticked, so saving the form never drops it unseen.**
+    """
+    html = _resource_edit_html()
+    box = re.search(r'<input[^>]*value="zeta-beyond-the-list"[^>]*>', html, re.DOTALL)
+
+    testbase.assert_true(box is not None and "checked" in box.group(0), html[:1500])
     return

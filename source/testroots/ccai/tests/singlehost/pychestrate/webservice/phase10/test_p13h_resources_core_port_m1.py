@@ -1820,3 +1820,116 @@ def test_handle_resource_checkout_manager_error_flashes_error():
                 p.deactivate()
         _reset_global_state()
     return
+
+
+# ===========================================================================
+# Clearing a field on edit (audit finding RES-07)
+# ===========================================================================
+
+
+def _post_resource_edit(*, body: bytes) -> Any:
+    """
+        POST ``body`` to the edit handler for resource 7 with the usual
+        fakes. Returns ``(env, resource_manager)``.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        resources_routes.register_resources_routes(app=_FakeApp())
+        patches.append(_patch_security_manager())
+
+        def _seed(instance: _FakeResourceManager) -> None:
+            instance.get_resource_response = _FakeResource(
+                resource_id=7, name="boardA", description="old words", tags=["alpha", "beta"],
+            )
+            return
+
+        patches.append(_patch_resource_manager(configure=_seed))
+        patches.append(_patch_resource_update_request_factory())
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+            path_params={"resource_id": "7"},
+        )
+        resources_routes.handle_resource_edit(request)
+        rtnval = (env, _FakeResourceManager.last_instance)
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_resource_edit_saves_a_cleared_description():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: submitting the edit form with an empty description saves
+    an empty description instead of leaving the old one.**
+    """
+    _, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=&capacity=1&tags_present=1&tags=alpha")
+
+    _, update, _ = rm.update_resource_calls[0]
+    testbase.assert_equal(update.description, "")
+    return
+
+
+def test_resource_edit_unticking_every_tag_removes_them():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: with the tag list on the form (tags_present) and no tag
+    ticked, the update removes every tag (tags == []).**
+    """
+    _, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=kept&capacity=1&tags_present=1")
+
+    _, update, _ = rm.update_resource_calls[0]
+    testbase.assert_equal(update.tags, [])
+    return
+
+
+def test_resource_edit_emptied_metadata_clears_it():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: an emptied metadata box saves empty metadata ({}), not
+    "no change".**
+    """
+    _, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=kept&capacity=1&metadata=")
+
+    _, update, _ = rm.update_resource_calls[0]
+    testbase.assert_equal(update.metadata, {})
+    return
+
+
+def test_resource_edit_without_the_tag_list_leaves_tags_alone():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: a submission that carries neither tags nor the
+    tags_present marker (no tag list on the form) does not touch the
+    resource's tags.**
+    """
+    _, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=kept&capacity=1")
+
+    _, update, _ = rm.update_resource_calls[0]
+    testbase.assert_equal(update.tags, None)
+    return
+
+
+def test_resource_edit_refuses_an_emptied_capacity():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: an emptied capacity is refused with an error flash
+    instead of being ignored under a "Resource updated successfully"
+    message; nothing is saved.**
+    """
+    env, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=kept&capacity=")
+
+    ctx = env.last_template.render_calls[0]
+    testbase.assert_equal(
+        (rm.update_resource_calls, ctx["flashes"]),
+        ([], [("error", "Capacity must be a whole number of at least 1.")]),
+    )
+    return
