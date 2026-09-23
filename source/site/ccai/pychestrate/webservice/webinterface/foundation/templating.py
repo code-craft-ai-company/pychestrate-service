@@ -40,6 +40,7 @@ __version__ = "1.0.0"
 
 
 import enum
+import math
 import os
 
 from datetime import datetime, timezone
@@ -146,6 +147,7 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     install_ui_profile_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
     environment.filters["input_datetime"] = input_datetime_filter
+    environment.filters["humanize_count"] = humanize_count_filter
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
     environment.filters["enum_value"] = enum_value_filter
@@ -283,6 +285,55 @@ def input_datetime_filter(value: Any, zone_name: Optional[str] = "UTC") -> str:
     if value.tzinfo is None or value.utcoffset() is None:
         value = value.replace(tzinfo=timezone.utc)
     rtnval = value.astimezone(zone).strftime("%Y-%m-%dT%H:%M")
+    return rtnval
+
+
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+
+_COUNT_SCALES = (
+    (10 ** 12, "trillion"),
+    (10 ** 9, "billion"),
+    (10 ** 6, "million"),
+)
+
+
+def humanize_count_filter(value: Any) -> Any:
+    """
+        Render a count people can read at a glance: exact with
+        thousands separators below a million (``65,534``), in words up
+        to the trillions (``16.8 million``), and beyond that as the
+        power of two it is within 1% of (``≈ 2⁶⁴`` for an IPv6 /64's
+        18446744073709551615 addresses) or else in scientific notation
+        (``≈ 1.4 × 10¹⁹``). Anything that is not an integer is returned
+        as is.
+
+        :param value: The count.
+
+        :returns: The readable count.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return value
+    magnitude = abs(value)
+    if magnitude < 10 ** 6:
+        rtnval = "{:,}".format(value)
+        return rtnval
+    sign = "-" if value < 0 else ""
+    if magnitude < 10 ** 15:
+        for scale, word in _COUNT_SCALES:
+            if magnitude >= scale:
+                rtnval = "{}{:.1f} {}".format(sign, magnitude / scale, word)
+                return rtnval
+    exponent = round(math.log2(magnitude))
+    power = 1 << exponent
+    if abs(magnitude - power) * 100 <= power:
+        shown = "2" + str(exponent).translate(_SUPERSCRIPT_DIGITS)
+    else:
+        decimal_exponent = len(str(magnitude)) - 1
+        shown = "{:.1f} × 10{}".format(
+            magnitude / (10 ** decimal_exponent),
+            str(decimal_exponent).translate(_SUPERSCRIPT_DIGITS),
+        )
+    rtnval = "≈ {}{}".format(sign, shown)
     return rtnval
 
 

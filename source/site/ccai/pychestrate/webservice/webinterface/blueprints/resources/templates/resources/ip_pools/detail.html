@@ -64,19 +64,19 @@
             <h2 class="card-header">Pool Statistics</h2>
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; text-align: center;">
                 <div>
-                    <div class="stat-value">{{ pool.total_addresses }}</div>
+                    <div class="stat-value" title="{{ pool.total_addresses }}">{{ pool.total_addresses | humanize_count }}</div>
                     <div class="muted small">Total</div>
                 </div>
                 <div>
-                    <div class="stat-value text-success">{{ pool.available_count }}</div>
+                    <div class="stat-value text-success" title="{{ pool.available_count }}">{{ pool.available_count | humanize_count }}</div>
                     <div class="muted small">Available</div>
                 </div>
                 <div>
-                    <div style="font-size: 1.5rem; font-weight: 600; color: var(--pyc-color-accent);">{{ pool.allocated_count }}</div>
+                    <div style="font-size: 1.5rem; font-weight: 600; color: var(--pyc-color-accent);">{{ pool.allocated_count | humanize_count }}</div>
                     <div class="muted small">Allocated</div>
                 </div>
                 <div>
-                    <div class="stat-value muted">{{ pool.reserved_count }}</div>
+                    <div class="stat-value muted">{{ pool.reserved_count | humanize_count }}</div>
                     <div class="muted small">Reserved</div>
                 </div>
             </div>
@@ -126,7 +126,7 @@
                 <code style="background: var(--pyc-color-surface-elevated); padding: 4px 8px; border-radius: 4px;">{{ ip }}</code>
                 {% endfor %}
                 {% if pool.available_count > 10 %}
-                <span class="muted">... and {{ pool.available_count - 10 }} more</span>
+                <span class="muted">... and {{ (pool.available_count - 10) | humanize_count }} more</span>
                 {% endif %}
             </div>
         </div>

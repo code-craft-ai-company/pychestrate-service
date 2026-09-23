@@ -339,3 +339,58 @@ def test_resource_edit_form_keeps_tags_beyond_the_listed_page():
 
     testbase.assert_true(box is not None and "checked" in box.group(0), html[:1500])
     return
+
+
+# ---------------------------------------------------------------------------
+# RES-46: IPv6-sized address counts are readable
+# ---------------------------------------------------------------------------
+
+
+def test_humanize_count_shows_an_ipv6_64_as_a_power_of_two():
+    """
+    **Feature: resources (RES-46 large counts)**
+    **Property: the 18446744073709551615 usable addresses of an IPv6 /64
+    read as "≈ 2⁶⁴".**
+    """
+    testbase.assert_equal(templating.humanize_count_filter(18446744073709551615), "≈ 2⁶⁴")
+    return
+
+
+def test_humanize_count_uses_words_for_millions():
+    """
+    **Feature: resources (RES-46 large counts)**
+    **Property: a /8's 16777214 usable addresses read as "16.8 million".**
+    """
+    testbase.assert_equal(templating.humanize_count_filter(16777214), "16.8 million")
+    return
+
+
+def test_humanize_count_keeps_small_counts_exact():
+    """
+    **Feature: resources (RES-46 large counts)**
+    **Property: counts below a million stay exact, with thousands
+    separators ("65,534").**
+    """
+    testbase.assert_equal(templating.humanize_count_filter(65534), "65,534")
+    return
+
+
+def test_ip_pool_list_does_not_print_raw_ipv6_counts():
+    """
+    **Feature: resources (RES-46 large counts)**
+    **Property: the IP pool list shows an IPv6 /64's counts as "≈ 2⁶⁴"
+    and never prints the 20-digit number as visible text (it stays in
+    the tooltip).**
+    """
+    pool = build_fixture(IPPoolResponse, mode=MODE_SPARSE, overrides={
+        "cidr": "2001:db8::/64", "total_addresses": 18446744073709551615,
+        "available_count": 18446744073709551613, "reserved_count": 2, "allocated_count": 0,
+    })
+    html = _render(
+        template_name="resources/ip_pools/list.html",
+        overrides={"pools": [pool], "page": 1, "per_page": 20, "total_pages": 1, "page_window": [1]},
+    )
+    visible = re.sub(r"<[^>]+>", " ", html)
+
+    testbase.assert_equal(("18446744073709551615" in visible, "≈ 2⁶⁴" in visible), (False, True))
+    return
