@@ -34,6 +34,14 @@ from ccai.pychestrate.cli.exceptions import CliUsageError
 
 _UNRECOGNIZED_PREFIX: str = "unrecognized arguments: "
 
+#: pyc's global options (accepted anywhere on the line, parsed before
+#: any command's parser runs). They are suggestion candidates too, so a
+#: mistyped global -- or the pod client's "--service-url" -- names the
+#: right spelling.
+GLOBAL_OPTION_NAMES = (
+    "--profile", "--server-url", "--timeout", "--output", "-o", "--fields", "--quiet", "-q",
+)
+
 
 class ParserExit(Exception):
     """
@@ -103,11 +111,12 @@ class CliArgumentParser(argparse.ArgumentParser):
         if not message.startswith(_UNRECOGNIZED_PREFIX):
             return message
         hints: List[str] = []
+        candidates = self.known_option_strings() + list(GLOBAL_OPTION_NAMES)
         for token in message[len(_UNRECOGNIZED_PREFIX):].split():
             if not token.startswith("-"):
                 continue
             option = token.split("=", 1)[0]
-            hint = suggestions.did_you_mean(word=option, candidates=self.known_option_strings())
+            hint = suggestions.did_you_mean(word=option, candidates=candidates)
             if len(hint) > 0:
                 hints.append("{}: {}".format(option, hint))
         if len(hints) == 0:
@@ -122,5 +131,6 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 __all__ = [
     "CliArgumentParser",
+    "GLOBAL_OPTION_NAMES",
     "ParserExit",
 ]

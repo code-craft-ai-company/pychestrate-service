@@ -215,7 +215,8 @@ Words pyc uses
 **Server URL**
     The address of the Pychestrate service, ``https://host[:port]``,
     without ``/api/v1``: ``--server-url``, ``PYC_SERVER_URL``, and
-    ``server_url`` in a profile.
+    ``server_url`` in a profile. (The pod client's
+    ``pychestrate-client enroll --service-url`` takes the same URL.)
 **API token**
     A ``pyc_...`` secret created under Account > API tokens (or for a
     service account) that acts as its owner. ``pyc`` sends it as

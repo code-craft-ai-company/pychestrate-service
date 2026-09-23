@@ -95,7 +95,6 @@ _BUILTIN_COMMANDS: Tuple[str, ...] = (
     "'commands'",
     "'help'",
     "'version'",
-    "'project list'",
     "'runs wait <run_id>'",
     "'plugin-api catalog [<entry-name>]'",
     "'ext list'",
@@ -132,8 +131,8 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "API commands:",
     "  <noun> <verb> [args]         e.g. 'pyc projects list', 'pyc projects get demo'.",
     "                               Bodies: --data JSON|@FILE|-, --from-file PATH, --set FIELD=VALUE.",
+    "                               Nouns are the plural REST resources; 'project' works too.",
     "  commands [--refresh]         List every API command the server offers.",
-    "  project list                 List projects (same as 'projects list').",
     "                               List commands take --all (every page) and --limit N.",
     "  runs wait <run_id>           Wait for a run: exit 0 on success, 10 on failure.",
     "                               POST commands take --wait to do this for their run.",
@@ -452,7 +451,10 @@ def _unknown_command_error(
     if detail is not None:
         lines.append(detail)
     lines.append("built-in: {}".format(", ".join(_BUILTIN_COMMANDS)))
-    lines.append("run 'pyc commands' for the API commands the server offers.")
+    lines.append(
+        "API commands use plural REST nouns ('pyc projects list', 'pyc runs get RUN_ID');"
+        " run 'pyc commands' for the ones the server offers."
+    )
     rtnval = CliUsageError("\n".join(lines))
     return rtnval
 
