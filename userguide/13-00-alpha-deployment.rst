@@ -224,7 +224,9 @@ The variables, by group:
 
 ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES``
     The reverse proxies whose ``X-Forwarded-Proto`` header the service
-    believes; see `Put nginx in front`_. Default: ``127.0.0.1,::1``.
+    believes, and whose ``X-Client-Cert-CN`` / ``X-Client-Cert-Verify``
+    headers identify a pod; see `Put nginx in front`_. Default:
+    ``127.0.0.1,::1``.
 
 ``PYCHESTRATE_BIND_HOST``, ``PYCHESTRATE_BIND_PORT``, ``PYCHESTRATE_WORKERS``, ``PYCHESTRATE_THREADS``
     Where gunicorn listens and how many worker processes and threads
@@ -357,8 +359,14 @@ A minimal ``server`` block:
 Pods authenticate to the orchestration endpoints with client
 certificates signed by the enrollment CA, which nginx verifies
 (``ssl_client_certificate`` pointing at ``enrollment-ca.crt``,
-``ssl_verify_client optional``). The nginx configuration that
-``deployment/deploy-alpha-to-host.sh`` generates is the reference for
+``ssl_verify_client optional``). nginx passes the verified identity on
+in two headers that every ``location`` proxying to the service must
+set: ``X-Client-Cert-CN`` (the certificate's common name, which is the
+pod's client id) and ``X-Client-Cert-Verify`` (``$ssl_client_verify``).
+The service believes them only from a trusted proxy, like
+``X-Forwarded-Proto``. The nginx configuration that
+``deployment/deploy-alpha-to-host.sh`` generates
+(``deployment/pychestrate.nginx.conf.template``) is the reference for
 that part of the setup.
 
 

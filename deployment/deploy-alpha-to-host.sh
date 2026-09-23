@@ -92,11 +92,15 @@ PROXY_PORT="80"             # external port nginx listens on
 PUBLIC_HOSTNAME="tc-app-server.tailb75ce6.ts.net"
 SKIP_SYSTEM_SETUP="false"
 # Path on the REMOTE to the CA cert used by nginx to verify
-# incoming client certificates for the mTLS-gated routes
-# (orchestration-ingest endpoints).  The deploy errors out
-# if this file does not exist on the remote -- bootstrap it
-# with ``deployment/bootstrap-client-ca.sh`` first.
-CLIENT_CA_PATH="/etc/nginx/ssl/client-ca.crt"
+# incoming client certificates for the mTLS-gated routes.  It must
+# be the service's client-enrollment CA -- the CA that signs every
+# pod certificate at enrollment -- or nginx rejects enrolled pods.
+# Defaults (after argument parsing) to the certificate that
+# ``development/run-staging-gunicorn --provision-only`` writes in
+# the remote checkout; step 6 runs it.  Override with
+# ``--client-ca-path`` only when the enrollment CA is staged
+# elsewhere (PYCHESTRATE_ENROLLMENT_CA_FILE_PATH).
+CLIENT_CA_PATH=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -122,6 +126,10 @@ done
 
 REMOTE_TARGET="${REMOTE_USER}@${REMOTE_HOST}"
 REMOTE_PATH="pychestrate-service"  # relative to remote $HOME
+
+if [ -z "${CLIENT_CA_PATH}" ]; then
+    CLIENT_CA_PATH="/home/${REMOTE_USER}/${REMOTE_PATH}/.cache/dev-secrets/dev.enrollment-ca.crt"
+fi
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -415,6 +423,12 @@ DB_PATH="${PRESENCE_DIR}/pychestrate.sqlite"
 export PYCHESTRATE_DATABASE_URL="sqlite:///${DB_PATH}"
 .venv/bin/alembic -c alembic.ini upgrade head
 echo "    DB: ${DB_PATH}"
+# Generate the service secrets now (KEK, pepper, cookie secret,
+# envelope signing key, presign secret and the client-enrollment
+# CA) rather than on first service start: step 7 points nginx's
+# ssl_client_certificate at the enrollment CA certificate, so it
+# must exist before nginx is reloaded.  Idempotent.
+development/run-staging-gunicorn --provision-only
 EOF
 echo
 
@@ -435,7 +449,7 @@ else
     echo "==> Step 7/8: nginx site config (proxy ${PROXY_PORT} -> 127.0.0.1:${REMOTE_PORT})"
     echo "    [you may be prompted for the remote sudo password]"
 
-    # Pre-flight: ensure the client-CA bundle exists on the
+    # Pre-flight: ensure the client-CA certificate exists on the
     # remote before we render an nginx config that references
     # it -- otherwise ``nginx -t`` would fail and the deploy
     # would refuse to reload.
@@ -443,20 +457,18 @@ else
         cat >&2 <<EOF
 ERROR: client-CA cert ${CLIENT_CA_PATH} missing on ${REMOTE_TARGET}.
 
-The nginx :443 server block now requires a client-CA bundle to
-verify incoming client certificates for the mTLS-gated
-orchestration-ingest endpoints (/api/v1/runs/<id>/{progress,
-results/complete,dispatch-ack}).
+nginx verifies pod client certificates against the service's
+client-enrollment CA -- the CA that signs every pod certificate
+at enrollment.  Step 6 generates it by running
 
-Bootstrap it once with the dedicated script:
+    development/run-staging-gunicorn --provision-only
 
-    deployment/bootstrap-client-ca.sh \\
-        --host=${REMOTE_HOST} --user=${REMOTE_USER}
-
-That generates a self-signed root CA at
-${CLIENT_CA_PATH} (and the corresponding key at
-\${CLIENT_CA_PATH%.crt}.key, mode 0600 root) if one does not
-already exist.  Then re-run this deploy.
+in the remote checkout, which writes the CA to
+.cache/dev-secrets/dev.enrollment-ca.pem and its certificate to
+.cache/dev-secrets/dev.enrollment-ca.crt.  If the service loads
+its enrollment CA from somewhere else
+(PYCHESTRATE_ENROLLMENT_CA_FILE_PATH), pass that CA's
+certificate with --client-ca-path.
 EOF
         exit 6
     fi

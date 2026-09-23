@@ -193,7 +193,7 @@ def test_handle_system_health_returns_aggregate_document():
     **Feature: 9-admin-ui PR p21f (system-health route)**
     **Property: Returns 200 with a ``{status, generated_at,
     subsystems}`` document carrying one subsystem per probe
-    (database, feature-flags, extension-routes).**
+    (database, feature-flags, extension-routes, job-loop).**
     """
     _activate_permission_patch(allowed=True)
     try:
@@ -206,12 +206,13 @@ def test_handle_system_health_returns_aggregate_document():
     body = _decode_body(response)
     testbase.assert_equal("status" in body, True)
     testbase.assert_equal("generated_at" in body, True)
-    testbase.assert_equal(len(body["subsystems"]), 3)
+    testbase.assert_equal(len(body["subsystems"]), 4)
 
     names = [subsystem["name"] for subsystem in body["subsystems"]]
     testbase.assert_equal("database" in names, True)
     testbase.assert_equal("feature-flags" in names, True)
     testbase.assert_equal("extension-routes" in names, True)
+    testbase.assert_equal("job-loop" in names, True)
     return
 
 

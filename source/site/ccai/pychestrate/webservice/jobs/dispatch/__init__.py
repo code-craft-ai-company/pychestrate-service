@@ -41,6 +41,7 @@ from ccai.pychestrate.webservice.jobs.dispatch.dispatcher import (
 from ccai.pychestrate.webservice.jobs.dispatch.errors import (
     DispatchError,
     DispatchNoCandidatesError,
+    DispatchSigningUnavailableError,
     DispatchTransportError,
 )
 from ccai.pychestrate.webservice.jobs.dispatch.factories.fifo import (

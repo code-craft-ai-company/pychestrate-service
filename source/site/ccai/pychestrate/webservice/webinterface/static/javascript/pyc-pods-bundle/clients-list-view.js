@@ -45,6 +45,10 @@ function build_client_revoke_url(client_id) {
   const rtnval = build_client_detail_url(client_id) + "/revoke";
   return rtnval;
 }
+function build_client_capabilities_url(client_id) {
+  const rtnval = build_client_detail_url(client_id) + "/capabilities";
+  return rtnval;
+}
 function short_id(client_id) {
   if (typeof client_id !== "string" || client_id.length === 0) {
     const rtnval2 = "";
@@ -125,6 +129,72 @@ function capability_tags(attributes) {
     }
     if (typeof value === "number" || typeof value === "boolean") {
       rtnval.push(key + ":" + String(value));
+    }
+  }
+  return rtnval;
+}
+/**
+ * Flatten the capabilities a pod advertised (the rows of
+ * ``GET /api/v1/clients/{id}/capabilities``) into the tags dispatch
+ * matches a job type's required capabilities against -- the rule of
+ * ``orchestration.rpa.candidates.capability_tags_for_client``: every
+ * capability ``kind``, plus for the ``rpa`` kind one
+ * ``rpa:<job type>`` tag per advertised job type and the pod's
+ * free-form ``tags``.
+ */
+function advertised_capability_tags(capabilities) {
+  const rtnval = [];
+  if (Array.isArray(capabilities) === false) {
+    return rtnval;
+  }
+  const add_tag = (tag) => {
+    if (tag.length > 0 && rtnval.includes(tag) === false) {
+      rtnval.push(tag);
+    }
+  };
+  for (const capability of capabilities) {
+    if (capability === null || typeof capability !== "object") {
+      continue;
+    }
+    const kind = capability.kind;
+    if (typeof kind !== "string" || kind.length === 0) {
+      continue;
+    }
+    add_tag(kind);
+    const value = capability.value;
+    if (kind !== "rpa" || value === null || typeof value !== "object") {
+      continue;
+    }
+    const job_types = Array.isArray(value.job_types) === true ? value.job_types : [];
+    for (const job_type of job_types) {
+      const name = String(job_type);
+      if (name.length > 0) {
+        add_tag("rpa:" + name);
+      }
+    }
+    const tags = Array.isArray(value.tags) === true ? value.tags : [];
+    for (const tag of tags) {
+      add_tag(String(tag));
+    }
+  }
+  return rtnval;
+}
+/**
+ * Latest ``updated_at`` among advertised capability rows, or ``""``
+ * when none carries one.
+ */
+function latest_capability_update(capabilities) {
+  let rtnval = "";
+  if (Array.isArray(capabilities) === false) {
+    return rtnval;
+  }
+  for (const capability of capabilities) {
+    if (capability === null || typeof capability !== "object") {
+      continue;
+    }
+    const updated_at = capability.updated_at;
+    if (typeof updated_at === "string" && updated_at > rtnval) {
+      rtnval = updated_at;
     }
   }
   return rtnval;
@@ -939,6 +1009,8 @@ export {
   CLIENT_STATUSES,
   LIVENESS_STATES,
   PycClientsList,
+  advertised_capability_tags,
+  build_client_capabilities_url,
   build_client_detail_url,
   build_client_revoke_url,
   build_clients_query_url,
@@ -947,6 +1019,7 @@ export {
   format_timestamp,
   has_next_page,
   has_previous_page,
+  latest_capability_update,
   liveness_tone,
   perform_client_revoke,
   revoke_message_for_status,

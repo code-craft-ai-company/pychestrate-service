@@ -251,7 +251,9 @@ def register_client(
         pod_name: str,
         bearer_token_hash: Optional[bytes],
         agent_version: Optional[str],
-        transport_name: Optional[str]
+        transport_name: Optional[str],
+        client_id: Optional[str] = None,
+        commit: bool = True
     ) -> Client:
     """
         Create a new ``clients_clients`` row and publish
@@ -266,6 +268,15 @@ def register_client(
                                   M1 test flows.
         :param agent_version: Reported agent version string.
         :param transport_name: Transport name the agent plans to use.
+        :param client_id: Client UUID to register under. The enrollment
+                          service mints it up front so the client
+                          certificate can be issued for it before any
+                          row is written; ``None`` mints a fresh one.
+        :param commit: Commit the new row (the default). The enrollment
+                       service passes ``False`` so the client, its
+                       certificate and the redeemed token land in one
+                       transaction -- a later failure then leaves no
+                       half-enrolled client behind.
 
         :returns: The persisted :class:`Client`.
         :raises: ClientAlreadyExistsError
@@ -283,9 +294,13 @@ def register_client(
         err_msg = os.linesep.join(err_msg_lines)
         raise ClientAlreadyExistsError(err_msg) from None
 
+    resolved_client_id = client_id
+    if resolved_client_id is None or len(str(resolved_client_id)) == 0:
+        resolved_client_id = new_uuid()
+
     now = utc_now()
     client = Client(
-        client_id=new_uuid(),
+        client_id=resolved_client_id,
         project_id=project_id,
         pod_name=pod_name,
         status=ClientStatus.ACTIVE,
@@ -315,7 +330,8 @@ def register_client(
             source_event_id=new_uuid(),
         ),
     )
-    db_session.commit()
+    if commit is True:
+        db_session.commit()
 
     rtnval = client
     return rtnval

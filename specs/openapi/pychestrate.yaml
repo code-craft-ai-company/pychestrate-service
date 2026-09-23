@@ -6583,8 +6583,20 @@ components:
       required: [client_id, client_certificate_pem, ca_chain_pem]
       properties:
         client_id: { type: string, format: uuid }
-        client_certificate_pem: { type: string }
-        ca_chain_pem: { type: string }
+        client_certificate_pem:
+          type: string
+          description: |
+            The issued client certificate as PEM text (not base64). Its
+            Subject CN, and a `urn:uuid:` URI subject alternative name,
+            carry `client_id` -- the identity the pod-facing routes
+            compare with the `client_id` in their path. Empty when the
+            request carried no CSR.
+        ca_chain_pem:
+          type: string
+          description: |
+            PEM text of the enrollment CA certificate that issued the
+            client certificate. The TLS terminator in front of the
+            service must trust this CA to accept the pod's certificate.
         not_after: { type: string, format: date-time }
         envelope_signing_keys:
           description: |
