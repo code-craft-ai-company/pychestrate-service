@@ -16,7 +16,8 @@ color scheme.
 
 Covered audit findings: XC-02 (Sign out unreachable on phones),
 LD-13 (serif palette font), XC-03 (nested main landmarks, raw
-landmark names, empty landmarks).
+landmark names, empty landmarks), XC-26 (drawer open over the
+content at tablet width, focus not trapped, Escape).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -299,6 +300,138 @@ def test_shell_page_shows_no_raw_catalog_keys(browser: Browser):
     page = open_shell_page(browser, **DESKTOP)
     try:
         testbase.assert_equal(page.evaluate(RAW_CATALOG_KEYS_JS), [])
+    finally:
+        page.context.close()
+    return
+
+
+# ---------------------------------------------------------------------------
+# XC-26: the navigation drawer on tablets and phones
+# ---------------------------------------------------------------------------
+
+
+def test_tablet_width_starts_with_the_drawer_closed(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: at 768px the sidebar is an overlay drawer that starts
+    closed, so it does not cover the page on load.**
+    """
+    page = open_shell_page(browser, **TABLET)
+    try:
+        page.wait_for_function(
+            "() => document.querySelector('mj-app-shell').getAttribute('nav-mode') === 'overlay'"
+        )
+        testbase.assert_equal(page.evaluate(LAYOUT_STATE_JS), {"open": False, "mode": "overlay"})
+    finally:
+        page.context.close()
+    return
+
+
+def test_nav_toggle_reports_the_closed_drawer(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: at 768px the header's navigation toggle reports
+    aria-expanded="false" for the closed drawer.**
+    """
+    page = open_shell_page(browser, **TABLET)
+    try:
+        page.wait_for_function(
+            "() => document.querySelector('mj-app-shell').getAttribute('nav-mode') === 'overlay'"
+        )
+        expanded = page.get_attribute(".pyc-site-shell__nav-toggle", "aria-expanded")
+        testbase.assert_equal(expanded, "false")
+    finally:
+        page.context.close()
+    return
+
+
+def test_phone_drawer_keeps_tab_inside_the_drawer(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: with the drawer open at 390px, Tab never moves focus
+    out of the sidebar.**
+    """
+    page = open_shell_page(browser, **PHONE)
+    try:
+        _open_phone_drawer(page)
+        outside = []
+        for _ in range(6):
+            page.keyboard.press("Tab")
+            focus = page.evaluate(DEEP_FOCUS_JS)
+            if focus is None or focus["inSidebar"] is False:
+                outside.append(focus)
+        testbase.assert_equal(outside, [])
+    finally:
+        page.context.close()
+    return
+
+
+def test_escape_closes_the_drawer_when_focus_is_on_the_page(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: Escape closes the open drawer even when focus is not
+    inside it.**
+    """
+    page = open_shell_page(browser, **PHONE)
+    try:
+        _open_phone_drawer(page)
+        page.evaluate("() => document.activeElement.blur()")
+        page.keyboard.press("Escape")
+        testbase.assert_equal(page.evaluate(LAYOUT_STATE_JS)["open"], False)
+    finally:
+        page.context.close()
+    return
+
+
+def test_closing_the_drawer_updates_the_toggle_state(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: after Escape closes the drawer, the header toggle
+    reports aria-expanded="false" again.**
+    """
+    page = open_shell_page(browser, **PHONE)
+    try:
+        _open_phone_drawer(page)
+        page.keyboard.press("Escape")
+        expanded = page.get_attribute(".pyc-site-shell__nav-toggle", "aria-expanded")
+        testbase.assert_equal(expanded, "false")
+    finally:
+        page.context.close()
+    return
+
+
+def test_phone_drawer_does_not_change_the_desktop_sidebar_preference(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: opening and closing the phone drawer with the toggle
+    does not record a collapsed-sidebar preference.**
+    """
+    page = open_shell_page(browser, **PHONE)
+    try:
+        _open_phone_drawer(page)
+        # The open drawer covers the toggle; activate it the way a
+        # keyboard or assistive-technology user would.
+        page.evaluate("() => document.querySelector('.pyc-site-shell__nav-toggle').click()")
+        stored = page.evaluate(
+            "(key) => window.localStorage.getItem(key)", NAV_COLLAPSED_STORAGE_KEY
+        )
+        testbase.assert_true(stored != "true", "overlay toggling stored nav-collapsed={}".format(stored))
+    finally:
+        page.context.close()
+    return
+
+
+def test_desktop_starts_with_the_sidebar_open(browser: Browser):
+    """
+    **Feature: site shell -- navigation drawer**
+    **Property: at 1440px the sidebar is a static column and starts
+    open.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        state = page.evaluate(LAYOUT_STATE_JS)
+        testbase.assert_equal(state["open"], True)
+        testbase.assert_true(state["mode"] != "overlay", "desktop layout is in overlay mode")
     finally:
         page.context.close()
     return

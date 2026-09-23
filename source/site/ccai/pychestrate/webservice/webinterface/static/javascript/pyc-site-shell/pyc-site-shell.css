@@ -145,6 +145,12 @@ pyc-site-shell:not(:defined)::before {
 .pyc-site-shell__layout {
     flex: 1 1 auto;
     min-height: 0;
+    /*
+     * Below this width the sidebar is an overlay drawer that starts
+     * closed (phones and tablets); at and above it the sidebar is a
+     * static column, open unless the user collapsed it.
+     */
+    --mj-shell-breakpoint-nav: 1000px;
 }
 
 /*

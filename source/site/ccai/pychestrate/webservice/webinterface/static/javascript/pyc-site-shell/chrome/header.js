@@ -40,7 +40,8 @@ function build_header(options) {
     if (typeof options.on_nav_toggle === "function") {
         const nav_toggle = build_nav_toggle(
             options.on_nav_toggle,
-            options.nav_open_initial === true
+            options.nav_open_initial === true,
+            options.nav_controls_id
         );
         app_bar.appendChild(nav_toggle);
     }
@@ -228,9 +229,9 @@ function wire_account_disclosure(container, button, panel) {
  * The sidebar collapse toggle. A plain <button> (not <mj-button>)
  * so the hamburger SVG can inherit the header foreground through
  * currentColor without fighting the component's own slots. The
- * shell updates aria-expanded as it toggles the nav track.
+ * shell keeps aria-expanded in step with the nav track.
  */
-function build_nav_toggle(on_nav_toggle, nav_open_initial) {
+function build_nav_toggle(on_nav_toggle, nav_open_initial, nav_controls_id) {
     const nav_toggle = document.createElement("button");
     nav_toggle.type = "button";
     nav_toggle.setAttribute("slot", "brand");
@@ -241,6 +242,9 @@ function build_nav_toggle(on_nav_toggle, nav_open_initial) {
         "aria-expanded",
         nav_open_initial === true ? "true" : "false"
     );
+    if (typeof nav_controls_id === "string" && nav_controls_id.length > 0) {
+        nav_toggle.setAttribute("aria-controls", nav_controls_id);
+    }
     nav_toggle.innerHTML = NAV_TOGGLE_ICON_SVG;
     nav_toggle.addEventListener("click", (event) => {
         event.preventDefault();

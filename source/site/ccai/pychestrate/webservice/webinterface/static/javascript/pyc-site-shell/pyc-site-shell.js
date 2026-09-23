@@ -43,7 +43,7 @@ const ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 const ATTR_BRAND_LABEL = "brand-label";
 const NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
 const NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
-const NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+const SIDEBAR_ELEMENT_ID = "pyc-site-shell-sidebar";
 const SIDEBAR_NAV_LABEL = "Primary";
 class PycSiteShell extends HTMLElement {
   _sidebar_registry;
@@ -225,17 +225,35 @@ class PycSiteShell extends HTMLElement {
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
     // <mj-app-shell> collapses the nav track to width 0 unless the
-    // host carries nav-open. On wide viewports the sidebar starts
-    // open unless the user previously collapsed it (persisted in
-    // localStorage); on narrow viewports <mj-app-shell>'s own
-    // ResizeObserver switches to nav-mode="overlay" and the nav
-    // stays closed until the header toggle opens it.
-    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
+    // host carries nav-open. nav-open states the wide-layout
+    // choice: open unless the user previously collapsed it
+    // (persisted in localStorage). Below the desktop breakpoint
+    // (--mj-shell-breakpoint-nav in pyc-site-shell.css) the layout
+    // measures itself, switches to nav-mode="overlay", and closes
+    // the drawer before the first paint -- so phones and tablets
+    // always start with the content visible and the drawer shut.
+    // Deciding here from a viewport media query instead would
+    // disagree with the layout's own width near the breakpoint.
     const nav_collapsed_preference = _read_nav_collapsed_preference();
-    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    const nav_open_initial = nav_collapsed_preference === false;
     if (nav_open_initial === true) {
       layout.setAttribute("nav-open", "");
     }
+    // Keep the header toggle's aria-expanded in step with the nav
+    // however it changes: the toggle, the backdrop, Escape, or the
+    // layout closing the drawer when it enters overlay mode.
+    layout.addEventListener("mj-shell-nav-toggle", (event) => {
+      if (event.target !== layout) {
+        return;
+      }
+      const toggle_button = this.querySelector(".pyc-site-shell__nav-toggle");
+      if (toggle_button !== null) {
+        toggle_button.setAttribute(
+          "aria-expanded",
+          layout.hasAttribute("nav-open") === true ? "true" : "false"
+        );
+      }
+    });
     this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
@@ -248,6 +266,7 @@ class PycSiteShell extends HTMLElement {
       },
       current_theme: _read_theme_preference(),
       nav_open_initial,
+      nav_controls_id: SIDEBAR_ELEMENT_ID,
       on_nav_toggle: () => {
         this._toggle_sidebar();
       },
@@ -263,6 +282,7 @@ class PycSiteShell extends HTMLElement {
     const sidebar = document.createElement("mj-side-nav");
     sidebar.setAttribute("slot", "nav");
     sidebar.setAttribute("nav-label", SIDEBAR_NAV_LABEL);
+    sidebar.id = SIDEBAR_ELEMENT_ID;
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
@@ -748,19 +768,25 @@ class PycSiteShell extends HTMLElement {
       return;
     }
     const next_open = layout.hasAttribute("nav-open") === false;
+    // Only the wide layout's sidebar state is a preference worth
+    // remembering; opening and closing the overlay drawer on a
+    // phone must not collapse the sidebar on the desktop.
+    const is_overlay = layout.getAttribute("nav-mode") === "overlay";
     if (next_open === true) {
       layout.setAttribute("nav-open", "");
     } else {
       layout.removeAttribute("nav-open");
     }
-    _write_nav_collapsed_preference(next_open === false);
+    if (is_overlay === false) {
+      _write_nav_collapsed_preference(next_open === false);
+    }
     const toggle_button = this.querySelector(
       ".pyc-site-shell__nav-toggle"
     );
     if (toggle_button !== null) {
       toggle_button.setAttribute(
         "aria-expanded",
-        next_open === true ? "true" : "false"
+        layout.hasAttribute("nav-open") === true ? "true" : "false"
       );
     }
     return;

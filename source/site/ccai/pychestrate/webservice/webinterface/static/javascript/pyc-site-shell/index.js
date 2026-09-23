@@ -94,7 +94,8 @@ function build_header(options) {
   if (typeof options.on_nav_toggle === "function") {
     const nav_toggle = build_nav_toggle(
       options.on_nav_toggle,
-      options.nav_open_initial === true
+      options.nav_open_initial === true,
+      options.nav_controls_id
     );
     app_bar.appendChild(nav_toggle);
   }
@@ -241,7 +242,7 @@ function wire_account_disclosure(container, button, panel) {
   });
   return;
 }
-function build_nav_toggle(on_nav_toggle, nav_open_initial) {
+function build_nav_toggle(on_nav_toggle, nav_open_initial, nav_controls_id) {
   const nav_toggle = document.createElement("button");
   nav_toggle.type = "button";
   nav_toggle.setAttribute("slot", "brand");
@@ -252,6 +253,9 @@ function build_nav_toggle(on_nav_toggle, nav_open_initial) {
     "aria-expanded",
     nav_open_initial === true ? "true" : "false"
   );
+  if (typeof nav_controls_id === "string" && nav_controls_id.length > 0) {
+    nav_toggle.setAttribute("aria-controls", nav_controls_id);
+  }
   nav_toggle.innerHTML = NAV_TOGGLE_ICON_SVG;
   nav_toggle.addEventListener("click", (event) => {
     event.preventDefault();
@@ -2584,11 +2588,14 @@ var SidebarRenderer = class {
    * containment guard an Escape aimed at a modal or the command
    * palette would also collapse the accordion and yank focus into
    * the sidebar. No outside-click handler: the accordion is meant
-   * to stay open until the user picks a different major.
+   * to stay open until the user picks a different major. An Escape
+   * something else already handled (defaultPrevented -- e.g. the
+   * overlay drawer closing itself) is left alone, so one keystroke
+   * does one thing.
    */
   _attach_keydown() {
     const on_document_keydown = (event) => {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || event.defaultPrevented === true) {
         return;
       }
       if (this._open_button === null) {
@@ -2937,7 +2944,7 @@ var ATTR_PALETTE_TIMEOUT_MS = "palette-timeout-ms";
 var ATTR_BRAND_LABEL = "brand-label";
 var NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
 var NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
-var NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+var SIDEBAR_ELEMENT_ID = "pyc-site-shell-sidebar";
 var SIDEBAR_NAV_LABEL = "Primary";
 var PycSiteShell = class extends HTMLElement {
   _sidebar_registry;
@@ -3106,12 +3113,23 @@ var PycSiteShell = class extends HTMLElement {
     this.replaceChildren();
     const layout = document.createElement("mj-app-shell");
     layout.classList.add("pyc-site-shell__layout");
-    const is_narrow_viewport = typeof window.matchMedia === "function" ? window.matchMedia(NARROW_VIEWPORT_QUERY).matches : false;
     const nav_collapsed_preference = _read_nav_collapsed_preference();
-    const nav_open_initial = is_narrow_viewport === false && nav_collapsed_preference === false;
+    const nav_open_initial = nav_collapsed_preference === false;
     if (nav_open_initial === true) {
       layout.setAttribute("nav-open", "");
     }
+    layout.addEventListener("mj-shell-nav-toggle", (event) => {
+      if (event.target !== layout) {
+        return;
+      }
+      const toggle_button = this.querySelector(".pyc-site-shell__nav-toggle");
+      if (toggle_button !== null) {
+        toggle_button.setAttribute(
+          "aria-expanded",
+          layout.hasAttribute("nav-open") === true ? "true" : "false"
+        );
+      }
+    });
     this._layout = layout;
     const brand_attr = this.getAttribute(ATTR_BRAND_LABEL);
     const is_mac_platform = typeof navigator !== "undefined" && typeof navigator.platform === "string" && navigator.platform.toLowerCase().indexOf("mac") >= 0;
@@ -3124,6 +3142,7 @@ var PycSiteShell = class extends HTMLElement {
       },
       current_theme: _read_theme_preference(),
       nav_open_initial,
+      nav_controls_id: SIDEBAR_ELEMENT_ID,
       on_nav_toggle: () => {
         this._toggle_sidebar();
       },
@@ -3136,6 +3155,7 @@ var PycSiteShell = class extends HTMLElement {
     const sidebar = document.createElement("mj-side-nav");
     sidebar.setAttribute("slot", "nav");
     sidebar.setAttribute("nav-label", SIDEBAR_NAV_LABEL);
+    sidebar.id = SIDEBAR_ELEMENT_ID;
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
@@ -3593,19 +3613,22 @@ var PycSiteShell = class extends HTMLElement {
       return;
     }
     const next_open = layout.hasAttribute("nav-open") === false;
+    const is_overlay = layout.getAttribute("nav-mode") === "overlay";
     if (next_open === true) {
       layout.setAttribute("nav-open", "");
     } else {
       layout.removeAttribute("nav-open");
     }
-    _write_nav_collapsed_preference(next_open === false);
+    if (is_overlay === false) {
+      _write_nav_collapsed_preference(next_open === false);
+    }
     const toggle_button = this.querySelector(
       ".pyc-site-shell__nav-toggle"
     );
     if (toggle_button !== null) {
       toggle_button.setAttribute(
         "aria-expanded",
-        next_open === true ? "true" : "false"
+        layout.hasAttribute("nav-open") === true ? "true" : "false"
       );
     }
     return;
