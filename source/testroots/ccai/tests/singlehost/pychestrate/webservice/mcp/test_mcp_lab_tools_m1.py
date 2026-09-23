@@ -88,15 +88,17 @@ ALL_KEYS = ("system:runs.read", "system:clients.read", "system:rpa.read", "syste
 
 
 class _Principal:
-    def __init__(self, user_id: str) -> None:
+    def __init__(self, user_id: str, token_scope: Optional[str] = None) -> None:
         self.user_id = user_id
+        self.token_scope = token_scope
         return
 
 
 class _Request:
-    def __init__(self, *, db_session: Any, user_id: Optional[str] = ACTOR_ID, body: Any = None) -> None:
+    def __init__(self, *, db_session: Any, user_id: Optional[str] = ACTOR_ID, body: Any = None,
+                 token_scope: Optional[str] = None) -> None:
         self.db_session = db_session
-        self.auth_principal = _Principal(user_id) if user_id is not None else None
+        self.auth_principal = _Principal(user_id, token_scope) if user_id is not None else None
         self.actor_user_id = user_id
         self.path = service_endpoint.MCP_SERVICE_PATH
         self._body = body
@@ -143,7 +145,7 @@ def _database() -> Any:
 
 
 def _call(session: Any, name: str, arguments: Dict[str, Any], *, keys: Iterable[str] = ALL_KEYS,
-          user_id: Optional[str] = ACTOR_ID) -> Dict[str, Any]:
+          user_id: Optional[str] = ACTOR_ID, token_scope: Optional[str] = None) -> Dict[str, Any]:
     """
         ``tools/call`` ``name`` as a caller holding ``keys``; returns the
         tool result (``structuredContent`` plus ``isError``/``text``).
@@ -151,7 +153,7 @@ def _call(session: Any, name: str, arguments: Dict[str, Any], *, keys: Iterable[
     message = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
     with _Granting(keys):
         response = service_endpoint._dispatch_message(
-            request=_Request(db_session=session, user_id=user_id), message=message,
+            request=_Request(db_session=session, user_id=user_id, token_scope=token_scope), message=message,
         )
     result = response["result"]
     rtnval = dict(result.get("structuredContent") or {})
@@ -379,6 +381,24 @@ def test_a_device_held_by_someone_else_cannot_be_checked_out():
     active = session.query(Allocation).filter(Allocation.resource_id == resource_id,
                                               Allocation.status == "active").count()
     testbase.assert_equal((result["isError"], active), (True, 1))
+    return
+
+
+def test_a_read_only_token_can_read_but_not_check_out():
+    """
+    **Feature: MCP lab tools (ORG-F19)**
+    **Property: a caller using a read-only API token can list devices but
+    is refused check_out_device (a tool that changes state), and nothing
+    is allocated.**
+    """
+    session = _database()
+    resource_id = _device(session)
+    listed = _call(session, "list_devices", {}, token_scope="read-only")
+    refused = _call(session, "check_out_device", {"resource_id": resource_id}, token_scope="read-only")
+    active = session.query(Allocation).filter(Allocation.resource_id == resource_id).count()
+    testbase.assert_equal(
+        (listed["isError"], refused["isError"], "read-only" in refused["text"], active), (False, True, True, 0),
+    )
     return
 
 

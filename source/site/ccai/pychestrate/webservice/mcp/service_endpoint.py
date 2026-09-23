@@ -604,6 +604,32 @@ def _handle_tools_list() -> Dict[str, Any]:
     return rtnval
 
 
+def _refuse_write_tool_for_read_only_token(*, request: Request, tool: ToolDefinition) -> None:
+    """
+        Refuse a state-changing tool to a caller authenticated with a
+        ``read-only`` API token. The session middleware lets such tokens
+        POST to this endpoint (reads travel over POST too) and leaves the
+        scope check to each tool's ``read_only`` flag.
+
+        :param request: Incoming webworks request.
+        :param tool: The tool being called.
+
+        :returns: None.
+        :raises: :class:`McpToolError` when the tool changes state and the
+                 token is read-only.
+    """
+    principal = getattr(request, "auth_principal", None)
+    if tool.read_only is False and getattr(principal, "token_scope", None) == "read-only":
+        raise McpToolError(
+            code=MCP_PERMISSION_DENIED,
+            message=(
+                "This API token is read-only; the {} tool changes state and"
+                " needs a read-write token.".format(tool.name)
+            ),
+        )
+    return
+
+
 def _handle_tools_call(
         *, request: Request, params: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -646,6 +672,7 @@ def _handle_tools_call(
         )
 
     try:
+        _refuse_write_tool_for_read_only_token(request=request, tool=tool)
         result = tool.handler(request=request, arguments=arguments)
     except McpToolError as xcpt:
         rtnval = {

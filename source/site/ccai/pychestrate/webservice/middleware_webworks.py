@@ -121,6 +121,11 @@ API_KEY_HEADER_NAME: str = "X-Pychestrate-Api-Key"
 #: any other bearer credential passes through to the handler untouched.
 API_TOKEN_PREFIX: str = "pyc_"
 
+#: Endpoints that read-only API tokens may POST to because the endpoint
+#: enforces the token's scope per operation (the MCP JSON-RPC transport
+#: carries read and write tools alike over POST).
+READ_ONLY_TOKEN_POST_PATHS: Tuple[str, ...] = ("/mcp/1/service",)
+
 
 def extract_api_token(request: Any) -> Optional[str]:
     """
@@ -365,6 +370,11 @@ class PychestrateSessionMiddleware:
         """
         principal = getattr(request, "auth_principal", None)
         if getattr(principal, "token_scope", None) != "read-only":
+            return False
+        # MCP speaks JSON-RPC over POST for reads and writes alike; the
+        # MCP endpoint refuses its state-changing tools to read-only
+        # tokens itself (mcp.service_endpoint).
+        if str(getattr(request, "path", "")) in READ_ONLY_TOKEN_POST_PATHS:
             return False
         method = str(getattr(request, "method", "GET")).upper()
         rtnval = method not in ("GET", "HEAD", "OPTIONS")

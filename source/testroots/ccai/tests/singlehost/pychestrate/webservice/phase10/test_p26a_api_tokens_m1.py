@@ -951,6 +951,24 @@ def test_read_only_token_can_read():
     return
 
 
+def test_read_only_token_may_post_to_the_mcp_endpoint():
+    """
+    **Feature: API tokens (ORG-F02)**
+    **Property: a read-only token's POST to the MCP endpoint reaches the
+    handler (MCP carries reads over POST and refuses write tools to
+    read-only tokens itself), while a POST elsewhere is still refused.**
+    """
+    _engine, session = _fresh_database()
+    issued = _issue(session=session, user=_make_user(session=session), scope="read-only")
+    headers = {"Authorization": "Bearer " + issued.token}
+    mcp_handler = _RecordingHandler()
+    _middleware(session=session)(_request(method="POST", path="/mcp/1/service", headers=headers), mcp_handler)
+    rest_handler = _RecordingHandler()
+    rest = _middleware(session=session)(_request(method="POST", headers=headers), rest_handler)
+    testbase.assert_equal((len(mcp_handler.principals), rest.status_code), (1, 403))
+    return
+
+
 def test_request_without_credentials_is_still_refused():
     """
     **Feature: API tokens (ORG-F02)**
