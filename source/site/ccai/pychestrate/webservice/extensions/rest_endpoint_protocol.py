@@ -28,7 +28,7 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass
-from typing import ClassVar, Tuple
+from typing import Any, Callable, ClassVar, Optional, Tuple
 
 from ccai.pychestrate.webservice.extensions.resource_extension import ResourceExtension
 
@@ -67,12 +67,21 @@ class RestEndpointDescriptor:
                                       ``E-extension-sandbox``).
         :param description: Operator-facing summary surfaced in the
                             catalog entry / Sphinx docs.
+        :param handler_name: Name of the extension's classmethod that
+                             serves the route. The host calls it as
+                             ``handler(request=request)``; it returns a
+                             JSON-serializable value (answered 200) or a
+                             webworks ``Response``. A descriptor without
+                             one is listed but not mounted, unless the
+                             extension overrides
+                             :meth:`RestEndpointExtension.handle_request`.
     """
     method: str
     path_suffix: str
     required_permissions: Tuple[str, ...]
     required_capabilities: Tuple[str, ...]
     description: str
+    handler_name: str = ""
 
 
 class RestEndpointExtension(ResourceExtension):
@@ -104,6 +113,58 @@ class RestEndpointExtension(ResourceExtension):
             :returns: Tuple of :class:`RestEndpointDescriptor`.
         """
         raise NotImplementedError("Subclasses must implement declare_endpoints")
+
+    @classmethod
+    def handle_request(cls, *, descriptor: RestEndpointDescriptor, request: Any) -> Any:
+        """
+            Serve one request for ``descriptor``. The host has already
+            checked the caller's authentication, the descriptor's
+            ``required_permissions`` and the extension's capability grants.
+            The default calls the classmethod named by
+            ``descriptor.handler_name`` with ``request=request``; override
+            it to dispatch some other way.
+
+            :param descriptor: The descriptor of the route being served.
+            :param request: The webworks request.
+
+            :returns: A JSON-serializable value or a webworks ``Response``.
+            :raises: NotImplementedError when the descriptor names no
+                     handler the extension has.
+        """
+        handler = _named_handler(ext_class=cls, descriptor=descriptor)
+        if handler is None:
+            err_msg = "{} declares no handler for {} {}.".format(
+                cls.__qualname__, descriptor.method, descriptor.path_suffix,
+            )
+            raise NotImplementedError(err_msg)
+        rtnval = handler(request=request)
+        return rtnval
+
+    @classmethod
+    def serves(cls, *, descriptor: RestEndpointDescriptor) -> bool:
+        """
+            Whether the host can mount ``descriptor``: the extension names a
+            handler it has, or overrides :meth:`handle_request`.
+
+            :param descriptor: One of this extension's descriptors.
+
+            :returns: Boolean.
+        """
+        overridden = cls.handle_request.__func__ is not RestEndpointExtension.handle_request.__func__
+        rtnval = overridden or _named_handler(ext_class=cls, descriptor=descriptor) is not None
+        return rtnval
+
+
+def _named_handler(*, ext_class: type, descriptor: RestEndpointDescriptor) -> Optional[Callable[..., Any]]:
+    """
+        The callable ``descriptor.handler_name`` names on ``ext_class``, or
+        ``None``.
+    """
+    if len(descriptor.handler_name or "") == 0:
+        return None
+    candidate = getattr(ext_class, descriptor.handler_name, None)
+    rtnval = candidate if callable(candidate) else None
+    return rtnval
 
 
 def is_valid_http_method(*, method: str) -> bool:

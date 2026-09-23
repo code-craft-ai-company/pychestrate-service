@@ -2234,11 +2234,15 @@ paths:
       summary: List extension-contributed REST endpoints.
       description: >-
         Operator-facing listing of the extension REST endpoints the
-        host discovered at startup, each mounted under the
-        `/api/v1/ext/<extension_name>/...` namespace. The dynamic
-        binding of each manifest row to a live route is a scoped
-        follow-up; `dynamic_mount` reports `deferred` until that
-        lands. RBAC-gated on `system:plugin_api.read`.
+        host discovered at startup, under the
+        `/api/v1/ext/<extension_name>/...` namespace. At startup the
+        host mounts every route whose extension names a handler;
+        each item says whether it is `mounted`, and `dynamic_mount`
+        is `mounted` once mounting has run in this process. A mounted
+        route requires a signed-in caller holding the route's
+        `required_permissions`, and the extension must hold its
+        `required_capabilities` in the extension sandbox (else 403).
+        RBAC-gated on `system:plugin_api.read`.
       operationId: plugin_api_list_ext
       responses:
         '200':
@@ -2251,13 +2255,37 @@ paths:
                 properties:
                   items:
                     type: array
-                    items: { $ref: '#/components/schemas/PluginApiMount' }
+                    items: { $ref: '#/components/schemas/ExtensionRoute' }
                   total: { type: integer }
                   dynamic_mount:
                     type: string
-                    enum: [deferred, active]
+                    enum: [deferred, mounted]
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /ext/example/echo:
+    get:
+      tags: [plugin_api]
+      summary: Echo a message (the in-tree reference extension).
+      description: >-
+        Served by `ExampleEchoEndpoints`, the published reference for
+        `RestEndpointExtension`. Any signed-in caller may use it.
+      operationId: ext_example_echo
+      parameters:
+        - name: message
+          in: query
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: The message, echoed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   # =====================================================================
   # embed
@@ -6843,6 +6871,27 @@ components:
         capabilities:
           type: array
           items: { type: string }
+
+    ExtensionRoute:
+      type: object
+      description: One route an extension contributes under /api/v1/ext.
+      required: [ext_name, method, path_suffix, full_path, mounted]
+      properties:
+        ext_name: { type: string }
+        method: { type: string, enum: [GET, POST, PUT, PATCH, DELETE] }
+        path_suffix: { type: string }
+        full_path: { type: string }
+        handler_class: { type: string }
+        required_permissions:
+          type: array
+          items: { type: string }
+        required_capabilities:
+          type: array
+          items: { type: string }
+        description: { type: string }
+        mounted:
+          type: boolean
+          description: Whether the host mounted the route (its extension names a handler).
 
     # ----------------------------------------------------------------
     # embed (8-embeddable-views)

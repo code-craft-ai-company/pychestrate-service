@@ -7,9 +7,9 @@
 
 Contributes a minimal ``GET /api/v1/ext/example/echo`` returning
 ``{"message": ...}``. Serves as the published reference for
-``RestEndpointExtension`` so external authors can copy the shape; the
-M2 router uses the descriptors here to verify discovery + dispatch
-end-to-end.
+``RestEndpointExtension`` so external authors can copy the shape: a
+descriptor names its handler (``handler_name``) and the host mounts the
+route at startup.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -18,7 +18,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import ClassVar, Tuple
+from typing import Any, ClassVar, Tuple
 
 from ccai.pychestrate.webservice.extensions.rest_endpoint_protocol import (
     HTTP_METHOD_GET,
@@ -41,6 +41,7 @@ class ExampleEchoEndpoints(RestEndpointExtension):
         required_permissions=tuple(),
         required_capabilities=tuple(),
         description="Echo the caller-supplied 'message' query parameter back.",
+        handler_name="handle_echo",
     )
 
     @classmethod
@@ -49,9 +50,23 @@ class ExampleEchoEndpoints(RestEndpointExtension):
         return rtnval
 
     @classmethod
+    def handle_echo(cls, *, request: Any) -> dict:
+        """
+            Serve ``GET /api/v1/ext/example/echo?message=...``.
+
+            :param request: The webworks request.
+
+            :returns: Dictionary with the echoed message.
+        """
+        message = request.query_params.get("message", "")
+        rtnval = cls.echo(message=str(message) if message is not None else "")
+        return rtnval
+
+    @classmethod
     def echo(cls, *, message: str) -> dict:
         """
-            Reference handler used once the M2 router is wired.
+            The echo itself, separate from request parsing so it can be
+            called directly.
 
             :param message: Caller-supplied message string.
 
