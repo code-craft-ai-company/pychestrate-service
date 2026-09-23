@@ -546,6 +546,7 @@ DEFAULT_REGISTRY.update({
     "password_min_length": _password_policy_value("password_min_length"),
     "password_max_length": _password_policy_value("password_max_length"),
     "password_input_id": _const("password"),
+    "value_cleared": _by_mode(True, False),
 })
 
 
