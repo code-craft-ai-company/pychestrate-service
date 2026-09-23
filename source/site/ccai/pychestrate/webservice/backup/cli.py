@@ -126,12 +126,12 @@ def _database_url() -> str:
     """
     from ccai.thisapp.wellknown import ThisApplicationSingleton
     from ccai.pychestrate.webservice.pychestrate_variables import (
-        PychestrateVariables,
         PychestrateVariablesDesc,
     )
 
-    ThisApplicationSingleton().forget_variable(PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL)
-    rtnval = str(PychestrateVariables.PYCHESTRATE_DATABASE_URL)
+    this_app = ThisApplicationSingleton()
+    this_app.forget_variable(PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL)
+    rtnval = str(this_app.get_variable_value(PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL))
     return rtnval
 
 

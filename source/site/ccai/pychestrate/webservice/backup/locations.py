@@ -64,14 +64,17 @@ def _resolve_configured_directory(
     try:
         from ccai.thisapp.wellknown import ThisApplicationSingleton
         from ccai.pychestrate.webservice.pychestrate_variables import (
-            PychestrateVariables,
             PychestrateVariablesDesc,
         )
 
-        ThisApplicationSingleton().forget_variable(
-            getattr(PychestrateVariablesDesc, accessor_name)
-        )
-        configured = getattr(PychestrateVariables, accessor_name)
+        # Resolve against the current application instance (the
+        # PychestrateVariables accessor caches the first one it saw,
+        # which goes stale when a test harness replaces it), forgetting
+        # any cached value so environment changes are honored.
+        var_desc = getattr(PychestrateVariablesDesc, accessor_name)
+        this_app = ThisApplicationSingleton()
+        this_app.forget_variable(var_desc)
+        configured = this_app.get_variable_value(var_desc)
     except SemanticError:
         configured = None
 

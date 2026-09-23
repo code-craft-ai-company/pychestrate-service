@@ -90,16 +90,17 @@ def _configured_artifact_root() -> str:
     try:
         from ccai.thisapp.wellknown import ThisApplicationSingleton
         from ccai.pychestrate.webservice.pychestrate_variables import (
-            PychestrateVariables,
             PychestrateVariablesDesc,
         )
 
-        # Forget any cached resolution so an environment change made
-        # after the first read (tests, operator tools) is honored.
-        ThisApplicationSingleton().forget_variable(
-            PychestrateVariablesDesc.PYCHESTRATE_ARTIFACT_ROOT
-        )
-        configured = PychestrateVariables.PYCHESTRATE_ARTIFACT_ROOT
+        # Resolve against the current application instance, forgetting
+        # any cached value first so an environment change made after
+        # the first read (tests, operator tools) is honored. (The
+        # PychestrateVariables accessor caches the instance it first
+        # saw, which goes stale when a test harness replaces it.)
+        this_app = ThisApplicationSingleton()
+        this_app.forget_variable(PychestrateVariablesDesc.PYCHESTRATE_ARTIFACT_ROOT)
+        configured = this_app.get_variable_value(PychestrateVariablesDesc.PYCHESTRATE_ARTIFACT_ROOT)
     except SemanticError:
         configured = None
 

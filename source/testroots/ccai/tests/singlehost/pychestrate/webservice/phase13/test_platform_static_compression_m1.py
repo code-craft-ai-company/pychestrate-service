@@ -70,10 +70,10 @@ _JS_BODY: bytes = (b"export function f(){return 'pychestrate component library';
 
 
 def _static_root_with(*, name: str, content: bytes) -> str:
+    static_files.reset_static_asset_cache_for_testing()
     root = tempfile.mkdtemp(prefix="pyc-static-gz-")
     with open(os.path.join(root, name), "wb") as fh:
         fh.write(content)
-    static_files.reset_static_asset_cache_for_testing()
     return root
 
 
