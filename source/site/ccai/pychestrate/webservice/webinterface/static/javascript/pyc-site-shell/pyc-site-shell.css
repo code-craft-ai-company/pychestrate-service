@@ -91,12 +91,19 @@ html, body {
     padding: 0;
 }
 
+/*
+ * The UI font is set on body, not only on <pyc-site-shell>: overlays
+ * the shell mounts on document.body (the command palette, the skip
+ * link, confirm dialogs) would otherwise fall back to the browser's
+ * default serif face.
+ */
 body {
     padding: 5px;
     box-sizing: border-box;
     min-height: 100vh;
     background-color: var(--pyc-color-app-bg, var(--pyc-site-shell-bg));
     color: var(--pyc-color-on-surface, var(--pyc-site-shell-fg));
+    font-family: var(--pyc-site-shell-font-family);
 }
 pyc-site-shell {
     display: flex;

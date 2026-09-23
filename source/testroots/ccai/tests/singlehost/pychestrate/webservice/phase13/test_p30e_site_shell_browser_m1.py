@@ -14,7 +14,8 @@ served in-process by :mod:`_shell_browser_harness` (no pychestrate
 instance needed), and checks one property at a given viewport /
 color scheme.
 
-Covered audit findings: XC-02 (Sign out unreachable on phones).
+Covered audit findings: XC-02 (Sign out unreachable on phones),
+LD-13 (serif palette font).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -173,6 +174,46 @@ def test_touch_devices_do_not_show_the_keyboard_shortcut(browser: Browser):
         hint = page.locator(".pyc-site-shell__palette-hint")
         visible_text = hint.inner_text().strip()
         testbase.assert_equal((visible_text, hint.is_visible()), ("", True))
+    finally:
+        page.context.close()
+    return
+
+
+# ---------------------------------------------------------------------------
+# LD-13: one UI typeface, overlays included
+# ---------------------------------------------------------------------------
+
+
+def test_body_uses_the_ui_font(browser: Browser):
+    """
+    **Feature: site shell -- typography**
+    **Property: the document body uses the UI font stack (a sans-serif
+    stack), not the browser's default serif.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        family = page.evaluate("() => getComputedStyle(document.body).fontFamily")
+        testbase.assert_true("sans-serif" in family, family)
+    finally:
+        page.context.close()
+    return
+
+
+def test_command_palette_results_use_the_ui_font(browser: Browser):
+    """
+    **Feature: site shell -- typography**
+    **Property: command-palette results, which mount on document.body,
+    render in the UI font stack.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        page.evaluate("() => document.querySelector('pyc-site-shell').openPalette()")
+        page.locator(".pyc-site-shell__palette-input").fill("Runs")
+        page.wait_for_selector(".pyc-site-shell__palette-option-label")
+        family = page.evaluate(
+            "() => getComputedStyle(document.querySelector('.pyc-site-shell__palette-option-label')).fontFamily"
+        )
+        testbase.assert_true("sans-serif" in family, family)
     finally:
         page.context.close()
     return
