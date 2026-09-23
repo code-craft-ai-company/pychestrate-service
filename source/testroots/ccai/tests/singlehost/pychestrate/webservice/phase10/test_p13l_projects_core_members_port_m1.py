@@ -65,6 +65,10 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
 
 _TEST_UI_COOKIE_SECRET: bytes = b"\x00" * 32
 
+#: User ids are UUIDs (``user.user_id``); the member routes must pass
+#: them through unchanged.
+_MEMBER_USER_ID: str = "5f0c2d1e-8a4b-4c3d-9e2f-1a2b3c4d5e6f"
+
 
 # ---------------------------------------------------------------------------
 # Test stubs
@@ -223,16 +227,17 @@ class _FakeProject:
 
 
 class _FakeMember:
-    def __init__(self, *, user_id: int, role: str = "viewer") -> None:
-        self.user_id: int = user_id
+    def __init__(self, *, user_id: Any, role: str = "viewer") -> None:
+        self.user_id: Any = user_id
         self.role: str = role
         return
 
 
 class _FakeUser:
-    def __init__(self, *, user_id: int, username: str = "u") -> None:
-        self.id: int = user_id
+    def __init__(self, *, user_id: Any, username: str = "u") -> None:
+        self.id: Any = user_id
         self.username: str = username
+        self.display_name: str = ""
         return
 
 
@@ -368,14 +373,19 @@ class _FakeProjectManager:
 
 
 class _FakeUserManager:
+    last_instance: Optional["_FakeUserManager"] = None
+
     def __init__(self, db_session: Any) -> None:
         self.db_session: Any = db_session
         self.list_users_response: _FakeUserListResponse = (
             _FakeUserListResponse(users=[])
         )
+        self.list_users_calls: List[Dict[str, Any]] = []
+        _FakeUserManager.last_instance = self
         return
 
     def list_users(self, **kwargs: Any) -> _FakeUserListResponse:
+        self.list_users_calls.append(dict(kwargs))
         return self.list_users_response
 
 
@@ -1471,7 +1481,9 @@ def test_handle_member_add_post_happy_path_redirects_to_member_list():
 
         cookie_value = _build_authenticated_cookie()
         body = (
-            b"csrf_token=csrf-fresh&user_id=11&role=contributor"
+            "csrf_token=csrf-fresh&user_id={}&role=contributor".format(
+                _MEMBER_USER_ID
+            ).encode("utf-8")
         )
         request = _FakeRequest(
             method="POST",
@@ -1490,7 +1502,7 @@ def test_handle_member_add_post_happy_path_redirects_to_member_list():
         testbase.assert_equal(len(pm.add_member_calls), 1)
         proj_id, target_uid, role, user_id = pm.add_member_calls[0]
         testbase.assert_equal(proj_id, 7)
-        testbase.assert_equal(target_uid, 11)
+        testbase.assert_equal(target_uid, _MEMBER_USER_ID)
         testbase.assert_equal(role.value, "contributor")
         testbase.assert_equal(user_id, "u-admin")
     finally:
@@ -1568,7 +1580,7 @@ def test_handle_member_edit_post_happy_path_calls_update_member_role():
                 project_id=7, name="alpha"
             )
             instance.list_members_response = [
-                _FakeMember(user_id=11, role="viewer"),
+                _FakeMember(user_id=_MEMBER_USER_ID, role="viewer"),
             ]
             return
 
@@ -1581,7 +1593,7 @@ def test_handle_member_edit_post_happy_path_calls_update_member_role():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=body,
-            path_params={"project_id": "7", "user_id": "11"},
+            path_params={"project_id": "7", "user_id": _MEMBER_USER_ID},
         )
         response = projects_routes.handle_member_edit(request)
 
@@ -1596,7 +1608,7 @@ def test_handle_member_edit_post_happy_path_calls_update_member_role():
             pm.update_member_role_calls[0]
         )
         testbase.assert_equal(proj_id, 7)
-        testbase.assert_equal(target_uid, 11)
+        testbase.assert_equal(target_uid, _MEMBER_USER_ID)
         testbase.assert_equal(role.value, "admin")
     finally:
         for p in (role_patch, pm_patch, sm_patch):
@@ -1628,7 +1640,7 @@ def test_handle_member_remove_happy_path_redirects_to_member_list():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=b"csrf_token=csrf-fresh",
-            path_params={"project_id": "7", "user_id": "11"},
+            path_params={"project_id": "7", "user_id": _MEMBER_USER_ID},
         )
         response = projects_routes.handle_member_remove(request)
 
@@ -1639,7 +1651,7 @@ def test_handle_member_remove_happy_path_redirects_to_member_list():
         )
         pm = _FakeProjectManager.last_instance
         testbase.assert_equal(
-            pm.remove_member_calls, [(7, 11, "u-admin")]
+            pm.remove_member_calls, [(7, _MEMBER_USER_ID, "u-admin")]
         )
     finally:
         for p in (pm_patch, sm_patch):
@@ -1671,7 +1683,7 @@ def test_handle_member_remove_refuses_self_removal():
         # so the target-vs-self comparison can actually match
         # (the member routes coerce the path user_id to int).
         info = _FakeSessionInfo(
-            user_id="11", username="selfadmin",
+            user_id=_MEMBER_USER_ID, username="selfadmin",
             csrf_token="csrf-fresh",
         )
 
@@ -1689,7 +1701,7 @@ def test_handle_member_remove_refuses_self_removal():
         pm_patch = _patch_project_manager()
 
         payload = {
-            "user_id": "11",
+            "user_id": _MEMBER_USER_ID,
             "username": "selfadmin",
             "session_token": "tok-abc",
         }
@@ -1700,7 +1712,7 @@ def test_handle_member_remove_refuses_self_removal():
             method="POST",
             cookies={cookie_session.COOKIE_NAME: cookie_value},
             body=b"csrf_token=csrf-fresh",
-            path_params={"project_id": "7", "user_id": "11"},
+            path_params={"project_id": "7", "user_id": _MEMBER_USER_ID},
         )
         response = projects_routes.handle_member_remove(request)
 
@@ -1713,6 +1725,206 @@ def test_handle_member_remove_refuses_self_removal():
         testbase.assert_equal(pm.remove_member_calls, [])
     finally:
         for p in (pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+# ===========================================================================
+# PRJ-01: member ids are UUIDs
+# ===========================================================================
+
+
+def test_coerce_user_id_keeps_uuid_user_ids():
+    """
+    **Feature: projects members (PRJ-01)**
+    **Property: _coerce_user_id returns the canonical UUID string for
+    a UUID user id (the format of ``user.user_id``) instead of None --
+    coercing to int dropped every real id and made member add, edit
+    and remove fail with "user_id is required".**
+    """
+    upper = _MEMBER_USER_ID.upper()
+
+    parsed = projects_routes._coerce_user_id(raw="  {}  ".format(upper))
+
+    testbase.assert_equal(parsed, _MEMBER_USER_ID)
+    return
+
+
+def test_coerce_user_id_rejects_values_that_are_not_uuids():
+    """
+    **Feature: projects members (PRJ-01)**
+    **Property: _coerce_user_id returns None for empty input and for
+    values that are not UUIDs, so the handlers can ask the user to
+    choose someone rather than query with garbage.**
+    """
+    results = [
+        projects_routes._coerce_user_id(raw=value)
+        for value in (None, "", "   ", "11", "not-a-user")
+    ]
+
+    testbase.assert_equal(results, [None, None, None, None, None])
+    return
+
+
+def test_handle_member_add_post_without_user_explains_and_adds_nobody():
+    """
+    **Feature: projects members (PRJ-01)**
+    **Property: POST /projects/{id}/members/add with no user chosen
+    re-renders the form with a flash asking the user to choose
+    someone and never calls add_member.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    um_patch = None
+    role_patch = None
+    enum_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(
+                project_id=7, name="alpha"
+            )
+            return
+
+        pm_patch = _patch_project_manager(configure=_seed)
+        um_patch = _patch_user_manager()
+        role_patch = _patch_project_role_resolver()
+        enum_patch = _patch_project_role_enumerator()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh&user_id=&role=viewer",
+            path_params={"project_id": "7"},
+        )
+        projects_routes.handle_member_add(request)
+
+        ctx = env.last_template.render_calls[0]
+        messages = " ".join(message for _category, message in ctx["flashes"])
+        testbase.assert_equal(
+            (
+                "Choose a user to add to the project." in messages,
+                _FakeProjectManager.last_instance.add_member_calls,
+            ),
+            (True, []),
+        )
+    finally:
+        for p in (enum_patch, role_patch, um_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_member_add_picker_lists_active_non_members_matching_search():
+    """
+    **Feature: projects members (PRJ-01)**
+    **Property: GET /projects/{id}/members/add?q=ali asks the user
+    manager for active users matching "ali" and offers only those who
+    are not already members (ids compared as strings).**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    um_patch = None
+    enum_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        member_id = "0b6f7a52-3a39-4d8e-8f4f-2d4f3f6a0c11"
+
+        def _seed(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(
+                project_id=7, name="alpha"
+            )
+            instance.list_members_response = [
+                _FakeMember(user_id=member_id, role="owner"),
+            ]
+            return
+
+        pm_patch = _patch_project_manager(configure=_seed)
+        um_patch = _patch_user_manager(users=[
+            _FakeUser(user_id=member_id, username="alice-owner"),
+            _FakeUser(user_id=_MEMBER_USER_ID, username="alice"),
+        ])
+        enum_patch = _patch_project_role_enumerator()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7"},
+            query_mapping={"q": "ali"},
+        )
+        projects_routes.handle_member_add(request)
+
+        ctx = env.last_template.render_calls[0]
+        offered = [user.username for user in ctx["available_users"]]
+        call = _FakeUserManager.last_instance.list_users_calls[0]
+        testbase.assert_equal(
+            (offered, call["search"], call["is_active"], ctx["user_search"]),
+            (["alice"], "ali", True, "ali"),
+        )
+    finally:
+        for p in (enum_patch, um_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_member_add_offers_create_user_link_to_user_managers():
+    """
+    **Feature: projects members (PRJ-01)**
+    **Property: the member picker context carries can_create_users =
+    True when the signed-in user holds system:users.write, so the
+    empty picker can link to the Create User page.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    um_patch = None
+    enum_patch = None
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(
+                project_id=7, name="alpha"
+            )
+            return
+
+        pm_patch = _patch_project_manager(configure=_seed)
+        um_patch = _patch_user_manager()
+        enum_patch = _patch_project_role_enumerator()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7"},
+        )
+        projects_routes.handle_member_add(request)
+
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(ctx["can_create_users"], True)
+    finally:
+        for p in (enum_patch, um_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()

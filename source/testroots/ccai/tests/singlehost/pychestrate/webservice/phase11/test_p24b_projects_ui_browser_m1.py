@@ -531,66 +531,71 @@ def test_member_list_renders_for_project(browser: Browser) -> None:
     return
 
 
+def _create_user_via_admin_ui(*, page: Page, username: str) -> None:
+    """
+        Create a plain user account through ``/admin/users/create`` so
+        a project has someone to add as a member (on a fresh deploy the
+        admin is the only account and already owns every project it
+        creates).
+
+        :param page: Authenticated admin page.
+        :param username: Login name for the new account.
+    """
+    page.goto(BASE_URL + "/admin/users/create")
+    page.wait_for_load_state("domcontentloaded")
+    page.fill("input[name='username']", username)
+    page.fill("input[name='email']", "{}@example.invalid".format(username))
+    page.fill("input[name='password']", "Member-Pass-{}!".format(username[-8:]))
+    page.fill("input[name='display_name']", "Member {}".format(username))
+    page.click("form[method='post'] button[type='submit']")
+    page.wait_for_load_state("domcontentloaded")
+    return
+
+
 def test_member_add_form_renders_and_submits(browser: Browser) -> None:
     """
     **Feature: projects-ui-members**
-    **Property: GET /projects/{id}/members/add renders a form
-    with user_id and role selects; with only the admin user
-    available, selecting the admin user (if the select is
-    non-empty) and submitting either succeeds or returns an
-    informative error flash -- proves the add-member write path
-    is reachable through the legacy UI.**
+    **Property: adding a second user to a project through
+    /projects/{id}/members/add lands on the Members page with a row
+    for that user -- the add-member write path works end to end
+    (it used to fail every time with "user_id is required").**
     """
     project_name = _unique(prefix="uitest-proj-mbradd")
+    member_name = _unique(prefix="uitest-member")
 
     context = browser.new_context()
     try:
         page = _login(context=context)
 
-        # Create project.
         project_id_str, create_ok = _create_project_via_ui(
             page=page,
             project_name=project_name,
             description="member add test",
         )
         testbase.assert_true(create_ok)
+        _create_user_via_admin_ui(page=page, username=member_name)
 
-        # Navigate to add-member form.
-        add_url = BASE_URL + "/projects/{}/members/add".format(project_id_str)
-        page.goto(add_url)
+        # Narrow the picker to the new account, choose it, submit.
+        page.goto(
+            BASE_URL + "/projects/{}/members/add?q={}".format(
+                project_id_str, member_name
+            )
+        )
+        page.wait_for_load_state("domcontentloaded")
+        option = page.locator(
+            "select[name='user_id'] option", has_text=member_name
+        ).first
+        page.select_option(
+            "select[name='user_id']", value=option.get_attribute("value")
+        )
+        page.select_option("select[name='role']", value="developer")
+        page.click("form[method='post'] button.btn-primary")
         page.wait_for_load_state("domcontentloaded")
 
-        current_url = page.url
-        testbase.assert_true("/login" not in current_url)
-
-        # The form must have user_id and role selects.
-        testbase.assert_true(
-            page.locator("select[name='user_id']").count() >= 1
+        member_rows = page.locator(
+            "table.data-table tbody tr", has_text=member_name
         )
-        testbase.assert_true(
-            page.locator("select[name='role']").count() >= 1
-        )
-
-        # If there are available users in the select, pick the first
-        # real one and submit.  On a single-user fixture the admin is
-        # already the project owner so the available_users list is
-        # empty -- submit is still exercised but will get an error
-        # flash (user_id is required) rather than success.
-        user_select = page.locator("select[name='user_id']")
-        option_count = user_select.locator("option").count()
-        if option_count > 1:
-            # Pick the first non-placeholder option.
-            user_select.select_option(index=1)
-            page.click("button.btn-primary")
-            page.wait_for_load_state("domcontentloaded")
-
-            # Should not bounce to login.
-            current_url = page.url
-            testbase.assert_true("/login" not in current_url)
-        else:
-            # Only the placeholder option exists: still confirm the
-            # form rendered correctly.
-            testbase.assert_true(option_count >= 1)
+        testbase.assert_equal(member_rows.count(), 1)
     finally:
         context.close()
 

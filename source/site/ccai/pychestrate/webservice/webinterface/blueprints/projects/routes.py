@@ -51,6 +51,7 @@ __version__ = "1.0.0"
 
 
 import json
+import uuid
 
 from datetime import datetime
 
@@ -80,6 +81,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     extract_fragment_title,
     _deny_redirect_target,
+    _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
@@ -89,6 +91,14 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 
 
 PROJECTS_PATH = "/projects"
+
+#: Permission that lets a user create accounts. The member picker
+#: links to the Create User page only for users who hold it.
+USERS_WRITE_PERMISSION = "system:users.write"
+
+#: Upper bound on the users listed in the member picker; the search
+#: box narrows the list when a deployment has more accounts.
+MEMBER_PICKER_LIMIT = 200
 
 
 _ROUTE_TABLE = (
@@ -287,6 +297,33 @@ def _coerce_int_with_default(*, raw: Any, default: int) -> int:
     if parsed is None:
         return default
     return parsed
+
+
+def _coerce_user_id(*, raw: Any) -> Optional[str]:
+    """
+        Normalize a user id from a form field or path parameter.
+
+        User ids are UUIDs (``user.user_id``), so they must never go
+        through :func:`_coerce_int` -- that turned every real id into
+        ``None`` and made adding, editing and removing members fail
+        with "user_id is required".
+
+        :param raw: Raw value (string, UUID or ``None``).
+
+        :returns: The canonical lower-case UUID string, or ``None``
+                  when the value is empty or not a UUID.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if len(text) == 0:
+        return None
+    try:
+        parsed = uuid.UUID(text)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    rtnval = str(parsed)
+    return rtnval
 
 
 def _parse_pagination_params(
@@ -1172,6 +1209,7 @@ def handle_member_add(request: Request) -> Response:
 
         method = request.method.upper()
         form_data: Optional[MultiFormView] = None
+        user_search = str(request.query_params.get("q", "") or "").strip()
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1190,7 +1228,7 @@ def handle_member_add(request: Request) -> Response:
                 return csrf_redirect
 
             user_id_raw = single_form.get("user_id", None)
-            user_id = _coerce_int(raw=user_id_raw)
+            user_id = _coerce_user_id(raw=user_id_raw)
             role_str = str(single_form.get("role", "viewer"))
             form_data = MultiFormView(data={
                 "user_id": [str(user_id_raw or "")],
@@ -1199,7 +1237,7 @@ def handle_member_add(request: Request) -> Response:
 
             try:
                 if user_id is None:
-                    raise ValueError("user_id is required.")
+                    raise ValueError("Choose a user to add to the project.")
                 role = _resolve_project_role(role_str=role_str)
                 project_manager.add_member(
                     project_id, user_id, role, auth.user_id
@@ -1230,13 +1268,19 @@ def handle_member_add(request: Request) -> Response:
         for m in current_members:
             mid = getattr(m, "user_id", None)
             if mid is not None:
-                member_user_ids.add(mid)
+                member_user_ids.add(str(mid))
 
-        all_users_response = user_manager.list_users(limit=1000)
+        # Only active accounts can be added; the search box narrows
+        # the picker on deployments with many users.
+        all_users_response = user_manager.list_users(
+            limit=MEMBER_PICKER_LIMIT,
+            search=user_search if len(user_search) > 0 else None,
+            is_active=True,
+        )
         all_users = getattr(all_users_response, "users", []) or []
         available_users = [
             u for u in all_users
-            if getattr(u, "id", None) not in member_user_ids
+            if str(getattr(u, "id", None)) not in member_user_ids
         ]
 
         roles = _enumerate_project_role_values()
@@ -1252,6 +1296,10 @@ def handle_member_add(request: Request) -> Response:
         context["available_users"] = available_users
         context["roles"] = roles
         context["form_data"] = form_data
+        context["user_search"] = user_search
+        context["can_create_users"] = _has_permission(
+            auth=auth, permission=USERS_WRITE_PERMISSION
+        )
         response = _render(
             template_name="projects/members/add.html",
             context=context,
@@ -1282,7 +1330,7 @@ def handle_member_edit(request: Request) -> Response:
         project_id = _coerce_int(
             raw=request.path_params.get("project_id", None)
         )
-        target_user_id = _coerce_int(
+        target_user_id = _coerce_user_id(
             raw=request.path_params.get("user_id", None)
         )
 
@@ -1371,7 +1419,7 @@ def handle_member_edit(request: Request) -> Response:
         ).members
         member = None
         for m in members:
-            if getattr(m, "user_id", None) == target_user_id:
+            if str(getattr(m, "user_id", None)) == target_user_id:
                 member = m
                 break
         if member is None:
@@ -1426,7 +1474,7 @@ def handle_member_remove(request: Request) -> Response:
         project_id = _coerce_int(
             raw=request.path_params.get("project_id", None)
         )
-        target_user_id = _coerce_int(
+        target_user_id = _coerce_user_id(
             raw=request.path_params.get("user_id", None)
         )
         single_form = _parse_form_or_empty(request=request)
@@ -1470,10 +1518,9 @@ def handle_member_remove(request: Request) -> Response:
             return deny_response
 
         # Refuse self-removal: an admin removing themselves would
-        # lock themselves out of the project mid-session. String
-        # comparison because path params arrive as coerced ints
-        # while auth user ids may be strings.
-        if str(target_user_id) == str(auth.user_id):
+        # lock themselves out of the project mid-session. Both ids
+        # are compared in canonical UUID form.
+        if target_user_id == _coerce_user_id(raw=auth.user_id):
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(

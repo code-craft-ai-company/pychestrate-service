@@ -19,15 +19,38 @@
 </div>
 
 <div class="card narrow">
+    <form method="get" action="{{ url_for('projects.member_add', project_id=project.id) }}" class="actions-row mb" role="search">
+        <label for="member-search" class="visually-hidden">Find a user</label>
+        <input type="search" id="member-search" name="q" class="form-control" value="{{ user_search }}"
+               placeholder="Find a user by name, username or email">
+        <button type="submit" class="btn btn-secondary">{{ ui.icon("search") }} Find</button>
+        {% if user_search %}
+        <a href="{{ url_for('projects.member_add', project_id=project.id) }}" class="btn btn-secondary">Clear</a>
+        {% endif %}
+    </form>
+
+    {% if not available_users %}
+    {% if user_search %}
+    {% set picker_empty_title = 'No active user matching "' ~ user_search ~ '" can be added.' %}
+    {% else %}
+    {% set picker_empty_title = "Every active user is already a member of this project." %}
+    {% endif %}
+    {% if can_create_users %}
+    {{ ui.empty_state(picker_empty_title, "To add someone new, create their account first.", url_for('config.user_create'), "Create a user") }}
+    {% else %}
+    {{ ui.empty_state(picker_empty_title, "Ask an administrator to create an account for the person you want to add.") }}
+    {% endif %}
+    {% endif %}
+
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+
         <div class="form-group">
             <label for="user_id">User *</label>
             <select id="user_id" name="user_id" class="form-control" required>
                 <option value="">Select a user...</option>
                 {% for user in available_users %}
-                <option value="{{ user.id }}" {% if form_data and form_data.user_id == user.id|string %}selected{% endif %}>{{ user.username }} ({{ user.display_name }})</option>
+                <option value="{{ user.id }}" {% if form_data and form_data.user_id == user.id|string %}selected{% endif %}>{{ user.username }}{% if user.display_name %} ({{ user.display_name }}){% endif %}</option>
                 {% endfor %}
             </select>
         </div>

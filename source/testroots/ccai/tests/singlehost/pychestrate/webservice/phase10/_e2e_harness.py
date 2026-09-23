@@ -1171,6 +1171,42 @@ def login_as(*, wsgi_app: Any, user: SeededAdmin) -> Dict[str, str]:
     return cookies
 
 
+# ---------------------------------------------------------------------------
+# Additional named users (projects access tests)
+# ---------------------------------------------------------------------------
+
+
+def ensure_seeded_user(*, login: str) -> SeededAdmin:
+    """
+        Idempotently seed a plain user (no role bindings) with the
+        given login, sharing one UUID across the modern and legacy
+        user tables like :func:`ensure_seeded_viewer`. Tests that
+        change a user's access use their own login so they never
+        disturb the shared admin and viewer.
+
+        :param login: Login name (also used to derive the email and
+                      display name).
+
+        :returns: A :class:`SeededAdmin` handle for the user.
+    """
+    ensure_app()
+    ensure_shared_in_memory_db_pool()
+    ensure_pepper_for_tests()
+
+    password = "{}-secret-1!".format(login)
+    user_id = _seed_user_pair(
+        login=login,
+        password=password,
+        email="{}@example.invalid".format(login),
+        role_csv="",
+        first_name="E2E",
+        last_name=login,
+        display_name="E2E {}".format(login),
+    )
+    rtnval = SeededAdmin(user_id=user_id, login=login, password=password)
+    return rtnval
+
+
 __all__ = [
     "fetch_login_form_token",
     "TEST_UI_COOKIE_SECRET",
@@ -1201,4 +1237,5 @@ __all__ = [
     "E2E_VIEWER_EMAIL",
     "ensure_seeded_viewer",
     "login_as",
+    "ensure_seeded_user",
 ]
