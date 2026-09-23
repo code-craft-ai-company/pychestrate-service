@@ -80,15 +80,21 @@ if os.path.exists(REPOSITORY_CONFIG_FILE):
 if PYTHON_VERSION is None:
     PYTHON_VERSION = "python{}.{}".format(*(platform.python_version_tuple()[:2]))
 
-pyres = None
-if platform.system() != "Windows":
-    pyres = subprocess.run("{} -c \"print('test')\"".format(PYTHON_VERSION), shell=True)
-else:
-    pyres = subprocess.run("python -c \"print('test')\"", shell=True)
-    
-if pyres.returncode != 0:
-    print("The required python version '{}' does not appear to be installed.".format(PYTHON_VERSION), file=sys.stderr)
-    exit(1)
+def check_python_version():
+    """
+        Make sure the repository's python interpreter is installed. Runs
+        from main, after the arguments are parsed, and quietly, so
+        '--help' has no side effects and prints nothing else.
+    """
+    if platform.system() != "Windows":
+        command = "{} -c \"pass\"".format(PYTHON_VERSION)
+    else:
+        command = "python -c \"pass\""
+    pyres = subprocess.run(command, shell=True, capture_output=True)
+    if pyres.returncode != 0:
+        print("The required python version '{}' does not appear to be installed.".format(PYTHON_VERSION), file=sys.stderr)
+        exit(1)
+    return
 
 VENV_FOLDER = os.path.join(REPOSITORY_FOLDER, ".venv")
 
@@ -283,12 +289,17 @@ def rehome_repository_main():
 
     parser = argparse.ArgumentParser(
                     prog='rehome-repository',
-                    description='Configures a repository for operations in a new location.')
+                    description=(
+                        "Configures a repository for operations in a new location: creates .cache/, "
+                        "writes .env (PYTHON_VERSION, PYTHONPATH, REPOSITORY_FOLDER) and, unless "
+                        "--skip-workspaces, a .code-workspace file for each workspaces/*.template."
+                    ))
 
     parser.add_argument('--skip-workspaces', default=False, dest='skip_workspaces', action='store_true',
         help="Indicates that VS Code workspaces should not be created.")
     args = parser.parse_args()
 
+    check_python_version()
     generate_directories()
     generate_development_env_file()
 
