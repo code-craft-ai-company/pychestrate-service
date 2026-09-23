@@ -1,31 +1,92 @@
-===================
-pychestrate-service
-===================
+###########
+Pychestrate
+###########
 
-Code Craft AI - Pychestrate Service
+Pychestrate is a self-hosted service for teams that build, test, and
+operate software on real devices and infrastructure. It keeps an
+inventory of the lab and records who is using which device, organizes
+work into projects, and runs build, test, infrastructure, and robotic
+process automation (RPA) jobs on *pods* -- the machines that do the
+work -- collecting their progress, results, and artifacts.
 
-Overview
-========
-pychestrate-service is a core component of the Code Craft AI technology stack. It provides robust, reusable foundation code designed to enable and orchestrate complex software automation tasks.
+This repository is the service: the web interface, the REST API under
+``/api/v1``, and an MCP endpoint for AI agents. Pods run the
+``pychestrate-client`` agent, which lives in its own repository.
 
-Installation
-============
-Using Poetry:
+.. image:: docs/images/pychestrate-home.png
+   :alt: The Pychestrate home page: the sidebar groups Projects,
+         Orchestration, Insights, Fleet, Operations, System, and Admin,
+         and the page lists every destination in them.
+
+
+Status
+======
+
+**Developer preview.** The latest tag is ``v0.0.7-preview``
+(2026-05-20); ``main`` carries the unreleased changes listed in
+`CHANGELOG.md <CHANGELOG.md>`_. Pychestrate is usable for evaluation and
+development, but it is not supported for production use beyond the
+project author and direct collaborators. `ROADMAP.md <ROADMAP.md>`_
+says what works, what does not, and what the milestones mean.
+
+
+Try it
+======
+
+You need Linux or macOS, Python 3.12, Poetry 2, ``git``, ``make``,
+``openssl``, and read access to the private Code Craft AI framework
+packages (`how to get it
+<userguide/02-00-getting-started.rst#get-access-to-the-dependencies>`_).
+Then:
 
 .. code-block:: bash
 
-    poetry add pychestrate-service
+    git clone https://github.com/code-craft-ai-company/pychestrate-service.git
+    cd pychestrate-service
+    repository-setup/rehome-repository    # writes .env
+    development/setup-environment         # creates .venv and installs the dependencies
+    make dev-up                           # serves http://127.0.0.1:8888
 
-Development
-===========
-This repository provides a standard Poetry environment.
+Open ``http://127.0.0.1:8888/``. A new server sends you to its setup
+wizard: paste the token from ``.cache/presence/initial-admin-token``,
+create the first administrator, and sign in. `Getting Started
+<userguide/02-00-getting-started.rst>`_ walks through it, and on to your
+first project.
 
-1. Activate virtual environment:
-   Run `poetry shell` and `poetry install`
-2. Test Execution:
-   Run `poetry run pytest`
 
-References
-==========
-- `User Guide <userguide/userguide.rst>`
-- `Coding Standards <userguide/10-00-coding-standards.rst>`
+Run the tests
+=============
+
+The tests use the ``testbase`` framework, not pytest:
+
+.. code-block:: bash
+
+    source .venv/bin/activate
+    testbase testing run --root source/testroots/ccai --includes=ccai.tests.singlehost --output=.output/singlehost
+    testbase agents summary extract --summary-file .output/singlehost/testrun_summary.json
+
+`CONTRIBUTING.md <CONTRIBUTING.md>`_ covers focused runs, the suites that
+need a live server, and what a pull request needs.
+
+
+Documentation
+=============
+
+* `User Manual <userguide/userguide.rst>`_ -- start with the
+  `Overview <userguide/01-00-overview.rst>`_ and
+  `Getting Started <userguide/02-00-getting-started.rst>`_.
+* `Deploying Pychestrate <userguide/13-00-alpha-deployment.rst>`_ -- the
+  operator runbook.
+* `Extensions <userguide/11-00-extensions.rst>`_ -- the extension
+  points and how to build an extension pack.
+* `REST API <specs/openapi/pychestrate.yaml>`_ -- the OpenAPI 3.1
+  contract for ``/api/v1``.
+* `CONTRIBUTING.md <CONTRIBUTING.md>`_, `CHANGELOG.md <CHANGELOG.md>`_,
+  and `ROADMAP.md <ROADMAP.md>`_.
+
+
+License
+=======
+
+Proprietary; licensed per organization for on-premises use. See
+`LICENSE.txt <LICENSE.txt>`_.
