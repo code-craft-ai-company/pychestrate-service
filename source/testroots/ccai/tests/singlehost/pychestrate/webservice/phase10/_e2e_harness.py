@@ -363,6 +363,25 @@ def _reassert_runtime_globals() -> None:
     return
 
 
+def _reassert_builtin_extensions() -> None:
+    """
+        Re-register the Phase-1 built-in extensions when a prior test
+        reset the extension registry without restoring them (several
+        suites call ``reset_registry_for_testing()`` and register only
+        what they need), so the cached app can still hash and verify
+        passwords. The registration is idempotent.
+    """
+    from ccai.pychestrate.webservice.extensions.bootstrap import (  # noqa: E402
+        register_phase1_builtin_extensions,
+    )
+    from ccai.pychestrate.webservice.extensions.registry import (  # noqa: E402
+        list_factory_implementations,
+    )
+    if len(list_factory_implementations(factory_protocol_name="password_hasher")) == 0:
+        register_phase1_builtin_extensions()
+    return
+
+
 def ensure_app() -> TestAppHandle:
     """
         Lazy module-level singleton: bootstrap the runtime + build
@@ -375,13 +394,18 @@ def ensure_app() -> TestAppHandle:
         restored -- so a prior test that nulled any of those in
         teardown cannot leave a later authenticated flow with an
         unconfigured session secret / session factory / templating
-        environment.
+        environment. The built-in extensions are re-registered when
+        a prior test emptied the extension registry.
     """
     global _APP_HANDLE
     if _APP_HANDLE is not None:
         _reassert_runtime_globals()
         _install_test_templating()
         _reassert_url_for_registry()
+        _reassert_builtin_extensions()
+        if _SEEDED_ADMIN is not None:
+            # Users were seeded with the test pepper; keep it active.
+            ensure_pepper_for_tests()
         return _APP_HANDLE
     kek_path = _write_test_kek_file()
     _bootstrap_runtime_for_tests(kek_file_path=kek_path)
@@ -681,9 +705,11 @@ def ensure_pepper_for_tests() -> None:
     # inherits from ``BaseException`` (not ``Exception``), so a
     # plain ``except Exception`` would not catch the
     # "no pepper loaded" raise from ``get_active_pepper``.
+    # Another suite may have installed a pepper of its own; the seeded
+    # users' hashes need this one, so replace any other pepper.
     try:
-        get_active_pepper()
-        return
+        if get_active_pepper().reveal() == _TEST_PASSWORD_PEPPER:
+            return
     except BaseException:
         pass
     set_active_pepper(pepper=SecretBytes(_TEST_PASSWORD_PEPPER))
