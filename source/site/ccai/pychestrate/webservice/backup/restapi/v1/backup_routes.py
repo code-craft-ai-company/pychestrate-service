@@ -8,14 +8,19 @@
 Implements the backup / disaster-recovery operations from
 ``specs/openapi/pychestrate.yaml``:
 
-* ``POST /api/v1/backups`` -- trigger a manual backup.
+* ``POST /api/v1/backups`` -- back up now: database snapshot + run
+  artifacts into an archive, key material into a separate key bundle
+  (see :mod:`backup.service`).
 * ``GET  /api/v1/backups`` -- list backup records (paginated).
 * ``GET  /api/v1/backups/{backup_id}`` -- read status / manifest.
-* ``POST /api/v1/backups/{backup_id}:restore`` -- request a
-  restore. Restore execution is a documented follow-on for the
-  p21d milestone -- this route validates the target backup and
-  answers ``501 Not Implemented`` until the restore executor
-  ships.
+* ``POST /api/v1/backups/{backup_id}/restore`` (also registered as
+  ``{backup_id}:restore``, which the router cannot reach) -- with
+  ``{"dry_run": true}``, verify the backup end to end and return the
+  restore command (200). A real restore replaces the database and the
+  keys this process has loaded, so the service cannot perform it on
+  itself: the route answers ``409`` with the command to run with the
+  service stopped (``python -m ccai.pychestrate.admin backup
+  restore ...``).
 
 All routes are cookie / RBAC gated (``system:backups.read`` /
 ``system:backups.write``) and emit RFC 7807 problem documents via
@@ -42,9 +47,10 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
 from ccai.pychestrate.webservice.backup import service as backup_service
 from ccai.pychestrate.webservice.backup.errors import (
     BackupBackendUnavailableError,
+    BackupError,
     BackupRecordNotFoundError,
     BackupRequestInvalidError,
-    BackupRestoreNotImplementedError,
+    BackupRestoreRequiresOfflineError,
 )
 from ccai.pychestrate.webservice.backup.models import BackupStatus
 from ccai.pychestrate.webservice.backup.service import (
@@ -372,10 +378,12 @@ def handle_create_backup(request: Request) -> Response:
     """
         ``POST /api/v1/backups``
 
-        Triggers a manual backup. Snapshots the database,
-        object-store references, and secrets metadata into an
-        archive written through the configured
-        ``backup_storage_backend``.
+        Runs a backup now: a consistent database snapshot and the
+        run-artifact tree into an archive written through the
+        configured ``backup_storage_backend``, and the key material
+        (KEK, password pepper, ...) into a separate key bundle.
+        ``include_database`` / ``include_object_store`` /
+        ``include_secrets`` select the parts.
 
         :param request: Incoming webworks request.
 
@@ -446,6 +454,16 @@ def handle_create_backup(request: Request) -> Response:
             _abort_problem(
                 request=request,
                 status=503,
+                detail=str(xcpt),
+            )
+            view = None  # unreachable
+        except BackupError as xcpt:
+            # A substrate failed (unreadable key file, dump tool
+            # missing, ...). The run is recorded as failed; the
+            # detail tells the operator what to fix.
+            _abort_problem(
+                request=request,
+                status=500,
                 detail=str(xcpt),
             )
             view = None  # unreachable
@@ -579,19 +597,59 @@ def handle_read_backup(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _plan_to_dict(plan: Any) -> Dict[str, Any]:
+    """
+        Serialize a dry-run :class:`RestorePlan` to the OpenAPI
+        ``BackupRestoreResult`` schema.
+
+        :param plan: Restore plan carrying a verification report.
+
+        :returns: JSON-friendly dict.
+    """
+    report = plan.verification
+    checks = []
+    for check in report.checks:
+        checks.append({"name": check.name, "ok": check.ok, "detail": check.detail})
+    if report.ok is True:
+        status = "verified"
+        detail = "The backup verified; restore it with the service stopped."
+    else:
+        status = "verification_failed"
+        detail = "The backup failed verification: {}".format(
+            ", ".join(check.name for check in report.failures())
+        )
+    rtnval: Dict[str, Any] = {
+        "backup_id": plan.backup_id,
+        "status": status,
+        "detail": detail,
+        "checks": checks,
+        "archive_path": plan.archive_path,
+        "key_bundle_path": plan.key_bundle_path,
+        "restore_command": plan.restore_command,
+    }
+    return rtnval
+
+
 def handle_restore_backup(request: Request) -> Response:
     """
         ``POST /api/v1/backups/{backup_id}:restore``
 
-        Requests a restore from a backup. The restore executor is
-        a documented follow-on for the p21d milestone -- this
-        route validates the target backup, records the request,
-        then answers ``501 Not Implemented``.
+        Body ``{"dry_run": true}`` verifies the backup end to end
+        (checksum, manifest, database integrity and row counts,
+        artifact count, key fingerprints, KEK against the stored data
+        keys) and answers 200 with the checks and the restore command.
+
+        Without ``dry_run`` the answer is 409: a restore replaces the
+        database, the run artifacts and the keys this process has
+        loaded, so it runs with the service stopped. The problem
+        document carries the exact command
+        (``restore_command``).
 
         :param request: Incoming webworks request.
 
-        :returns: A ``501`` problem response, or ``404`` when the
-                  target backup is unknown.
+        :returns: 200 (dry run), 409 (restore must run offline), 404
+                  (unknown backup), 422 (backup not completed / archive
+                  not on this host) or another problem response.
     """
     backup_id = request.path_params.get("backup_id", "")
     try:
@@ -602,15 +660,26 @@ def handle_restore_backup(request: Request) -> Response:
             permission_key=BACKUPS_WRITE_PERMISSION_KEY,
         )
 
+        body = _decode_optional_json_object(request=request)
+        dry_run = body.get("dry_run", False)
+        if isinstance(dry_run, bool) is False:
+            _abort_problem(
+                request=request,
+                status=422,
+                detail="Field 'dry_run' must be a boolean.",
+            )
+
         actor_id: Optional[str] = None
         principal_user_id = getattr(principal, "user_id", None)
         if principal_user_id is not None:
             actor_id = str(principal_user_id)
 
+        plan = None
         try:
-            backup_service.request_restore(
+            plan = backup_service.plan_restore(
                 db_session=db_session,
                 backup_id=backup_id,
+                dry_run=dry_run,
                 actor_id=actor_id,
             )
         except BackupRecordNotFoundError as xcpt:
@@ -620,19 +689,25 @@ def handle_restore_backup(request: Request) -> Response:
                 detail=str(xcpt),
                 extensions={"backup_id": backup_id},
             )
-        except BackupRestoreNotImplementedError as xcpt:
+        except BackupRequestInvalidError as xcpt:
             _abort_problem(
                 request=request,
-                status=501,
+                status=422,
                 detail=str(xcpt),
                 extensions={"backup_id": backup_id},
             )
+        except BackupRestoreRequiresOfflineError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={
+                    "backup_id": backup_id,
+                    "restore_command": xcpt.restore_command,
+                },
+            )
 
-        # request_restore always raises -- this line is unreachable.
-        rtnval: Response = JSONResponse(
-            content={"backup_id": backup_id, "status": "accepted"},
-            status_code=202,
-        )
+        rtnval: Response = JSONResponse(content=_plan_to_dict(plan), status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval
@@ -665,10 +740,19 @@ def register_backup_routes(*, app: Any, version_prefix: str) -> None:
     app.attach_route(
         base + "/{backup_id}:restore", methods=["POST"],
     )(handle_restore_backup)
+    # The webworks router only treats a whole path segment of the
+    # form ``{name}`` as a parameter, so ``{backup_id}:restore`` is
+    # registered as a literal and a request for ``<id>:restore``
+    # matches ``GET /backups/{backup_id}`` instead (405). The
+    # ``/restore`` sub-resource is the reachable spelling of the same
+    # operation.
+    app.attach_route(
+        base + "/{backup_id}/restore", methods=["POST"],
+    )(handle_restore_backup)
 
     _LOGGER.info(
         "pychestrate.backup.routes.wired: backup trigger + list +"
-        " status read + restore-request (501 follow-on) surface."
+        " status read + restore verification (restore itself runs offline)."
     )
     return
 

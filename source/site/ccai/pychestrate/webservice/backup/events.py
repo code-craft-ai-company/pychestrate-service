@@ -14,12 +14,12 @@ __version__ = "1.0.0"
 
 class BackupEventTopics:
     """
-        Backup / disaster-recovery bus topics. The p21d milestone
-        emits STARTED + COMPLETED + FAILED for a manually-triggered
-        backup; scheduled / drill / restore-verified topics land
-        with the scheduler follow-on.
+        Backup / disaster-recovery topics, used as the ``topic=``
+        field of the backup log events.
     """
     STARTED = "entity.backup.started"
     COMPLETED = "entity.backup.completed"
     FAILED = "entity.backup.failed"
     RESTORE_REQUESTED = "entity.backup.restore_requested"
+    RESTORE_VERIFIED = "entity.backup.restore_verified"
+    RESTORE_COMPLETED = "entity.backup.restore_completed"

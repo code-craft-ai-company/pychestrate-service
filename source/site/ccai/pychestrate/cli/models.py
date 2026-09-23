@@ -36,6 +36,8 @@ class CliProfile:
         :param mtls_key_path: Filesystem path to the matching private
                               key PEM, or ``None``.
         :param verify_tls: Whether to verify the server certificate.
+        :param timeout_seconds: Per-request timeout, or ``None`` for
+                                the transport default.
     """
     profile_name: str
     server_url: str
@@ -44,6 +46,7 @@ class CliProfile:
     mtls_cert_path: Optional[str]
     mtls_key_path: Optional[str]
     verify_tls: bool
+    timeout_seconds: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +64,9 @@ class RestOperation:
                                             parameters.
         :param required_path_param_names: Tuple of required path
                                           parameters.
+        :param summary: One-line summary from the OpenAPI document.
+        :param has_request_body: Whether the operation takes a JSON
+                                 body.
     """
     operation_id: str
     method: str
@@ -69,6 +75,8 @@ class RestOperation:
     query_param_names: Tuple[str, ...] = field(default_factory=tuple)
     required_query_param_names: Tuple[str, ...] = field(default_factory=tuple)
     required_path_param_names: Tuple[str, ...] = field(default_factory=tuple)
+    summary: str = ""
+    has_request_body: bool = False
 
 
 @dataclass(frozen=True)

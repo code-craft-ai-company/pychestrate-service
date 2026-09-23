@@ -1257,8 +1257,9 @@ def test_handle_ip_pool_edit_post_happy_path_passes_csv_lists():
     """
     **Feature: webworks resources port T6.11 (E2)**
     **Property: A valid edit POST passes parsed dns_servers /
-    reserved_ips lists into the IPPoolUpdateRequest. Empty CSV
-    fields become None (don't update).**
+    reserved_ips lists into the IPPoolUpdateRequest. A submitted but
+    empty CSV field is an explicit empty list (it clears the list;
+    audit finding RES-07), not None.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1305,7 +1306,7 @@ def test_handle_ip_pool_edit_post_happy_path_passes_csv_lists():
         testbase.assert_equal(target_id, 7)
         testbase.assert_equal(ar.description, "Updated")
         testbase.assert_equal(ar.dns_servers, ["1.1.1.1"])
-        testbase.assert_equal(ar.reserved_ips, None)
+        testbase.assert_equal(ar.reserved_ips, [])
     finally:
         for p in (upd_patch, ipm_patch, sm_patch):
             if p is not None:
@@ -1684,4 +1685,143 @@ def test_handle_ip_pool_checkin_without_either_id_flashes_error():
             if p is not None:
                 p.deactivate()
         _reset_global_state()
+    return
+
+
+# ---------------------------------------------------------------------------
+# The stored (canonical) range is reported (audit finding RES-24)
+# ---------------------------------------------------------------------------
+
+
+def test_ip_pool_create_names_the_range_it_stored():
+    """
+    **Feature: resources (RES-24 server-side validation)**
+    **Property: when the manager stores a typed range as its network
+    (10.50.0.5/29 -> 10.50.0.0/29), the success message names the stored
+    range and what was entered.**
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    flashed: List[Dict[str, Any]] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed(instance: _FakeIPPoolManager) -> None:
+            stored = _FakeIPPool(pool_id=42, name="lab-b")
+            stored.cidr = "10.50.0.0/29"
+            instance.create_pool_response = stored
+            return
+
+        patches.append(_patch_ip_pool_manager(configure=_seed))
+        patches.append(_patch_ip_pool_create_request_factory())
+        flash_patch = create_module_patch(resources_routes_ip_pools, "_redirect_with_flash")
+        flash_mock = flash_patch.activate()
+        patches.append(flash_patch)
+
+        def _record(**kwargs: Any) -> Any:
+            flashed.append(kwargs)
+            return RedirectResponse(url=kwargs["url"], status_code=303)
+
+        flash_mock.configure(side_effect=_record)
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=b"csrf_token=csrf-fresh&name=lab-b&cidr=10.50.0.5%2F29",
+        )
+        resources_routes_ip_pools.handle_ip_pool_create(request)
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+
+    testbase.assert_equal(
+        flashed[0]["message"], 'IP Pool "lab-b" created with range 10.50.0.0/29 (entered as 10.50.0.5/29).'
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Clearing a field on the IP pool edit form (audit finding RES-07)
+# ---------------------------------------------------------------------------
+
+
+def _post_ip_pool_edit(*, body: bytes) -> Any:
+    """
+        POST ``body`` to the IP pool edit handler for pool 7 with the
+        usual fakes. Returns the IPPoolUpdateRequest the manager got.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed(instance: _FakeIPPoolManager) -> None:
+            instance.get_pool_response = _FakeIPPool(pool_id=7, name="lab")
+            return
+
+        patches.append(_patch_ip_pool_manager(configure=_seed))
+        patches.append(_patch_ip_pool_update_request_factory())
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+            path_params={"pool_id": "7"},
+        )
+        resources_routes_ip_pools.handle_ip_pool_edit(request)
+        _, rtnval, _ = _FakeIPPoolManager.last_instance.update_pool_calls[0]
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_ip_pool_edit_saves_a_cleared_gateway_and_description():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: submitting the IP pool edit form with an empty gateway
+    and description passes them as empty values (which clear them),
+    not as "no change".**
+    """
+    update = _post_ip_pool_edit(
+        body=b"csrf_token=csrf-fresh&gateway=&description=&dns_servers=8.8.8.8&reserved_ips=",
+    )
+
+    testbase.assert_equal((update.gateway, update.description), ("", ""))
+    return
+
+
+def test_ip_pool_edit_saves_cleared_dns_servers():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: emptying the DNS servers box clears the list ([]).**
+    """
+    update = _post_ip_pool_edit(
+        body=b"csrf_token=csrf-fresh&gateway=10.0.0.1&description=x&dns_servers=&reserved_ips=",
+    )
+
+    testbase.assert_equal(update.dns_servers, [])
+    return
+
+
+def test_ip_pool_edit_leaves_fields_the_form_did_not_send():
+    """
+    **Feature: resources (RES-07 clearing fields on edit)**
+    **Property: fields absent from the submission are passed as None
+    ("no change").**
+    """
+    update = _post_ip_pool_edit(body=b"csrf_token=csrf-fresh&description=only+this")
+
+    testbase.assert_equal(
+        (update.gateway, update.dns_servers, update.reserved_ips, update.description),
+        (None, None, None, "only this"),
+    )
     return

@@ -25,6 +25,15 @@ The legacy detail / edit handlers fetch the target reservation
 via ``list_reservations(limit=1000)`` and find-by-id (since the
 manager exposes no direct ``get_reservation``). Ported faithfully
 via :func:`_find_reservation_by_id`.
+
+Reservation times are typed in the viewer's time zone. The create
+and edit forms carry a hidden ``tz`` field that the page's script
+fills with the browser's IANA zone (and, on the edit form, converts
+the UTC pre-fill into that zone); the handlers read the
+``datetime-local`` values in that zone and hand the manager aware
+UTC datetimes. Without script the field stays empty and the form
+is filled in, and read as, UTC. The zone in effect is shown beside
+the inputs.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -34,9 +43,11 @@ __version__ = "1.0.0"
 
 
 import logging
+import re
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import (
@@ -62,6 +73,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
@@ -79,6 +91,17 @@ _LOGGER = logging.getLogger("pychestrate.ui.resources.reservations")
 # "Showing first N of M" note plus pool/type filters so any
 # resource stays reachable.
 _RESOURCE_SELECTOR_LIMIT = 1000
+
+
+# The zone a reservation form is read in when the page's script did
+# not report the browser's zone.
+_DEFAULT_ZONE_NAME = "UTC"
+
+# Shape of an IANA zone name ("America/Los_Angeles", "Etc/GMT+8");
+# anything else the browser posts is refused before it reaches
+# ``ZoneInfo``.
+_ZONE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,3}$")
+_MAX_ZONE_NAME_LENGTH = 64
 
 
 _ROUTE_TABLE = (
@@ -204,6 +227,81 @@ def _parse_iso_datetime_or_none(*, raw: Optional[str]) -> Optional[datetime]:
         return None
 
 
+def _resolve_viewer_zone(*, zone_name: Optional[str]) -> Optional[Any]:
+    """
+        Resolve the time zone a reservation form was filled in. The
+        page's script posts the browser's IANA zone in the hidden
+        ``tz`` field; an empty value means the script did not run and
+        the form was filled in UTC (which is what it said).
+
+        :param zone_name: The posted ``tz`` value.
+
+        :returns: A ``tzinfo`` for the zone, or None when the name is
+                  not a zone this server knows (the caller refuses the
+                  submission rather than guess).
+    """
+    name = str(zone_name or "").strip()
+    if len(name) == 0 or name == _DEFAULT_ZONE_NAME:
+        return timezone.utc
+    if len(name) > _MAX_ZONE_NAME_LENGTH or _ZONE_NAME_PATTERN.match(name) is None:
+        return None
+    try:
+        rtnval = ZoneInfo(name)
+    except (KeyError, ValueError, OSError):
+        # ZoneInfoNotFoundError is a KeyError.
+        return None
+    return rtnval
+
+
+def _viewer_zone_name(*, zone_name: Optional[str]) -> str:
+    """
+        The zone name to show beside the inputs (and to echo in the
+        hidden ``tz`` field) when a submitted form is shown again.
+
+        :param zone_name: The posted ``tz`` value.
+
+        :returns: The posted name when it resolves, otherwise ``UTC``.
+    """
+    name = str(zone_name or "").strip()
+    if len(name) == 0 or _resolve_viewer_zone(zone_name=name) is None:
+        return _DEFAULT_ZONE_NAME
+    return name
+
+
+def _parse_form_datetime(*, raw: Optional[str], zone: Any) -> Optional[datetime]:
+    """
+        Read a ``datetime-local`` value (``YYYY-MM-DDTHH:MM``) typed in
+        ``zone`` and return that instant as an aware UTC datetime. A
+        value that already carries an offset keeps it.
+
+        :param raw: The submitted value.
+        :param zone: The ``tzinfo`` the value was typed in.
+
+        :returns: Aware UTC datetime, or None for an empty or malformed
+                  value.
+    """
+    text = str(raw or "").strip()
+    if len(text) == 0:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=zone)
+    rtnval = parsed.astimezone(timezone.utc)
+    return rtnval
+
+
+def _unknown_zone_message(*, zone_name: Optional[str]) -> str:
+    rtnval = (
+        "Your browser reported the time zone \"{}\", which this server does"
+        " not recognise. Enter the start and end times in UTC and submit"
+        " again.".format(str(zone_name or "").strip()[:_MAX_ZONE_NAME_LENGTH])
+    )
+    return rtnval
+
+
 def _parse_pagination_params(
         *, request: Request,
         default_per_page: int = 20
@@ -219,6 +317,8 @@ def _parse_pagination_params(
     )
     if per_page < 1:
         per_page = default_per_page
+    if per_page > RESOURCES_MAX_PER_PAGE:
+        per_page = RESOURCES_MAX_PER_PAGE
     rtnval = {"page": page, "per_page": per_page}
     return rtnval
 
@@ -349,6 +449,7 @@ def _render_reservation_create_form(
         form_data: Optional[MultiFormView],
         selector_pool_id: Optional[int] = None,
         selector_resource_type: Optional[str] = None,
+        viewer_timezone: str = "",
         status_code: int = 200
     ) -> HTMLResponse:
     """
@@ -357,6 +458,10 @@ def _render_reservation_create_form(
         reports the true total so the template can show a
         "Showing first N of M" note when the list is truncated --
         every resource stays reachable by refining the filters.
+
+        ``viewer_timezone`` is the zone the form's times are in: empty
+        on a fresh form (the page's script fills in the browser's
+        zone), or the zone a re-rendered submission was typed in.
     """
     selector_kwargs: Dict[str, Any] = {
         "limit": _RESOURCE_SELECTOR_LIMIT,
@@ -386,6 +491,7 @@ def _render_reservation_create_form(
     context["selector_pool_id"] = selector_pool_id
     context["selector_resource_type"] = selector_resource_type
     context["form_data"] = form_data
+    context["viewer_timezone"] = viewer_timezone
     response = _render(
         template_name="resources/reservations/create.html",
         context=context,
@@ -425,16 +531,17 @@ def handle_reservation_create(request: Request) -> Response:
         )
 
         if method == "GET":
-            # "Apply filter" submits the whole form with GET, so the
-            # draft the user has typed rides along in the query string;
-            # echo it back so narrowing the resource list never wipes
-            # the form.
-            draft: Dict[str, List[str]] = {}
-            for field in ("resource_id", "start_time", "end_time", "mode", "job_id", "reason"):
-                value = request.query_params.get(field, None)
-                if value is not None and len(str(value)) > 0:
-                    draft[field] = [str(value)]
-            form_view: Optional[MultiFormView] = MultiFormView(data=draft) if len(draft) > 0 else None
+            # The resource-list filter is a separate GET form that
+            # carries only pool_id / resource_type; the reservation
+            # draft is never read from (or put into) the URL. A
+            # ``resource_id`` link parameter still pre-selects a
+            # resource.
+            form_view: Optional[MultiFormView] = None
+            preselect = _coerce_int(
+                raw=request.query_params.get("resource_id", None)
+            )
+            if preselect is not None:
+                form_view = MultiFormView(data={"resource_id": [str(preselect)]})
             response = _render_reservation_create_form(
                 auth=auth,
                 resource_manager=resource_manager,
@@ -469,9 +576,31 @@ def handle_reservation_create(request: Request) -> Response:
         end_time_str = str(single_form.get("end_time", ""))
         mode_str = str(single_form.get("mode", "exclusive"))
         reason = str(single_form.get("reason", "")).strip()
+        zone_name = str(single_form.get("tz", "") or "")
+        viewer_timezone = _viewer_zone_name(zone_name=zone_name)
 
-        start_time = _parse_iso_datetime_or_none(raw=start_time_str)
-        end_time = _parse_iso_datetime_or_none(raw=end_time_str)
+        zone = _resolve_viewer_zone(zone_name=zone_name)
+        if zone is None:
+            flash.add_flash(
+                session=auth.session,
+                message=_unknown_zone_message(zone_name=zone_name),
+                category=flash.CATEGORY_ERROR,
+            )
+            response = _render_reservation_create_form(
+                auth=auth,
+                resource_manager=resource_manager,
+                form_data=form_view,
+                selector_pool_id=selector_pool_id,
+                selector_resource_type=selector_resource_type,
+                viewer_timezone=viewer_timezone,
+                status_code=400,
+            )
+            return response
+
+        # The datetime-local values were typed in the viewer's zone;
+        # the manager gets the same instants as aware UTC.
+        start_time = _parse_form_datetime(raw=start_time_str, zone=zone)
+        end_time = _parse_form_datetime(raw=end_time_str, zone=zone)
 
         if start_time is None or end_time is None:
             flash.add_flash(
@@ -485,6 +614,7 @@ def handle_reservation_create(request: Request) -> Response:
                 form_data=form_view,
                 selector_pool_id=selector_pool_id,
                 selector_resource_type=selector_resource_type,
+                viewer_timezone=viewer_timezone,
                 status_code=400,
             )
             return response
@@ -501,6 +631,7 @@ def handle_reservation_create(request: Request) -> Response:
                 form_data=form_view,
                 selector_pool_id=selector_pool_id,
                 selector_resource_type=selector_resource_type,
+                viewer_timezone=viewer_timezone,
                 status_code=400,
             )
             return response
@@ -550,6 +681,7 @@ def handle_reservation_create(request: Request) -> Response:
             form_data=form_view,
             selector_pool_id=selector_pool_id,
             selector_resource_type=selector_resource_type,
+            viewer_timezone=viewer_timezone,
             status_code=400,
         )
         return response
@@ -671,6 +803,9 @@ def handle_reservation_edit(request: Request) -> Response:
 
         method = request.method.upper()
         form_view: Optional[MultiFormView] = None
+        # A fresh form is pre-filled in UTC and says so; the page's
+        # script moves it into the browser's zone.
+        viewer_timezone = ""
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -691,47 +826,67 @@ def handle_reservation_edit(request: Request) -> Response:
                 )
                 return csrf_redirect
 
-            start_time_str = str(single_form.get("start_time", ""))
-            end_time_str = str(single_form.get("end_time", ""))
-            start_time = _parse_iso_datetime_or_none(
-                raw=start_time_str
-            )
-            end_time = _parse_iso_datetime_or_none(raw=end_time_str)
+            zone_name = str(single_form.get("tz", "") or "")
+            viewer_timezone = _viewer_zone_name(zone_name=zone_name)
+            zone = _resolve_viewer_zone(zone_name=zone_name)
+            start_time: Optional[datetime] = None
+            end_time: Optional[datetime] = None
+            if zone is not None:
+                # Typed in the viewer's zone; the manager gets UTC.
+                start_time = _parse_form_datetime(
+                    raw=single_form.get("start_time", ""), zone=zone
+                )
+                end_time = _parse_form_datetime(
+                    raw=single_form.get("end_time", ""), zone=zone
+                )
 
-            try:
-                allocation_manager.modify_reservation(
-                    reservation_id,
-                    start_time=start_time,
-                    end_time=end_time,
-                    user_id=auth.user_id,
-                )
-                response = _redirect_with_flash(
-                    session=auth.session,
-                    url=_url_for_module.url_for(
-                        "resources.reservation_detail",
-                        reservation_id=reservation_id,
-                    ),
-                    message="Reservation updated successfully.",
-                    category=flash.CATEGORY_SUCCESS,
-                )
-                return response
-            except Exception as exc:
-                message = _describe_allocation_error(exc=exc)
-                if message is None:
-                    _LOGGER.exception(
-                        "Unexpected error updating reservation %s",
-                        reservation_id,
-                    )
-                    message = (
-                        "An unexpected error occurred while updating"
-                        " the reservation. The problem has been"
-                        " logged."
-                    )
+            if zone is None:
                 flash.add_flash(
                     session=auth.session,
-                    message=message,
+                    message=_unknown_zone_message(zone_name=zone_name),
                     category=flash.CATEGORY_ERROR,
                 )
+            elif start_time is None or end_time is None:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Start time and end time are required.",
+                    category=flash.CATEGORY_ERROR,
+                )
+            else:
+                try:
+                    allocation_manager.modify_reservation(
+                        reservation_id,
+                        start_time=start_time,
+                        end_time=end_time,
+                        user_id=auth.user_id,
+                    )
+                    response = _redirect_with_flash(
+                        session=auth.session,
+                        url=_url_for_module.url_for(
+                            "resources.reservation_detail",
+                            reservation_id=reservation_id,
+                        ),
+                        message="Reservation updated successfully.",
+                        category=flash.CATEGORY_SUCCESS,
+                    )
+                    return response
+                except Exception as exc:
+                    message = _describe_allocation_error(exc=exc)
+                    if message is None:
+                        _LOGGER.exception(
+                            "Unexpected error updating reservation %s",
+                            reservation_id,
+                        )
+                        message = (
+                            "An unexpected error occurred while updating"
+                            " the reservation. The problem has been"
+                            " logged."
+                        )
+                    flash.add_flash(
+                        session=auth.session,
+                        message=message,
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         # GET, or POST that fell through -- re-render with the
         # submitted values (``form_data``) when a POST failed so
@@ -746,6 +901,7 @@ def handle_reservation_edit(request: Request) -> Response:
         context.update(_resources_permission_flags(auth=auth))
         context["reservation"] = reservation
         context["form_data"] = form_view
+        context["viewer_timezone"] = viewer_timezone
         response = _render(
             template_name="resources/reservations/edit.html",
             context=context,

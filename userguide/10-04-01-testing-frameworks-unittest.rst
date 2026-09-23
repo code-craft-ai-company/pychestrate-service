@@ -3,6 +3,14 @@
 Testing Frameworks - UnitTest
 =============================
 
+.. note::
+
+   This repository has no unittest suite: its tests are testbase tests
+   under ``source/testroots/ccai`` (see `Testing Frameworks - TestBase and
+   TestPlus <10-04-03-testing-frameworks-testbase.rst>`_). This page is the
+   Code Craft AI convention for repositories that do use ``unittest``; the
+   ``source/tests`` paths below refer to such a repository.
+
 .. contents:: Outline
    :local:
    :depth: 1
@@ -12,7 +20,7 @@ Purpose and Audience
 
 - Explain how to create, organize, and run tests in this repository with the standard library ``unittest`` package.
 - Provide a single reference that works for human developers and automation agents (for example, CodeCraftX) working inside Codex or local workspaces.
-- Highlight where this document fits relative to :doc:`10-03-testing-patterns-and-practices` and other userguide references.
+- Highlight where this document fits relative to `Testing Patterns and Practices <10-03-testing-patterns-and-practices.rst>`_ and other userguide references.
 
 Test Root and Discovery
 -----------------------
@@ -28,12 +36,12 @@ Environment Preparation
 - Run ``repository-setup/rehome-repository`` once per checkout to create the required ``.env`` file with repository-relative paths.
 - Run ``development/setup-environment`` in the workspace to create/refresh the virtual environment with project dependencies.
 - Activate the resulting virtual environment before executing any ``python`` or ``poetry`` commands so the standard library ``unittest`` entry points pick up the correct dependencies.
-- In Codex containers, execute ``development/codex-setup`` first; it chains the setup steps expected by CodeCraftX agents.
+- In Codex containers, run ``development/codex-container-setup`` first; it chains the setup steps expected by CodeCraftX agents.
 
 Writing Tests with unittest
 ---------------------------
 
-- Follow :doc:`10-00-coding-standards` and :doc:`10-02-naming-conventions` for class, method, and constant names in test modules.
+- Follow the `Coding Standards <10-00-coding-standards.rst>`_ and `Naming Conventions <10-02-naming-conventions.rst>`_ for class, method, and constant names in test modules.
 - Structure each test module with:
 
   * Imports grouped as stdlib, third-party, then project modules.

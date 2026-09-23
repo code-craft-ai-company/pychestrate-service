@@ -1,0 +1,166 @@
+# pychestrate-service alpha -- nginx site config
+#
+# Rendered by ``deployment/deploy-alpha-to-host.sh`` (``sed``
+# substitution of the placeholders below) and installed as
+# /etc/nginx/sites-available/pychestrate.  DO NOT EDIT the
+# installed copy by hand; edit this template and re-run the
+# deploy.
+#
+# Placeholders (each written between @ signs in the body below):
+#   PROXY_PORT       -- the plain-HTTP port that redirects to HTTPS (e.g. 80)
+#   REMOTE_PORT      -- the loopback app port gunicorn binds (e.g. 8888)
+#   PUBLIC_HOSTNAME  -- canonical hostname on the TLS certificate
+#   CLIENT_CA_PATH   -- CA bundle that verifies pod client certificates
+
+# Derive the client-certificate Common Name from the verified
+# subject DN. Stock nginx exposes $ssl_client_s_dn (RFC2253
+# format, e.g. ``CN=worker1,O=codecraftai``) but has no built-in
+# CN accessor -- this map extracts it so the orchestration-ingest
+# location blocks can forward it as the SSL_CLIENT_S_DN_CN header.
+map $ssl_client_s_dn $ssl_client_s_dn_cn {
+    default        "";
+    ~CN=(?<cn>[^,]+) $cn;
+}
+
+# Plain HTTP listener -- redirect everything to HTTPS so the
+# ``Secure``-flagged session cookie is honored (the UI cookie
+# middleware sets Secure unconditionally).
+server {
+    listen @PROXY_PORT@ default_server;
+    listen [::]:@PROXY_PORT@ default_server;
+
+    server_name _;
+
+    return 301 https://@PUBLIC_HOSTNAME@$request_uri;
+}
+
+# HTTPS listener -- terminates TLS with the Tailscale-issued
+# cert at /etc/nginx/ssl/pychestrate.{crt,key} and proxies to
+# the gunicorn upstream on the loopback.
+server {
+    listen 443 ssl http2 default_server;
+    listen [::]:443 ssl http2 default_server;
+
+    server_name _;
+
+    ssl_certificate     /etc/nginx/ssl/pychestrate.crt;
+    ssl_certificate_key /etc/nginx/ssl/pychestrate.key;
+
+    # Mutual-TLS client-cert verification.
+    #
+    # ``optional`` (not ``on``) lets the bulk of the surface --
+    # cookie-session UI traffic + API-key REST traffic -- keep
+    # working without a client cert.  The orchestration-ingest
+    # endpoints below are gated explicitly with an
+    # ``$ssl_client_verify`` check, double-gated by the
+    # application-level mTLS check that consumes the
+    # ``SSL_CLIENT_S_DN_CN`` forwarded header.
+    ssl_client_certificate @CLIENT_CA_PATH@;
+    ssl_verify_client       optional;
+    ssl_verify_depth        2;
+
+    # Generous body limit -- the service has uploads
+    # (artifacts, logs) and 1MiB nginx default is too tight.
+    client_max_body_size 50M;
+
+    # HSTS: this site is HTTPS-only (the :80 server redirects), so
+    # browsers should never try plain HTTP again.  The app adds its
+    # own HSTS only in the production runtime environment; hide that
+    # copy so the header appears exactly once.  The other security
+    # headers (CSP with per-response nonces, frame protection,
+    # nosniff, referrer policy, no-store) come from the app itself.
+    proxy_hide_header Strict-Transport-Security;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Response compression.  Every shell page loads the ~1.6 MB
+    # mj-* component library plus the pyc-* bundles; gzip brings
+    # the JavaScript down to roughly a fifth of that on the wire.
+    # Set here in the server block (not at http level) because
+    # the stock Debian/Ubuntu nginx.conf already declares
+    # ``gzip on`` in the http block and a second http-level
+    # declaration is rejected as a duplicate.  text/html is
+    # always compressed once gzip is on.  The app itself also
+    # gzips static text assets for proxy-less setups; nginx
+    # passes an already-encoded response through untouched.
+    gzip              on;
+    gzip_vary         on;
+    gzip_proxied      any;
+    gzip_comp_level   6;
+    gzip_min_length   1024;
+    gzip_types
+        application/javascript
+        application/json
+        application/manifest+json
+        application/problem+json
+        application/xml
+        image/svg+xml
+        text/css
+        text/javascript
+        text/plain
+        text/xml;
+
+    # Orchestration-ingest endpoints -- worker -> service
+    # progress / results / dispatch-ack callbacks.  These MUST
+    # present a client cert verified against our CA bundle.
+    # nginx fails fast with 401 for unverified clients; the
+    # application STILL re-checks ``SSL_CLIENT_S_DN_CN`` so a
+    # misconfigured proxy cannot grant ingress unauthenticated.
+    location ~ ^/api/v1/runs/[^/]+/(progress|results/complete|dispatch-ack)$ {
+        if ($ssl_client_verify != "SUCCESS") {
+            return 401;
+        }
+
+        proxy_pass http://127.0.0.1:@REMOTE_PORT@;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # Forward the verified subject + verify result so the
+        # app's _require_mtls_client_cn() helper can read the
+        # CN and bind the request to the calling worker.
+        proxy_set_header SSL_CLIENT_S_DN_CN $ssl_client_s_dn_cn;
+        proxy_set_header SSL_CLIENT_VERIFY  $ssl_client_verify;
+
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
+
+    # Health probes / static / the WSGI app -- all routed to
+    # the same upstream.
+    location / {
+        proxy_pass http://127.0.0.1:@REMOTE_PORT@;
+        proxy_http_version 1.1;
+
+        # Forward original client info so the app can log /
+        # rate-limit on real client identity.
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+
+        # Forward mTLS-verified subject + verify result even on
+        # the catch-all so future routes that opt into the mTLS
+        # check see the same environ keys without a separate
+        # location block.
+        proxy_set_header SSL_CLIENT_S_DN_CN $ssl_client_s_dn_cn;
+        proxy_set_header SSL_CLIENT_VERIFY  $ssl_client_verify;
+
+        # WebSocket / long-poll friendliness.
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+
+        # Long-running HTTP requests (alembic-driven imports,
+        # artifact uploads, etc).  Gunicorn's worker timeout
+        # ultimately bounds this; nginx just shouldn't be the
+        # short-circuit.
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+    }
+}

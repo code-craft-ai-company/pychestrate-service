@@ -130,7 +130,7 @@ def scan_once(
         err_msg = os.linesep.join(err_lines)
         raise ResultTreeNotFoundError(err_msg) from None
 
-    parser = _resolve_parser()
+    parser = _resolve_parser(tree_path=tree_path)
     project_id = _project_id_for_run(db_session=db_session, run_id=run_id)
 
     try:
@@ -261,10 +261,14 @@ def scan_once(
     return rtnval
 
 
-def _resolve_parser():
+def _resolve_parser(*, tree_path: Optional[str] = None):
     """
-        Return the highest-precedence registered parser or raise
-        :class:`ResultIngestError`.
+        Return the first registered parser (in precedence order) that
+        recognizes the tree's format -- testbase, JUnit XML, ... --
+        falling back to the first registered parser, or raise
+        :class:`ResultIngestError` when none is registered.
+
+        :param tree_path: The result tree; ``None`` picks the fallback.
     """
     candidates = list_factory_implementations(
         factory_protocol_name=RESULT_TREE_PARSER_PROTOCOL,
@@ -275,6 +279,12 @@ def _resolve_parser():
         err_msg = os.linesep.join(err_lines)
         raise ResultIngestError(err_msg) from None
     rtnval = candidates[0]
+    if tree_path is not None:
+        for candidate in candidates:
+            recognizes = getattr(candidate, "recognizes_tree", None)
+            if recognizes is not None and recognizes(tree_path=tree_path) is True:
+                rtnval = candidate
+                break
     return rtnval
 
 

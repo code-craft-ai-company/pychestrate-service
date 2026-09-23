@@ -1,8 +1,8 @@
 .. _17-00-site-shell:
 
-***************************************
-Site Shell — Unified UI Chrome (Phase 10)
-***************************************
+***********************************************
+Site Shell -- Unified UI Chrome (Phase 10)
+***********************************************
 
 Pychestrate's Jenkins-style site shell wraps every authenticated
 page with one consistent header, a permission-gated left sidebar,
@@ -20,32 +20,45 @@ Overview
 
 The shell sits at the top of Layer 9. It consumes
 ``1-authentication`` (session cookie + ``/login`` redirect
-contract), ``1-rbac``
-(``GET /api/v1/me/permissions`` and the ``ui.admin.view``
-permission), and ``9-ui-design-tokens`` (every color, spacing,
-and font reference). Feature surfaces -- the admin bundle, the
-project dashboard, the run-detail page -- contribute sidebar
-entries and command-palette providers through the shell's
-in-browser registry. The shell is feature-agnostic: it never
-hard-codes which features exist.
+contract), ``1-rbac`` (``GET /api/v1/me/permissions`` and the
+``system:ui.admin.view`` permission), the navigation manifest
+(``GET /api/v1/me/navigation``), and the design tokens (every color,
+spacing, and font reference). Feature surfaces -- the admin bundle,
+the project dashboard, the run-detail page -- mount their views into
+the shell's main area and may contribute command-palette providers
+through the shell's in-browser registry.
 
 Routes are either *shell* routes or *chromeless* routes:
 
 - **Shell routes** (everything authenticated) are served via the
   shell HTML document. The page-specific custom element mounts
   into the ``<main>`` slot.
-- **Chromeless routes** -- ``/login``, ``/logout``,
-  ``/setup/*``, ``/__health/*``, ``/errors/{404,403,500}`` --
-  bypass the shell entirely and render their own minimal HTML.
-  The site shell bundle SHALL NOT load on these routes.
+- **Chromeless routes** render their own minimal document without
+  the shell bundle: ``/login``, ``/logout``, the setup wizard under
+  ``/setup/*``, and signed embeddable views under ``/embed/*``. The
+  prefixes ``/__health`` and ``/errors`` are reserved as chromeless
+  too, but no pages are served there today; requests for them get the
+  ordinary 404.
 
-Adding a Sidebar Group From Your Bundle
-=======================================
+Error pages are not separate routes. ``site_shell/error_pages.py``
+renders them in place, at the URL that failed: inside the shell for a
+signed-in browser on a shell path, and as a standalone page for
+everyone else.
 
-Feature bundles register sidebar groups and entries at load time
-via the ``window.pychestrateShell`` registry handle. The
-registry intersects each entry against the live permission set
-from ``/api/v1/me/permissions``.
+Sidebar navigation
+==================
+
+The sidebar comes from one server-side list, the navigation manifest
+in
+``source/site/ccai/pychestrate/webservice/webinterface/site_shell/nav_manifest.py``.
+It declares every group and entry with the permissions (and UI-profile
+surfaces) each needs; ``GET /api/v1/me/navigation`` filters it for the
+signed-in user, and the shell renders the result on every route. To add
+a page to the sidebar, add its ``NavEntry`` there.
+
+The in-browser registry behind the manifest is also reachable through
+the ``window.pychestrateShell`` handle, for an entry that only one
+bundle's page needs:
 
 .. code-block:: javascript
 
@@ -74,33 +87,31 @@ Rules:
   regardless of per-entry permissions.
 - Duplicate routes are dropped with a ``console.warn``
   (``pychestrate.ui.shell.sidebar_dup_route``); first
-  registration wins.
+  registration wins, and the manifest registers first.
 
 Adding a Palette Provider
 =========================
 
-Bundles can contribute a provider to the ``Ctrl/Cmd + K``
-palette:
+The shell registers its own provider, ``shell.navigation``, which
+matches the visible sidebar entries by label, group, and route. Bundles
+can contribute more providers to the ``Ctrl/Cmd + K`` palette:
 
 .. code-block:: javascript
 
     handle.palette.registerProvider({
-        providerId: "admin.search",
-        label: "Admin",
+        providerId: "admin.actions",
+        label: "Admin actions",
         requiredPermissions: ["system:ui.admin.view"],
-        timeoutMs: 3000,
+        timeoutMs: 1000,
         query: async (q) => {
-            const response = await fetch(
-                "/api/v1/admin/search?q=" + encodeURIComponent(q),
-                { credentials: "same-origin" },
-            )
-            const body = await response.json()
-            return body.results.map((row) => ({
-                id: row.id,
-                label: row.label,
-                description: row.description,
-                route: row.route,
-            }))
+            const actions = [
+                { id: "admin.create-user", label: "Create user",
+                  route: "/admin/users/create" },
+                { id: "admin.enrollment-tokens", label: "Mint an enrollment token",
+                  route: "/admin/enrollment-tokens" },
+            ]
+            const needle = q.trim().toLowerCase()
+            return actions.filter((action) => action.label.toLowerCase().includes(needle))
         },
     })
 
@@ -116,21 +127,22 @@ Result shape::
 
 The shell runs every visible provider in parallel with the
 declared ``timeoutMs`` (default 5 s). A provider that throws or
-times out renders an inline "this provider is unavailable"
-notice without blocking the others.
+times out renders an inline "this source is unavailable" notice
+without blocking the others.
 
 Chromeless Routes
 =================
 
-Chromeless routes are listed in
+Chromeless route prefixes are listed in
 ``source/site/ccai/pychestrate/webservice/webinterface/site_shell/chromeless_routes.py``.
-The route-registration pipeline rejects any new shell route
-colliding with a chromeless prefix at startup with
-``ConfigurationError`` (B-3 in ``9-site-shell/tasks.md``).
+The shell's catch-all route never claims a path under them. Nothing
+checks at startup that other blueprints stay out of them:
+``validate_chromeless_routes_at_startup`` in the same module is not
+called yet.
 
 Mark a route chromeless only when it must NOT load the shell
-bundle (login, setup, canonical error pages). Authenticated
-feature pages are always shell routes.
+bundle (sign-in, setup, embeddable views). Authenticated feature
+pages are always shell routes.
 
 Observability
 =============
@@ -144,6 +156,8 @@ DOM CustomEvents emitted by the shell:
   ``{entryRoute, entryLabel}``.
 - ``pyc-site-shell-permissions-changed`` --
   ``{added: [...], removed: [...]}``.
+- ``pyc-site-shell-home-rendered`` -- ``{}``.
+- ``pyc-site-shell-not-found-rendered`` -- ``{path}``.
 - ``pyc-site-shell-empty-state-rendered`` -- ``{}``.
 - ``pyc-site-shell-palette-opened`` -- ``{}``.
 - ``pyc-site-shell-palette-closed`` -- ``{}``.
@@ -170,39 +184,50 @@ Client metrics beaconed to ``POST /api/v1/_metrics/ui`` (PR p17g):
 - ``pychestrate_ui_shell_sidebar_entry_clicked_total``
   (counter) -- per click, labeled with ``entry_route``.
 
-The endpoint is informational in p17g: it validates the payload
-shape, rate-limits to 12 batches per remote address per minute,
-and logs a one-line summary. Aggregation into a Prometheus
-exposition is a separate concern.
+The endpoint is informational: it validates the payload shape, logs a
+one-line summary, and stores nothing. It accepts 12 batches per minute
+per client address; the webworks request does not carry the client's
+address today, so all clients currently share that one budget.
+Aggregation into a Prometheus exposition is a separate concern.
 
 Invariants
 ==========
 
-The shell upholds two security-flavored invariants enforced by
-automated checks:
+The shell upholds two invariants, both enforced by
+``source/testroots/ccai/tests/singlehost/pychestrate/webservice/phase13/test_p30d_shell_storage_and_color_invariants_m1.py``:
 
-1. **No browser storage writes** -- The shell never writes to
-   ``localStorage``, ``sessionStorage``, or ``IndexedDB``. The
-   permissions cache and any session-scoped UI state live in
-   in-memory singletons that die with the tab. Enforcement is
-   the ``tests/storage-invariant.test.mjs`` static scanner.
+1. **Browser storage holds per-viewer preferences only.** The shell
+   writes exactly two ``localStorage`` keys, both preferences of the
+   person at that browser: ``pychestrate.ui.theme`` (``light`` or
+   ``dark``, set by the header's Theme control) and
+   ``pyc-site-shell.nav-collapsed`` (``true`` or ``false``, whether
+   the sidebar is collapsed). Nothing else -- no session data, no
+   permissions, no page content -- is written to ``localStorage``,
+   ``sessionStorage``, or IndexedDB; the permissions cache and other
+   session-scoped state live in memory and die with the tab. Every
+   storage access is wrapped so a browser that refuses storage (some
+   privacy modes) falls back to the defaults.
 
-2. **No hard-coded colors** -- ``styles.css`` defines every
-   color / shadow / font through ``--pyc-site-shell-*`` tokens
-   under a ``:root`` block. The tokens default to the local
-   fallback values when ``9-ui-design-tokens`` is not loaded.
-   Token names follow the inventory in ``styles.css``.
+2. **No hard-coded colors.** ``pyc-site-shell.css`` defines every
+   color and shadow through ``--pyc-site-shell-*`` tokens in its
+   ``:root`` block; the rule blocks below it only reference tokens.
+   The tokens fall back to local values when the design-token
+   stylesheet is not loaded.
+
+A change that needs another stored value adds its key to the test's
+allowlist, with the reason, in the same change.
 
 Testing Your Bundle Inside the Shell
 ====================================
 
-Bundle tests are Playwright-driven and run against a real
-deployed instance -- there is no Node-based unit-test harness.
-The browser tests live in
+Bundle tests are Playwright-driven and run against a live server --
+there is no Node-based unit-test harness. The browser tests live in
 ``source/testroots/ccai/tests/singlehost/pychestrate/``
 ``webservice/phase11/test_p23a_mj_components_browser_m1.py``
-(and any sibling ``test_p*_browser_*.py`` files for view-
-specific coverage). The conventional pattern:
+(and any sibling ``test_p*_browser_*.py`` files for view-specific
+coverage). They read ``PYCHESTRATE_TEST_BASE_URL`` and the
+``PYCHESTRATE_TEST_ADMIN_*`` credentials; see ``CONTRIBUTING.md``. The
+conventional pattern:
 
 1. Sign in via the shared ``_sign_in`` helper.
 2. Navigate to your bundle's route.
@@ -215,28 +240,3 @@ that the retired Node harness covered now ride on integration
 coverage -- if a helper breaks, its consumer view's browser
 test surfaces the regression. See ``AGENTS.md`` for the
 broader testbase + Playwright pattern.
-
-Migration Guide: Vue Templates to Custom Elements Inside the Shell
-==================================================================
-
-Pychestrate originally rendered most authenticated pages from
-Vue templates served by a flask blueprint. The migration to the
-unified shell is incremental:
-
-1. **Identify the page's data dependencies** -- the existing
-   ``GET /config/...`` controller already returns JSON; reuse
-   that exact contract from your custom element rather than
-   reshaping it.
-2. **Write a Web Component** for the page. The component takes
-   no router responsibility -- the shell's ``ShellRouter``
-   mounts the right component for the active route.
-3. **Register sidebar entries** for the routes your component
-   serves. Match the permission keys to the route-level
-   ``@require_permission`` guards already on the server.
-4. **Mark the legacy Vue route chromeless** while it is still
-   used, then delete it once the custom element ships.
-
-Forward-looking: Vue templates remain in the codebase until each
-page has a custom-element replacement. The shell is happy to
-host either; chromeless routes can continue to render the legacy
-Vue document until they are migrated.

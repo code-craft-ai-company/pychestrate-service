@@ -118,7 +118,8 @@ from ccai.pychestrate.webservice.extensions.phase8_bootstrap import (
     Phase8BootstrapConfig,
     bootstrap_phase8_runtime,
 )
-from ccai.pychestrate.webservice.jobs.scheduling import SchedulerHandle
+from ccai.pychestrate.webservice.housekeeping import register_housekeeping_tasks
+from ccai.pychestrate.webservice.jobs.scheduling import SchedulerHandle, default_scheduler
 from ccai.pychestrate.webservice.metadata import (
     RUNTIME_ENVIRONMENTS,
     SITE_SHARED_GLOBALS,
@@ -966,6 +967,11 @@ def bootstrap_runtime(
 
     phase3_config = Phase3BootstrapConfig(session_factory=session_factory)
     bootstrap_phase3_runtime(config=phase3_config)
+
+    # Resource housekeeping (reservation activation, allocation expiry,
+    # scheduled health checks) joins the process-wide scheduler before
+    # phase 5 starts it: tasks registered after the start never run.
+    register_housekeeping_tasks(scheduler=default_scheduler(), session_factory=session_factory)
 
     phase5_config = Phase5BootstrapConfig(session_factory=session_factory)
     phase5_handle = bootstrap_phase5_runtime(config=phase5_config)

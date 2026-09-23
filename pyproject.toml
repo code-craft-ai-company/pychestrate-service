@@ -1,14 +1,15 @@
 [tool.poetry]
 name = "pychestrate-service"
 description = "Code Craft AI - Pychestrate Service"
-version = "0.0.1"
+version = "0.0.7-preview"
 authors = []
 readme = "README.rst"
 license = "LICENSE.txt"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: Other/Proprietary License",
-    "Operating System :: POSIX"
+    "Operating System :: POSIX",
+    "Private :: Do Not Upload"
 ]
 keywords = [
     "python"
@@ -17,6 +18,9 @@ packages = [
     {include="ccai", from="source/packages"},
     {include="ccai", from="source/site"},
 ]
+
+[tool.poetry.scripts]
+pyc = "ccai.pychestrate.cli.entry:console_main"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4.0"

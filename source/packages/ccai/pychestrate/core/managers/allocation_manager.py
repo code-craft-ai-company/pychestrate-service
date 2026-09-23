@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session as DbSession
 
-from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.defaults import ensure_utc, utc_now
 
 
 # =============================================================================
@@ -643,7 +643,8 @@ class AllocationManager:
         # Check if already released
         if allocation.status != AllocationStatus.ACTIVE.value:
             raise AllocationNotFoundError(
-                f"Allocation '{allocation_id}' is not active (status: {allocation.status})"
+                f"Allocation '{allocation_id}' is not active (status: {allocation.status})",
+                error_code="ALLOCATION_NOT_ACTIVE"
             )
         
         # Release the allocation
@@ -653,7 +654,7 @@ class AllocationManager:
         
         # Calculate duration
         if allocation.checkout_time:
-            duration = now - allocation.checkout_time
+            duration = now - ensure_utc(allocation.checkout_time)
             allocation.duration_minutes = int(duration.total_seconds() / 60)
         
         self._db_session.commit()
@@ -696,7 +697,8 @@ class AllocationManager:
         # Check if already released
         if allocation.status != AllocationStatus.ACTIVE.value:
             raise AllocationNotFoundError(
-                f"Allocation '{allocation_id}' is not active (status: {allocation.status})"
+                f"Allocation '{allocation_id}' is not active (status: {allocation.status})",
+                error_code="ALLOCATION_NOT_ACTIVE"
             )
         
         # Force release the allocation
@@ -708,7 +710,7 @@ class AllocationManager:
         
         # Calculate duration
         if allocation.checkout_time:
-            duration = now - allocation.checkout_time
+            duration = now - ensure_utc(allocation.checkout_time)
             allocation.duration_minutes = int(duration.total_seconds() / 60)
         
         self._db_session.commit()
@@ -759,7 +761,7 @@ class AllocationManager:
             
             # Calculate duration
             if allocation.checkout_time:
-                duration = now - allocation.checkout_time
+                duration = now - ensure_utc(allocation.checkout_time)
                 allocation.duration_minutes = int(duration.total_seconds() / 60)
             
             count += 1
@@ -980,9 +982,9 @@ class AllocationManager:
         events = []
         for a in allocations:
             if a.checkout_time:
-                events.append((a.checkout_time, 1))  # Start event
+                events.append((ensure_utc(a.checkout_time), 1))  # Start event
                 end_time = a.actual_checkin or a.expected_checkin or utc_now()
-                events.append((end_time, -1))  # End event
+                events.append((ensure_utc(end_time), -1))  # End event
         
         # Sort events by time
         events.sort(key=lambda x: x[0])
@@ -1152,14 +1154,19 @@ class AllocationManager:
         
         # Validate time window
         if request.start_time is None or request.end_time is None:
-            raise InvalidTimeWindowError("Both start_time and end_time are required")
+            raise InvalidTimeWindowError("Both start_time and end_time are required", error_code="TIMES_REQUIRED")
         
-        if request.start_time >= request.end_time:
-            raise InvalidTimeWindowError("start_time must be before end_time")
+        # A naive time is taken to be UTC (as the database layer stores it), so
+        # the comparisons below never mix naive and aware values.
+        start_time = ensure_utc(request.start_time)
+        end_time = ensure_utc(request.end_time)
+        
+        if start_time >= end_time:
+            raise InvalidTimeWindowError("start_time must be before end_time", error_code="END_NOT_AFTER_START")
         
         now = utc_now()
-        if request.start_time < now:
-            raise InvalidTimeWindowError("start_time cannot be in the past")
+        if start_time < now:
+            raise InvalidTimeWindowError("start_time cannot be in the past", error_code="START_IN_PAST")
         
         # Validate mode
         mode = request.mode.lower() if request.mode else "exclusive"
@@ -1169,8 +1176,8 @@ class AllocationManager:
         # Check for conflicts with existing reservations
         conflicts = self.check_reservation_conflicts(
             resource_id=request.resource_id,
-            start_time=request.start_time,
-            end_time=request.end_time,
+            start_time=start_time,
+            end_time=end_time,
             mode=mode
         )
         
@@ -1185,8 +1192,8 @@ class AllocationManager:
             resource_id=request.resource_id,
             user_id=user_id,
             job_id=request.job_id,
-            start_time=request.start_time,
-            end_time=request.end_time,
+            start_time=start_time,
+            end_time=end_time,
             mode=mode,
             status=ReservationStatus.PENDING.value,
             reason=request.reason
@@ -1204,8 +1211,8 @@ class AllocationManager:
                     "reservation_id": reservation.id,
                     "resource_id": request.resource_id,
                     "resource_name": resource.name,
-                    "start_time": str(request.start_time),
-                    "end_time": str(request.end_time),
+                    "start_time": str(start_time),
+                    "end_time": str(end_time),
                     "mode": mode
                 }
             )
@@ -1236,13 +1243,15 @@ class AllocationManager:
         # Check ownership
         if str(reservation.user_id) != str(user_id):
             raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'"
+                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
+                error_code="NOT_RESERVATION_OWNER"
             )
         
         # Check if reservation can be cancelled
         if reservation.status not in (ReservationStatus.PENDING.value, ReservationStatus.ACTIVE.value):
             raise ReservationNotFoundError(
-                f"Reservation '{reservation_id}' cannot be cancelled (status: {reservation.status})"
+                f"Reservation '{reservation_id}' cannot be cancelled (status: {reservation.status})",
+                error_code="RESERVATION_NOT_CANCELLABLE"
             )
         
         # Cancel the reservation
@@ -1297,26 +1306,28 @@ class AllocationManager:
         # Check ownership
         if str(reservation.user_id) != str(user_id):
             raise NotAllocationOwnerError(
-                f"User '{user_id}' is not the owner of reservation '{reservation_id}'"
+                f"User '{user_id}' is not the owner of reservation '{reservation_id}'",
+                error_code="NOT_RESERVATION_OWNER"
             )
         
         # Check if reservation can be modified
         if reservation.status != ReservationStatus.PENDING.value:
             raise ReservationNotFoundError(
-                f"Reservation '{reservation_id}' cannot be modified (status: {reservation.status})"
+                f"Reservation '{reservation_id}' cannot be modified (status: {reservation.status})",
+                error_code="RESERVATION_NOT_MODIFIABLE"
             )
         
-        # Determine new time window
-        new_start = start_time if start_time is not None else reservation.start_time
-        new_end = end_time if end_time is not None else reservation.end_time
+        # Determine new time window (naive values are taken to be UTC)
+        new_start = ensure_utc(start_time if start_time is not None else reservation.start_time)
+        new_end = ensure_utc(end_time if end_time is not None else reservation.end_time)
         
         # Validate new time window
         if new_start >= new_end:
-            raise InvalidTimeWindowError("start_time must be before end_time")
+            raise InvalidTimeWindowError("start_time must be before end_time", error_code="END_NOT_AFTER_START")
         
         now = utc_now()
         if new_start < now:
-            raise InvalidTimeWindowError("start_time cannot be in the past")
+            raise InvalidTimeWindowError("start_time cannot be in the past", error_code="START_IN_PAST")
         
         # Check for conflicts with existing reservations (excluding this one)
         conflicts = self.check_reservation_conflicts(

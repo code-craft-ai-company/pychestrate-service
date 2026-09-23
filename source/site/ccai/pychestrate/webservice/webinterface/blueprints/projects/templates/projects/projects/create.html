@@ -23,10 +23,10 @@
         <div class="form-group">
             <label for="name">Project Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   pattern="[a-zA-Z0-9_.-]+"
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}"
                    value="{{ form_data.name if form_data else '' }}"
                    placeholder="my-project">
-            <div class="form-text">Only alphanumeric characters, underscores, hyphens, and periods allowed</div>
+            <div class="form-text">Letters, digits, underscores, hyphens and periods, starting with a letter or digit; at most 128 characters.</div>
         </div>
         
         <div class="form-group">

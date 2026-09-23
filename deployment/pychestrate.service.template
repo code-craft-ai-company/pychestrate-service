@@ -44,6 +44,10 @@ Environment="PYCHESTRATE_RUNTIME_ENVIRONMENT=staging"
 Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
 Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
+# stdout goes to a file (StandardOutput=append:), where Python would
+# block-buffer it: without this, startup lines such as the
+# initial-admin token path can sit in the buffer indefinitely.
+Environment="PYTHONUNBUFFERED=1"
 
 # Pychestrate "presence directory" -- the canonical home for
 # the application's per-host state. Holds:
@@ -52,6 +56,17 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #   * pychestrate.sqlite       -- alpha-tier persistent DB
 #   * initial-admin-token      -- mode 0600, written on first
 #                                  boot by the setup wizard
+#   * artifacts/               -- run artifacts (result trees
+#                                  uploaded by pods); override
+#                                  with PYCHESTRATE_ARTIFACT_ROOT
+#                                  below.  Never inside the
+#                                  checkout: ProtectHome mounts
+#                                  it read-only and every deploy
+#                                  rsyncs it with --delete.
+#   * backups/, backup-keys/   -- backup archives and their key
+#                                  bundles (POST /api/v1/backups
+#                                  and pychestrate-backup.timer);
+#                                  copy both off the host.
 #   * logs/                    -- future home for application
 #                                  logs (the alpha still tees
 #                                  gunicorn stdout to
@@ -74,6 +89,24 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #
 #Environment="PYCHESTRATE_PRESENCE_DIR=/var/lib/pychestrate"
 
+# Run-artifact root.  Defaults to <presence dir>/artifacts, which
+# the ReadWritePaths line below already covers.  Relocating it
+# (e.g. to a larger volume) needs that path added to
+# ReadWritePaths as well, or uploads fail with EROFS.
+#
+#Environment="PYCHESTRATE_ARTIFACT_ROOT=/srv/pychestrate/artifacts"
+
+# Monitoring.  /livez and /readyz answer without credentials.
+# /metrics (Prometheus) requires ``Authorization: Bearer <token>``
+# with the token in PYCHESTRATE_METRICS_TOKEN_FILE, which
+# run-staging-gunicorn generates at .cache/dev-secrets/dev.metrics-token
+# (point the scraper's credentials_file at a copy).  To serve
+# /metrics without a token instead -- e.g. when the proxy restricts
+# the path -- set PYCHESTRATE_METRICS_PUBLIC=true.
+#
+#Environment="PYCHESTRATE_METRICS_TOKEN_FILE=/etc/pychestrate/metrics-token"
+#Environment="PYCHESTRATE_METRICS_PUBLIC=true"
+
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 
 # Restart on crash with a small backoff; the StartLimitBurst /
@@ -85,7 +118,9 @@ RestartSec=5
 # Tee the service's stdout/stderr to a log file under the
 # user's home directory so ``tail -f ~/.pychestrate/server.log``
 # stays useful for ad-hoc debugging.  ``journalctl -u
-# pychestrate.service`` is the canonical view.
+# pychestrate.service`` shows the unit's lifecycle.  The file is
+# rotated daily (or past 100 MB, 14 kept, compressed) by
+# /etc/logrotate.d/pychestrate from pychestrate.logrotate.template.
 StandardOutput=append:/home/@USER@/.pychestrate/server.log
 StandardError=append:/home/@USER@/.pychestrate/server.log
 

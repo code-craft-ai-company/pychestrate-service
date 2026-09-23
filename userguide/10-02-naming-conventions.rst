@@ -25,7 +25,7 @@ When defining constants, use descriptive names that clearly indicate their purpo
 defined in a separate module or file if they are used across multiple modules.  This helps in organizing the code and makes it easier to manage changes to constants.
 
 Constants should be prefixed with a symbolic name which that describes the type of constant they represent. For example, if a constant represents a configuration value,
-it could be prefixed with `CONFIG_`.
+it could be prefixed with ``CONFIG_``.
 
 
 Method Names
@@ -34,11 +34,11 @@ Method Names
 
 Conversion Methods
 ------------------
-Methods that convert an object to another binary data type such as a dictionary but do not serialize it should be named `as_<type>`.  This makes it clear that the method
+Methods that convert an object to another binary data type such as a dictionary but do not serialize it should be named ``as_<type>``.  This makes it clear that the method
 is converting the object to a different type without effecting the usability of the data.
 
-If an object is complex and it is desirable to have a brief representation of the object, the method can take an optional boolean parameter called `brief`. If `brief` is
-set to `True`, the method should return a single level or simplified version of the object.
+If an object is complex and it is desirable to have a brief representation of the object, the method can take an optional boolean parameter called ``brief``. If ``brief`` is
+set to ``True``, the method should return a single level or simplified version of the object.
 
 .. code-block:: python
 
@@ -50,7 +50,7 @@ set to `True`, the method should return a single level or simplified version of 
 
 Encoding Methods
 ----------------
-Methods that serialize an object to a string of a specific format should be named `to_<format>`. This makes it easy to locate the serialization methods of objects.
+Methods that serialize an object to a string of a specific format should be named ``to_<format>``. This makes it easy to locate the serialization methods of objects.
 
 .. code-block:: python
 

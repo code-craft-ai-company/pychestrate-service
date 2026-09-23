@@ -476,6 +476,16 @@ NAV_ENTRIES: List[NavEntry] = [
         # the nav gate matches the page's actual enforcement.
         required_permissions=["system:resources.manage"],
     ),
+    # Machine identity: service accounts and every API token
+    # (webinterface/blueprints/config/routes_tokens.py). A user's own
+    # tokens live at /account/api-tokens.
+    NavEntry(
+        entry_id="admin.api-tokens",
+        label="API Tokens",
+        route="/admin/api-tokens",
+        group_id=GROUP_ADMIN,
+        required_permissions=["system:auth.read"],
+    ),
 ]
 
 

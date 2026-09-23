@@ -31,6 +31,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.testshared.factories.webui.dataclass_fixtures import (
@@ -128,6 +129,11 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_sessions import (
     _SessionRow,
+)
+# Machine identity pages (config/tokens/*).
+from ccai.pychestrate.webservice.security.auth.api_tokens.service import (
+    ApiTokenView,
+    ServiceAccountView,
 )
 
 
@@ -252,6 +258,25 @@ def _minted(mode: str) -> Any:
         "secret": "s3cr3t",
         "enroll_command": "pychestrate-client enroll --token tok-7",
         "run_command": "pychestrate-client run",
+    }
+    return rtnval
+
+
+def _api_token_minted(mode: str) -> Any:
+    """
+        The one-time panel ``routes_tokens`` renders after issuing an
+        API token; ``None`` on a plain GET.
+    """
+    if mode == MODE_SPARSE:
+        return None
+    rtnval = {
+        "token": "pyc_" + "x" * 43,
+        "name": "laptop CLI",
+        "owner_label": "admin",
+        "scope": "read-write",
+        "expires_at": FIXTURE_DATETIME,
+        "login_command": "pyc login --server-url https://pyc.example.invalid",
+        "curl_command": 'curl -H "Authorization: Bearer $PYC_TOKEN" https://pyc.example.invalid/api/v1/me',
     }
     return rtnval
 
@@ -390,6 +415,20 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "work_packet_json": _const('{\n  "customer_id": 42\n}'),
     "run_packet_json": _const('{\n  "region": "eu"\n}'),
     "secret_packet_keys": _by_mode(["auth"], []),
+    "run_pods": _by_mode(
+        [{"pod_id": "11111111-1111-4000-8000-000000000001", "label": "lab-pod-01 (11111111)"},
+         {"pod_id": "22222222-2222-4000-8000-000000000002", "label": "lab-pod-02 (22222222)"}],
+        [],
+    ),
+    "run_blocked_reason": _by_mode("", "No pod can run this job yet."),
+    "run_errors": _by_mode(["/customer_id: required"], []),
+    "run_selected_pod_id": _by_mode("11111111-1111-4000-8000-000000000001", ""),
+    "replay_job": _by_mode(SimpleNamespace(job_id="0f6c2c1e-1111-4000-8000-000000000009"), None),
+    "replay_message": _by_mode("An identical run of this specification was submitted less than a minute ago, so no new job was started.", ""),
+    "pod_choices": _by_mode(
+        [{"pod_id": "11111111-1111-4000-8000-000000000001", "label": "lab-pod-01 (11111111)"}],
+        [],
+    ),
     "is_active": _by_mode(True, False),
     "job_types": _many(RpaJobTypeView),
     "job_type": _one(RpaJobTypeView),
@@ -569,6 +608,11 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),
+        "field_errors": _by_mode(
+            {"email": "Email address looks invalid.", "password_confirm": "Password and confirmation do not match."},
+            {},
+        ),
+        "first_invalid": _by_mode("email", None),
     },
     "projects/calendar/": {
         "start_date": _by_mode("2026-09-01", ""),
@@ -578,6 +622,23 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "pools": _many(IPPoolResponse),
         "pool": _one(IPPoolResponse),
         "allocations": _many(IPAllocationResponse),
+    },
+    # Resources audit fixes (RES-02 / RES-17): the IANA zone a
+    # reservation form's times are typed in ("" = fresh form, UTC).
+    "resources/reservations/": {
+        "viewer_timezone": _by_mode("America/Los_Angeles", ""),
+    },
+    # Machine identity: API tokens and service accounts
+    # (webinterface/blueprints/config/routes_tokens.py).
+    "config/tokens/": {
+        "tokens": _many(ApiTokenView),
+        "minted": _api_token_minted,
+        "service_accounts": _many(ServiceAccountView),
+        "lifetime_choices": _const((7, 30, 90, 180, 366)),
+        "default_lifetime_days": _const(90),
+        "can_view_admin_tokens": _by_mode(True, False),
+        "can_manage_tokens": _by_mode(True, False),
+        "can_create_service_accounts": _by_mode(True, False),
     },
 }
 

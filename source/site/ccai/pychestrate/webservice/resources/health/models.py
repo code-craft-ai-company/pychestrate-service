@@ -13,7 +13,6 @@ import enum
 
 from sqlalchemy import (
     Column,
-    DateTime,
     Enum,
     Index,
     Integer,
@@ -25,6 +24,7 @@ from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -62,10 +62,10 @@ class ResourceHealth(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=ProbeOutcome.UNKNOWN,
     )
-    last_probe_at = Column(DateTime(timezone=True), nullable=True)
-    last_pass_at = Column(DateTime(timezone=True), nullable=True)
-    last_fail_at = Column(DateTime(timezone=True), nullable=True)
-    next_probe_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    last_probe_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_pass_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_fail_at = Column(UtcDateTime(timezone=True), nullable=True)
+    next_probe_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     pass_count = Column(Integer, nullable=False, default=0)
     fail_count = Column(Integer, nullable=False, default=0)
     consecutive_failures = Column(Integer, nullable=False, default=0)

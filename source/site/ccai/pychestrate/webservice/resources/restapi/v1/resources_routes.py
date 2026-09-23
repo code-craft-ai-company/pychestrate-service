@@ -35,6 +35,7 @@ __version__ = "1.0.0"
 
 
 import logging
+import uuid
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -42,6 +43,7 @@ from typing import Any, Dict, List, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.core.defaults import ensure_utc
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -322,6 +324,31 @@ def _parse_positive_int(
     return rtnval
 
 
+def _require_resource_id(*, request: Request) -> str:
+    """
+        Read the ``resource_id`` path parameter. Resource ids are
+        UUIDs; a value that is not one cannot name a resource, so it
+        is answered ``404`` like any unknown id (the database layer
+        used to raise on it and the request failed with a ``500``).
+
+        :param request: Incoming webworks request.
+
+        :returns: The canonical UUID text.
+    """
+    raw = request.path_params.get("resource_id", "")
+    try:
+        rtnval = str(uuid.UUID(str(raw)))
+    except (TypeError, ValueError, AttributeError):
+        _abort_problem(
+            request=request,
+            status=404,
+            detail="Resource not found: '{}' is not a resource id.".format(raw),
+            extensions={"resource_id": raw},
+        )
+        rtnval = ""  # unreachable
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Serializers
 # ---------------------------------------------------------------------------
@@ -329,17 +356,22 @@ def _parse_positive_int(
 
 def _iso_or_none(value: Any) -> Optional[str]:
     """
-        ISO-8601 serialize a datetime or return ``None``.
+        Serialize a datetime as RFC 3339 with an explicit UTC offset
+        (``2026-09-22T23:34:26+00:00``), or return ``None``. The
+        database stores UTC; a naive value (SQLite hands those back)
+        is UTC, and sending it without an offset made browsers read it
+        as local time, shifting every time by the viewer's UTC offset
+        (audit finding RES-20).
 
         :param value: Datetime or None.
 
-        :returns: ISO-formatted string or None.
+        :returns: RFC 3339 string or None.
     """
     if value is None:
         rtnval = None
         return rtnval
     if isinstance(value, datetime):
-        rtnval = value.isoformat()
+        rtnval = ensure_utc(value).isoformat()
         return rtnval
     rtnval = str(value)
     return rtnval
@@ -464,6 +496,7 @@ def handle_read_resource(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCES_READ_PERMISSION_KEY,
         )
+        resource_id = _require_resource_id(request=request)
 
         try:
             view = inventory_service.get_resource(
@@ -516,6 +549,7 @@ def handle_transition_resource_state(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCES_WRITE_PERMISSION_KEY,
         )
+        resource_id = _require_resource_id(request=request)
 
         body = _decode_json_object_or_abort(request=request)
         state_raw = _require_string_field(
@@ -603,6 +637,7 @@ def handle_read_resource_health(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCES_READ_PERMISSION_KEY,
         )
+        resource_id = _require_resource_id(request=request)
 
         try:
             view = health_service.get_health_record(
@@ -649,6 +684,7 @@ def handle_list_resource_usage_history(request: Request) -> Response:
             db_session=db_session,
             permission_key=RESOURCES_READ_PERMISSION_KEY,
         )
+        resource_id = _require_resource_id(request=request)
 
         limit = _parse_positive_int(
             request=request,
