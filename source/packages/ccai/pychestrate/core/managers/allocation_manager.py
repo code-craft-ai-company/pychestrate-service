@@ -1154,11 +1154,16 @@ class AllocationManager:
         if request.start_time is None or request.end_time is None:
             raise InvalidTimeWindowError("Both start_time and end_time are required")
         
-        if request.start_time >= request.end_time:
+        # A naive time is taken to be UTC (as the database layer stores it), so
+        # the comparisons below never mix naive and aware values.
+        start_time = ensure_utc(request.start_time)
+        end_time = ensure_utc(request.end_time)
+        
+        if start_time >= end_time:
             raise InvalidTimeWindowError("start_time must be before end_time")
         
         now = utc_now()
-        if request.start_time < now:
+        if start_time < now:
             raise InvalidTimeWindowError("start_time cannot be in the past")
         
         # Validate mode
@@ -1169,8 +1174,8 @@ class AllocationManager:
         # Check for conflicts with existing reservations
         conflicts = self.check_reservation_conflicts(
             resource_id=request.resource_id,
-            start_time=request.start_time,
-            end_time=request.end_time,
+            start_time=start_time,
+            end_time=end_time,
             mode=mode
         )
         
@@ -1185,8 +1190,8 @@ class AllocationManager:
             resource_id=request.resource_id,
             user_id=user_id,
             job_id=request.job_id,
-            start_time=request.start_time,
-            end_time=request.end_time,
+            start_time=start_time,
+            end_time=end_time,
             mode=mode,
             status=ReservationStatus.PENDING.value,
             reason=request.reason
@@ -1204,8 +1209,8 @@ class AllocationManager:
                     "reservation_id": reservation.id,
                     "resource_id": request.resource_id,
                     "resource_name": resource.name,
-                    "start_time": str(request.start_time),
-                    "end_time": str(request.end_time),
+                    "start_time": str(start_time),
+                    "end_time": str(end_time),
                     "mode": mode
                 }
             )
@@ -1306,9 +1311,9 @@ class AllocationManager:
                 f"Reservation '{reservation_id}' cannot be modified (status: {reservation.status})"
             )
         
-        # Determine new time window
-        new_start = start_time if start_time is not None else reservation.start_time
-        new_end = end_time if end_time is not None else reservation.end_time
+        # Determine new time window (naive values are taken to be UTC)
+        new_start = ensure_utc(start_time if start_time is not None else reservation.start_time)
+        new_end = ensure_utc(end_time if end_time is not None else reservation.end_time)
         
         # Validate new time window
         if new_start >= new_end:

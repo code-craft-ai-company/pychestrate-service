@@ -42,7 +42,9 @@ __version__ = "1.0.0"
 import enum
 import os
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 import jinja2
 
@@ -143,6 +145,7 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     install_static_url_global(environment=environment)
     install_ui_profile_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
+    environment.filters["input_datetime"] = input_datetime_filter
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
     environment.filters["enum_value"] = enum_value_filter
@@ -250,6 +253,36 @@ def format_datetime_filter(
             jinja2.escape(zone_label),
         )
     ) if hasattr(jinja2, "Markup") else _markup_time(iso_value, display_value, zone_label)
+    return rtnval
+
+
+def input_datetime_filter(value: Any, zone_name: Optional[str] = "UTC") -> str:
+    """
+        Render a datetime as the ``value`` of an ``<input
+        type="datetime-local">``: plain ``YYYY-MM-DDTHH:MM`` text in
+        ``zone_name`` (an IANA zone; UTC when empty or unknown). A
+        naive value is taken to be UTC. ``None`` and anything that is
+        not a datetime render as an empty string, so the input shows
+        blank instead of markup (``format_datetime`` returns a
+        ``<time>`` element, which does not belong inside ``value=""``).
+
+        :param value: The datetime to render.
+        :param zone_name: IANA zone the input is filled in.
+
+        :returns: The input value, or an empty string.
+    """
+    if not isinstance(value, datetime):
+        return ""
+    zone: Any = timezone.utc
+    name = str(zone_name or "").strip()
+    if len(name) > 0 and name != "UTC":
+        try:
+            zone = ZoneInfo(name)
+        except (KeyError, ValueError, OSError):
+            zone = timezone.utc
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=timezone.utc)
+    rtnval = value.astimezone(zone).strftime("%Y-%m-%dT%H:%M")
     return rtnval
 
 

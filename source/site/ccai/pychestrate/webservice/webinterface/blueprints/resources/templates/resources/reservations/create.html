@@ -59,14 +59,16 @@
         <div class="form-group">
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
+                   aria-describedby="reservation-zone-note"
                    value="{{ form_data.start_time if form_data else '' }}">
-            <p class="form-text">Times are interpreted in the server's time zone.</p>
         </div>
 
         <div class="form-group">
             <label for="end_time">End Time *</label>
             <input type="datetime-local" id="end_time" name="end_time" class="form-control" required
+                   aria-describedby="reservation-zone-note"
                    value="{{ form_data.end_time if form_data else '' }}">
+            {% include "resources/reservations/_viewer_zone.html" %}
         </div>
 
         <div class="form-group">

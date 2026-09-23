@@ -579,6 +579,11 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "pool": _one(IPPoolResponse),
         "allocations": _many(IPAllocationResponse),
     },
+    # Resources audit fixes (RES-02 / RES-17): the IANA zone a
+    # reservation form's times are typed in ("" = fresh form, UTC).
+    "resources/reservations/": {
+        "viewer_timezone": _by_mode("America/Los_Angeles", ""),
+    },
 }
 
 
