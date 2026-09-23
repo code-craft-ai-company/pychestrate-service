@@ -754,3 +754,333 @@ def test_build_trigger_without_integration_omits_it(bundle_browser: ThreadedBrow
     )
     testbase.assert_equal("source_integration_id" in body, False)
     return
+
+
+
+# ---------------------------------------------------------------------------
+# ORC-04 -- the metrics views speak the registered kinds' contracts
+# ---------------------------------------------------------------------------
+
+
+CATALOG_API_PATH: str = "/api/v1/metrics/catalog"
+ALERT_RULES_PATH: str = "/api/v1/projects/{}/metric-alerts".format(PROJECT_ID)
+SLOS_PATH: str = "/api/v1/projects/{}/slos".format(PROJECT_ID)
+DASHBOARD_ID: str = "00000000-0000-4000-8000-0000000d0001"
+DASHBOARD_PATH: str = "/api/v1/projects/{}/dashboards/{}".format(PROJECT_ID, DASHBOARD_ID)
+FAILED_METRIC: str = "pychestrate_rpa_jobs_failed_total"
+SUBSCRIPTIONS_PATH: str = "/api/v1/webhooks/out/subscriptions"
+SUBSCRIPTION_ID: str = "00000000-0000-4000-8000-0000000d0002"
+SUBSCRIPTION_TEST_PATH: str = "{}/{}/test".format(SUBSCRIPTIONS_PATH, SUBSCRIPTION_ID)
+
+
+def _metrics_api(*, alert_rules: Optional[List[Dict[str, Any]]] = None) -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=PROJECTS_PATH,
+        body={"items": [{"project_id": PROJECT_ID, "slug": "p", "display_name": "P"}], "meta": {"total": 1}},
+    )
+    api.respond(
+        method="GET",
+        path=CATALOG_API_PATH,
+        body={"items": [{"name": FAILED_METRIC, "kind": "counter", "label_names": ["project_id"]}]},
+    )
+    api.respond(
+        method="GET",
+        path=ALERT_RULES_PATH,
+        body={"items": alert_rules if alert_rules is not None else [], "meta": {"total": 0}},
+    )
+    api.respond(
+        method="POST",
+        path=ALERT_RULES_PATH,
+        status=201,
+        body={"rule_id": "00000000-0000-4000-8000-0000000d00aa"},
+    )
+    api.respond(method="GET", path=SLOS_PATH, body={"items": [], "meta": {"total": 0}})
+    api.respond(
+        method="POST",
+        path=SLOS_PATH,
+        status=201,
+        body={"slo_id": "00000000-0000-4000-8000-0000000d00bb"},
+    )
+    return api
+
+
+def _open_alert_rules(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-metrics-bundle")
+    mount_element(page=page, tag="pyc-alert-rules")
+    wait_for_request(page=page, api=api, method="GET", path=CATALOG_API_PATH)
+    wait_for_request(page=page, api=api, method="GET", path=ALERT_RULES_PATH)
+    rtnval = (context, page)
+    return rtnval
+
+
+def _submit_alert_rule(*, page: Any) -> None:
+    page.click('[data-role="create-toggle"]')
+    page.wait_for_selector('[data-role="create-form"]')
+    page.fill('[data-role="create-name"] input', "rpa failures")
+    page.fill('[data-role="create-threshold"] input', "0")
+    page.click('[data-role="create-submit"]')
+    return
+
+
+def test_alert_rule_form_sends_the_threshold_kind_config(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: the create form sends the config the registered
+    threshold kind validates -- metric_name, op, threshold,
+    window_seconds -- not metric / comparison.**
+    """
+    api = _metrics_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_alert_rules(browser=browser, api=api)
+        try:
+            _submit_alert_rule(page=page)
+            posted = wait_for_request(page=page, api=api, method="POST", path=ALERT_RULES_PATH)
+        finally:
+            context.close()
+        rtnval = posted[0].body
+        return rtnval
+
+    body = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        (body["kind"], body["config"]),
+        ("threshold", {"metric_name": FAILED_METRIC, "op": ">", "threshold": 0, "window_seconds": 3600}),
+    )
+    return
+
+
+def test_alert_rule_create_failure_shows_the_server_detail(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: a rejected rule shows the server's reason instead of
+    "check the fields".**
+    """
+    api = _metrics_api()
+    api.respond(
+        method="POST",
+        path=ALERT_RULES_PATH,
+        status=422,
+        body={"type": "about:blank", "title": "Unprocessable", "status": 422,
+              "detail": "invalid config: 'window_seconds' must be a positive integer when present"},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_alert_rules(browser=browser, api=api)
+        try:
+            _submit_alert_rule(page=page)
+            page.wait_for_selector('[data-role="toast"][data-tone="error"]', timeout=5000)
+            rtnval = page.inner_text('[data-role="toast"][data-tone="error"]')
+        finally:
+            context.close()
+        return rtnval
+
+    toast_text = bundle_browser.run(_scenario)
+    testbase.assert_equal("'window_seconds' must be a positive integer" in toast_text, True)
+    return
+
+
+def test_alert_rule_list_shows_the_evaluator_state(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: each rule row shows the alert evaluator's live state
+    (here: Firing).**
+    """
+    api = _metrics_api(alert_rules=[{
+        "rule_id": "00000000-0000-4000-8000-0000000d00cc",
+        "project_id": PROJECT_ID,
+        "name": "rpa failures",
+        "kind": "threshold",
+        "config": {"metric_name": FAILED_METRIC, "op": ">", "threshold": 0, "window_seconds": 3600},
+        "severity": "warning",
+        "enabled": True,
+        "notification_targets": [],
+        "live_state": {"state": "firing", "last_reason": "2.0 > 0.0",
+                       "last_evaluated_at": "2026-09-22T23:00:00+00:00", "fire_count": 1},
+    }])
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_alert_rules(browser=browser, api=api)
+        try:
+            badge = page.wait_for_selector('[data-role="state-badge"]', timeout=5000)
+            rtnval = (badge.get_attribute("data-state"), badge.inner_text().strip())
+        finally:
+            context.close()
+        return rtnval
+
+    shown = bundle_browser.run(_scenario)
+    testbase.assert_equal(shown, ("firing", "Firing"))
+    return
+
+
+def _open_slos_form(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-metrics-bundle")
+    mount_element(page=page, tag="pyc-slos")
+    wait_for_request(page=page, api=api, method="GET", path=SLOS_PATH)
+    page.click('[data-role="create-toggle"]')
+    page.wait_for_selector('[data-role="create-form"]')
+    rtnval = (context, page)
+    return rtnval
+
+
+def _submit_slo(*, page: Any) -> None:
+    page.fill('[data-role="create-name"] input', "rpa success")
+    page.fill('[data-role="create-target"] input', "0.9")
+    page.fill('[data-role="create-window"] input', "604800")
+    page.fill(
+        '[data-role="create-config"] textarea',
+        '{"good_metric_name": "pychestrate_rpa_jobs_completed_total",'
+        ' "total_metric_name": "pychestrate_rpa_jobs_triggered_total"}',
+    )
+    page.click('[data-role="create-submit"]')
+    return
+
+
+def test_slo_form_defaults_to_the_registered_kind(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: the create form's kind defaults to availability_ratio
+    (the registered SLO kind), so an SLO created without editing the
+    kind is accepted.**
+    """
+    api = _metrics_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_slos_form(browser=browser, api=api)
+        try:
+            _submit_slo(page=page)
+            posted = wait_for_request(page=page, api=api, method="POST", path=SLOS_PATH)
+        finally:
+            context.close()
+        rtnval = posted[0].body
+        return rtnval
+
+    body = bundle_browser.run(_scenario)
+    testbase.assert_equal(body["kind"], "availability_ratio")
+    return
+
+
+def test_slo_create_failure_shows_the_server_detail(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: a rejected SLO shows the server's reason instead of
+    "check the fields".**
+    """
+    api = _metrics_api()
+    api.respond(
+        method="POST",
+        path=SLOS_PATH,
+        status=422,
+        body={"type": "about:blank", "title": "Unprocessable", "status": 422,
+              "detail": "invalid definition_config: 'good_metric_name' is required"},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_slos_form(browser=browser, api=api)
+        try:
+            _submit_slo(page=page)
+            page.wait_for_selector('[data-role="toast"][data-tone="error"]', timeout=5000)
+            rtnval = page.inner_text('[data-role="toast"][data-tone="error"]')
+        finally:
+            context.close()
+        return rtnval
+
+    toast_text = bundle_browser.run(_scenario)
+    testbase.assert_equal("'good_metric_name' is required" in toast_text, True)
+    return
+
+
+def test_dashboard_editor_saves_a_tile_the_backend_accepts(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-metrics-bundle**
+    **Property: a tile added in the editor is saved with a registered
+    tile kind (metric-line-chart) and a metric_name config.**
+    """
+    api = _metrics_api()
+    api.respond(
+        method="GET",
+        path=DASHBOARD_PATH,
+        body={"dashboard_id": DASHBOARD_ID, "project_id": PROJECT_ID, "name": "ops", "tiles": [], "version": 1},
+    )
+    api.respond(
+        method="PATCH",
+        path=DASHBOARD_PATH,
+        body={"dashboard_id": DASHBOARD_ID, "version": 2},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-metrics-bundle")
+        try:
+            page.evaluate(
+                "(path) => history.pushState({}, '', path)",
+                "/dashboards/{}/edit".format(DASHBOARD_ID),
+            )
+            mount_element(page=page, tag="pyc-dashboard-editor")
+            wait_for_request(page=page, api=api, method="GET", path=DASHBOARD_PATH)
+            wait_for_request(page=page, api=api, method="GET", path=CATALOG_API_PATH)
+            page.wait_for_selector('[data-role="add-tile"]', timeout=5000)
+            page.wait_for_timeout(200)
+            page.click('[data-role="add-tile"]')
+            page.click('[data-role="save-layout"]')
+            patched = wait_for_request(page=page, api=api, method="PATCH", path=DASHBOARD_PATH)
+        finally:
+            context.close()
+        rtnval = patched[0].body["tiles"][0]
+        return rtnval
+
+    tile = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        (tile["kind"], tile["config"]),
+        ("metric-line-chart", {"metric_name": FAILED_METRIC, "label_filter": {}, "range_seconds": 3600}),
+    )
+    return
+
+
+def test_webhooks_test_event_reports_an_undelivered_event(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-04 / pyc-ops-bundle**
+    **Property: when the server reports the test event was not
+    delivered, the view says so with the reason instead of "queued".**
+    """
+    api = _webhooks_api()
+    api.respond(
+        method="GET",
+        path=SUBSCRIPTIONS_PATH,
+        body={"items": [{
+            "subscription_id": SUBSCRIPTION_ID, "project_id": PROJECT_ID, "name": "notifier",
+            "url": "http://127.0.0.1:9/hook", "topic_filters": [], "enabled": True,
+        }], "meta": {"total": 1}},
+    )
+    api.respond(
+        method="POST",
+        path=SUBSCRIPTION_TEST_PATH,
+        body={"status": "failed", "delivery": {
+            "delivery_id": "00000000-0000-4000-8000-0000000d00dd", "outcome": "failed",
+            "response_status": None,
+            "response_excerpt": "not sent: the host '127.0.0.1' resolves to a loopback address (127.0.0.1), which webhooks may not target",
+        }},
+    )
+    api.respond(
+        method="GET",
+        path="{}/{}/deliveries".format(SUBSCRIPTIONS_PATH, SUBSCRIPTION_ID),
+        body={"items": [], "meta": {"total": 0}},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_webhooks(browser=browser, api=api)
+        try:
+            page.click('[data-role="tab-outbound"]')
+            wait_for_request(page=page, api=api, method="GET", path=SUBSCRIPTIONS_PATH)
+            page.click('[data-role="test-event"]')
+            page.wait_for_selector('[data-role="toast"][data-tone="error"]', timeout=5000)
+            rtnval = page.inner_text('[data-role="toast"][data-tone="error"]')
+        finally:
+            context.close()
+        return rtnval
+
+    toast_text = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        toast_text.startswith("Test event was not delivered: not sent:"), True,
+    )
+    return

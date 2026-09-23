@@ -12,6 +12,8 @@ M1 ships:
   ``evaluate``, upserts :class:`AlertLiveState`, emits
   EVALUATED + STATE_CHANGED + FIRED / RESOLVED on transitions.
 * :func:`get_live_state` / :func:`list_alert_kinds`.
+* :func:`evaluate_enabled_alert_rules` -- one tick of the periodic
+  evaluator the Layer-7 bootstrap schedules.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -20,6 +22,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
 import os
 
 from dataclasses import dataclass, field
@@ -58,6 +61,8 @@ from ccai.pychestrate.webservice.metrics.alerts.models import (
 
 
 ALERT_RULE_KIND_PROTOCOL: str = "alert_rule_kind"
+
+_LOGGER = logging.getLogger("pychestrate.metrics.alerts")
 
 
 @dataclass(frozen=True)
@@ -366,6 +371,42 @@ def evaluate_alert_rule(
         threshold_value=outcome.threshold_value,
         reason=outcome.reason,
     )
+    return rtnval
+
+
+def evaluate_enabled_alert_rules(
+        *,
+        db_session: DbSession
+    ) -> List[AlertEvaluationResult]:
+    """
+        Evaluate every enabled rule across all projects -- one tick of
+        the periodic alert evaluator the Layer-7 bootstrap schedules.
+
+        A rule whose evaluation raises (an unregistered kind, a
+        database error) is logged and skipped so one broken rule
+        cannot stop the others from being evaluated.
+
+        :param db_session: Active SQLAlchemy session.
+
+        :returns: One result per rule that evaluated.
+    """
+    results: List[AlertEvaluationResult] = []
+    rule_ids = repository.list_enabled_rule_ids(db_session=db_session)
+    for rule_id in rule_ids:
+        try:
+            outcome = evaluate_alert_rule(
+                db_session=db_session, rule_id=rule_id,
+            )
+        except Exception as xcpt:  # noqa: BLE001 -- per-rule isolation
+            db_session.rollback()
+            _LOGGER.warning(
+                "pychestrate.metrics.alerts.evaluation_failed rule_id=%s error=%s",
+                rule_id,
+                xcpt,
+            )
+            continue
+        results.append(outcome)
+    rtnval = results
     return rtnval
 
 

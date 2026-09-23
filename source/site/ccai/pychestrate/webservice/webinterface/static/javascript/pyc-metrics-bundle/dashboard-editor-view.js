@@ -11,10 +11,10 @@ import {
 } from "./dashboards-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 const TILE_KIND_OPTIONS = [
-  { value: "line", label: "Line chart" },
-  { value: "bar", label: "Bar chart" },
-  { value: "number", label: "Single number" }
+  { value: "metric-line-chart", label: "Line chart" },
+  { value: "metric-single-stat", label: "Single number" }
 ];
+const DEFAULT_TILE_RANGE_SECONDS = 3600;
 function dashboard_id_from_edit_path(path) {
   if (typeof path !== "string") {
     const rtnval2 = "";
@@ -53,6 +53,13 @@ function generate_tile_id() {
   const rtnval = "tile-" + stamp + "-" + rand;
   return rtnval;
 }
+function build_tile_config(metric, kind) {
+  const rtnval = { metric_name: metric, label_filter: {} };
+  if (kind === "metric-line-chart") {
+    rtnval.range_seconds = DEFAULT_TILE_RANGE_SECONDS;
+  }
+  return rtnval;
+}
 function build_tile(metric, kind, index) {
   const rtnval = {
     tile_id: generate_tile_id(),
@@ -61,7 +68,7 @@ function build_tile(metric, kind, index) {
     y: index,
     w: 1,
     h: 1,
-    config: { metric }
+    config: build_tile_config(metric, kind)
   };
   return rtnval;
 }
@@ -136,6 +143,10 @@ function editor_tile_metric(tile) {
     const rtnval2 = "";
     return rtnval2;
   }
+  if (typeof config.metric_name === "string" && config.metric_name.length > 0) {
+    const rtnval2 = config.metric_name;
+    return rtnval2;
+  }
   const metric = config.metric;
   if (typeof metric !== "string") {
     const rtnval2 = "";
@@ -167,7 +178,8 @@ function build_save_payload(dashboard, tiles) {
   }
   return rtnval;
 }
-function save_message_for_status(status) {
+function save_message_for_status(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
   if (status === 200 || status === 201) {
     const rtnval2 = "Dashboard saved.";
     return rtnval2;
@@ -177,7 +189,7 @@ function save_message_for_status(status) {
     return rtnval2;
   }
   if (status === 422) {
-    const rtnval2 = "The layout was rejected \u2014 check the tiles.";
+    const rtnval2 = reason.length > 0 ? "The layout was rejected: " + reason : "The layout was rejected \u2014 check the tiles.";
     return rtnval2;
   }
   if (status === 403) {
@@ -464,6 +476,7 @@ class PycDashboardEditor extends HTMLElement {
         option.textContent = entry.name;
         metric_select.appendChild(option);
       }
+      metric_select.value = this._catalog[0].name;
     }
     metric_label.appendChild(metric_select);
     form.appendChild(metric_label);
@@ -479,6 +492,7 @@ class PycDashboardEditor extends HTMLElement {
       opt.textContent = option.label;
       kind_select.appendChild(opt);
     }
+    kind_select.value = TILE_KIND_OPTIONS[0].value;
     kind_label.appendChild(kind_select);
     form.appendChild(kind_label);
     const add_button = document.createElement("mj-button");
@@ -651,6 +665,7 @@ class PycDashboardEditor extends HTMLElement {
     const payload = build_save_payload(this._dashboard, this._tiles);
     let status = 0;
     let dashboard_id = "";
+    let detail = "";
     try {
       const url = build_dashboard_detail_url(
         this._projectId,
@@ -675,6 +690,15 @@ class PycDashboardEditor extends HTMLElement {
         if (typeof record.version === "number") {
           this._dashboard.version = record.version;
         }
+      } else {
+        try {
+          const problem = await response.json();
+          if (problem !== null && typeof problem === "object" && typeof problem.detail === "string") {
+            detail = problem.detail;
+          }
+        } catch (parse_reason) {
+          detail = "";
+        }
       }
     } catch (reason) {
       console.warn(
@@ -694,7 +718,7 @@ class PycDashboardEditor extends HTMLElement {
       ok,
       status,
       dashboardId: dashboard_id,
-      message: save_message_for_status(status)
+      message: save_message_for_status(status, detail)
     };
     return rtnval;
   }
@@ -723,11 +747,13 @@ class PycDashboardEditor extends HTMLElement {
   }
 }
 export {
+  DEFAULT_TILE_RANGE_SECONDS,
   PycDashboardEditor,
   TILE_KIND_OPTIONS,
   add_tile,
   build_save_payload,
   build_tile,
+  build_tile_config,
   dashboard_id_from_edit_path,
   editor_tile_metric,
   generate_tile_id,

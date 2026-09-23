@@ -64,6 +64,9 @@ from ccai.pychestrate.webservice.webhooks_out.models import (
     DeliveryOutcome,
     SignatureScheme,
 )
+from ccai.pychestrate.webservice.webhooks_out.delivery import (
+    SendResult,
+)
 from ccai.pychestrate.webservice.webhooks_out.restapi.v1 import (
     webhooks_out_routes,
 )
@@ -1319,12 +1322,12 @@ def test_list_subscription_deliveries_happy_path():
     return
 
 
-def test_test_subscription_happy_path():
+def _run_test_delivery(*, sent: Any) -> Tuple[Any, List[Dict[str, Any]]]:
     """
-    **Feature: 8-webhooks-out PR p21a**
-    **Property: POST .../test builds a signed event and records the
-    delivery attempt, answering 202.**
+        Drive POST .../test with the sender answering ``sent``; return
+        the response and the record_delivery_attempt calls.
     """
+    recorded: List[Dict[str, Any]] = []
     perm_patch = _patch_out_permission(allowed=True)
     find_patch = create_module_patch(
         webhooks_out_routes.repository, "find_target_by_id",
@@ -1346,11 +1349,22 @@ def test_test_subscription_happy_path():
             delivery_id="del-1",
         )
     )
+    send_patch = create_module_patch(
+        webhooks_out_routes.out_delivery, "send_signed_request",
+    )
+    send_mock = send_patch.activate()
+    send_mock.configure(side_effect=lambda **kwargs: sent)
     record_patch = create_module_patch(
         webhooks_out_routes.out_service, "record_delivery_attempt",
     )
     record_mock = record_patch.activate()
-    record_mock.configure(side_effect=lambda **kwargs: _make_delivery_view())
+
+    def _record(**kwargs: Any) -> Any:
+        recorded.append(kwargs)
+        rtnval = _make_delivery_view()
+        return rtnval
+
+    record_mock.configure(side_effect=_record)
     try:
         request = _FakeRequest(
             path="/api/v1/webhooks/out/subscriptions/sub-1/test",
@@ -1362,13 +1376,52 @@ def test_test_subscription_happy_path():
         response = webhooks_out_routes.handle_test_subscription(request)
     finally:
         record_patch.deactivate()
+        send_patch.deactivate()
         signed_patch.deactivate()
         find_patch.deactivate()
         perm_patch.deactivate()
-    testbase.assert_equal(response.status_code, 202)
+    rtnval = (response, recorded)
+    return rtnval
+
+
+def test_test_subscription_records_a_delivered_test_event():
+    """
+    **Feature: outbound webhooks -- audit ORC-04**
+    **Property: POST .../test sends the signed event and records the
+    attempt with the receiver's answer -- a 2xx is recorded as
+    succeeded (it was left "pending" forever before).**
+    """
+    response, recorded = _run_test_delivery(sent=SendResult(
+        outcome=DeliveryOutcome.SUCCEEDED,
+        response_status=204,
+        response_excerpt="",
+        duration_ms=12,
+    ))
     body = _decode_body(response)
-    testbase.assert_equal(body["status"], "queued")
-    testbase.assert_equal(body["delivery"]["delivery_id"], "del-1")
+    testbase.assert_equal(
+        (response.status_code, body["status"], recorded[0]["outcome"], recorded[0]["response_status"]),
+        (200, "succeeded", DeliveryOutcome.SUCCEEDED, 204),
+    )
+    return
+
+
+def test_test_subscription_records_an_undelivered_test_event():
+    """
+    **Feature: outbound webhooks -- audit ORC-04**
+    **Property: when the test event is not delivered, the attempt is
+    recorded as failed with the reason, and the response says so.**
+    """
+    response, recorded = _run_test_delivery(sent=SendResult(
+        outcome=DeliveryOutcome.FAILED,
+        response_status=None,
+        response_excerpt="not sent: the URL targets the Pychestrate server itself (localhost)",
+        duration_ms=0,
+    ))
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (body["status"], recorded[0]["outcome"], recorded[0]["response_excerpt"].startswith("not sent:")),
+        ("failed", DeliveryOutcome.FAILED, True),
+    )
     return
 
 

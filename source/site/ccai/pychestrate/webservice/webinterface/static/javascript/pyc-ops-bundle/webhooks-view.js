@@ -63,7 +63,7 @@ function delivery_outcome_tone(outcome) {
     return rtnval2;
   }
   const lowered = outcome.toLowerCase();
-  if (lowered === "delivered" || lowered === "success") {
+  if (lowered === "succeeded" || lowered === "delivered" || lowered === "success") {
     const rtnval2 = "ok";
     return rtnval2;
   }
@@ -71,7 +71,7 @@ function delivery_outcome_tone(outcome) {
     const rtnval2 = "warn";
     return rtnval2;
   }
-  if (lowered === "failed" || lowered === "error") {
+  if (lowered === "failed" || lowered === "rejected_disabled" || lowered === "error") {
     const rtnval2 = "error";
     return rtnval2;
   }
@@ -152,7 +152,24 @@ function toggle_message_for_status(status, subject, enabled) {
   const rtnval = "Failed to " + verb + " the " + subject.toLowerCase() + " (HTTP " + String(status) + ").";
   return rtnval;
 }
-function test_message_for_status(status) {
+function test_message_for_status(status, outcome, delivery) {
+  if (status === 200 && outcome === "succeeded") {
+    const code = delivery !== null && delivery !== void 0 && typeof delivery.response_status === "number" ? " (HTTP " + String(delivery.response_status) + ")" : "";
+    const rtnval2 = "Test event delivered" + code + ".";
+    return rtnval2;
+  }
+  if (status === 200 && outcome === "failed") {
+    let reason = "";
+    if (delivery !== null && delivery !== void 0) {
+      if (typeof delivery.response_excerpt === "string" && delivery.response_excerpt.length > 0 && typeof delivery.response_status !== "number") {
+        reason = delivery.response_excerpt;
+      } else if (typeof delivery.response_status === "number") {
+        reason = "the receiver answered HTTP " + String(delivery.response_status);
+      }
+    }
+    const rtnval2 = reason.length > 0 ? "Test event was not delivered: " + reason + "." : "Test event was not delivered.";
+    return rtnval2;
+  }
   if (status === 202 || status === 200) {
     const rtnval2 = "Test event queued — the delivery history below refreshes in a moment.";
     return rtnval2;
@@ -1311,7 +1328,7 @@ class PycWebhooks extends HTMLElement {
     const outcome = await this._do_test(subscription.subscription_id);
     button.toggleAttribute("disabled", false);
     this._show_toast(outcome.message, outcome.ok === true ? "ok" : "error");
-    if (outcome.ok === true) {
+    if (outcome.recorded === true) {
       this._schedule_history_refresh(subscription);
     }
     return;
@@ -1355,6 +1372,8 @@ class PycWebhooks extends HTMLElement {
   }
   async _do_test(subscription_id) {
     let status = 0;
+    let delivery_outcome = "";
+    let delivery = null;
     try {
       const response = await fetch(
         build_subscription_test_url(subscription_id),
@@ -1369,6 +1388,21 @@ class PycWebhooks extends HTMLElement {
         }
       );
       status = response.status;
+      if (response.ok === true) {
+        try {
+          const body = await response.json();
+          if (body !== null && typeof body === "object") {
+            if (typeof body.status === "string") {
+              delivery_outcome = body.status;
+            }
+            if (body.delivery !== null && typeof body.delivery === "object") {
+              delivery = body.delivery;
+            }
+          }
+        } catch (parse_reason) {
+          delivery = null;
+        }
+      }
     } catch (reason) {
       console.warn(
         "pychestrate.ui.ops.test_event_failed",
@@ -1376,16 +1410,21 @@ class PycWebhooks extends HTMLElement {
       );
       const rtnval2 = {
         ok: false,
+        recorded: false,
         status: 0,
+        outcome: "",
         message: "Failed to reach the webhooks service."
       };
       return rtnval2;
     }
-    const ok = status === 202 || status === 200;
+    const recorded = status === 202 || status === 200;
+    const ok = status === 202 || (status === 200 && delivery_outcome !== "failed");
     const rtnval = {
       ok,
+      recorded,
       status,
-      message: test_message_for_status(status)
+      outcome: delivery_outcome,
+      message: test_message_for_status(status, delivery_outcome, delivery)
     };
     return rtnval;
   }
@@ -1473,6 +1512,20 @@ class PycWebhooks extends HTMLElement {
         label: "HTTP",
         width: "8rem",
         render: (delivery) => delivery.response_status === null || delivery.response_status === void 0 ? "—" : String(delivery.response_status)
+      },
+      {
+        key: "response_excerpt",
+        label: "Detail",
+        width: "20rem",
+        sortable: false,
+        render: (delivery) => {
+          const detail = document.createElement("span");
+          detail.setAttribute("data-role", "delivery-detail");
+          const text = typeof delivery.response_excerpt === "string" && delivery.response_excerpt.length > 0 ? delivery.response_excerpt : "—";
+          detail.textContent = text;
+          detail.title = text;
+          return detail;
+        }
       },
       {
         key: "attempted_at",

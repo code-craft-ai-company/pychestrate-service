@@ -3,6 +3,8 @@ import {
   list_load_message_for_status
 } from "./test-metrics-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+const DEFAULT_SLO_KIND = "availability_ratio";
+const SLO_CONFIG_EXAMPLE = '{"good_metric_name": "pychestrate_rpa_jobs_completed_total", "total_metric_name": "pychestrate_rpa_jobs_triggered_total"}';
 function build_slos_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/slos";
   return rtnval;
@@ -73,10 +75,24 @@ function slo_status_label(status) {
     const rtnval2 = "Breaching";
     return rtnval2;
   }
+  if (typeof status.achieved_ratio !== "number") {
+    const rtnval2 = "No data in window";
+    return rtnval2;
+  }
   const rtnval = format_ratio(status.achieved_ratio) + " achieved";
   return rtnval;
 }
-function slo_create_message_for_status(status) {
+function slo_problem_detail(body) {
+  if (body === null || typeof body !== "object") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const detail = body.detail;
+  const rtnval = typeof detail === "string" ? detail.trim() : "";
+  return rtnval;
+}
+function slo_create_message_for_status(status, detail) {
+  const reason = typeof detail === "string" ? detail.trim() : "";
   if (status === 201 || status === 200) {
     const rtnval2 = "SLO created.";
     return rtnval2;
@@ -86,7 +102,7 @@ function slo_create_message_for_status(status) {
     return rtnval2;
   }
   if (status === 422) {
-    const rtnval2 = "The SLO definition was rejected \u2014 check the fields.";
+    const rtnval2 = reason.length > 0 ? "The SLO definition was rejected: " + reason : "The SLO definition was rejected \u2014 check the fields.";
     return rtnval2;
   }
   if (status === 404) {
@@ -601,6 +617,9 @@ class PycSlos extends HTMLElement {
           burn_badge.setAttribute("data-role", "burn-indicator");
           const status = self._status.get(slo.slo_id) ?? null;
           burn_badge.setAttribute("data-tone", slo_status_tone(status));
+          if (status !== null && typeof status.reason === "string" && status.reason.length > 0) {
+            burn_badge.setAttribute("title", status.reason);
+          }
           burn_badge.textContent = slo_status_label(status);
           return burn_badge;
         }
@@ -785,7 +804,12 @@ class PycSlos extends HTMLElement {
       form,
       "Kind",
       "create-kind",
-      "availability"
+      DEFAULT_SLO_KIND
+    );
+    kind_input.value = DEFAULT_SLO_KIND;
+    kind_input.setAttribute(
+      "help-text",
+      "availability_ratio: achieved = good / total over the window."
     );
     const target_input = this._build_text_field(
       form,
@@ -805,7 +829,11 @@ class PycSlos extends HTMLElement {
     const config_area = document.createElement("mj-textarea");
     config_area.classList.add("pyc-metrics__input");
     config_area.setAttribute("data-role", "create-config");
-    config_area.setAttribute("placeholder", '{"metric": "http_2xx"}');
+    config_area.setAttribute("placeholder", SLO_CONFIG_EXAMPLE);
+    config_area.setAttribute(
+      "help-text",
+      "good_metric_name and total_metric_name are counters from the metric catalog; label_filter (optional) narrows both. Series are scoped to this project."
+    );
     config_area.rows = 3;
     config_label.appendChild(config_area);
     form.appendChild(config_label);
@@ -924,7 +952,7 @@ class PycSlos extends HTMLElement {
    * invoke a create without a real form-submit event.
    *
    * @param name Human-facing SLO name.
-   * @param kind SLO kind (e.g. ``availability``).
+   * @param kind SLO kind (e.g. ``availability_ratio``).
    * @param target Target ratio in the 0..1 range.
    * @param window_seconds Rolling evaluation window length.
    * @param definition_config Kind-specific configuration object.
@@ -960,6 +988,7 @@ class PycSlos extends HTMLElement {
     };
     let status = 0;
     let slo_id = "";
+    let detail = "";
     try {
       const url = build_slos_collection_url(this._state.projectId);
       const response = await fetch(url, {
@@ -977,6 +1006,12 @@ class PycSlos extends HTMLElement {
         const slo = body;
         if (slo !== null && typeof slo.slo_id === "string") {
           slo_id = slo.slo_id;
+        }
+      } else {
+        try {
+          detail = slo_problem_detail(await response.json());
+        } catch (parse_reason) {
+          detail = "";
         }
       }
     } catch (reason) {
@@ -997,7 +1032,7 @@ class PycSlos extends HTMLElement {
       ok,
       status,
       sloId: slo_id,
-      message: slo_create_message_for_status(status)
+      message: slo_create_message_for_status(status, detail)
     };
     return rtnval;
   }
@@ -1032,7 +1067,9 @@ class PycSlos extends HTMLElement {
   }
 }
 export {
+  DEFAULT_SLO_KIND,
   PycSlos,
+  SLO_CONFIG_EXAMPLE,
   build_slo_detail_url,
   build_slos_collection_url,
   extract_slo_projects,
@@ -1040,6 +1077,7 @@ export {
   format_window,
   parse_definition_config,
   slo_create_message_for_status,
+  slo_problem_detail,
   slo_status_label,
   slo_status_tone
 };

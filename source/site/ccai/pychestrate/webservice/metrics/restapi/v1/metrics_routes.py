@@ -319,8 +319,26 @@ def _parse_iso_datetime(
         )
         parsed = None  # unreachable
 
-    rtnval = parsed
+    rtnval = _as_utc(parsed) if parsed is not None else None
     return rtnval
+
+
+def _as_utc(value: datetime) -> datetime:
+    """
+        Treat a naive datetime as UTC. Sample times round-trip naive
+        from SQLite; comparing them with an aware ``from`` / ``to``
+        bound raised ``TypeError`` (a 500 for every ranged query --
+        the Timeseries view's range presets and every dashboard tile;
+        audit ORC-04).
+
+        :param value: A datetime.
+
+        :returns: A timezone-aware datetime.
+    """
+    if value.tzinfo is None:
+        rtnval = value.replace(tzinfo=timezone.utc)
+        return rtnval
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -374,8 +392,11 @@ def _sample_view_to_point(view: Any) -> Dict[str, Any]:
 
         :returns: JSON-friendly dict.
     """
+    observed_at = view.observed_at
+    if isinstance(observed_at, datetime):
+        observed_at = _as_utc(observed_at)
     rtnval: Dict[str, Any] = {
-        "observed_at": _iso_or_none(view.observed_at),
+        "observed_at": _iso_or_none(observed_at),
         "value": float(view.value),
         "labels": dict(view.labels or {}),
         "label_signature": view.label_signature,
@@ -504,6 +525,8 @@ def handle_query_timeseries(request: Request) -> Response:
         points: List[Dict[str, Any]] = []
         for view in sample_views:
             observed_at = view.observed_at
+            if isinstance(observed_at, datetime):
+                observed_at = _as_utc(observed_at)
             if from_dt is not None and observed_at is not None:
                 if observed_at < from_dt:
                     continue

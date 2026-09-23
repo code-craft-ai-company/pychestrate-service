@@ -4503,18 +4503,24 @@ paths:
       summary: Send a test event for an outbound subscription.
       operationId: webhooks_out_test_subscription
       description: |
-        Builds a signed test event for the subscription and records
-        the delivery attempt. Exposed as a trailing `/test`
-        sub-resource because the route matcher cannot place a
-        literal `:test` action suffix on a param segment.
+        Builds a signed test event for the subscription, POSTs it to
+        the subscription URL and records the attempt with its real
+        outcome: `succeeded` for a 2xx answer, `failed` otherwise
+        (with the receiver's status and a response excerpt, or why
+        the request was not sent). The server does not call
+        loopback, link-local, unspecified, multicast or reserved
+        addresses (or `localhost`) and does not follow redirects.
+        Exposed as a trailing `/test` sub-resource because the route
+        matcher cannot place a literal `:test` action suffix on a
+        param segment.
       requestBody:
         required: false
         content:
           application/json:
             schema: { $ref: '#/components/schemas/WebhookOutTestRequest' }
       responses:
-        '202':
-          description: Test event built and recorded.
+        '200':
+          description: Test event sent (or refused) and recorded.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookOutTestResult' }
@@ -8660,6 +8666,27 @@ components:
           nullable: true
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        live_state: { $ref: '#/components/schemas/MetricAlertLiveState' }
+
+    MetricAlertLiveState:
+      type: object
+      description: >-
+        The alert evaluator's latest verdict for a rule. `unknown`
+        until the evaluator (every 60 s) has run the rule.
+      required: [state, fire_count, resolve_count]
+      properties:
+        state:
+          type: string
+          enum: [unknown, ok, firing]
+        last_value: { nullable: true }
+        last_threshold: { nullable: true }
+        last_reason: { type: string }
+        last_evaluated_at: { type: string, format: date-time, nullable: true }
+        last_state_changed_at: { type: string, format: date-time, nullable: true }
+        fired_at: { type: string, format: date-time, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        fire_count: { type: integer }
+        resolve_count: { type: integer }
 
     MetricAlertRuleCreateRequest:
       type: object
@@ -9486,9 +9513,15 @@ components:
         signature: { type: string, nullable: true }
         outcome:
           type: string
-          enum: [pending, success, failure, retrying]
+          enum: [pending, succeeded, failed, rejected_disabled]
         response_status: { type: integer, nullable: true }
-        response_excerpt: { type: string, nullable: true }
+        response_excerpt:
+          type: string
+          nullable: true
+          description: >-
+            Start of the receiver's response body, or why the request
+            was not sent (`not sent: ...`) or not answered
+            (`not delivered: ...`).
         duration_ms: { type: integer, nullable: true }
         attempted_at: { type: string, format: date-time, nullable: true }
 
@@ -9516,7 +9549,8 @@ components:
       properties:
         status:
           type: string
-          enum: [queued]
+          description: The recorded delivery outcome.
+          enum: [succeeded, failed]
         delivery: { $ref: '#/components/schemas/WebhookOutDelivery' }
 
     # ----------------------------------------------------------------

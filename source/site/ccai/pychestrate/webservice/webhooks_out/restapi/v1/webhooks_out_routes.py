@@ -20,7 +20,8 @@ Implements the outbound-webhook operations from
 * ``GET    /api/v1/webhooks/out/subscriptions/{id}/deliveries``
   -- delivery history (success/failure/retries).
 * ``POST   /api/v1/webhooks/out/subscriptions/{id}/test`` -- send
-  a test event and record the delivery attempt. (The webworks
+  a test event to the subscription URL and record the delivery
+  attempt with its real outcome. (The webworks
   matcher cannot place a literal ``:test`` suffix on a param
   segment, so the test action is exposed as a trailing
   ``/test`` sub-resource.)
@@ -50,15 +51,13 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
 from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+from ccai.pychestrate.webservice.webhooks_out import delivery as out_delivery
 from ccai.pychestrate.webservice.webhooks_out import repository
 from ccai.pychestrate.webservice.webhooks_out import service as out_service
 from ccai.pychestrate.webservice.webhooks_out.errors import (
     WebhookTargetConflictError,
     WebhookTargetInvalidError,
     WebhookTargetNotFoundError,
-)
-from ccai.pychestrate.webservice.webhooks_out.models import (
-    DeliveryOutcome,
 )
 
 
@@ -897,18 +896,20 @@ def handle_test_subscription(request: Request) -> Response:
     """
         ``POST /api/v1/webhooks/out/subscriptions/{subscription_id}/test``
 
-        Builds a signed test event for the subscription and
-        records the delivery attempt. The actual HTTP write
-        lands in the M2 dispatcher -- this route records the
-        attempt as :data:`DeliveryOutcome.PENDING` so the
-        operator sees the test in the delivery history.
+        Builds a signed test event for the subscription, POSTs it
+        to the subscription URL (:func:`webhooks_out.delivery.
+        send_signed_request`: refused addresses are not called,
+        redirects are not followed) and records the attempt with
+        its real outcome -- ``succeeded`` for a 2xx answer,
+        ``failed`` otherwise, with the receiver's status and a
+        response excerpt (or why the request was not sent).
 
         Optional JSON body: ``{"topic": "...", "payload": {...}}``.
 
         :param request: Incoming webworks request.
 
-        :returns: JSON response (202) with the recorded
-                  delivery, or a problem response.
+        :returns: JSON response (200) ``{"status": <outcome>,
+                  "delivery": {...}}``, or a problem response.
     """
     subscription_id = request.path_params.get("subscription_id", "")
     try:
@@ -972,6 +973,8 @@ def handle_test_subscription(request: Request) -> Response:
             secret=secret,
         )
 
+        sent = out_delivery.send_signed_request(signed=signed)
+
         delivery_view = out_service.record_delivery_attempt(
             db_session=db_session,
             target_id=subscription_id,
@@ -980,22 +983,27 @@ def handle_test_subscription(request: Request) -> Response:
             payload_digest_sha256=signed.payload_digest_sha256,
             signature=signed.signature,
             request_headers=dict(signed.headers),
-            outcome=DeliveryOutcome.PENDING,
+            outcome=sent.outcome,
+            response_status=sent.response_status,
+            response_excerpt=sent.response_excerpt,
+            duration_ms=sent.duration_ms,
         )
 
         _LOGGER.info(
             "pychestrate.webhooks_out.test_event subscription_id=%s"
-            " delivery_id=%s topic=%s",
+            " delivery_id=%s topic=%s outcome=%s response_status=%s",
             subscription_id,
             signed.delivery_id,
             topic,
+            sent.outcome.value,
+            sent.response_status,
         )
 
         body_dict = {
-            "status": "queued",
+            "status": sent.outcome.value,
             "delivery": _delivery_view_to_dict(view=delivery_view),
         }
-        rtnval: Response = JSONResponse(content=body_dict, status_code=202)
+        rtnval: Response = JSONResponse(content=body_dict, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval
