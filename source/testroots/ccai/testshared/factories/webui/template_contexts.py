@@ -603,6 +603,21 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     "projects/repositories/": {
         "secret_refs": _by_mode(["ci/github-token", "ci/deploy-key"], []),
+        "repository_specs": _by_mode(["nightly"], []),
+    },
+    "projects/builds/spec_detail": {
+        "spec_usage": _by_mode(
+            {"builds": 3, "active_builds": 1, "watches": ["build-on-push"]},
+            {"builds": 0, "active_builds": 0, "watches": []},
+        ),
+    },
+    "projects/builds/spec_edit": {
+        "form_values": _by_mode(
+            {"name": "nightly", "repository_id": "7", "branch": "main", "timeout_minutes": "60",
+             "steps": "[]", "environment": "{}", "description": "Nightly build"},
+            {"name": "", "repository_id": "", "branch": "", "timeout_minutes": "",
+             "steps": "", "environment": "", "description": ""},
+        ),
     },
     "projects/watches/": {
         "trigger_labels": _const({

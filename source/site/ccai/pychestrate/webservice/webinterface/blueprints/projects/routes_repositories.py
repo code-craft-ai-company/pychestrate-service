@@ -188,6 +188,28 @@ def _check_credential_reference(
     return
 
 
+def _build_specs_using_repository(
+        *, db_session: Any, project_id: int, repository_id: int
+    ) -> List[str]:
+    """
+        Names of the project's build specifications that build the
+        repository (they block its removal). Lazy-imports; any failure
+        yields an empty list.
+    """
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        BuildManager,
+    )
+    try:
+        specs = BuildManager(db_session).list_specs(project_id, limit=500).specs
+        rtnval = sorted(
+            str(spec.name) for spec in specs
+            if getattr(spec, "repository_id", None) == repository_id
+        )
+    except Exception:
+        rtnval = []
+    return rtnval
+
+
 def _list_secret_refs(*, db_session: Any, user_id: str) -> List[str]:
     """
         Secret references to offer in the repository forms. Lazy-imports.
@@ -750,6 +772,12 @@ def handle_repository_detail(request: Request) -> Response:
         context["repository"] = repository
         context["can_manage"] = can_manage
         context["can_delete"] = can_delete
+        # A repository that build specifications build cannot be
+        # removed; the page names them instead of offering Remove.
+        context["repository_specs"] = _build_specs_using_repository(
+            db_session=db_session, project_id=project_id,
+            repository_id=repository_id,
+        )
 
         response = _render(
             template_name="projects/repositories/detail.html",

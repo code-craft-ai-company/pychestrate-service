@@ -667,13 +667,17 @@ class RepositoryManager:
         repository_name = repository.name
         project_id = repository.project_id
         
-        # Disable related watches (Requirements 3.2)
+        # Disable related watches (Requirements 3.2) and let go of the
+        # repository, so the foreign key does not block its removal. (The
+        # flag used to be set on a non-existent ``is_enabled`` attribute,
+        # which left the watches enabled.)
         watches = self._db_session.query(ProjectWatch).filter(
             ProjectWatch.repository_id == repository_id
         ).all()
-        
+
         for watch in watches:
-            watch.is_enabled = False
+            watch.enabled = False
+            watch.repository_id = None
 
         # Forget the branches and tags recorded by fetches.
         from ccai.pychestrate.core.orm import ProjectRepositoryRef

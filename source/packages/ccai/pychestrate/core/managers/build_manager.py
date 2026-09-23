@@ -223,8 +223,17 @@ class DuplicateBuildSpecError(Exception):
 
 class BuildSpecHasActiveBuildsError(Exception):
     """Exception raised when attempting to delete a build specification with active builds."""
-    
+
     def __init__(self, message: str, error_code: str = "BUILD_SPEC_HAS_ACTIVE_BUILDS"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
+class BuildSpecInUseError(Exception):
+    """Exception raised when attempting to delete a build specification that watches still use."""
+
+    def __init__(self, message: str, error_code: str = "BUILD_SPEC_IN_USE"):
         self.message = message
         self.error_code = error_code
         super().__init__(self.message)
@@ -833,27 +842,25 @@ class BuildManager:
         return self._build_spec_to_response(spec)
 
     
-    def delete_spec(self, spec_id: int, user_id: str) -> None:
+    def spec_usage(self, spec_id: int) -> Dict[str, Any]:
         """
-        Delete build specification. Fails if active builds exist.
-        
+        What deleting a build specification would affect.
+
         :param spec_id: The build specification's unique identifier
-        :param user_id: The ID of the user deleting the specification
-        :raises BuildSpecNotFoundError: If specification is not found
-        :raises BuildSpecHasActiveBuildsError: If specification has active builds
-        
-        Validates: Requirements 4.3
+        :returns: ``{"builds": n, "active_builds": n, "watches": [names]}``
+                  -- its builds (deleted with it), those still pending or
+                  running (which block deletion), and the watches that
+                  start when it finishes or run it (which block deletion)
         """
-        from ccai.pychestrate.core.orm import ProjectBuildSpec, ProjectBuild, ProjectJobStatus
-        
+        from ccai.pychestrate.core.orm import ProjectBuild, ProjectBuildSpec, ProjectJobStatus, ProjectWatch
+
         spec = self._db_session.query(ProjectBuildSpec).filter(
             ProjectBuildSpec.id == spec_id
         ).first()
-        
         if not spec:
             raise BuildSpecNotFoundError(f"Build specification with ID '{spec_id}' not found")
-        
-        # Check for active builds
+
+        builds = self._db_session.query(ProjectBuild).filter(ProjectBuild.spec_id == spec_id).count()
         active_builds = self._db_session.query(ProjectBuild).filter(
             ProjectBuild.spec_id == spec_id,
             ProjectBuild.status.in_([
@@ -862,19 +869,109 @@ class BuildManager:
                 ProjectJobStatus.RUNNING.value
             ])
         ).count()
-        
-        if active_builds > 0:
-            raise BuildSpecHasActiveBuildsError(
-                f"Cannot delete build specification '{spec.name}' with {active_builds} active build(s)"
+
+        watches: List[str] = []
+        for watch in self._db_session.query(ProjectWatch).filter(
+            ProjectWatch.project_id == spec.project_id
+        ).order_by(ProjectWatch.name).all():
+            started_by_spec = (
+                watch.trigger_source == 'build_completion' and watch.source_id == spec_id
             )
-        
+            runs_spec = any(
+                isinstance(action, dict)
+                and action.get('action') == 'trigger_build'
+                and action.get('target_id') == spec_id
+                for action in (watch.actions_json or [])
+            )
+            if started_by_spec or runs_spec:
+                watches.append(watch.name)
+
+        rtnval = {"builds": builds, "active_builds": active_builds, "watches": watches}
+        return rtnval
+
+    def delete_spec(self, spec_id: int, user_id: str) -> Dict[str, int]:
+        """
+        Delete a build specification together with its builds and their
+        artifacts. Test jobs that ran against those builds and test
+        specifications that name it keep their history but lose the link.
+
+        It is refused while builds are pending or running, and while
+        watches start when it finishes or run it (they would fail) --
+        the watches are named so they can be changed first.
+
+        :param spec_id: The build specification's unique identifier
+        :param user_id: The ID of the user deleting the specification
+        :returns: ``{"builds": n}`` -- how many builds were deleted
+        :raises BuildSpecNotFoundError: If specification is not found
+        :raises BuildSpecHasActiveBuildsError: If specification has active builds
+        :raises BuildSpecInUseError: If watches use the specification
+
+        Validates: Requirements 4.3
+        """
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select, update as sa_update
+
+        from ccai.pychestrate.core.orm import (
+            ProjectBuild, ProjectBuildArtifact, ProjectBuildSpec, ProjectTestJob, ProjectTestSpec,
+        )
+
+        usage = self.spec_usage(spec_id)
+        spec = self._db_session.query(ProjectBuildSpec).filter(
+            ProjectBuildSpec.id == spec_id
+        ).first()
         spec_name = spec.name
         project_id = spec.project_id
-        
-        # Delete the specification (cascades to builds)
-        self._db_session.delete(spec)
-        self._db_session.commit()
-        
+
+        if usage["active_builds"] > 0:
+            raise BuildSpecHasActiveBuildsError(
+                f"The build specification '{spec_name}' cannot be deleted while "
+                f"{usage['active_builds']} of its builds are waiting or running. "
+                "Cancel them or wait for them to finish."
+            )
+        if len(usage["watches"]) > 0:
+            raise BuildSpecInUseError(
+                "The build specification '{}' cannot be deleted while watches use it: {}. "
+                "Change or delete those watches first.".format(spec_name, ", ".join(usage["watches"]))
+            )
+
+        build_ids = select(ProjectBuild.id).where(ProjectBuild.spec_id == spec_id)
+        artifact_paths = [
+            row.path for row in self._db_session.query(ProjectBuildArtifact).filter(
+                ProjectBuildArtifact.build_id.in_(build_ids)
+            ).all() if row.path
+        ]
+        log_paths = [
+            row.logs_path for row in self._db_session.query(ProjectBuild).filter(
+                ProjectBuild.spec_id == spec_id
+            ).all() if row.logs_path
+        ]
+
+        try:
+            self._db_session.execute(
+                sa_update(ProjectTestJob).where(ProjectTestJob.build_id.in_(build_ids)).values(build_id=None)
+            )
+            self._db_session.execute(
+                sa_update(ProjectTestSpec).where(ProjectTestSpec.build_ref == spec_id).values(build_ref=None)
+            )
+            self._db_session.execute(
+                sa_delete(ProjectBuildArtifact).where(ProjectBuildArtifact.build_id.in_(build_ids))
+            )
+            self._db_session.execute(sa_delete(ProjectBuild).where(ProjectBuild.spec_id == spec_id))
+            self._db_session.execute(sa_delete(ProjectBuildSpec).where(ProjectBuildSpec.id == spec_id))
+            self._db_session.commit()
+        except Exception:
+            self._db_session.rollback()
+            raise
+        self._db_session.expire_all()
+
+        # The files go only after the rows did (best effort).
+        for path in artifact_paths + log_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
         # Log the specification deletion event
         if self._audit_logger:
             self._audit_logger.log_event(
@@ -883,9 +980,13 @@ class BuildManager:
                 details={
                     "project_id": project_id,
                     "spec_id": spec_id,
-                    "spec_name": spec_name
+                    "spec_name": spec_name,
+                    "builds_deleted": usage["builds"]
                 }
             )
+
+        rtnval = {"builds": usage["builds"]}
+        return rtnval
     
     def list_specs(
         self,
