@@ -42,10 +42,13 @@ Conventions
   (set in ``alembic.ini`` ``file_template``); the leading
   timestamp keeps the directory ordered chronologically when
   multiple revisions accumulate between releases.
-* Every migration is reversible. ``downgrade()`` either
-  performs the inverse operation OR raises a clear ``NotImplementedError``
-  with a comment describing why an in-place rollback is unsafe
-  (typically when the migration drops or truncates data).
+* Every migration defines ``downgrade()``, and it reverses the
+  schema change. Data repairs that cannot be undone are the
+  exception: their ``downgrade()`` is a deliberate no-op whose
+  docstring says why. Two revisions are like that today --
+  ``e3f4a5b6c7d8`` (repair of the admin RBAC bindings) and
+  ``f4a5b6c7d8e9`` (normalizing their UUID storage) -- so a
+  downgrade across them leaves the repaired rows in place.
 * Schema-only migrations are preferred. Data backfills should
   live in service-layer code or one-off scripts under
   ``development/`` so the migration stays fast and reentrant.
