@@ -4213,7 +4213,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
-        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+        '503':
+          description: |
+            The service cannot verify the delivery: no database session,
+            or (`reason: secret_unavailable`) the integration's shared
+            secret no longer resolves in the secrets vault.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookInReceiveResult' }
 
   /webhooks/in/integrations:
     get:
@@ -4241,6 +4248,14 @@ paths:
       tags: [webhooks]
       summary: Register an inbound webhook integration configuration.
       operationId: webhooks_in_create_integration
+      description: |
+        The integration's shared secret is stored only in the secrets
+        vault. Send the key itself as the write-only `secret` (it is
+        stored as a project secret on the caller's behalf, which needs
+        `system:secrets.admin` or project membership plus
+        `system:project_secrets.write`), or name an existing vault
+        secret the caller may read in `secret_ref`. No response ever
+        contains the key.
       requestBody:
         required: true
         content:
@@ -4253,7 +4268,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/WebhookInIntegration' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '403':
+          description: |
+            The caller lacks `system:webhooks.write`, may not store the
+            secret in the project's vault scope, or may not read the
+            vault secret named by `secret_ref`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Unprocessable' }
 
@@ -9251,7 +9274,16 @@ components:
         project_id: { type: string, format: uuid }
         provider: { type: string }
         hook_name: { type: string }
-        secret_ref: { type: string }
+        secret_ref:
+          type: string
+          nullable: true
+          description: |
+            Secrets-vault reference the shared secret is stored under --
+            never the secret itself. `null` when the reference no longer
+            names a vault secret.
+        secret_configured:
+          type: boolean
+          description: Whether the vault holds the integration's shared secret.
         mtls_required: { type: boolean }
         description: { type: string }
         enabled: { type: boolean }
@@ -9264,12 +9296,21 @@ components:
 
     WebhookInIntegrationCreate:
       type: object
-      required: [project_id, provider, hook_name, secret_ref]
+      description: Exactly one of `secret` and `secret_ref` is required.
+      required: [project_id, provider, hook_name]
       properties:
         project_id: { type: string, format: uuid }
         provider: { type: string }
         hook_name: { type: string }
-        secret_ref: { type: string }
+        secret:
+          type: string
+          writeOnly: true
+          description: |
+            The shared HMAC key. Stored in the secrets vault; never
+            returned.
+        secret_ref:
+          type: string
+          description: Name of an existing vault secret the caller may read.
         mtls_required: { type: boolean, default: false }
         description: { type: string }
 

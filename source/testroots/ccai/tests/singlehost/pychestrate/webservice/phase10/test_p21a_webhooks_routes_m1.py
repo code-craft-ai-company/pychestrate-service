@@ -80,6 +80,13 @@ from ccai.pychestrate.webservice.webhooks_in.errors import (
 )
 
 
+# Inbound ids are UUIDs: the inbound routes answer 422 / 404 for a
+# malformed project or webhook id instead of failing in the driver.
+INBOUND_PROJECT_ID: str = "00000000-0000-4000-8000-00000000a101"
+INBOUND_WEBHOOK_ID: str = "00000000-0000-4000-8000-00000000a102"
+INBOUND_UNKNOWN_WEBHOOK_ID: str = "00000000-0000-4000-8000-00000000a1ff"
+
+
 # ---------------------------------------------------------------------------
 # Fakes
 # ---------------------------------------------------------------------------
@@ -220,6 +227,31 @@ def _patch_in_permission(*, allowed: bool) -> Any:
     return patch
 
 
+def _patch_secret_resolution(*, value: Optional[bytes] = b"topsecret") -> Any:
+    """
+        Patch the receiver's vault lookup so a fake configuration
+        row resolves to ``value``.
+    """
+    patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "resolve_shared_secret",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: value)
+    return patch
+
+
+def _patch_secret_stored(*, stored: bool = True) -> Any:
+    """
+        Patch the serializer's vault-existence check.
+    """
+    patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "is_secret_ref_stored",
+    )
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: stored)
+    return patch
+
+
 def _patch_out_permission(*, allowed: bool) -> Any:
     patch = create_module_patch(
         webhooks_out_routes.rbac_evaluator, "check_permission",
@@ -230,11 +262,11 @@ def _patch_out_permission(*, allowed: bool) -> Any:
 
 
 def _make_config_view(
-        *, webhook_id: str = "wh-1"
+        *, webhook_id: str = INBOUND_WEBHOOK_ID
     ) -> WebhookConfigurationView:
     rtnval = WebhookConfigurationView(
         webhook_id=webhook_id,
-        project_id="proj-1",
+        project_id=INBOUND_PROJECT_ID,
         provider="generic",
         hook_name="ops",
         secret_ref="topsecret",
@@ -361,6 +393,7 @@ def test_receiver_accepts_a_dispatched_event():
     )
     cfg_mock = cfg_patch.activate()
     cfg_mock.configure(side_effect=lambda **kwargs: [_FakeConfigRow()])
+    secret_patch = _patch_secret_resolution()
     disp_patch = create_module_patch(
         webhooks_in_routes, "dispatch_inbound_webhook",
     )
@@ -388,6 +421,7 @@ def test_receiver_accepts_a_dispatched_event():
         response = webhooks_in_routes.handle_receive_webhook(request)
     finally:
         disp_patch.deactivate()
+        secret_patch.deactivate()
         cfg_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
     body = _decode_body(response)
@@ -407,6 +441,7 @@ def test_receiver_rejects_bad_signature_with_401():
     )
     cfg_mock = cfg_patch.activate()
     cfg_mock.configure(side_effect=lambda **kwargs: [_FakeConfigRow()])
+    secret_patch = _patch_secret_resolution()
     disp_patch = create_module_patch(
         webhooks_in_routes, "dispatch_inbound_webhook",
     )
@@ -439,6 +474,7 @@ def test_receiver_rejects_bad_signature_with_401():
         response = webhooks_in_routes.handle_receive_webhook(request)
     finally:
         disp_patch.deactivate()
+        secret_patch.deactivate()
         cfg_patch.deactivate()
     testbase.assert_equal(response.status_code, 401)
     body = _decode_body(response)
@@ -458,6 +494,7 @@ def test_receiver_409s_a_replayed_delivery():
     )
     cfg_mock = cfg_patch.activate()
     cfg_mock.configure(side_effect=lambda **kwargs: [_FakeConfigRow()])
+    secret_patch = _patch_secret_resolution()
     disp_patch = create_module_patch(
         webhooks_in_routes, "dispatch_inbound_webhook",
     )
@@ -485,6 +522,7 @@ def test_receiver_409s_a_replayed_delivery():
         response = webhooks_in_routes.handle_receive_webhook(request)
     finally:
         disp_patch.deactivate()
+        secret_patch.deactivate()
         cfg_patch.deactivate()
     testbase.assert_equal(response.status_code, 409)
     body = _decode_body(response)
@@ -617,6 +655,33 @@ def test_list_integrations_happy_path():
     )
     list_mock = list_patch.activate()
     list_mock.configure(side_effect=lambda **kwargs: [_make_config_view()])
+    stored_patch = _patch_secret_stored(stored=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations",
+            query={"project_id": INBOUND_PROJECT_ID},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_in_routes.handle_list_integrations(request)
+    finally:
+        stored_patch.deactivate()
+        list_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(len(body["items"]), 1)
+    testbase.assert_equal(body["items"][0]["provider"], "generic")
+    return
+
+
+def test_list_integrations_rejects_a_malformed_project_id():
+    """
+    **Feature: 8-webhooks-in (audit ORC-29 follow-up)**
+    **Property: GET integrations answers 422 for a project_id that is
+    not a UUID instead of failing in the database driver.**
+    """
+    perm_patch = _patch_in_permission(allowed=True)
     try:
         request = _FakeRequest(
             path="/api/v1/webhooks/in/integrations",
@@ -626,12 +691,8 @@ def test_list_integrations_happy_path():
         )
         response = webhooks_in_routes.handle_list_integrations(request)
     finally:
-        list_patch.deactivate()
         perm_patch.deactivate()
-    testbase.assert_equal(response.status_code, 200)
-    body = _decode_body(response)
-    testbase.assert_equal(len(body["items"]), 1)
-    testbase.assert_equal(body["items"][0]["provider"], "generic")
+    testbase.assert_equal(response.status_code, 422)
     return
 
 
@@ -665,30 +726,70 @@ def test_create_integration_happy_path():
     integration.**
     """
     perm_patch = _patch_in_permission(allowed=True)
+    project_patch = create_module_patch(
+        webhooks_in_routes.projects_repo, "get_project_by_id",
+    )
+    project_mock = project_patch.activate()
+    project_mock.configure(side_effect=lambda **kwargs: object())
     create_patch = create_module_patch(
-        webhooks_in_routes.configuration_service, "create_webhook",
+        webhooks_in_routes.configuration_service, "create_webhook_with_secret",
     )
     create_mock = create_patch.activate()
     create_mock.configure(side_effect=lambda **kwargs: _make_config_view())
+    stored_patch = _patch_secret_stored(stored=True)
     try:
         request = _FakeRequest(
             path="/api/v1/webhooks/in/integrations",
             body={
-                "project_id": "proj-1",
+                "project_id": INBOUND_PROJECT_ID,
                 "provider": "generic",
                 "hook_name": "ops",
-                "secret_ref": "topsecret",
+                "secret": "topsecret",
             },
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
         response = webhooks_in_routes.handle_create_integration(request)
     finally:
+        stored_patch.deactivate()
         create_patch.deactivate()
+        project_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 201)
     body = _decode_body(response)
-    testbase.assert_equal(body["webhook_id"], "wh-1")
+    testbase.assert_equal(body["webhook_id"], INBOUND_WEBHOOK_ID)
+    return
+
+
+def test_create_integration_404s_for_an_unknown_project():
+    """
+    **Feature: 8-webhooks-in (audit ORC-29 follow-up)**
+    **Property: POST integrations answers 404 when the project does
+    not exist, before any secret is stored.**
+    """
+    perm_patch = _patch_in_permission(allowed=True)
+    project_patch = create_module_patch(
+        webhooks_in_routes.projects_repo, "get_project_by_id",
+    )
+    project_mock = project_patch.activate()
+    project_mock.configure(side_effect=lambda **kwargs: None)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations",
+            body={
+                "project_id": INBOUND_PROJECT_ID,
+                "provider": "generic",
+                "hook_name": "ops",
+                "secret": "topsecret",
+            },
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_in_routes.handle_create_integration(request)
+    finally:
+        project_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
     return
 
 
@@ -1028,10 +1129,11 @@ def test_update_integration_enables_and_disables():
     )
     disable_mock = disable_patch.activate()
     disable_mock.configure(side_effect=lambda **kwargs: _make_config_view())
+    stored_patch = _patch_secret_stored(stored=True)
     try:
         enable_request = _FakeRequest(
-            path="/api/v1/webhooks/in/integrations/wh-1",
-            path_params={"webhook_id": "wh-1"},
+            path="/api/v1/webhooks/in/integrations/" + INBOUND_WEBHOOK_ID,
+            path_params={"webhook_id": INBOUND_WEBHOOK_ID},
             body={"enabled": True},
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -1040,8 +1142,8 @@ def test_update_integration_enables_and_disables():
             enable_request
         )
         disable_request = _FakeRequest(
-            path="/api/v1/webhooks/in/integrations/wh-1",
-            path_params={"webhook_id": "wh-1"},
+            path="/api/v1/webhooks/in/integrations/" + INBOUND_WEBHOOK_ID,
+            path_params={"webhook_id": INBOUND_WEBHOOK_ID},
             body={"enabled": False},
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -1050,13 +1152,14 @@ def test_update_integration_enables_and_disables():
             disable_request
         )
     finally:
+        stored_patch.deactivate()
         disable_patch.deactivate()
         enable_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(enable_response.status_code, 200)
     testbase.assert_equal(disable_response.status_code, 200)
     enable_body = _decode_body(enable_response)
-    testbase.assert_equal(enable_body["webhook_id"], "wh-1")
+    testbase.assert_equal(enable_body["webhook_id"], INBOUND_WEBHOOK_ID)
     return
 
 
@@ -1077,8 +1180,8 @@ def test_update_integration_404s_when_missing():
     disable_mock.configure(side_effect=_raise)
     try:
         request = _FakeRequest(
-            path="/api/v1/webhooks/in/integrations/wh-x",
-            path_params={"webhook_id": "wh-x"},
+            path="/api/v1/webhooks/in/integrations/" + INBOUND_UNKNOWN_WEBHOOK_ID,
+            path_params={"webhook_id": INBOUND_UNKNOWN_WEBHOOK_ID},
             body={"enabled": False},
             db_session=object(),
             auth_principal=_FakePrincipal(),
@@ -1090,6 +1193,34 @@ def test_update_integration_404s_when_missing():
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
+    return
+
+
+def test_update_integration_404s_for_a_malformed_webhook_id():
+    """
+    **Feature: 8-webhooks-in (audit ORC-29 follow-up)**
+    **Property: PATCH integration answers 404 for a webhook_id that is
+    not a UUID without reaching the configuration service.**
+    """
+    perm_patch = _patch_in_permission(allowed=True)
+    disable_patch = create_module_patch(
+        webhooks_in_routes.configuration_service, "disable_webhook",
+    )
+    disable_mock = disable_patch.activate()
+    disable_mock.configure(side_effect=lambda **kwargs: _make_config_view())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/webhooks/in/integrations/wh-x",
+            path_params={"webhook_id": "wh-x"},
+            body={"enabled": False},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = webhooks_in_routes.handle_update_integration(request)
+    finally:
+        disable_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 404)
     return
 
 

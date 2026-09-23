@@ -56,3 +56,19 @@ class WebhookReplayDetectedError(WebhookInError):
         Raised when the replay-cache has already seen the
         ``(provider, hook_name, delivery_id)`` triple.
     """
+
+
+class WebhookSecretInvalidError(WebhookInError):
+    """
+        Raised when a create supplies no usable shared secret: none
+        at all, both a secret and a ``secret_ref``, or a
+        ``secret_ref`` that names no (unexpired) vault secret.
+    """
+
+
+class WebhookSecretAccessDeniedError(WebhookInError):
+    """
+        Raised when the caller may not store the shared secret in
+        the secrets vault, or may not read the vault secret it asked
+        to bind.
+    """
