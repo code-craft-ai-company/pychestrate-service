@@ -106,5 +106,5 @@ def test_missing_timestamp_is_a_dash(browser: Browser):
     """
     shown = _format_in_zone(browser=browser, zone="UTC", values=[None])
 
-    testbase.assert_equal(shown, ["—"])
+    testbase.assert_equal(shown, ["\u2014"])
     return

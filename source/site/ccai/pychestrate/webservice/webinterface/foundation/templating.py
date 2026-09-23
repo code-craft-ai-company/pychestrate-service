@@ -288,7 +288,7 @@ def input_datetime_filter(value: Any, zone_name: Optional[str] = "UTC") -> str:
     return rtnval
 
 
-_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
 
 _COUNT_SCALES = (
     (10 ** 12, "trillion"),
@@ -329,11 +329,11 @@ def humanize_count_filter(value: Any) -> Any:
         shown = "2" + str(exponent).translate(_SUPERSCRIPT_DIGITS)
     else:
         decimal_exponent = len(str(magnitude)) - 1
-        shown = "{:.1f} × 10{}".format(
+        shown = "{:.1f} \u00d7 10{}".format(
             magnitude / (10 ** decimal_exponent),
             str(decimal_exponent).translate(_SUPERSCRIPT_DIGITS),
         )
-    rtnval = "≈ {}{}".format(sign, shown)
+    rtnval = "\u2248 {}{}".format(sign, shown)
     return rtnval
 
 

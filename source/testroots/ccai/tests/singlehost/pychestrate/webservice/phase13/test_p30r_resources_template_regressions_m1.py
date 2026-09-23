@@ -353,7 +353,7 @@ def test_humanize_count_shows_an_ipv6_64_as_a_power_of_two():
     **Property: the 18446744073709551615 usable addresses of an IPv6 /64
     read as "≈ 2⁶⁴".**
     """
-    testbase.assert_equal(templating.humanize_count_filter(18446744073709551615), "≈ 2⁶⁴")
+    testbase.assert_equal(templating.humanize_count_filter(18446744073709551615), "\u2248 2\u2076\u2074")
     return
 
 
@@ -393,7 +393,7 @@ def test_ip_pool_list_does_not_print_raw_ipv6_counts():
     )
     visible = re.sub(r"<[^>]+>", " ", html)
 
-    testbase.assert_equal(("18446744073709551615" in visible, "≈ 2⁶⁴" in visible), (False, True))
+    testbase.assert_equal(("18446744073709551615" in visible, "\u2248 2\u2076\u2074" in visible), (False, True))
     return
 
 
@@ -418,7 +418,7 @@ def test_resource_detail_shows_a_dash_for_no_pool():
     html = _render(template_name="resources/resources/detail.html", overrides={"resource": _pool_less_resource()})
     row = re.search(r'<th scope="row">Pool</th>\s*<td>(.*?)</td>', html, re.DOTALL)
 
-    testbase.assert_equal(row.group(1).strip() if row is not None else None, "—")
+    testbase.assert_equal(row.group(1).strip() if row is not None else None, "\u2014")
     return
 
 
