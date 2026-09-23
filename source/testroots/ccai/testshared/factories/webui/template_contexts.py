@@ -749,6 +749,93 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     "projects/releases/": {
         "artifacts": _many(ReleaseArtifactResponse),
     },
+    # -- projects-a audit fixes (PRJ-*) -----------------------------------
+    "projects/members/": {
+        "user_search": _by_mode("ali", ""),
+        "can_create_users": _by_mode(True, False),
+        "roles": _const(["owner", "administrator", "developer", "viewer"]),
+        "role_descriptions": _const({
+            "owner": "Owner - everything",
+            "developer": "Developer - run jobs",
+        }),
+        "global_access": _by_mode(
+            [{"user_id": "user_id-7", "username": "bob", "display_name": "Bob",
+              "role": "developer", "roles": ["project-editor"]}],
+            [],
+        ),
+    },
+    "projects/release_templates/": {
+        "can_create_release": _by_mode(True, False),
+        "release_form": _by_mode({"version": "1.4.0", "name": "Spring"}, {}),
+        "release_errors": _by_mode({"version": "Version 1.4 does not match this template's version pattern."}, {}),
+    },
+    "projects/releases/detail": {
+        "provenance": _by_mode(
+            {
+                "template_id": 7,
+                "template_name": "standard",
+                "channel": "stable",
+                "version_pattern": "^\\d+\\.\\d+\\.\\d+$",
+                "repositories": [{"id": 7, "name": "repo-alpha"}, {"id": 8, "name": None}],
+                "pipeline_json": "{\n  \"stages\": []\n}",
+                "schedule_json": "",
+            },
+            None,
+        ),
+    },
+    "projects/repositories/": {
+        "secret_refs": _by_mode(["ci/github-token", "ci/deploy-key"], []),
+        "repository_specs": _by_mode(["nightly"], []),
+    },
+    "projects/builds/spec_detail": {
+        "spec_usage": _by_mode(
+            {"builds": 3, "active_builds": 1, "watches": ["build-on-push"]},
+            {"builds": 0, "active_builds": 0, "watches": []},
+        ),
+    },
+    "projects/rpa/detail": {
+        "job_names": _by_mode(
+            {"triggered_by": "Admin User", "pod": "lab-a", "client": "client of lab-a"},
+            {"triggered_by": None, "pod": None, "client": None},
+        ),
+    },
+    "projects/builds/spec_edit": {
+        "form_values": _by_mode(
+            {"name": "nightly", "repository_id": "7", "branch": "main", "timeout_minutes": "60",
+             "steps": "[]", "environment": "{}", "description": "Nightly build"},
+            {"name": "", "repository_id": "", "branch": "", "timeout_minutes": "",
+             "steps": "", "environment": "", "description": ""},
+        ),
+    },
+    "projects/watches/": {
+        "trigger_labels": _const({
+            "repository_commit": "New commits on a branch",
+            "build_completion": "A build finishes",
+        }),
+        "action_labels": _const({"trigger_build": "Run a build"}),
+        "target_names": _by_mode({"trigger_build:1": "nightly"}, {}),
+        "test_sample": _by_mode({"sample_branch": "main", "sample_build_status": "failed"}, {}),
+        "test_result": _by_mode(
+            {
+                "watch_id": 7,
+                "watch_name": "build-on-push",
+                "trigger_source": "repository_commit",
+                "enabled": True,
+                "would_trigger": False,
+                "conditions_match": False,
+                "condition_results": {
+                    "branch_pattern": {"pattern": "^main$", "value": "dev", "matches": False, "applies": True},
+                    "tag_pattern": {"pattern": None, "value": "", "matches": True, "applies": False},
+                    "file_pattern": {"pattern": None, "value": [], "matches": True, "applies": False},
+                    "build_status": {"pattern": "failed", "value": "failed", "matches": True, "applies": True},
+                },
+                "actions_count": 1,
+                "actions": [{"action": "trigger_build", "target_id": 3}],
+            },
+            None,
+        ),
+    },
+    # -- end projects-a audit fixes --------------------------------------
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),
         "field_errors": _by_mode(

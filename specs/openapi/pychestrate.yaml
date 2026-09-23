@@ -1546,6 +1546,67 @@ paths:
         '204':
           description: Role binding removed.
         '404': { $ref: '#/components/responses/NotFound' }
+  /projects/{project_id}/release-templates/{template_id}/create-release:
+    parameters:
+      - in: path
+        name: project_id
+        required: true
+        description: >
+          Integer id of a project in the consumer web UI's project store
+          (the release-template routes key on it, not on a slug).
+        schema: { type: integer, minimum: 1 }
+      - in: path
+        name: template_id
+        required: true
+        schema: { type: integer, minimum: 1 }
+    post:
+      tags: [projects]
+      summary: Create a draft release from a release template.
+      description: >
+        Requires system:release_templates.read and system:projects.write.
+        The template's channel, version pattern, repositories, pipeline and
+        schedule are copied into the release metadata together with
+        template_id and template_name; keys in the request's metadata
+        overwrite them. The version must be a semantic version and, when the
+        template has a version pattern, match it.
+      operationId: projects_create_release_from_template
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string, example: 1.4.0 }
+                name:
+                  type: string
+                  description: Defaults to "<template name> <version>".
+                description:
+                  type: string
+                  description: Defaults to the template's description.
+                metadata:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '201':
+          description: Draft release created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  release_id: { type: integer }
+                  project_id: { type: integer }
+                  version: { type: string }
+                  name: { type: string }
+                  description: { type: string }
+                  status: { type: string, example: draft }
+                  metadata: { type: object, additionalProperties: true }
+                  created_at: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
 
   # =====================================================================
   # clients

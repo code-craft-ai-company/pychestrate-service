@@ -370,6 +370,7 @@ class _FakeWatchManager:
         self.disable_watch_called: bool = False
         self.test_watch_response: Any = True
         self.test_watch_called: bool = False
+        self.test_watch_calls: List[Any] = []
         _FakeWatchManager.last_instance = self
         return
 
@@ -423,8 +424,9 @@ class _FakeWatchManager:
         self.disable_watch_called = True
         return
 
-    def test_watch(self, watch_id: int) -> Any:
+    def test_watch(self, watch_id: int, event_data: Dict[str, Any]) -> Any:
         self.test_watch_called = True
+        self.test_watch_calls.append((watch_id, dict(event_data)))
         return self.test_watch_response
 
 
@@ -1466,126 +1468,105 @@ def test_handle_watch_delete_admin_required_redirects_when_denied():
     return
 
 
-def test_handle_watch_test_truthy_yields_success_flash_redirect():
+def _post_watch_test(*, body: bytes) -> Dict[str, Any]:
     """
-    **Feature: webworks projects watches T13.14 (F5)**
-    **Property: POST .../watches/{wid}/test with a truthy
-    test_watch result redirects to the detail page (success
-    flash); the watch_id was passed to the manager.**
+        POST the watch test form for watch 42 of project 7 with the
+        managers faked.
+
+        :returns: ``{"response", "manager", "context"}``.
     """
     _reset_global_state()
-    sm_patch = None
-    pm_patch = None
-    wm_patch = None
+    patches: List[Any] = []
     try:
-        _install_stub_environment()
+        env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
+        patches.append(_patch_security_manager())
 
         def _seed_pm(instance: _FakeProjectManager) -> None:
             instance.get_project_response = _FakeProject(project_id=7)
             return
 
-        pm_patch = _patch_project_manager_in(
+        patches.append(_patch_project_manager_in(
             target_module=projects_routes_watches,
             configure=_seed_pm,
-        )
+        ))
 
         def _seed_wm(instance: _FakeWatchManager) -> None:
             instance.get_watch_response = _FakeWatch(
                 watch_id=42, project_id=7
             )
-            instance.test_watch_response = True
+            instance.test_watch_response = {
+                "would_trigger": True,
+                "conditions_match": True,
+                "condition_results": {},
+            }
             return
 
-        wm_patch = _patch_watch_manager(configure=_seed_wm)
+        patches.append(_patch_watch_manager(configure=_seed_wm))
 
-        cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
             method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
             path_params={"project_id": "7", "watch_id": "42"},
-            body=b"csrf_token=csrf-fresh",
+            body=body,
         )
         response = projects_routes_watches.handle_watch_test(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/projects/7/watches/42"
-        )
-        testbase.assert_equal(
-            _FakeWatchManager.last_instance.test_watch_called, True
-        )
+        rendered = env.last_template
+        rtnval = {
+            "response": response,
+            "manager": _FakeWatchManager.last_instance,
+            "template": rendered.name if rendered is not None else None,
+            "context": rendered.render_calls[0] if rendered is not None else None,
+        }
     finally:
-        for p in (wm_patch, pm_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
+        for p in reversed(patches):
+            p.deactivate()
         _reset_global_state()
+    return rtnval
+
+
+def test_handle_watch_test_checks_the_sample_event_and_shows_the_result():
+    """
+    **Feature: projects (PRJ-10 watch test)**
+    **Property: POST .../watches/{wid}/test hands the sample event from
+    the form to test_watch and renders the detail page with the result
+    (it used to call test_watch without the event, a TypeError on the
+    real manager).**
+    """
+    outcome = _post_watch_test(body=b"csrf_token=csrf-fresh&sample_branch=main")
+
+    testbase.assert_equal(
+        (
+            outcome["response"].status_code,
+            outcome["template"],
+            outcome["manager"].test_watch_calls,
+            outcome["context"]["test_result"]["would_trigger"],
+        ),
+        (200, "projects/watches/detail.html", [(42, {"branch": "main"})], True),
+    )
     return
 
 
-def test_handle_watch_test_falsey_yields_no_matches_flash():
+def test_handle_watch_test_leaves_out_empty_sample_fields():
     """
-    **Feature: webworks projects watches T13.15 (F5)**
-    **Property: POST .../watches/{wid}/test with a False
-    test_watch result still 302s back to the detail (info
-    flash for the "no matches" case), distinct from the
-    exception-raised error path.**
+    **Feature: projects (PRJ-10 watch test)**
+    **Property: empty sample fields are not part of the event (a tag
+    test does not pretend the branch is empty), and the form is refilled
+    with what was typed.**
     """
-    _reset_global_state()
-    sm_patch = None
-    pm_patch = None
-    wm_patch = None
-    try:
-        _install_stub_environment()
-        _install_ui_cookie_secret()
-        _install_db_session_factory(db_session=_FakeDbSession())
-        _register_url_for_endpoints()
-        sm_patch = _patch_security_manager()
+    outcome = _post_watch_test(
+        body=b"csrf_token=csrf-fresh&sample_branch=&sample_tag=v1.4.0"
+    )
 
-        def _seed_pm(instance: _FakeProjectManager) -> None:
-            instance.get_project_response = _FakeProject(project_id=7)
-            return
-
-        pm_patch = _patch_project_manager_in(
-            target_module=projects_routes_watches,
-            configure=_seed_pm,
-        )
-
-        def _seed_wm(instance: _FakeWatchManager) -> None:
-            instance.get_watch_response = _FakeWatch(
-                watch_id=42, project_id=7
-            )
-            instance.test_watch_response = False
-            return
-
-        wm_patch = _patch_watch_manager(configure=_seed_wm)
-
-        cookie_value = _build_authenticated_cookie()
-        request = _FakeRequest(
-            method="POST",
-            cookies={cookie_session.COOKIE_NAME: cookie_value},
-            path_params={"project_id": "7", "watch_id": "42"},
-            body=b"csrf_token=csrf-fresh",
-        )
-        response = projects_routes_watches.handle_watch_test(request)
-
-        is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
-        testbase.assert_equal(
-            response.headers["Location"], "/projects/7/watches/42"
-        )
-        testbase.assert_equal(
-            _FakeWatchManager.last_instance.test_watch_called, True
-        )
-    finally:
-        for p in (wm_patch, pm_patch, sm_patch):
-            if p is not None:
-                p.deactivate()
-        _reset_global_state()
+    testbase.assert_equal(
+        (
+            outcome["manager"].test_watch_calls,
+            outcome["context"]["test_sample"]["sample_tag"],
+        ),
+        ([(42, {"tag": "v1.4.0"})], "v1.4.0"),
+    )
     return
 
 
@@ -1993,6 +1974,55 @@ def test_handle_watch_create_post_missing_repository_id_yields_error():
         for p in (wm_patch, bm_patch, repo_patch, pm_patch, sm_patch):
             if p is not None:
                 p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_create_post_build_completion_without_a_spec_yields_error():
+    """
+    **Feature: projects (PRJ-10 watches)**
+    **Property: a "build finishes" watch posted without a build
+    specification is refused with 400 before any watch manager call --
+    a repository id in the form is not used as its source.**
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        patches.append(_patch_project_manager_in(
+            target_module=projects_routes_watches, configure=_seed_pm,
+        ))
+        patches.append(_patch_repository_manager_in(target_module=projects_routes_watches))
+        patches.append(_patch_build_manager_in_watches())
+        patches.append(_patch_watch_manager())
+
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            path_params={"project_id": "7"},
+            body=(
+                b"csrf_token=csrf-fresh&name=after-build&repository_id=11"
+                b"&event_type=build_completion&action_type=trigger_test_job"
+                b"&action_target_id=5"
+            ),
+        )
+        response = projects_routes_watches.handle_watch_create(request)
+
+        testbase.assert_equal(
+            (response.status_code, _FakeWatchManager.last_instance), (400, None)
+        )
+    finally:
+        for p in reversed(patches):
+            p.deactivate()
         _reset_global_state()
     return
 

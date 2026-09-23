@@ -35,6 +35,30 @@
     {% endif %}
 </div>
 
+{% if can_create_release %}
+<div class="card" id="create-release">
+    <h2 class="card-header">Create a release</h2>
+    <p class="muted">Starts a draft release with this template's channel, repositories, pipeline and schedule.</p>
+    <form method="post" action="{{ url_for('projects.release_template_create_release', project_id=project.id, template_id=template.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="release-version">Version *</label>
+            <input type="text" id="release-version" name="version" class="form-control mono" required
+                   value="{{ release_form.get('version', '') }}" placeholder="1.4.0" autocomplete="off" spellcheck="false"
+                   {{ ui.invalid_attrs(release_errors, 'version') }}>
+            {{ ui.field_error(release_errors, 'version') }}
+            <p class="form-text">A semantic version (major.minor.patch){% if template.version_pattern %} that matches <code>{{ template.version_pattern }}</code>{% endif %}.</p>
+        </div>
+        <div class="form-group">
+            <label for="release-name">Name</label>
+            <input type="text" id="release-name" name="name" class="form-control"
+                   value="{{ release_form.get('name', '') }}" placeholder="{{ template.name }} &lt;version&gt;">
+        </div>
+        <button type="submit" class="btn btn-primary">{{ ui.icon("new_releases") }} Create release</button>
+    </form>
+</div>
+{% endif %}
+
 <div class="card">
     <h2 class="card-header">Defaults</h2>
     <div class="table-scroll" tabindex="0"><table class="data-table">

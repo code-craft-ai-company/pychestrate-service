@@ -1,5 +1,6 @@
 {% extends "projects/base.html" %}
 {% import "site_shell/_macros.html" as ui %}
+{% import "projects/builds/_build_macros.html" as bm %}
 
 {% block title %}Infrastructure Jobs - {{ project.name }} - Pychestrate{% endblock %}
 
@@ -69,11 +70,11 @@
             <td><span class="badge badge-info">{{ job.action.value }}</span></td>
             <td><span class="badge badge-secondary">{{ job.state.value }}</span></td>
             <td>
-                {{ ui.status_badge(job.status) }}
+                {{ bm.build_status(job.status) }}
             </td>
             <td>{{ job.triggered_by_username }}</td>
             <td>{% if job.duration_seconds is not none %}{{ job.duration_seconds }}s{% else %}&mdash;{% endif %}</td>
-            <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
+            <td>{{ bm.build_started(job) }}</td>
             <td>
                 <a href="{{ url_for('projects.infra_job_detail', project_id=project.id, job_id=job.id) }}" class="btn btn-sm btn-secondary">View</a>
                 <a href="{{ url_for('projects.infra_job_logs', project_id=project.id, job_id=job.id) }}" class="btn btn-sm btn-secondary">Logs</a>

@@ -154,3 +154,124 @@ def test_template_to_dict_renders_all_fields():
     assert payload["default_schedule"] == {"cron": "* * * * *"}
     assert payload["created_at"].startswith("2026-05-23T09:00")
     return
+
+
+# ---------------------------------------------------------------------------
+# POST .../create-release (PRJ-09)
+# ---------------------------------------------------------------------------
+
+
+class _FakeRestRequest:
+    """
+        Just enough of a webworks request for the create-release
+        handler: path params, a JSON body, and the session / actor the
+        session middleware attaches.
+    """
+
+    def __init__(
+            self, *, db_session: Any, path_params: Dict[str, str], body: Dict[str, Any]
+        ) -> None:
+        self.db_session = db_session
+        self.path_params = path_params
+        self.path = "/api/v1/projects/{project_id}/release-templates/{template_id}/create-release".format(
+            **path_params
+        )
+        self.actor_user_id = "3f6c1a2e-4b5d-4e6f-8a9b-0c1d2e3f4a5b"
+        self.auth_principal = object()
+        self._body = body
+        return
+
+    def json(self) -> Dict[str, Any]:
+        return self._body
+
+
+def _project_with_template() -> Any:
+    """
+        An in-memory database with one project and one release template
+        whose version pattern is ``^\\d+\\.\\d+\\.\\d+$``.
+
+        :returns: Tuple of (session, project_id, template_id).
+    """
+    import uuid
+
+    import sqlalchemy as sa
+
+    from sqlalchemy.orm import sessionmaker
+
+    from ccai.pychestrate.core.managers.release_template_manager import (
+        ReleaseTemplateManager,
+    )
+    from ccai.pychestrate.core.orm import Project, PychestrateModelBase
+
+    engine = sa.create_engine("sqlite://")
+    PychestrateModelBase.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    project = Project(name="alpha", owner_id=uuid.uuid4(), metadata_json={})
+    session.add(project)
+    session.commit()
+    template = ReleaseTemplateManager(db_session=session).create(
+        project.id, name="standard", default_channel="stable",
+        version_pattern=r"^\d+\.\d+\.\d+$",
+    )
+    rtnval = (session, project.id, template.id)
+    return rtnval
+
+
+def _post_create_release(*, body: Dict[str, Any]) -> Any:
+    """
+        Call the create-release handler with permission checks stubbed
+        out (they are covered by the route-permission suites).
+
+        :returns: Tuple of (response, session).
+    """
+    from ccai.testbase.mocking import create_module_patch
+
+    session, project_id, template_id = _project_with_template()
+    patch = create_module_patch(routes_module, "_require_permission")
+    patch.activate()
+    try:
+        response = routes_module.handle_create_release_from_template(
+            _FakeRestRequest(
+                db_session=session,
+                path_params={"project_id": str(project_id), "template_id": str(template_id)},
+                body=body,
+            )
+        )
+    finally:
+        patch.deactivate()
+    rtnval = (response, session)
+    return rtnval
+
+
+def test_create_release_from_template_answers_201_with_the_release():
+    """
+    **Feature: projects release templates REST (PRJ-09)**
+    **Property: POST .../create-release answers 201 with the new
+    release (it used to commit the release and then fail with a 500
+    because the response was built with ``body=`` instead of
+    ``content=``).**
+    """
+    import json
+
+    response, _session = _post_create_release(body={"version": "1.4.0"})
+
+    payload = json.loads(response.body.decode("utf-8"))
+    assert (response.status_code, payload["version"], payload["metadata"]["template_name"]) == (
+        201, "1.4.0", "standard",
+    )
+    return
+
+
+def test_create_release_from_template_rejects_a_version_outside_the_pattern():
+    """
+    **Feature: projects release templates REST (PRJ-09)**
+    **Property: a semantic version that does not match the template's
+    version pattern (a pre-release against ``x.y.z``) answers 400 and
+    creates no release.**
+    """
+    from ccai.pychestrate.core.orm import ProjectRelease
+
+    response, session = _post_create_release(body={"version": "1.4.0-rc1"})
+
+    assert (response.status_code, session.query(ProjectRelease).count()) == (400, 0)
+    return

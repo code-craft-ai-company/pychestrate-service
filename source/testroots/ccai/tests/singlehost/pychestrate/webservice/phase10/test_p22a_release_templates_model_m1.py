@@ -88,6 +88,23 @@ def _seed_project(*, session: Any, name: str = "demo") -> Project:
     return rtnval
 
 
+def _seed_repositories(*, session: Any, project: Project, ids: Any) -> None:
+    """
+        Give ``project`` repositories with the given ids (a template's
+        default repositories must be the project's own).
+    """
+    from ccai.pychestrate.core.orm import ProjectRepository  # noqa: E402
+
+    for repo_id in ids:
+        session.add(ProjectRepository(
+            id=repo_id, project_id=project.id, name="repo-{}".format(repo_id),
+            url="https://example.invalid/repo-{}.git".format(repo_id), auth_type="none",
+            default_branch="main",
+        ))
+    session.commit()
+    return
+
+
 def test_release_template_table_columns_present():
     """
         ``ProjectReleaseTemplate`` should expose every column called
@@ -154,6 +171,7 @@ def test_create_template_persists_row():
     """
     session = _build_in_memory_session()
     project = _seed_project(session=session)
+    _seed_repositories(session=session, project=project, ids=(1, 2))
     manager = ReleaseTemplateManager(db_session=session)
 
     response = manager.create(
@@ -276,6 +294,7 @@ def test_update_template_changes_fields_and_persists():
     """
     session = _build_in_memory_session()
     project = _seed_project(session=session)
+    _seed_repositories(session=session, project=project, ids=(1, 7, 8, 9))
     manager = ReleaseTemplateManager(db_session=session)
     created = manager.create(
         project.id, name="ga", default_repo_ids=[1]

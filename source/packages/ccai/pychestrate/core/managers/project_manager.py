@@ -19,7 +19,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -407,6 +407,15 @@ def deserialize_variable_value(json_str: str, var_type: str) -> Any:
 # Permission Definitions
 # =============================================================================
 
+# Ordering used when a user holds a role through more than one path
+# (project membership and a global role): the strongest one applies.
+PROJECT_ROLE_RANK = {
+    ProjectRole.VIEWER: 1,
+    ProjectRole.DEVELOPER: 2,
+    ProjectRole.ADMINISTRATOR: 3,
+    ProjectRole.OWNER: 4,
+}
+
 # Role permissions mapping
 ROLE_PERMISSIONS = {
     ProjectRole.OWNER: {
@@ -486,16 +495,123 @@ class ProjectManager:
     # Mask value for sensitive variables
     SENSITIVE_MASK = "********"
     
-    def __init__(self, db_session: DbSession, audit_logger=None):
+    def __init__(
+        self,
+        db_session: DbSession,
+        audit_logger=None,
+        access_resolver: Optional[Callable[[str], Optional[ProjectRole]]] = None
+    ):
         """
         Initialize the ProjectManager with a database session.
-        
+
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
+        :param access_resolver: Optional callable ``(user_id) -> ProjectRole | None``
+                                returning the role a user holds on *every*
+                                project through deployment-wide grants (a
+                                global ``project-*`` role, or the system
+                                projects permissions). Supplied by the web
+                                layer, which knows the RBAC tables; without
+                                it, access comes from project membership
+                                alone.
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
-    
+        self._access_resolver = access_resolver
+        self._global_roles: Dict[str, Optional[ProjectRole]] = {}
+
+    # =========================================================================
+    # Access resolution
+    # =========================================================================
+
+    def get_global_role(self, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the role ``user_id`` holds on every project through
+        deployment-wide grants, or ``None``. The answer is cached for the
+        lifetime of this manager (one request).
+
+        :param user_id: The user's unique identifier
+        :returns: The global ProjectRole, or None
+        """
+        if self._access_resolver is None or user_id is None:
+            return None
+        key = str(user_id)
+        if key not in self._global_roles:
+            try:
+                resolved = self._access_resolver(key)
+            except Exception:
+                # Access checks fail closed: an unreadable grant is no grant.
+                resolved = None
+            self._global_roles[key] = resolved
+        rtnval = self._global_roles[key]
+        return rtnval
+
+    def get_member_role(self, project_id: int, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the role ``user_id`` holds as a member of the project, or
+        ``None`` when the user is not a member.
+
+        :param project_id: The project's unique identifier
+        :param user_id: The user's unique identifier
+        :returns: The member's ProjectRole, or None
+        """
+        from ccai.pychestrate.core.orm import ProjectMember
+
+        member = self._db_session.query(ProjectMember).filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.user_id == user_id
+        ).first()
+        if not member:
+            return None
+        try:
+            rtnval = ProjectRole(member.role)
+        except ValueError:
+            rtnval = None
+        return rtnval
+
+    def get_effective_role(self, project_id: int, user_id: str) -> Optional[ProjectRole]:
+        """
+        Return the strongest role ``user_id`` holds on the project: their
+        membership role or the role granted on every project by a global
+        role, whichever ranks higher (viewer < developer < administrator <
+        owner).
+
+        :param project_id: The project's unique identifier
+        :param user_id: The user's unique identifier
+        :returns: The effective ProjectRole, or None when the user has no
+                  access to the project
+        """
+        candidates = [
+            role for role in (
+                self.get_member_role(project_id, user_id),
+                self.get_global_role(user_id),
+            )
+            if role is not None
+        ]
+        if len(candidates) == 0:
+            return None
+        rtnval = max(candidates, key=lambda role: PROJECT_ROLE_RANK[role])
+        return rtnval
+
+    def has_any_project_access(self, user_id: str) -> bool:
+        """
+        Whether the user can use the Projects area at all: they are a
+        member of at least one project, or a global role gives them access
+        to every project.
+
+        :param user_id: The user's unique identifier
+        :returns: True when the user has access to some project
+        """
+        from ccai.pychestrate.core.orm import ProjectMember
+
+        if self.get_global_role(user_id) is not None:
+            return True
+        membership = self._db_session.query(ProjectMember.id).filter(
+            ProjectMember.user_id == user_id
+        ).first()
+        rtnval = membership is not None
+        return rtnval
+
     # =========================================================================
     # Validation Methods
     # =========================================================================
@@ -709,15 +825,28 @@ class ProjectManager:
         
         return self._project_to_response(project)
     
-    def delete_project(self, project_id: int, user_id: str) -> None:
+    def delete_project(
+        self,
+        project_id: int,
+        user_id: str,
+        *,
+        related_rows_cleanup: Optional[Callable[[DbSession, int], None]] = None
+    ) -> None:
         """
         Delete a project. Fails if active jobs exist.
-        
+
         :param project_id: The project's unique identifier
         :param user_id: The ID of the user deleting the project
+        :param related_rows_cleanup: Optional callable ``(db_session, project_id)``
+                                     that deletes rows other services keep for
+                                     the project without a foreign key (RPA
+                                     specifications and jobs, for example). It
+                                     runs in the same transaction, before the
+                                     project row is deleted; if it raises, the
+                                     whole deletion is rolled back.
         :raises ProjectNotFoundError: If project is not found
         :raises ProjectHasActiveJobsError: If project has active jobs
-        
+
         Validates: Requirements 1.4
         """
         from ccai.pychestrate.core.orm import (
@@ -748,17 +877,28 @@ class ProjectManager:
         ).count()
         
         total_active_jobs = active_builds + active_infra_jobs + active_test_jobs
-        
+
         if total_active_jobs > 0:
             raise ProjectHasActiveJobsError(
-                f"Cannot delete project '{project.name}' with {total_active_jobs} active job(s)"
+                f"Cannot delete project '{project.name}' while {total_active_jobs} build, "
+                f"infrastructure or test job(s) are pending or running. Cancel them or "
+                f"wait for them to finish, then delete the project."
             )
-        
+
         project_name = project.name
-        
-        # Delete the project (cascades to members, variables, etc.)
-        self._db_session.delete(project)
-        self._db_session.commit()
+
+        try:
+            # Rows other services keep for this project go in the same
+            # transaction, so a failure leaves the project untouched.
+            if related_rows_cleanup is not None:
+                related_rows_cleanup(self._db_session, project_id)
+
+            # Delete everything the project owns, then the project.
+            self._delete_project_rows(project_id)
+            self._db_session.commit()
+        except Exception:
+            self._db_session.rollback()
+            raise
         
         # Log the project deletion event
         if self._audit_logger:
@@ -779,25 +919,30 @@ class ProjectManager:
         search: str = None
     ) -> ProjectListResponse:
         """
-        List projects the user has access to.
-        
+        List projects the user has access to: every project when a global
+        role gives them access to all projects, otherwise the projects they
+        are a member of.
+
         :param user_id: The user's ID (for permission filtering)
         :param offset: Number of records to skip
         :param limit: Maximum number of records to return
         :param search: Optional search string for project name or description
         :returns: ProjectListResponse with paginated project list
-        
+
         Validates: Requirements 1.5, 14.6
         """
         from ccai.pychestrate.core.orm import Project, ProjectMember
         from sqlalchemy import or_
-        
-        # Get projects where user is a member
-        query = self._db_session.query(Project).join(
-            ProjectMember, Project.id == ProjectMember.project_id
-        ).filter(
-            ProjectMember.user_id == user_id
-        )
+
+        if self.get_global_role(user_id) is not None:
+            query = self._db_session.query(Project)
+        else:
+            # Get projects where user is a member
+            query = self._db_session.query(Project).join(
+                ProjectMember, Project.id == ProjectMember.project_id
+            ).filter(
+                ProjectMember.user_id == user_id
+            )
         
         # Apply search filter
         if search:
@@ -1120,6 +1265,10 @@ class ProjectManager:
         * **Granular permission strings** defined in :data:`ROLE_PERMISSIONS`
           (e.g. ``'project.update'``, ``'build.trigger'``).
 
+        The user's role is the strongest of their project membership and
+        the role a global grant gives them on every project (see
+        :meth:`get_effective_role`).
+
         :param project_id: The project's unique identifier
         :param user_id: The user's unique identifier
         :param permission: The permission to check.
@@ -1127,18 +1276,12 @@ class ProjectManager:
 
         Validates: Requirements 14.4
         """
-        from ccai.pychestrate.core.orm import ProjectMember
+        role = self.get_effective_role(project_id, user_id)
 
-        # Check if user is a member
-        member = self._db_session.query(ProjectMember).filter(
-            ProjectMember.project_id == project_id,
-            ProjectMember.user_id == user_id
-        ).first()
-
-        if not member:
+        if role is None:
             return False
 
-        role_str = member.role
+        role_str = role.value
 
         # --- Role-level shortcuts (used by the web-UI routes) ----------------
         if permission == "view":
@@ -1718,6 +1861,117 @@ class ProjectManager:
     # Helper Methods
     # =========================================================================
     
+    def _delete_project_rows(self, project_id: int) -> None:
+        """
+        Delete a project and every row it owns, children first, without
+        committing.
+
+        The ORM relationship cascades only covered some children:
+        ``ProjectBuildSpec.builds`` (and the infrastructure / test job
+        and pipeline run collections) had none, so deleting a project
+        that had ever run a build made SQLAlchemy try to set
+        ``project_builds.pbspec_id`` to NULL and the delete failed with an
+        IntegrityError; calendar events and release schedules had no
+        relationship at all. The rows are therefore deleted explicitly,
+        in foreign-key order, after the few nullable cross-references
+        between the project's own tables (releases <-> pipeline runs,
+        channels -> current release, test jobs -> builds) are cleared.
+        The order holds on databases that enforce foreign keys
+        (PostgreSQL).
+
+        :param project_id: The project's unique identifier
+        """
+        from ccai.pychestrate.core.orm import (
+            Project, ProjectMember, ProjectVariable, ProjectRepository,
+            ProjectBuildSpec, ProjectBuild, ProjectBuildArtifact,
+            ProjectInfraSpec, ProjectInfraJob,
+            ProjectTestSpec, ProjectTestJob, ProjectTestResult,
+            ProjectReleasePipeline, ProjectPipelineRun, ProjectStageRun,
+            ProjectRelease, ProjectReleaseArtifact, ProjectReleaseChannel,
+            ProjectChannelHistory, ProjectReleaseSchedule, ProjectReleaseTemplate,
+            ProjectCalendarEvent, ProjectReleaseEvent, ProjectPhaseEvent,
+            ProjectReleaseBranch, ProjectMergeEvent, ProjectPullEvent,
+            ProjectWatch, ProjectWatchTriggerLog, ProjectRepositoryRef, project_resources,
+        )
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select
+
+        session = self._db_session
+
+        def _ids(column, *criteria):
+            return select(column).where(*criteria)
+
+        def _delete_where(model, *criteria) -> None:
+            session.query(model).filter(*criteria).delete(synchronize_session=False)
+            return
+
+        def _clear(model, values: Dict[str, Any], *criteria) -> None:
+            session.query(model).filter(*criteria).update(values, synchronize_session=False)
+            return
+
+        pipeline_ids = _ids(ProjectReleasePipeline.id,
+                            ProjectReleasePipeline.project_id == project_id)
+
+        # Break the nullable references between the project's own rows.
+        _clear(ProjectReleaseChannel, {ProjectReleaseChannel.current_release_id: None},
+               ProjectReleaseChannel.project_id == project_id)
+        _clear(ProjectRelease, {ProjectRelease.pipeline_run_id: None, ProjectRelease.schedule_id: None},
+               ProjectRelease.project_id == project_id)
+        _clear(ProjectPipelineRun, {ProjectPipelineRun.release_id: None},
+               ProjectPipelineRun.pipeline_id.in_(pipeline_ids))
+        _clear(ProjectTestJob, {ProjectTestJob.build_id: None, ProjectTestJob.infra_job_id: None},
+               ProjectTestJob.project_id == project_id)
+        _clear(ProjectTestSpec, {ProjectTestSpec.build_ref: None, ProjectTestSpec.infra_ref: None},
+               ProjectTestSpec.project_id == project_id)
+
+        # Watches and their trigger history.
+        _delete_where(ProjectWatchTriggerLog, ProjectWatchTriggerLog.watch_id.in_(
+            _ids(ProjectWatch.id, ProjectWatch.project_id == project_id)))
+        _delete_where(ProjectWatch, ProjectWatch.project_id == project_id)
+
+        # Tests, builds, infrastructure.
+        _delete_where(ProjectTestResult, ProjectTestResult.job_id.in_(
+            _ids(ProjectTestJob.id, ProjectTestJob.project_id == project_id)))
+        _delete_where(ProjectTestJob, ProjectTestJob.project_id == project_id)
+        _delete_where(ProjectTestSpec, ProjectTestSpec.project_id == project_id)
+        _delete_where(ProjectBuildArtifact, ProjectBuildArtifact.build_id.in_(
+            _ids(ProjectBuild.id, ProjectBuild.project_id == project_id)))
+        _delete_where(ProjectBuild, ProjectBuild.project_id == project_id)
+        _delete_where(ProjectBuildSpec, ProjectBuildSpec.project_id == project_id)
+        _delete_where(ProjectInfraJob, ProjectInfraJob.project_id == project_id)
+        _delete_where(ProjectInfraSpec, ProjectInfraSpec.project_id == project_id)
+
+        # Releases, their calendar and branch events, channels, pipelines.
+        release_ids = _ids(ProjectRelease.id, ProjectRelease.project_id == project_id)
+        _delete_where(ProjectPhaseEvent, ProjectPhaseEvent.release_event_id.in_(
+            _ids(ProjectReleaseEvent.id, ProjectReleaseEvent.project_id == project_id)))
+        _delete_where(ProjectReleaseEvent, ProjectReleaseEvent.project_id == project_id)
+        _delete_where(ProjectMergeEvent, ProjectMergeEvent.project_id == project_id)
+        _delete_where(ProjectPullEvent, ProjectPullEvent.project_id == project_id)
+        _delete_where(ProjectReleaseBranch, ProjectReleaseBranch.release_id.in_(release_ids))
+        _delete_where(ProjectReleaseArtifact, ProjectReleaseArtifact.release_id.in_(release_ids))
+        _delete_where(ProjectChannelHistory, ProjectChannelHistory.channel_id.in_(
+            _ids(ProjectReleaseChannel.id, ProjectReleaseChannel.project_id == project_id)))
+        _delete_where(ProjectReleaseChannel, ProjectReleaseChannel.project_id == project_id)
+        _delete_where(ProjectStageRun, ProjectStageRun.pipeline_run_id.in_(
+            _ids(ProjectPipelineRun.id, ProjectPipelineRun.pipeline_id.in_(pipeline_ids))))
+        _delete_where(ProjectRelease, ProjectRelease.project_id == project_id)
+        _delete_where(ProjectPipelineRun, ProjectPipelineRun.pipeline_id.in_(pipeline_ids))
+        _delete_where(ProjectReleaseSchedule, ProjectReleaseSchedule.project_id == project_id)
+        _delete_where(ProjectReleasePipeline, ProjectReleasePipeline.project_id == project_id)
+        _delete_where(ProjectReleaseTemplate, ProjectReleaseTemplate.project_id == project_id)
+        _delete_where(ProjectCalendarEvent, ProjectCalendarEvent.project_id == project_id)
+
+        # Repositories, settings, membership, and the project itself.
+        _delete_where(ProjectRepositoryRef, ProjectRepositoryRef.repository_id.in_(
+            _ids(ProjectRepository.id, ProjectRepository.project_id == project_id)))
+        _delete_where(ProjectRepository, ProjectRepository.project_id == project_id)
+        _delete_where(ProjectVariable, ProjectVariable.project_id == project_id)
+        session.execute(sa_delete(project_resources).where(project_resources.c.proj_id == project_id))
+        _delete_where(ProjectMember, ProjectMember.project_id == project_id)
+        _delete_where(Project, Project.id == project_id)
+        return
+
     def _project_to_response(self, project) -> ProjectResponse:
         """
         Convert a Project ORM object to a ProjectResponse dataclass.
