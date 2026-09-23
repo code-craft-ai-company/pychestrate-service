@@ -17,6 +17,38 @@
 
 set -euo pipefail
 
+usage() {
+    cat <<'USAGE'
+usage: development/dev-up [-h | --help]
+
+Boot a local Pychestrate webservice for development on a SQLite database,
+generating any missing per-checkout dev secrets under .cache/dev-secrets/.
+Not for production (refused when PYCHESTRATE_RUNTIME_ENVIRONMENT=production).
+
+Any PYCHESTRATE_* variable already set in the environment wins over the
+generated default, for example:
+  PYCHESTRATE_BIND_HOST / PYCHESTRATE_BIND_PORT   where to listen (127.0.0.1:8888)
+  PYCHESTRATE_THREADS                             request threads (8)
+  PYCHESTRATE_DATABASE_URL                        another database (e.g. Postgres)
+
+On a first run, open the printed URL and unlock the setup wizard with the
+token from <presence-dir>/initial-admin-token (the path is printed too).
+Reset all local state with: rm -rf .cache/presence .cache/dev-db
+USAGE
+}
+
+# Arguments are checked before anything is created or started.
+for arg in "$@"; do
+    case "${arg}" in
+        -h|--help) usage; exit 0 ;;
+        *)
+            echo "dev-up: unknown argument: ${arg}" >&2
+            usage >&2
+            exit 2
+            ;;
+    esac
+done
+
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
@@ -189,6 +221,13 @@ echo "dev-up: enrollment-ca-cert=${ENROLLMENT_CA_CERT_FILE}"
 echo "dev-up: envelope-signing-key=${PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH} (id ${PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID})"
 echo "dev-up: result-presign-secret=${RESULT_PRESIGN_SECRET_FILE}"
 echo "dev-up: presence-dir=${PYCHESTRATE_PRESENCE_DIR}"
+echo
+URL_HOST="${PYCHESTRATE_BIND_HOST}"
+if [[ "${URL_HOST}" == "0.0.0.0" || "${URL_HOST}" == "::" ]]; then
+    URL_HOST="127.0.0.1"
+fi
+echo "dev-up: open http://${URL_HOST}:${PYCHESTRATE_BIND_PORT}/"
+echo "dev-up: first run? unlock the setup wizard with the token in ${PYCHESTRATE_PRESENCE_DIR}/initial-admin-token"
 echo
 
 if [[ -f "${REPO_ROOT}/.venv/bin/python" ]]; then
