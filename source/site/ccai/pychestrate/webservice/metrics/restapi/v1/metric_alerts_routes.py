@@ -246,12 +246,38 @@ def _iso_or_none(value: Any) -> Optional[str]:
     return rtnval
 
 
-def _alert_rule_view_to_dict(view: Any) -> Dict[str, Any]:
+def _live_state_to_dict(live: Any) -> Dict[str, Any]:
+    """
+        Serialize an :class:`AlertLiveStateView` to the OpenAPI
+        ``MetricAlertLiveState`` schema.
+
+        :param live: Live-state read-model.
+
+        :returns: JSON-friendly dict.
+    """
+    rtnval: Dict[str, Any] = {
+        "state": live.state.value,
+        "last_value": live.last_value,
+        "last_threshold": live.last_threshold,
+        "last_reason": live.last_reason,
+        "last_evaluated_at": _iso_or_none(live.last_evaluated_at),
+        "last_state_changed_at": _iso_or_none(live.last_state_changed_at),
+        "fired_at": _iso_or_none(live.fired_at),
+        "resolved_at": _iso_or_none(live.resolved_at),
+        "fire_count": int(live.fire_count),
+        "resolve_count": int(live.resolve_count),
+    }
+    return rtnval
+
+
+def _alert_rule_view_to_dict(view: Any, *, live: Any) -> Dict[str, Any]:
     """
         Serialize an :class:`AlertRuleView` to the OpenAPI
         ``MetricAlertRule`` schema.
 
         :param view: Alert-rule read-model.
+        :param live: The rule's :class:`AlertLiveStateView` (state
+                     ``unknown`` until the evaluator has run).
 
         :returns: JSON-friendly dict.
     """
@@ -268,7 +294,25 @@ def _alert_rule_view_to_dict(view: Any) -> Dict[str, Any]:
         "created_by": view.created_by,
         "created_at": _iso_or_none(view.created_at),
         "updated_at": _iso_or_none(view.updated_at),
+        "live_state": _live_state_to_dict(live=live),
     }
+    return rtnval
+
+
+def _rule_to_dict(*, db_session: Any, view: Any) -> Dict[str, Any]:
+    """
+        Serialize a rule together with its live state.
+
+        :param db_session: Active SQLAlchemy session.
+        :param view: Alert-rule read-model.
+
+        :returns: JSON-friendly dict.
+    """
+    live = alerts_service.get_live_state(
+        db_session=db_session,
+        rule_id=str(view.rule_id),
+    )
+    rtnval = _alert_rule_view_to_dict(view=view, live=live)
     return rtnval
 
 
@@ -282,7 +326,9 @@ def handle_list_metric_alerts(request: Request) -> Response:
         ``GET /api/v1/projects/{project_id}/metric-alerts``
 
         Query param: ``enabled_only`` (``"true"`` filters to
-        enabled rules).
+        enabled rules). Each item carries ``live_state``: the
+        evaluator's latest verdict (``unknown`` until the rule has
+        been evaluated).
 
         :param request: Incoming webworks request.
 
@@ -315,7 +361,7 @@ def handle_list_metric_alerts(request: Request) -> Response:
         )
         items: List[Dict[str, Any]] = []
         for view in views:
-            items.append(_alert_rule_view_to_dict(view=view))
+            items.append(_rule_to_dict(db_session=db_session, view=view))
 
         body = {
             "items": items,
@@ -504,7 +550,7 @@ def handle_create_metric_alert(request: Request) -> Response:
             str(view.rule_id),
         )
 
-        body_dict = _alert_rule_view_to_dict(view=view)
+        body_dict = _rule_to_dict(db_session=db_session, view=view)
         rtnval: Response = JSONResponse(content=body_dict, status_code=201)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response

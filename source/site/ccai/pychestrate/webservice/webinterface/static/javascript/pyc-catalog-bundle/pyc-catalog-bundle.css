@@ -122,6 +122,25 @@ pyc-test-catalog {
     color: var(--pyc-catalog-fg-muted);
 }
 
+.pyc-catalog__import-status[data-tone="error"] {
+    color: var(--pyc-catalog-error-fg);
+}
+
+.pyc-catalog__import-status[data-tone="ok"] {
+    color: var(--pyc-catalog-ok-fg);
+}
+
+.pyc-catalog__import-note {
+    margin: 0;
+    flex-basis: 100%;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-catalog-fg-muted);
+}
+
+.pyc-catalog__field--wide {
+    flex-basis: 100%;
+}
+
 .pyc-catalog__table-region {
     overflow-x: auto;
 }

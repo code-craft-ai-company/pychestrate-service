@@ -21,6 +21,15 @@ from ccai.pychestrate.webservice.extensions.phase5_bootstrap import (
 from ccai.pychestrate.webservice.extensions.phase6_bootstrap import (
     register_phase6_builtin_extensions,
 )
+from ccai.pychestrate.webservice.extensions.phase7_bootstrap import (
+    register_phase7_builtin_extensions,
+)
+from ccai.pychestrate.webservice.extensions.phase8_bootstrap import (
+    register_phase8_builtin_extensions,
+)
+from ccai.pychestrate.webservice.extensions.view_registry_self_check import (
+    log_view_registry_self_check,
+)
 from ccai.pychestrate.webservice.extensions.ext_router import (
     mount_extension_routes,
 )
@@ -546,6 +555,11 @@ def register_service_extensions() -> None:
     register_phase4_builtin_extensions()
     register_phase5_builtin_extensions()
     register_phase6_builtin_extensions()
+    # Layer 7 (metrics / SLOs / alerts / dashboards) and Layer 8
+    # (webhooks, release channels) registries -- previously never
+    # registered (audit ORC-04).
+    register_phase7_builtin_extensions()
+    register_phase8_builtin_extensions()
     build_and_validate_plugin_api_catalog()
     mount_extension_routes()
     register_flags_routes(app=app, version_prefix="/api/v1")
@@ -652,6 +666,9 @@ def register_service_extensions() -> None:
     # explicitly skipped by the catch-all.
     install_shell_default_bundles()
     register_shell_catchall(app=app)
+    # Startup self-check: warn about any view whose extension registry
+    # is empty (audit ORC-04).
+    log_view_registry_self_check()
     return
 
 

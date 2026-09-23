@@ -30,8 +30,21 @@ a distributed scheduler. It:
 Stage-job dispatch is NOT re-implemented here. ``build`` steps go
 through :func:`build.service.trigger_run`; ``test`` steps go through
 :meth:`TestOrchestrator.trigger_run`; ``infra`` / ``provision`` steps
-go through :func:`infra.runs.service.trigger_run`. ``script`` steps
-have no Layer-5 dispatch path and resolve in-process immediately.
+go through :func:`infra.runs.service.trigger_run`.
+
+A step is never reported successful for work that did not happen
+(audit ORG-F15):
+
+* ``script`` steps have no execution path -- no pod executor runs
+  them -- so they resolve immediately as ``FAILED`` with
+  :data:`SCRIPT_STEP_NOT_EXECUTED_REASON`, which fails their stage
+  and the run instead of letting it go green.
+* ``build`` steps build the commit the pipeline was triggered at:
+  the run's ``commit_sha`` (and branch, from ``ref``) are passed to
+  the build unless the step pins its own.
+* A trigger that asks for matrix dimensions is refused
+  (:class:`PipelineMatrixUnsupportedError`): a run executes each
+  stage once, so it could not honour the matrix.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -71,6 +84,7 @@ from ccai.pychestrate.webservice.orchestration.pipelines.definition.service impo
     TriggerAspects,
 )
 from ccai.pychestrate.webservice.orchestration.pipelines.execution.errors import (
+    PipelineMatrixUnsupportedError,
     PipelineRunConflictError,
 )
 
@@ -100,6 +114,31 @@ JOB_KIND_RPA: str = "rpa"
 JOB_KIND_SCRIPT: str = "script"
 
 
+#: Recorded on a ``script`` step, which is marked FAILED because nothing
+#: can run it: pods execute build, test, provision and rpa jobs only.
+SCRIPT_STEP_NOT_EXECUTED_REASON: str = (
+    "not executed: script steps have no execution path in this release"
+    " (pods run build, test, provision and rpa jobs only)"
+)
+
+#: Prefix stripped from a git ref to obtain the branch name handed to
+#: build steps.
+GIT_BRANCH_REF_PREFIX: str = "refs/heads/"
+
+
+@dataclass(frozen=True)
+class SourceRevision:
+    """
+        The revision a pipeline run was triggered at, handed to the
+        steps that build source.
+
+        :param commit_sha: The run's commit.
+        :param ref: The run's git ref (branch / tag), possibly empty.
+    """
+    commit_sha: str
+    ref: str
+
+
 @dataclass(frozen=True)
 class PipelineTriggerInputs:
     """
@@ -120,10 +159,11 @@ class PipelineTriggerInputs:
                            "no eligible pod" -- the affected stage job
                            fails and its dependents are skipped.
         :param matrix_params: Optional matrix-expansion dimensions.
-                              When present, the orchestrator records
-                              the expanded shard set on the run for
-                              diagnostics; M1 keeps the DAG itself
-                              unsharded (one stage per document stage).
+                              Must be empty: a run executes each
+                              stage exactly once, so
+                              :meth:`PipelineOrchestrator.trigger_pipeline`
+                              refuses a non-empty matrix rather than
+                              ignore it.
     """
     project_id: str
     project_slug: str
@@ -223,8 +263,21 @@ class PipelineOrchestrator:
             :returns: The :class:`PipelineRunView` after the root
                       stages have been dispatched.
             :raises: PipelineDocumentInvalidError, PipelineDagCycleError,
-                     PipelineStepKindUnknownError, PipelineRunConflictError.
+                     PipelineStepKindUnknownError, PipelineRunConflictError,
+                     PipelineMatrixUnsupportedError.
         """
+        if inputs.matrix_params is not None and len(inputs.matrix_params) > 0:
+            err_lines = ["Matrix execution is not supported: a pipeline run executes each stage once."]
+            err_lines.append(
+                "Trigger without 'matrix'; preview shards with"
+                " POST /api/v1/projects/{project_id}/pipelines:expand-matrix."
+            )
+            err_lines.append("DIMENSIONS: {}".format(
+                ", ".join(sorted(str(key) for key in inputs.matrix_params.keys())),
+            ))
+            err_msg = os.linesep.join(err_lines)
+            raise PipelineMatrixUnsupportedError(err_msg) from None
+
         run_view = definition_service.trigger_run(
             db_session=db_session,
             project_id=inputs.project_id,
@@ -287,6 +340,9 @@ class PipelineOrchestrator:
 
             :returns: None.
         """
+        revision = self._source_revision_for_run(
+            db_session=db_session, run_id=run_id,
+        )
         stage_rows = definition_repository.list_stages_for_run(
             db_session=db_session, run_id=run_id,
         )
@@ -321,6 +377,7 @@ class PipelineOrchestrator:
                         project_slug=project_slug,
                         candidates=candidates,
                         actor_id=actor_id,
+                        revision=revision,
                     )
                     # Re-read the post-dispatch state -- a fully
                     # synchronous (script-only or dispatch-failed)
@@ -386,11 +443,14 @@ class PipelineOrchestrator:
             project_id: str,
             project_slug: str,
             candidates: Tuple[DispatchCandidate, ...],
-            actor_id: Optional[str]
+            actor_id: Optional[str],
+            revision: SourceRevision
         ) -> None:
         """
             Mark a stage ``RUNNING`` and dispatch each of its steps
             through the reused build / test / provision dispatch.
+
+            :param revision: The run's commit + ref, for build steps.
 
             :returns: None.
         """
@@ -412,6 +472,7 @@ class PipelineOrchestrator:
                 project_slug=project_slug,
                 candidates=candidates,
                 actor_id=actor_id,
+                revision=revision,
             )
         return
 
@@ -423,31 +484,44 @@ class PipelineOrchestrator:
             project_id: str,
             project_slug: str,
             candidates: Tuple[DispatchCandidate, ...],
-            actor_id: Optional[str]
+            actor_id: Optional[str],
+            revision: SourceRevision
         ) -> None:
         """
             Dispatch a single step's job. ``build`` / ``test`` /
-            ``infra`` / ``provision`` route through the reused
-            Layer-6 dispatch paths; ``script`` (no Layer-5 path)
-            resolves in-process immediately.
+            ``infra`` / ``provision`` / ``rpa`` route through the
+            reused Layer-6 dispatch paths. ``script`` steps have no
+            execution path, so they are marked ``FAILED`` with
+            :data:`SCRIPT_STEP_NOT_EXECUTED_REASON` -- never
+            ``COMPLETED``.
 
             The dispatched orchestration run id is recorded on
             :attr:`PipelineStepRun.layer5_run_id` so the run-terminal
             bus subscriber can correlate the terminal event back to
             this step.
 
+            :param revision: The run's commit + ref, for build steps.
+
             :returns: None.
         """
         job_kind = step_row.job_kind
         if job_kind == JOB_KIND_SCRIPT:
-            # No Layer-5 dispatch path for scripts at M1 -- resolve
-            # the step in-process so the DAG can continue.
+            # Nothing can execute a script step: no pod executor runs
+            # them. Report the step FAILED with the reason instead of
+            # pretending it ran -- a COMPLETED here was a false green
+            # (audit ORG-F15). The failure fails the stage, skips its
+            # dependents, and fails the run.
+            _LOGGER.warning(
+                "pychestrate.pipelines.orchestrator.script_step_not_executed"
+                " step_run_id=%s",
+                str(step_row.step_run_id),
+            )
             self._mirror_step_terminal(
                 db_session=db_session,
                 step_run_id=str(step_row.step_run_id),
-                final_state=StepState.COMPLETED,
+                final_state=StepState.FAILED,
                 layer5_run_id=None,
-                reason="script step (no Layer-5 dispatch)",
+                reason=SCRIPT_STEP_NOT_EXECUTED_REASON,
             )
             return
 
@@ -460,6 +534,7 @@ class PipelineOrchestrator:
                 project_slug=project_slug,
                 candidates=candidates,
                 actor_id=actor_id,
+                revision=revision,
             )
         except Exception as dispatch_err:  # noqa: BLE001 -- see below
             # A dispatch failure is a legitimate stage outcome: the
@@ -495,12 +570,15 @@ class PipelineOrchestrator:
             project_id: str,
             project_slug: str,
             candidates: Tuple[DispatchCandidate, ...],
-            actor_id: Optional[str]
+            actor_id: Optional[str],
+            revision: SourceRevision
         ) -> str:
         """
             Route a step to the reused Layer-6 dispatch path matching
             its ``job_kind`` and return the dispatched orchestration
             run id.
+
+            :param revision: The run's commit + ref, for build steps.
 
             :raises: Exception -- any dispatch error bubbles to the
                      caller, which records it as a step failure.
@@ -515,6 +593,7 @@ class PipelineOrchestrator:
                 project_slug=project_slug,
                 candidates=candidates,
                 actor_id=actor_id,
+                revision=revision,
             )
             return run_id
 
@@ -563,18 +642,35 @@ class PipelineOrchestrator:
             project_id: str,
             project_slug: str,
             candidates: Tuple[DispatchCandidate, ...],
-            actor_id: Optional[str]
+            actor_id: Optional[str],
+            revision: SourceRevision
         ) -> str:
         """
             Dispatch a ``build`` step via the reused build service.
+
+            The build targets the pipeline run's commit: unless the
+            step pins its own ``commit_sha`` / ``branch``, the run's
+            ``commit_sha`` and the branch named by its ``ref`` are
+            added to the runner inputs the build envelope reads them
+            from. Without them the envelope carried the all-zero
+            placeholder commit, so a green build said nothing about
+            the commit the pipeline ran for.
+
+            :param revision: The run's commit + ref.
         """
         if self._build_service is None:
             raise RuntimeError("build dispatch not wired") from None
 
         runner_kind = inputs.get("runner_kind", "makefile")
+        runner_inputs = dict(inputs)
+        if "commit_sha" not in runner_inputs and len(revision.commit_sha) > 0:
+            runner_inputs["commit_sha"] = revision.commit_sha
+        branch = self._branch_from_ref(ref=revision.ref)
+        if "branch" not in runner_inputs and len(branch) > 0:
+            runner_inputs["branch"] = branch
         build_inputs = self._build_service.BuildRunInputs(
             runner_kind=runner_kind,
-            runner_inputs=dict(inputs),
+            runner_inputs=runner_inputs,
         )
         aspects = self._build_service.BuildTriggerAspects(
             actor_id=actor_id,
@@ -791,6 +887,53 @@ class PipelineOrchestrator:
             rtnval = ""
             return rtnval
         rtnval = str(run_row.project_id)
+        return rtnval
+
+    def _source_revision_for_run(
+            self, *, db_session: DbSession, run_id: str
+        ) -> SourceRevision:
+        """
+            Read the commit + ref a pipeline run was triggered at.
+
+            :param db_session: Active SQLAlchemy session.
+            :param run_id: Pipeline run id.
+
+            :returns: :class:`SourceRevision` (empty strings when the
+                      run row is missing).
+        """
+        run_row = definition_repository.find_run_by_id(
+            db_session=db_session, run_id=run_id,
+        )
+        if run_row is None:
+            rtnval = SourceRevision(commit_sha="", ref="")
+            return rtnval
+        rtnval = SourceRevision(
+            commit_sha=str(run_row.commit_sha or ""),
+            ref=str(run_row.ref or ""),
+        )
+        return rtnval
+
+    @staticmethod
+    def _branch_from_ref(*, ref: str) -> str:
+        """
+            The branch a git ref names: ``refs/heads/main`` and ``main``
+            both give ``main``; other ``refs/*`` (tags, pull refs) name
+            no branch.
+
+            :param ref: Git ref, possibly empty.
+
+            :returns: Branch name, or an empty string.
+        """
+        if ref is None or len(ref) == 0:
+            rtnval = ""
+            return rtnval
+        if ref.startswith(GIT_BRANCH_REF_PREFIX):
+            rtnval = ref[len(GIT_BRANCH_REF_PREFIX):]
+            return rtnval
+        if ref.startswith("refs/"):
+            rtnval = ""
+            return rtnval
+        rtnval = ref
         return rtnval
 
     # -----------------------------------------------------------------
@@ -1064,6 +1207,9 @@ __all__ = [
     "PipelineOrchestrator",
     "PipelineTriggerInputs",
     "PipelineRunConflictError",
+    "PipelineMatrixUnsupportedError",
+    "SCRIPT_STEP_NOT_EXECUTED_REASON",
+    "SourceRevision",
     "set_active_pipeline_orchestrator",
     "get_active_pipeline_orchestrator",
     "RUN_TERMINAL_TOPICS",

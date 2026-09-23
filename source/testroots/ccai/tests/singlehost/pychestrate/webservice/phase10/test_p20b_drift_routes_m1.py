@@ -187,6 +187,68 @@ def _patch_environment(*, view: Any = None, raise_missing: bool = False) -> Any:
     return patch
 
 
+def _patch_schedule(*, schedule: Any = None) -> Any:
+    """
+        Answer ``get_schedule`` with ``schedule``, or raise
+        :class:`DriftScheduleNotFoundError` when it is ``None``.
+    """
+    patch = create_module_patch(drift_routes.drift_service, "get_schedule")
+    mock = patch.activate()
+
+    def _answer(**kwargs: Any) -> Any:
+        if schedule is None:
+            raise DriftScheduleNotFoundError("Drift schedule not found.")
+        return schedule
+
+    mock.configure(side_effect=_answer)
+    return patch
+
+
+def _make_schedule_view() -> Any:
+    rtnval = drift_routes.drift_service.DriftScheduleView(
+        project_id="proj-1",
+        environment_id="env-1",
+        checker_name="terraform",
+        cron_expression="0 * * * *",
+        enabled=True,
+        updated_by=None,
+        updated_at=datetime(2026, 5, 20, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    return rtnval
+
+
+def _get_status(*, runs: List[Any], schedule: Any = None) -> Any:
+    """
+        Run GET drift with ``runs`` recorded and ``schedule`` (or none);
+        return the response.
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    env_patch = _patch_environment()
+    schedule_patch = _patch_schedule(schedule=schedule)
+    list_patch = create_module_patch(
+        drift_routes.drift_service, "list_drift_runs_for_environment",
+    )
+    list_mock = list_patch.activate()
+    list_mock.configure(side_effect=lambda **kwargs: list(runs))
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/environments/env-1/drift",
+            path_params={"project_id": "proj-1", "environment_id": "env-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = drift_routes.handle_get_drift_status(request)
+    finally:
+        list_patch.deactivate()
+        schedule_patch.deactivate()
+        env_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    rtnval = response
+    return rtnval
+
+
 def _make_drift_view(
         *,
         run_id: str = "drift-1",
@@ -371,6 +433,7 @@ def test_get_drift_returns_empty_status_when_no_runs():
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
     env_patch = _patch_environment()
+    schedule_patch = _patch_schedule(schedule=None)
     list_patch = create_module_patch(
         drift_routes.drift_service, "list_drift_runs_for_environment",
     )
@@ -386,6 +449,7 @@ def test_get_drift_returns_empty_status_when_no_runs():
         response = drift_routes.handle_get_drift_status(request)
     finally:
         list_patch.deactivate()
+        schedule_patch.deactivate()
         env_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
@@ -405,6 +469,7 @@ def test_get_drift_returns_latest_report_when_run_exists():
     perm_patch = _patch_check_permission(allowed=True)
     proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
     env_patch = _patch_environment()
+    schedule_patch = _patch_schedule(schedule=None)
     list_patch = create_module_patch(
         drift_routes.drift_service, "list_drift_runs_for_environment",
     )
@@ -422,6 +487,7 @@ def test_get_drift_returns_latest_report_when_run_exists():
         response = drift_routes.handle_get_drift_status(request)
     finally:
         list_patch.deactivate()
+        schedule_patch.deactivate()
         env_patch.deactivate()
         proj_patch.deactivate()
         perm_patch.deactivate()
@@ -530,5 +596,107 @@ def test_drift_check_returns_202_on_happy_path():
     testbase.assert_equal(body["dispatch_available"], False)
     testbase.assert_equal(
         body["detail"], drift_routes.DRIFT_CHECK_RECORDED_DETAIL,
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Audit ORC-39 -- drift history and an honest "Check Drift"
+# ---------------------------------------------------------------------------
+
+
+def test_drift_status_carries_the_recent_run_history():
+    """
+    **Feature: environment detail -- audit ORC-39**
+    **Property: the drift status lists the environment's recent drift
+    runs, newest first, for the environment detail page.**
+    """
+    response = _get_status(runs=[
+        _make_drift_view(run_id="drift-2"),
+        _make_drift_view(run_id="drift-1"),
+    ])
+    body = _decode_body(response)
+    testbase.assert_equal([run["run_id"] for run in body["history"]], ["drift-2", "drift-1"])
+    return
+
+
+def test_drift_status_says_a_check_cannot_start_without_a_schedule():
+    """
+    **Feature: environment detail -- audit ORC-39**
+    **Property: with no drift schedule the status says a check cannot
+    start and why, so "Check Drift" does not dead-end on a 409.**
+    """
+    response = _get_status(runs=[], schedule=None)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (body["check_available"], body["check_unavailable_reason"], body["schedule"]),
+        (False, drift_routes.DRIFT_NO_SCHEDULE_REASON, None),
+    )
+    return
+
+
+def test_drift_status_says_a_check_can_start_with_a_schedule():
+    """
+    **Feature: environment detail -- audit ORC-39**
+    **Property: with a drift schedule the status says a check can
+    start and names the schedule's checker.**
+    """
+    response = _get_status(runs=[], schedule=_make_schedule_view())
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (body["check_available"], body["check_unavailable_reason"], body["schedule"]["checker_name"]),
+        (True, None, "terraform"),
+    )
+    return
+
+
+def test_drift_status_labels_drift_detection_a_preview():
+    """
+    **Feature: environment detail -- audit ORC-39**
+    **Property: the status says drift detection is a preview whose
+    checks are not processed (dispatch_available false).**
+    """
+    response = _get_status(runs=[])
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (body["dispatch_available"], body["detail"]),
+        (False, drift_routes.DRIFT_PREVIEW_DETAIL),
+    )
+    return
+
+
+def test_drift_check_without_a_schedule_explains_why():
+    """
+    **Feature: environment detail -- audit ORC-39**
+    **Property: a drift check refused for the missing schedule says
+    drift schedules cannot be set up yet (reason no_drift_schedule).**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    env_patch = _patch_environment()
+    run_patch = create_module_patch(drift_routes.drift_service, "run_now")
+    run_mock = run_patch.activate()
+
+    def _raise(**kwargs):
+        raise DriftScheduleNotFoundError("No drift schedule for environment.")
+
+    run_mock.configure(side_effect=_raise)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/environments/env-1/drift:check",
+            path_params={"project_id": "proj-1", "environment_id": "env-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+        )
+        response = drift_routes.handle_trigger_drift_check(request)
+    finally:
+        run_patch.deactivate()
+        env_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (body["detail"], body["reason"]),
+        (drift_routes.DRIFT_NO_SCHEDULE_REASON, "no_drift_schedule"),
     )
     return

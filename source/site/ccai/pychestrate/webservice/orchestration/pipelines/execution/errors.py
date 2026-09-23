@@ -21,3 +21,13 @@ class PipelineRunConflictError(PipelineExecutionError):
         conflicting run is already active for the same definition.
         Surfaces as an HTTP 409 over REST.
     """
+
+
+class PipelineMatrixUnsupportedError(PipelineExecutionError):
+    """
+        Raised when a trigger asks for matrix dimensions. A pipeline
+        run executes every stage exactly once -- matrix expansion is
+        a preview only -- so a run that silently ignored the matrix
+        would report success for shards it never ran. Surfaces as an
+        HTTP 422 over REST.
+    """

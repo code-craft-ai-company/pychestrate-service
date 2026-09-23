@@ -32,15 +32,25 @@ def insert_configuration(
         mtls_required: bool,
         description: str,
         created_by: Optional[str],
-        created_at: datetime
+        created_at: datetime,
+        webhook_id: Optional[str] = None
     ) -> WebhookConfiguration:
     """
         Insert a new ``webhooks_in_configurations`` row and
         flush so the dispatcher pipeline can read its
         ``webhook_id``.
+
+        :param webhook_id: Optional pre-allocated id (the caller
+                           allocates one when the id must appear
+                           in the integration's secret reference
+                           before the row exists); a fresh UUID
+                           when ``None``.
     """
+    resolved_webhook_id = webhook_id
+    if resolved_webhook_id is None:
+        resolved_webhook_id = new_uuid()
     row = WebhookConfiguration(
-        webhook_id=new_uuid(),
+        webhook_id=resolved_webhook_id,
         project_id=project_id,
         provider=provider,
         hook_name=hook_name,

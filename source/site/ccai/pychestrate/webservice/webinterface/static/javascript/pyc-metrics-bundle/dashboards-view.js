@@ -78,6 +78,10 @@ function tile_metric_name(tile) {
     const rtnval2 = "";
     return rtnval2;
   }
+  if (typeof config.metric_name === "string" && config.metric_name.length > 0) {
+    const rtnval2 = config.metric_name;
+    return rtnval2;
+  }
   const metric = config.metric;
   if (typeof metric !== "string") {
     const rtnval2 = "";

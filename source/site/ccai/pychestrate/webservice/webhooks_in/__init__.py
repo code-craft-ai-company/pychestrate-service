@@ -13,6 +13,9 @@ Public surface:
   :class:`StructuredRejection` — IO shapes.
 * :func:`create_webhook`, :func:`get_webhook`,
   :func:`list_webhooks`, :func:`disable_webhook`.
+* :func:`create_webhook_with_secret`,
+  :func:`resolve_shared_secret` -- the shared secret lives
+  only in ``1-secrets-vault``.
 * :class:`WebhookConfigurationView`.
 * :func:`dispatch_inbound_webhook` +
   :class:`WebhookDispatchResult`.
@@ -28,7 +31,9 @@ Public surface:
   :class:`WebhookConfigurationNotFoundError`,
   :class:`WebhookProviderUnknownError`,
   :class:`WebhookSignatureInvalidError`,
-  :class:`WebhookReplayDetectedError`.
+  :class:`WebhookReplayDetectedError`,
+  :class:`WebhookSecretInvalidError`,
+  :class:`WebhookSecretAccessDeniedError`.
 * :func:`register_builtin_extensions`.
 """
 
@@ -44,9 +49,11 @@ from ccai.pychestrate.webservice.extensions.registry import (
 from ccai.pychestrate.webservice.webhooks_in.configuration_service import (
     WebhookConfigurationView,
     create_webhook,
+    create_webhook_with_secret,
     disable_webhook,
     get_webhook,
     list_webhooks,
+    resolve_shared_secret,
 )
 from ccai.pychestrate.webservice.webhooks_in.dispatcher import (
     WebhookDispatchResult,
@@ -59,6 +66,8 @@ from ccai.pychestrate.webservice.webhooks_in.errors import (
     WebhookInError,
     WebhookProviderUnknownError,
     WebhookReplayDetectedError,
+    WebhookSecretAccessDeniedError,
+    WebhookSecretInvalidError,
     WebhookSignatureInvalidError,
 )
 from ccai.pychestrate.webservice.webhooks_in.events import (

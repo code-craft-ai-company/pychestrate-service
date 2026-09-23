@@ -98,8 +98,11 @@ def dispatch_inbound_webhook(
         :param headers: Request headers mapping (case-insensitive
                         on read).
         :param shared_secret: Resolved bytes for the configured
-                              webhook (M2 wires the secrets
-                              vault; M1 callers supply directly).
+                              webhook. The REST receiver resolves
+                              them from the secrets vault via
+                              :func:`configuration_service.resolve_shared_secret`;
+                              the configuration row only holds
+                              the vault reference.
         :param remote_ip: Source IP used by the audit log.
         :param request_id: Caller-supplied id; the helper
                            synthesizes one when missing.

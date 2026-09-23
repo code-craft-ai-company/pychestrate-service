@@ -83,6 +83,82 @@ function announce_session_expired() {
   );
   return;
 }
+function parse_import_includes(raw) {
+  if (typeof raw !== "string") {
+    const rtnval2 = [];
+    return rtnval2;
+  }
+  const rtnval = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed_line = line.trim();
+    if (trimmed_line.length === 0 || trimmed_line.startsWith("#") === true) {
+      continue;
+    }
+    for (const piece of trimmed_line.split(",")) {
+      const include = piece.trim();
+      if (include.length > 0 && rtnval.includes(include) === false) {
+        rtnval.push(include);
+      }
+    }
+  }
+  return rtnval;
+}
+function parse_capability_tags(raw) {
+  if (typeof raw !== "string") {
+    const rtnval2 = [];
+    return rtnval2;
+  }
+  const rtnval = [];
+  for (const piece of raw.split(",")) {
+    const tag = piece.trim();
+    if (tag.length > 0 && rtnval.includes(tag) === false) {
+      rtnval.push(tag);
+    }
+  }
+  return rtnval;
+}
+function import_outcome_message(status, body) {
+  if (status === 0) {
+    const rtnval2 = { ok: false, message: "Import failed \u2014 network error." };
+    return rtnval2;
+  }
+  if (status < 200 || status >= 300) {
+    let detail = "";
+    if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+      detail = body.detail.trim();
+    }
+    if (detail.length === 0) {
+      const rtnval22 = { ok: false, message: "Import failed (HTTP " + String(status) + ")." };
+      return rtnval22;
+    }
+    const rtnval2 = { ok: false, message: "Import failed: " + detail };
+    return rtnval2;
+  }
+  let count = 0;
+  let errors = [];
+  if (body !== null && typeof body === "object") {
+    if (typeof body.entries_imported === "number") {
+      count = body.entries_imported;
+    }
+    if (Array.isArray(body.errors) === true) {
+      errors = body.errors;
+    }
+  }
+  if (count === 0) {
+    let message2 = "Nothing was imported.";
+    if (errors.length > 0) {
+      message2 = message2 + " " + errors.join("; ");
+    }
+    const rtnval2 = { ok: false, message: message2 };
+    return rtnval2;
+  }
+  let message = "Imported " + String(count) + (count === 1 ? " entry." : " entries.");
+  if (errors.length > 0) {
+    message = message + " " + String(errors.length) + " failed: " + errors.join("; ");
+  }
+  const rtnval = { ok: errors.length === 0, message };
+  return rtnval;
+}
 function trigger_message_for_status(status) {
   if (status === 202 || status === 200 || status === 201) {
     const rtnval2 = "Run triggered.";
@@ -674,8 +750,10 @@ var PycTestCatalog = class extends HTMLElement {
     return;
   }
   /**
-   * Show / hide the inline import form. The form collects a
-   * testbase importer tag and a source root reference, then POSTs
+   * Show / hide the inline import form. The service cannot browse the
+   * test code on the pods, so the form collects the testbase include
+   * names to catalog (one per line) plus the optional testbase root,
+   * branch and required capability tags, then POSTs
    * ``…/test-catalog:import``.
    */
   _toggle_import_form() {
@@ -692,21 +770,25 @@ var PycTestCatalog = class extends HTMLElement {
     const form = document.createElement("form");
     form.classList.add("pyc-catalog__import-form");
     form.setAttribute("data-role", "import-form");
-    const tag_label = document.createElement("div");
-    tag_label.classList.add("pyc-catalog__field");
-    const tag_input = document.createElement("mj-text-field");
-    tag_input.setAttribute("label", "Importer tag");
-    tag_input.classList.add("pyc-catalog__input");
-    tag_input.setAttribute("type", "text");
-    tag_input.setAttribute("data-role", "import-tag");
-    tag_input.setAttribute("placeholder", "testbase-project");
-    tag_input.value = "testbase-project";
-    tag_label.appendChild(tag_input);
-    form.appendChild(tag_label);
+    const note = document.createElement("p");
+    note.classList.add("pyc-catalog__import-note");
+    note.setAttribute("data-role", "import-note");
+    note.textContent = "List the testbase tests to add, one include per line \u2014 the names `testbase testing run --includes` takes, for example ccai.tests.singlehost.feature.test_module. Each include becomes one catalog entry.";
+    form.appendChild(note);
+    const includes_label = document.createElement("label");
+    includes_label.classList.add("pyc-catalog__field", "pyc-catalog__field--wide");
+    includes_label.textContent = "Test includes (one per line)";
+    const includes_area = document.createElement("mj-textarea");
+    includes_area.classList.add("pyc-catalog__input");
+    includes_area.setAttribute("data-role", "import-includes");
+    includes_area.setAttribute("placeholder", "ccai.tests.singlehost.feature.test_module");
+    includes_area.rows = 5;
+    includes_label.appendChild(includes_area);
+    form.appendChild(includes_label);
     const root_label = document.createElement("div");
     root_label.classList.add("pyc-catalog__field");
     const root_input = document.createElement("mj-text-field");
-    root_input.setAttribute("label", "Testbase project root");
+    root_input.setAttribute("label", "Testbase root on the pod (optional)");
     root_input.classList.add("pyc-catalog__input");
     root_input.setAttribute("type", "text");
     root_input.setAttribute("data-role", "import-root");
@@ -716,13 +798,34 @@ var PycTestCatalog = class extends HTMLElement {
     const ref_label = document.createElement("div");
     ref_label.classList.add("pyc-catalog__field");
     const ref_input = document.createElement("mj-text-field");
-    ref_input.setAttribute("label", "Reference (optional)");
+    ref_input.setAttribute("label", "Branch (optional)");
     ref_input.classList.add("pyc-catalog__input");
     ref_input.setAttribute("type", "text");
     ref_input.setAttribute("data-role", "import-ref");
     ref_input.setAttribute("placeholder", "main");
     ref_label.appendChild(ref_input);
     form.appendChild(ref_label);
+    const tags_label = document.createElement("div");
+    tags_label.classList.add("pyc-catalog__field");
+    const tags_input = document.createElement("mj-text-field");
+    tags_input.setAttribute("label", "Required capability tags (optional, comma-separated)");
+    tags_input.classList.add("pyc-catalog__input");
+    tags_input.setAttribute("type", "text");
+    tags_input.setAttribute("data-role", "import-tags");
+    tags_input.setAttribute("placeholder", "linux, python3.12");
+    tags_label.appendChild(tags_input);
+    form.appendChild(tags_label);
+    const tag_label = document.createElement("div");
+    tag_label.classList.add("pyc-catalog__field");
+    const tag_input = document.createElement("mj-text-field");
+    tag_input.setAttribute("label", "Importer");
+    tag_input.classList.add("pyc-catalog__input");
+    tag_input.setAttribute("type", "text");
+    tag_input.setAttribute("data-role", "import-tag");
+    tag_input.setAttribute("placeholder", "testbase-project");
+    tag_input.value = "testbase-project";
+    tag_label.appendChild(tag_input);
+    form.appendChild(tag_label);
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-catalog__button");
     submit.setAttribute("type", "submit");
@@ -736,9 +839,13 @@ var PycTestCatalog = class extends HTMLElement {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       void this._submit_import(
-        tag_input.value.trim(),
-        root_input.value.trim(),
-        ref_input.value.trim(),
+        {
+          importerTag: String(tag_input.value ?? "").trim(),
+          includesText: String(includes_area.value ?? ""),
+          root: String(root_input.value ?? "").trim(),
+          ref: String(ref_input.value ?? "").trim(),
+          tagsText: String(tags_input.value ?? "")
+        },
         submit,
         status
       );
@@ -750,55 +857,62 @@ var PycTestCatalog = class extends HTMLElement {
    * POST the import request and reload the catalog on completion.
    * Exposed so unit tests can drive the submit path directly.
    *
-   * @param importer_tag Importer factory tag.
-   * @param source_root Testbase project root path / reference.
-   * @param source_ref Optional branch / ref descriptor.
+   * @param request ``{importerTag, includesText, root, ref, tagsText}``
+   *                -- the importer tag, the pasted include list, and the
+   *                optional testbase root, branch and comma-separated
+   *                capability tags.
    * @param submit_button The form's submit button (disabled while
    *                      the request is in flight).
-   * @param status_node The status paragraph the progress text is
-   *                     written to.
+   * @param status_node The status paragraph the outcome is written to.
+   *
+   * @returns ``{ok, message}`` -- the outcome shown in the status line.
    */
-  async submitImport(importer_tag, source_root, source_ref, submit_button, status_node) {
-    await this._submit_import(
-      importer_tag,
-      source_root,
-      source_ref,
-      submit_button,
-      status_node
-    );
-    return;
+  async submitImport(request, submit_button, status_node) {
+    const rtnval = await this._submit_import(request, submit_button, status_node);
+    return rtnval;
   }
-  async _submit_import(importer_tag, source_root, source_ref, submit_button, status_node) {
+  async _submit_import(request, submit_button, status_node) {
+    const set_status = (text, tone) => {
+      if (status_node !== null) {
+        status_node.textContent = text;
+        status_node.setAttribute("data-tone", tone);
+      }
+      return;
+    };
     if (this._state.projectId.length === 0) {
-      if (status_node !== null) {
-        status_node.textContent = "Select a project first.";
-      }
-      return;
+      const rtnval2 = { ok: false, message: "Select a project first." };
+      set_status(rtnval2.message, "error");
+      return rtnval2;
     }
-    if (importer_tag.length === 0) {
-      if (status_node !== null) {
-        status_node.textContent = "An importer tag is required.";
-      }
-      return;
+    const importer_tag = typeof request.importerTag === "string" && request.importerTag.length > 0 ? request.importerTag : "testbase-project";
+    const includes = parse_import_includes(request.includesText);
+    if (includes.length === 0) {
+      const rtnval2 = {
+        ok: false,
+        message: "List at least one testbase include to import."
+      };
+      set_status(rtnval2.message, "error");
+      return rtnval2;
     }
     if (submit_button !== null) {
       submit_button.toggleAttribute("disabled", true);
     }
-    if (status_node !== null) {
-      status_node.textContent = "Import running\u2026";
+    set_status("Import running\u2026", "neutral");
+    const source = { includes };
+    if (typeof request.root === "string" && request.root.length > 0) {
+      source["root"] = request.root;
     }
-    const source = {};
-    if (source_root.length > 0) {
-      source["root"] = source_root;
+    if (typeof request.ref === "string" && request.ref.length > 0) {
+      source["ref"] = request.ref;
     }
-    if (source_ref.length > 0) {
-      source["ref"] = source_ref;
+    const tags = parse_capability_tags(request.tagsText);
+    if (tags.length > 0) {
+      source["required_capability_tags"] = tags;
     }
-    const payload = { importer_tag };
-    if (Object.keys(source).length > 0) {
-      payload["source"] = source;
-    }
+    const payload = { importer_tag, source };
     const url = build_catalog_import_url(this._state.projectId);
+    let status = 0;
+    let body = null;
     try {
       const response = await fetch(url, {
         method: "POST",
@@ -809,39 +923,28 @@ var PycTestCatalog = class extends HTMLElement {
         },
         body: JSON.stringify(payload)
       });
-      if (response.ok === false) {
-        if (status_node !== null) {
-          status_node.textContent = "Import failed (HTTP " + String(response.status) + ").";
-        }
-        if (submit_button !== null) {
-          submit_button.toggleAttribute("disabled", false);
-        }
-        return;
-      }
-      const summary = await response.json();
-      const imported = summary.entries_imported;
-      const count = typeof imported === "number" ? imported : 0;
-      if (status_node !== null) {
-        status_node.textContent = "Import complete \u2014 " + String(count) + " entries imported.";
+      status = response.status;
+      try {
+        body = await response.json();
+      } catch (parse_reason) {
+        body = null;
       }
     } catch (reason) {
       console.warn(
         "pychestrate.ui.catalog.import_failed",
         { reason: String(reason) }
       );
-      if (status_node !== null) {
-        status_node.textContent = "Import failed \u2014 network error.";
-      }
-      if (submit_button !== null) {
-        submit_button.toggleAttribute("disabled", false);
-      }
-      return;
+      status = 0;
     }
     if (submit_button !== null) {
       submit_button.toggleAttribute("disabled", false);
     }
-    await this._refresh();
-    return;
+    const outcome = import_outcome_message(status, body);
+    set_status(outcome.message, outcome.ok === true ? "ok" : "error");
+    if (status >= 200 && status < 300) {
+      await this._refresh();
+    }
+    return outcome;
   }
   /**
    * POST a ``TestRunCreateRequest`` for the given catalog entry.

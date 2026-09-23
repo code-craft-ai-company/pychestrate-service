@@ -204,7 +204,7 @@ def _make_config(
 
 def _patch_phases() -> List[Any]:
     """
-        Patch the five ``bootstrap_phaseN_runtime`` calls to no-ops so a
+        Patch the seven ``bootstrap_phaseN_runtime`` calls to no-ops so a
         gate test exercises only the seeding gate, not the real KEK /
         bus / scheduler wiring.
 
@@ -226,6 +226,8 @@ def _patch_phases() -> List[Any]:
         ("bootstrap_phase3_runtime", fake_phase_void),
         ("bootstrap_phase5_runtime", fake_phase_void),
         ("bootstrap_phase6_runtime", fake_phase_void),
+        ("bootstrap_phase7_runtime", fake_phase_void),
+        ("bootstrap_phase8_runtime", fake_phase_void),
     ]
 
     patches: List[Any] = []

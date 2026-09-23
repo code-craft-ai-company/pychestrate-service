@@ -14,8 +14,15 @@ Required config:
 
 Optional config:
 
-* ``label_filter`` — exact-match label dict applied to both
-  metrics.
+* ``label_filter`` — label dict applied to both metrics. A
+  series matches when its labels *include* every pair of the
+  filter, so an empty filter reads every series of the metric.
+  When a metric declares a ``project_id`` label and the filter
+  does not set one, the SLO's own project is added, so a
+  project's SLO reads only that project's series.
+
+Counter samples are increments; the achieved ratio sums the
+increments of both metrics observed inside the SLO window.
 
 The window-based aggregation is implemented in pure Python
 over ``metrics_timeseries_sample`` rows so the M1 stack stays
@@ -29,11 +36,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import hashlib
-import json
-
-from datetime import datetime, timedelta, timezone
-from typing import Any, List, Mapping, Optional, Tuple
+from datetime import timedelta
+from typing import Any, List, Mapping, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -44,7 +48,7 @@ from ccai.pychestrate.webservice.metrics.slos.factories.kind_protocol import (
     SLODefinitionProtocol,
     SLOKindRecord,
 )
-from ccai.pychestrate.webservice.metrics.timeseries import repository as ts_repository
+from ccai.pychestrate.webservice.metrics.timeseries.selection import select_samples
 
 
 AVAILABILITY_RATIO_KIND_NAME: str = "availability_ratio"
@@ -125,38 +129,24 @@ class AvailabilityRatioSloKind(SLODefinitionProtocol):
         good_metric = config["good_metric_name"]
         total_metric = config["total_metric_name"]
         label_filter = dict(config.get("label_filter", {}))
-        signature = _label_signature(labels=label_filter)
         cutoff = utc_now() - timedelta(seconds=max(window_seconds, 0))
 
-        good_rows = ts_repository.list_samples_for_signature(
+        good_rows = select_samples(
             db_session=db_session,
             metric_name=good_metric,
-            label_signature=signature,
-            limit=10000,
+            label_filter=label_filter,
+            project_id=project_id,
+            since=cutoff,
         )
-        total_rows = ts_repository.list_samples_for_signature(
+        total_rows = select_samples(
             db_session=db_session,
             metric_name=total_metric,
-            label_signature=signature,
-            limit=10000,
+            label_filter=label_filter,
+            project_id=project_id,
+            since=cutoff,
         )
-
-        # SQLite returns tz-naive datetimes; normalize to UTC-
-        # aware before comparing so the test backend matches
-        # Postgres semantics.
-        def _aware(value: datetime) -> datetime:
-            if value.tzinfo is None:
-                return value.replace(tzinfo=timezone.utc)
-            return value
-
-        good_in_window = sum(
-            row.value for row in good_rows
-            if _aware(row.observed_at) >= cutoff
-        )
-        total_in_window = sum(
-            row.value for row in total_rows
-            if _aware(row.observed_at) >= cutoff
-        )
+        good_in_window = sum(row.value for row in good_rows)
+        total_in_window = sum(row.value for row in total_rows)
 
         if total_in_window <= 0:
             rtnval = SLOComputationOutcome(
@@ -178,17 +168,3 @@ class AvailabilityRatioSloKind(SLODefinitionProtocol):
         )
         return rtnval
 
-
-def _label_signature(*, labels: Mapping[str, str]) -> str:
-    """
-        Identical signature derivation as the timeseries
-        facade.
-    """
-    canonical = json.dumps(
-        {key: labels[key] for key in sorted(labels.keys())},
-        separators=(",", ":"),
-        ensure_ascii=True,
-    )
-    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-    rtnval = digest[:32]
-    return rtnval
