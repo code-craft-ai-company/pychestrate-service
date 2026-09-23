@@ -197,6 +197,12 @@ pyc-release-channels {
     color: var(--pyc-ops-error-fg);
 }
 
+/* a page that works only in part says what is missing (ORG-F14) */
+.pyc-ops__notice--preview {
+    background-color: var(--pyc-ops-warn-surface);
+    color: var(--pyc-ops-warn-fg);
+}
+
 /* tables */
 .pyc-ops__table {
     /* mj-data-table virtualizes rows with absolute positioning,

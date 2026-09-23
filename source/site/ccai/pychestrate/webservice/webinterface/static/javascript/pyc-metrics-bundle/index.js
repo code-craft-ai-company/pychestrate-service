@@ -2523,7 +2523,7 @@ var PycSlos = class extends HTMLElement {
       },
       {
         key: "burn",
-        label: "Burn-rate",
+        label: "Achieved",
         width: "12rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
@@ -2994,6 +2994,7 @@ var COMPARISON_OPTIONS = [
   { value: "!=", label: "not equal to" }
 ];
 var DEFAULT_ALERT_WINDOW_SECONDS = 3600;
+var ALERT_RULES_PREVIEW_NOTE = "Preview: enabled rules are evaluated every minute and their state is shown below, but no notification is sent to their targets yet.";
 var ALERT_STATE_LABELS = {
   firing: "Firing",
   ok: "OK",
@@ -3286,6 +3287,12 @@ var PycAlertRules = class extends HTMLElement {
     heading.classList.add("pyc-metrics__heading");
     heading.textContent = "Metric Alert Rules";
     root.appendChild(heading);
+    const preview = document.createElement("p");
+    preview.classList.add("pyc-metrics__notice", "pyc-metrics__notice--preview");
+    preview.setAttribute("data-role", "preview-notice");
+    preview.setAttribute("role", "note");
+    preview.textContent = ALERT_RULES_PREVIEW_NOTE;
+    root.appendChild(preview);
     const controls = document.createElement("div");
     controls.classList.add("pyc-metrics__controls");
     const project_label = document.createElement("label");
@@ -3748,6 +3755,10 @@ var PycAlertRules = class extends HTMLElement {
       "Notification targets (comma-separated)",
       "create-targets",
       "ops-pager, slack:#alerts"
+    );
+    targets_input.setAttribute(
+      "help-text",
+      "Saved with the rule; notifications are not sent yet."
     );
     const enabled_label = document.createElement("label");
     enabled_label.classList.add("pyc-metrics__field");

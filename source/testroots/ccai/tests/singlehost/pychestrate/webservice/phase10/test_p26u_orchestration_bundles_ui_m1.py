@@ -1084,3 +1084,98 @@ def test_webhooks_test_event_reports_an_undelivered_event(bundle_browser: Thread
         toast_text.startswith("Test event was not delivered: not sent:"), True,
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# ORG-F14 -- pages that work only in part say what is missing
+# ---------------------------------------------------------------------------
+
+
+def test_alert_rules_page_says_notifications_are_not_sent(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORG-F14 / pyc-metrics-bundle**
+    **Property: the Alert Rules page carries a preview notice saying
+    rules are evaluated but no notification is sent.**
+    """
+    api = _metrics_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_alert_rules(browser=browser, api=api)
+        try:
+            notice = page.wait_for_selector('[data-role="preview-notice"]', timeout=5000)
+            rtnval = notice.inner_text()
+        finally:
+            context.close()
+        return rtnval
+
+    text = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        (text.startswith("Preview:"), "no notification is sent" in text),
+        (True, True),
+    )
+    return
+
+
+def test_webhooks_page_says_deliveries_start_nothing(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORG-F14 / pyc-ops-bundle**
+    **Property: the Webhooks page carries a preview notice saying
+    inbound deliveries start nothing and outbound subscriptions get
+    test events only.**
+    """
+    api = _webhooks_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_webhooks(browser=browser, api=api)
+        try:
+            notice = page.wait_for_selector('[data-role="preview-notice"]', timeout=5000)
+            rtnval = notice.inner_text()
+        finally:
+            context.close()
+        return rtnval
+
+    text = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        ("do not start builds or pipelines" in text, "test events only" in text),
+        (True, True),
+    )
+    return
+
+
+def test_slos_table_calls_the_status_column_achieved(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORG-F14 / pyc-metrics-bundle**
+    **Property: the SLO status column shows the achieved ratio and is
+    labelled "Achieved", not "Burn-rate" (no burn rate is computed).**
+    """
+    api = _metrics_api()
+    api.respond(
+        method="GET",
+        path=SLOS_PATH,
+        body={"items": [{
+            "slo_id": "00000000-0000-4000-8000-0000000d00ee",
+            "project_id": PROJECT_ID,
+            "name": "rpa success",
+            "kind": "availability_ratio",
+            "target": 0.9,
+            "window_seconds": 604800,
+            "status": {"achieved_ratio": 0.95, "breaching": False, "error_budget_remaining_ratio": 0.5,
+                       "reason": "good=19 total=20 ratio=0.950000"},
+        }], "meta": {"total": 1}},
+    )
+
+    def _scenario(browser: Any) -> Any:
+        context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-metrics-bundle")
+        try:
+            mount_element(page=page, tag="pyc-slos")
+            page.wait_for_selector('[data-role="burn-indicator"]', timeout=5000)
+            rtnval = page.evaluate(
+                "() => document.querySelector('[data-role=\"slos-table\"]').columns.map((c) => c.label)",
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    labels = bundle_browser.run(_scenario)
+    testbase.assert_equal(("Achieved" in labels, "Burn-rate" in labels), (True, False))
+    return

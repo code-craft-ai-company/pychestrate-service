@@ -1,6 +1,7 @@
 const WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 const WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 const TEST_EVENT_HISTORY_REFRESH_MS = 1500;
+const WEBHOOKS_PREVIEW_NOTE = "Preview: inbound deliveries are verified and recorded, but they do not start builds or pipelines yet. Outbound subscriptions receive test events only; entity events are not delivered to them yet.";
 const TOAST_STACK_LIMIT = 4;
 function build_integrations_url(project_id) {
   const params = new URLSearchParams();
@@ -296,6 +297,12 @@ class PycWebhooks extends HTMLElement {
     heading.classList.add("pyc-ops__heading");
     heading.textContent = "Webhooks";
     root.appendChild(heading);
+    const preview = document.createElement("p");
+    preview.classList.add("pyc-ops__notice", "pyc-ops__notice--preview");
+    preview.setAttribute("data-role", "preview-notice");
+    preview.setAttribute("role", "note");
+    preview.textContent = WEBHOOKS_PREVIEW_NOTE;
+    root.appendChild(preview);
     const controls = document.createElement("div");
     controls.classList.add("pyc-ops__controls");
     const project_label = document.createElement("label");
@@ -1859,6 +1866,7 @@ class PycWebhooks extends HTMLElement {
 export {
   PycWebhooks,
   TEST_EVENT_HISTORY_REFRESH_MS,
+  WEBHOOKS_PREVIEW_NOTE,
   TOAST_STACK_LIMIT,
   build_in_deliveries_url,
   build_integration_resource_url,

@@ -92,10 +92,10 @@
                     {{ ui.icon("account_tree") }} Pipelines
                 </a></li>
                 <li><a href="{{ url_for('projects.channel_list', project_id=project.id) }}" {% if request_endpoint == 'projects.channel_list' %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("rss_feed") }} Channels
+                    {{ ui.icon("rss_feed") }} Channels (preview)
                 </a></li>
                 <li><a href="{{ url_for('projects.schedule_list', project_id=project.id) }}" {% if request_endpoint == 'projects.schedule_list' %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("schedule") }} Schedules
+                    {{ ui.icon("schedule") }} Schedules (preview)
                 </a></li>
                 <li><a href="{{ url_for('projects.release_template_list', project_id=project.id) }}" {% if request_endpoint.startswith('projects.release_template_') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("layers") }} Release Templates

@@ -609,7 +609,7 @@ class PycSlos extends HTMLElement {
       },
       {
         key: "burn",
-        label: "Burn-rate",
+        label: "Achieved",
         width: "12rem",
         render: (slo) => {
           const burn_badge = document.createElement("mj-chip");
