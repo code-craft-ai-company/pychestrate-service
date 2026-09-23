@@ -44,7 +44,8 @@
 #      from ``deployment/pychestrate.service.template``) + start
 #      / restart the service, plus ``pychestrate-backup.service``
 #      / ``.timer`` (daily backup of the database, run artifacts
-#      and keys into ~/pychestrate/backups + backup-keys).  The unit invokes
+#      and keys into ~/pychestrate/backups + backup-keys) and the
+#      logrotate policy for ~/.pychestrate/*.log.  The unit invokes
 #      ``development/run-staging-gunicorn`` which runs gunicorn
 #      against ``build_wsgi_application_for_production()`` with
 #      ``PYCHESTRATE_RUNTIME_ENVIRONMENT=staging`` and binds
@@ -581,6 +582,13 @@ else
     BACKUP_TIMER_LOCAL="$(mktemp)"
     cp "${REPO_ROOT}/deployment/pychestrate-backup.timer.template" "${BACKUP_TIMER_LOCAL}"
 
+    # Log rotation for the files the units append to.
+    LOGROTATE_LOCAL="$(mktemp)"
+    sed \
+        -e "s|@USER@|${REMOTE_USER}|g" \
+        "${REPO_ROOT}/deployment/pychestrate.logrotate.template" \
+        > "${LOGROTATE_LOCAL}"
+
     UNIT_INSTALL_LOCAL="$(mktemp)"
     cat > "${UNIT_INSTALL_LOCAL}" <<UNIT_INSTALL
 #!/usr/bin/env bash
@@ -616,6 +624,8 @@ sudo install -m 0644 -o root -g root \\
     /tmp/pychestrate-backup.service /etc/systemd/system/pychestrate-backup.service
 sudo install -m 0644 -o root -g root \\
     /tmp/pychestrate-backup.timer /etc/systemd/system/pychestrate-backup.timer
+sudo install -m 0644 -o root -g root \\
+    /tmp/pychestrate.logrotate /etc/logrotate.d/pychestrate
 
 sudo systemctl daemon-reload
 sudo systemctl enable pychestrate.service
@@ -630,8 +640,9 @@ UNIT_INSTALL
     scp -q "${UNIT_LOCAL}"         "${REMOTE_TARGET}:/tmp/pychestrate.service"
     scp -q "${BACKUP_UNIT_LOCAL}"  "${REMOTE_TARGET}:/tmp/pychestrate-backup.service"
     scp -q "${BACKUP_TIMER_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate-backup.timer"
+    scp -q "${LOGROTATE_LOCAL}"    "${REMOTE_TARGET}:/tmp/pychestrate.logrotate"
     scp -q "${UNIT_INSTALL_LOCAL}" "${REMOTE_TARGET}:/tmp/pychestrate.systemd.install.sh"
-    rm -f "${UNIT_LOCAL}" "${BACKUP_UNIT_LOCAL}" "${BACKUP_TIMER_LOCAL}" "${UNIT_INSTALL_LOCAL}"
+    rm -f "${UNIT_LOCAL}" "${BACKUP_UNIT_LOCAL}" "${BACKUP_TIMER_LOCAL}" "${LOGROTATE_LOCAL}" "${UNIT_INSTALL_LOCAL}"
 
     ssh -t "${REMOTE_TARGET}" "bash /tmp/pychestrate.systemd.install.sh && rm -f /tmp/pychestrate.systemd.install.sh"
 fi
@@ -655,6 +666,8 @@ for attempt in 1 2 3 4 5 6 7 8; do
         echo "  proxy port  : ${PROXY_PORT}    (nginx)"
         echo "  app port    : ${REMOTE_PORT}  (loopback only)"
         echo "  service     : pychestrate.service (systemd)"
+        echo "  liveness    : https://${PUBLIC_HOSTNAME}/livez  (readiness: /readyz)"
+        echo "  metrics     : https://${PUBLIC_HOSTNAME}/metrics  (Bearer token: ~/pychestrate-service/.cache/dev-secrets/dev.metrics-token)"
         echo "  status      : ssh ${REMOTE_TARGET} sudo systemctl status pychestrate"
         echo "  live logs   : ssh ${REMOTE_TARGET} sudo journalctl -u pychestrate -f"
         echo "  log file    : ssh ${REMOTE_TARGET} 'tail -f ~/.pychestrate/server.log'"

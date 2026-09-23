@@ -82,8 +82,17 @@ UI_COOKIE_SECRET_FILE="${SECRETS_DIR}/dev.ui-cookie-secret"
 # The loader (jobs/envelope/signer.py) decodes base64 then builds
 # the Ed25519 private key from the 32-byte seed.
 ENVELOPE_SIGNING_KEY_FILE="${SECRETS_DIR}/dev.envelope-signing-key"
+# Bearer token Prometheus sends to scrape /metrics (see
+# system/operations.py); configure the scraper with this file.
+METRICS_TOKEN_FILE="${SECRETS_DIR}/dev.metrics-token"
 
 if [[ "${ADMIN_MODE}" == "false" ]]; then
+
+if [[ ! -s "${METRICS_TOKEN_FILE}" ]]; then
+    head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > "${METRICS_TOKEN_FILE}"
+    chmod 600 "${METRICS_TOKEN_FILE}"
+    echo "run-staging-gunicorn: generated ${METRICS_TOKEN_FILE} (/metrics scrape token)"
+fi
 
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
@@ -156,6 +165,8 @@ export PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH="${PYCHESTRATE_PASSWORD_PEPPER_FILE
 
 export PYCHESTRATE_UI_COOKIE_SECRET_SOURCE="${PYCHESTRATE_UI_COOKIE_SECRET_SOURCE:-file}"
 export PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH="${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH:-${UI_COOKIE_SECRET_FILE}}"
+
+export PYCHESTRATE_METRICS_TOKEN_FILE="${PYCHESTRATE_METRICS_TOKEN_FILE:-${METRICS_TOKEN_FILE}}"
 
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"

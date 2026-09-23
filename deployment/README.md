@@ -381,6 +381,38 @@ defeats the principle of least privilege.
   (which reaches the target via Tailscale).
 
 
+## Monitoring
+
+| Endpoint | Auth | Answers |
+|---|---|---|
+| `GET /livez` (also `/__health/live`) | none | `200 {"status": "live"}` while the process serves HTTP -- use for restart decisions |
+| `GET /readyz` (also `/healthz`, `/__health/ready`) | none | `200 {"status": "ready"}`, or `503 {"status": "not_ready", "failing": ["database"]}` when the database does not answer `SELECT 1` within 3 s -- use for traffic decisions |
+| `GET /api/v1/system/health` | none / admin | overall status word for anyone; subsystem details with `system:ui.admin.view` |
+| `GET /metrics` | bearer token | Prometheus text: process start, request counts and latency per worker, readiness, runs by state, backups by status and `pychestrate_backup_last_success_timestamp_seconds` (alert when it is older than ~26 h), internal event counters |
+
+The probes reveal nothing but a status word and check names, and they
+pass the first-run setup gate. `/metrics` needs `Authorization: Bearer
+<token>`, the token being the contents of `PYCHESTRATE_METRICS_TOKEN_FILE`
+(`run-staging-gunicorn` generates `.cache/dev-secrets/dev.metrics-token`);
+set `PYCHESTRATE_METRICS_PUBLIC=true` to serve it without a token only
+where the network or proxy already restricts it. Scrape config:
+
+```yaml
+scrape_configs:
+  - job_name: pychestrate
+    scheme: https
+    authorization:
+      credentials_file: /etc/prometheus/pychestrate-metrics-token
+    static_configs:
+      - targets: ["tc-app-server.tailb75ce6.ts.net"]
+```
+
+Counters and latency histograms are per gunicorn worker (series carry
+a `pid` label; sum them). `~/.pychestrate/server.log` and `backup.log`
+are rotated daily or past 100 MB, 14 kept, by
+`/etc/logrotate.d/pychestrate` (from `pychestrate.logrotate.template`).
+
+
 ## Backup and restore
 
 A backup is two files per run, written under the presence directory

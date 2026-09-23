@@ -92,6 +92,17 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #
 #Environment="PYCHESTRATE_ARTIFACT_ROOT=/srv/pychestrate/artifacts"
 
+# Monitoring.  /livez and /readyz answer without credentials.
+# /metrics (Prometheus) requires ``Authorization: Bearer <token>``
+# with the token in PYCHESTRATE_METRICS_TOKEN_FILE, which
+# run-staging-gunicorn generates at .cache/dev-secrets/dev.metrics-token
+# (point the scraper's credentials_file at a copy).  To serve
+# /metrics without a token instead -- e.g. when the proxy restricts
+# the path -- set PYCHESTRATE_METRICS_PUBLIC=true.
+#
+#Environment="PYCHESTRATE_METRICS_TOKEN_FILE=/etc/pychestrate/metrics-token"
+#Environment="PYCHESTRATE_METRICS_PUBLIC=true"
+
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 
 # Restart on crash with a small backoff; the StartLimitBurst /
@@ -103,7 +114,9 @@ RestartSec=5
 # Tee the service's stdout/stderr to a log file under the
 # user's home directory so ``tail -f ~/.pychestrate/server.log``
 # stays useful for ad-hoc debugging.  ``journalctl -u
-# pychestrate.service`` is the canonical view.
+# pychestrate.service`` shows the unit's lifecycle.  The file is
+# rotated daily (or past 100 MB, 14 kept, compressed) by
+# /etc/logrotate.d/pychestrate from pychestrate.logrotate.template.
 StandardOutput=append:/home/@USER@/.pychestrate/server.log
 StandardError=append:/home/@USER@/.pychestrate/server.log
 

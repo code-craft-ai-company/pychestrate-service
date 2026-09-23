@@ -63,6 +63,9 @@ from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
 from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     register_system_health_routes,
 )
+from ccai.pychestrate.webservice.system.restapi.v1.operations_routes import (
+    register_operations_routes,
+)
 from ccai.pychestrate.webservice.mcp.service_endpoint import (
     MCP_MIDDLEWARE_PREFIX,
     register_mcp_service_routes,
@@ -518,6 +521,9 @@ def register_service_extensions() -> None:
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
     register_system_health_routes(app=app, version_prefix="/api/v1")
+    # Liveness / readiness probes and Prometheus /metrics (top level,
+    # no session; see system.operations).
+    register_operations_routes(app=app)
     # MCP server endpoint for agents (fixed path /mcp/1/service, not
     # under the versioned REST prefix).
     register_mcp_service_routes(app=app)
