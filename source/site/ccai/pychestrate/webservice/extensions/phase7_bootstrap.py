@@ -27,7 +27,9 @@ additionally:
 * attaches the :class:`MetricIngestBusBridge`, the production metric
   writer that turns ``entity.*`` bus events into samples;
 * starts the periodic alert evaluator, which evaluates every enabled
-  alert rule so its live state (OK / FIRING) is current.
+  alert rule so its live state (OK / FIRING) is current. Each run
+  takes the ``metrics.alerts.evaluate`` housekeeping lease, so when
+  several server processes run it only one evaluates at a time.
 
 Before audit ORC-04 none of this was called: the registries were
 empty, so creating an SLO, alert rule or dashboard tile failed with
@@ -44,11 +46,12 @@ import logging
 import threading
 
 from dataclasses import dataclass, field
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as DbSession
 
+from ccai.pychestrate.webservice.housekeeping.tasks import run_with_lease
 from ccai.pychestrate.webservice.jobs.scheduling import (
     PeriodicTask,
     PeriodicTaskScheduler,
@@ -95,8 +98,13 @@ _LOGGER = logging.getLogger("pychestrate.extensions.phase7")
 #: Seconds between evaluations of every enabled alert rule.
 DEFAULT_ALERT_EVALUATION_INTERVAL_SECONDS: float = 60.0
 
-#: Name of the periodic alert-evaluator task.
-ALERT_EVALUATOR_TASK_NAME: str = "phase7.alert_evaluator"
+#: Name of the periodic alert-evaluator task and of its housekeeping
+#: lease.
+ALERT_EVALUATOR_TASK_NAME: str = "metrics.alerts.evaluate"
+
+#: Lease time-to-live of one evaluator run; a run over a few hundred
+#: rules takes seconds.
+ALERT_EVALUATOR_LEASE_SECONDS: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -223,36 +231,45 @@ def phase7_scheduler() -> PeriodicTaskScheduler:
 def evaluate_alert_rules_once() -> int:
     """
         Evaluate every enabled alert rule with the evaluator's current
-        session factory -- one tick of the alert evaluator.
+        session factory -- one tick of the alert evaluator. The run
+        holds the :data:`ALERT_EVALUATOR_TASK_NAME` housekeeping lease;
+        when another process holds it, this tick evaluates nothing.
 
-        :returns: How many rules were evaluated (0 when no session
-                  factory is configured).
+        :returns: How many rules this tick evaluated (0 when no session
+                  factory is configured, another process holds the
+                  lease, or the rules cannot be read).
     """
     with _RUNTIME_LOCK:
         session_factory = _EVALUATOR_SESSION_FACTORY
     if session_factory is None:
         return 0
-    session = session_factory()
+
+    evaluated: List[int] = [0]
+
+    def _work(db_session: DbSession, keep_lease: Callable[[], bool]) -> str:
+        results = alerts_service.evaluate_enabled_alert_rules(db_session=db_session)
+        evaluated[0] = len(results)
+        firing = len([result for result in results if result.state.value == "firing"])
+        rtnval = "evaluated={} firing={}".format(len(results), firing)
+        return rtnval
+
     try:
-        results = alerts_service.evaluate_enabled_alert_rules(db_session=session)
+        run_with_lease(
+            session_factory=session_factory,
+            task_name=ALERT_EVALUATOR_TASK_NAME,
+            ttl_seconds=ALERT_EVALUATOR_LEASE_SECONDS,
+            work=_work,
+        )
     except SQLAlchemyError as xcpt:
-        # The rule table cannot be read (schema not created yet, DB
-        # down): say so once per tick without a traceback and retry on
-        # the next tick.
+        # The lease or rule tables cannot be read (schema not created
+        # yet, DB down): say so once per tick without a traceback and
+        # retry on the next tick.
         _LOGGER.warning(
-            "phase7.alert_evaluator.rules_unreadable error=%s",
+            "phase7.alert_evaluator.unreadable error=%s",
             xcpt.__class__.__name__,
         )
-        results = []
-    finally:
-        session.close()
-    if len(results) > 0:
-        _LOGGER.debug(
-            "phase7.alert_evaluator.tick rules=%s firing=%s",
-            len(results),
-            len([r for r in results if r.state.value == "firing"]),
-        )
-    rtnval = len(results)
+        return 0
+    rtnval = evaluated[0]
     return rtnval
 
 

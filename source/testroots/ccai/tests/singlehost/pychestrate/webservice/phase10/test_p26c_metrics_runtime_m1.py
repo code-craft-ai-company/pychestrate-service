@@ -57,6 +57,7 @@ from ccai.pychestrate.webservice.extensions.registry import (
 from ccai.pychestrate.webservice.extensions.view_registry_self_check import (
     check_view_registries,
 )
+from ccai.pychestrate.webservice.housekeeping import acquire_lease
 from ccai.pychestrate.webservice.jobs.scheduling import PeriodicTaskScheduler
 from ccai.pychestrate.webservice.messaging.event_bus import (
     EntityEvent,
@@ -283,6 +284,33 @@ def test_alert_evaluator_tick_evaluates_every_enabled_rule():
         _teardown_runtime()
     testbase.assert_equal(evaluated, 1)
     testbase.assert_equal(live.state, AlertState.FIRING)
+    return
+
+
+def test_alert_evaluator_tick_skips_while_another_process_holds_the_lease():
+    """
+    **Feature: metrics runtime -- audit ORC-04**
+    **Property: when another server process holds the evaluator's
+    housekeeping lease, a tick evaluates nothing, so several processes
+    never evaluate (and fire) the same rules at once.**
+    """
+    _fresh_runtime()
+    engine, session = build_in_memory_session()
+    try:
+        _register_counter(session=session, name=COUNTER_METRIC, label_names=("project_id",))
+        rule = _threshold_rule(session=session, config={
+            "metric_name": COUNTER_METRIC, "op": ">", "threshold": 0,
+        })
+        write_counter(db_session=session, name=COUNTER_METRIC, delta=1.0, labels={"project_id": PROJECT_UUID})
+        session.commit()
+        acquire_lease(session, task_name=ALERT_EVALUATOR_TASK_NAME, holder_id="another-process", ttl_seconds=300.0)
+        make_alert_evaluator_task(session_factory=sessionmaker(bind=engine), interval_seconds=60.0)
+        evaluated = evaluate_alert_rules_once()
+        live = get_live_state(db_session=session, rule_id=rule.rule_id)
+    finally:
+        session.close()
+        _teardown_runtime()
+    testbase.assert_equal((evaluated, live.state), (0, AlertState.UNKNOWN))
     return
 
 
