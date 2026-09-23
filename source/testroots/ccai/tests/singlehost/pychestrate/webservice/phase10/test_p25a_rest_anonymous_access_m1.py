@@ -520,6 +520,8 @@ def _production_route_probe() -> List[Dict[str, Any]]:
     kek_path = os.path.join(workdir, "kek.bin")
     with open(kek_path, "wb") as kek_file:
         kek_file.write(b"\x77" * 32)
+    # The KEK loader refuses a key file its group or other users can read.
+    os.chmod(kek_path, 0o600)
 
     env = os.environ.copy()
     env["PYCHESTRATE_DATABASE_URL"] = "sqlite:///" + db_path

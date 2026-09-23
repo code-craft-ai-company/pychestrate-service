@@ -237,6 +237,9 @@ from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
 from ccai.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
+from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
+    wrap_wsgi_app_with_secure_cookie_policy,
+)
 from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
 from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
@@ -662,6 +665,9 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # Cookies carry ``Secure`` for HTTPS requests (direct or through a
+    # trusted proxy) and always in production; see cookie_session.
+    wsgi_app = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=wsgi_app)
     # Platform layers (security headers + CSP nonce, request metrics)
     # see every response.
     wsgi_app = wrap_platform_wsgi_application(
@@ -733,6 +739,9 @@ def build_wsgi_application_for_production():
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     rtnval = _eager_start_response_wsgi(rtnval_inner)
+    # Cookies carry ``Secure`` for HTTPS requests (direct or through a
+    # trusted proxy) and always in production; see cookie_session.
+    rtnval = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=rtnval)
     # Platform layers (security headers + CSP nonce, request metrics)
     # see every response.
     rtnval = wrap_platform_wsgi_application(

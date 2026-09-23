@@ -34,7 +34,7 @@ Unit Tests
 TestBase Tests
 ==============
 
-A 'testbase' test takes the form of a function with a 'test_' prefix like so:
+A ``testbase`` test takes the form of a function with a ``test_`` prefix like so:
 
 .. code-block:: python
 
@@ -81,10 +81,11 @@ To use a resource in a descendant test scope, just reference it by name in the t
 
 The test tree should only contain resource origination declarations and tests.  It should not contain factories unless the usage of the factory is very isolated.  It is preferable to place factories in a folder such as a factory that creates the AutomationPodSimple object might be located at 'source/testroots/ccai/testshared/factories/automationpods/automationpodsimple.py'
 
-# Evaluating Test Results
-There is a machine processable JSOS stream file in the output folder.
+Evaluating Test Results
+=======================
 
-"*outputfolder*/testrun_results_stream.jsos"
+There is a machine processable JSOS stream file in the output folder:
+``<output folder>/testrun_results_stream.jsos``.
 
 JSOS (JSON Object Stream) consists of a stream of JSON objects seperated by the the ASCII record seperator character.  When a
 test starts it writes a preview to the stream.  The test preview has a 'result' equal to 'UNSET'.  Example Preview:
@@ -107,6 +108,7 @@ test starts it writes a preview to the stream.  The test preview has a 'result' 
 When a test finishes it writes a result to the stream.  A test result will always have a 'detail' attribute. Example Result:
 
 .. code-block:: javascript
+
     {
         "name": "ccai.tests.singlehost.interop.protocols.dns.test_dnsaddress#test_write_passes_address",
         "monikers": [],
