@@ -761,12 +761,14 @@ class ProjectManager:
         ).count()
         
         total_active_jobs = active_builds + active_infra_jobs + active_test_jobs
-        
+
         if total_active_jobs > 0:
             raise ProjectHasActiveJobsError(
-                f"Cannot delete project '{project.name}' with {total_active_jobs} active job(s)"
+                f"Cannot delete project '{project.name}' while {total_active_jobs} build, "
+                f"infrastructure or test job(s) are pending or running. Cancel them or "
+                f"wait for them to finish, then delete the project."
             )
-        
+
         project_name = project.name
 
         try:
@@ -775,8 +777,8 @@ class ProjectManager:
             if related_rows_cleanup is not None:
                 related_rows_cleanup(self._db_session, project_id)
 
-            # Delete the project (cascades to members, variables, etc.)
-            self._db_session.delete(project)
+            # Delete everything the project owns, then the project.
+            self._delete_project_rows(project_id)
             self._db_session.commit()
         except Exception:
             self._db_session.rollback()
@@ -1740,6 +1742,115 @@ class ProjectManager:
     # Helper Methods
     # =========================================================================
     
+    def _delete_project_rows(self, project_id: int) -> None:
+        """
+        Delete a project and every row it owns, children first, without
+        committing.
+
+        The ORM relationship cascades only covered some children:
+        ``ProjectBuildSpec.builds`` (and the infrastructure / test job
+        and pipeline run collections) had none, so deleting a project
+        that had ever run a build made SQLAlchemy try to set
+        ``project_builds.pbspec_id`` to NULL and the delete failed with an
+        IntegrityError; calendar events and release schedules had no
+        relationship at all. The rows are therefore deleted explicitly,
+        in foreign-key order, after the few nullable cross-references
+        between the project's own tables (releases <-> pipeline runs,
+        channels -> current release, test jobs -> builds) are cleared.
+        The order holds on databases that enforce foreign keys
+        (PostgreSQL).
+
+        :param project_id: The project's unique identifier
+        """
+        from ccai.pychestrate.core.orm import (
+            Project, ProjectMember, ProjectVariable, ProjectRepository,
+            ProjectBuildSpec, ProjectBuild, ProjectBuildArtifact,
+            ProjectInfraSpec, ProjectInfraJob,
+            ProjectTestSpec, ProjectTestJob, ProjectTestResult,
+            ProjectReleasePipeline, ProjectPipelineRun, ProjectStageRun,
+            ProjectRelease, ProjectReleaseArtifact, ProjectReleaseChannel,
+            ProjectChannelHistory, ProjectReleaseSchedule, ProjectReleaseTemplate,
+            ProjectCalendarEvent, ProjectReleaseEvent, ProjectPhaseEvent,
+            ProjectReleaseBranch, ProjectMergeEvent, ProjectPullEvent,
+            ProjectWatch, ProjectWatchTriggerLog, project_resources,
+        )
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select
+
+        session = self._db_session
+
+        def _ids(column, *criteria):
+            return select(column).where(*criteria)
+
+        def _delete_where(model, *criteria) -> None:
+            session.query(model).filter(*criteria).delete(synchronize_session=False)
+            return
+
+        def _clear(model, values: Dict[str, Any], *criteria) -> None:
+            session.query(model).filter(*criteria).update(values, synchronize_session=False)
+            return
+
+        pipeline_ids = _ids(ProjectReleasePipeline.id,
+                            ProjectReleasePipeline.project_id == project_id)
+
+        # Break the nullable references between the project's own rows.
+        _clear(ProjectReleaseChannel, {ProjectReleaseChannel.current_release_id: None},
+               ProjectReleaseChannel.project_id == project_id)
+        _clear(ProjectRelease, {ProjectRelease.pipeline_run_id: None, ProjectRelease.schedule_id: None},
+               ProjectRelease.project_id == project_id)
+        _clear(ProjectPipelineRun, {ProjectPipelineRun.release_id: None},
+               ProjectPipelineRun.pipeline_id.in_(pipeline_ids))
+        _clear(ProjectTestJob, {ProjectTestJob.build_id: None, ProjectTestJob.infra_job_id: None},
+               ProjectTestJob.project_id == project_id)
+        _clear(ProjectTestSpec, {ProjectTestSpec.build_ref: None, ProjectTestSpec.infra_ref: None},
+               ProjectTestSpec.project_id == project_id)
+
+        # Watches and their trigger history.
+        _delete_where(ProjectWatchTriggerLog, ProjectWatchTriggerLog.watch_id.in_(
+            _ids(ProjectWatch.id, ProjectWatch.project_id == project_id)))
+        _delete_where(ProjectWatch, ProjectWatch.project_id == project_id)
+
+        # Tests, builds, infrastructure.
+        _delete_where(ProjectTestResult, ProjectTestResult.job_id.in_(
+            _ids(ProjectTestJob.id, ProjectTestJob.project_id == project_id)))
+        _delete_where(ProjectTestJob, ProjectTestJob.project_id == project_id)
+        _delete_where(ProjectTestSpec, ProjectTestSpec.project_id == project_id)
+        _delete_where(ProjectBuildArtifact, ProjectBuildArtifact.build_id.in_(
+            _ids(ProjectBuild.id, ProjectBuild.project_id == project_id)))
+        _delete_where(ProjectBuild, ProjectBuild.project_id == project_id)
+        _delete_where(ProjectBuildSpec, ProjectBuildSpec.project_id == project_id)
+        _delete_where(ProjectInfraJob, ProjectInfraJob.project_id == project_id)
+        _delete_where(ProjectInfraSpec, ProjectInfraSpec.project_id == project_id)
+
+        # Releases, their calendar and branch events, channels, pipelines.
+        release_ids = _ids(ProjectRelease.id, ProjectRelease.project_id == project_id)
+        _delete_where(ProjectPhaseEvent, ProjectPhaseEvent.release_event_id.in_(
+            _ids(ProjectReleaseEvent.id, ProjectReleaseEvent.project_id == project_id)))
+        _delete_where(ProjectReleaseEvent, ProjectReleaseEvent.project_id == project_id)
+        _delete_where(ProjectMergeEvent, ProjectMergeEvent.project_id == project_id)
+        _delete_where(ProjectPullEvent, ProjectPullEvent.project_id == project_id)
+        _delete_where(ProjectReleaseBranch, ProjectReleaseBranch.release_id.in_(release_ids))
+        _delete_where(ProjectReleaseArtifact, ProjectReleaseArtifact.release_id.in_(release_ids))
+        _delete_where(ProjectChannelHistory, ProjectChannelHistory.channel_id.in_(
+            _ids(ProjectReleaseChannel.id, ProjectReleaseChannel.project_id == project_id)))
+        _delete_where(ProjectReleaseChannel, ProjectReleaseChannel.project_id == project_id)
+        _delete_where(ProjectStageRun, ProjectStageRun.pipeline_run_id.in_(
+            _ids(ProjectPipelineRun.id, ProjectPipelineRun.pipeline_id.in_(pipeline_ids))))
+        _delete_where(ProjectRelease, ProjectRelease.project_id == project_id)
+        _delete_where(ProjectPipelineRun, ProjectPipelineRun.pipeline_id.in_(pipeline_ids))
+        _delete_where(ProjectReleaseSchedule, ProjectReleaseSchedule.project_id == project_id)
+        _delete_where(ProjectReleasePipeline, ProjectReleasePipeline.project_id == project_id)
+        _delete_where(ProjectReleaseTemplate, ProjectReleaseTemplate.project_id == project_id)
+        _delete_where(ProjectCalendarEvent, ProjectCalendarEvent.project_id == project_id)
+
+        # Repositories, settings, membership, and the project itself.
+        _delete_where(ProjectRepository, ProjectRepository.project_id == project_id)
+        _delete_where(ProjectVariable, ProjectVariable.project_id == project_id)
+        session.execute(sa_delete(project_resources).where(project_resources.c.proj_id == project_id))
+        _delete_where(ProjectMember, ProjectMember.project_id == project_id)
+        _delete_where(Project, Project.id == project_id)
+        return
+
     def _project_to_response(self, project) -> ProjectResponse:
         """
         Convert a Project ORM object to a ProjectResponse dataclass.

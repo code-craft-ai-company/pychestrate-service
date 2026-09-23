@@ -467,11 +467,18 @@ def test_project_delete_redirects_to_list(browser: Browser) -> None:
         page.goto(BASE_URL + "/projects/{}".format(project_id_str))
         page.wait_for_load_state("domcontentloaded")
 
-        # The delete form's submit button uses a JS confirm() -- use
-        # page.on("dialog", ...) to auto-accept before clicking.
+        # The delete form carries data-confirm; the shell asks through
+        # an <mj-dialog> ("Continue") and falls back to the native
+        # confirm() -- accept whichever appears.
         page.on("dialog", lambda dlg: dlg.accept())
-        page.click("button.btn-danger")
+        page.click("form[action$='/delete'] button.btn-danger")
+        continue_button = page.get_by_role("button", name="Continue")
+        try:
+            continue_button.last.click(timeout=5000)
+        except Exception:
+            pass
 
+        page.wait_for_url("**/projects/list", timeout=NAVIGATION_TIMEOUT_MS)
         page.wait_for_load_state("domcontentloaded")
 
         # Should land on /projects/list.

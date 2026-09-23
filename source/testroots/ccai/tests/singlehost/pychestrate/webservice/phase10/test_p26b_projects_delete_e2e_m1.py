@@ -12,6 +12,9 @@ left in the database afterwards.
 * PRJ-19 -- a project's RPA specifications, revisions and jobs are
   removed with it, and a project with RPA jobs still running is not
   deleted.
+* PRJ-03 -- a project that has run builds can be deleted, and a refused
+  delete explains itself on the project page instead of showing
+  database error text.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -27,10 +30,12 @@ from ccai import testbase
 from ccai.pychestrate.core.defaults import new_uuid
 from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
     ensure_app,
+    ensure_seeded_admin,
     logged_in_cookies,
 )
 from ccai.tests.singlehost.pychestrate.webservice.phase10._projects_ui_helpers import (
     create_project_via_ui,
+    get_page,
     open_db_session,
     post_form,
 )
@@ -166,6 +171,97 @@ def test_deleting_a_project_removes_its_rpa_specs_revisions_and_jobs():
     testbase.assert_equal(
         _rpa_row_counts(project_id=project_id, spec_id=seeded["spec_id"]),
         {"specs": 0, "jobs": 0, "revisions": 0},
+    )
+    return
+
+
+def _seed_build(*, project_id: int, status: str, owner_id: str) -> None:
+    """
+        Give the project a repository, a build specification and one
+        build in ``status`` (with an artifact), straight in the database.
+    """
+    import uuid  # noqa: E402
+
+    from ccai.pychestrate.core.orm import (  # noqa: E402
+        ProjectBuild,
+        ProjectBuildArtifact,
+        ProjectBuildSpec,
+        ProjectRepository,
+    )
+
+    db_session = open_db_session()
+    try:
+        repo = ProjectRepository(
+            project_id=project_id, name="repo", url="https://example.com/r.git", auth_type="none",
+        )
+        db_session.add(repo)
+        db_session.flush()
+        spec = ProjectBuildSpec(project_id=project_id, repository_id=repo.id, name="nightly")
+        db_session.add(spec)
+        db_session.flush()
+        build = ProjectBuild(
+            project_id=project_id, spec_id=spec.id, spec_version=1, branch="main",
+            commit_sha="abc1234", status=status, trigger_type="manual",
+            triggered_by_id=uuid.UUID(owner_id),
+        )
+        db_session.add(build)
+        db_session.flush()
+        db_session.add(ProjectBuildArtifact(
+            build_id=build.id, name="app.tgz", path="/tmp/app.tgz", size_bytes=1, checksum="00",
+        ))
+        db_session.commit()
+    finally:
+        db_session.close()
+    return
+
+
+def test_a_project_that_has_run_builds_can_be_deleted():
+    """
+    **Feature: projects deletion (PRJ-03)**
+    **Property: POST /projects/{id}/delete removes a project whose build
+    specification has a finished build with an artifact (the delete used
+    to fail with an IntegrityError).**
+    """
+    handle = ensure_app()
+    cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
+    admin = ensure_seeded_admin()
+    project_id = create_project_via_ui(
+        wsgi_app=handle.wsgi_app, cookies=cookies, prefix="prj03-built"
+    )
+    _seed_build(project_id=project_id, status="succeeded", owner_id=admin.user_id)
+
+    _delete_project(wsgi_app=handle.wsgi_app, cookies=cookies, project_id=project_id)
+
+    testbase.assert_equal(_project_exists(project_id=project_id), False)
+    return
+
+
+def test_a_refused_delete_explains_itself_on_the_project_page():
+    """
+    **Feature: projects deletion (PRJ-03)**
+    **Property: when a project cannot be deleted (a build is still
+    pending), the user is sent back to the project page with a message
+    saying what to do -- not to the list, and not with database error
+    text.**
+    """
+    handle = ensure_app()
+    cookies = logged_in_cookies(wsgi_app=handle.wsgi_app)
+    admin = ensure_seeded_admin()
+    project_id = create_project_via_ui(
+        wsgi_app=handle.wsgi_app, cookies=cookies, prefix="prj03-busy"
+    )
+    _seed_build(project_id=project_id, status="pending", owner_id=admin.user_id)
+
+    response = _delete_project(wsgi_app=handle.wsgi_app, cookies=cookies, project_id=project_id)
+    page = get_page(wsgi_app=handle.wsgi_app, path=response.header("Location"), cookies=cookies)
+
+    testbase.assert_equal(
+        (
+            response.header("Location"),
+            "Cancel them or wait for them to finish" in page.text,
+            "Error" in page.text and "sqlite" in page.text.lower(),
+        ),
+        ("/projects/{}".format(project_id), True, False),
     )
     return
 

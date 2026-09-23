@@ -1105,10 +1105,22 @@ def handle_project_delete(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            # Stay on the project when it still exists: the message says
+            # what to do (or carries a reference for an administrator).
+            if getattr(exc, "error_code", None) == "PROJECT_NOT_FOUND":
+                failure_url = _url_for_module.url_for("projects.project_list")
+            else:
+                failure_url = _url_for_module.url_for(
+                    "projects.project_detail", project_id=project_id
+                )
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("projects.project_list"),
-                message="Error deleting project: {}".format(str(exc)),
+                url=failure_url,
+                message=_describe_failure(
+                    exc=exc,
+                    prefix="Error deleting project: ",
+                    request_path=str(getattr(request, "path", "")),
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1655,6 +1667,70 @@ def _log_unexpected_error(*, action: str, request_path: str) -> str:
         request_path,
     )
     return reference
+
+
+class ProjectsFormError(ValueError):
+    """
+        A problem with what the user submitted, raised by the projects
+        route handlers themselves. Its message is written for the user
+        and is shown as-is.
+    """
+
+
+def _is_user_facing_error(*, exc: BaseException) -> bool:
+    """
+        Whether an exception's message was written for users.
+
+        True for :class:`ProjectsFormError` and for the domain
+        exceptions the core managers raise (classes defined under
+        ``ccai.pychestrate.core.managers`` that carry an
+        ``error_code``, such as ``ProjectHasActiveJobsError``). Anything
+        else -- SQL errors, ``TypeError``, ``KeyError`` -- is an
+        internal failure whose text must not reach the browser.
+
+        :param exc: The exception being handled.
+
+        :returns: ``True`` when the message may be shown to the user.
+    """
+    if isinstance(exc, ProjectsFormError):
+        return True
+    module_name = str(getattr(type(exc), "__module__", "") or "")
+    rtnval = (
+        module_name.startswith("ccai.pychestrate.core.managers.")
+        and hasattr(exc, "error_code")
+    )
+    return rtnval
+
+
+def _describe_failure(
+        *, exc: BaseException, prefix: str, request_path: str
+    ) -> str:
+    """
+        Turn an exception caught by a handler into the flash message
+        shown to the user. User-facing errors keep their message; any
+        other exception is logged (with its traceback) under a new
+        reference and replaced by a generic sentence carrying that
+        reference, so SQL, Python and git error text never reaches the
+        browser. Call from inside the ``except`` block.
+
+        :param exc: The exception being handled.
+        :param prefix: Message start, e.g. ``"Error deleting project: "``.
+        :param request_path: Path of the failing request (logged).
+
+        :returns: The flash message.
+    """
+    if _is_user_facing_error(exc=exc) is True:
+        detail = getattr(exc, "message", None) or str(exc)
+    else:
+        reference = _log_unexpected_error(
+            action=prefix.strip().rstrip(":"), request_path=request_path
+        )
+        detail = (
+            "an unexpected problem occurred. If it keeps happening, give "
+            "an administrator this reference: {}.".format(reference)
+        )
+    rtnval = "{}{}".format(prefix, detail)
+    return rtnval
 
 
 def _render_unexpected_error_page(*, request: Request, action: str) -> Response:
