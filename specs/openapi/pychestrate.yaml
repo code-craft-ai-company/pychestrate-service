@@ -2580,6 +2580,16 @@ paths:
         `test_catalog_importer` factory protocol) against the project.
         Each import overwrites entries with the same
         `(project_id, importer_tag, entry_key)` key in place.
+
+        The service cannot walk a testbase project on the pods, so the
+        `testbase-project` importer catalogs the tests the source
+        names: `includes` (testbase include expressions, one entry
+        each, with optional `root`, `ref` and
+        `required_capability_tags`) and / or full `entries`. An import
+        that would add nothing -- an empty source, a malformed include
+        or entry, or an importer that finds no entries -- answers 422
+        with the reason and `entries_imported: 0`; it is never
+        reported as a successful import.
       requestBody:
         required: true
         content:
@@ -2593,6 +2603,7 @@ paths:
               schema: { $ref: '#/components/schemas/TestCatalogImportSummary' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   /projects/{project_id}/builds:
     parameters:
@@ -7428,7 +7439,20 @@ components:
         source:
           type: object
           additionalProperties: true
-          description: Importer-specific source descriptor (repo URL, branch, path).
+          description: |
+            Importer-specific source descriptor. For `testbase-project`:
+            `includes` (array of testbase include expressions such as
+            `ccai.tests.singlehost.feature.test_module` or
+            `pkg.module@#test_name`), optional `root` (testbase root on
+            the pod), `ref` (branch, stored as the entry's branch) and
+            `required_capability_tags`; and / or `entries` (full entry
+            objects with `entry_key`, `display_name`, `description`,
+            `required_capability_tags`, `param_schema`, `raw_metadata`).
+          example:
+            includes:
+              - ccai.tests.singlehost.feature.test_module
+            root: source/testroots/ccai
+            ref: main
     TestCatalogImportSummary:
       type: object
       required: [importer_tag, started_at]
