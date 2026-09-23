@@ -55,6 +55,9 @@ from ccai.webworks.routing.response import (
     Response,
 )
 
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    password_policy_template_context,
+)
 from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
@@ -466,6 +469,7 @@ def handle_user_create(request: Request) -> Response:
             )
             context["roles"] = roles
             context["form_data"] = None
+            context.update(password_policy_template_context())
             response = _render(
                 template_name="config/users/create.html",
                 context=context,
@@ -569,6 +573,7 @@ def handle_user_create(request: Request) -> Response:
         )
         context["roles"] = roles
         context["form_data"] = form_view
+        context.update(password_policy_template_context())
         response = _render(
             template_name="config/users/create.html",
             context=context,

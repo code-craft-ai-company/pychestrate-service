@@ -31,10 +31,14 @@
             <label for="password">Password *</label>
             <div class="actions-row">
                 <input type="password" id="password" name="password" class="form-control" required
-                       minlength="12" autocomplete="new-password">
+                       minlength="{{ password_min_length }}" maxlength="{{ password_max_length }}"
+                       pattern="{{ password_pattern }}" title="{{ password_title }}"
+                       aria-describedby="password-rules" autocomplete="new-password">
                 <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
             </div>
-            <p class="form-text">Minimum 12 characters with uppercase, lowercase, digit, and special character</p>
+            {% with password_input_id="password" %}
+                {% include "config/_password_rules.html" %}
+            {% endwith %}
         </div>
         
         <div class="form-group">

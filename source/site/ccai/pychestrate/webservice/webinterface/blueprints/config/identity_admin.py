@@ -54,12 +54,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
+# ``MIN_PASSWORD_LENGTH`` is re-exported for callers that read the
+# bound from here; the rules themselves live in
+# security.auth.password_policy.
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    MIN_PASSWORD_LENGTH,
+)
+
 
 ADMIN_UI_PERMISSION_KEY: str = "system:ui.admin.view"
 
 SYSTEM_ADMIN_ROLE_NAME: str = "system-admin"
-
-MIN_PASSWORD_LENGTH: int = 12
 
 _LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -279,11 +284,43 @@ def _validate_new_user_fields(
         )
     if display_name is None or len(display_name.strip()) == 0:
         raise AdminValidationError("Display name is required")
-    if password is None or len(password) < MIN_PASSWORD_LENGTH:
+    _validate_password_for_user(
+        password=password, login_name=username, email=email
+    )
+    return
+
+
+def _validate_password_for_user(
+        *,
+        password: Optional[str],
+        login_name: Optional[str],
+        email: Optional[str]
+    ) -> None:
+    """
+        Enforce the shared password policy
+        (:mod:`security.auth.password_policy`) for a password being
+        set on an account. Every path in this module that stores a
+        password goes through here, so the rules the forms state are
+        the rules the server applies.
+
+        :param password: Candidate plaintext password.
+        :param login_name: The account's login name.
+        :param email: The account's email address.
+
+        :returns: None.
+        :raises: AdminValidationError
+    """
+    from ccai.pychestrate.webservice.security.auth.password_policy import (
+        check_password_against_policy,
+        describe_password_problems,
+    )
+
+    problems = check_password_against_policy(
+        password=password, login_name=login_name, email=email
+    )
+    if len(problems) > 0:
         raise AdminValidationError(
-            "Password must be at least {} characters".format(
-                MIN_PASSWORD_LENGTH
-            )
+            describe_password_problems(problems=problems)
         )
     return
 

@@ -523,6 +523,33 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
 
 
 # ---------------------------------------------------------------------------
+# Admin & identity: password rules, password lifecycle, audit, sessions
+# (September 2026 audit fixes). Values come from the product modules so
+# the fixtures cannot drift from what the handlers pass.
+# ---------------------------------------------------------------------------
+
+def _password_policy_value(key: str) -> Builder:
+    def _build(mode: str) -> Any:
+        from ccai.pychestrate.webservice.security.auth.password_policy import (  # noqa: E402
+            password_policy_template_context,
+        )
+        rtnval = password_policy_template_context()[key]
+        return rtnval
+    return _build
+
+
+DEFAULT_REGISTRY.update({
+    "password_rules": _password_policy_value("password_rules"),
+    "password_summary": _password_policy_value("password_summary"),
+    "password_pattern": _password_policy_value("password_pattern"),
+    "password_title": _password_policy_value("password_title"),
+    "password_min_length": _password_policy_value("password_min_length"),
+    "password_max_length": _password_policy_value("password_max_length"),
+    "password_input_id": _const("password"),
+})
+
+
+# ---------------------------------------------------------------------------
 # Per-template-prefix overrides: longest matching prefix wins
 # ---------------------------------------------------------------------------
 

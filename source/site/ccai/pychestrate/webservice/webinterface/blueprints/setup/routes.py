@@ -84,6 +84,11 @@ from ccai.pychestrate.webservice.identity.setup.setup_service import (
     mark_setup_complete_in_process_cache,
 )
 from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
+from ccai.pychestrate.webservice.security.auth.password_policy import (
+    MIN_PASSWORD_LENGTH as POLICY_MIN_PASSWORD_LENGTH,
+    check_password_against_policy,
+    password_policy_template_context,
+)
 from ccai.pychestrate.webservice.webinterface.foundation import (
     templating,
 )
@@ -109,7 +114,7 @@ LOGIN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}$")
 EMAIL_PATTERN = re.compile(
     r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
 )
-MIN_PASSWORD_LENGTH: int = 12
+MIN_PASSWORD_LENGTH: int = POLICY_MIN_PASSWORD_LENGTH
 
 
 # Endpoint registrations -- (endpoint_name, relative_path, methods).
@@ -490,10 +495,11 @@ def _collect_admin_form_errors(
         )
     if EMAIL_PATTERN.match(email) is None:
         rtnval.append("Email address looks invalid.")
-    if len(password) < MIN_PASSWORD_LENGTH:
-        rtnval.append("Password must be at least {} characters.".format(
-            MIN_PASSWORD_LENGTH
-        ))
+    # The first administrator gets the same password rules as every
+    # other account (security.auth.password_policy).
+    rtnval.extend(check_password_against_policy(
+        password=password, login_name=login_name, email=email
+    ))
     if password != password_confirm:
         rtnval.append("Password and confirmation do not match.")
     if len(display_name) == 0:
@@ -651,6 +657,7 @@ def handle_admin_form(request: Request) -> Response:
         "error": None,
         "errors": [],
     }
+    context.update(password_policy_template_context())
     rtnval = templating.render_template_response(
         template_name="setup/admin.html",
         context=context,
@@ -724,6 +731,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                 "error": validation_error,
                 "errors": validation_errors,
             }
+            context.update(password_policy_template_context())
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
                 context=context,
@@ -756,6 +764,7 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                     " email may already be in use."
                 ),
             }
+            context.update(password_policy_template_context())
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
                 context=context,
