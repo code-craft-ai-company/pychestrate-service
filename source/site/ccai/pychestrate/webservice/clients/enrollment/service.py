@@ -14,7 +14,9 @@ M1 scope:
   row by consulting every registered issuer (secrets self-identify by
   their stored ``issuer_algorithm``), verifies the digest, runs the
   ``client_identity_verifier``, and materializes the client by calling
-  :func:`clients.registry.service.register_client`.
+  :func:`clients.registry.service.register_client`. The client is then
+  registered on the pod the token names, which makes it a dispatch
+  candidate.
 * :func:`list_enrollment_tokens` — admin listing with optional filters.
 * :func:`revoke_enrollment_token` — admin token rescission.
 * :func:`revoke_client` — flips ``clients_clients.status`` to ``REVOKED``
@@ -86,6 +88,7 @@ from ccai.pychestrate.webservice.extensions.registry import (
 )
 from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
 from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
+from ccai.pychestrate.webservice.pods.static_service import bind_enrolled_client
 
 
 DEFAULT_TOKEN_ENTROPY_BITS: int = 128
@@ -421,7 +424,10 @@ def redeem_enrollment_token(
         whose issuer algorithm still verifies the supplied secret,
         rejects if the candidate fails the identity verifier, and
         materializes the client by calling
-        :func:`clients.registry.service.register_client`.
+        :func:`clients.registry.service.register_client`. The client is
+        registered on the pod the token names
+        (:func:`pods.static_service.bind_enrolled_client`), which makes
+        it eligible for dispatch.
 
         :param db_session: Active SQLAlchemy session.
         :param secret: Secret returned at issue time.
@@ -556,6 +562,16 @@ def redeem_enrollment_token(
         matched_row.redeemed_by_client_id = client.client_id
         db_session.flush()
 
+        # The token names the pod this client serves. Registering the
+        # client on that pod is what makes it a dispatch candidate;
+        # nothing else in the product creates the registration.
+        registration = bind_enrolled_client(
+            db_session=db_session,
+            project_id=str(matched_row.project_id),
+            pod_name=matched_row.pod_name,
+            client_id=str(client.client_id),
+        )
+
         enrolled_payload = {
             "client_id": str(client.client_id),
             "token_id": str(matched_row.token_id),
@@ -564,6 +580,8 @@ def redeem_enrollment_token(
             "agent_version": payload.agent_version,
             "transport_name": payload.transport_name,
             "enrolled_at": now.isoformat(),
+            "pod_id": str(registration.pod_id),
+            "registration_id": str(registration.registration_id),
         }
         if signed_cert is not None:
             enrolled_payload["cert_serial"] = signed_cert.cert_serial
