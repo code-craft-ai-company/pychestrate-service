@@ -54,7 +54,11 @@
     </div>
     <div class="card">
         <div class="muted">Authentication</div>
-        <div><span class="badge badge-secondary">{{ repository.auth_type.value }}</span></div>
+        {% set auth_labels = {'none': 'Public', 'https_token': 'HTTPS access token', 'ssh_key': 'SSH private key'} %}
+        <div><span class="badge badge-secondary">{{ auth_labels.get(repository.auth_type.value, repository.auth_type.value) }}</span></div>
+        {% if repository.auth_type.value != 'none' %}
+        <div class="muted small">Credential secret: <code>{{ repository.credential_secret_ref or 'not set' }}</code></div>
+        {% endif %}
     </div>
     <div class="card">
         <div class="muted">Default Branch</div>

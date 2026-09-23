@@ -30,7 +30,7 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">URL</th>
-            <th scope="col">Auth Type</th>
+            <th scope="col">Authentication</th>
             <th scope="col">Default Branch</th>
             <th scope="col">Last Commit</th>
             <th scope="col">Last Fetch</th>
@@ -46,7 +46,7 @@
                 </a>
             </td>
             <td class="mono">{{ repo.url[:35] }}{% if repo.url|length > 35 %}...{% endif %}</td>
-            <td><span class="badge badge-secondary">{{ repo.auth_type.value }}</span></td>
+            <td><span class="badge badge-secondary">{{ {"none": "Public", "https_token": "HTTPS access token", "ssh_key": "SSH private key"}.get(repo.auth_type.value, repo.auth_type.value) }}</span></td>
             <td>{{ repo.default_branch }}</td>
             <td>{{ repo.last_commit_sha[:7] if repo.last_commit_sha else 'N/A' }}</td>
             <td>{{ repo.last_fetch_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</td>

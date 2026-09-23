@@ -36,11 +36,15 @@
         </div>
         
         <div class="form-group">
-            <label for="credential_secret_ref">Credential Secret Reference</label>
+            <label for="credential_secret_ref">Credential secret</label>
             <input type="text" id="credential_secret_ref" name="credential_secret_ref" class="form-control"
+                   list="repository-secret-refs" autocomplete="off" spellcheck="false"
                    value="{{ form_data.credential_secret_ref if form_data else (repository.credential_secret_ref or '') }}"
-                   placeholder="scope/secret-name">
-            <div class="form-text">Reference to a secret containing credentials</div>
+                   placeholder="e.g. ci/github-token">
+            <datalist id="repository-secret-refs">
+                {% for secret_ref in secret_refs %}<option value="{{ secret_ref }}"></option>{% endfor %}
+            </datalist>
+            <div class="form-text">The name of a secret in System &gt; Secrets holding the access token or SSH private key. You must be able to read it.</div>
         </div>
         
         <div class="form-group">

@@ -601,6 +601,9 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
             None,
         ),
     },
+    "projects/repositories/": {
+        "secret_refs": _by_mode(["ci/github-token", "ci/deploy-key"], []),
+    },
     # -- end projects-a audit fixes --------------------------------------
     "setup/": {
         "errors": _by_mode(["Email address looks invalid.", "Password and confirmation do not match."], []),

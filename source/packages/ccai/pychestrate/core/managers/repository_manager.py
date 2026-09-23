@@ -18,19 +18,28 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import base64
+import logging
 import subprocess
 import tempfile
 import os
 import re
+import shlex
+import shutil
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
+from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import utc_now
+
+
+_module_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -161,8 +170,17 @@ class RepositoryConnectivityError(Exception):
 
 class RepositoryHasReferencesError(Exception):
     """Exception raised when attempting to delete a repository with references."""
-    
+
     def __init__(self, message: str, error_code: str = "REPOSITORY_HAS_REFERENCES"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
+class RepositoryCredentialError(Exception):
+    """Exception raised when a repository's credential secret is missing or cannot be read."""
+
+    def __init__(self, message: str, error_code: str = "REPOSITORY_CREDENTIAL_UNAVAILABLE"):
         self.message = message
         self.error_code = error_code
         super().__init__(self.message)
@@ -179,6 +197,64 @@ REPOSITORY_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}\Z')
 # Git URL patterns
 GIT_HTTPS_PATTERN = re.compile(r'^https?://[^\s]+\.git$|^https?://[^\s]+$')
 GIT_SSH_PATTERN = re.compile(r'^git@[^\s:]+:[^\s]+\.git$|^ssh://[^\s]+$')
+
+# Human names for the authentication types, used in messages.
+_AUTH_TYPE_LABELS = {
+    'https_token': 'HTTPS access token',
+    'ssh_key': 'SSH private key',
+    'none': 'no',
+}
+
+# GIT_ASKPASS helper for HTTPS token authentication: git runs it once for
+# the username and once for the password. Both values come from the
+# environment of that one git process, so the token is never written to
+# disk or put on a command line.
+_ASKPASS_SCRIPT = """#!/bin/sh
+case "$1" in
+    Username*|username*) printf '%s\\n' "$PYCHESTRATE_GIT_USERNAME" ;;
+    *) printf '%s\\n' "$PYCHESTRATE_GIT_TOKEN" ;;
+esac
+"""
+
+# What to tell the user when git fails, matched against its (lower-cased)
+# error output. Anything else gets a generic sentence; the raw output only
+# goes to the server log.
+_GIT_FAILURE_MESSAGES = (
+    (("could not read username", "could not read password", "terminal prompts disabled"),
+     "the server asked for credentials. For a private repository, use HTTPS access "
+     "token authentication with a credential secret."),
+    (("authentication failed", "permission denied (publickey", "invalid username or password",
+      "returned error: 401", "returned error: 403"),
+     "the server refused the credentials. Check the repository's credential secret."),
+    (("repository not found", "not found", "does not appear to be a git repository",
+      "returned error: 404"),
+     "no repository was found at this URL (or the credentials cannot see it)."),
+    (("could not resolve host", "name or service not known", "nodename nor servname"),
+     "the host name in the URL could not be resolved."),
+    (("host key verification failed",),
+     "the SSH host key could not be verified."),
+    (("connection refused", "connection timed out", "timed out", "network is unreachable",
+      "failed to connect", "could not connect"),
+     "the server could not be reached."),
+    (("ssl", "certificate"),
+     "the server's TLS certificate was not accepted."),
+)
+
+
+def _username_from_url(*, url: str) -> Optional[str]:
+    """
+    The user name embedded in an HTTPS repository URL
+    (``https://user@host/repo.git``), if any.
+
+    :param url: Repository URL
+    :returns: The user name, or None
+    """
+    try:
+        parts = urlsplit(url or "")
+    except ValueError:
+        return None
+    rtnval = parts.username if parts.username else None
+    return rtnval
 
 
 # =============================================================================
@@ -240,17 +316,31 @@ class RepositoryManager:
     Validates: Requirements 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, secret_manager=None):
+    def __init__(
+        self,
+        db_session: DbSession,
+        audit_logger=None,
+        secret_manager=None,
+        credential_resolver: Optional[Callable[[str], str]] = None
+    ):
         """
         Initialize the RepositoryManager with a database session.
-        
+
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
-        :param secret_manager: Optional SecretManager instance for credential resolution
+        :param secret_manager: Optional legacy SecretManager for ``scope/name``
+                               credential references
+        :param credential_resolver: Optional callable ``(secret_ref) -> str``
+                                    that reads a repository's credential
+                                    secret (it raises
+                                    :class:`RepositoryCredentialError` when
+                                    the secret cannot be read). Preferred
+                                    over ``secret_manager``.
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._secret_manager = secret_manager
+        self._credential_resolver = credential_resolver
     
     # =========================================================================
     # Validation Methods
@@ -293,7 +383,10 @@ class RepositoryManager:
         # Validate credential_secret_ref is provided for authenticated types
         if request.auth_type != RepositoryAuthType.NONE and not request.credential_secret_ref:
             raise RepositoryValidationError(
-                f"Credential secret reference is required for authentication type '{request.auth_type.value}'",
+                "Choose the credential secret for {} authentication, or choose "
+                "Public (no authentication) for a public repository.".format(
+                    _AUTH_TYPE_LABELS.get(request.auth_type.value, request.auth_type.value)
+                ),
                 field="credential_secret_ref",
                 error_code="MISSING_CREDENTIAL_REF"
             )
@@ -603,52 +696,172 @@ class RepositoryManager:
     
     def _get_credential_for_repository(self, repository) -> Optional[str]:
         """
-        Get the credential value for a repository from the secret manager.
-        
+        Resolve the credential a repository authenticates with.
+
+        Repositories with ``auth_type == none`` need none. Otherwise the
+        repository's ``credential_secret_ref`` is resolved through the
+        ``credential_resolver`` the caller supplied (the web UI reads the
+        secrets vault with the acting user's permissions) or, failing
+        that, the legacy ``secret_manager`` (``scope/name`` references).
+        A credential that cannot be resolved is an error: it used to be
+        swallowed, git ran without credentials and every private
+        repository failed.
+
         :param repository: The ProjectRepository ORM object
-        :returns: The credential value or None if not available
+        :returns: The credential value, or None for ``auth_type == none``
+        :raises RepositoryCredentialError: If the credential is missing or
+                                           cannot be read
         """
-        if not repository.credential_secret_ref or not self._secret_manager:
+        if repository.auth_type == RepositoryAuthType.NONE.value:
             return None
-        
-        try:
-            # Parse the secret reference (format: scope/secret_name)
-            parts = repository.credential_secret_ref.split('/')
-            if len(parts) == 2:
-                scope_name, secret_name = parts
-                secret_response = self._secret_manager.get_secret_value(
-                    scope_name=scope_name,
-                    secret_name=secret_name
+
+        secret_ref = (repository.credential_secret_ref or "").strip()
+        if len(secret_ref) == 0:
+            raise RepositoryCredentialError(
+                "This repository uses {} authentication but has no credential "
+                "secret. Edit the repository and choose one.".format(
+                    _AUTH_TYPE_LABELS.get(repository.auth_type, repository.auth_type)
                 )
-                if secret_response:
-                    return secret_response.value
-        except Exception:
-            # If we can't get the credential, return None
-            pass
-        
-        return None
-    
-    def _build_git_env(self, repository, credential: Optional[str] = None) -> Dict[str, str]:
+            )
+
+        if self._credential_resolver is not None:
+            credential = self._credential_resolver(secret_ref)
+        elif self._secret_manager is not None:
+            try:
+                credential = self._secret_manager.resolve_secret_reference(
+                    "${" + secret_ref + "}"
+                )
+            except Exception:
+                raise RepositoryCredentialError(
+                    "The credential secret {} could not be read.".format(secret_ref)
+                ) from None
+        else:
+            raise RepositoryCredentialError(
+                "No secrets service is available to read the credential secret {}.".format(
+                    secret_ref
+                )
+            )
+
+        if credential is None or len(str(credential).strip()) == 0:
+            raise RepositoryCredentialError(
+                "The credential secret {} is empty.".format(secret_ref)
+            )
+        return str(credential)
+
+    @contextmanager
+    def _git_access(self, *, repository) -> Iterator[Dict[str, Any]]:
         """
-        Build environment variables for git commands.
-        
+        Prepare the environment git runs in to reach ``repository`` and
+        clean up afterwards.
+
+        * No prompts ever (``GIT_TERMINAL_PROMPT=0``, SSH ``BatchMode``).
+        * ``https_token``: a private ``GIT_ASKPASS`` script answers the
+          username prompt with the URL's user (or ``x-access-token``) and
+          the password prompt with the token, both passed through the
+          environment -- the token never appears on a command line or in
+          a URL, and configured credential helpers are switched off.
+        * ``ssh_key``: the key is written to a private temporary file and
+          used through ``ssh -i ... -o IdentitiesOnly=yes``.
+
         :param repository: The ProjectRepository ORM object
-        :param credential: Optional credential value
-        :returns: Dictionary of environment variables
+        :yields: ``{"env": ..., "args": [...], "secrets": [...]}`` -- the
+                 environment, the git options to put before the command,
+                 and the values to scrub from anything git prints
+        :raises RepositoryCredentialError: If the credential cannot be
+                                           resolved
         """
+        credential = self._get_credential_for_repository(repository)
+
         env = os.environ.copy()
-        
-        # Disable interactive prompts
         env['GIT_TERMINAL_PROMPT'] = '0'
         env['GIT_SSH_COMMAND'] = 'ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new'
-        
-        if credential and repository.auth_type == RepositoryAuthType.HTTPS_TOKEN.value:
-            # For HTTPS with token, we'll use the credential helper
-            env['GIT_ASKPASS'] = 'echo'
-            env['GIT_PASSWORD'] = credential
-        
-        return env
-    
+        # Inherited prompt helpers must not answer for us, and git's trace
+        # output would print the Authorization header.
+        for inherited in list(env.keys()):
+            if (
+                inherited in ('GIT_ASKPASS', 'SSH_ASKPASS', 'GIT_PASSWORD', 'GIT_CURL_VERBOSE')
+                or inherited.startswith('GIT_TRACE')
+            ):
+                env.pop(inherited, None)
+        git_args: List[str] = []
+        secrets: List[str] = []
+        workdir = None
+
+        try:
+            if credential is not None:
+                workdir = tempfile.mkdtemp(prefix="pyc-git-")
+                if repository.auth_type == RepositoryAuthType.SSH_KEY.value:
+                    # OpenSSH wants LF line endings and a final newline.
+                    key_text = credential.replace("\r\n", "\n").strip() + "\n"
+                    secrets.append(credential.strip())
+                    key_path = os.path.join(workdir, "id_key")
+                    key_fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(key_fd, "w") as key_file:
+                        key_file.write(key_text)
+                    env['GIT_SSH_COMMAND'] = (
+                        "ssh -i {} -o IdentitiesOnly=yes -o BatchMode=yes "
+                        "-o StrictHostKeyChecking=accept-new".format(shlex.quote(key_path))
+                    )
+                else:
+                    token = credential.strip()
+                    username = _username_from_url(url=repository.url) or "x-access-token"
+                    secrets.append(token)
+                    secrets.append(
+                        base64.b64encode(
+                            "{}:{}".format(username, token).encode("utf-8")
+                        ).decode("ascii")
+                    )
+                    askpass_path = os.path.join(workdir, "askpass.sh")
+                    askpass_fd = os.open(askpass_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o700)
+                    with os.fdopen(askpass_fd, "w") as askpass_file:
+                        askpass_file.write(_ASKPASS_SCRIPT)
+                    env['GIT_ASKPASS'] = askpass_path
+                    env['PYCHESTRATE_GIT_USERNAME'] = username
+                    env['PYCHESTRATE_GIT_TOKEN'] = token
+                    git_args = ['-c', 'credential.helper=']
+            yield {"env": env, "args": git_args, "secrets": secrets}
+        finally:
+            if workdir is not None:
+                shutil.rmtree(workdir, ignore_errors=True)
+
+    def _describe_git_failure(
+        self,
+        *,
+        repository,
+        action: str,
+        stderr: Optional[str],
+        secrets: List[str]
+    ) -> str:
+        """
+        Turn a failed git command into a message for the user and log the
+        details (with any credential scrubbed) for an administrator.
+
+        :param repository: The ProjectRepository ORM object
+        :param action: What was attempted, e.g. ``"connect to"``
+        :param stderr: What git printed
+        :param secrets: Values that must never be logged or shown
+        :returns: A user-facing sentence
+        """
+        text = stderr or ""
+        for secret in secrets:
+            if secret:
+                text = text.replace(secret, "********")
+        lowered = text.lower()
+        _module_logger.warning(
+            "pychestrate.repository.git_failed repository_id=%s action=%s stderr=%s",
+            getattr(repository, 'id', None), action, text.strip()[:2000],
+        )
+        explanation = (
+            "git reported an error. Check the URL and credentials; an "
+            "administrator can find the details in the server log."
+        )
+        for needles, message in _GIT_FAILURE_MESSAGES:
+            if any(needle in lowered for needle in needles):
+                explanation = message
+                break
+        rtnval = "Could not {} the repository: {}".format(action, explanation)
+        return rtnval
+
     def _run_git_command(
         self,
         args: List[str],
@@ -658,7 +871,7 @@ class RepositoryManager:
     ) -> subprocess.CompletedProcess:
         """
         Run a git command with the given arguments.
-        
+
         :param args: List of git command arguments
         :param cwd: Working directory for the command
         :param env: Environment variables
@@ -667,7 +880,7 @@ class RepositoryManager:
         :raises RepositoryConnectivityError: If the command fails
         """
         cmd = ['git'] + args
-        
+
         try:
             result = subprocess.run(
                 cmd,
@@ -680,11 +893,13 @@ class RepositoryManager:
             return result
         except subprocess.TimeoutExpired:
             raise RepositoryConnectivityError(
-                f"Git command timed out after {timeout} seconds"
+                f"The repository did not answer within {timeout} seconds."
             )
-        except Exception as e:
+        except Exception:
+            _module_logger.exception("pychestrate.repository.git_unavailable")
             raise RepositoryConnectivityError(
-                f"Failed to execute git command: {str(e)}"
+                "Git could not be started on the server. An administrator can "
+                "find the details in the server log."
             )
     
     def test_connectivity(self, repository_id: int) -> bool:
@@ -706,26 +921,23 @@ class RepositoryManager:
         
         if not repository:
             raise RepositoryNotFoundError(f"Repository with ID '{repository_id}' not found")
-        
-        # Get credential if available
-        credential = self._get_credential_for_repository(repository)
-        
-        # Build environment
-        env = self._build_git_env(repository, credential)
-        
-        # Use git ls-remote to test connectivity without cloning
-        result = self._run_git_command(
-            ['ls-remote', '--heads', repository.url],
-            env=env,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            raise RepositoryConnectivityError(
-                f"Failed to connect to repository: {error_msg}"
+
+        with self._git_access(repository=repository) as access:
+            # Use git ls-remote to test connectivity without cloning
+            result = self._run_git_command(
+                access['args'] + ['ls-remote', '--heads', repository.url],
+                env=access['env'],
+                timeout=30
             )
-        
+
+            if result.returncode != 0:
+                raise RepositoryConnectivityError(
+                    self._describe_git_failure(
+                        repository=repository, action="connect to", stderr=result.stderr,
+                        secrets=access["secrets"],
+                    )
+                )
+
         return True
     
     def fetch_latest(self, repository_id: int) -> RepositoryResponse:
@@ -747,26 +959,23 @@ class RepositoryManager:
         
         if not repository:
             raise RepositoryNotFoundError(f"Repository with ID '{repository_id}' not found")
-        
-        # Get credential if available
-        credential = self._get_credential_for_repository(repository)
-        
-        # Build environment
-        env = self._build_git_env(repository, credential)
-        
-        # Get the latest commit SHA for the default branch
-        result = self._run_git_command(
-            ['ls-remote', repository.url, f'refs/heads/{repository.default_branch}'],
-            env=env,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            raise RepositoryConnectivityError(
-                f"Failed to fetch from repository: {error_msg}"
+
+        with self._git_access(repository=repository) as access:
+            # Get the latest commit SHA for the default branch
+            result = self._run_git_command(
+                access['args'] + ['ls-remote', repository.url, f'refs/heads/{repository.default_branch}'],
+                env=access['env'],
+                timeout=30
             )
-        
+
+            if result.returncode != 0:
+                raise RepositoryConnectivityError(
+                    self._describe_git_failure(
+                        repository=repository, action="fetch from", stderr=result.stderr,
+                        secrets=access["secrets"],
+                    )
+                )
+
         # Parse the output to get the commit SHA
         output = result.stdout.strip()
         if output:
@@ -781,7 +990,7 @@ class RepositoryManager:
                 
                 # Try to get more commit details using git log
                 # This requires a clone, so we'll do it in a temp directory
-                commit_info = self._get_commit_details(repository, commit_sha, credential)
+                commit_info = self._get_commit_details(repository, commit_sha)
                 if commit_info:
                     repository.last_commit_message = commit_info.get('message', '')[:512]
                     repository.last_commit_author = commit_info.get('author', '')[:128]
@@ -833,24 +1042,21 @@ class RepositoryManager:
         if not repository:
             raise RepositoryNotFoundError(f"Repository with ID '{repository_id}' not found")
         
-        # Get credential if available
-        credential = self._get_credential_for_repository(repository)
-        
-        # Build environment
-        env = self._build_git_env(repository, credential)
-        
-        # Get all branches using ls-remote
-        result = self._run_git_command(
-            ['ls-remote', '--heads', repository.url],
-            env=env,
-            timeout=30
-        )
-        
-        if result.returncode != 0:
-            error_msg = result.stderr.strip() if result.stderr else "Unknown error"
-            raise RepositoryConnectivityError(
-                f"Failed to list branches: {error_msg}"
+        with self._git_access(repository=repository) as access:
+            # Get all branches using ls-remote
+            result = self._run_git_command(
+                access['args'] + ['ls-remote', '--heads', repository.url],
+                env=access['env'],
+                timeout=30
             )
+
+            if result.returncode != 0:
+                raise RepositoryConnectivityError(
+                    self._describe_git_failure(
+                        repository=repository, action="list the branches of", stderr=result.stderr,
+                        secrets=access["secrets"],
+                    )
+                )
         
         branches = []
         now = utc_now()
@@ -897,45 +1103,40 @@ class RepositoryManager:
         if not repository:
             raise RepositoryNotFoundError(f"Repository with ID '{repository_id}' not found")
         
-        # Get credential if available
-        credential = self._get_credential_for_repository(repository)
-        
-        # Build environment
-        env = self._build_git_env(repository, credential)
-        
-        # Try to resolve the ref
-        # First try as a branch
-        result = self._run_git_command(
-            ['ls-remote', repository.url, f'refs/heads/{ref}'],
-            env=env,
-            timeout=30
-        )
-        
         commit_sha = None
         ref_type = 'branch'
-        
-        if result.returncode == 0 and result.stdout.strip():
-            parts = result.stdout.strip().split()
-            if parts:
-                commit_sha = parts[0]
-        else:
-            # Try as a tag
+
+        with self._git_access(repository=repository) as access:
+            # Try to resolve the ref
+            # First try as a branch
             result = self._run_git_command(
-                ['ls-remote', repository.url, f'refs/tags/{ref}'],
-                env=env,
+                access['args'] + ['ls-remote', repository.url, f'refs/heads/{ref}'],
+                env=access['env'],
                 timeout=30
             )
-            
+
             if result.returncode == 0 and result.stdout.strip():
                 parts = result.stdout.strip().split()
                 if parts:
                     commit_sha = parts[0]
-                    ref_type = 'tag'
             else:
-                # Assume it's a SHA and try to verify
-                # For now, just return the ref as the SHA
-                commit_sha = ref
-                ref_type = 'sha'
+                # Try as a tag
+                result = self._run_git_command(
+                    access['args'] + ['ls-remote', repository.url, f'refs/tags/{ref}'],
+                    env=access['env'],
+                    timeout=30
+                )
+
+                if result.returncode == 0 and result.stdout.strip():
+                    parts = result.stdout.strip().split()
+                    if parts:
+                        commit_sha = parts[0]
+                        ref_type = 'tag'
+                else:
+                    # Assume it's a SHA and try to verify
+                    # For now, just return the ref as the SHA
+                    commit_sha = ref
+                    ref_type = 'sha'
         
         return {
             'ref': ref,
