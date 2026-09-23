@@ -52,6 +52,7 @@ __version__ = "1.0.0"
 
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -211,6 +212,11 @@ def test_production_startup_completes_against_alembic_migrated_db():
     repo_root = _repo_root()
     db_url = "sqlite:///" + db_path
 
+    # A throwaway presence directory: without one the subprocess falls
+    # back to ~/pychestrate and overwrites the developer's own
+    # initial-admin token file on every run.
+    presence_dir = tempfile.mkdtemp(prefix="pych-smoke-presence-")
+
     env = os.environ.copy()
     env["PYCHESTRATE_DATABASE_URL"] = db_url
     env["PYCHESTRATE_RUNTIME_ENVIRONMENT"] = "testing"
@@ -218,6 +224,7 @@ def test_production_startup_completes_against_alembic_migrated_db():
     env["PYCHESTRATE_KEK_SOURCE"] = "file"
     env["PYCHESTRATE_KEK_ID"] = "smoke-test-kek"
     env["PYCHESTRATE_KEK_FILE_PATH"] = kek_path
+    env["PYCHESTRATE_PRESENCE_DIR"] = presence_dir
     # Pepper + UI cookie secret are optional in the bootstrap
     # config (the runtime tolerates them being unset).
     env.pop("PYCHESTRATE_PEPPER_SOURCE", None)
@@ -275,6 +282,7 @@ def test_production_startup_completes_against_alembic_migrated_db():
             os.unlink(kek_path)
         except OSError:
             pass
+        shutil.rmtree(presence_dir, ignore_errors=True)
 
     # Step 3: assert on the subprocess output. Build a
     # diagnostic message that's useful in the failure case;
