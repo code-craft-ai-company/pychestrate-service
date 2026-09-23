@@ -614,6 +614,15 @@ def register_service_extensions() -> None:
     return
 
 
+#: Threads per worker for the built-in webworks server when
+#: ``PYCHESTRATE_THREADS`` is unset. The server only builds a thread
+#: pool for ``worker_class="thread"``; with the default ``"sync"``
+#: class it served one connection at a time, so every asset request
+#: waited out the previous connection's 2 s keep-alive (10-13 s per
+#: page) and one pod long-poll stalled everyone for 30 s.
+NATIVE_SERVER_DEFAULT_THREADS = 8
+
+
 def pychestrate_website_main():
     runtime_config = load_config_from_environment()
     bootstrap_runtime(config=runtime_config)
@@ -663,15 +672,16 @@ def pychestrate_website_main():
     bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
     bind_port = int(PychestrateVariables.PYCHESTRATE_BIND_PORT)
     workers = int(os.environ.get("PYCHESTRATE_WORKERS", "1"))
-    threads = int(os.environ.get("PYCHESTRATE_THREADS", "1"))
+    threads = int(os.environ.get("PYCHESTRATE_THREADS", str(NATIVE_SERVER_DEFAULT_THREADS)))
+    worker_class = "thread" if threads > 1 else "sync"
 
     print(
-        "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={})".format(
-            bind_host, bind_port, workers, threads
+        "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={}, worker_class={})".format(
+            bind_host, bind_port, workers, threads, worker_class
         )
     )
     run_server(app=wsgi_app, host=bind_host, port=bind_port,
-               workers=workers, threads=threads)
+               workers=workers, threads=threads, worker_class=worker_class)
 
 
 def build_wsgi_application_for_production():

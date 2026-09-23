@@ -160,6 +160,12 @@ export PYCHESTRATE_RESULT_PRESIGN_SECRET="${PYCHESTRATE_RESULT_PRESIGN_SECRET:-$
 
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
+# One worker process (the pod dispatch queue lives in process
+# memory) serving requests on a pool of threads: a browser loads a
+# page's assets in parallel and a pod's 30 s dispatch long-poll
+# holds only one thread.
+export PYCHESTRATE_WORKERS="${PYCHESTRATE_WORKERS:-1}"
+export PYCHESTRATE_THREADS="${PYCHESTRATE_THREADS:-8}"
 
 export PYCHESTRATE_PRESENCE_DIR="${PYCHESTRATE_PRESENCE_DIR:-${DEV_PRESENCE_DIR}}"
 
@@ -172,6 +178,7 @@ export PYTHONPATH="${REPO_ROOT}/source/packages:${REPO_ROOT}/source/site:../code
 echo "dev-up: env=${PYCHESTRATE_RUNTIME_ENVIRONMENT}"
 echo "dev-up: db=${PYCHESTRATE_DATABASE_URL:-<persona default>}"
 echo "dev-up: bind=${PYCHESTRATE_BIND_HOST}:${PYCHESTRATE_BIND_PORT}"
+echo "dev-up: workers=${PYCHESTRATE_WORKERS} threads=${PYCHESTRATE_THREADS}"
 echo "dev-up: kek=${PYCHESTRATE_KEK_FILE_PATH}"
 echo "dev-up: pepper=${PYCHESTRATE_PASSWORD_PEPPER_FILE_PATH}"
 echo "dev-up: ui-cookie-secret=${PYCHESTRATE_UI_COOKIE_SECRET_FILE_PATH}"
