@@ -3,6 +3,14 @@
 Testing Frameworks - UnitTest
 =============================
 
+.. note::
+
+   This repository has no unittest suite: its tests are testbase tests
+   under ``source/testroots/ccai`` (see `Testing Frameworks - TestBase and
+   TestPlus <10-04-03-testing-frameworks-testbase.rst>`_). This page is the
+   Code Craft AI convention for repositories that do use ``unittest``; the
+   ``source/tests`` paths below refer to such a repository.
+
 .. contents:: Outline
    :local:
    :depth: 1
@@ -28,7 +36,7 @@ Environment Preparation
 - Run ``repository-setup/rehome-repository`` once per checkout to create the required ``.env`` file with repository-relative paths.
 - Run ``development/setup-environment`` in the workspace to create/refresh the virtual environment with project dependencies.
 - Activate the resulting virtual environment before executing any ``python`` or ``poetry`` commands so the standard library ``unittest`` entry points pick up the correct dependencies.
-- In Codex containers, execute ``development/codex-setup`` first; it chains the setup steps expected by CodeCraftX agents.
+- In Codex containers, run ``development/codex-container-setup`` first; it chains the setup steps expected by CodeCraftX agents.
 
 Writing Tests with unittest
 ---------------------------

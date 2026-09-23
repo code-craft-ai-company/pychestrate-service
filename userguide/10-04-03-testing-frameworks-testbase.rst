@@ -17,9 +17,9 @@ Purpose and Audience
 Test Roots and Resource Layout
 ------------------------------
 
-- Test suites live under ``<repository>/source/testroots/testbase`` or, for organizations with namespace customized code, ``<repository>/source/testroots/<org namespace root>``.
+- Test suites live under ``<repository>/source/testroots/<org namespace root>``; in this repository that is ``source/testroots/ccai``.
 - Every ``testbase`` test root requires a ``__testroot__.py`` file that declares the root type as ``testbase`` so discovery utilities can register it correctly.
-- Organize tests by resource configuration (for example ``source/testroots/ccai/tests/singlehost`` for single-machine coverage and ``source/testroots/ccai/tests/simplecluster`` for clustered tests).
+- Organize tests by resource configuration: ``source/testroots/ccai/tests/singlehost`` holds single-machine coverage, the only configuration this repository has; a clustered configuration would sit beside it (for example ``tests/simplecluster``).
 - Keep directories parallel to the source hierarchy whenever possible so it remains obvious which packages each subtree validates.
 - Shared factories, fixtures, or helpers belong under ``source/testroots/<root>/testshared`` (for example ``source/testroots/ccai/testshared/factories/automationpods/automationpodsimple.py``) to avoid cluttering test nodes.
 
@@ -28,7 +28,7 @@ Environment Preparation
 
 - Execute ``repository-setup/rehome-repository`` after cloning so the expected ``.env`` file exists for both frameworks.
 - Run ``development/setup-environment`` to create or refresh the virtual environment, then activate it before invoking ``testbase`` or ``testplus`` entry points.
-- Inside Codex containers, start with ``development/codex-setup``; it chains the repository bootstrap steps CodeCraftX relies on.
+- Inside Codex containers, start with ``development/codex-container-setup``; it chains the repository bootstrap steps CodeCraftX relies on.
 - Create a dedicated output directory per run so logs, JSOS streams, and other artifacts remain isolated and easy to archive.
 
 Writing Tests with TestBase
@@ -71,13 +71,13 @@ Working with TestPlus
 Running Tests
 -------------
 
-- During AI-based testing, only the ``singlehost`` suites are typically available; more complex clusters (for example ``simplecluster``) require infrastructure that Codex sandboxes do not provide yet.
+- This repository has only ``singlehost`` suites. The ones under ``phase11`` and ``phase12`` drive a live server (``PYCHESTRATE_TEST_BASE_URL``); everything else runs in-process.
 - Run a focused ``testbase`` suite using::
 
     source .venv/bin/activate
-    testbase --root source/testroots/ccai --includes=ccai.tests.singlehost --output=<desired output folder>
+    testbase testing run --root source/testroots/ccai --includes=ccai.tests.singlehost --output=<desired output folder>
 
-- Substitute the ``--includes`` path with any other resource-specific subtree (for example ``ccai.tests.simplecluster``) when appropriate infrastructure exists.
+- Narrow ``--includes`` to a package or module path to run part of the suite; it matches by prefix, so repeat the option to select several.
 - Always point ``--output`` to a writable directory created for the current run so artifacts do not overlap between executions.
 
 Evaluating Test Results

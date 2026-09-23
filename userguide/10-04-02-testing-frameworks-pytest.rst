@@ -1,6 +1,15 @@
 Testing Frameworks - PyTest
 ===========================
 
+.. note::
+
+   pytest is not installed in this repository and it has no pytest suite:
+   its tests are testbase tests under ``source/testroots/ccai`` (see
+   `Testing Frameworks - TestBase and TestPlus
+   <10-04-03-testing-frameworks-testbase.rst>`_). This page is the Code
+   Craft AI convention for repositories that do use pytest; the
+   ``source/testroots/pytest`` paths below refer to such a repository.
+
 .. contents:: Outline
    :local:
    :depth: 1
@@ -25,7 +34,7 @@ Environment Preparation
 
 - Execute ``repository-setup/rehome-repository`` and ``development/setup-environment`` after cloning to ensure the virtual environment and ``.env`` file exist.
 - Activate the virtual environment before running ``pytest`` so plugins and dependencies resolve correctly.
-- In Codex environments, run ``development/codex-setup`` first; it applies the same bootstrap flow expected locally.
+- In Codex environments, run ``development/codex-container-setup`` first; it applies the same bootstrap flow expected locally.
 - Record any additional plugins or configuration flags in ``pyproject.toml`` (``[tool.pytest.ini_options]``) so contributors share the same defaults.
 
 Writing Tests with pytest
