@@ -108,6 +108,10 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
 from ccai.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
     register_me_routes,
 )
+# Machine identity: API tokens, service accounts, /api/v1/me.
+from ccai.pychestrate.webservice.security.auth.restapi.v1.api_tokens_routes import (
+    register_api_tokens_routes,
+)
 from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
 )
@@ -564,6 +568,8 @@ def register_service_extensions() -> None:
     register_webhooks_in_routes(app=app, version_prefix="/api/v1")
     register_webhooks_out_routes(app=app, version_prefix="/api/v1")
     register_backup_routes(app=app, version_prefix="/api/v1")
+    # Machine identity: API tokens, service accounts, /api/v1/me.
+    register_api_tokens_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",

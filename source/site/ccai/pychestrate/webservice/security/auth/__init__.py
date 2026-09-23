@@ -17,6 +17,9 @@ from ccai.pychestrate.webservice.security.auth.factories.local_provider import L
 from ccai.pychestrate.webservice.security.auth.factories.stdlib_scrypt_hasher import (
     StdlibScryptPasswordHasher,
 )
+from ccai.pychestrate.webservice.security.auth.api_tokens import (
+    register_builtin_extensions as _register_api_token_extensions,
+)
 
 
 def register_builtin_extensions() -> None:
@@ -33,4 +36,7 @@ def register_builtin_extensions() -> None:
     """
     register_factory_implementation(implementation=LocalCredentialAuthProvider)
     register_factory_implementation(implementation=StdlibScryptPasswordHasher)
+    # API tokens / service accounts: audit kinds for token creation,
+    # revocation, and use.
+    _register_api_token_extensions()
     return

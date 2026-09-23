@@ -129,6 +129,11 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_sessions import (
     _SessionRow,
 )
+# Machine identity pages (config/tokens/*).
+from ccai.pychestrate.webservice.security.auth.api_tokens.service import (
+    ApiTokenView,
+    ServiceAccountView,
+)
 
 
 Builder = Callable[[str], Any]
@@ -252,6 +257,25 @@ def _minted(mode: str) -> Any:
         "secret": "s3cr3t",
         "enroll_command": "pychestrate-client enroll --token tok-7",
         "run_command": "pychestrate-client run",
+    }
+    return rtnval
+
+
+def _api_token_minted(mode: str) -> Any:
+    """
+        The one-time panel ``routes_tokens`` renders after issuing an
+        API token; ``None`` on a plain GET.
+    """
+    if mode == MODE_SPARSE:
+        return None
+    rtnval = {
+        "token": "pyc_" + "x" * 43,
+        "name": "laptop CLI",
+        "owner_label": "admin",
+        "scope": "read-write",
+        "expires_at": FIXTURE_DATETIME,
+        "login_command": "pyc login --server-url https://pyc.example.invalid",
+        "curl_command": 'curl -H "Authorization: Bearer $PYC_TOKEN" https://pyc.example.invalid/api/v1/me',
     }
     return rtnval
 
@@ -578,6 +602,18 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
         "pools": _many(IPPoolResponse),
         "pool": _one(IPPoolResponse),
         "allocations": _many(IPAllocationResponse),
+    },
+    # Machine identity: API tokens and service accounts
+    # (webinterface/blueprints/config/routes_tokens.py).
+    "config/tokens/": {
+        "tokens": _many(ApiTokenView),
+        "minted": _api_token_minted,
+        "service_accounts": _many(ServiceAccountView),
+        "lifetime_choices": _const((7, 30, 90, 180, 366)),
+        "default_lifetime_days": _const(90),
+        "can_view_admin_tokens": _by_mode(True, False),
+        "can_manage_tokens": _by_mode(True, False),
+        "can_create_service_accounts": _by_mode(True, False),
     },
 }
 
