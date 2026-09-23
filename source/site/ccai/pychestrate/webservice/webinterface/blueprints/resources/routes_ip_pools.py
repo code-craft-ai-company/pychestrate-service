@@ -720,38 +720,35 @@ def handle_ip_pool_edit(request: Request) -> Response:
                 )
                 return csrf_redirect
 
-            gateway = str(single_form.get("gateway", "")).strip()
-            dns_servers_str = str(
-                single_form.get("dns_servers", "")
-            ).strip()
-            description = str(
-                single_form.get("description", "")
-            ).strip()
-            reserved_ips_str = str(
-                single_form.get("reserved_ips", "")
-            ).strip()
-
-            # Legacy semantics: empty CSV input passes None
-            # (don't update), non-empty passes the parsed list.
-            if len(dns_servers_str) > 0:
-                dns_servers: Optional[List[str]] = _parse_csv_string(
-                    raw=dns_servers_str
+            # A field the form submitted is an explicit value even when
+            # it is empty: clearing the gateway, the DNS servers, the
+            # reserved list or the description saves exactly that.
+            # Only a field the form did not send means "no change"
+            # (audit finding RES-07; these used to be ignored under an
+            # "updated successfully" message).
+            gateway: Optional[str] = None
+            if "gateway" in multi_form:
+                gateway = str(single_form.get("gateway", "")).strip()
+            description: Optional[str] = None
+            if "description" in multi_form:
+                description = str(
+                    single_form.get("description", "")
+                ).strip()
+            dns_servers: Optional[List[str]] = None
+            if "dns_servers" in multi_form:
+                dns_servers = _parse_csv_string(
+                    raw=str(single_form.get("dns_servers", "")).strip()
                 )
-            else:
-                dns_servers = None
-            if len(reserved_ips_str) > 0:
-                reserved_ips: Optional[List[str]] = _parse_csv_string(
-                    raw=reserved_ips_str
+            reserved_ips: Optional[List[str]] = None
+            if "reserved_ips" in multi_form:
+                reserved_ips = _parse_csv_string(
+                    raw=str(single_form.get("reserved_ips", "")).strip()
                 )
-            else:
-                reserved_ips = None
 
             try:
                 update_request = _build_ip_pool_update_request(
-                    description=(
-                        description if len(description) > 0 else None
-                    ),
-                    gateway=gateway if len(gateway) > 0 else None,
+                    description=description,
+                    gateway=gateway,
                     dns_servers=dns_servers,
                     reserved_ips=reserved_ips,
                 )
