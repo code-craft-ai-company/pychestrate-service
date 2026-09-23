@@ -52,6 +52,13 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 #   * pychestrate.sqlite       -- alpha-tier persistent DB
 #   * initial-admin-token      -- mode 0600, written on first
 #                                  boot by the setup wizard
+#   * artifacts/               -- run artifacts (result trees
+#                                  uploaded by pods); override
+#                                  with PYCHESTRATE_ARTIFACT_ROOT
+#                                  below.  Never inside the
+#                                  checkout: ProtectHome mounts
+#                                  it read-only and every deploy
+#                                  rsyncs it with --delete.
 #   * logs/                    -- future home for application
 #                                  logs (the alpha still tees
 #                                  gunicorn stdout to
@@ -73,6 +80,13 @@ Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
 # service user).
 #
 #Environment="PYCHESTRATE_PRESENCE_DIR=/var/lib/pychestrate"
+
+# Run-artifact root.  Defaults to <presence dir>/artifacts, which
+# the ReadWritePaths line below already covers.  Relocating it
+# (e.g. to a larger volume) needs that path added to
+# ReadWritePaths as well, or uploads fail with EROFS.
+#
+#Environment="PYCHESTRATE_ARTIFACT_ROOT=/srv/pychestrate/artifacts"
 
 ExecStart=/home/@USER@/pychestrate-service/development/run-staging-gunicorn
 

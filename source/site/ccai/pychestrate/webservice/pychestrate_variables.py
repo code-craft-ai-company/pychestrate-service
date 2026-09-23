@@ -91,6 +91,21 @@ def _default_database_url() -> str:
     return rtnval
 
 
+def _default_artifact_root() -> str:
+    """
+        Compute the default run-artifact root: ``artifacts`` inside
+        the pychestrate presence directory. Kept outside the code
+        checkout on purpose -- a deploy syncs the checkout with
+        ``rsync --delete`` and the systemd unit mounts it read-only.
+
+        :returns: Absolute directory path.
+    """
+    presence_dir = PersonaVariables.AM_PRESENCE_DIR
+    expanded_presence = os.path.expanduser(presence_dir)
+    rtnval = os.path.join(expanded_presence, "artifacts")
+    return rtnval
+
+
 class PychestrateVariablesDesc(AppVarSet):
     """
         Declarative pychestrate variable descriptors.
@@ -114,6 +129,15 @@ class PychestrateVariablesDesc(AppVarSet):
         source=VariableSource.BOTH,
         default=_default_database_url,
         required=True,
+    )
+
+    # Directory run artifacts (result trees uploaded by pods) are
+    # written under. Must be outside the code checkout and writable
+    # by the service user; included in backups.
+    PYCHESTRATE_ARTIFACT_ROOT = AppVarDesc(
+        section=SECTION_DATASTORAGE,
+        source=VariableSource.BOTH,
+        default=_default_artifact_root,
     )
 
     # ------------------------------------------------------------------
@@ -311,6 +335,9 @@ class PychestrateVariables:
 
     PYCHESTRATE_DATABASE_URL = AppVarAccessor(
         PychestrateVariablesDesc.PYCHESTRATE_DATABASE_URL
+    )
+    PYCHESTRATE_ARTIFACT_ROOT = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_ARTIFACT_ROOT
     )
 
     PYCHESTRATE_KEK_SOURCE = AppVarAccessor(
