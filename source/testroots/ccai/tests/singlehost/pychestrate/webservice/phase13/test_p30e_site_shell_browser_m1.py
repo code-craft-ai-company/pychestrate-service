@@ -15,7 +15,8 @@ instance needed), and checks one property at a given viewport /
 color scheme.
 
 Covered audit findings: XC-02 (Sign out unreachable on phones),
-LD-13 (serif palette font).
+LD-13 (serif palette font), XC-03 (nested main landmarks, raw
+landmark names, empty landmarks).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -214,6 +215,90 @@ def test_command_palette_results_use_the_ui_font(browser: Browser):
             "() => getComputedStyle(document.querySelector('.pyc-site-shell__palette-option-label')).fontFamily"
         )
         testbase.assert_true("sans-serif" in family, family)
+    finally:
+        page.context.close()
+    return
+
+
+# ---------------------------------------------------------------------------
+# XC-03: one main landmark, named navigation, no empty landmarks
+# ---------------------------------------------------------------------------
+
+
+def test_shell_page_exposes_one_main_landmark(browser: Browser):
+    """
+    **Feature: site shell -- landmarks**
+    **Property: a shell page exposes exactly one main landmark (none
+    nested inside another).**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        testbase.assert_equal(page.get_by_role("main").count(), 1)
+    finally:
+        page.context.close()
+    return
+
+
+def test_shell_sidebar_is_one_navigation_landmark_named_primary(browser: Browser):
+    """
+    **Feature: site shell -- landmarks**
+    **Property: the sidebar is a single navigation landmark named
+    "Primary" (not wrapped in a second navigation landmark).**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        names = page.evaluate(
+            "() => { const out = []; const walk = (root) => { for (const el of root.querySelectorAll('*')) { "
+            "if ((el.tagName === 'NAV' || el.getAttribute('role') === 'navigation') && el.checkVisibility()) "
+            "out.push(el.getAttribute('aria-label')); if (el.shadowRoot) walk(el.shadowRoot); } }; "
+            "walk(document); return out; }"
+        )
+        testbase.assert_equal(names.count("Primary"), 1)
+        testbase.assert_equal(page.get_by_role("navigation", name="Primary", exact=True).count(), 1)
+    finally:
+        page.context.close()
+    return
+
+
+def test_shell_navigation_landmarks_are_not_named_by_catalog_keys(browser: Browser):
+    """
+    **Feature: site shell -- landmarks**
+    **Property: no navigation landmark on a shell page is named by a
+    raw "mj.*" catalog key.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        count = page.get_by_role("navigation", name=re.compile(r"mj\.")).count()
+        testbase.assert_equal(count, 0)
+    finally:
+        page.context.close()
+    return
+
+
+def test_shell_page_has_no_empty_complementary_or_contentinfo(browser: Browser):
+    """
+    **Feature: site shell -- landmarks**
+    **Property: the unused inspector and status-bar regions expose no
+    complementary or contentinfo landmark.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        counts = (page.get_by_role("complementary").count(), page.get_by_role("contentinfo").count())
+        testbase.assert_equal(counts, (0, 0))
+    finally:
+        page.context.close()
+    return
+
+
+def test_shell_page_shows_no_raw_catalog_keys(browser: Browser):
+    """
+    **Feature: site shell -- landmarks**
+    **Property: no text or aria-label on a shell page (shadow DOM
+    included) is a raw "mj.<component>.<key>" string.**
+    """
+    page = open_shell_page(browser, **DESKTOP)
+    try:
+        testbase.assert_equal(page.evaluate(RAW_CATALOG_KEYS_JS), [])
     finally:
         page.context.close()
     return

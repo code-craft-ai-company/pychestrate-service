@@ -44,6 +44,7 @@ const ATTR_BRAND_LABEL = "brand-label";
 const NAV_BANNER_MESSAGE = "Navigation could not be loaded. The sidebar may be incomplete.";
 const NAV_COLLAPSED_STORAGE_KEY = "pyc-site-shell.nav-collapsed";
 const NARROW_VIEWPORT_QUERY = "(max-width: 767px)";
+const SIDEBAR_NAV_LABEL = "Primary";
 class PycSiteShell extends HTMLElement {
   _sidebar_registry;
   _palette_registry;
@@ -256,8 +257,12 @@ class PycSiteShell extends HTMLElement {
       }
     });
     layout.appendChild(header);
+    // <mj-side-nav> renders the page's one navigation landmark
+    // (<mj-app-shell> then leaves its nav region unlabelled);
+    // name it here so it is not announced by a catalog key.
     const sidebar = document.createElement("mj-side-nav");
     sidebar.setAttribute("slot", "nav");
+    sidebar.setAttribute("nav-label", SIDEBAR_NAV_LABEL);
     sidebar.classList.add("pyc-site-shell__sidebar");
     layout.appendChild(sidebar);
     this._sidebar_region = sidebar;
