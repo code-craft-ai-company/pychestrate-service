@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session as DbSession
 
-from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.defaults import ensure_utc, utc_now
 
 
 # =============================================================================
@@ -653,7 +653,7 @@ class AllocationManager:
         
         # Calculate duration
         if allocation.checkout_time:
-            duration = now - allocation.checkout_time
+            duration = now - ensure_utc(allocation.checkout_time)
             allocation.duration_minutes = int(duration.total_seconds() / 60)
         
         self._db_session.commit()
@@ -708,7 +708,7 @@ class AllocationManager:
         
         # Calculate duration
         if allocation.checkout_time:
-            duration = now - allocation.checkout_time
+            duration = now - ensure_utc(allocation.checkout_time)
             allocation.duration_minutes = int(duration.total_seconds() / 60)
         
         self._db_session.commit()
@@ -759,7 +759,7 @@ class AllocationManager:
             
             # Calculate duration
             if allocation.checkout_time:
-                duration = now - allocation.checkout_time
+                duration = now - ensure_utc(allocation.checkout_time)
                 allocation.duration_minutes = int(duration.total_seconds() / 60)
             
             count += 1
@@ -980,9 +980,9 @@ class AllocationManager:
         events = []
         for a in allocations:
             if a.checkout_time:
-                events.append((a.checkout_time, 1))  # Start event
+                events.append((ensure_utc(a.checkout_time), 1))  # Start event
                 end_time = a.actual_checkin or a.expected_checkin or utc_now()
-                events.append((end_time, -1))  # End event
+                events.append((ensure_utc(end_time), -1))  # End event
         
         # Sort events by time
         events.sort(key=lambda x: x[0])
