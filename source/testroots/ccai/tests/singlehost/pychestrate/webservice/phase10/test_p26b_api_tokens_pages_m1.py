@@ -30,7 +30,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 
 from ccai import testbase
 from ccai.testbase.mocking import create_module_patch
