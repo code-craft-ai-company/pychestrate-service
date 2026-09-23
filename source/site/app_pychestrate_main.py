@@ -662,7 +662,8 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
-    # Platform layers (security headers + CSP nonce) see every response.
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
     wsgi_app = wrap_platform_wsgi_application(
         wsgi_app=wsgi_app, runtime_environment=runtime_config.runtime_environment,
     )
@@ -732,7 +733,8 @@ def build_wsgi_application_for_production():
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     rtnval = _eager_start_response_wsgi(rtnval_inner)
-    # Platform layers (security headers + CSP nonce) see every response.
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
     rtnval = wrap_platform_wsgi_application(
         wsgi_app=rtnval, runtime_environment=runtime_config.runtime_environment,
     )
