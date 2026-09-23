@@ -41,11 +41,11 @@ from ccai.testshared.factories.pyc.pyc_harness import (
 )
 
 
-#: Options every generated command owns; no query parameter may use
-#: one of these names.
+#: Options every generated command owns (and pyc's global options);
+#: no query parameter may use one of these names.
 _RESERVED_OPTION_NAMES = (
-    "data", "from_file", "set", "wait", "wait_timeout", "wait_interval", "help", "h",
-    "profile", "server_url", "timeout",
+    "data", "from_file", "set", "wait", "wait_timeout", "wait_interval", "help", "h", "all",
+    "profile", "server_url", "timeout", "output", "o", "fields", "quiet",
 )
 
 SMALL_DOCUMENT: Dict[str, Any] = {
@@ -274,6 +274,24 @@ def test_no_query_parameter_collides_with_a_pyc_option():
         for name in descriptor.operation.query_param_names:
             if name in _RESERVED_OPTION_NAMES:
                 collisions.append("{} {}".format(descriptor.operation.operation_id, name))
+    testbase.assert_equal(collisions, [])
+    return
+
+
+def test_page_lists_leave_limit_to_pyc():
+    """
+    **Feature: pyc command generator (CLI-05)**
+    **Property: no page / per_page list also declares a 'limit' query
+    parameter, which would collide with pyc's own --limit N.**
+    """
+    from ccai.pychestrate.cli import pagination  # noqa: E402
+
+    collisions = []
+    for descriptor in _real_tree().commands.values():
+        operation = descriptor.operation
+        if pagination.pagination_mode(operation=operation) == pagination.PAGE_MODE:
+            if "limit" in operation.query_param_names:
+                collisions.append(operation.operation_id)
     testbase.assert_equal(collisions, [])
     return
 

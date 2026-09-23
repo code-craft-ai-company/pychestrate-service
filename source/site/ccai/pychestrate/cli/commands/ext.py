@@ -26,11 +26,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import json
-
 from typing import Any, Dict, List, Optional, Sequence
 
-from ccai.pychestrate.cli import exit_codes, suggestions, transport
+from ccai.pychestrate.cli import exit_codes, renderer, suggestions, transport
 from ccai.pychestrate.cli.argparsing import CliArgumentParser
 from ccai.pychestrate.cli.context import CliContext, resolve_profile
 from ccai.pychestrate.cli.exceptions import CliUsageError, NotFoundError
@@ -110,23 +108,27 @@ def _send(
     return rtnval
 
 
-def _emit_json(*, ctx: CliContext, body: Any, empty_text: str) -> None:
+def _emit_catalog(*, ctx: CliContext, response: RestResponse) -> None:
     """
-        Print a response body as JSON.
+        Print the plugin-api catalog: as one table of entries (both
+        kinds) for ``table`` / ``tsv`` / ``--quiet``, as the server's
+        object otherwise.
 
         :param ctx: Invocation context.
-        :param body: Decoded body.
-        :param empty_text: What to print for an empty body.
+        :param response: The catalog answer.
 
         :returns: None.
     """
-    if body is None:
-        ctx.stdout.write(empty_text + "\n")
-    elif isinstance(body, (dict, list)):
-        ctx.stdout.write(json.dumps(body, indent=2))
-        ctx.stdout.write("\n")
-    else:
-        ctx.stdout.write("{}\n".format(body))
+    body = response.body
+    output_format = renderer.effective_format(options=ctx.output, stream=ctx.stdout)
+    is_catalog = isinstance(body, dict) and ("factory_protocols" in body or "resource_extensions" in body)
+    tabular = output_format in (renderer.FORMAT_TABLE, renderer.FORMAT_TSV) or ctx.output.quiet is True
+    if is_catalog is True and tabular is True:
+        rows: List[Any] = list(body.get("factory_protocols", None) or [])
+        rows.extend(body.get("resource_extensions", None) or [])
+        ctx.emit_result(value=rows, identifier_fields=("name",))
+        return
+    ctx.emit_result(value=body, raw_text=response.raw_text, identifier_fields=("name",))
     return
 
 
@@ -180,7 +182,7 @@ def run_plugin_api_catalog(*, ctx: CliContext, args: Sequence[str]) -> int:
         response = _send(
             ctx=ctx, profile=profile, operation=operation, path_params={"name": namespace.entry_name},
         )
-    _emit_json(ctx=ctx, body=response.body, empty_text="{}")
+    _emit_catalog(ctx=ctx, response=response)
     rtnval = exit_codes.EXIT_OK
     return rtnval
 
@@ -218,7 +220,7 @@ def run_ext_list(*, ctx: CliContext, args: Sequence[str]) -> int:
         path_template="/api/v1/plugin-api/_meta/mounts",
     )
     response = _send(ctx=ctx, profile=profile, operation=operation)
-    _emit_json(ctx=ctx, body=response.body, empty_text="[]")
+    ctx.emit_result(value=response.body, raw_text=response.raw_text, identifier_fields=("full_path",))
     rtnval = exit_codes.EXIT_OK
     return rtnval
 
@@ -394,7 +396,7 @@ def run_ext_invocation(*, ctx: CliContext, ext_name: str, args: Sequence[str]) -
                 " serve extension routes yet.".format(xcpt, route.full_path, dynamic_mount)
             ) from None
         raise
-    _emit_json(ctx=ctx, body=response.body, empty_text="{}")
+    ctx.emit_result(value=response.body, raw_text=response.raw_text)
     rtnval = exit_codes.EXIT_OK
     return rtnval
 

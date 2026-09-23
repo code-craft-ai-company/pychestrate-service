@@ -28,16 +28,17 @@ __version__ = "1.0.0"
 import urllib.parse
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Mapping, Optional, TextIO
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, Mapping, Optional, TextIO, Tuple
 
-from ccai.pychestrate.cli import credentials
+from ccai.pychestrate.cli import credentials, renderer
 from ccai.pychestrate.cli.exceptions import (
     CredentialsFileNotFoundError,
     NotConfiguredError,
     ProfileNotFoundError,
 )
 from ccai.pychestrate.cli.models import CliProfile
+from ccai.pychestrate.cli.renderer import OutputOptions
 
 
 PYC_SERVER_URL_ENV_VAR: str = "PYC_SERVER_URL"
@@ -48,6 +49,9 @@ PYC_TOKEN_ENV_VAR: str = "PYC_TOKEN"
 API_PREFIX: str = "/api/v1"
 
 EXAMPLE_SERVER_URL: str = "https://pychestrate.example.com"
+
+#: A stored token expiring within this many days is warned about.
+TOKEN_EXPIRY_WARNING_DAYS: int = 7
 
 
 class _NullStream:
@@ -83,6 +87,7 @@ class CliContext:
                               terminal (``getpass`` by default).
         :param sleep: Callable used by ``--wait`` polling.
         :param clock: Callable returning "now" (UTC).
+        :param output: ``-o/--output``, ``--fields``, ``-q/--quiet``.
     """
     stdout: TextIO
     stderr: TextIO
@@ -97,6 +102,7 @@ class CliContext:
     prompt_secret: Optional[Callable[[str], str]] = None
     sleep: Optional[Callable[[float], None]] = None
     clock: Optional[Callable[[], datetime]] = None
+    output: OutputOptions = field(default_factory=OutputOptions)
     _notes_written: set = field(default_factory=set)
 
     def note(self, key: str, message: str) -> None:
@@ -125,6 +131,41 @@ class CliContext:
             return self.clock()
         rtnval = datetime.now(timezone.utc)
         return rtnval
+
+    def emit_result(
+            self,
+            *,
+            value: Any,
+            raw_text: Optional[str] = None,
+            identifier_fields: Tuple[str, ...] = tuple(),
+            default_format: Optional[str] = None
+        ) -> None:
+        """
+            Print a command's result in the ``--output`` format (see
+            :mod:`cli.renderer`).
+
+            :param value: Decoded body, or data pyc built.
+            :param raw_text: The body as the server sent it (``-o raw``).
+            :param identifier_fields: Fields ``--quiet`` prints.
+            :param default_format: The command's own default format;
+                                   ``None`` for table on a terminal /
+                                   JSON elsewhere.
+
+            :returns: None.
+        """
+        renderer.render(
+            request=renderer.RenderRequest(
+                value=value,
+                raw_text=raw_text,
+                identifier_fields=identifier_fields,
+                default_format=default_format,
+            ),
+            options=self.output,
+            stream=self.stdout,
+            notes=self.stderr,
+            environ=dict(self.environ),
+        )
+        return
 
 
 def not_configured_message(*, ctx: CliContext, reason: str) -> str:
@@ -298,12 +339,24 @@ def resolve_profile(*, ctx: CliContext, quiet: bool = False) -> CliProfile:
     if expires_at is not None:
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-        if expires_at <= ctx.now():
+        now = ctx.now()
+        if expires_at <= now:
             ctx.note(
                 "expired",
                 "warning: the API token stored in profile '{}' expired on {};"
                 " run 'pyc login' with a new token.".format(
                     profile.profile_name, expires_at.date().isoformat()
+                ),
+            )
+        elif expires_at - now <= timedelta(days=TOKEN_EXPIRY_WARNING_DAYS):
+            remaining_days = max((expires_at - now).days, 0)
+            ctx.note(
+                "expiring",
+                "warning: the API token stored in profile '{}' expires {} ({}); create a new one"
+                " under Account > API tokens and run 'pyc login'.".format(
+                    profile.profile_name,
+                    "within a day" if remaining_days == 0 else "in {} day(s)".format(remaining_days),
+                    expires_at.date().isoformat(),
                 ),
             )
     rtnval = profile

@@ -12,7 +12,8 @@ A CI step triggers a run and must fail when the run fails::
     pyc runs wait <run_id> [--wait-timeout 3600] [--interval 5]
 
 Both poll ``GET /api/v1/runs/{run_id}``, print a line on stderr at
-every state change, print the final run as JSON on stdout, and exit:
+every state change, print the final run on stdout (in the ``--output``
+format: a table on a terminal, JSON otherwise), and exit:
 
 * ``0``  -- the run completed successfully;
 * ``10`` -- it finished any other way (failed, cancelled, dispatch
@@ -26,7 +27,6 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import json
 import time
 
 from typing import Any, Dict, Optional, Sequence
@@ -109,7 +109,7 @@ def wait_for_run(
             last_state = state
 
         if state in TERMINAL_STATES or state in STUCK_STATES:
-            ctx.stdout.write(json.dumps(run, indent=2) + "\n")
+            ctx.emit_result(value=run, raw_text=response.raw_text, identifier_fields=("run_id",))
             outcome = str(run.get("terminal_outcome", "") or "")
             if state == "completed" and outcome in ("", SUCCESS_OUTCOME):
                 rtnval = exit_codes.EXIT_OK
@@ -122,7 +122,7 @@ def wait_for_run(
 
         elapsed = (ctx.now() - started).total_seconds()
         if elapsed >= timeout_seconds:
-            ctx.stdout.write(json.dumps(run, indent=2) + "\n")
+            ctx.emit_result(value=run, raw_text=response.raw_text, identifier_fields=("run_id",))
             raise WaitTimeoutError(
                 "run {} was still {} after {:g}s".format(run_id, state or "unknown", timeout_seconds)
             )

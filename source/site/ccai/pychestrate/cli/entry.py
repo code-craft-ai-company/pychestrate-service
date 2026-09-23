@@ -45,6 +45,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from ccai.pychestrate.cli import (
     exit_codes,
     parser,
+    renderer,
     suggestions,
 )
 from ccai.pychestrate.cli.argparsing import ParserExit
@@ -125,6 +126,7 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "                               Bodies: --data JSON|@FILE|-, --from-file PATH, --set FIELD=VALUE.",
     "  commands [--refresh]         List every API command the server offers.",
     "  project list                 List projects (same as 'projects list').",
+    "                               List commands take --all (every page) and --limit N.",
     "  runs wait <run_id>           Wait for a run: exit 0 on success, 10 on failure.",
     "                               POST commands take --wait to do this for their run.",
     "",
@@ -143,6 +145,11 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "  --profile NAME               Credentials profile (PYC_PROFILE; default 'default').",
     "  --server-url URL             Server root URL (PYC_SERVER_URL); overrides the profile.",
     "  --timeout SECONDS            Per-request timeout (default 30).",
+    "  -o, --output FORMAT          table, json, yaml, tsv or raw (the server's answer as",
+    "                               sent). Default: table on a terminal, json otherwise;",
+    "                               lists print as arrays.",
+    "  --fields A,B,C               Keep these fields, in this order (a.b reaches into objects).",
+    "  -q, --quiet                  Print only each item's identifier, one per line.",
     "  --version, --help",
     "",
     "environment: PYC_SERVER_URL, PYC_TOKEN, PYC_PROFILE, PYC_CREDENTIALS_PATH,",
@@ -163,25 +170,77 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
 # ---------------------------------------------------------------------------
 
 
-_GLOBAL_OPTIONS_WITH_VALUE: Tuple[str, ...] = ("--profile", "--server-url", "--timeout")
+#: Global options taking a value: spelling -> key in the parsed dict.
+_GLOBAL_OPTIONS_WITH_VALUE: Dict[str, str] = {
+    "--profile": "profile",
+    "--server-url": "server_url",
+    "--timeout": "timeout",
+    "--output": "output",
+    "-o": "output",
+    "--fields": "fields",
+}
+
+#: Global flags: spelling -> key.
+_GLOBAL_FLAGS: Dict[str, str] = {
+    "--quiet": "quiet",
+    "-q": "quiet",
+}
 
 #: Every global option, for "did you mean" on an unknown leading one.
-_GLOBAL_OPTION_SPELLINGS: Tuple[str, ...] = _GLOBAL_OPTIONS_WITH_VALUE + (VERSION_FLAG,) + HELP_FLAGS
+_GLOBAL_OPTION_SPELLINGS: Tuple[str, ...] = (
+    tuple(_GLOBAL_OPTIONS_WITH_VALUE.keys()) + tuple(_GLOBAL_FLAGS.keys()) + (VERSION_FLAG,) + HELP_FLAGS
+)
+
+
+def _match_global_option(*, token: str, following: Optional[str]) -> Tuple[Optional[str], Optional[str], int]:
+    """
+        Recognize one global option token.
+
+        :param token: The token.
+        :param following: The next token, or ``None``.
+
+        :returns: ``(key, value, tokens_consumed)``; ``key`` is
+                  ``None`` when ``token`` is not a global option.
+        :raises: CliUsageError for an option missing its value.
+    """
+    if token in _GLOBAL_FLAGS:
+        rtnval = (_GLOBAL_FLAGS[token], "true", 1)
+        return rtnval
+    for option, key in _GLOBAL_OPTIONS_WITH_VALUE.items():
+        if token == option:
+            if following is None or (following.startswith("-") and following != "-"):
+                raise CliUsageError("{} needs a value".format(option))
+            rtnval = (key, following, 2)
+            return rtnval
+        if token.startswith(option + "="):
+            rtnval = (key, token.split("=", 1)[1], 1)
+            return rtnval
+        if option == "-o" and token.startswith("-o") and len(token) > 2 and not token.startswith("--"):
+            # -ojson
+            rtnval = (key, token[2:], 1)
+            return rtnval
+    rtnval = (None, None, 0)
+    return rtnval
 
 
 def _split_global_args(*, argv: Sequence[str]) -> Tuple[Dict, List[str]]:
     """
-        Pull ``--profile``, ``--server-url`` and ``--timeout`` (either
-        ``--opt value`` or ``--opt=value``) out of argv wherever they
-        appear before ``--``. A leading ``--`` is dropped; a later one
-        and everything after it are passed through untouched.
+        Pull the global options (``--profile``, ``--server-url``,
+        ``--timeout``, ``-o/--output``, ``--fields`` -- as
+        ``--opt value`` or ``--opt=value`` -- and ``-q/--quiet``) out
+        of argv wherever they appear before ``--``. A leading ``--`` is
+        dropped; a later one and everything after it are passed through
+        untouched.
 
         :param argv: Tokens after ``pyc``.
 
         :returns: Tuple of (parsed_globals_dict, remainder_list).
         :raises: CliUsageError for a missing or invalid value.
     """
-    parsed: Dict = {"profile": None, "server_url": None, "timeout": None}
+    parsed: Dict = {
+        "profile": None, "server_url": None, "timeout": None,
+        "output": None, "fields": None, "quiet": False,
+    }
     remainder: List[str] = []
     tokens = list(argv)
     if len(tokens) > 0 and tokens[0] == END_OF_OPTIONS:
@@ -192,27 +251,22 @@ def _split_global_args(*, argv: Sequence[str]) -> Tuple[Dict, List[str]]:
         if token == END_OF_OPTIONS:
             remainder.extend(tokens[index:])
             break
-        matched = None
-        value = None
-        for option in _GLOBAL_OPTIONS_WITH_VALUE:
-            if token == option:
-                matched = option
-                if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
-                    raise CliUsageError("{} needs a value".format(option))
-                value = tokens[index + 1]
-                index = index + 2
-                break
-            if token.startswith(option + "="):
-                matched = option
-                value = token.split("=", 1)[1]
-                index = index + 1
-                break
-        if matched is None:
+        following = tokens[index + 1] if index + 1 < len(tokens) else None
+        key, value, consumed = _match_global_option(token=token, following=following)
+        if key is None:
             remainder.append(token)
             index = index + 1
             continue
-        key = matched[2:].replace("-", "_")
-        parsed[key] = value
+        index = index + consumed
+        if key == "quiet":
+            parsed["quiet"] = True
+        else:
+            parsed[key] = value
+
+    if parsed["output"] is not None:
+        parsed["output"] = renderer.parse_output_format(parsed["output"])
+    if parsed["fields"] is not None:
+        parsed["fields"] = renderer.parse_fields(parsed["fields"])
 
     if parsed["timeout"] is not None:
         try:
@@ -610,7 +664,26 @@ def _run_commands(*, ctx: CliContext, args: Sequence[str]) -> int:
     namespace = command_parser.parse_args(list(args))
     profile = resolve_profile(ctx=ctx)
     tree, source = api_commands.load_command_tree(ctx=ctx, profile=profile, force_refresh=namespace.refresh)
-    ctx.stdout.write(api_commands.render_command_list(tree=tree, source=source))
+    wants_rows = (
+        ctx.output.output_format not in (None, renderer.FORMAT_TABLE)
+        or ctx.output.quiet is True
+        or len(ctx.output.fields) > 0
+    )
+    if wants_rows is True:
+        rows = []
+        for (noun, verb), descriptor in sorted(tree.commands.items()):
+            rows.append({
+                "command": "{} {}".format(noun, verb),
+                "noun": noun,
+                "verb": verb,
+                "method": descriptor.operation.method,
+                "path": descriptor.operation.path_template,
+                "operation_id": descriptor.operation.operation_id,
+                "summary": descriptor.operation.summary,
+            })
+        ctx.emit_result(value=rows, identifier_fields=("command",))
+    else:
+        ctx.stdout.write(api_commands.render_command_list(tree=tree, source=source))
     rtnval = exit_codes.EXIT_OK
     return rtnval
 
@@ -791,7 +864,7 @@ def _handle_api_command(*, ctx: CliContext, noun: str, verb: str, args: Sequence
             detail = "(the server's OpenAPI document could not be loaded, so only pyc's built-in commands are known)"
         raise _unknown_command_error(noun=noun, verb=verb, known_nouns=_known_nouns(tree=tree), detail=detail)
 
-    rtnval = api_commands.run_api_command(ctx=ctx, profile=profile, descriptor=descriptor, args=args)
+    rtnval = api_commands.run_api_command(ctx=ctx, profile=profile, descriptor=descriptor, args=args, tree=tree)
     return rtnval
 
 
@@ -925,6 +998,11 @@ def main(
         profile_loader=profile_loader,
         prompt_secret=prompt_secret,
         sleep=sleep,
+        output=renderer.OutputOptions(
+            output_format=parsed_globals.get("output"),
+            fields=parsed_globals.get("fields") or tuple(),
+            quiet=bool(parsed_globals.get("quiet")),
+        ),
     )
 
     try:

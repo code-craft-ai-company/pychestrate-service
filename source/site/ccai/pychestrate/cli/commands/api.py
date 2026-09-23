@@ -43,7 +43,7 @@ import json
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ccai.pychestrate.cli import openapi_cache, parser, suggestions, transport
+from ccai.pychestrate.cli import openapi_cache, pagination, parser, suggestions, transport
 from ccai.pychestrate.cli.argparsing import CliArgumentParser
 from ccai.pychestrate.cli.builtin_operations import FALLBACK_OPENAPI_DOCUMENT
 from ccai.pychestrate.cli.context import CliContext
@@ -425,11 +425,23 @@ def build_command_parser(*, ctx: CliContext, descriptor: CommandDescriptor) -> C
             help="set one body field (repeatable; VALUE is parsed as JSON when it can be,"
                  " dotted fields nest: --set labels.env=ci)",
         )
+    mode = pagination.pagination_mode(operation=operation)
+    if mode is not None:
+        paging_group = command_parser.add_argument_group("pages")
+        paging_group.add_argument(
+            "--all", dest="all_pages", action="store_true", default=False,
+            help="request every page and print the items as one list",
+        )
+        if mode == pagination.PAGE_MODE:
+            paging_group.add_argument(
+                "--limit", dest="item_limit", type=int, default=None, metavar="N",
+                help="print at most N items, requesting further pages as needed",
+            )
     if operation.method == "POST":
         command_parser.add_argument(
             "--wait", action="store_true", default=False,
-            help="wait for the run_id in the response to finish; exit 0 on success,"
-                 " 10 on failure, 11 on timeout",
+            help="wait for the run_id in the response to finish and print the run;"
+                 " exit 0 on success, 10 on failure, 11 on timeout",
         )
         command_parser.add_argument(
             "--wait-timeout", type=float, default=3600.0, metavar="SECONDS",
@@ -612,27 +624,48 @@ def _note_unknown_body_fields(*, ctx: CliContext, descriptor: CommandDescriptor,
 # ---------------------------------------------------------------------------
 
 
-def emit_response(*, ctx: CliContext, response: RestResponse) -> None:
+def identifier_fields_for(*, tree: Optional[CommandTree], descriptor: CommandDescriptor) -> Tuple[str, ...]:
     """
-        Print a response body: JSON pretty-printed, text verbatim,
-        nothing for an empty body.
+        The fields that identify an item of ``descriptor``'s noun, for
+        ``--quiet``: the path parameter of the noun's ``get`` command
+        (``slug`` for projects, ``run_id`` for runs), so
+        ``pyc projects list -q`` prints what ``pyc projects get`` takes.
+
+        :param tree: Command tree (``None``: use only the command).
+        :param descriptor: Command.
+
+        :returns: Field names, best first.
+    """
+    fields: List[str] = []
+    if tree is not None:
+        getter = tree.commands.get((descriptor.noun, parser.OPERATION_VERB_GET), None)
+        if getter is not None and len(getter.operation.path_param_names) > 0:
+            fields.append(getter.operation.path_param_names[-1])
+    if len(descriptor.operation.path_param_names) > 0:
+        own = descriptor.operation.path_param_names[-1]
+        if own not in fields:
+            fields.append(own)
+    rtnval = tuple(fields)
+    return rtnval
+
+
+def emit_response(
+        *,
+        ctx: CliContext,
+        response: RestResponse,
+        identifier_fields: Tuple[str, ...] = tuple()
+    ) -> None:
+    """
+        Print a response in the ``--output`` format (a text body
+        verbatim, nothing for an empty body).
 
         :param ctx: Invocation context.
         :param response: The response.
+        :param identifier_fields: Fields ``--quiet`` prints.
 
         :returns: None.
     """
-    body = response.body
-    if body is None:
-        return
-    if isinstance(body, (dict, list)):
-        ctx.stdout.write(json.dumps(body, indent=2))
-        ctx.stdout.write("\n")
-        return
-    text = str(body)
-    ctx.stdout.write(text)
-    if not text.endswith("\n"):
-        ctx.stdout.write("\n")
+    ctx.emit_result(value=response.body, raw_text=response.raw_text, identifier_fields=identifier_fields)
     return
 
 
@@ -646,20 +679,24 @@ def run_api_command(
         ctx: CliContext,
         profile: CliProfile,
         descriptor: CommandDescriptor,
-        args: Sequence[str]
+        args: Sequence[str],
+        tree: Optional[CommandTree] = None
     ) -> int:
     """
-        Parse the arguments of one generated command, send the request,
-        and print the response.
+        Parse the arguments of one generated command, send the request
+        (every page with ``--all`` / ``--limit``), and print the result
+        in the ``--output`` format. With ``--wait`` only the finished
+        run is printed.
 
         :param ctx: Invocation context.
         :param profile: Active profile.
         :param descriptor: Command.
         :param args: Arguments after ``pyc <noun> <verb>``.
+        :param tree: The command tree (names ``--quiet``'s identifier).
 
         :returns: Exit code (0; errors raise).
     """
-    from ccai.pychestrate.cli import exit_codes  # noqa: E402
+    from ccai.pychestrate.cli import exit_codes, renderer  # noqa: E402
 
     operation = descriptor.operation
     command_parser = build_command_parser(ctx=ctx, descriptor=descriptor)
@@ -696,17 +733,40 @@ def run_api_command(
                 )
             body = {}
 
-    response = transport.execute_request(
-        profile=profile,
-        operation=operation,
-        path_params=path_params,
-        query_params=query_params,
-        body=body,
-        idempotency_key=None,
-        timeout_seconds=None,
-        opener=ctx.request_opener,
-    )
-    emit_response(ctx=ctx, response=response)
+    def _send(params: Dict[str, str]) -> RestResponse:
+        sent = transport.execute_request(
+            profile=profile,
+            operation=operation,
+            path_params=path_params,
+            query_params=params,
+            body=body,
+            idempotency_key=None,
+            timeout_seconds=None,
+            opener=ctx.request_opener,
+        )
+        return sent
+
+    identifier_fields = identifier_fields_for(tree=tree, descriptor=descriptor)
+    mode = pagination.pagination_mode(operation=operation)
+    all_pages = bool(values.get("all_pages", False))
+    item_limit = values.get("item_limit", None)
+    if mode is not None and (all_pages is True or item_limit is not None):
+        if ctx.output.output_format == renderer.FORMAT_RAW:
+            raise CliUsageError("-o raw prints one answer as the server sent it; it cannot follow pages (--all / --limit)")
+        if item_limit is not None and item_limit < 1:
+            raise CliUsageError("--limit must be at least 1")
+        items = pagination.fetch_pages(
+            mode=mode,
+            query_params=query_params,
+            send=_send,
+            item_limit=item_limit,
+            note=lambda text: ctx.note("pages", text),
+        )
+        ctx.emit_result(value=items, identifier_fields=identifier_fields)
+        rtnval = exit_codes.EXIT_OK
+        return rtnval
+
+    response = _send(query_params)
 
     if values.get("wait", False) is True:
         from ccai.pychestrate.cli.commands.runs import wait_for_run  # noqa: E402
@@ -714,15 +774,24 @@ def run_api_command(
         if isinstance(response.body, dict):
             run_id = response.body.get("run_id", None)
         if run_id is None or len(str(run_id)) == 0:
+            emit_response(ctx=ctx, response=response, identifier_fields=identifier_fields)
             raise CliUsageError(
                 "--wait: the response carries no run_id, so there is nothing to wait for"
             )
+        # Only the finished run is printed, so "-o json" stays one
+        # document a script can read.
         rtnval = wait_for_run(
             ctx=ctx, profile=profile, run_id=str(run_id),
             timeout_seconds=values.get("wait_timeout", 3600.0),
             interval_seconds=values.get("wait_interval", 5.0),
         )
         return rtnval
+
+    emit_response(ctx=ctx, response=response, identifier_fields=identifier_fields)
+    if mode is not None and ctx.output.quiet is False:
+        more_note = pagination.more_items_note(mode=mode, body=response.body)
+        if more_note is not None:
+            ctx.note("pages", more_note)
 
     rtnval = exit_codes.EXIT_OK
     return rtnval
