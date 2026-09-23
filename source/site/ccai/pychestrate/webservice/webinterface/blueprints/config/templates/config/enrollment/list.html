@@ -12,7 +12,7 @@
 {% if minted is defined and minted %}
 <div class="card" style="max-width: 45rem; margin-bottom: 1.5rem; border-color: var(--pyc-color-on-success-surface); background: var(--pyc-color-success-surface);">
     <div class="card-header" style="border-color: var(--pyc-color-on-success-surface);">
-        Token {{ minted.token_id }} minted for client "{{ minted.pod_name }}"
+        Token {{ minted.token_id }} minted for pod "{{ minted.pod_name }}" in project "{{ minted.project_label }}"
     </div>
     <p class="strong text-danger mb-sm">
         Shown once &mdash; save it now. The secret cannot be retrieved again.
@@ -34,20 +34,38 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
         <div class="form-group">
-            <label for="project_id">Project ID *</label>
-            <input type="text" id="project_id" name="project_id"
-                   class="form-control" required>
-            <p class="form-text">UUID of the project the token is scoped to.</p>
+            <label for="project_id">Project *</label>
+            {% if project_choices %}
+            <select id="project_id" name="project_id" class="form-control" required{{ ui.invalid_attrs(errors, 'project_id') }}>
+                <option value="">Choose a project&hellip;</option>
+                {% for group in project_choice_groups %}
+                <optgroup label="{{ group.label }}">
+                    {% for choice in group.choices %}
+                    <option value="{{ choice.value }}" {% if mint_form.project_id == choice.value %}selected{% endif %}>{{ choice.label }}{% if group.show_detail %} ({{ choice.detail }}){% endif %}</option>
+                    {% endfor %}
+                </optgroup>
+                {% endfor %}
+            </select>
+            {{ ui.field_error(errors, 'project_id') }}
+            <p class="form-text">The project whose jobs the enrolled client will run.</p>
+            {% else %}
+            <p class="form-text" id="project_id-empty">
+                There are no projects yet. <a href="{{ url_for('projects.project_create') }}">Create a project</a>
+                first, then come back to mint a token for it.
+            </p>
+            {% endif %}
         </div>
 
         <div class="form-group">
-            <label for="pod_name">Client Name *</label>
+            <label for="pod_name">Pod label *</label>
             <input type="text" id="pod_name" name="pod_name"
-                   class="form-control" required>
+                   class="form-control" required maxlength="128"
+                   value="{{ mint_form.pod_name }}"{{ ui.invalid_attrs(errors, 'pod_name') }}>
+            {{ ui.field_error(errors, 'pod_name') }}
             <p class="form-text">
-                Human-readable client name &mdash; the value the client
-                passes as <code>--name</code> when it enrolls. Recorded
-                as the pod label the token commits to.
+                The label the client enrolls under &mdash; the value it
+                passes as <code>--name</code>. The token only enrolls a
+                client with this label.
             </p>
         </div>
 
@@ -55,6 +73,7 @@
             <label for="ttl_seconds">Expiry (TTL seconds)</label>
             <input type="number" id="ttl_seconds" name="ttl_seconds"
                    class="form-control" min="1"
+                   value="{{ mint_form.ttl_seconds }}"
                    placeholder="{{ default_ttl_seconds }}">
             <p class="form-text">
                 Optional. Blank defaults to {{ default_ttl_seconds }}
@@ -64,12 +83,12 @@
 
         <div class="form-group">
             <label>
-                <input type="checkbox" name="one_shot" value="1" checked>
+                <input type="checkbox" name="one_shot" value="1" {% if mint_form.one_shot %}checked{% endif %}>
                 One-shot (consumed on first redemption)
             </label>
         </div>
 
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-primary"{% if not project_choices %} disabled{% endif %}>
             {{ ui.icon("add") }} Mint Token
         </button>
     </form>
@@ -80,7 +99,7 @@
         <tr>
             <th scope="col">Token ID</th>
             <th scope="col">Project</th>
-            <th scope="col">Pod</th>
+            <th scope="col">Pod label</th>
             <th scope="col">Status</th>
             <th scope="col">Issued</th>
             <th scope="col">Expires</th>
@@ -91,7 +110,7 @@
         {% for token in tokens %}
         <tr>
             <td>{{ token.token_id }}</td>
-            <td>{{ token.project_id }}</td>
+            <td>{% if token.project_id in project_labels %}{{ project_labels[token.project_id] }}{% else %}{{ ui.truncate_id(token.project_id) }}{% endif %}</td>
             <td>{{ token.pod_name }}</td>
             <td><span class="badge badge-info">{{ token.status.value }}</span></td>
             <td>{{ token.issued_at_iso or '-' }}</td>

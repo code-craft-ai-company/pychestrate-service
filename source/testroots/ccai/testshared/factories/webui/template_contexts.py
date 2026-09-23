@@ -547,6 +547,46 @@ def _format_variable_value_builder() -> Builder:
     return _build
 
 
+_FIXTURE_UI_PROJECT_UUID: str = "5a0c2e62-8f7a-5d16-9f4e-3c1b2a0d9e11"
+_FIXTURE_API_PROJECT_UUID: str = "0b6f3c1e-2d4a-4e8b-9c7d-1a2b3c4d5e6f"
+
+
+def _project_choices(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_enrollment import (  # noqa: E402
+        ProjectChoice,
+    )
+    if mode == MODE_SPARSE:
+        return []
+    rtnval = [
+        ProjectChoice(
+            value=_FIXTURE_UI_PROJECT_UUID, label="alpha",
+            detail="web UI project #1", source="ui",
+        ),
+        ProjectChoice(
+            value=_FIXTURE_API_PROJECT_UUID, label="Beta",
+            detail="beta", source="api",
+        ),
+    ]
+    return rtnval
+
+
+def _project_choice_groups(mode: str) -> Any:
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        routes_enrollment,
+    )
+    rtnval = routes_enrollment._project_choice_groups(choices=_project_choices(mode))
+    return rtnval
+
+
+def _minted_with_project(mode: str) -> Any:
+    base = _minted(mode)
+    if base is None:
+        return None
+    rtnval = dict(base)
+    rtnval["project_label"] = "alpha"
+    return rtnval
+
+
 DEFAULT_REGISTRY.update({
     "password_rules": _password_policy_value("password_rules"),
     "password_summary": _password_policy_value("password_summary"),
@@ -557,6 +597,15 @@ DEFAULT_REGISTRY.update({
     "password_input_id": _const("password"),
     "value_cleared": _by_mode(True, False),
     "format_value": _format_variable_value_builder(),
+    "project_choices": _project_choices,
+    "project_choice_groups": _project_choice_groups,
+    "project_labels": _by_mode({_FIXTURE_UI_PROJECT_UUID: "alpha"}, {}),
+    "mint_form": _by_mode(
+        {"project_id": _FIXTURE_UI_PROJECT_UUID, "pod_name": "pod-alpha",
+         "ttl_seconds": "3600", "one_shot": True},
+        {"project_id": "", "pod_name": "", "ttl_seconds": "", "one_shot": True},
+    ),
+    "minted": _minted_with_project,
 })
 
 

@@ -289,6 +289,29 @@ def _patch_service_list(*, tokens: List[Any]) -> Any:
     return patch
 
 
+_PICKED_PROJECT_UUID: str = "11111111-1111-4111-8111-111111111111"
+
+
+def _patch_project_choices(*, values: List[str]) -> Any:
+    """
+        Patch the mint form's project picker to offer ``values``.
+    """
+    def _choices(*, db_session: Any) -> List[Any]:
+        rtnval = [
+            routes_enrollment.ProjectChoice(
+                value=value, label="project {}".format(index),
+                detail="", source=routes_enrollment.PROJECT_SOURCE_API,
+            )
+            for index, value in enumerate(values)
+        ]
+        return rtnval
+
+    patch = create_module_patch(routes_enrollment, "_list_project_choices")
+    mock = patch.activate()
+    mock.configure(side_effect=_choices)
+    return patch
+
+
 def _build_authenticated_cookie() -> str:
     payload = {
         "user_id": "u-admin",
@@ -401,6 +424,7 @@ def test_handle_enrollment_token_list_renders_token_rows():
     _reset_global_state()
     sm_patch = None
     list_patch = None
+    choices_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -418,6 +442,7 @@ def test_handle_enrollment_token_list_renders_token_rows():
             ),
         ]
         list_patch = _patch_service_list(tokens=tokens)
+        choices_patch = _patch_project_choices(values=[])
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -434,7 +459,7 @@ def test_handle_enrollment_token_list_renders_token_rows():
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(len(ctx["tokens"]), 2)
     finally:
-        for p in (list_patch, sm_patch):
+        for p in (list_patch, choices_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -522,6 +547,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
     sm_patch = None
     issue_patch = None
     list_patch = None
+    choices_patch = None
     try:
         env = _install_stub_environment()
         _install_ui_cookie_secret()
@@ -529,6 +555,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
         list_patch = _patch_service_list(tokens=[])
+        choices_patch = _patch_project_choices(values=[_PICKED_PROJECT_UUID])
 
         issued_calls: List[Dict[str, Any]] = []
 
@@ -546,7 +573,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
 
         cookie_value = _build_authenticated_cookie()
         body = _csrf_body(fields={
-            "project_id": "proj-1",
+            "project_id": _PICKED_PROJECT_UUID,
             "pod_name": "pod-1",
             "ttl_seconds": "7200",
         })
@@ -563,7 +590,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
         testbase.assert_equal(is_redirect, False)
         testbase.assert_equal(response.status_code, 200)
         testbase.assert_equal(len(issued_calls), 1)
-        testbase.assert_equal(issued_calls[0]["project_id"], "proj-1")
+        testbase.assert_equal(issued_calls[0]["project_id"], _PICKED_PROJECT_UUID)
         testbase.assert_equal(issued_calls[0]["pod_name"], "pod-1")
         testbase.assert_equal(issued_calls[0]["ttl_seconds"], 7200)
 
@@ -590,7 +617,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
         # empty on the mint response.
         testbase.assert_equal(ctx["flashes"], [])
     finally:
-        for p in (list_patch, issue_patch, sm_patch):
+        for p in (list_patch, choices_patch, issue_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
@@ -599,20 +626,24 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
 
 def test_handle_enrollment_token_mint_missing_fields_flashes_error():
     """
-    **Feature: enrollment-admin (p19o)**
+    **Feature: enrollment-admin (p19o) + project picker (ADM-10)**
     **Property: A mint POST missing project_id / pod_name does
-    not call the service and redirects back to the list with an
-    error flash.**
+    not call the service and re-renders the form (400) with a
+    field error for each missing field.**
     """
     _reset_global_state()
     sm_patch = None
     issue_patch = None
+    list_patch = None
+    choices_patch = None
     try:
-        _install_stub_environment()
+        env = _install_stub_environment()
         _install_ui_cookie_secret()
         _install_db_session_factory(db_session=_FakeDbSession())
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
+        list_patch = _patch_service_list(tokens=[])
+        choices_patch = _patch_project_choices(values=[_PICKED_PROJECT_UUID])
 
         issued_calls: List[Dict[str, Any]] = []
 
@@ -638,10 +669,15 @@ def test_handle_enrollment_token_mint_missing_fields_flashes_error():
         )
 
         is_redirect = isinstance(response, RedirectResponse)
-        testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(is_redirect, False)
+        testbase.assert_equal(response.status_code, 400)
         testbase.assert_equal(len(issued_calls), 0)
+        ctx = env.last_template.render_calls[0]
+        testbase.assert_equal(
+            sorted(ctx["errors"].keys()), ["pod_name", "project_id"]
+        )
     finally:
-        for p in (issue_patch, sm_patch):
+        for p in (list_patch, choices_patch, issue_patch, sm_patch):
             if p is not None:
                 p.deactivate()
         _reset_global_state()
