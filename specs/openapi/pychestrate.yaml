@@ -4882,13 +4882,22 @@ paths:
         (packet keys win), validates it against the job type's JSON
         schema, redacts `secret_fields` in storage, mints a signed
         `job_kind=rpa` envelope, and dispatches it to an eligible pod.
-        A repeat within the idempotency window returns the original job.
+        The packet is validated before any pod is chosen. An identical
+        request within the idempotency window (60 s) returns the original
+        job with `replayed: true` and status 200 instead of starting a new
+        one; send `allow_duplicate: true` to start a new job anyway.
+        Unknown body fields are refused with 422.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RpaTriggerRequest' }
       responses:
+        '200':
+          description: An identical run was submitted within the idempotency window; the earlier job is returned with `replayed` set to true and no new job is started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpaJob' }
         '202':
           description: Job dispatched.
           content:
@@ -4908,7 +4917,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '422':
-          description: Packet failed schema validation; `errors` lists `{path, message}` per failing JSON pointer.
+          description: Packet failed schema validation (`errors` lists `{path, message}` per failing JSON pointer), or the body has unknown fields (`unknown_fields`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -9680,9 +9689,11 @@ components:
 
     RpaTriggerRequest:
       type: object
+      additionalProperties: false
       properties:
         work_packet: { type: object, description: Merged over the specification's default packet; packet keys win. }
         idempotency_key: { type: string }
+        allow_duplicate: { type: boolean, default: false, description: Start a new job even when an identical one was submitted within the idempotency window. }
 
     RpaJob:
       type: object
@@ -9713,6 +9724,7 @@ components:
         started_at: { type: [string, 'null'], format: date-time }
         completed_at: { type: [string, 'null'], format: date-time }
         duration_seconds: { type: [integer, 'null'] }
+        replayed: { type: boolean, description: True when this response returned an earlier identical job instead of starting a new one. }
 
     RpaJobList:
       type: object

@@ -25,7 +25,7 @@ __version__ = "1.0.0"
 import logging
 import os
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
@@ -321,6 +321,9 @@ class RpaJobView:
     completed_at: Optional[datetime]
     run_state: Optional[str] = None
     duration_seconds: Optional[int] = None
+    # True when trigger_job found an identical run inside the idempotency
+    # window and returned that job instead of starting a new one.
+    replayed: bool = False
 
 
 @dataclass(frozen=True)
@@ -537,36 +540,57 @@ def update_job_type(
         description: Optional[str] = None,
         capability_requirements: Optional[Sequence[str]] = None,
         packet_schema: Any = ...,
-        secret_fields: Optional[Sequence[str]] = None
+        secret_fields: Optional[Sequence[str]] = None,
+        actor_id: Optional[str] = None
     ) -> RpaJobTypeView:
     """
         Edit the display fields, schema, secret fields, or
         capabilities of a job type. ``packet_schema`` uses ``...`` as
         the "leave unchanged" sentinel so ``None`` can clear it.
+        Publishes ``entity.rpa.job_type_updated`` naming the changed
+        fields, so edits reach the audit log.
 
         :raises: RpaJobTypeNotFoundError, RpaJobTypeInvalidError.
     """
     row = _require_job_type_row(db_session=db_session, type_id=type_id)
+    changed: List[str] = []
     if display_name is not None:
         text = str(display_name).strip()
         if len(text) == 0:
             raise RpaJobTypeInvalidError("display_name must not be empty.") from None
         row.display_name = text
+        changed.append("display_name")
     if description is not None:
         row.description = str(description)
+        changed.append("description")
     if capability_requirements is not None:
         row.capability_requirements = _clean_string_list(
             capability_requirements, field_name="capability_requirements",
         )
+        changed.append("capability_requirements")
     if secret_fields is not None:
         row.secret_fields = _clean_string_list(secret_fields, field_name="secret_fields")
+        changed.append("secret_fields")
     if packet_schema is not ...:
         ok, issues = validate_schema_document(packet_schema)
         if ok is False:
             raise RpaJobTypeInvalidError(os.linesep.join(issues)) from None
         row.packet_schema = dict(packet_schema) if packet_schema else None
+        changed.append("packet_schema")
     row.updated_at = utc_now()
     db_session.flush()
+    enqueue_event(
+        db_session=db_session,
+        event=EntityEvent(
+            topic=RpaEventTopics.JOB_TYPE_UPDATED,
+            payload={
+                "type_id": row.type_id,
+                "changed_fields": changed,
+                "actor_id": actor_id,
+            },
+            source_event_id=new_uuid(),
+        ),
+    )
     db_session.commit()
     rtnval = get_job_type(db_session=db_session, type_id=type_id)
     return rtnval
@@ -1106,6 +1130,47 @@ def _check_capabilities(
     return kept
 
 
+def check_trigger_packet(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        spec_id: str,
+        work_packet: Optional[Mapping[str, Any]] = None,
+        max_packet_bytes: int = DEFAULT_MAX_PACKET_BYTES
+    ) -> Dict[str, Any]:
+    """
+        Run the checks :func:`trigger_job` applies to a work packet --
+        specification in the project, job type runnable, a version to
+        resolve, packet size and JSON Schema -- without creating
+        anything. Callers run it before choosing pods, so a caller
+        with a bad packet learns that, not "no pod available".
+
+        :returns: The merged packet.
+        :raises: RpaSpecNotFoundError, RpaJobTypeRetiredError,
+                 RpaVersionNotActiveError, PacketValidationError,
+                 PacketTooLargeError.
+    """
+    project_ref = str(project_id)
+    spec_row = _require_spec_row(db_session=db_session, spec_id=spec_id)
+    if spec_row.project_id != project_ref:
+        err_lines = ["RPA specification does not belong to the project."]
+        err_lines.append("SPEC_ID: {}".format(spec_id))
+        err_lines.append("PROJECT_ID: {}".format(project_ref))
+        raise RpaSpecNotFoundError(os.linesep.join(err_lines)) from None
+    type_row = _require_job_type_row(db_session=db_session, type_id=spec_row.type_id)
+    resolve_version(
+        db_session=db_session, type_id=type_row.type_id, selector=spec_row.version_selector,
+    )
+    merged = merge_packet(
+        default_packet=dict(spec_row.default_packet or {}),
+        work_packet=dict(work_packet or {}),
+    )
+    enforce_packet_size(packet=merged, max_bytes=max_packet_bytes)
+    validate_packet(packet=merged, schema=type_row.packet_schema)
+    rtnval = merged
+    return rtnval
+
+
 def trigger_job(
         *,
         db_session: DbSession,
@@ -1163,7 +1228,7 @@ def trigger_job(
                 "pychestrate.rpa.trigger.idempotent_replay job_id=%s key=%s",
                 str(prior.job_id), idempotency_key,
             )
-            rtnval = get_job(db_session=db_session, job_id=str(prior.job_id))
+            rtnval = replace(get_job(db_session=db_session, job_id=str(prior.job_id)), replayed=True)
             return rtnval
 
     required = list(type_row.capability_requirements or []) + list(spec_row.required_capabilities or [])

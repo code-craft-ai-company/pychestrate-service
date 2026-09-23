@@ -46,7 +46,7 @@ import logging
 import uuid
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
@@ -189,6 +189,49 @@ def _decode_json_object_or_abort(*, request: Request) -> Dict[str, Any]:
         _abort_problem(request=request, status=400, detail="Request body must be a JSON object.")
     rtnval = decoded
     return rtnval
+
+
+#: Body fields each write endpoint reads. Anything else is refused (422)
+#: so a misspelled field (``timeout_seconds`` for ``timeout_minutes``)
+#: fails loudly instead of being silently ignored.
+JOB_TYPE_CREATE_FIELDS = (
+    "type_id", "display_name", "description", "execution_mode",
+    "capability_requirements", "packet_schema", "secret_fields",
+)
+JOB_TYPE_UPDATE_FIELDS = (
+    "display_name", "description", "capability_requirements", "packet_schema", "secret_fields",
+)
+VERSION_PUBLISH_FIELDS = (
+    "version", "source", "source_kind", "source_ref", "entrypoint", "environment", "timeout_minutes",
+)
+SPEC_FIELDS = (
+    "name", "type_id", "version_selector", "default_packet", "target_pod_id",
+    "required_capabilities", "timeout_minutes", "description",
+)
+TRIGGER_FIELDS = ("work_packet", "idempotency_key", "allow_duplicate")
+
+
+def _reject_unknown_fields(*, request: Request, body: Dict[str, Any], allowed: Iterable[str]) -> None:
+    """
+        Abort with a 422 problem naming every body field the endpoint
+        does not read.
+
+        :param request: The request (for the problem ``instance``).
+        :param body: Decoded JSON object body.
+        :param allowed: Field names the endpoint reads.
+    """
+    allowed_set = set(allowed)
+    unknown = sorted(key for key in body if key not in allowed_set)
+    if len(unknown) > 0:
+        _abort_problem(
+            request=request,
+            status=422,
+            detail="Unknown field(s): {}. This endpoint accepts: {}.".format(
+                ", ".join(unknown), ", ".join(sorted(allowed_set)),
+            ),
+            extensions={"unknown_fields": unknown},
+        )
+    return
 
 
 def _is_uuid(value: Any) -> bool:
@@ -357,6 +400,7 @@ def _job_to_dict(view: Any) -> Dict[str, Any]:
         "started_at": _iso_or_none(view.started_at),
         "completed_at": _iso_or_none(view.completed_at),
         "duration_seconds": view.duration_seconds,
+        "replayed": bool(getattr(view, "replayed", False)),
     }
     return rtnval
 
@@ -418,6 +462,7 @@ def handle_create_job_type(request: Request) -> Response:
             request=request, db_session=db_session, permission_key=RPA_JOB_TYPES_MANAGE_PERMISSION_KEY,
         )
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=JOB_TYPE_CREATE_FIELDS)
         inputs = rpa_service.RpaJobTypeInputs(
             type_id=str(body.get("type_id", "")).strip(),
             display_name=str(body.get("display_name", "")),
@@ -473,6 +518,7 @@ def handle_update_job_type(request: Request) -> Response:
             request=request, db_session=db_session, permission_key=RPA_JOB_TYPES_MANAGE_PERMISSION_KEY,
         )
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=JOB_TYPE_UPDATE_FIELDS)
         kwargs: Dict[str, Any] = {}
         if "display_name" in body:
             kwargs["display_name"] = body["display_name"]
@@ -485,7 +531,10 @@ def handle_update_job_type(request: Request) -> Response:
         if "packet_schema" in body:
             kwargs["packet_schema"] = body["packet_schema"]
         try:
-            view = rpa_service.update_job_type(db_session=db_session, type_id=type_id, **kwargs)
+            principal = getattr(request, "auth_principal", None)
+            view = rpa_service.update_job_type(
+                db_session=db_session, type_id=type_id, actor_id=_actor_id(principal), **kwargs,
+            )
         except RpaJobTypeNotFoundError as xcpt:
             _abort_problem(request=request, status=404, detail=str(xcpt), extensions={"type_id": type_id})
             view = None
@@ -532,6 +581,7 @@ def handle_publish_version(request: Request) -> Response:
             request=request, db_session=db_session, permission_key=RPA_JOB_TYPES_MANAGE_PERMISSION_KEY,
         )
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=VERSION_PUBLISH_FIELDS)
         source = body.get("source", None)
         source_kind = body.get("source_kind", None)
         source_ref = body.get("source_ref", None)
@@ -688,6 +738,7 @@ def handle_create_spec(request: Request) -> Response:
         )
         _require_project_exists(request=request, db_session=db_session, project_id=project_id)
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=SPEC_FIELDS)
         inputs = _spec_inputs_from_body(request=request, body=body)
         try:
             view = rpa_service.create_spec(
@@ -760,6 +811,7 @@ def handle_update_spec(request: Request) -> Response:
             request=request, db_session=db_session, project_id=project_id, spec_id=spec_id,
         )
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=SPEC_FIELDS)
         merged: Dict[str, Any] = {
             "name": current.name,
             "type_id": current.type_id,
@@ -830,14 +882,55 @@ def handle_delete_spec(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _abort_for_trigger_error(*, request: Request, xcpt: Exception, spec_id: str) -> None:
+    """
+        Map a trigger-path error from :mod:`orchestration.rpa.service`
+        onto its problem response and abort; other exceptions propagate.
+    """
+    if isinstance(xcpt, PacketValidationError):
+        _abort_problem(
+            request=request, status=422, detail=str(xcpt),
+            extensions={"errors": [{"path": p, "message": m} for p, m in xcpt.issues]},
+        )
+    if isinstance(xcpt, PacketTooLargeError):
+        _abort_problem(request=request, status=413, detail=str(xcpt))
+    if isinstance(xcpt, (RpaJobTypeRetiredError, RpaVersionNotActiveError, RpaVersionNotFoundError)):
+        _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"spec_id": spec_id})
+    if isinstance(xcpt, CapabilityMismatchError):
+        _abort_problem(
+            request=request, status=409, detail=str(xcpt),
+            extensions={"reason": "capability_mismatch"},
+        )
+    if isinstance(xcpt, RpaDispatchUnavailableError):
+        _abort_problem(
+            request=request, status=503, detail=str(xcpt),
+            extensions={"reason": "dispatch_not_configured"},
+        )
+    if isinstance(xcpt, RpaDispatchFailedError):
+        _abort_problem(
+            request=request, status=409, detail=str(xcpt), extensions={"reason": "dispatch_failed"},
+        )
+    raise xcpt
+
+
+_TRIGGER_ERRORS = (
+    PacketValidationError, PacketTooLargeError, RpaJobTypeRetiredError, RpaVersionNotActiveError,
+    RpaVersionNotFoundError, CapabilityMismatchError, RpaDispatchUnavailableError, RpaDispatchFailedError,
+)
+
+
 def handle_trigger_job(request: Request) -> Response:
     """
         ``POST /api/v1/projects/{project_id}/rpa/specs/{spec_id}/trigger``
 
-        Body: ``{"work_packet": {...}, "idempotency_key": "..."}``.
-        Returns 202 with the job on success; 422 with an ``errors``
-        list on packet validation failure; 409 when no pod is
-        eligible or the dispatcher refused.
+        Body: ``{"work_packet": {...}, "idempotency_key": "...",
+        "allow_duplicate": false}``. Returns 202 with the new job; 200
+        with the earlier job and ``"replayed": true`` when an identical
+        run was submitted inside the idempotency window (send
+        ``"allow_duplicate": true`` to start a new job anyway); 422 with
+        an ``errors`` list when the packet fails validation (checked
+        before any pod is chosen); 409 when no pod is eligible or the
+        dispatcher refused.
     """
     project_id = str(request.path_params.get("project_id", ""))
     spec_id = str(request.path_params.get("spec_id", ""))
@@ -851,10 +944,23 @@ def handle_trigger_job(request: Request) -> Response:
             request=request, db_session=db_session, project_id=project_id, spec_id=spec_id,
         )
         body = _decode_json_object_or_abort(request=request)
+        _reject_unknown_fields(request=request, body=body, allowed=TRIGGER_FIELDS)
         work_packet = body.get("work_packet", {}) or {}
         if not isinstance(work_packet, dict):
             _abort_problem(request=request, status=422, detail="'work_packet' must be a JSON object.")
         idempotency_key = body.get("idempotency_key", None)
+        allow_duplicate = body.get("allow_duplicate", False)
+        if not isinstance(allow_duplicate, bool):
+            _abort_problem(request=request, status=422, detail="'allow_duplicate' must be true or false.")
+
+        # Validate the packet before looking for pods, so a caller with a
+        # bad packet is told that rather than "no pod available".
+        try:
+            rpa_service.check_trigger_packet(
+                db_session=db_session, project_id=project_id, spec_id=spec_id, work_packet=work_packet,
+            )
+        except _TRIGGER_ERRORS as xcpt:
+            _abort_for_trigger_error(request=request, xcpt=xcpt, spec_id=spec_id)
 
         candidates = resolve_dispatch_candidates(
             db_session=db_session, project_id=project_id, target_pod_id=spec_view.target_pod_id,
@@ -863,55 +969,37 @@ def handle_trigger_job(request: Request) -> Response:
             _abort_problem(
                 request=request,
                 status=409,
-                detail="No enrolled pod is available to run this RPA job -- enroll a client/pod first.",
+                detail=(
+                    "No pod can run this RPA job: a pod needs at least one enrolled client "
+                    "registered to it and the job's required capabilities."
+                ),
                 extensions={"project_id": project_id, "reason": "no_eligible_pod"},
             )
 
-        aspects = rpa_service.RpaTriggerAspects(
-            actor_id=_actor_id(principal),
-            candidates=candidates,
-            project_slug=str(getattr(project_row, "slug", "") or getattr(project_row, "name", "") or ""),
-            trigger_cause={"kind": "api"},
-            idempotency_key=str(idempotency_key) if idempotency_key else None,
-        )
+        aspect_kwargs: Dict[str, Any] = {
+            "actor_id": _actor_id(principal),
+            "candidates": candidates,
+            "project_slug": str(getattr(project_row, "slug", "") or getattr(project_row, "name", "") or ""),
+            "trigger_cause": {"kind": "api"},
+            "idempotency_key": str(idempotency_key) if idempotency_key else None,
+        }
+        if allow_duplicate is True:
+            aspect_kwargs["idempotency_window_seconds"] = 0
+        aspects = rpa_service.RpaTriggerAspects(**aspect_kwargs)
+        view = None
         try:
             view = rpa_service.trigger_job(
                 db_session=db_session, project_id=project_id, spec_id=spec_id,
                 work_packet=work_packet, aspects=aspects,
             )
-        except PacketValidationError as xcpt:
-            _abort_problem(
-                request=request, status=422, detail=str(xcpt),
-                extensions={"errors": [{"path": p, "message": m} for p, m in xcpt.issues]},
-            )
-            view = None
-        except PacketTooLargeError as xcpt:
-            _abort_problem(request=request, status=413, detail=str(xcpt))
-            view = None
-        except (RpaJobTypeRetiredError, RpaVersionNotActiveError, RpaVersionNotFoundError) as xcpt:
-            _abort_problem(request=request, status=409, detail=str(xcpt), extensions={"spec_id": spec_id})
-            view = None
-        except CapabilityMismatchError as xcpt:
-            _abort_problem(
-                request=request, status=409, detail=str(xcpt),
-                extensions={"reason": "capability_mismatch"},
-            )
-            view = None
-        except RpaDispatchUnavailableError as xcpt:
-            _abort_problem(
-                request=request, status=503, detail=str(xcpt),
-                extensions={"reason": "dispatch_not_configured"},
-            )
-            view = None
-        except RpaDispatchFailedError as xcpt:
-            _abort_problem(
-                request=request, status=409, detail=str(xcpt), extensions={"reason": "dispatch_failed"},
-            )
-            view = None
+        except _TRIGGER_ERRORS as xcpt:
+            _abort_for_trigger_error(request=request, xcpt=xcpt, spec_id=spec_id)
         _LOGGER.info(
-            "pychestrate.rpa.trigger project_id=%s spec_id=%s job_id=%s", project_id, spec_id, view.job_id,
+            "pychestrate.rpa.trigger project_id=%s spec_id=%s job_id=%s replayed=%s",
+            project_id, spec_id, view.job_id, view.replayed,
         )
-        rtnval: Response = JSONResponse(content=_job_to_dict(view), status_code=202)
+        status_code = 200 if view.replayed is True else 202
+        rtnval: Response = JSONResponse(content=_job_to_dict(view), status_code=status_code)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
     return rtnval

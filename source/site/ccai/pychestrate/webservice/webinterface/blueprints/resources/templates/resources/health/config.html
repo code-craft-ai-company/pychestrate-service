@@ -21,7 +21,7 @@
         </div>
         
         {% if config and config.probe_command %}
-        <div class="alert alert-warning" role="status">
+        <div class="pyc-inline-notice" role="status">
             This check used a command probe (<code>{{ config.probe_command }}</code>), which is no
             longer run: command probes executed on the Pychestrate server, not on the device.
             Enter a probe URL below to re-enable the check.

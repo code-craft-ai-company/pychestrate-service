@@ -51,17 +51,47 @@
 {% if can_manage %}
 <div class="card" id="run">
     <h2 class="card-header">Run this specification</h2>
+    {% if replay_job %}
+    <div class="pyc-inline-notice" role="status">
+        <p>{{ replay_message }} <a href="{{ url_for('projects.rpa_detail', project_id=project.id, job_id=replay_job.job_id) }}">View job <span class="mono">{{ replay_job.job_id[:8] }}</span></a>.</p>
+        <form action="{{ url_for('projects.rpa_run', project_id=project.id, spec_id=spec.spec_id) }}" method="post" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="work_packet" value="{{ run_packet_json }}">
+            <input type="hidden" name="target_pod" value="{{ run_selected_pod_id }}">
+            <input type="hidden" name="allow_duplicate" value="1">
+            <button type="submit" class="btn btn-sm btn-secondary">{{ ui.icon("play_arrow") }} Run anyway</button>
+        </form>
+    </div>
+    {% endif %}
+    {% if run_blocked_reason %}
+    <div class="pyc-inline-notice" role="status" id="run-blocked">{{ run_blocked_reason }}</div>
+    {% endif %}
     <form action="{{ url_for('projects.rpa_run', project_id=project.id, spec_id=spec.spec_id) }}" method="post" class="pyc-run-form" data-confirm="Dispatch an RPA job with this work packet?">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label for="work_packet">Work Packet (JSON)</label>
-            <textarea id="work_packet" name="work_packet" class="form-control mono" rows="10" spellcheck="false" aria-describedby="work-packet-help work-packet-errors">{{ run_packet_json }}</textarea>
+            <textarea id="work_packet" name="work_packet" class="form-control mono" rows="10" spellcheck="false" aria-describedby="work-packet-help work-packet-errors"{% if run_errors %} aria-invalid="true"{% endif %}>{{ run_packet_json }}</textarea>
             <p id="work-packet-help" class="form-text">Pre-filled from the specification defaults. Keys you change here override the defaults for this run only.{% if secret_packet_keys %} Secret fields ({{ secret_packet_keys | join(", ") }}) are not shown; their stored values are used unless you enter new ones.{% endif %}</p>
         </div>
-        <button type="submit" class="btn btn-success" {% if not spec.resolved_version %}disabled{% endif %}>{{ ui.icon("play_arrow") }} Run job now</button>
+        {% if run_pods | length > 1 %}
+        <div class="form-group">
+            <label for="target_pod">Run on</label>
+            <select id="target_pod" name="target_pod" class="form-control">
+                <option value="">Any eligible pod</option>
+                {% for pod in run_pods %}
+                <option value="{{ pod.pod_id }}"{% if pod.pod_id == run_selected_pod_id %} selected{% endif %}>{{ pod.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% elif run_pods | length == 1 %}
+        <p class="form-text">Runs on {{ run_pods[0].label }}, the only pod that can run this job.</p>
+        {% endif %}
+        <button type="submit" class="btn btn-success" {% if not spec.resolved_version or run_blocked_reason %}disabled{% endif %}>{{ ui.icon("play_arrow") }} Run job now</button>
         {% if not spec.resolved_version %}<span class="muted small">The job type has no active version to run.</span>{% endif %}
         {# Errors render below the button so showing them never moves the control under the pointer. #}
-        <ul id="work-packet-errors" class="form-errors" role="alert" hidden></ul>
+        <ul id="work-packet-errors" class="form-errors" role="alert"{% if not run_errors %} hidden{% endif %}>
+            {% for error in run_errors %}<li>{{ error }}</li>{% endfor %}
+        </ul>
     </form>
 </div>
 {% endif %}
@@ -87,7 +117,7 @@
         </tr>
         <tr>
             <th scope="row">Target pod</th>
-            <td class="mono">{{ spec.target_pod_id | display }}</td>
+            <td>{% if spec.target_pod_id %}<span class="mono">{{ spec.target_pod_id }}</span>{% else %}Any eligible pod{% endif %}</td>
         </tr>
         <tr>
             <th scope="row">Created</th>
@@ -233,9 +263,14 @@
             return problems.length === 0;
         }
 
-        // Runs before the confirm delegate (capture phase) so a bad packet
-        // never reaches the dialog.
-        form.addEventListener("submit", function (event) {
+        // The shell's confirm delegate listens on the document in the capture
+        // phase, which runs before any listener on the form itself. Listen on
+        // the window (earlier still) so a bad packet is reported before the
+        // confirmation dialog, and never reaches it.
+        window.addEventListener("submit", function (event) {
+            if (event.target !== form) {
+                return;
+            }
             if (!validate()) {
                 event.preventDefault();
                 event.stopImmediatePropagation();

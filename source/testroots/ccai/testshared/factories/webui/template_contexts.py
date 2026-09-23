@@ -31,6 +31,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai.testshared.factories.webui.dataclass_fixtures import (
@@ -390,6 +391,20 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "work_packet_json": _const('{\n  "customer_id": 42\n}'),
     "run_packet_json": _const('{\n  "region": "eu"\n}'),
     "secret_packet_keys": _by_mode(["auth"], []),
+    "run_pods": _by_mode(
+        [{"pod_id": "11111111-1111-4000-8000-000000000001", "label": "lab-pod-01 (11111111)"},
+         {"pod_id": "22222222-2222-4000-8000-000000000002", "label": "lab-pod-02 (22222222)"}],
+        [],
+    ),
+    "run_blocked_reason": _by_mode("", "No pod can run this job yet."),
+    "run_errors": _by_mode(["/customer_id: required"], []),
+    "run_selected_pod_id": _by_mode("11111111-1111-4000-8000-000000000001", ""),
+    "replay_job": _by_mode(SimpleNamespace(job_id="0f6c2c1e-1111-4000-8000-000000000009"), None),
+    "replay_message": _by_mode("An identical run of this specification was submitted less than a minute ago, so no new job was started.", ""),
+    "pod_choices": _by_mode(
+        [{"pod_id": "11111111-1111-4000-8000-000000000001", "label": "lab-pod-01 (11111111)"}],
+        [],
+    ),
     "is_active": _by_mode(True, False),
     "job_types": _many(RpaJobTypeView),
     "job_type": _one(RpaJobTypeView),
