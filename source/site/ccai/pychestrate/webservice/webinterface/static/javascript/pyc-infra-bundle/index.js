@@ -2793,6 +2793,29 @@ function parse_actor_roles(raw) {
   }
   return rtnval;
 }
+var UUID_PATTERN2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function is_complete_uuid(value) {
+  if (typeof value !== "string") {
+    const rtnval2 = false;
+    return rtnval2;
+  }
+  const rtnval = UUID_PATTERN2.test(value.trim());
+  return rtnval;
+}
+async function problem_detail_of(response) {
+  try {
+    const body = await response.json();
+    if (body !== null && typeof body === "object" && typeof body.detail === "string") {
+      const rtnval2 = body.detail.split(/\r?\n/)[0].trim();
+      return rtnval2;
+    }
+  } catch (reason) {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const rtnval = "";
+  return rtnval;
+}
 function extract_guard_projects(body) {
   let raw = [];
   if (Array.isArray(body) === true) {
@@ -2828,6 +2851,12 @@ var PycGuards = class extends HTMLElement {
   _projects_notice_region;
   _environments;
   _environmentsAvailable;
+  /**
+   * True when the project's environment list could not be read
+   * (the picker then falls back to typing a full environment id).
+   */
+  _environmentsLoadFailed;
+  _environment_filter_slot;
   _root;
   _table_region;
   _attach_region;
@@ -2841,6 +2870,7 @@ var PycGuards = class extends HTMLElement {
       loading: false,
       errored: false,
       errorStatus: 0,
+      errorDetail: "",
       total: 0
     };
     this._guards = [];
@@ -2850,6 +2880,8 @@ var PycGuards = class extends HTMLElement {
     this._projects_notice_region = null;
     this._environments = [];
     this._environmentsAvailable = false;
+    this._environmentsLoadFailed = false;
+    this._environment_filter_slot = null;
     this._root = null;
     this._table_region = null;
     this._attach_region = null;
@@ -2901,9 +2933,7 @@ var PycGuards = class extends HTMLElement {
     project_select.classList.add("pyc-infra__select");
     project_select.setAttribute("data-role", "project-select");
     project_select.addEventListener("change", () => {
-      this._state.projectId = project_select.value;
-      void this._load_environments();
-      void this._refresh();
+      void this._on_project_changed(project_select.value);
     });
     project_label.appendChild(project_select);
     controls.appendChild(project_label);
@@ -2914,25 +2944,18 @@ var PycGuards = class extends HTMLElement {
     project_input.setAttribute("data-role", "project-input");
     project_input.hidden = true;
     project_input.addEventListener("change", () => {
-      this._state.projectId = project_input.value.trim();
-      void this._load_environments();
-      void this._refresh();
+      void this._on_project_changed(project_input.value.trim());
     });
     controls.appendChild(project_input);
     const env_label = document.createElement("label");
     env_label.classList.add("pyc-infra__field");
-    env_label.textContent = "Environment filter";
-    const env_input = document.createElement("mj-text-field");
-    env_input.classList.add("pyc-infra__input");
-    env_input.setAttribute("type", "text");
-    env_input.setAttribute("placeholder", "environment id (optional)");
-    env_input.setAttribute("data-role", "environment-filter");
-    env_input.addEventListener("change", () => {
-      this._state.environmentFilter = env_input.value.trim();
-      void this._refresh();
-    });
-    env_label.appendChild(env_input);
+    env_label.textContent = "Environment";
+    const env_slot = document.createElement("span");
+    env_slot.classList.add("pyc-infra__control-slot");
+    env_slot.setAttribute("data-role", "environment-filter-slot");
+    env_label.appendChild(env_slot);
     controls.appendChild(env_label);
+    this._environment_filter_slot = env_slot;
     const attach_button = document.createElement("mj-button");
     attach_button.classList.add("pyc-infra__button");
     attach_button.setAttribute("type", "button");
@@ -2991,6 +3014,84 @@ var PycGuards = class extends HTMLElement {
     this._table_region = table_region;
     this._root = root;
     this.replaceChildren(root);
+    this._render_environment_filter();
+    return;
+  }
+  /**
+   * Switch to another project: forget the environment chosen for the
+   * previous one, load the new project's environments (which picks
+   * the first), then load its guards.
+   *
+   * @param project_id The newly selected project id.
+   */
+  async _on_project_changed(project_id) {
+    this._state.projectId = project_id;
+    this._state.environmentFilter = "";
+    await this._load_environments();
+    await this._refresh();
+    return;
+  }
+  /**
+   * Render the environment picker into the controls. With the
+   * project's environments loaded it is a select over them; when
+   * the project has none it says so; only when the list could not
+   * be read does it fall back to typing a full environment id.
+   */
+  _render_environment_filter() {
+    if (this._environment_filter_slot === null) {
+      return;
+    }
+    const slot = this._environment_filter_slot;
+    if (this._state.projectId.length === 0) {
+      const waiting = document.createElement("span");
+      waiting.classList.add("pyc-infra__field-caption");
+      waiting.setAttribute("data-role", "environment-filter-empty");
+      waiting.textContent = "Select a project first";
+      slot.replaceChildren(waiting);
+      return;
+    }
+    if (this._environmentsAvailable === true) {
+      const select = document.createElement("mj-select");
+      select.classList.add("pyc-infra__select");
+      select.setAttribute("data-role", "environment-filter");
+      select.setAttribute("aria-label", "Environment");
+      for (const environment of this._environments) {
+        const option = document.createElement("mj-option");
+        option.setAttribute("value", environment.environment_id);
+        option.textContent = environment.name + " (" + short_id(environment.environment_id) + ")";
+        if (environment.environment_id === this._state.environmentFilter) {
+          option.setAttribute("selected", "");
+        }
+        select.appendChild(option);
+      }
+      select.value = this._state.environmentFilter;
+      select.addEventListener("change", () => {
+        this._state.environmentFilter = select.value;
+        void this._refresh();
+      });
+      slot.replaceChildren(select);
+      return;
+    }
+    if (this._environmentsLoadFailed === false) {
+      const none = document.createElement("span");
+      none.classList.add("pyc-infra__field-caption");
+      none.setAttribute("data-role", "environment-filter-empty");
+      none.textContent = "This project has no environments \u2014 register one on the Environments page.";
+      slot.replaceChildren(none);
+      return;
+    }
+    const input = document.createElement("mj-text-field");
+    input.classList.add("pyc-infra__input");
+    input.setAttribute("type", "text");
+    input.setAttribute("placeholder", "full environment id (UUID)");
+    input.setAttribute("aria-label", "Environment id");
+    input.setAttribute("data-role", "environment-filter");
+    input.value = this._state.environmentFilter;
+    input.addEventListener("change", () => {
+      this._state.environmentFilter = input.value.trim();
+      void this._refresh();
+    });
+    slot.replaceChildren(input);
     return;
   }
   /**
@@ -3107,6 +3208,7 @@ var PycGuards = class extends HTMLElement {
   async _load_environments() {
     let environments = [];
     let available = false;
+    let load_failed = false;
     if (this._state.projectId.length > 0) {
       try {
         const url = build_environments_collection_url(
@@ -3117,6 +3219,9 @@ var PycGuards = class extends HTMLElement {
           credentials: "same-origin",
           headers: { Accept: "application/json" }
         });
+        if (response.ok === false) {
+          load_failed = true;
+        }
         if (response.ok === true) {
           const body = await response.json();
           const page = body;
@@ -3136,6 +3241,7 @@ var PycGuards = class extends HTMLElement {
           }
         }
       } catch (reason) {
+        load_failed = true;
         console.warn(
           "pychestrate.ui.infra.guard_environments_fetch_failed",
           { reason: String(reason) }
@@ -3144,6 +3250,18 @@ var PycGuards = class extends HTMLElement {
     }
     this._environments = environments;
     this._environmentsAvailable = available;
+    this._environmentsLoadFailed = load_failed;
+    if (available === true) {
+      const known = environments.some(
+        (environment) => environment.environment_id === this._state.environmentFilter
+      );
+      if (known === false) {
+        this._state.environmentFilter = environments[0].environment_id;
+      }
+    } else if (load_failed === false) {
+      this._state.environmentFilter = "";
+    }
+    this._render_environment_filter();
     if (this._attach_region !== null && this._attach_region.hidden === false) {
       this._render_attach_form();
     }
@@ -3178,7 +3296,7 @@ var PycGuards = class extends HTMLElement {
     const input = document.createElement("mj-text-field");
     input.classList.add("pyc-infra__input");
     input.setAttribute("type", "text");
-    input.setAttribute("placeholder", "environment id (no environments listed for this project)");
+    input.setAttribute("placeholder", "full environment id (UUID) -- no environments listed for this project");
     input.setAttribute("data-role", role);
     input.required = true;
     const rtnval = input;
@@ -3235,9 +3353,19 @@ var PycGuards = class extends HTMLElement {
       this._render_table_region();
       return;
     }
+    if (is_complete_uuid(this._state.environmentFilter) === false) {
+      this._guards = [];
+      this._state.loading = false;
+      this._state.errored = true;
+      this._state.errorStatus = 422;
+      this._state.errorDetail = "Enter a complete environment id (a UUID).";
+      this._render_table_region();
+      return;
+    }
     this._state.loading = true;
     this._state.errored = false;
     this._state.errorStatus = 0;
+    this._state.errorDetail = "";
     this._render_table_region();
     const url = build_guards_collection_url(
       this._state.projectId,
@@ -3245,6 +3373,7 @@ var PycGuards = class extends HTMLElement {
     );
     let page = null;
     let error_status = 0;
+    let error_detail = "";
     try {
       const response = await fetch(url, {
         method: "GET",
@@ -3253,6 +3382,9 @@ var PycGuards = class extends HTMLElement {
       });
       if (response.ok === false) {
         error_status = response.status;
+        if (error_status >= 400 && error_status < 500) {
+          error_detail = await problem_detail_of(response);
+        }
         throw new Error(
           "guards fetch failed: HTTP " + String(response.status)
         );
@@ -3270,6 +3402,7 @@ var PycGuards = class extends HTMLElement {
       this._state.loading = false;
       this._state.errored = true;
       this._state.errorStatus = error_status;
+      this._state.errorDetail = error_detail;
       this._render_table_region();
       return;
     }
@@ -3331,7 +3464,7 @@ var PycGuards = class extends HTMLElement {
         "pyc-infra__status--error"
       );
       error.setAttribute("data-role", "error-state");
-      error.textContent = list_load_message_for_status(
+      error.textContent = this._state.errorDetail.length > 0 ? this._state.errorDetail : list_load_message_for_status(
         this._state.errorStatus,
         "guards"
       );
@@ -3592,6 +3725,12 @@ var PycGuards = class extends HTMLElement {
       }
       return;
     }
+    if (is_complete_uuid(environment_id) === false) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Enter a complete environment id (a UUID).";
+      }
+      return;
+    }
     submit_button.toggleAttribute("disabled", true);
     if (status instanceof HTMLElement) {
       status.textContent = "Attaching guard\u2026";
@@ -3640,6 +3779,7 @@ var PycGuards = class extends HTMLElement {
     };
     let status = 0;
     let guard_id = "";
+    let detail = "";
     try {
       const url = build_guards_collection_url(
         this._state.projectId,
@@ -3661,6 +3801,8 @@ var PycGuards = class extends HTMLElement {
         if (guard !== null && typeof guard.guard_id === "string") {
           guard_id = guard.guard_id;
         }
+      } else if (status === 422) {
+        detail = await problem_detail_of(response);
       }
     } catch (reason) {
       console.warn(
@@ -3680,7 +3822,7 @@ var PycGuards = class extends HTMLElement {
       ok,
       status,
       guardId: guard_id,
-      message: attach_message_for_status(status)
+      message: detail.length > 0 ? "Guard not attached: " + detail : attach_message_for_status(status)
     };
     return rtnval;
   }
@@ -3774,6 +3916,12 @@ var PycGuards = class extends HTMLElement {
     if (environment_id.length === 0 || action.length === 0) {
       if (status instanceof HTMLElement) {
         status.textContent = "Environment id and action are required.";
+      }
+      return;
+    }
+    if (is_complete_uuid(environment_id) === false) {
+      if (status instanceof HTMLElement) {
+        status.textContent = "Enter a complete environment id (a UUID).";
       }
       return;
     }

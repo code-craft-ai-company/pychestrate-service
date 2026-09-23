@@ -464,3 +464,8 @@ pyc-guards {
     font-size: var(--pyc-font-size-small, 0.8125rem);
     color: var(--pyc-infra-fg-muted);
 }
+
+.pyc-infra__control-slot {
+    display: block;
+    min-width: 14rem;
+}

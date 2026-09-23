@@ -3853,8 +3853,11 @@ paths:
       x-pychestrate-status: planned
       description: >-
         The guards domain is environment scoped; the
-        `environment_id` query param is required. Returns guard
-        attachments as an `{items, meta}` page.
+        `environment_id` query param is required and must be a
+        complete environment UUID (a missing one answers 400, a
+        malformed or partial one 422). A malformed `project_id`
+        answers 404. Returns guard attachments as an
+        `{items, meta}` page.
       parameters:
         - in: query
           name: environment_id
@@ -3879,6 +3882,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
     post:
       tags: [blast_radius_guards]
       summary: Attach a blast-radius guard onto an environment.

@@ -493,3 +493,154 @@ def test_test_metrics_card_is_labelled_failed_run_rate(bundle_browser: ThreadedB
         ("Failed-run rate", "25%", []),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# ORC-28 -- guards are listed through an environment picker
+# ---------------------------------------------------------------------------
+
+
+ENVIRONMENTS_PATH: str = "/api/v1/projects/{}/environments".format(PROJECT_ID)
+GUARDS_PATH: str = "/api/v1/projects/{}/blast-radius-guards".format(PROJECT_ID)
+ENVIRONMENT_PROD: str = "00000000-0000-4000-8000-0000000e0001"
+ENVIRONMENT_STAGE: str = "00000000-0000-4000-8000-0000000e0002"
+
+
+def _guards_api(*, environments: Optional[List[Dict[str, Any]]] = None, environments_status: int = 200) -> FakeApi:
+    api = FakeApi()
+    api.respond(
+        method="GET",
+        path=PROJECTS_PATH,
+        body={"items": [{"project_id": PROJECT_ID, "slug": "p", "display_name": "P"}], "meta": {"total": 1}},
+    )
+    if environments is None:
+        environments = [
+            {"environment_id": ENVIRONMENT_PROD, "name": "prod"},
+            {"environment_id": ENVIRONMENT_STAGE, "name": "stage"},
+        ]
+    api.respond(
+        method="GET",
+        path=ENVIRONMENTS_PATH,
+        status=environments_status,
+        body={"items": environments, "meta": {"total": len(environments)}},
+    )
+    api.respond(method="GET", path=GUARDS_PATH, body={"items": [], "meta": {"total": 0}})
+    return api
+
+
+def _open_guards(*, browser: Any, api: FakeApi) -> Any:
+    context, page = open_bundle_page(browser=browser, api=api, bundle="pyc-infra-bundle")
+    mount_element(page=page, tag="pyc-guards")
+    wait_for_request(page=page, api=api, method="GET", path=ENVIRONMENTS_PATH)
+    rtnval = (context, page)
+    return rtnval
+
+
+def test_guards_environment_control_lists_the_projects_environments(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-28 / pyc-infra-bundle**
+    **Property: the guards view offers the project's environments in a
+    picker instead of an "optional" free-text id.**
+    """
+    api = _guards_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_guards(browser=browser, api=api)
+        try:
+            page.wait_for_selector('[data-role="environment-filter"]', timeout=5000)
+            rtnval = page.evaluate(
+                "() => { const c = document.querySelector('[data-role=\"environment-filter\"]');"
+                " return {tag: c.tagName.toLowerCase(),"
+                " values: Array.from(c.querySelectorAll('mj-option')).map((o) => o.getAttribute('value'))}; }",
+            )
+        finally:
+            context.close()
+        return rtnval
+
+    control = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        control,
+        {"tag": "mj-select", "values": [ENVIRONMENT_PROD, ENVIRONMENT_STAGE]},
+    )
+    return
+
+
+def test_guards_list_is_requested_with_a_complete_environment_id(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-28 / pyc-infra-bundle**
+    **Property: the guards list loads for the first environment without
+    the user typing an id, and the request carries its full UUID.**
+    """
+    api = _guards_api()
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_guards(browser=browser, api=api)
+        try:
+            requests = wait_for_request(page=page, api=api, method="GET", path=GUARDS_PATH)
+        finally:
+            context.close()
+        rtnval = requests[0].query.get("environment_id")
+        return rtnval
+
+    sent = bundle_browser.run(_scenario)
+    testbase.assert_equal(sent, ENVIRONMENT_PROD)
+    return
+
+
+def test_guards_partial_typed_environment_id_is_not_sent(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-28 / pyc-infra-bundle**
+    **Property: when the environment list cannot be read and the user
+    types a partial id, no list request is sent and the view asks for a
+    complete environment id.**
+    """
+    api = _guards_api(environments_status=403)
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_guards(browser=browser, api=api)
+        try:
+            page.wait_for_selector('[data-role="environment-filter"] input', timeout=5000)
+            page.fill('[data-role="environment-filter"] input', "00000000-0000")
+            page.dispatch_event('[data-role="environment-filter"]', "change")
+            page.wait_for_selector('[data-role="error-state"]', timeout=5000)
+            message = page.inner_text('[data-role="error-state"]')
+            sent = api.requests_for(method="GET", path=GUARDS_PATH)
+        finally:
+            context.close()
+        rtnval = (message, len(sent))
+        return rtnval
+
+    outcome = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        outcome,
+        ("Enter a complete environment id (a UUID).", 0),
+    )
+    return
+
+
+def test_guards_project_without_environments_says_so(bundle_browser: ThreadedBrowser):
+    """
+    **Feature: audit ORC-28 / pyc-infra-bundle**
+    **Property: a project with no environments shows that instead of an
+    id field, and no guards request is sent.**
+    """
+    api = _guards_api(environments=[])
+
+    def _scenario(browser: Any) -> Any:
+        context, page = _open_guards(browser=browser, api=api)
+        try:
+            page.wait_for_selector('[data-role="environment-filter-empty"]', timeout=5000)
+            page.wait_for_timeout(300)
+            text = page.inner_text('[data-role="environment-filter-empty"]')
+            sent = api.requests_for(method="GET", path=GUARDS_PATH)
+        finally:
+            context.close()
+        rtnval = (text, len(sent))
+        return rtnval
+
+    outcome = bundle_browser.run(_scenario)
+    testbase.assert_equal(
+        outcome,
+        ("This project has no environments — register one on the Environments page.", 0),
+    )
+    return
