@@ -68,6 +68,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -181,9 +183,9 @@ def _parse_json_object(*, raw: str, field_label: str) -> Dict[str, Any]:
     try:
         decoded = json.loads(text)
     except ValueError as exc:
-        raise ValueError("{} must be valid JSON: {}".format(field_label, str(exc))) from None
+        raise ProjectsFormError("{} must be valid JSON: {}".format(field_label, str(exc))) from None
     if not isinstance(decoded, dict):
-        raise ValueError("{} must be a JSON object.".format(field_label))
+        raise ProjectsFormError("{} must be a JSON object.".format(field_label))
     rtnval = decoded
     return rtnval
 
@@ -515,11 +517,11 @@ def handle_rpa_spec_create(request: Request) -> Response:
             )
             return response
         except ValueError as exc:
-            flash.add_flash(session=auth.session, message=str(exc), category=flash.CATEGORY_ERROR)
+            flash.add_flash(session=auth.session, message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))), category=flash.CATEGORY_ERROR)
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating RPA specification: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error creating RPA specification: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -675,7 +677,7 @@ def handle_rpa_run(request: Request) -> Response:
                 db_session=db_session, project_id=str(project_id), target_pod_id=spec.target_pod_id,
             )
             if len(candidates) == 0:
-                raise ValueError(
+                raise ProjectsFormError(
                     "No enrolled pod is available to run this job. Enroll a client on a pod first."
                 )
             project_slug = str(getattr(project_manager, "slug", "") or getattr(spec, "name", ""))
@@ -702,7 +704,7 @@ def handle_rpa_run(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message="Error triggering RPA job: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error triggering RPA job: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -884,7 +886,7 @@ def handle_rpa_cancel(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session, url=detail_url,
-                message="Error cancelling RPA job: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error cancelling RPA job: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -917,7 +919,7 @@ def build_watch_rpa_trigger(*, db_session: Any) -> Callable[..., Any]:
         spec = rpa.get_spec(db_session=db_session, spec_id=spec_id)
         if project_id is not None and str(spec.project_id) != str(project_id):
             # A watch may only start RPA jobs in its own project.
-            raise ValueError(
+            raise ProjectsFormError(
                 "RPA specification {} is not part of project {}.".format(spec_id, project_id)
             )
         candidates = _resolve_candidates(

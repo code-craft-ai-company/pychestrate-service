@@ -62,6 +62,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
     _field_errors_from,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
@@ -243,11 +245,11 @@ def _parse_json_object_or_none(
         ]
         err_msg_lines.append("ERROR: {}".format(str(exc)))
         err_msg = "; ".join(err_msg_lines)
-        raise ValueError(err_msg) from exc
+        raise ProjectsFormError(err_msg) from exc
 
     if not isinstance(parsed, dict):
         err_msg = "{} must be a JSON object.".format(field_label)
-        raise ValueError(err_msg)
+        raise ProjectsFormError(err_msg)
 
     rtnval = parsed
     return rtnval
@@ -283,7 +285,7 @@ def _parse_repo_id_csv(*, raw: str) -> List[int]:
                     candidate
                 )
             )
-            raise ValueError(err_msg) from exc
+            raise ProjectsFormError(err_msg) from exc
         rtnval.append(value)
 
     return rtnval
@@ -629,7 +631,7 @@ def handle_release_template_create(request: Request) -> Response:
             errors = {}
             flash.add_flash(
                 session=auth.session,
-                message=str(exc),
+                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
@@ -638,9 +640,7 @@ def handle_release_template_create(request: Request) -> Response:
             if len(errors) == 0:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error creating release template: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error creating release template: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1127,7 +1127,7 @@ def handle_release_template_edit(request: Request) -> Response:
             except ValueError as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message=str(exc),
+                    message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
@@ -1136,9 +1136,7 @@ def handle_release_template_edit(request: Request) -> Response:
                 if len(errors) == 0:
                     flash.add_flash(
                         session=auth.session,
-                        message="Error updating release template: {}".format(
-                            str(exc)
-                        ),
+                        message=_describe_failure(exc=exc, prefix="Error updating release template: ", request_path=str(getattr(request, "path", ""))),
                         category=flash.CATEGORY_ERROR,
                     )
 
@@ -1280,9 +1278,7 @@ def handle_release_template_delete(request: Request) -> Response:
                     "projects.release_template_list",
                     project_id=project_id,
                 ),
-                message="Error deleting release template: {}".format(
-                    str(exc)
-                ),
+                message=_describe_failure(exc=exc, prefix="Error deleting release template: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response

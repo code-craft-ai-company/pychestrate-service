@@ -1108,9 +1108,7 @@ def handle_repository_delete(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.repository_list", project_id=project_id
                 ),
-                message="Error removing repository: {}".format(
-                    str(exc)
-                ),
+                message=_describe_failure(exc=exc, prefix="Error removing repository: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response

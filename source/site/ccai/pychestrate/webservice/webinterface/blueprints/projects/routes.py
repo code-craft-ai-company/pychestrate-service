@@ -452,9 +452,9 @@ def _parse_metadata_json_or_default(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError("Invalid JSON in metadata field.") from exc
+        raise ProjectsFormError("Invalid JSON in metadata field.") from exc
     if not isinstance(parsed, dict):
-        raise ValueError(
+        raise ProjectsFormError(
             "Metadata must be a JSON object, not a {}".format(
                 type(parsed).__name__
             )
@@ -817,13 +817,13 @@ def handle_project_create(request: Request) -> Response:
         except ValueError as exc:
             flash.add_flash(
                 session=auth.session,
-                message=str(exc),
+                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating project: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error creating project: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -1038,15 +1038,13 @@ def handle_project_edit(request: Request) -> Response:
             except ValueError as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message=str(exc),
+                    message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating project: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error updating project: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1333,7 +1331,7 @@ def handle_member_add(request: Request) -> Response:
 
             try:
                 if user_id is None:
-                    raise ValueError("Choose a user to add to the project.")
+                    raise ProjectsFormError("Choose a user to add to the project.")
                 role = _resolve_project_role(role_str=role_str)
                 project_manager.add_member(
                     project_id, user_id, role, auth.user_id
@@ -1351,7 +1349,7 @@ def handle_member_add(request: Request) -> Response:
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error adding member: {}".format(str(exc)),
+                    message=_describe_failure(exc=exc, prefix="Error adding member: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1504,9 +1502,7 @@ def handle_member_edit(request: Request) -> Response:
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating member role: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error updating member role: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1651,7 +1647,7 @@ def handle_member_remove(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.member_list", project_id=project_id
                 ),
-                message="Error removing member: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error removing member: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1722,10 +1718,11 @@ def _is_user_facing_error(*, exc: BaseException) -> bool:
     """
         Whether an exception's message was written for users.
 
-        True for :class:`ProjectsFormError` and for the domain
-        exceptions the core managers raise (classes defined under
+        True for :class:`ProjectsFormError`, for the domain exceptions
+        the core managers raise (classes defined under
         ``ccai.pychestrate.core.managers`` that carry an
-        ``error_code``, such as ``ProjectHasActiveJobsError``). Anything
+        ``error_code``, such as ``ProjectHasActiveJobsError``) and for
+        the RPA service's recoverable errors (``RpaError``). Anything
         else -- SQL errors, ``TypeError``, ``KeyError`` -- is an
         internal failure whose text must not reach the browser.
 
@@ -1736,9 +1733,11 @@ def _is_user_facing_error(*, exc: BaseException) -> bool:
     if isinstance(exc, ProjectsFormError):
         return True
     module_name = str(getattr(type(exc), "__module__", "") or "")
+    # The RPA service's recoverable errors (RpaError and its subclasses)
+    # are written for users too.
     rtnval = (
-        module_name.startswith("ccai.pychestrate.core.managers.")
-        and hasattr(exc, "error_code")
+        (module_name.startswith("ccai.pychestrate.core.managers.") and hasattr(exc, "error_code"))
+        or module_name == "ccai.pychestrate.webservice.orchestration.rpa.errors"
     )
     return rtnval
 
@@ -1801,6 +1800,8 @@ def _describe_failure(
             "an unexpected problem occurred. If it keeps happening, give "
             "an administrator this reference: {}.".format(reference)
         )
+        if len(prefix) == 0:
+            detail = detail[0].upper() + detail[1:]
     rtnval = "{}{}".format(prefix, detail)
     return rtnval
 

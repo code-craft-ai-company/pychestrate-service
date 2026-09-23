@@ -81,6 +81,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
     _field_errors_from,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
@@ -236,7 +238,7 @@ def _resolve_trigger_source(*, value: str) -> Any:
     try:
         rtnval = WatchTriggerSource(value)
     except ValueError:
-        raise ValueError("Choose what starts the watch.") from None
+        raise ProjectsFormError("Choose what starts the watch.") from None
     return rtnval
 
 
@@ -254,7 +256,7 @@ def _resolve_watch_action(*, value: str) -> Any:
     try:
         rtnval = WatchAction(value)
     except ValueError:
-        raise ValueError("Choose what the watch does.") from None
+        raise ProjectsFormError("Choose what the watch does.") from None
     return rtnval
 
 
@@ -343,7 +345,7 @@ def _build_watch_condition(
     if trigger == "build_completion":
         status = _optional_text(value=build_status)
         if status is not None and status not in BUILD_RESULT_CHOICES:
-            raise ValueError(
+            raise ProjectsFormError(
                 "Choose which build results start the watch: succeeded,"
                 " failed, or either."
             )
@@ -372,7 +374,7 @@ def _build_watch_action_config(
     action_enum = _resolve_watch_action(value=action_type)
     # Only notifications need no target.
     if action_spec_id is None and action_enum != WatchAction.SEND_NOTIFICATION:
-        raise ValueError(
+        raise ProjectsFormError(
             "Choose a target for the action: the build specification to"
             " run, or the id of the pipeline, infrastructure specification"
             " or test specification."
@@ -1162,7 +1164,7 @@ def handle_watch_create(request: Request) -> Response:
             if len(errors) == 0:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error creating watch: {}".format(str(exc)),
+                    message=_describe_failure(exc=exc, prefix="Error creating watch: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
             return _render_watch_create_form(
@@ -1346,7 +1348,7 @@ def handle_watch_edit(request: Request) -> Response:
             if len(errors) == 0:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating watch: {}".format(str(exc)),
+                    message=_describe_failure(exc=exc, prefix="Error updating watch: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
             repository_manager = _build_repository_manager(
@@ -1519,8 +1521,10 @@ def _handle_watch_action(
             response = _redirect_with_flash(
                 session=auth.session,
                 url=success_url,
-                message="{}{}".format(
-                    error_message_prefix, str(exc)
+                message=_describe_failure(
+                    exc=exc,
+                    prefix=error_message_prefix,
+                    request_path=str(getattr(request, "path", "")),
                 ),
                 category=flash.CATEGORY_ERROR,
             )

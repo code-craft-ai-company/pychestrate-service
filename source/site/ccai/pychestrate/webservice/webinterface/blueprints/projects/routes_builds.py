@@ -75,6 +75,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
     _describe_failure,
     _field_errors_from,
     _is_user_facing_error,
@@ -333,7 +334,7 @@ def _parse_json_or_default(
         rtnval = json.loads(raw)
         return rtnval
     except json.JSONDecodeError as exc:
-        raise ValueError(
+        raise ProjectsFormError(
             "Invalid JSON in steps or environment field."
         ) from exc
 
@@ -786,7 +787,7 @@ def handle_build_spec_create(request: Request) -> Response:
             errors: Dict[str, str] = {}
             flash.add_flash(
                 session=auth.session,
-                message=str(exc),
+                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
@@ -795,9 +796,7 @@ def handle_build_spec_create(request: Request) -> Response:
             if len(errors) == 0:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error creating build specification: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error creating build specification: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1020,7 +1019,7 @@ def handle_build_spec_edit(request: Request) -> Response:
                     raw=form_values["environment"].strip(), default={}
                 )
                 if not isinstance(environment, dict):
-                    raise ValueError("Environment variables must be a JSON object.")
+                    raise ProjectsFormError("Environment variables must be a JSON object.")
                 update_request = _build_build_spec_update_request(
                     name=form_values["name"].strip(),
                     repository_id=_coerce_int(raw=form_values["repository_id"]),
@@ -1049,10 +1048,13 @@ def handle_build_spec_edit(request: Request) -> Response:
                 )
                 return response
             except ValueError as exc:
-                message = getattr(exc, "message", None) or str(exc)
                 flash.add_flash(
                     session=auth.session,
-                    message="Error saving build specification: {}".format(message),
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="Error saving build specification: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
@@ -1422,7 +1424,7 @@ def handle_build_trigger(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.build_list", project_id=project_id
                 ),
-                message="Error triggering build: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error triggering build: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1525,7 +1527,7 @@ def handle_build_cancel(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message="Error cancelling build: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error cancelling build: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
