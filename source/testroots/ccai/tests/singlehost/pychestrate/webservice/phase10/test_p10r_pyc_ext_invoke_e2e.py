@@ -36,14 +36,19 @@ from ccai import testbase
 from ccai.pychestrate.cli import entry, exit_codes
 from ccai.pychestrate.cli.extensions.discovery import (
     find_descriptor,
-    find_mounted_route_for_verb,
     find_subcommand_class,
-    resolve_ext_command,
 )
 from ccai.pychestrate.cli.extensions.example_subcommand import (
     PycExtExampleSubcommand,
 )
 from ccai.pychestrate.cli.models import CliProfile, RestResponse
+
+# The in-process pairing of the two halves lives with the service
+# (the CLI package imports no service code).
+from ccai.pychestrate.webservice.extensions.cli_ext_pairing import (
+    find_mounted_route_for_verb,
+    resolve_ext_command,
+)
 
 # Side-effect imports — load every half of the example pair so
 # ``__subclasses__`` enumerations cover them deterministically.

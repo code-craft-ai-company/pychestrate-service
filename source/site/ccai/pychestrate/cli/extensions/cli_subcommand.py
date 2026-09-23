@@ -14,9 +14,17 @@ without re-parsing OpenAPI per pack.
 
 The base lives under :mod:`cli.extensions` (alongside the CLI
 package) rather than under :mod:`webservice.extensions` because the
-CLI is distributed separately from the service runtime — keeping the
-base co-located keeps the CLI build self-contained and frees pack
-authors from depending on the full service codebase.
+CLI is distributed separately from the service runtime (the
+standard-library-only ``pychestrate-cli`` package) — keeping the base
+co-located keeps the CLI build self-contained and frees pack authors
+from depending on the full service codebase.
+
+Its base class is the service's
+:class:`~ccai.pychestrate.webservice.extensions.resource_extension.ResourceExtension`
+when the service is installed next to the CLI (the server process,
+where the plugin-api catalog must list ``CLISubcommandExtension`` as a
+published resource base), and a stand-in with the same class
+attributes when only ``pychestrate-cli`` is installed.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -28,7 +36,17 @@ __version__ = "1.0.0"
 from dataclasses import dataclass
 from typing import ClassVar, Tuple
 
-from ccai.pychestrate.webservice.extensions.resource_extension import ResourceExtension
+try:
+    from ccai.pychestrate.webservice.extensions.resource_extension import ResourceExtension
+except ImportError:
+    class ResourceExtension:  # type: ignore[no-redef]
+        """
+            Stand-in for the service's resource-extension base when
+            only the standalone ``pychestrate-cli`` package is
+            installed.
+        """
+
+        resource_extension_name: ClassVar[str] = ""
 
 
 @dataclass(frozen=True)
@@ -64,9 +82,9 @@ class CLISubcommandExtension(ResourceExtension):
         tuple of :class:`CLISubcommandDescriptor`.
 
         :attr:`required_capabilities` mirrors the sandbox capability
-        keys the underlying REST endpoint requires; the M2 ext-router
-        uses the same set, so authors keep the descriptor consistent
-        across both surfaces.
+        keys the underlying REST endpoint requires; the service's
+        extension router uses the same set, so authors keep the
+        descriptor consistent across both surfaces.
     """
 
     resource_extension_name: ClassVar[str] = "cli_subcommand"

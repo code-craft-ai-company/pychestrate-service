@@ -48,6 +48,7 @@ import uuid
 
 from typing import Callable, Dict, Mapping, Optional
 
+from ccai.pychestrate.cli import version
 from ccai.pychestrate.cli.exceptions import (
     AuthenticationError,
     BadRequestError,
@@ -63,7 +64,8 @@ from ccai.pychestrate.cli.models import CliProfile, RestOperation, RestResponse
 
 
 DEFAULT_REQUEST_TIMEOUT_SECONDS: float = 30.0
-USER_AGENT: str = "pyc-cli/1.0 (+https://docs.pychestrate.io)"
+#: ``pyc/<version> python/<version>`` (see :mod:`cli.version`).
+USER_AGENT: str = version.user_agent()
 
 REQUEST_ID_HEADER: str = "X-Request-Id"
 

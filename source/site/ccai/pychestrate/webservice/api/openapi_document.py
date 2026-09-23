@@ -19,6 +19,11 @@ host, is replaced with ``/api/v1`` on the answering server so clients
 resolve paths against the server they asked. A deployment without the
 ``specs`` tree answers 404, and ``pyc`` falls back to its built-in
 commands.
+
+``info.version`` is the version of the REST contract; the served copy
+also names the running service's own version as
+``info.x-service-version`` (the ``[tool.poetry] version`` of the
+checkout's ``pyproject.toml``), which ``pyc version`` reports.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -30,6 +35,7 @@ __version__ = "1.0.0"
 import json
 import logging
 import os
+import re
 import threading
 
 from pathlib import Path
@@ -54,6 +60,13 @@ SPEC_RELATIVE_PATH: Tuple[str, ...] = ("specs", "openapi", "pychestrate.yaml")
 
 #: How far up from this module to look for the repository root.
 _MAX_PARENT_LEVELS: int = 10
+
+#: The ``info`` member naming the running service's version.
+SERVICE_VERSION_EXTENSION: str = "x-service-version"
+
+_POETRY_SECTION_PATTERN = re.compile(r"^\[tool\.poetry\]\s*$")
+_SECTION_PATTERN = re.compile(r"^\[.*\]\s*$")
+_VERSION_LINE_PATTERN = re.compile(r"""^version\s*=\s*["']([^"']+)["']""")
 
 _CACHE_LOCK = threading.Lock()
 _CACHE: Dict[str, Any] = {"path": None, "mtime": None, "document": None}
@@ -95,6 +108,34 @@ def _json_default(value: Any) -> Any:
     return rtnval
 
 
+def read_service_version(*, pyproject_path: Path) -> Optional[str]:
+    """
+        The ``[tool.poetry] version`` of a ``pyproject.toml`` (read
+        line by line, so no TOML parser is needed).
+
+        :param pyproject_path: The file.
+
+        :returns: Version text, or ``None`` when absent / unreadable.
+    """
+    try:
+        with open(pyproject_path, "r", encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return None
+    in_poetry_section = False
+    for line in lines:
+        stripped = line.strip()
+        if _SECTION_PATTERN.match(stripped) is not None:
+            in_poetry_section = _POETRY_SECTION_PATTERN.match(stripped) is not None
+            continue
+        if in_poetry_section is True:
+            match = _VERSION_LINE_PATTERN.match(stripped)
+            if match is not None:
+                rtnval: Optional[str] = match.group(1)
+                return rtnval
+    return None
+
+
 def _parse_spec(*, spec_path: Path) -> Dict[str, Any]:
     """
         Parse the YAML spec into the JSON-safe document to serve.
@@ -114,6 +155,10 @@ def _parse_spec(*, spec_path: Path) -> Dict[str, Any]:
     document["servers"] = [
         {"url": "/api/v1", "description": "The server that returned this document."}
     ]
+    # <repo>/specs/openapi/pychestrate.yaml -> <repo>/pyproject.toml
+    service_version = read_service_version(pyproject_path=spec_path.parents[2] / "pyproject.toml")
+    if service_version is not None and isinstance(document.get("info", None), dict):
+        document["info"][SERVICE_VERSION_EXTENSION] = service_version
     return document
 
 
@@ -208,10 +253,12 @@ def register_openapi_document_routes(*, app: Any, version_prefix: str) -> None:
 
 __all__ = [
     "OPENAPI_DOCUMENT_PATH",
+    "SERVICE_VERSION_EXTENSION",
     "SPEC_RELATIVE_PATH",
     "handle_get_openapi_document",
     "load_served_document",
     "locate_spec_file",
+    "read_service_version",
     "register_openapi_document_routes",
     "reset_cache_for_testing",
 ]

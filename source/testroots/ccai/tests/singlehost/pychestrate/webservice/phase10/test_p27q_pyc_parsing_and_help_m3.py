@@ -280,6 +280,36 @@ def test_help_command_prints_the_same_help_as_the_flag():
     return
 
 
+def test_every_command_of_the_contract_answers_help_offline():
+    """
+    **Feature: pyc parsing and help (CLI-09)**
+    **Property: for every command and noun of the real contract,
+    --help exits 0 with non-empty help and sends no request (the CLI
+    spec's "--help totality" property, checked on every path).**
+    """
+    from ccai.pychestrate.cli import parser  # noqa: E402
+    from ccai.testshared.factories.pyc.pyc_harness import load_real_openapi_document  # noqa: E402
+
+    document = load_real_openapi_document()
+    tree = parser.build_command_tree(openapi_document=document)
+    sandbox = PycSandbox()
+    try:
+        sandbox.log_in()
+        sandbox.cache_command_list(document=document)
+        server = PycFakeServer()
+        failures = []
+        paths = [[noun, verb] for (noun, verb) in sorted(tree.commands.keys())]
+        paths.extend([noun] for noun in parser.canonical_nouns(tree=tree))
+        for path in paths:
+            rc, out, err = run_pyc(sandbox=sandbox, argv=path + ["--help"], opener=server)
+            if rc != exit_codes.EXIT_OK or len(out) == 0:
+                failures.append("{}: rc={} {}".format(" ".join(path), rc, err.strip()[:120]))
+        testbase.assert_equal((failures, server.requests), ([], []))
+    finally:
+        sandbox.close()
+    return
+
+
 def test_builtin_command_help_sends_nothing():
     """
     **Feature: pyc parsing and help (CLI-09)**

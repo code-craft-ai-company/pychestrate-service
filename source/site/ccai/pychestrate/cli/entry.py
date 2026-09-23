@@ -13,7 +13,8 @@ The entry point handles four classes of invocation:
    commands' help comes from the cached OpenAPI document (or pyc's
    built-in commands when nothing is cached).
 2. Built-in commands: ``login``, ``logout``, ``whoami``, ``config``,
-   ``commands``, ``runs wait``, ``plugin-api catalog``, ``ext``.
+   ``commands``, ``version``, ``runs wait``, ``plugin-api catalog``,
+   ``ext``.
 3. API commands generated from the server's OpenAPI document
    (``pyc projects list``, ``pyc projects get demo`` ...; see
    :mod:`cli.commands.api`).
@@ -47,6 +48,7 @@ from ccai.pychestrate.cli import (
     parser,
     renderer,
     suggestions,
+    version,
 )
 from ccai.pychestrate.cli.argparsing import ParserExit
 from ccai.pychestrate.cli.context import CliContext, resolve_profile
@@ -74,7 +76,8 @@ from ccai.pychestrate.cli.models import CliProfile, CommandTree
 
 
 CLI_PROG: str = "pyc"
-CLI_VERSION: str = "0.2.0"
+#: The pyc version (defined once, in :mod:`cli.version`).
+CLI_VERSION: str = version.PYC_VERSION
 
 PYC_DEBUG_ENV_VAR: str = "PYC_DEBUG"
 
@@ -91,6 +94,7 @@ _BUILTIN_COMMANDS: Tuple[str, ...] = (
     "'config ...'",
     "'commands'",
     "'help'",
+    "'version'",
     "'project list'",
     "'runs wait <run_id>'",
     "'plugin-api catalog [<entry-name>]'",
@@ -99,7 +103,9 @@ _BUILTIN_COMMANDS: Tuple[str, ...] = (
 )
 
 #: Words that are pyc commands whatever the server offers.
-_BUILTIN_NOUNS: Tuple[str, ...] = ("login", "logout", "whoami", "config", "commands", "ext", "help")
+_BUILTIN_NOUNS: Tuple[str, ...] = (
+    "login", "logout", "whoami", "config", "commands", "ext", "help", "version",
+)
 
 #: Built-in verbs that live under an API noun.
 _BUILTIN_VERBS: Dict[Tuple[str, str], str] = {
@@ -120,6 +126,8 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "  logout [--revoke]            Forget (and optionally revoke) the stored token.",
     "  config init|set|get|unset|profiles|path",
     "                               Manage the credentials file.",
+    "  version                      Versions of pyc, the service and its REST API",
+    "                               ('pyc --version' prints pyc's alone, offline).",
     "",
     "API commands:",
     "  <noun> <verb> [args]         e.g. 'pyc projects list', 'pyc projects get demo'.",
@@ -614,6 +622,9 @@ def _run_builtin_command(*, ctx: CliContext, noun: str, args: Sequence[str]) -> 
     if noun == "ext":
         from ccai.pychestrate.cli.commands.ext import run_ext  # noqa: E402
         return run_ext(ctx=ctx, args=args)
+    if noun == "version":
+        from ccai.pychestrate.cli.commands.version import run_version  # noqa: E402
+        return run_version(ctx=ctx, args=args)
     raise CliUsageError("'{}' is not a pyc command".format(noun))
 
 
