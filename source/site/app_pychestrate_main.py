@@ -112,6 +112,10 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
 from ccai.pychestrate.webservice.security.auth.restapi.v1.api_tokens_routes import (
     register_api_tokens_routes,
 )
+# The REST contract as JSON for the pyc CLI (/api/v1/_meta/openapi.json).
+from ccai.pychestrate.webservice.api.openapi_document import (
+    register_openapi_document_routes,
+)
 from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
 )
@@ -570,6 +574,8 @@ def register_service_extensions() -> None:
     register_backup_routes(app=app, version_prefix="/api/v1")
     # Machine identity: API tokens, service accounts, /api/v1/me.
     register_api_tokens_routes(app=app, version_prefix="/api/v1")
+    # The REST contract as JSON for the pyc CLI.
+    register_openapi_document_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",

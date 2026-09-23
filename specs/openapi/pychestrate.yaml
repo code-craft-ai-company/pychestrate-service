@@ -72,6 +72,8 @@ tags:
       that authenticate machine callers as `Authorization: Bearer pyc_...`.
   - name: service_accounts
     description: Non-human identities for CI and automation, authenticated by API tokens.
+  - name: meta
+    description: The API's own description (the OpenAPI document the pyc CLI reads).
   - name: users
     description: User account administration.
   - name: rbac
@@ -267,6 +269,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/MeNavigation'
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =====================================================================
+  # meta
+  # =====================================================================
+
+  /_meta/openapi.json:
+    get:
+      tags: [meta]
+      summary: This OpenAPI document, as JSON.
+      operationId: meta_get_openapi
+      description: |
+        The REST contract the server implements, rendered from
+        `specs/openapi/pychestrate.yaml`, with `servers` set to
+        `/api/v1` on the answering host. The `pyc` CLI builds its
+        commands from it. 404 when the deployment does not carry the
+        spec.
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # =====================================================================
   # machine identity: /me, API tokens, service accounts
