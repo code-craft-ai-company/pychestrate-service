@@ -71,6 +71,14 @@ tags:
       Service health for monitoring. (Liveness / readiness probes and
       the Prometheus scrape live outside /api/v1: /livez, /readyz,
       /metrics.)
+  - name: api_tokens
+    description: |
+      API tokens (personal access tokens and service-account tokens)
+      that authenticate machine callers as `Authorization: Bearer pyc_...`.
+  - name: service_accounts
+    description: Non-human identities for CI and automation, authenticated by API tokens.
+  - name: meta
+    description: The API's own description (the OpenAPI document the pyc CLI reads).
   - name: users
     description: User account administration.
   - name: rbac
@@ -190,6 +198,7 @@ tags:
 
 security:
   - pychestrate_session: []
+  - pychestrate_bearer: []
   - pychestrate_api_key: []
 
 paths:
@@ -293,6 +302,259 @@ paths:
               schema:
                 $ref: '#/components/schemas/MeNavigation'
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =====================================================================
+  # meta
+  # =====================================================================
+
+  /_meta/openapi.json:
+    get:
+      tags: [meta]
+      summary: This OpenAPI document, as JSON.
+      operationId: meta_get_openapi
+      description: |
+        The REST contract the server implements, rendered from
+        `specs/openapi/pychestrate.yaml`, with `servers` set to
+        `/api/v1` on the answering host. The `pyc` CLI builds its
+        commands from it. 404 when the deployment does not carry the
+        spec.
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # machine identity: /me, API tokens, service accounts
+  # =====================================================================
+
+  /me:
+    get:
+      tags: [me]
+      summary: Who the caller is and how the request authenticated.
+      operationId: me_get_identity
+      description: |
+        The signed-in principal: identity, account kind (`user` or
+        `service_account`), and how the request authenticated -- a
+        session, or an API token (with the token's id, name, scope,
+        and expiry). `pyc whoami` and `pyc login` use it.
+      responses:
+        '200':
+          description: The caller's identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeIdentity'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/api-tokens:
+    get:
+      tags: [api_tokens]
+      summary: List the caller's API tokens.
+      operationId: api_tokens_list_mine
+      description: |
+        The caller's tokens, newest first, including expired and
+        revoked ones. Never includes a token secret.
+      responses:
+        '200':
+          description: The caller's tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [api_tokens]
+      summary: Issue an API token that acts as the caller.
+      operationId: api_tokens_create_mine
+      description: |
+        Issues a token with exactly the caller's permissions (or
+        fewer, when `read-only`). The response carries the secret
+        in `token` -- the only time it is ever returned -- with
+        `Cache-Control: no-store`. Requires a signed-in session: a
+        request authenticated with an API token gets 403, so a
+        leaked token cannot mint a longer-lived successor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreateRequest'
+      responses:
+        '201':
+          description: Token issued; `token` is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedApiToken'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /me/api-tokens/{token_id}:
+    parameters:
+      - $ref: '#/components/parameters/ApiTokenIdParam'
+    get:
+      tags: [api_tokens]
+      summary: Read one of the caller's API tokens.
+      operationId: api_tokens_read_mine
+      responses:
+        '200':
+          description: The token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [api_tokens]
+      summary: Revoke one of the caller's API tokens.
+      operationId: api_tokens_revoke_mine
+      description: |
+        Revokes the token immediately. A token may revoke itself.
+        Another user's token id answers 404.
+      responses:
+        '200':
+          description: The revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-tokens:
+    get:
+      tags: [api_tokens]
+      summary: List every API token (administration).
+      operationId: api_tokens_list
+      description: Requires `system:auth.read`.
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          description: Only this user's (or service account's) tokens.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tokens, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api-tokens/{token_id}:
+    parameters:
+      - $ref: '#/components/parameters/ApiTokenIdParam'
+    delete:
+      tags: [api_tokens]
+      summary: Revoke any API token (administration).
+      operationId: api_tokens_revoke
+      description: Requires `system:auth.admin`.
+      responses:
+        '200':
+          description: The revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /service-accounts:
+    get:
+      tags: [service_accounts]
+      summary: List service accounts.
+      operationId: service_accounts_list
+      description: Requires `system:users.read`.
+      responses:
+        '200':
+          description: Service accounts with their count of working tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccountList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [service_accounts]
+      summary: Create a service account.
+      operationId: service_accounts_create
+      description: |
+        Requires `system:users.write`. A service account is an
+        identity user with no password; bind roles to it like any
+        user and issue it API tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountCreateRequest'
+      responses:
+        '201':
+          description: Service account created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /service-accounts/{user_id}/api-tokens:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags: [service_accounts]
+      summary: List a service account's API tokens.
+      operationId: service_accounts_list_tokens
+      description: Requires `system:auth.read`.
+      responses:
+        '200':
+          description: The service account's tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [service_accounts]
+      summary: Issue an API token that acts as the service account.
+      operationId: service_accounts_create_token
+      description: |
+        Requires `system:auth.admin` and a signed-in session. The
+        secret is returned once. A user id that is not a service
+        account answers 404, so no token can impersonate a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreateRequest'
+      responses:
+        '201':
+          description: Token issued; `token` is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedApiToken'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # users
@@ -5231,13 +5493,24 @@ components:
         `/login` (HTML form, not part of the REST surface). The
         webworks `PychestrateSessionMiddleware` resolves this cookie
         to a request-scoped actor on every request.
+    pychestrate_bearer:
+      type: http
+      scheme: bearer
+      description: |
+        An API token (`pyc_...`) sent as `Authorization: Bearer <token>`.
+        Personal tokens are issued at Account > API tokens (or
+        `POST /me/api-tokens`); service-account tokens by an
+        administrator at Admin > API Tokens. A token acts with its
+        account's permissions (never more; a `read-only` token only
+        reads), expires, and can be revoked. Also accepted on the MCP
+        endpoint.
     pychestrate_api_key:
       type: apiKey
       in: header
       name: X-Pychestrate-Api-Key
       description: |
-        Long-lived API key for tooling and CI integrations. Issued
-        out-of-band through the admin UI.
+        The same API token as `pychestrate_bearer`, sent in the
+        `X-Pychestrate-Api-Key` header instead.
     pychestrate_mtls:
       type: mutualTLS
       description: |
@@ -5261,6 +5534,11 @@ components:
     UserIdParam:
       in: path
       name: user_id
+      required: true
+      schema: { type: string, format: uuid }
+    ApiTokenIdParam:
+      in: path
+      name: token_id
       required: true
       schema: { type: string, format: uuid }
     ProjectIdParam:
@@ -5488,6 +5766,118 @@ components:
         status:
           type: string
           enum: [closed]
+
+    MeIdentity:
+      type: object
+      required: [user_id, login_name, account_kind, authentication]
+      properties:
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        display_name: { type: string }
+        primary_email: { type: string }
+        status: { type: string, enum: [ACTIVE, DEACTIVATED, PENDING] }
+        account_kind: { type: string, enum: [user, service_account] }
+        authentication:
+          type: object
+          required: [method]
+          properties:
+            method: { type: string, enum: [session, api_token] }
+            token_id: { type: string, format: uuid }
+            token_name: { type: string }
+            token_scope: { type: string, enum: [read-write, read-only] }
+            token_expires_at: { type: string, format: date-time }
+
+    ApiTokenCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: What the token is for.
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 366
+          default: 90
+          description: Every token expires.
+        scope:
+          type: string
+          enum: [read-write, read-only]
+          default: read-write
+          description: |
+            `read-write` acts with every permission the account holds;
+            `read-only` additionally refuses every non-GET/HEAD/OPTIONS
+            request with 403.
+
+    ApiToken:
+      type: object
+      required: [token_id, user_id, name, token_hint, scope, status, expires_at]
+      properties:
+        token_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        is_service_account: { type: boolean }
+        name: { type: string }
+        token_hint:
+          type: string
+          description: The token's first characters (`pyc_` + 6), for recognition only.
+        scope: { type: string, enum: [read-write, read-only] }
+        status: { type: string, enum: [active, expired, revoked] }
+        created_at: { type: string, format: date-time }
+        created_by_user_id: { type: [string, 'null'], format: uuid }
+        expires_at: { type: string, format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+
+    IssuedApiToken:
+      allOf:
+        - $ref: '#/components/schemas/ApiToken'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The secret. Returned only in this response; store it now.
+
+    ApiTokenList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApiToken' }
+        total: { type: integer }
+
+    ServiceAccountCreateRequest:
+      type: object
+      required: [login_name]
+      properties:
+        login_name:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,62}$'
+        display_name: { type: string }
+
+    ServiceAccount:
+      type: object
+      required: [user_id, login_name, status, active_token_count]
+      properties:
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        display_name: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        active_token_count: { type: integer }
+
+    ServiceAccountList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceAccount' }
+        total: { type: integer }
 
     MePermissions:
       type: object

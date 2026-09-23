@@ -1,0 +1,27 @@
+{#
+    One-time panel shown in the POST response that issued a token.
+    Expects ``minted`` = {token, name, owner_label, scope, expires_at,
+    login_command, curl_command}, or nothing. The secret is never
+    flashed or stored; this render is the only place it appears.
+#}
+{% if minted %}
+<div class="card" role="status" style="max-width: 45rem; margin-bottom: 1.5rem; border-color: var(--pyc-color-on-success-surface); background: var(--pyc-color-success-surface);">
+    <div class="card-header" style="border-color: var(--pyc-color-on-success-surface);">
+        Token "{{ minted.name }}" created for {{ minted.owner_label }}
+        ({{ minted.scope }}, expires {{ minted.expires_at | format_datetime('%Y-%m-%d') }})
+    </div>
+    <p class="strong text-danger mb-sm">
+        Shown once &mdash; copy it now. The token cannot be displayed again.
+    </p>
+    <label class="muted small" for="minted-token">API token:</label>
+    <pre class="command-box" id="minted-token">{{ minted.token }}</pre>
+    <p class="muted small">
+        Sign in the <code>pyc</code> command line (paste the token when it asks):
+    </p>
+    <pre class="command-box">{{ minted.login_command }}</pre>
+    <p class="muted small">
+        Or send it from any HTTP client as a bearer token:
+    </p>
+    <pre class="command-box">{{ minted.curl_command }}</pre>
+</div>
+{% endif %}

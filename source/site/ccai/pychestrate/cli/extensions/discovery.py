@@ -22,6 +22,12 @@ REST suffix segment. Subcommands declaring a path that does not
 follow the convention surface a clear lookup miss rather than a
 silent dispatch.
 
+The CLI process is not the server: the extension packs installed next
+to ``pyc`` need not be the ones the server loaded, so the dispatcher
+resolves the route half from the server's own ``GET /api/v1/ext``
+listing (:func:`parse_ext_listing` / :func:`find_listed_route`) and
+keeps the in-process manifest walk for tests and tooling.
+
 The walks happen against the live subclass trees (the same path
 ``mount_extension_routes`` and ``build_catalog`` use), so production
 runtimes and tests share the discovery code path. Tests inject
@@ -36,7 +42,7 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass
-from typing import Optional, Type
+from typing import Any, List, Optional, Tuple, Type
 
 from ccai.pychestrate.cli.extensions.cli_subcommand import (
     CLISubcommandDescriptor,
@@ -174,3 +180,78 @@ def resolve_ext_command(
         mounted_route=mounted_route,
     )
     return rtnval
+
+
+@dataclass(frozen=True)
+class ListedExtRoute:
+    """
+        One route from the server's ``GET /api/v1/ext`` listing.
+
+        :param ext_name: Owning extension's ``ext_name``.
+        :param method: HTTP method.
+        :param path_suffix: Per-extension suffix (``/echo``).
+        :param full_path: ``/api/v1/ext/<ext_name><suffix>``.
+    """
+    ext_name: str
+    method: str
+    path_suffix: str
+    full_path: str
+
+
+def parse_ext_listing(*, body: Any) -> Tuple[List[ListedExtRoute], Optional[str]]:
+    """
+        Parse the server's extension listing. Accepts the
+        ``{"items": [...], "dynamic_mount": ...}`` shape of
+        ``/api/v1/ext`` and the bare list of
+        ``/api/v1/plugin-api/_meta/mounts``.
+
+        :param body: Decoded response body.
+
+        :returns: ``(routes, dynamic_mount)``; ``dynamic_mount`` is the
+                  server's statement about whether it serves the
+                  listed routes (``"deferred"`` when it does not yet).
+    """
+    items: Any = body
+    dynamic_mount: Optional[str] = None
+    if isinstance(body, dict):
+        items = body.get("items", [])
+        raw_mount = body.get("dynamic_mount", None)
+        dynamic_mount = str(raw_mount) if raw_mount is not None else None
+    routes: List[ListedExtRoute] = []
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            routes.append(
+                ListedExtRoute(
+                    ext_name=str(item.get("ext_name", "")),
+                    method=str(item.get("method", "GET")).upper(),
+                    path_suffix=str(item.get("path_suffix", "")),
+                    full_path=str(item.get("full_path", "")),
+                )
+            )
+    rtnval = (routes, dynamic_mount)
+    return rtnval
+
+
+def find_listed_route(
+        *,
+        routes: List[ListedExtRoute],
+        ext_name: str,
+        verb: str
+    ) -> Optional[ListedExtRoute]:
+    """
+        The listed route for ``pyc ext <ext_name> <verb>`` (suffix
+        ``/<verb>``), or ``None``.
+
+        :param routes: Parsed listing.
+        :param ext_name: Extension name.
+        :param verb: Subcommand verb.
+
+        :returns: Route or ``None``.
+    """
+    expected_suffix = "/{}".format(verb)
+    for route in routes:
+        if route.ext_name == ext_name and route.path_suffix == expected_suffix:
+            return route
+    return None

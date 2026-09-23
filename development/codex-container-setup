@@ -1,9 +1,45 @@
 #!/usr/bin/env bash
+#
+# codex-container-setup -- prepare a Codex (web) task container.
+#
+# usage: development/codex-container-setup [-h | --help]
+#
+# Lets git fetch the private codecraftai-* dependencies with $GITHUB_TOKEN,
+# then runs repository-setup/rehome-repository (writes .env) and
+# development/setup-environment (creates .venv).
+#
+# GITHUB_TOKEN must be set to a token with read access to those
+# repositories. The token is never written to disk: git is given a
+# credential helper, scoped to https://github.com, that reads $GITHUB_TOKEN
+# at the moment git needs it. (Earlier versions stored the token in
+# ~/.git-credentials with a global 'store' helper.)
 
-# This script is used to setup containers used for Codex task environments when work with Codex via a web browser
-git config --global credential.helper store
+set -euo pipefail
 
-echo "https://git:$GITHUB_TOKEN@github.com" > ~/.git-credentials
+case "${1:-}" in
+    -h|--help)
+        sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'
+        exit 0
+        ;;
+    "")
+        ;;
+    *)
+        echo "codex-container-setup: unknown argument '$1' (see --help)" >&2
+        exit 2
+        ;;
+esac
+
+if [ -z "${GITHUB_TOKEN:-}" ]; then
+    echo "codex-container-setup: GITHUB_TOKEN is not set; it is needed to fetch the private dependencies." >&2
+    exit 1
+fi
+
+cd "$(dirname "$0")/.."
+
+# The single quotes keep ${GITHUB_TOKEN} literal in the git config: the
+# helper expands it only when git asks for credentials.
+git config --global credential.https://github.com.helper \
+    '!f() { test "$1" = get || exit 0; echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
 
 repository-setup/rehome-repository
 
