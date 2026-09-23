@@ -21,6 +21,14 @@ The eight build routes served under the projects blueprint:
                                                                      spec.
 * ``GET  /projects/{project_id}/builds/specs/{spec_id}``          -- spec
                                                                      detail.
+* ``GET  /projects/{project_id}/builds/specs/{spec_id}/edit``     -- spec
+                                                                     form
+                                                                     (developer).
+* ``POST /projects/{project_id}/builds/specs/{spec_id}/edit``     -- save a
+                                                                     new
+                                                                     version.
+* ``POST /projects/{project_id}/builds/specs/{spec_id}/delete``   -- delete
+                                                                     (admin).
 * ``GET  /projects/{project_id}/builds/{build_id}``               -- build
                                                                      detail.
 * ``GET  /projects/{project_id}/builds/{build_id}/logs``          -- build
@@ -67,6 +75,10 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
+    _field_errors_from,
+    _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -88,6 +100,16 @@ _ROUTE_TABLE = (
         "projects.build_spec_detail",
         "/{project_id}/builds/specs/{spec_id}",
         ("GET",),
+    ),
+    (
+        "projects.build_spec_edit",
+        "/{project_id}/builds/specs/{spec_id}/edit",
+        ("GET", "POST"),
+    ),
+    (
+        "projects.build_spec_delete",
+        "/{project_id}/builds/specs/{spec_id}/delete",
+        ("POST",),
     ),
     (
         "projects.build_detail",
@@ -112,16 +134,20 @@ _ROUTE_TABLE = (
 )
 
 
+#: Inputs the build specification forms show errors for.
+_SPEC_FORM_FIELDS = ("name", "branch", "steps", "timeout_minutes")
+
+
 # ---------------------------------------------------------------------------
 # Lazy-import builder seams
 # ---------------------------------------------------------------------------
 
 
 def _build_project_manager(*, db_session: Any) -> Any:
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 
@@ -155,6 +181,35 @@ def _build_build_spec_create_request(
         BuildSpecCreateRequest,
     )
     rtnval = BuildSpecCreateRequest(
+        name=name,
+        repository_id=repository_id,
+        branch=branch,
+        steps=steps,
+        environment=environment,
+        timeout_minutes=timeout_minutes,
+        description=description,
+    )
+    return rtnval
+
+
+def _build_build_spec_update_request(
+        *,
+        name: str,
+        repository_id: Optional[int],
+        branch: str,
+        steps: Any,
+        environment: Dict[str, Any],
+        timeout_minutes: int,
+        description: str
+    ) -> Any:
+    """
+        Construct a :class:`BuildSpecUpdateRequest` carrying every field
+        of the edit form (the manager bumps the version).
+    """
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        BuildSpecUpdateRequest,
+    )
+    rtnval = BuildSpecUpdateRequest(
         name=name,
         repository_id=repository_id,
         branch=branch,
@@ -279,7 +334,7 @@ def _parse_json_or_default(
         rtnval = json.loads(raw)
         return rtnval
     except json.JSONDecodeError as exc:
-        raise ValueError(
+        raise ProjectsFormError(
             "Invalid JSON in steps or environment field."
         ) from exc
 
@@ -339,6 +394,36 @@ def _can_manage(
         )
     except Exception:
         rtnval = False
+    return rtnval
+
+
+def _can_delete(
+        *,
+        project_manager: Any, project_id: int, user_id: str
+    ) -> bool:
+    """
+        Deleting a build specification is ``admin``-gated; the Delete
+        button follows the same probe.
+    """
+    try:
+        rtnval = project_manager.check_permission(
+            project_id, user_id, "admin"
+        )
+    except Exception:
+        rtnval = False
+    return rtnval
+
+
+def _spec_usage(*, build_manager: Any, spec_id: int) -> Dict[str, Any]:
+    """
+        What deleting the specification would affect (for the delete
+        confirmation). Falls back to "nothing known" when the manager
+        cannot tell.
+    """
+    try:
+        rtnval = build_manager.spec_usage(spec_id)
+    except Exception:
+        rtnval = {"builds": 0, "active_builds": 0, "watches": []}
     return rtnval
 
 
@@ -547,7 +632,8 @@ def _render_build_spec_create_form(
         project: Any,
         repositories: List[Any],
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -559,6 +645,7 @@ def _render_build_spec_create_form(
     context["project"] = project
     context["repositories"] = repositories
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
     response = _render(
         template_name="projects/builds/spec_create.html",
         context=context,
@@ -697,19 +784,21 @@ def handle_build_spec_create(request: Request) -> Response:
             )
             return response
         except ValueError as exc:
+            errors: Dict[str, str] = {}
             flash.add_flash(
                 session=auth.session,
-                message=str(exc),
+                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error creating build specification: {}".format(
-                    str(exc)
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+            # A problem with one field is shown next to it.
+            errors = _field_errors_from(exc=exc, fields=_SPEC_FORM_FIELDS)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(exc=exc, prefix="Error creating build specification: ", request_path=str(getattr(request, "path", ""))),
+                    category=flash.CATEGORY_ERROR,
+                )
 
         repositories = repository_manager.list_repositories(
             project_id, limit=100
@@ -720,6 +809,7 @@ def handle_build_spec_create(request: Request) -> Response:
             repositories=repositories,
             form_data=form_view,
             status_code=400,
+            errors=errors,
         )
     finally:
         try:
@@ -770,6 +860,12 @@ def handle_build_spec_detail(request: Request) -> Response:
             project_id=project_id,
             user_id=auth.user_id,
         )
+        can_delete = _can_delete(
+            project_manager=project_manager,
+            project_id=project_id,
+            user_id=auth.user_id,
+        )
+        spec_usage = _spec_usage(build_manager=build_manager, spec_id=spec_id)
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -782,6 +878,8 @@ def handle_build_spec_detail(request: Request) -> Response:
         context["spec"] = spec
         context["recent_builds"] = recent_builds
         context["can_manage"] = can_manage
+        context["can_delete"] = can_delete
+        context["spec_usage"] = spec_usage
 
         response = _render(
             template_name="projects/builds/spec_detail.html",
@@ -791,6 +889,292 @@ def handle_build_spec_detail(request: Request) -> Response:
             response=response, session=auth.session
         )
         return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _spec_edit_form_values(*, spec: Any) -> Dict[str, str]:
+    """
+        The edit form's initial values: the specification as it is, with
+        the steps and environment as indented JSON.
+    """
+    rtnval = {
+        "name": str(getattr(spec, "name", "") or ""),
+        "repository_id": str(getattr(spec, "repository_id", "") or ""),
+        "branch": str(getattr(spec, "branch", "") or ""),
+        "timeout_minutes": str(getattr(spec, "timeout_minutes", "") or ""),
+        "steps": json.dumps(getattr(spec, "steps", None) or [], indent=2),
+        "environment": json.dumps(getattr(spec, "environment", None) or {}, indent=2),
+        "description": str(getattr(spec, "description", "") or ""),
+    }
+    return rtnval
+
+
+def _resolve_spec_for_write(
+        *, request: Request, auth: _AuthResolution, permission: str
+    ) -> Any:
+    """
+        Shared head of the edit and delete handlers: the project (with
+        ``permission``), the build manager and the project's own
+        specification. Returns ``(project, build_manager, spec)`` or a
+        :class:`RedirectResponse`.
+    """
+    project_id = _coerce_int(
+        raw=request.path_params.get("project_id", None)
+    )
+    spec_id = _coerce_int(
+        raw=request.path_params.get("spec_id", None)
+    )
+    project_manager = _build_project_manager(db_session=auth.db_session)
+    resolved = _resolve_project_or_redirect(
+        auth=auth,
+        project_manager=project_manager,
+        project_id=project_id,
+    )
+    if isinstance(resolved, RedirectResponse):
+        return resolved
+    project = resolved
+    deny_response = _require_project_permission_or_redirect(
+        project_manager=project_manager,
+        auth=auth,
+        project_id=project_id,
+        permission=permission,
+        deny_redirect_url=(
+            _url_for_module.url_for(
+                "projects.build_spec_detail", project_id=project_id, spec_id=spec_id,
+            )
+            if spec_id is not None
+            else _url_for_module.url_for("projects.project_detail", project_id=project_id)
+        ),
+    )
+    if deny_response is not None:
+        return deny_response
+    build_manager = _build_build_manager(db_session=auth.db_session)
+    spec_or_redirect = _resolve_owned_resource_or_redirect(
+        auth=auth,
+        project_id=project_id,
+        manager=build_manager,
+        getter_name="get_spec",
+        target_id=spec_id,
+        list_endpoint="projects.build_spec_list",
+        not_found_message="Build specification not found.",
+    )
+    if isinstance(spec_or_redirect, RedirectResponse):
+        return spec_or_redirect
+    rtnval = (project, build_manager, spec_or_redirect)
+    return rtnval
+
+
+def handle_build_spec_edit(request: Request) -> Response:
+    """
+        ``GET /projects/{project_id}/builds/specs/{spec_id}/edit`` /
+        ``POST .../edit``. ``developer``-gated. Saving creates the next
+        version of the specification; builds already run keep the
+        version they used.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        resolved = _resolve_spec_for_write(
+            request=request, auth=auth, permission="developer"
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project, build_manager, spec = resolved
+        project_id = project.id
+        repository_manager = _build_repository_manager(db_session=db_session)
+
+        form_values = _spec_edit_form_values(spec=spec)
+        status_code = 200
+        errors: Dict[str, str] = {}
+        if request.method.upper() == "POST":
+            single_form = _parse_form_or_empty(request=request)
+            csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+                form=single_form,
+                session=auth.session,
+                fallback_url=_url_for_module.url_for(
+                    "projects.build_spec_edit", project_id=project_id, spec_id=spec.id,
+                ),
+            )
+            if csrf_redirect is not None:
+                _attach_session_to_response(
+                    response=csrf_redirect, session=auth.session
+                )
+                return csrf_redirect
+
+            form_values = {
+                key: str(single_form.get(key, "") or "")
+                for key in form_values.keys()
+            }
+            try:
+                branch = form_values["branch"].strip() or "main"
+                steps = _parse_json_or_default(raw=form_values["steps"].strip(), default=[])
+                environment = _parse_json_or_default(
+                    raw=form_values["environment"].strip(), default={}
+                )
+                if not isinstance(environment, dict):
+                    raise ProjectsFormError("Environment variables must be a JSON object.")
+                update_request = _build_build_spec_update_request(
+                    name=form_values["name"].strip(),
+                    repository_id=_coerce_int(raw=form_values["repository_id"]),
+                    branch=branch,
+                    steps=steps,
+                    environment=environment,
+                    timeout_minutes=_coerce_int_with_default(
+                        raw=form_values["timeout_minutes"], default=60,
+                    ),
+                    description=form_values["description"].strip(),
+                )
+                updated = build_manager.update_spec(
+                    spec.id, update_request, auth.user_id
+                )
+                response = _redirect_with_flash(
+                    session=auth.session,
+                    url=_url_for_module.url_for(
+                        "projects.build_spec_detail",
+                        project_id=project_id,
+                        spec_id=spec.id,
+                    ),
+                    message="Build specification saved as version {}.".format(
+                        getattr(updated, "version", "")
+                    ),
+                    category=flash.CATEGORY_SUCCESS,
+                )
+                return response
+            except ValueError as exc:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="Error saving build specification: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
+            except Exception as exc:
+                # A problem with one field is shown next to it.
+                errors = _field_errors_from(exc=exc, fields=_SPEC_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(
+                            exc=exc,
+                            prefix="Error saving build specification: ",
+                            request_path=str(getattr(request, "path", "")),
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
+            status_code = 400
+
+        repositories = repository_manager.list_repositories(
+            project_id, limit=100
+        ).repositories
+        flashes = flash.consume_flashes(session=auth.session)
+        context = _build_default_template_context(
+            session=auth.session,
+            request_endpoint="projects.build_spec_edit",
+            flashes=flashes,
+            csrf_token=auth.csrf_token,
+        )
+        context["project"] = project
+        context["spec"] = spec
+        context["repositories"] = repositories
+        context["form_values"] = form_values
+        context["errors"] = errors
+        response = _render(
+            template_name="projects/builds/spec_edit.html",
+            context=context,
+            status_code=status_code,
+        )
+        _attach_session_to_response(
+            response=response, session=auth.session
+        )
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def handle_build_spec_delete(request: Request) -> Response:
+    """
+        ``POST /projects/{project_id}/builds/specs/{spec_id}/delete``.
+        ``admin``-gated. Deletes the specification with its builds and
+        their artifacts; refused (with the reason on the specification's
+        page) while builds are waiting or running or watches use it.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        project_id = _coerce_int(
+            raw=request.path_params.get("project_id", None)
+        )
+        single_form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form,
+            session=auth.session,
+            fallback_url=_url_for_module.url_for(
+                "projects.build_spec_list", project_id=project_id,
+            ),
+        )
+        if csrf_redirect is not None:
+            _attach_session_to_response(
+                response=csrf_redirect, session=auth.session
+            )
+            return csrf_redirect
+
+        resolved = _resolve_spec_for_write(
+            request=request, auth=auth, permission="admin"
+        )
+        if isinstance(resolved, RedirectResponse):
+            return resolved
+        project, build_manager, spec = resolved
+
+        try:
+            deleted = build_manager.delete_spec(spec.id, auth.user_id)
+            builds = int((deleted or {}).get("builds", 0))
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.build_spec_list", project_id=project.id,
+                ),
+                message='Build specification "{}" deleted{}.'.format(
+                    spec.name,
+                    "" if builds == 0 else " with its {} build{}".format(
+                        builds, "" if builds == 1 else "s"
+                    ),
+                ),
+                category=flash.CATEGORY_SUCCESS,
+            )
+            return response
+        except Exception as exc:
+            if _is_user_facing_error(exc=exc) is True:
+                message = getattr(exc, "message", None) or str(exc)
+            else:
+                message = _describe_failure(
+                    exc=exc,
+                    prefix="Error deleting build specification: ",
+                    request_path=str(getattr(request, "path", "")),
+                )
+            response = _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for(
+                    "projects.build_spec_detail", project_id=project.id, spec_id=spec.id,
+                ),
+                message=message,
+                category=flash.CATEGORY_ERROR,
+            )
+            return response
     finally:
         try:
             db_session.close()
@@ -1040,7 +1424,7 @@ def handle_build_trigger(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.build_list", project_id=project_id
                 ),
-                message="Error triggering build: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error triggering build: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1143,7 +1527,7 @@ def handle_build_cancel(request: Request) -> Response:
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message="Error cancelling build: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error cancelling build: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1164,6 +1548,8 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "projects.build_spec_list": handle_build_spec_list,
     "projects.build_spec_create": handle_build_spec_create,
     "projects.build_spec_detail": handle_build_spec_detail,
+    "projects.build_spec_edit": handle_build_spec_edit,
+    "projects.build_spec_delete": handle_build_spec_delete,
     "projects.build_detail": handle_build_detail,
     "projects.build_logs": handle_build_logs,
     "projects.build_trigger": handle_build_trigger,
@@ -1191,6 +1577,8 @@ __all__ = [
     "handle_build_spec_list",
     "handle_build_spec_create",
     "handle_build_spec_detail",
+    "handle_build_spec_edit",
+    "handle_build_spec_delete",
     "handle_build_detail",
     "handle_build_logs",
     "handle_build_trigger",

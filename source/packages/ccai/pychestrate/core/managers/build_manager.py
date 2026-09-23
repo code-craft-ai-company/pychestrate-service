@@ -17,6 +17,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import logging
 import os
 import re
 
@@ -29,6 +30,13 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy import or_
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.managers.git_validation import (
+    commit_sha_problem,
+    ref_name_problem,
+)
+
+
+_module_logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -198,6 +206,16 @@ class BuildSpecValidationError(Exception):
         super().__init__(self.message)
 
 
+class BuildValidationError(Exception):
+    """Exception raised when a build request or result is not valid."""
+
+    def __init__(self, message: str, field: str = None, error_code: str = None):
+        self.message = message
+        self.field = field
+        self.error_code = error_code or "BUILD_VALIDATION_ERROR"
+        super().__init__(self.message)
+
+
 class BuildSpecNotFoundError(Exception):
     """Exception raised when a build specification is not found."""
     
@@ -219,8 +237,17 @@ class DuplicateBuildSpecError(Exception):
 
 class BuildSpecHasActiveBuildsError(Exception):
     """Exception raised when attempting to delete a build specification with active builds."""
-    
+
     def __init__(self, message: str, error_code: str = "BUILD_SPEC_HAS_ACTIVE_BUILDS"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
+class BuildSpecInUseError(Exception):
+    """Exception raised when attempting to delete a build specification that watches still use."""
+
+    def __init__(self, message: str, error_code: str = "BUILD_SPEC_IN_USE"):
         self.message = message
         self.error_code = error_code
         super().__init__(self.message)
@@ -255,8 +282,17 @@ class BuildNotFoundError(Exception):
 
 class BuildCannotBeCancelledError(Exception):
     """Exception raised when a build cannot be cancelled."""
-    
+
     def __init__(self, message: str, error_code: str = "BUILD_CANNOT_BE_CANCELLED"):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+
+class BuildAlreadyFinishedError(Exception):
+    """Exception raised when the outcome of a build that already finished is reported."""
+
+    def __init__(self, message: str, error_code: str = "BUILD_ALREADY_FINISHED"):
         self.message = message
         self.error_code = error_code
         super().__init__(self.message)
@@ -342,8 +378,39 @@ def validate_build_steps(steps: List[Dict[str, Any]]) -> List[str]:
         # Check continue_on_failure field
         if 'continue_on_failure' in step and not isinstance(step.get('continue_on_failure'), bool):
             errors.append(f"Step {i}: 'continue_on_failure' must be a boolean")
-    
+
     return errors
+
+
+def normalize_build_steps(steps: Any) -> Any:
+    """
+    Return the build steps with every optional field present, so readers
+    (the build-spec page, the build runner) never have to guess whether a
+    key exists: ``config`` defaults to ``{}`` and ``continue_on_failure``
+    to ``False``.
+
+    Only the optional fields are filled; required fields (``name``,
+    ``type``) are left to :func:`validate_build_steps`. Anything that is
+    not a list of dictionaries is returned unchanged.
+
+    :param steps: Build step definitions as stored or submitted.
+    :returns: A new list of step dictionaries with the defaults applied.
+    """
+    if not isinstance(steps, list):
+        return steps
+
+    rtnval: List[Any] = []
+    for step in steps:
+        if not isinstance(step, dict):
+            rtnval.append(step)
+            continue
+        normalized = dict(step)
+        if normalized.get('config') is None:
+            normalized['config'] = {}
+        if normalized.get('continue_on_failure') is None:
+            normalized['continue_on_failure'] = False
+        rtnval.append(normalized)
+    return rtnval
 
 
 
@@ -366,19 +433,27 @@ class BuildManager:
     Validates: Requirements 4.1-4.5, 5.1, 5.3-5.7
     """
     
-    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None):
+    def __init__(self, db_session: DbSession, audit_logger=None, resource_manager=None, secret_manager=None,
+                 event_sink=None):
         """
         Initialize the BuildManager with a database session.
-        
+
         :param db_session: SQLAlchemy database session
         :param audit_logger: Optional AuditLogger instance for audit logging
         :param resource_manager: Optional ResourceManager instance for resource checkout
         :param secret_manager: Optional SecretManager instance for secret resolution
+        :param event_sink: Optional callable
+                           ``(*, trigger_source, source_id, event_data, user_id)``
+                           returning the watch trigger logs, called when a
+                           build finishes. Defaults to the project's watches
+                           with the core action managers (see
+                           :func:`watch_manager.dispatch_watch_event`).
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._resource_manager = resource_manager
         self._secret_manager = secret_manager
+        self._event_sink = event_sink
     
     # =========================================================================
     # Validation Methods
@@ -414,7 +489,11 @@ class BuildManager:
                 field="steps",
                 error_code="INVALID_STEPS"
             )
-    
+
+        branch_problem = ref_name_problem(name=request.branch or "")
+        if branch_problem is not None:
+            raise BuildSpecValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
+
     def validate_spec(self, spec: BuildSpecCreateRequest) -> List[str]:
         """
         Validate build specification syntax. Returns list of errors.
@@ -472,7 +551,9 @@ class BuildManager:
             repository_id=spec.repository_id,
             repository_name=repository_name,
             branch=spec.branch,
-            steps=spec.steps_json or [],
+            # Rows written before steps were normalized on save may lack
+            # the optional fields; fill them here too.
+            steps=normalize_build_steps(spec.steps_json or []),
             environment=spec.environment_json or {},
             timeout_minutes=spec.timeout_minutes,
             description=spec.description or "",
@@ -608,7 +689,7 @@ class BuildManager:
             repository_id=request.repository_id,
             name=request.name,
             branch=request.branch,
-            steps_json=request.steps,
+            steps_json=normalize_build_steps(request.steps),
             environment_json=request.environment,
             timeout_minutes=request.timeout_minutes,
             description=request.description or "",
@@ -725,6 +806,9 @@ class BuildManager:
         
         # Update branch if provided
         if request.branch is not None:
+            branch_problem = ref_name_problem(name=request.branch)
+            if branch_problem is not None:
+                raise BuildSpecValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
             spec.branch = request.branch
         
         # Update steps if provided
@@ -736,7 +820,7 @@ class BuildManager:
                     field="steps",
                     error_code="INVALID_STEPS"
                 )
-            spec.steps_json = request.steps
+            spec.steps_json = normalize_build_steps(request.steps)
         
         # Update environment if provided
         if request.environment is not None:
@@ -779,27 +863,25 @@ class BuildManager:
         return self._build_spec_to_response(spec)
 
     
-    def delete_spec(self, spec_id: int, user_id: str) -> None:
+    def spec_usage(self, spec_id: int) -> Dict[str, Any]:
         """
-        Delete build specification. Fails if active builds exist.
-        
+        What deleting a build specification would affect.
+
         :param spec_id: The build specification's unique identifier
-        :param user_id: The ID of the user deleting the specification
-        :raises BuildSpecNotFoundError: If specification is not found
-        :raises BuildSpecHasActiveBuildsError: If specification has active builds
-        
-        Validates: Requirements 4.3
+        :returns: ``{"builds": n, "active_builds": n, "watches": [names]}``
+                  -- its builds (deleted with it), those still pending or
+                  running (which block deletion), and the watches that
+                  start when it finishes or run it (which block deletion)
         """
-        from ccai.pychestrate.core.orm import ProjectBuildSpec, ProjectBuild, ProjectJobStatus
-        
+        from ccai.pychestrate.core.orm import ProjectBuild, ProjectBuildSpec, ProjectJobStatus, ProjectWatch
+
         spec = self._db_session.query(ProjectBuildSpec).filter(
             ProjectBuildSpec.id == spec_id
         ).first()
-        
         if not spec:
             raise BuildSpecNotFoundError(f"Build specification with ID '{spec_id}' not found")
-        
-        # Check for active builds
+
+        builds = self._db_session.query(ProjectBuild).filter(ProjectBuild.spec_id == spec_id).count()
         active_builds = self._db_session.query(ProjectBuild).filter(
             ProjectBuild.spec_id == spec_id,
             ProjectBuild.status.in_([
@@ -808,19 +890,109 @@ class BuildManager:
                 ProjectJobStatus.RUNNING.value
             ])
         ).count()
-        
-        if active_builds > 0:
-            raise BuildSpecHasActiveBuildsError(
-                f"Cannot delete build specification '{spec.name}' with {active_builds} active build(s)"
+
+        watches: List[str] = []
+        for watch in self._db_session.query(ProjectWatch).filter(
+            ProjectWatch.project_id == spec.project_id
+        ).order_by(ProjectWatch.name).all():
+            started_by_spec = (
+                watch.trigger_source == 'build_completion' and watch.source_id == spec_id
             )
-        
+            runs_spec = any(
+                isinstance(action, dict)
+                and action.get('action') == 'trigger_build'
+                and action.get('target_id') == spec_id
+                for action in (watch.actions_json or [])
+            )
+            if started_by_spec or runs_spec:
+                watches.append(watch.name)
+
+        rtnval = {"builds": builds, "active_builds": active_builds, "watches": watches}
+        return rtnval
+
+    def delete_spec(self, spec_id: int, user_id: str) -> Dict[str, int]:
+        """
+        Delete a build specification together with its builds and their
+        artifacts. Test jobs that ran against those builds and test
+        specifications that name it keep their history but lose the link.
+
+        It is refused while builds are pending or running, and while
+        watches start when it finishes or run it (they would fail) --
+        the watches are named so they can be changed first.
+
+        :param spec_id: The build specification's unique identifier
+        :param user_id: The ID of the user deleting the specification
+        :returns: ``{"builds": n}`` -- how many builds were deleted
+        :raises BuildSpecNotFoundError: If specification is not found
+        :raises BuildSpecHasActiveBuildsError: If specification has active builds
+        :raises BuildSpecInUseError: If watches use the specification
+
+        Validates: Requirements 4.3
+        """
+        from sqlalchemy import delete as sa_delete
+        from sqlalchemy import select, update as sa_update
+
+        from ccai.pychestrate.core.orm import (
+            ProjectBuild, ProjectBuildArtifact, ProjectBuildSpec, ProjectTestJob, ProjectTestSpec,
+        )
+
+        usage = self.spec_usage(spec_id)
+        spec = self._db_session.query(ProjectBuildSpec).filter(
+            ProjectBuildSpec.id == spec_id
+        ).first()
         spec_name = spec.name
         project_id = spec.project_id
-        
-        # Delete the specification (cascades to builds)
-        self._db_session.delete(spec)
-        self._db_session.commit()
-        
+
+        if usage["active_builds"] > 0:
+            raise BuildSpecHasActiveBuildsError(
+                f"The build specification '{spec_name}' cannot be deleted while "
+                f"{usage['active_builds']} of its builds are waiting or running. "
+                "Cancel them or wait for them to finish."
+            )
+        if len(usage["watches"]) > 0:
+            raise BuildSpecInUseError(
+                "The build specification '{}' cannot be deleted while watches use it: {}. "
+                "Change or delete those watches first.".format(spec_name, ", ".join(usage["watches"]))
+            )
+
+        build_ids = select(ProjectBuild.id).where(ProjectBuild.spec_id == spec_id)
+        artifact_paths = [
+            row.path for row in self._db_session.query(ProjectBuildArtifact).filter(
+                ProjectBuildArtifact.build_id.in_(build_ids)
+            ).all() if row.path
+        ]
+        log_paths = [
+            row.logs_path for row in self._db_session.query(ProjectBuild).filter(
+                ProjectBuild.spec_id == spec_id
+            ).all() if row.logs_path
+        ]
+
+        try:
+            self._db_session.execute(
+                sa_update(ProjectTestJob).where(ProjectTestJob.build_id.in_(build_ids)).values(build_id=None)
+            )
+            self._db_session.execute(
+                sa_update(ProjectTestSpec).where(ProjectTestSpec.build_ref == spec_id).values(build_ref=None)
+            )
+            self._db_session.execute(
+                sa_delete(ProjectBuildArtifact).where(ProjectBuildArtifact.build_id.in_(build_ids))
+            )
+            self._db_session.execute(sa_delete(ProjectBuild).where(ProjectBuild.spec_id == spec_id))
+            self._db_session.execute(sa_delete(ProjectBuildSpec).where(ProjectBuildSpec.id == spec_id))
+            self._db_session.commit()
+        except Exception:
+            self._db_session.rollback()
+            raise
+        self._db_session.expire_all()
+
+        # The files go only after the rows did (best effort).
+        for path in artifact_paths + log_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
         # Log the specification deletion event
         if self._audit_logger:
             self._audit_logger.log_event(
@@ -829,9 +1001,13 @@ class BuildManager:
                 details={
                     "project_id": project_id,
                     "spec_id": spec_id,
-                    "spec_name": spec_name
+                    "spec_name": spec_name,
+                    "builds_deleted": usage["builds"]
                 }
             )
+
+        rtnval = {"builds": usage["builds"]}
+        return rtnval
     
     def list_specs(
         self,
@@ -894,7 +1070,18 @@ class BuildManager:
         
         if not spec:
             raise BuildSpecNotFoundError(f"Build specification with ID '{request.spec_id}' not found")
-        
+
+        # A branch or commit that cannot exist is refused rather than
+        # recorded (it used to accept "not-a-sha!!").
+        if request.branch:
+            branch_problem = ref_name_problem(name=request.branch)
+            if branch_problem is not None:
+                raise BuildValidationError(branch_problem, field="branch", error_code="INVALID_BRANCH")
+        if request.commit_sha:
+            sha_problem = commit_sha_problem(value=request.commit_sha)
+            if sha_problem is not None:
+                raise BuildValidationError(sha_problem, field="commit_sha", error_code="INVALID_COMMIT_SHA")
+
         # Determine branch and commit
         branch = request.branch if request.branch else spec.branch
         commit_sha = request.commit_sha if request.commit_sha else "HEAD"
@@ -1007,8 +1194,128 @@ class BuildManager:
                     "previous_status": build.status
                 }
             )
-        
+
         return self._build_to_response(build)
+
+    def complete_build(
+        self,
+        build_id: int,
+        status: JobStatus,
+        user_id: Optional[str] = None
+    ) -> BuildResponse:
+        """
+        Record that a build finished -- succeeded or failed -- and fire the
+        project's build-completion watches for its specification. Whatever
+        runs builds reports their outcome here. A cancelled build did not
+        finish and fires nothing (see :meth:`cancel_build`).
+
+        :param build_id: The build's unique identifier
+        :param status: ``succeeded`` or ``failed``
+        :param user_id: The user reporting the outcome, if any; the
+                        watches' actions run as that user, otherwise as
+                        the project owner
+        :returns: BuildResponse with the updated build data
+        :raises BuildValidationError: If ``status`` is not a finished status
+        :raises BuildNotFoundError: If build is not found
+        :raises BuildAlreadyFinishedError: If the build already finished
+        """
+        from ccai.pychestrate.core.orm import ProjectBuild, ProjectJobStatus
+
+        status_value = status.value if isinstance(status, Enum) else str(status)
+        if status_value not in (ProjectJobStatus.SUCCEEDED.value, ProjectJobStatus.FAILED.value):
+            raise BuildValidationError(
+                f"A build finishes as succeeded or failed, not '{status_value}'",
+                field="status",
+                error_code="INVALID_BUILD_RESULT"
+            )
+
+        build = self._db_session.query(ProjectBuild).filter(
+            ProjectBuild.id == build_id
+        ).first()
+
+        if not build:
+            raise BuildNotFoundError(f"Build with ID '{build_id}' not found")
+
+        active_statuses = [
+            ProjectJobStatus.PENDING.value,
+            ProjectJobStatus.QUEUED.value,
+            ProjectJobStatus.RUNNING.value
+        ]
+        if build.status not in active_statuses:
+            raise BuildAlreadyFinishedError(
+                f"Build with status '{build.status}' has already finished"
+            )
+
+        build.status = status_value
+        build.completed_at = utc_now()
+        if build.started_at:
+            build.duration_seconds = int((build.completed_at - build.started_at).total_seconds())
+
+        self._db_session.commit()
+
+        if self._audit_logger:
+            self._audit_logger.log_event(
+                event_type='build_completed',
+                user_id=str(user_id) if user_id else 'system',
+                details={
+                    "build_id": build.id,
+                    "spec_id": build.spec_id,
+                    "status": status_value
+                }
+            )
+
+        self._fire_build_completion(build=build, user_id=user_id)
+        return self._build_to_response(build)
+
+    def _fire_build_completion(self, *, build, user_id: Optional[str]) -> int:
+        """
+        Fire the build-completion watches of the build's specification.
+        A failing watch never undoes the build's result: the error is
+        logged.
+
+        :param build: The finished ProjectBuild ORM object
+        :param user_id: The user reporting the outcome, if any
+        :returns: How many watches fired
+        """
+        from ccai.pychestrate.core.managers.watch_manager import (
+            WatchTriggerSource, dispatch_watch_event,
+        )
+
+        event_data = {
+            "build_id": build.id,
+            "build_status": build.status,
+            "spec_id": build.spec_id,
+            "project_id": build.project_id,
+            "branch": build.branch,
+            "commit_sha": build.commit_sha,
+        }
+        try:
+            if self._event_sink is not None:
+                trigger_logs = self._event_sink(
+                    trigger_source=WatchTriggerSource.BUILD_COMPLETION,
+                    source_id=build.spec_id,
+                    event_data=event_data,
+                    user_id=user_id,
+                )
+            else:
+                trigger_logs = dispatch_watch_event(
+                    db_session=self._db_session,
+                    trigger_source=WatchTriggerSource.BUILD_COMPLETION,
+                    source_id=build.spec_id,
+                    event_data=event_data,
+                    user_id=user_id,
+                )
+        except Exception:
+            _module_logger.exception(
+                "pychestrate.build.watch_dispatch_failed build_id=%s", event_data["build_id"]
+            )
+            try:
+                self._db_session.rollback()
+            except Exception:
+                pass
+            trigger_logs = []
+        rtnval = len(trigger_logs or [])
+        return rtnval
     
     def list_builds(
         self,

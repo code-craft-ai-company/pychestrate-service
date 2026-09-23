@@ -97,10 +97,10 @@ _ROUTE_TABLE = (
 
 
 def _build_project_manager(*, db_session: Any) -> Any:
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 

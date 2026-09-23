@@ -1,0 +1,40 @@
+{#- Build display helpers for the projects pages (PRJ-33): a status
+    badge that shows cancelled builds in a neutral colour (the shared
+    status_badge paints them like failures), a "Started" cell that says
+    what a build that never started is doing, and a commit cell that says
+    "Latest on <branch>" instead of the placeholder "HEAD". #}
+{% import "site_shell/_macros.html" as ui %}
+
+{% macro build_status(status) -%}
+{%- set value = status.value if status.value is defined else status -%}
+{%- if value == 'cancelled' -%}
+<span class="badge badge-secondary">{{ value | display }}</span>
+{%- else -%}
+{{ ui.status_badge(status) }}
+{%- endif -%}
+{%- endmacro %}
+
+{% macro build_started(build) -%}
+{%- set value = build.status.value if build.status.value is defined else build.status -%}
+{%- if build.started_at -%}
+{{ build.started_at | format_datetime('%Y-%m-%d %H:%M') }}
+{%- elif value == 'queued' -%}
+<span class="muted">Queued</span>
+{%- elif value == 'pending' -%}
+<span class="muted">Waiting to start</span>
+{%- elif value == 'cancelled' -%}
+<span class="muted">Never started</span>
+{%- else -%}
+<span class="muted">&mdash;</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro build_commit(build, full=false) -%}
+{%- if not build.commit_sha or build.commit_sha == 'HEAD' -%}
+<span class="muted">Latest on {{ build.branch }}</span>
+{%- elif full -%}
+<span class="mono">{{ build.commit_sha }}</span>
+{%- else -%}
+<span class="mono" title="{{ build.commit_sha }}">{{ build.commit_sha[:7] }}</span>
+{%- endif -%}
+{%- endmacro %}

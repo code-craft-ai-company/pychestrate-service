@@ -51,6 +51,8 @@ __version__ = "1.0.0"
 
 
 import json
+import logging
+import uuid
 
 from datetime import datetime
 
@@ -80,6 +82,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     extract_fragment_title,
     _deny_redirect_target,
+    _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
@@ -89,6 +92,14 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 
 
 PROJECTS_PATH = "/projects"
+
+#: Permission that lets a user create accounts. The member picker
+#: links to the Create User page only for users who hold it.
+USERS_WRITE_PERMISSION = "system:users.write"
+
+#: Upper bound on the users listed in the member picker; the search
+#: box narrows the list when a deployment has more accounts.
+MEMBER_PICKER_LIMIT = 200
 
 
 _ROUTE_TABLE = (
@@ -144,16 +155,18 @@ _FUTURE_ENDPOINT_PATTERNS: tuple = ()
 
 def _build_project_manager(*, db_session: Any) -> Any:
     """
-        Construct a :class:`ProjectManager`. Lazy-imports.
+        Construct a :class:`ProjectManager` whose permission checks
+        and project lists honour global project roles as well as
+        membership (see :mod:`project_access`). Lazy-imports.
 
         :param db_session: Open SQLAlchemy session.
 
         :returns: ProjectManager instance.
     """
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 
@@ -238,6 +251,46 @@ def _build_project_update_request(
     return rtnval
 
 
+def _delete_project_rpa_rows(db_session: Any, project_id: int) -> None:
+    """
+        Related-rows cleanup handed to
+        :meth:`ProjectManager.delete_project`: remove the project's RPA
+        specifications, revisions and jobs in the same transaction.
+
+        RPA rows refer to a project by id without a foreign key, so
+        without this a deleted project's specifications stayed behind
+        and a later project that reused the id showed them as its own.
+        Refuses (and so rolls back the whole deletion) while any of the
+        project's RPA jobs is still pending or running.
+
+        :param db_session: The project manager's open session.
+        :param project_id: Id of the project being deleted.
+
+        :raises ProjectHasActiveJobsError: when RPA jobs are active.
+    """
+    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
+        ProjectHasActiveJobsError,
+    )
+    from ccai.pychestrate.webservice.orchestration.rpa import (  # noqa: E402
+        repository as rpa_repository,
+    )
+
+    project_ref = str(project_id)
+    active_jobs = rpa_repository.count_active_jobs_for_project(
+        db_session=db_session, project_id=project_ref
+    )
+    if active_jobs > 0:
+        raise ProjectHasActiveJobsError(
+            "Cannot delete the project while {} RPA job(s) are still "
+            "pending or running. Wait for them to finish or cancel "
+            "them first.".format(active_jobs)
+        )
+    rpa_repository.delete_project_rows(
+        db_session=db_session, project_id=project_ref
+    )
+    return
+
+
 def _resolve_project_role(*, role_str: str) -> Any:
     """
         Resolve a string to the :class:`ProjectRole` enum value.
@@ -247,6 +300,39 @@ def _resolve_project_role(*, role_str: str) -> Any:
         ProjectRole,
     )
     rtnval = ProjectRole(role_str)
+    return rtnval
+
+
+#: What each project role may do, shown next to the role picker. The
+#: global ``project-*`` roles (assigned on a user's page) give the
+#: matching role on every project.
+PROJECT_ROLE_DESCRIPTIONS: Dict[str, str] = {
+    "owner": "Owner - everything, including deleting the project (global role: project-owner)",
+    "administrator": "Administrator - manage members, settings and releases",
+    "developer": "Developer - run builds, tests, infrastructure and RPA jobs (global role: project-editor)",
+    "viewer": "Viewer - read-only access (global role: project-viewer)",
+}
+
+
+def _list_global_project_access(*, db_session: Any) -> List[Dict[str, Any]]:
+    """
+        Users who can open every project through a global role, for the
+        Members page. Lazy-imports; any failure yields an empty list.
+
+        :param db_session: Open SQLAlchemy session.
+
+        :returns: Rows from :func:`project_access.list_global_project_access`.
+    """
+    try:
+        from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+            list_global_project_access,
+        )
+        rtnval = list_global_project_access(db_session=db_session)
+    except Exception:
+        _projects_ui_logger.exception(
+            "pychestrate.ui.projects.global_access_lookup_failed"
+        )
+        rtnval = []
     return rtnval
 
 
@@ -287,6 +373,33 @@ def _coerce_int_with_default(*, raw: Any, default: int) -> int:
     if parsed is None:
         return default
     return parsed
+
+
+def _coerce_user_id(*, raw: Any) -> Optional[str]:
+    """
+        Normalize a user id from a form field or path parameter.
+
+        User ids are UUIDs (``user.user_id``), so they must never go
+        through :func:`_coerce_int` -- that turned every real id into
+        ``None`` and made adding, editing and removing members fail
+        with "user_id is required".
+
+        :param raw: Raw value (string, UUID or ``None``).
+
+        :returns: The canonical lower-case UUID string, or ``None``
+                  when the value is empty or not a UUID.
+    """
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if len(text) == 0:
+        return None
+    try:
+        parsed = uuid.UUID(text)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    rtnval = str(parsed)
+    return rtnval
 
 
 def _parse_pagination_params(
@@ -339,9 +452,9 @@ def _parse_metadata_json_or_default(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError("Invalid JSON in metadata field.") from exc
+        raise ProjectsFormError("Invalid JSON in metadata field.") from exc
     if not isinstance(parsed, dict):
-        raise ValueError(
+        raise ProjectsFormError(
             "Metadata must be a JSON object, not a {}".format(
                 type(parsed).__name__
             )
@@ -704,13 +817,13 @@ def handle_project_create(request: Request) -> Response:
         except ValueError as exc:
             flash.add_flash(
                 session=auth.session,
-                message=str(exc),
+                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating project: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error creating project: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -925,15 +1038,13 @@ def handle_project_edit(request: Request) -> Response:
             except ValueError as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message=str(exc),
+                    message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating project: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error updating project: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1014,7 +1125,11 @@ def handle_project_delete(request: Request) -> Response:
             return deny_response
 
         try:
-            project_manager.delete_project(project_id, auth.user_id)
+            project_manager.delete_project(
+                project_id,
+                auth.user_id,
+                related_rows_cleanup=_delete_project_rpa_rows,
+            )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),
@@ -1023,10 +1138,22 @@ def handle_project_delete(request: Request) -> Response:
             )
             return response
         except Exception as exc:
+            # Stay on the project when it still exists: the message says
+            # what to do (or carries a reference for an administrator).
+            if getattr(exc, "error_code", None) == "PROJECT_NOT_FOUND":
+                failure_url = _url_for_module.url_for("projects.project_list")
+            else:
+                failure_url = _url_for_module.url_for(
+                    "projects.project_detail", project_id=project_id
+                )
             response = _redirect_with_flash(
                 session=auth.session,
-                url=_url_for_module.url_for("projects.project_list"),
-                message="Error deleting project: {}".format(str(exc)),
+                url=failure_url,
+                message=_describe_failure(
+                    exc=exc,
+                    prefix="Error deleting project: ",
+                    request_path=str(getattr(request, "path", "")),
+                ),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1114,6 +1241,10 @@ def handle_member_list(request: Request) -> Response:
         context["members"] = members
         context["can_manage"] = can_manage
         context["current_user_id"] = auth.user_id
+        context["global_access"] = _list_global_project_access(
+            db_session=db_session
+        )
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
@@ -1172,6 +1303,7 @@ def handle_member_add(request: Request) -> Response:
 
         method = request.method.upper()
         form_data: Optional[MultiFormView] = None
+        user_search = str(request.query_params.get("q", "") or "").strip()
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1190,7 +1322,7 @@ def handle_member_add(request: Request) -> Response:
                 return csrf_redirect
 
             user_id_raw = single_form.get("user_id", None)
-            user_id = _coerce_int(raw=user_id_raw)
+            user_id = _coerce_user_id(raw=user_id_raw)
             role_str = str(single_form.get("role", "viewer"))
             form_data = MultiFormView(data={
                 "user_id": [str(user_id_raw or "")],
@@ -1199,7 +1331,7 @@ def handle_member_add(request: Request) -> Response:
 
             try:
                 if user_id is None:
-                    raise ValueError("user_id is required.")
+                    raise ProjectsFormError("Choose a user to add to the project.")
                 role = _resolve_project_role(role_str=role_str)
                 project_manager.add_member(
                     project_id, user_id, role, auth.user_id
@@ -1217,7 +1349,7 @@ def handle_member_add(request: Request) -> Response:
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error adding member: {}".format(str(exc)),
+                    message=_describe_failure(exc=exc, prefix="Error adding member: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1230,13 +1362,19 @@ def handle_member_add(request: Request) -> Response:
         for m in current_members:
             mid = getattr(m, "user_id", None)
             if mid is not None:
-                member_user_ids.add(mid)
+                member_user_ids.add(str(mid))
 
-        all_users_response = user_manager.list_users(limit=1000)
+        # Only active accounts can be added; the search box narrows
+        # the picker on deployments with many users.
+        all_users_response = user_manager.list_users(
+            limit=MEMBER_PICKER_LIMIT,
+            search=user_search if len(user_search) > 0 else None,
+            is_active=True,
+        )
         all_users = getattr(all_users_response, "users", []) or []
         available_users = [
             u for u in all_users
-            if getattr(u, "id", None) not in member_user_ids
+            if str(getattr(u, "id", None)) not in member_user_ids
         ]
 
         roles = _enumerate_project_role_values()
@@ -1251,7 +1389,12 @@ def handle_member_add(request: Request) -> Response:
         context["project"] = project
         context["available_users"] = available_users
         context["roles"] = roles
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         context["form_data"] = form_data
+        context["user_search"] = user_search
+        context["can_create_users"] = _has_permission(
+            auth=auth, permission=USERS_WRITE_PERMISSION
+        )
         response = _render(
             template_name="projects/members/add.html",
             context=context,
@@ -1282,7 +1425,7 @@ def handle_member_edit(request: Request) -> Response:
         project_id = _coerce_int(
             raw=request.path_params.get("project_id", None)
         )
-        target_user_id = _coerce_int(
+        target_user_id = _coerce_user_id(
             raw=request.path_params.get("user_id", None)
         )
 
@@ -1359,9 +1502,7 @@ def handle_member_edit(request: Request) -> Response:
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
-                    message="Error updating member role: {}".format(
-                        str(exc)
-                    ),
+                    message=_describe_failure(exc=exc, prefix="Error updating member role: ", request_path=str(getattr(request, "path", ""))),
                     category=flash.CATEGORY_ERROR,
                 )
 
@@ -1371,7 +1512,7 @@ def handle_member_edit(request: Request) -> Response:
         ).members
         member = None
         for m in members:
-            if getattr(m, "user_id", None) == target_user_id:
+            if str(getattr(m, "user_id", None)) == target_user_id:
                 member = m
                 break
         if member is None:
@@ -1397,6 +1538,7 @@ def handle_member_edit(request: Request) -> Response:
         context["project"] = project
         context["member"] = member
         context["roles"] = roles
+        context["role_descriptions"] = PROJECT_ROLE_DESCRIPTIONS
         response = _render(
             template_name="projects/members/edit.html",
             context=context,
@@ -1426,7 +1568,7 @@ def handle_member_remove(request: Request) -> Response:
         project_id = _coerce_int(
             raw=request.path_params.get("project_id", None)
         )
-        target_user_id = _coerce_int(
+        target_user_id = _coerce_user_id(
             raw=request.path_params.get("user_id", None)
         )
         single_form = _parse_form_or_empty(request=request)
@@ -1470,10 +1612,9 @@ def handle_member_remove(request: Request) -> Response:
             return deny_response
 
         # Refuse self-removal: an admin removing themselves would
-        # lock themselves out of the project mid-session. String
-        # comparison because path params arrive as coerced ints
-        # while auth user ids may be strings.
-        if str(target_user_id) == str(auth.user_id):
+        # lock themselves out of the project mid-session. Both ids
+        # are compared in canonical UUID form.
+        if target_user_id == _coerce_user_id(raw=auth.user_id):
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
@@ -1506,7 +1647,7 @@ def handle_member_remove(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.member_list", project_id=project_id
                 ),
-                message="Error removing member: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error removing member: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1528,6 +1669,183 @@ def handle_member_remove(request: Request) -> Response:
 # fragment-style projects/base.html; redirects (auth bounce to
 # /login?next=..., post-POST redirects) pass through untouched.
 # ---------------------------------------------------------------------------
+
+
+_projects_ui_logger = logging.getLogger("pychestrate.ui.projects")
+
+
+def _new_error_reference() -> str:
+    """
+        Mint a short reference that ties a message shown to a user to
+        the log line recording the underlying exception.
+
+        :returns: A 12-character hexadecimal reference.
+    """
+    rtnval = uuid.uuid4().hex[:12]
+    return rtnval
+
+
+def _log_unexpected_error(*, action: str, request_path: str) -> str:
+    """
+        Log the exception being handled (with its traceback) under a new
+        reference. Call from inside an ``except`` block.
+
+        :param action: Short description of what failed (handler name or
+                       user action).
+        :param request_path: Path of the request that failed.
+
+        :returns: The reference to show the user.
+    """
+    reference = _new_error_reference()
+    _projects_ui_logger.exception(
+        "pychestrate.ui.projects.unexpected_error reference=%s action=%s path=%s",
+        reference,
+        action,
+        request_path,
+    )
+    return reference
+
+
+class ProjectsFormError(ValueError):
+    """
+        A problem with what the user submitted, raised by the projects
+        route handlers themselves. Its message is written for the user
+        and is shown as-is.
+    """
+
+
+def _is_user_facing_error(*, exc: BaseException) -> bool:
+    """
+        Whether an exception's message was written for users.
+
+        True for :class:`ProjectsFormError`, for the domain exceptions
+        the core managers raise (classes defined under
+        ``ccai.pychestrate.core.managers`` that carry an
+        ``error_code``, such as ``ProjectHasActiveJobsError``) and for
+        the RPA service's recoverable errors (``RpaError``). Anything
+        else -- SQL errors, ``TypeError``, ``KeyError`` -- is an
+        internal failure whose text must not reach the browser.
+
+        :param exc: The exception being handled.
+
+        :returns: ``True`` when the message may be shown to the user.
+    """
+    if isinstance(exc, ProjectsFormError):
+        return True
+    module_name = str(getattr(type(exc), "__module__", "") or "")
+    # The RPA service's recoverable errors (RpaError and its subclasses)
+    # are written for users too.
+    rtnval = (
+        (module_name.startswith("ccai.pychestrate.core.managers.") and hasattr(exc, "error_code"))
+        or module_name == "ccai.pychestrate.webservice.orchestration.rpa.errors"
+    )
+    return rtnval
+
+
+def _field_errors_from(
+        *, exc: BaseException, fields: Any, aliases: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
+    """
+        The inline form error for a validation failure: the field the
+        manager named (``exc.field``, renamed through ``aliases`` to the
+        form's input name) with the error's message. Empty when the error
+        is not user-facing or names no field the form shows an error
+        for -- the caller then shows the message above the form, so it
+        is never lost.
+
+        :param exc: The exception being handled.
+        :param fields: The input names the form renders errors for.
+        :param aliases: ``{manager field (or prefix ending in "["): form
+                        input name}``.
+
+        :returns: ``{input name: message}`` for ``ui.field_error``.
+    """
+    rtnval: Dict[str, str] = {}
+    field = getattr(exc, "field", None)
+    if _is_user_facing_error(exc=exc) is True and isinstance(field, str) and len(field) > 0:
+        name = field
+        for source, target in (aliases or {}).items():
+            if field == source or (source.endswith("[") and field.startswith(source)):
+                name = target
+                break
+        if name in set(fields):
+            rtnval[name] = getattr(exc, "message", None) or str(exc)
+    return rtnval
+
+
+def _describe_failure(
+        *, exc: BaseException, prefix: str, request_path: str
+    ) -> str:
+    """
+        Turn an exception caught by a handler into the flash message
+        shown to the user. User-facing errors keep their message; any
+        other exception is logged (with its traceback) under a new
+        reference and replaced by a generic sentence carrying that
+        reference, so SQL, Python and git error text never reaches the
+        browser. Call from inside the ``except`` block.
+
+        :param exc: The exception being handled.
+        :param prefix: Message start, e.g. ``"Error deleting project: "``.
+        :param request_path: Path of the failing request (logged).
+
+        :returns: The flash message.
+    """
+    if _is_user_facing_error(exc=exc) is True:
+        detail = getattr(exc, "message", None) or str(exc)
+    else:
+        reference = _log_unexpected_error(
+            action=prefix.strip().rstrip(":"), request_path=request_path
+        )
+        detail = (
+            "an unexpected problem occurred. If it keeps happening, give "
+            "an administrator this reference: {}.".format(reference)
+        )
+        if len(prefix) == 0:
+            detail = detail[0].upper() + detail[1:]
+    rtnval = "{}{}".format(prefix, detail)
+    return rtnval
+
+
+def _render_unexpected_error_page(*, request: Request, action: str) -> Response:
+    """
+        Log the exception being handled and answer with the site
+        shell's 500 page carrying the log reference. Falls back to the
+        chromeless error page when the shell itself cannot render.
+
+        :param request: The request whose handler failed.
+        :param action: Handler name, recorded in the log line.
+
+        :returns: A 500 :class:`Response`.
+    """
+    from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+        render_error_response,
+    )
+
+    request_path = getattr(request, "path", "")
+    reference = _log_unexpected_error(
+        action=action, request_path=str(request_path)
+    )
+    message = (
+        "This page could not be shown because of an unexpected problem. "
+        "Try again, and if it keeps happening give an administrator this "
+        "reference: {}.".format(reference)
+    )
+    try:
+        rtnval = render_error_response(
+            request=request, status_code=500, message=message
+        )
+    except Exception:
+        _projects_ui_logger.exception(
+            "pychestrate.ui.projects.error_page_failed reference=%s",
+            reference,
+        )
+        rtnval = render_error_response(
+            request=request,
+            status_code=500,
+            message=message,
+            force_chromeless=True,
+        )
+    return rtnval
 
 
 _DEFAULT_PROJECTS_PAGE_TITLE = "Pychestrate"
@@ -1632,8 +1950,19 @@ def _wrap_projects_handler_in_shell(handler: Any) -> Any:
     )
 
     def _wrapped(request: Request) -> Response:
-        with _ui_profile_scope.request_profile_scope():
-            inner = handler(request)
+        try:
+            with _ui_profile_scope.request_profile_scope():
+                inner = handler(request)
+        except Exception:
+            # An unexpected failure (a template error, a manager bug)
+            # used to escape as the framework's bare JSON 500 with no
+            # shell. Log it under a reference and show the shell's
+            # error page with that reference instead.
+            rtnval = _render_unexpected_error_page(
+                request=request,
+                action=getattr(handler, "__name__", "projects_handler"),
+            )
+            return rtnval
         if isinstance(inner, HTMLResponse) is False:
             return inner
 

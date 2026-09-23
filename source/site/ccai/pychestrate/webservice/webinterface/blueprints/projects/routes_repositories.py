@@ -68,6 +68,10 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
+    _field_errors_from,
+    _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -121,21 +125,103 @@ def _build_project_manager(*, db_session: Any) -> Any:
     """
         Construct a :class:`ProjectManager`. Lazy-imports.
     """
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 
-def _build_repository_manager(*, db_session: Any) -> Any:
+def _build_repository_manager(
+        *, db_session: Any, user_id: Optional[str] = None
+    ) -> Any:
     """
         Construct a :class:`RepositoryManager`. Lazy-imports.
+
+        :param db_session: Open SQLAlchemy session.
+        :param user_id: The signed-in user. When given, the manager can
+                        read the repository's credential secret from the
+                        secrets vault with that user's permissions, and
+                        the watches a fetch fires run their actions as
+                        that user (for the test and fetch actions).
+
+        :returns: RepositoryManager instance.
     """
     from ccai.pychestrate.core.managers.repository_manager import (  # noqa: E402
         RepositoryManager,
     )
-    rtnval = RepositoryManager(db_session)
+    credential_resolver = None
+    event_sink = None
+    if user_id is not None:
+        from ccai.pychestrate.webservice.webinterface.blueprints.projects.repository_credentials import (  # noqa: E402
+            build_credential_resolver,
+        )
+        from ccai.pychestrate.webservice.webinterface.blueprints.projects.watch_events import (  # noqa: E402
+            build_watch_event_sink,
+        )
+        credential_resolver = build_credential_resolver(
+            db_session=db_session, user_id=user_id
+        )
+        event_sink = build_watch_event_sink(
+            db_session=db_session, user_id=user_id
+        )
+    rtnval = RepositoryManager(
+        db_session, credential_resolver=credential_resolver,
+        event_sink=event_sink,
+    )
+    return rtnval
+
+
+def _check_credential_reference(
+        *, db_session: Any, user_id: str, secret_ref: str
+    ) -> None:
+    """
+        Refuse a credential secret the signed-in user cannot read (see
+        :mod:`repository_credentials`). Lazy-imports.
+
+        :raises RepositoryCredentialError: when the reference is unusable.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.repository_credentials import (  # noqa: E402
+        check_credential_reference,
+    )
+    check_credential_reference(
+        db_session=db_session, user_id=user_id, secret_ref=secret_ref
+    )
+    return
+
+
+def _build_specs_using_repository(
+        *, db_session: Any, project_id: int, repository_id: int
+    ) -> List[str]:
+    """
+        Names of the project's build specifications that build the
+        repository (they block its removal). Lazy-imports; any failure
+        yields an empty list.
+    """
+    from ccai.pychestrate.core.managers.build_manager import (  # noqa: E402
+        BuildManager,
+    )
+    try:
+        specs = BuildManager(db_session).list_specs(project_id, limit=500).specs
+        rtnval = sorted(
+            str(spec.name) for spec in specs
+            if getattr(spec, "repository_id", None) == repository_id
+        )
+    except Exception:
+        rtnval = []
+    return rtnval
+
+
+def _list_secret_refs(*, db_session: Any, user_id: str) -> List[str]:
+    """
+        Secret references to offer in the repository forms. Lazy-imports.
+
+        :returns: Sorted secret references (possibly empty).
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.repository_credentials import (  # noqa: E402
+        list_readable_secret_refs,
+    )
+    rtnval = list_readable_secret_refs(db_session=db_session, user_id=user_id)
     return rtnval
 
 
@@ -147,7 +233,12 @@ def _resolve_repository_auth_type(*, auth_type_str: str) -> Any:
     from ccai.pychestrate.core.managers.repository_manager import (  # noqa: E402
         RepositoryAuthType,
     )
-    rtnval = RepositoryAuthType(auth_type_str)
+    try:
+        rtnval = RepositoryAuthType(auth_type_str)
+    except ValueError:
+        raise ProjectsFormError(
+            "Choose how the server signs in to the repository."
+        ) from None
     return rtnval
 
 
@@ -431,10 +522,38 @@ def handle_repository_list(request: Request) -> Response:
             pass
 
 
+#: Inputs the repository create form shows errors for.
+_CREATE_FORM_FIELDS = ("name", "url", "auth_type", "credential_secret_ref", "default_branch")
+
+#: Inputs the repository edit form shows errors for.
+_EDIT_FORM_FIELDS = ("name", "credential_secret_ref", "default_branch")
+
+
+def _repository_form_errors(
+        *, exc: BaseException, fields: Any = _CREATE_FORM_FIELDS
+    ) -> Dict[str, str]:
+    """
+        Inline errors for the repository forms: the manager's field, or
+        the credential secret field for a secret that cannot be used.
+
+        :param exc: The exception being handled.
+        :param fields: The inputs the form shows errors for.
+
+        :returns: ``{input name: message}`` (empty: show a message above
+                  the form instead).
+    """
+    if getattr(exc, "error_code", None) == "REPOSITORY_CREDENTIAL_UNAVAILABLE":
+        rtnval = {"credential_secret_ref": getattr(exc, "message", None) or str(exc)}
+    else:
+        rtnval = _field_errors_from(exc=exc, fields=fields)
+    return rtnval
+
+
 def _render_repository_create_form(
         *, auth: _AuthResolution, project: Any,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     auth_types = _enumerate_repository_auth_type_values()
     flashes = flash.consume_flashes(session=auth.session)
@@ -447,6 +566,10 @@ def _render_repository_create_form(
     context["project"] = project
     context["auth_types"] = auth_types
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["secret_refs"] = _list_secret_refs(
+        db_session=auth.db_session, user_id=auth.user_id
+    )
     response = _render(
         template_name="projects/repositories/create.html",
         context=context,
@@ -523,10 +646,14 @@ def handle_repository_create(request: Request) -> Response:
 
         name = str(single_form.get("name", "")).strip()
         url = str(single_form.get("url", "")).strip()
-        auth_type_str = str(single_form.get("auth_type", "none"))
+        auth_type_str = str(single_form.get("auth_type", "none")).strip()
         credential_secret_ref = str(
             single_form.get("credential_secret_ref", "")
         ).strip()
+        if auth_type_str == "none":
+            # A public repository has no credential; drop any secret
+            # name left in the form.
+            credential_secret_ref = ""
         default_branch = str(
             single_form.get("default_branch", "main")
         ).strip()
@@ -544,6 +671,14 @@ def handle_repository_create(request: Request) -> Response:
             auth_type = _resolve_repository_auth_type(
                 auth_type_str=auth_type_str
             )
+            # A repository may only use a secret its creator can read:
+            # the server authenticates with it on everyone's behalf.
+            if len(credential_secret_ref) > 0:
+                _check_credential_reference(
+                    db_session=db_session,
+                    user_id=auth.user_id,
+                    secret_ref=credential_secret_ref,
+                )
             create_request = _build_repository_create_request(
                 name=name,
                 url=url,
@@ -572,10 +707,22 @@ def handle_repository_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error adding repository: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
+            # A problem with one field is shown next to it; anything
+            # else as a message above the form.
+            errors = _repository_form_errors(exc=exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="Error adding repository: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
+            return _render_repository_create_form(
+                auth=auth, project=project, form_data=form_view,
+                status_code=400, errors=errors,
             )
 
         return _render_repository_create_form(
@@ -673,6 +820,12 @@ def handle_repository_detail(request: Request) -> Response:
         context["repository"] = repository
         context["can_manage"] = can_manage
         context["can_delete"] = can_delete
+        # A repository that build specifications build cannot be
+        # removed; the page names them instead of offering Remove.
+        context["repository_specs"] = _build_specs_using_repository(
+            db_session=db_session, project_id=project_id,
+            repository_id=repository_id,
+        )
 
         response = _render(
             template_name="projects/repositories/detail.html",
@@ -748,6 +901,7 @@ def handle_repository_edit(request: Request) -> Response:
         # so the form shows the submitted values rather than the
         # stale database copy.
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -781,6 +935,17 @@ def handle_repository_edit(request: Request) -> Response:
             ).strip()
 
             try:
+                # A new credential secret must be one the editor can read.
+                current_ref = getattr(repository, "credential_secret_ref", None) or ""
+                if (
+                    len(credential_secret_ref) > 0
+                    and credential_secret_ref != current_ref
+                ):
+                    _check_credential_reference(
+                        db_session=db_session,
+                        user_id=auth.user_id,
+                        secret_ref=credential_secret_ref,
+                    )
                 update_request = _build_repository_update_request(
                     name=name if len(name) > 0 else None,
                     credential_secret_ref=(
@@ -810,13 +975,17 @@ def handle_repository_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Error updating repository: {}".format(
-                        str(exc)
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
+                errors = _repository_form_errors(exc=exc, fields=_EDIT_FORM_FIELDS)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(
+                            exc=exc,
+                            prefix="Error updating repository: ",
+                            request_path=str(getattr(request, "path", "")),
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -828,6 +997,10 @@ def handle_repository_edit(request: Request) -> Response:
         context["project"] = project
         context["repository"] = repository
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["secret_refs"] = _list_secret_refs(
+            db_session=db_session, user_id=auth.user_id
+        )
         response = _render(
             template_name="projects/repositories/edit.html",
             context=context,
@@ -935,9 +1108,7 @@ def handle_repository_delete(request: Request) -> Response:
                 url=_url_for_module.url_for(
                     "projects.repository_list", project_id=project_id
                 ),
-                message="Error removing repository: {}".format(
-                    str(exc)
-                ),
+                message=_describe_failure(exc=exc, prefix="Error removing repository: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -956,7 +1127,8 @@ def _handle_repository_action(
         success_truthy_message: str,
         success_falsey_message: Optional[str],
         success_falsey_category: str,
-        error_message_prefix: str
+        error_message_prefix: str,
+        describe_success: Optional[Callable[[Any], str]] = None
     ) -> Response:
     """
         Shared body for the ``test`` and ``fetch`` action
@@ -983,6 +1155,9 @@ def _handle_repository_action(
         :param error_message_prefix: Prefix for exception flashes
                                      (e.g. ``"Error testing
                                      repository: "``).
+        :param describe_success: Optional ``(result) -> message`` used
+                                 instead of ``success_truthy_message``
+                                 (fetch reports what it found).
     """
     auth = _resolve_authenticated_request(request=request)
     if auth.redirect_response is not None:
@@ -1043,8 +1218,11 @@ def _handle_repository_action(
             repository_id=repository_id,
         )
 
+        # Test and fetch talk to the remote, so the manager must be able
+        # to read the repository's credential secret -- as the signed-in
+        # user, under the secrets vault's access rules.
         repository_manager = _build_repository_manager(
-            db_session=db_session
+            db_session=db_session, user_id=auth.user_id
         )
         # The permission check above is for the project in the URL:
         # refuse repositories that belong to any other project.
@@ -1072,18 +1250,32 @@ def _handle_repository_action(
                 )
                 return response
 
+            message = success_truthy_message
+            if describe_success is not None:
+                message = describe_success(result)
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message=success_truthy_message,
+                message=message,
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
         except Exception as exc:
+            # Git and credential failures carry complete messages written
+            # for the user (the manager scrubs whatever git printed);
+            # anything else is logged under a reference, never shown.
+            if _is_user_facing_error(exc=exc) is True:
+                message = getattr(exc, "message", None) or str(exc)
+            else:
+                message = _describe_failure(
+                    exc=exc,
+                    prefix=error_message_prefix,
+                    request_path=str(getattr(request, "path", "")),
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=detail_url,
-                message="{}{}".format(error_message_prefix, str(exc)),
+                message=message,
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1113,6 +1305,18 @@ def handle_repository_test(request: Request) -> Response:
     return rtnval
 
 
+def _describe_fetch(result: Any) -> str:
+    """
+        The fetch flash: what changed since the previous fetch and how
+        many watches fired (see :mod:`watch_events`). Lazy-imports.
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.watch_events import (  # noqa: E402
+        describe_fetch,
+    )
+    rtnval = describe_fetch(repository=result)
+    return rtnval
+
+
 def handle_repository_fetch(request: Request) -> Response:
     """
         ``POST .../{repository_id}/fetch`` -- refresh remote
@@ -1127,6 +1331,7 @@ def handle_repository_fetch(request: Request) -> Response:
         success_falsey_message=None,
         success_falsey_category=flash.CATEGORY_INFO,
         error_message_prefix="Error fetching repository: ",
+        describe_success=_describe_fetch,
     )
     return rtnval
 

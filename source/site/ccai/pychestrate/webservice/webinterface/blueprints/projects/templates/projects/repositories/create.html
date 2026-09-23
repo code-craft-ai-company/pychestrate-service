@@ -26,39 +26,48 @@
             <label for="name">Repository Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   placeholder="my-repo">
+                   placeholder="my-repo"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
-        
+
         <div class="form-group">
             <label for="url">Repository URL *</label>
             <input type="text" id="url" name="url" class="form-control" required
                    value="{{ form_data.url if form_data else '' }}"
-                   placeholder="https://github.com/org/repo.git">
+                   placeholder="https://github.com/org/repo.git"{{ ui.invalid_attrs(errors, 'url') }}>
+            {{ ui.field_error(errors, 'url') }}
             <div class="form-text">HTTPS or SSH URL</div>
         </div>
         
         <div class="form-group">
-            <label for="auth_type">Authentication Type *</label>
-            <select id="auth_type" name="auth_type" class="form-control" required>
+            <label for="auth_type">Authentication *</label>
+            <select id="auth_type" name="auth_type" class="form-control" required{{ ui.invalid_attrs(errors, 'auth_type') }}>
                 {% for auth_type in auth_types %}
-                <option value="{{ auth_type }}" {% if form_data and form_data.auth_type == auth_type %}selected{% endif %}>{{ auth_type }}</option>
+                <option value="{{ auth_type }}" {% if (form_data and form_data.auth_type == auth_type) or (not form_data and auth_type == 'none') %}selected{% endif %}>{% if auth_type == 'none' %}Public (no authentication){% elif auth_type == 'https_token' %}HTTPS access token{% elif auth_type == 'ssh_key' %}SSH private key{% else %}{{ auth_type }}{% endif %}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'auth_type') }}
         </div>
-        
+
         <div class="form-group">
-            <label for="credential_secret_ref">Credential Secret Reference</label>
+            <label for="credential_secret_ref">Credential secret</label>
             <input type="text" id="credential_secret_ref" name="credential_secret_ref" class="form-control"
+                   list="repository-secret-refs" autocomplete="off" spellcheck="false"
                    value="{{ form_data.credential_secret_ref if form_data else '' }}"
-                   placeholder="scope/secret-name">
-            <div class="form-text">Reference to a secret containing credentials (for HTTPS token or SSH key)</div>
+                   placeholder="e.g. ci/github-token"{{ ui.invalid_attrs(errors, 'credential_secret_ref') }}>
+            {{ ui.field_error(errors, 'credential_secret_ref') }}
+            <datalist id="repository-secret-refs">
+                {% for secret_ref in secret_refs %}<option value="{{ secret_ref }}"></option>{% endfor %}
+            </datalist>
+            <div class="form-text">For an access token or SSH key: the name of a secret in System &gt; Secrets holding the token (or the private key). You must be able to read it. Leave empty for a public repository.</div>
         </div>
         
         <div class="form-group">
             <label for="default_branch">Default Branch</label>
             <input type="text" id="default_branch" name="default_branch" class="form-control"
                    value="{{ form_data.default_branch if form_data else 'main' }}"
-                   placeholder="main">
+                   placeholder="main"{{ ui.invalid_attrs(errors, 'default_branch') }}>
+            {{ ui.field_error(errors, 'default_branch') }}
         </div>
         
         <div class="form-group">

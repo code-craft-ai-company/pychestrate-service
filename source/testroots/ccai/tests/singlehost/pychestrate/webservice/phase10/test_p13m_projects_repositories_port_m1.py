@@ -394,8 +394,9 @@ def _patch_repository_manager(
             Callable[[_FakeRepositoryManager], None]
         ] = None
     ) -> Any:
-    def _builder(*, db_session: Any) -> _FakeRepositoryManager:
+    def _builder(*, db_session: Any, **kwargs: Any) -> _FakeRepositoryManager:
         instance = _FakeRepositoryManager(db_session)
+        instance.builder_kwargs = dict(kwargs)
         if configure is not None:
             configure(instance)
         return instance
@@ -480,6 +481,56 @@ def _patch_repository_update_request_factory() -> Any:
     mock = patch.activate()
     mock.configure(side_effect=_builder)
     return patch
+
+
+class _CredentialSeams:
+    """
+        Stand-ins for the secrets-vault seams (PRJ-11): the check made
+        when a credential secret is saved and the picker's suggestions.
+    """
+
+    def __init__(self, *, refuse: Optional[str]) -> None:
+        self.refuse: Optional[str] = refuse
+        self.check_calls: List[Dict[str, Any]] = []
+        self.patches: List[Any] = []
+        return
+
+    def deactivate(self) -> None:
+        for patch in self.patches:
+            patch.deactivate()
+        return
+
+
+def _patch_credential_seams(*, refuse: Optional[str] = None) -> _CredentialSeams:
+    """
+        Patch ``_check_credential_reference`` (refusing with ``refuse``
+        when given) and ``_list_secret_refs``.
+    """
+    from ccai.pychestrate.core.managers.repository_manager import (
+        RepositoryCredentialError,
+    )
+    seams = _CredentialSeams(refuse=refuse)
+
+    def _check(*, db_session: Any, user_id: str, secret_ref: str) -> None:
+        seams.check_calls.append({"user_id": user_id, "secret_ref": secret_ref})
+        if seams.refuse is not None:
+            raise RepositoryCredentialError(seams.refuse)
+        return
+
+    def _list(*, db_session: Any, user_id: str) -> List[str]:
+        return ["ci/github-token"]
+
+    check_patch = create_module_patch(
+        projects_routes_repositories, "_check_credential_reference"
+    )
+    check_patch.activate().configure(side_effect=_check)
+    seams.patches.append(check_patch)
+    list_patch = create_module_patch(
+        projects_routes_repositories, "_list_secret_refs"
+    )
+    list_patch.activate().configure(side_effect=_list)
+    seams.patches.append(list_patch)
+    return seams
 
 
 def _build_authenticated_cookie() -> str:
@@ -736,6 +787,7 @@ def test_handle_repository_create_post_happy_path_redirects_to_detail():
     cr_patch = None
     at_patch = None
     enum_patch = None
+    cred_seams = None
     try:
         _install_stub_environment()
         _install_ui_cookie_secret()
@@ -759,6 +811,7 @@ def test_handle_repository_create_post_happy_path_redirects_to_detail():
         cr_patch = _patch_repository_create_request_factory()
         at_patch = _patch_repository_auth_type_resolver()
         enum_patch = _patch_repository_auth_type_enumerator()
+        cred_seams = _patch_credential_seams()
 
         cookie_value = _build_authenticated_cookie()
         body = (
@@ -795,10 +848,154 @@ def test_handle_repository_create_post_happy_path_redirects_to_detail():
         testbase.assert_equal(user_id, "u-admin")
     finally:
         for p in (
-            enum_patch, at_patch, cr_patch, rm_patch, pm_patch, sm_patch,
+            cred_seams, enum_patch, at_patch, cr_patch, rm_patch, pm_patch,
+            sm_patch,
         ):
             if p is not None:
                 p.deactivate()
+        _reset_global_state()
+    return
+
+
+def _post_repository_create(*, body: bytes, refuse: Optional[str] = None) -> Dict[str, Any]:
+    """
+        POST the create form for project 7 with the manager, request
+        factory and credential seams patched.
+
+        :returns: ``{"response", "manager", "seams", "flashes"}``.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        patches.append(_patch_project_manager(configure=_seed_pm))
+        patches.append(_patch_repository_manager())
+        patches.append(_patch_repository_create_request_factory())
+        patches.append(_patch_repository_auth_type_resolver())
+        patches.append(_patch_repository_auth_type_enumerator())
+        seams = _patch_credential_seams(refuse=refuse)
+        patches.append(seams)
+
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+            path_params={"project_id": "7"},
+        )
+        response = projects_routes_repositories.handle_repository_create(request)
+        rendered = _FakeRepositoryManager.last_instance
+        rtnval = {
+            "response": response,
+            "manager": rendered,
+            "seams": seams,
+        }
+    finally:
+        for p in reversed(patches):
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_handle_repository_create_refuses_a_secret_the_user_cannot_read():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: saving a repository whose credential secret the
+    signed-in user cannot read is refused (400) and nothing is added --
+    otherwise anyone could point a repository at any secret and have
+    the server send it to the repository's URL.**
+    """
+    outcome = _post_repository_create(
+        body=(
+            b"csrf_token=csrf-fresh&name=repo-a"
+            b"&url=https%3A%2F%2Fgit.example%2Fa.git"
+            b"&auth_type=https_token&credential_secret_ref=prod%2Fdb-password"
+            b"&default_branch=main"
+        ),
+        refuse="You do not have access to the secret prod/db-password.",
+    )
+
+    testbase.assert_equal(
+        (
+            outcome["response"].status_code,
+            len(outcome["manager"].add_repository_calls),
+            outcome["seams"].check_calls,
+        ),
+        (400, 0, [{"user_id": "u-admin", "secret_ref": "prod/db-password"}]),
+    )
+    return
+
+
+def test_handle_repository_create_without_authentication_checks_no_secret():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: a public repository (authentication "none") is saved
+    without touching the secrets vault, even if a stale secret name was
+    left in the form.**
+    """
+    outcome = _post_repository_create(
+        body=(
+            b"csrf_token=csrf-fresh&name=repo-a"
+            b"&url=https%3A%2F%2Fgit.example%2Fa.git"
+            b"&auth_type=none&credential_secret_ref=ci%2Fleftover"
+            b"&default_branch=main"
+        ),
+        refuse="must not be consulted",
+    )
+
+    testbase.assert_equal(
+        (
+            isinstance(outcome["response"], RedirectResponse),
+            len(outcome["manager"].add_repository_calls),
+            outcome["seams"].check_calls,
+        ),
+        (True, 1, []),
+    )
+    return
+
+
+def test_handle_repository_create_form_offers_readable_secrets():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: the create form's context carries the secret names the
+    user can read (the picker's suggestions).**
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        patches.append(_patch_project_manager(configure=_seed_pm))
+        patches.append(_patch_repository_auth_type_enumerator())
+        patches.append(_patch_credential_seams())
+
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            path_params={"project_id": "7"},
+        )
+        projects_routes_repositories.handle_repository_create(request)
+        ctx = env.last_template.render_calls[0]
+
+        testbase.assert_equal(ctx["secret_refs"], ["ci/github-token"])
+    finally:
+        for p in reversed(patches):
+            p.deactivate()
         _reset_global_state()
     return
 
@@ -1326,4 +1523,131 @@ def test_handle_repository_fetch_refuses_repository_from_another_project():
             if p is not None:
                 p.deactivate()
         _reset_global_state()
+    return
+
+
+# ===========================================================================
+# PRJ-11: repository credentials for test / fetch
+# ===========================================================================
+
+
+def _post_repository_action(
+        *, handler: Callable[[Any], Response], raises: Optional[Exception] = None
+    ) -> Dict[str, Any]:
+    """
+        POST a test / fetch action for repository 11 of project 7 with the
+        manager patched (raising ``raises`` from the action when given).
+
+        :returns: ``{"response", "manager", "flashes"}``.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+        patches.append(_patch_project_manager())
+
+        def _seed(instance: _FakeRepositoryManager) -> None:
+            _seed_repository_in_project_7(instance)
+            instance.test_connectivity_raises = raises
+            instance.fetch_latest_raises = raises
+            return
+
+        patches.append(_patch_repository_manager(configure=_seed))
+
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7", "repository_id": "11"},
+        )
+        response = handler(request)
+        payload = cookie_session.verify_session_payload(
+            cookie_value=response._cookies[cookie_session.COOKIE_NAME].value,
+            secret=_TEST_UI_COOKIE_SECRET,
+        )
+        rtnval = {
+            "response": response,
+            "manager": _FakeRepositoryManager.last_instance,
+            "flashes": [tuple(entry) for entry in payload.get(flash.SESSION_KEY, [])],
+        }
+    finally:
+        for p in reversed(patches):
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_handle_repository_test_reads_the_credential_as_the_signed_in_user():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: the connectivity test builds its RepositoryManager for
+    the signed-in user, so the repository's credential secret is read
+    with that user's secrets permissions (it used to be built with no
+    way to read secrets at all).**
+    """
+    outcome = _post_repository_action(
+        handler=projects_routes_repositories.handle_repository_test
+    )
+
+    testbase.assert_equal(outcome["manager"].builder_kwargs, {"user_id": "u-admin"})
+    return
+
+
+def test_handle_repository_fetch_reads_the_credential_as_the_signed_in_user():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: fetch builds its RepositoryManager for the signed-in
+    user as well.**
+    """
+    outcome = _post_repository_action(
+        handler=projects_routes_repositories.handle_repository_fetch
+    )
+
+    testbase.assert_equal(outcome["manager"].builder_kwargs, {"user_id": "u-admin"})
+    return
+
+
+def test_handle_repository_test_shows_the_credential_problem():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: when the credential secret cannot be read, the error
+    flash says so in the manager's words.**
+    """
+    from ccai.pychestrate.core.managers.repository_manager import (
+        RepositoryCredentialError,
+    )
+    outcome = _post_repository_action(
+        handler=projects_routes_repositories.handle_repository_test,
+        raises=RepositoryCredentialError(
+            "You do not have access to the secret ci/github-token."
+        ),
+    )
+
+    testbase.assert_equal(
+        outcome["flashes"],
+        [(flash.CATEGORY_ERROR, "You do not have access to the secret ci/github-token.")],
+    )
+    return
+
+
+def test_handle_repository_fetch_hides_unexpected_errors():
+    """
+    **Feature: projects (PRJ-11 repository credentials)**
+    **Property: an unexpected exception during fetch (not a manager
+    error) is logged under a reference; its text never reaches the
+    flash.**
+    """
+    outcome = _post_repository_action(
+        handler=projects_routes_repositories.handle_repository_fetch,
+        raises=RuntimeError("password=hunter2 in some internal error"),
+    )
+    messages = " ".join(message for _category, message in outcome["flashes"])
+
+    testbase.assert_equal(
+        ("hunter2" in messages, "reference" in messages), (False, True)
+    )
     return

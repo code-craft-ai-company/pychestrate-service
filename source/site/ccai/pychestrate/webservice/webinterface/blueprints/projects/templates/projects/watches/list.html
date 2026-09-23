@@ -30,8 +30,8 @@
         <tr>
             <th scope="col">Name</th>
             <th scope="col">Source</th>
-            <th scope="col">Trigger</th>
-            <th scope="col">Branch Pattern</th>
+            <th scope="col">Starts when</th>
+            <th scope="col">Condition</th>
             <th scope="col">Actions</th>
             <th scope="col">Enabled</th>
             <th scope="col">Last Triggered</th>
@@ -47,11 +47,11 @@
                 </a>
             </td>
             <td>{{ watch.source_name }}</td>
-            <td><span class="badge badge-secondary">{{ watch.trigger_source.value }}</span></td>
-            <td class="mono">{{ watch.conditions.branch_pattern or '*' }}</td>
+            <td>{{ trigger_labels.get(watch.trigger_source.value, watch.trigger_source.value) }}</td>
+            <td>{% if watch.conditions.tag_pattern %}tag matches <code>{{ watch.conditions.tag_pattern }}</code>{% elif watch.conditions.branch_pattern %}branch matches <code>{{ watch.conditions.branch_pattern }}</code>{% else %}<span class="muted">none</span>{% endif %}{% if watch.conditions.build_status in ('succeeded', 'failed') %}, build {{ watch.conditions.build_status }}{% endif %}</td>
             <td>
                 {% for action in watch.actions %}
-                <span class="badge badge-info">{{ action.action.value }}</span>
+                <span class="badge badge-info">{{ action_labels.get(action.action.value, action.action.value) }}</span>
                 {% else %}
                 <span class="muted">None configured</span>
                 {% endfor %}

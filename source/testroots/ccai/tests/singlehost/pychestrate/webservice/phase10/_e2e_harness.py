@@ -419,6 +419,25 @@ def _reassert_runtime_globals() -> None:
     return
 
 
+def _reassert_builtin_extensions() -> None:
+    """
+        Re-register the Phase-1 built-in extensions when a prior test
+        reset the extension registry without restoring them (several
+        suites call ``reset_registry_for_testing()`` and register only
+        what they need), so the cached app can still hash and verify
+        passwords. The registration is idempotent.
+    """
+    from ccai.pychestrate.webservice.extensions.bootstrap import (  # noqa: E402
+        register_phase1_builtin_extensions,
+    )
+    from ccai.pychestrate.webservice.extensions.registry import (  # noqa: E402
+        list_factory_implementations,
+    )
+    if len(list_factory_implementations(factory_protocol_name="password_hasher")) == 0:
+        register_phase1_builtin_extensions()
+    return
+
+
 def ensure_app() -> TestAppHandle:
     """
         Lazy module-level singleton: bootstrap the runtime + build
@@ -431,7 +450,8 @@ def ensure_app() -> TestAppHandle:
         restored -- so a prior test that nulled any of those in
         teardown cannot leave a later authenticated flow with an
         unconfigured session secret / session factory / templating
-        environment.
+        environment. The built-in extensions are re-registered when
+        a prior test emptied the extension registry.
     """
     global _APP_HANDLE
     if _APP_HANDLE is not None:
@@ -439,6 +459,7 @@ def ensure_app() -> TestAppHandle:
         _install_test_templating()
         _reassert_url_for_registry()
         _reassert_extension_registry_and_pepper()
+        _reassert_builtin_extensions()
         return _APP_HANDLE
     kek_path = _write_test_kek_file()
     _bootstrap_runtime_for_tests(kek_file_path=kek_path)
@@ -739,9 +760,13 @@ def ensure_pepper_for_tests() -> None:
     # inherits from ``BaseException`` (not ``Exception``), so a
     # plain ``except Exception`` would not catch the
     # "no pepper loaded" raise from ``get_active_pepper``.
+    # Another suite may have installed a pepper of its own; the seeded
+    # users' hashes need this one, so replace any other pepper.
     try:
-        get_active_pepper()
+        active_is_test_pepper = get_active_pepper().reveal() == _TEST_PASSWORD_PEPPER
     except BaseException:
+        active_is_test_pepper = False
+    if active_is_test_pepper is False:
         set_active_pepper(pepper=SecretBytes(_TEST_PASSWORD_PEPPER))
     # The seeded users are hashed under this pepper: remember it so
     # ``ensure_app`` can put it back if another suite replaces it.
@@ -1231,6 +1256,42 @@ def login_as(*, wsgi_app: Any, user: SeededAdmin) -> Dict[str, str]:
     return cookies
 
 
+# ---------------------------------------------------------------------------
+# Additional named users (projects access tests)
+# ---------------------------------------------------------------------------
+
+
+def ensure_seeded_user(*, login: str) -> SeededAdmin:
+    """
+        Idempotently seed a plain user (no role bindings) with the
+        given login, sharing one UUID across the modern and legacy
+        user tables like :func:`ensure_seeded_viewer`. Tests that
+        change a user's access use their own login so they never
+        disturb the shared admin and viewer.
+
+        :param login: Login name (also used to derive the email and
+                      display name).
+
+        :returns: A :class:`SeededAdmin` handle for the user.
+    """
+    ensure_app()
+    ensure_shared_in_memory_db_pool()
+    ensure_pepper_for_tests()
+
+    password = "{}-secret-1!".format(login)
+    user_id = _seed_user_pair(
+        login=login,
+        password=password,
+        email="{}@example.invalid".format(login),
+        role_csv="",
+        first_name="E2E",
+        last_name=login,
+        display_name="E2E {}".format(login),
+    )
+    rtnval = SeededAdmin(user_id=user_id, login=login, password=password)
+    return rtnval
+
+
 __all__ = [
     "fetch_login_form_token",
     "TEST_UI_COOKIE_SECRET",
@@ -1261,4 +1322,5 @@ __all__ = [
     "E2E_VIEWER_EMAIL",
     "ensure_seeded_viewer",
     "login_as",
+    "ensure_seeded_user",
 ]

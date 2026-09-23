@@ -69,6 +69,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.routes import (
     PROJECTS_PATH,
+    ProjectsFormError,
+    _describe_failure,
+    _is_user_facing_error,
     _require_project_permission_or_redirect,
     _resolve_project_or_redirect,
 )
@@ -99,10 +102,10 @@ RPA_STATUS_CHOICES = (
 
 
 def _build_project_manager(*, db_session: Any) -> Any:
-    from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
-        ProjectManager,
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (  # noqa: E402
+        build_access_aware_project_manager,
     )
-    rtnval = ProjectManager(db_session)
+    rtnval = build_access_aware_project_manager(db_session=db_session)
     return rtnval
 
 
@@ -215,9 +218,9 @@ def _parse_json_object(*, raw: str, field_label: str) -> Dict[str, Any]:
     try:
         decoded = json.loads(text)
     except ValueError as exc:
-        raise ValueError("{} must be valid JSON: {}".format(field_label, str(exc))) from None
+        raise ProjectsFormError("{} must be valid JSON: {}".format(field_label, str(exc))) from None
     if not isinstance(decoded, dict):
-        raise ValueError("{} must be a JSON object.".format(field_label))
+        raise ProjectsFormError("{} must be a JSON object.".format(field_label))
     rtnval = decoded
     return rtnval
 
@@ -550,11 +553,11 @@ def handle_rpa_spec_create(request: Request) -> Response:
             )
             return response
         except ValueError as exc:
-            flash.add_flash(session=auth.session, message=str(exc), category=flash.CATEGORY_ERROR)
+            flash.add_flash(session=auth.session, message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))), category=flash.CATEGORY_ERROR)
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
-                message="Error creating RPA specification: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error creating RPA specification: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
 
@@ -720,14 +723,19 @@ def handle_rpa_spec_detail(request: Request) -> Response:
             pass
 
 
-def _packet_error_lines(*, exc: Exception) -> List[str]:
+def _packet_error_lines(*, exc: Exception, request_path: str = "") -> List[str]:
     """
         One line per problem for the run form's error list: each schema
-        issue with its path, otherwise the error's own message.
+        issue with its path, otherwise the error's own message -- or, for
+        an error not written for users, a log reference instead of its
+        text (PRJ-29).
     """
     issues = getattr(exc, "issues", None)
     if issues:
         rtnval = ["{}: {}".format(path or "/", message) for path, message in issues]
+        return rtnval
+    if _is_user_facing_error(exc=exc) is not True:
+        rtnval = [_describe_failure(exc=exc, prefix="", request_path=request_path)]
         return rtnval
     text = str(exc).strip()
     first_line = text.splitlines()[0] if len(text) > 0 else "The job could not be started."
@@ -828,7 +836,7 @@ def handle_rpa_run(request: Request) -> Response:
             if len(selected_pod_id) > 0:
                 candidates = [c for c in candidates if str(getattr(c, "pod_id", "")) == selected_pod_id]
             if len(candidates) == 0:
-                raise ValueError(NO_ELIGIBLE_POD_MESSAGE)
+                raise ProjectsFormError(NO_ELIGIBLE_POD_MESSAGE)
             project_slug = str(getattr(project_manager, "slug", "") or getattr(spec, "name", ""))
             aspect_kwargs: Dict[str, Any] = {
                 "actor_id": auth.user_id,
@@ -844,7 +852,9 @@ def handle_rpa_run(request: Request) -> Response:
                 work_packet=work_packet, aspects=aspects,
             )
         except Exception as exc:
-            response = _rerender(errors=_packet_error_lines(exc=exc))
+            response = _rerender(errors=_packet_error_lines(
+                exc=exc, request_path=str(getattr(request, "path", "")),
+            ))
             return response
 
         if getattr(job, "replayed", False) is True:
@@ -865,6 +875,51 @@ def handle_rpa_run(request: Request) -> Response:
             db_session.close()
         except Exception:
             pass
+
+
+def _job_names(*, db_session: Any, job: Any) -> Dict[str, Optional[str]]:
+    """
+        The people and machines behind an RPA job, by name instead of
+        UUID (PRJ-33): who triggered it, and the pod and client that ran
+        it. A name that cannot be found is None (the page then shows the
+        id).
+
+        :param db_session: Open SQLAlchemy session.
+        :param job: The RPA job view.
+
+        :returns: ``{"triggered_by", "pod", "client"}``.
+    """
+    rtnval: Dict[str, Optional[str]] = {"triggered_by": None, "pod": None, "client": None}
+    lookups = (
+        ("triggered_by", "ccai.pychestrate.core.orm", "User", "id",
+         getattr(job, "triggered_by_id", None), ("display_name", "login")),
+        ("pod", "ccai.pychestrate.webservice.pods.models", "PodDefinition", "pod_id",
+         getattr(job, "pod_id", None), ("pod_name",)),
+        ("client", "ccai.pychestrate.webservice.clients.models", "Client", "client_id",
+         getattr(job, "client_id", None), ("pod_name",)),
+    )
+    for key, module_name, model_name, id_column, raw_id, name_columns in lookups:
+        if raw_id is None or len(str(raw_id)) == 0:
+            continue
+        try:
+            import importlib  # noqa: E402
+            import uuid as uuid_module  # noqa: E402
+            model = getattr(importlib.import_module(module_name), model_name)
+            row = db_session.query(model).filter(
+                getattr(model, id_column) == uuid_module.UUID(str(raw_id))
+            ).first()
+        except Exception:
+            row = None
+        if row is None:
+            continue
+        for column in name_columns:
+            value = getattr(row, column, None)
+            if value:
+                rtnval[key] = str(value)
+                break
+    if rtnval["client"] is not None:
+        rtnval["client"] = "client of {}".format(rtnval["client"])
+    return rtnval
 
 
 def handle_rpa_detail(request: Request) -> Response:
@@ -909,6 +964,7 @@ def handle_rpa_detail(request: Request) -> Response:
         context["can_manage"] = can_manage
         context["work_packet_json"] = _pretty_json(dict(job.work_packet))
         context["is_active"] = job.status.value in ("pending", "dispatching", "running")
+        context["job_names"] = _job_names(db_session=db_session, job=job)
 
         response = _render(template_name="projects/rpa/detail.html", context=context)
         _attach_session_to_response(response=response, session=auth.session)
@@ -1038,7 +1094,7 @@ def handle_rpa_cancel(request: Request) -> Response:
         except Exception as exc:
             response = _redirect_with_flash(
                 session=auth.session, url=detail_url,
-                message="Error cancelling RPA job: {}".format(str(exc)),
+                message=_describe_failure(exc=exc, prefix="Error cancelling RPA job: ", request_path=str(getattr(request, "path", ""))),
                 category=flash.CATEGORY_ERROR,
             )
             return response
@@ -1071,7 +1127,7 @@ def build_watch_rpa_trigger(*, db_session: Any) -> Callable[..., Any]:
         spec = rpa.get_spec(db_session=db_session, spec_id=spec_id)
         if project_id is not None and str(spec.project_id) != str(project_id):
             # A watch may only start RPA jobs in its own project.
-            raise ValueError(
+            raise ProjectsFormError(
                 "RPA specification {} is not part of project {}.".format(spec_id, project_id)
             )
         candidates = _resolve_candidates(

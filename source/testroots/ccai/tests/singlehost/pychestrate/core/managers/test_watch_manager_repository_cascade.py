@@ -77,7 +77,6 @@ def create_mock_watch(watch_id, project_id, name, repository_id, enabled=True):
     ctx.set_attribute('conditions_json', {})
     ctx.set_attribute('actions_json', [{'action': 'trigger_build', 'target_id': 1, 'parameters': {}}])
     ctx.set_attribute('enabled', enabled)
-    ctx.set_attribute('is_enabled', enabled)  # Alternative attribute name
     ctx.set_attribute('description', '')
     ctx.set_attribute('last_trigger_time', None)
     ctx.set_attribute('trigger_count', 0)
@@ -162,7 +161,7 @@ def test_remove_repository_disables_related_watches():
     
     # All watches should be disabled
     for watch in watches:
-        assert watch.is_enabled == False, f"Watch {watch.name} should be disabled after repository removal"
+        assert watch.enabled == False, f"Watch {watch.name} should be disabled after repository removal"
 
 
 def test_remove_repository_with_no_watches():
@@ -242,7 +241,7 @@ def test_property_all_watches_disabled_on_removal():
         
         # All watches should be disabled
         for watch in watches:
-            assert watch.is_enabled == False, \
+            assert watch.enabled == False, \
                 f"Watch should be disabled after repository removal"
 
 
@@ -278,7 +277,7 @@ def test_property_only_related_watches_affected():
         
         # All related watches should be disabled
         for watch in related_watches:
-            assert watch.is_enabled == False, \
+            assert watch.enabled == False, \
                 f"Related watch should be disabled"
 
 
@@ -310,7 +309,7 @@ def test_property_disabled_watches_remain_disabled():
         
         # All watches should be disabled (including those that were already disabled)
         for watch in watches:
-            assert watch.is_enabled == False, \
+            assert watch.enabled == False, \
                 f"Watch should be disabled after repository removal"
 
 
@@ -345,11 +344,11 @@ def test_multiple_repositories_independent():
     
     # Watches for repo1 should be disabled
     for watch in watches_repo1:
-        assert watch.is_enabled == False, "Watch for removed repo should be disabled"
+        assert watch.enabled == False, "Watch for removed repo should be disabled"
     
     # Watches for repo2 should still be enabled (they weren't in the query result)
     for watch in watches_repo2:
-        assert watch.is_enabled == True, "Watch for other repo should remain enabled"
+        assert watch.enabled == True, "Watch for other repo should remain enabled"
 
 
 def test_property_cascade_with_various_watch_counts():
@@ -379,7 +378,7 @@ def test_property_cascade_with_various_watch_counts():
         manager.remove_repository(repo_id, user_id)
         
         # All watches should be disabled
-        disabled_count = sum(1 for w in watches if w.is_enabled == False)
+        disabled_count = sum(1 for w in watches if w.enabled == False)
         assert disabled_count == count, \
             f"All {count} watches should be disabled, got {disabled_count}"
 
@@ -389,7 +388,7 @@ def test_property_removal_is_idempotent_for_disabled_watches():
     **Feature: projects, Property 22: Repository Removal Cascades to Watches**
     **Validates: Requirements 3.2**
     
-    Property test: Setting is_enabled to False on already disabled watches should be safe.
+    Property test: Setting enabled to False on already disabled watches should be safe.
     """
     for _ in range(50):
         project_id = 1
@@ -418,5 +417,5 @@ def test_property_removal_is_idempotent_for_disabled_watches():
         
         # All watches should still be disabled
         for watch in watches:
-            assert watch.is_enabled == False
+            assert watch.enabled == False
 

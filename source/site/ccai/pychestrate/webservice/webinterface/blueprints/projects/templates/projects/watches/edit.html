@@ -20,6 +20,8 @@
 </div>
 
 {% set primary_action = watch.actions[0] if watch.actions else none %}
+{% set trigger = watch.trigger_source.value %}
+{% set current_status = form_data.build_status if form_data else (watch.conditions.build_status or 'any') %}
 <div class="card">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -27,7 +29,8 @@
         <div class="form-group">
             <label for="name">Name</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   value="{{ form_data.name if form_data else watch.name }}">
+                   value="{{ form_data.name if form_data else watch.name }}"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
 
         <div class="form-group">
@@ -35,49 +38,63 @@
             <textarea id="description" name="description" class="form-control" rows="2">{{ form_data.description if form_data else (watch.description or '') }}</textarea>
         </div>
 
-        <div class="form-group">
-            <label for="repository_id">Repository</label>
-            <select id="repository_id" name="repository_id" class="form-control" required>
-                {% for repo in repositories %}
-                <option value="{{ repo.id }}" {% if (form_data and form_data.repository_id == repo.id|string) or (not form_data and watch.source_id == repo.id) %}selected{% endif %}>
-                    {{ repo.name }}
-                </option>
-                {% endfor %}
-            </select>
-        </div>
+        <h2 class="card-header">When</h2>
 
         <div class="form-group">
-            <label for="event_type">Event Type</label>
-            <select id="event_type" name="event_type" class="form-control" required>
-                {% for event_type in event_types %}
-                <option value="{{ event_type }}" {% if (form_data and form_data.event_type == event_type) or (not form_data and watch.trigger_source.value == event_type) %}selected{% endif %}>
-                    {{ event_type }}
-                </option>
-                {% endfor %}
-            </select>
+            <label for="ro-trigger">Start this watch when</label>
+            <input type="text" id="ro-trigger" class="form-control" disabled
+                   value="{{ trigger_labels.get(trigger, trigger) }}: {{ watch.source_name }}">
+            <p class="form-text">What starts a watch and what it watches cannot be changed; create another watch instead.</p>
         </div>
 
+        {% if trigger != 'repository_tag' %}
         <div class="form-group">
-            <label for="branch_pattern">Branch Pattern</label>
+            <label for="branch_pattern">Branch pattern</label>
             <input type="text" id="branch_pattern" name="branch_pattern" class="form-control"
                    value="{{ form_data.branch_pattern if form_data else (watch.conditions.branch_pattern or '') }}"
-                   placeholder="e.g., main, feature/*, release-*">
-            <span class="form-text">Regular expression matched against the branch name (for example <code>^release/.*</code>). Leave empty to match every branch.</span>
+                   placeholder="e.g., ^main$ or ^release/"{{ ui.invalid_attrs(errors, 'branch_pattern') }}>
+            {{ ui.field_error(errors, 'branch_pattern') }}
+            <span class="form-text">Regular expression matched from the start of the branch name. Leave empty to match every branch.</span>
         </div>
+        {% endif %}
+
+        {% if trigger == 'repository_tag' %}
+        <div class="form-group">
+            <label for="tag_pattern">Tag pattern</label>
+            <input type="text" id="tag_pattern" name="tag_pattern" class="form-control"
+                   value="{{ form_data.tag_pattern if form_data else (watch.conditions.tag_pattern or '') }}"
+                   placeholder="e.g., ^v[0-9]+"{{ ui.invalid_attrs(errors, 'tag_pattern') }}>
+            {{ ui.field_error(errors, 'tag_pattern') }}
+            <span class="form-text">Regular expression matched from the start of the tag name. Leave empty to match every tag.</span>
+        </div>
+        {% endif %}
+
+        {% if trigger == 'build_completion' %}
+        <div class="form-group">
+            <label for="build_status">Build result</label>
+            <select id="build_status" name="build_status" class="form-control">
+                <option value="any" {% if current_status in ('', 'any') %}selected{% endif %}>Succeeded or failed</option>
+                <option value="succeeded" {% if current_status == 'succeeded' %}selected{% endif %}>Succeeded</option>
+                <option value="failed" {% if current_status == 'failed' %}selected{% endif %}>Failed</option>
+            </select>
+            {{ ui.field_error(errors, 'build_status') }}
+        </div>
+        {% endif %}
+
+        <h2 class="card-header">Then</h2>
 
         <div class="form-group">
-            <label for="action_type">Action Type</label>
+            <label for="action_type">Do this</label>
             <select id="action_type" name="action_type" class="form-control" required>
                 {% for action_type in action_types %}
-                <option value="{{ action_type }}" {% if (form_data and form_data.action_type == action_type) or (not form_data and primary_action and primary_action.action.value == action_type) %}selected{% endif %}>
-                    {{ action_type }}
-                </option>
+                <option value="{{ action_type }}" {% if (form_data and form_data.action_type == action_type) or (not form_data and primary_action and primary_action.action.value == action_type) %}selected{% endif %}>{{ action_labels.get(action_type, action_type) }}</option>
                 {% endfor %}
             </select>
+            {{ ui.field_error(errors, 'action_type') }}
         </div>
 
         <div class="form-group">
-            <label for="action_spec_id">Target build specification</label>
+            <label for="action_spec_id">Build specification to run</label>
             <select id="action_spec_id" name="action_spec_id" class="form-control">
                 <option value="">Select a build spec</option>
                 {% for spec in build_specs %}
@@ -86,15 +103,16 @@
                 </option>
                 {% endfor %}
             </select>
-        <p class="form-text">Used when the action is <code>trigger_build</code>.</p>
+        <p class="form-text">For "Run a build".</p>
         </div>
 
         <div class="form-group">
             <label for="action_target_id">Target id for other actions</label>
             <input type="number" id="action_target_id" name="action_target_id" class="form-control" min="1"
                    value="{{ form_data.action_target_id if form_data else '' }}"
-                   placeholder="pipeline, infrastructure specification, or test specification id">
-            <p class="form-text">For <code>trigger_pipeline</code>, <code>trigger_infra_job</code>, <code>trigger_test_job</code>, and <code>send_notification</code>: the id of the thing to run. Takes precedence over the build specification when set.</p>
+                   placeholder="pipeline, infrastructure specification, or test specification id"{{ ui.invalid_attrs(errors, 'action_target_id') }}>
+            {{ ui.field_error(errors, 'action_target_id') }}
+            <p class="form-text">For starting a release pipeline, or running an infrastructure or test job: the id of the thing to run. Takes precedence over the build specification when set.</p>
         </div>
 
         <div class="form-group">
@@ -103,7 +121,7 @@
                 Enabled
             </label>
         </div>
-        
+
         <div class="actions-row">
             <button type="submit" class="btn btn-primary">
                 {{ ui.icon("save") }} Save Changes

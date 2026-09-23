@@ -4,6 +4,16 @@
 {% block title %}{{ watch.name }} - Watch - {{ project.name }} - Pychestrate{% endblock %}
 
 {% block content %}
+{% macro event_summary(event) -%}
+{%- if event.tag is defined and event.tag %}New tag {{ event.tag }}
+{%- elif event.build_id is defined and event.build_id %}Build #{{ event.build_id }} {{ event.build_status if event.build_status is defined and event.build_status else 'finished' }}{% if event.branch is defined and event.branch %} on {{ event.branch }}{% endif %}
+{%- elif event.created is defined and event.created %}New branch {{ event.branch }}
+{%- elif event.branch is defined and event.branch %}New commits on {{ event.branch }}
+{%- else %}Event{% endif -%}
+{%- if event.commit_sha is defined and event.commit_sha and event.commit_sha != 'HEAD' %} <span class="mono muted">({{ event.commit_sha[:10] }})</span>{% endif -%}
+{%- endmacro %}
+{% set trigger = watch.trigger_source.value %}
+{% set sample_status = test_sample.sample_build_status if test_sample.sample_build_status is defined else 'succeeded' %}
 <nav aria-label="Breadcrumb">
     <ol class="breadcrumb">
         <li><a href="{{ url_for('projects.project_list') }}">Projects</a></li>
@@ -39,58 +49,56 @@
             <button type="submit" class="btn btn-success">Enable</button>
         </form>
         {% endif %}
-        <form action="{{ url_for('projects.watch_test', project_id=project.id, watch_id=watch.id) }}" method="post">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-secondary" title="Run this watch's actions once now">
-                {{ ui.icon("play_arrow") }} Test
-            </button>
-        </form>
         {% endif %}
     </div>
 </div>
 
 <div class="stat-grid">
     <div class="card">
-        <div class="muted">Trigger</div>
-        <div><span class="badge badge-secondary badge-lg">{{ watch.trigger_source.value }}</span></div>
+        <div class="muted">Starts when</div>
+        <div><span class="badge badge-secondary badge-lg">{{ trigger_labels.get(trigger, trigger) }}</span></div>
     </div>
     <div class="card">
-        <div class="muted">Source</div>
+        <div class="muted">{% if trigger == 'build_completion' %}Build specification{% else %}Repository{% endif %}</div>
         <div class="strong">{{ watch.source_name }}</div>
     </div>
     <div class="card">
-        <div class="muted">Branch Pattern</div>
-        <div class="strong mono">{{ watch.conditions.branch_pattern or '*' }}</div>
+        <div class="muted">Times triggered</div>
+        <div class="strong">{{ watch.trigger_count or 0 }}</div>
     </div>
     <div class="card">
-        <div class="muted">Trigger Count</div>
-        <div class="strong">{{ watch.trigger_count or 0 }}</div>
+        <div class="muted">Last triggered</div>
+        <div class="strong">{{ watch.last_trigger_time | format_datetime('%Y-%m-%d %H:%M', 'Never') }}</div>
     </div>
 </div>
 
 <div class="card">
     <h2 class="card-header">Conditions</h2>
     <div class="table-scroll" tabindex="0"><table class="data-table">
+        {% if trigger != 'repository_tag' %}
         <tr>
-            <th scope="row">Branch Pattern</th>
-            <td class="mono">{{ watch.conditions.branch_pattern or 'any branch' }}</td>
+            <th scope="row">Branch</th>
+            <td>{% if watch.conditions.branch_pattern %}matches <code>{{ watch.conditions.branch_pattern }}</code>{% else %}any branch{% endif %}</td>
         </tr>
+        {% endif %}
+        {% if trigger == 'repository_tag' %}
         <tr>
-            <th scope="row">Tag Pattern</th>
-            <td class="mono">{{ watch.conditions.tag_pattern or 'any tag' }}</td>
+            <th scope="row">Tag</th>
+            <td>{% if watch.conditions.tag_pattern %}matches <code>{{ watch.conditions.tag_pattern }}</code>{% else %}any tag{% endif %}</td>
         </tr>
+        {% endif %}
+        {% if trigger == 'build_completion' %}
         <tr>
-            <th scope="row">File Pattern</th>
-            <td class="mono">{{ watch.conditions.file_pattern or 'any file' }}</td>
+            <th scope="row">Build result</th>
+            <td>{% if watch.conditions.build_status in ('succeeded', 'failed') %}{{ watch.conditions.build_status }}{% else %}succeeded or failed{% endif %}</td>
         </tr>
+        {% endif %}
+        {% if watch.conditions.file_pattern %}
         <tr>
-            <th scope="row">Build Status</th>
-            <td>{{ watch.conditions.build_status or 'any' }}</td>
+            <th scope="row">Changed files</th>
+            <td>match <code>{{ watch.conditions.file_pattern }}</code></td>
         </tr>
-        <tr>
-            <th scope="row">Last Triggered</th>
-            <td>{{ watch.last_trigger_time | format_datetime('%Y-%m-%d %H:%M:%S', 'Never') }}</td>
-        </tr>
+        {% endif %}
         <tr>
             <th scope="row">Created</th>
             <td>{{ watch.created_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
@@ -116,18 +124,20 @@
         <tbody>
             {% for action in watch.actions %}
             <tr>
-                <td><span class="badge badge-info">{{ action.action.value }}</span></td>
+                <td><span class="badge badge-info">{{ action_labels.get(action.action.value, action.action.value) }}</span></td>
                 <td>
                     {% if action.action.value == 'trigger_build' %}
-                    <a href="{{ url_for('projects.build_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Build specification #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.build_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_build:' ~ action.target_id) or ('Build specification #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_pipeline' %}
-                    <a href="{{ url_for('projects.pipeline_detail', project_id=project.id, pipeline_id=action.target_id) }}">Pipeline #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.pipeline_detail', project_id=project.id, pipeline_id=action.target_id) }}">{{ target_names.get('trigger_pipeline:' ~ action.target_id) or ('Pipeline #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_infra_job' %}
-                    <a href="{{ url_for('projects.infra_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Infrastructure specification #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.infra_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_infra_job:' ~ action.target_id) or ('Infrastructure specification #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_test_job' %}
-                    <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Test specification #{{ action.target_id }}</a>
-                    {% else %}
+                    <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_test_job:' ~ action.target_id) or ('Test specification #' ~ action.target_id ~ ' (removed)') }}</a>
+                    {% elif action.target_id %}
                     #{{ action.target_id }}
+                    {% else %}
+                    <span class="muted">none</span>
                     {% endif %}
                 </td>
                 <td class="mono">
@@ -142,6 +152,79 @@
     {% endif %}
 </div>
 
+{% if can_manage %}
+<div class="card mt" id="watch-test">
+    <h2 class="card-header">Test this watch</h2>
+    <p class="muted">Check a sample event against the conditions. Nothing is run.</p>
+    <form action="{{ url_for('projects.watch_test', project_id=project.id, watch_id=watch.id) }}#watch-test" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {% if trigger == 'repository_tag' %}
+        <div class="form-group">
+            <label for="sample_tag">New tag</label>
+            <input type="text" id="sample_tag" name="sample_tag" class="form-control" required
+                   value="{{ test_sample.sample_tag if test_sample.sample_tag is defined else '' }}" placeholder="e.g., v1.4.0">
+        </div>
+        {% else %}
+        <div class="form-group">
+            <label for="sample_branch">{% if trigger == 'build_completion' %}Branch the build built{% elif trigger == 'repository_branch' %}New branch{% else %}Branch with new commits{% endif %}</label>
+            <input type="text" id="sample_branch" name="sample_branch" class="form-control" required
+                   value="{{ test_sample.sample_branch if test_sample.sample_branch is defined else '' }}" placeholder="e.g., main">
+        </div>
+        {% endif %}
+        {% if trigger == 'build_completion' %}
+        <div class="form-group">
+            <label for="sample_build_status">Build result</label>
+            <select id="sample_build_status" name="sample_build_status" class="form-control">
+                <option value="succeeded" {% if sample_status == 'succeeded' %}selected{% endif %}>Succeeded</option>
+                <option value="failed" {% if sample_status == 'failed' %}selected{% endif %}>Failed</option>
+            </select>
+        </div>
+        {% endif %}
+        <div class="actions-row">
+            <button type="submit" class="btn btn-secondary">{{ ui.icon("play_arrow") }} Test</button>
+        </div>
+    </form>
+
+    {% if test_result %}
+    <div class="mt" role="status">
+        {% if test_result.would_trigger %}
+        <p><span class="badge badge-success">Would run</span> This event matches every condition, so the watch would run its {{ test_result.actions_count }} action{{ '' if test_result.actions_count == 1 else 's' }}.</p>
+        {% elif test_result.conditions_match %}
+        <p><span class="badge badge-warning">Would not run</span> The event matches, but the watch is disabled.</p>
+        {% else %}
+        <p><span class="badge badge-secondary">Would not run</span> The event does not match every condition.</p>
+        {% endif %}
+        <div class="table-scroll" tabindex="0"><table class="data-table">
+            <thead>
+                <tr>
+                    <th scope="col">Condition</th>
+                    <th scope="col">Requires</th>
+                    <th scope="col">Sample</th>
+                    <th scope="col">Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key, label in [('branch_pattern', 'Branch'), ('tag_pattern', 'Tag'), ('build_status', 'Build result')] %}
+                {% set outcome = test_result.condition_results[key] %}
+                {% if outcome.applies %}
+                <tr>
+                    <th scope="row">{{ label }}</th>
+                    <td>{% if key == 'build_status' %}{{ outcome.pattern }}{% else %}matches <code>{{ outcome.pattern }}</code>{% endif %}</td>
+                    <td class="mono">{{ outcome.value or '(empty)' }}</td>
+                    <td>{% if outcome.matches %}<span class="badge badge-success">matches</span>{% else %}<span class="badge badge-danger">does not match</span>{% endif %}</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table></div>
+        {% if not (test_result.condition_results.branch_pattern.applies or test_result.condition_results.tag_pattern.applies or test_result.condition_results.build_status.applies) %}
+        <p class="muted">This watch has no conditions. {{ {'repository_commit': 'Every new commit', 'repository_branch': 'Every new branch', 'repository_tag': 'Every new tag', 'build_completion': 'Every finished build'}.get(trigger, 'Every event') }} starts it.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="card mt">
     <h2 class="card-header">Recent Triggers</h2>
     {% if trigger_logs %}
@@ -150,7 +233,7 @@
             <tr>
                 <th scope="col">Triggered At</th>
                 <th scope="col">Event</th>
-                <th scope="col">Actions Run</th>
+                <th scope="col">Actions</th>
                 <th scope="col">Result</th>
             </tr>
         </thead>
@@ -158,10 +241,15 @@
             {% for log in trigger_logs %}
             <tr>
                 <td>{{ log.triggered_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td class="mono">
-                    {% if log.trigger_event %}{{ log.trigger_event | tojson }}{% else %}<span class="muted">n/a</span>{% endif %}
+                <td>{% if log.trigger_event %}{{ event_summary(log.trigger_event) }}{% else %}<span class="muted">n/a</span>{% endif %}</td>
+                <td>
+                    {% for executed in log.actions_executed %}
+                    {% set action_value = executed.action if executed.action is defined else 'action' %}
+                    <div>{{ action_labels.get(action_value, action_value) }}{% if executed.success is defined and executed.success %}{% if executed.result_id is defined and executed.result_id %}: #{{ executed.result_id }} started{% else %}: done{% endif %}{% endif %}</div>
+                    {% else %}
+                    <span class="muted">none</span>
+                    {% endfor %}
                 </td>
-                <td>{{ log.actions_executed | length }}</td>
                 <td>
                     {% if log.success %}
                     <span class="badge badge-success">succeeded</span>
@@ -175,7 +263,11 @@
         </tbody>
     </table></div>
     {% else %}
-    {{ ui.empty_state("This watch has not been triggered yet.") }}
+    {% if trigger == 'build_completion' %}
+    {{ ui.empty_state("This watch has not been triggered yet.", hint="It starts when a build of " ~ watch.source_name ~ " finishes.") }}
+    {% else %}
+    {{ ui.empty_state("This watch has not been triggered yet.", hint="It starts when a fetch of " ~ watch.source_name ~ " finds a matching change: use Fetch on the repository's page.") }}
+    {% endif %}
     {% endif %}
 </div>
 
