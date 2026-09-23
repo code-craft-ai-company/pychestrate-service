@@ -325,11 +325,14 @@ class SidebarRenderer {
    * containment guard an Escape aimed at a modal or the command
    * palette would also collapse the accordion and yank focus into
    * the sidebar. No outside-click handler: the accordion is meant
-   * to stay open until the user picks a different major.
+   * to stay open until the user picks a different major. An Escape
+   * something else already handled (defaultPrevented -- e.g. the
+   * overlay drawer closing itself) is left alone, so one keystroke
+   * does one thing.
    */
   _attach_keydown() {
     const on_document_keydown = (event) => {
-      if (event.key !== "Escape") {
+      if (event.key !== "Escape" || event.defaultPrevented === true) {
         return;
       }
       if (this._open_button === null) {

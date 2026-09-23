@@ -89,7 +89,9 @@ if [[ ! -s "${ENROLLMENT_CA_FILE}" ]]; then
     echo "dev-up: generated ${ENROLLMENT_CA_FILE} (self-signed dev CA)"
 fi
 
-if [[ ! -s "${ENROLLMENT_CA_CERT_FILE}" ]]; then
+# Re-derived whenever the CA file is newer (a restore may have put
+# the backed-up CA back), so the certificate always matches the CA.
+if [[ ! -s "${ENROLLMENT_CA_CERT_FILE}" || "${ENROLLMENT_CA_FILE}" -nt "${ENROLLMENT_CA_CERT_FILE}" ]]; then
     openssl x509 -in "${ENROLLMENT_CA_FILE}" -out "${ENROLLMENT_CA_CERT_FILE}"
     chmod 644 "${ENROLLMENT_CA_CERT_FILE}"
     echo "dev-up: wrote ${ENROLLMENT_CA_CERT_FILE} (enrollment CA certificate for a TLS terminator)"

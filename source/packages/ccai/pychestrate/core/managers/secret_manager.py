@@ -48,6 +48,14 @@ GCM_NONCE_SIZE = 12
 # Secret reference pattern: ${scope/secret_name}
 SECRET_REFERENCE_PATTERN = re.compile(r'\$\{([^/]+)/([^}]+)\}')
 
+# Scope and secret names: what the create forms' pattern allows, and what
+# a ${scope/secret_name} reference can carry (no '/', '}' or spaces).
+SECRET_NAME_PATTERN = re.compile(r'^[a-zA-Z][a-zA-Z0-9_-]{0,127}\Z')
+SECRET_NAME_RULE = (
+    "letters, digits, underscores and hyphens, starting with a letter"
+    " (at most 128 characters)"
+)
+
 
 # =============================================================================
 # Request/Response Dataclasses
@@ -353,6 +361,9 @@ class SecretManager:
         
         if len(request.name) > 128:
             raise SecretManagerError("Scope name must be 128 characters or less")
+
+        if SECRET_NAME_PATTERN.match(request.name) is None:
+            raise SecretManagerError("Scope names use " + SECRET_NAME_RULE + ".")
         
         # Check for duplicate name
         existing = self._db_session.query(SecretScope).filter(
@@ -618,6 +629,9 @@ class SecretManager:
         
         if len(request.name) > 128:
             raise SecretManagerError("Secret name must be 128 characters or less")
+
+        if SECRET_NAME_PATTERN.match(request.name) is None:
+            raise SecretManagerError("Secret names use " + SECRET_NAME_RULE + ".")
         
         # Validate value
         if not request.value:

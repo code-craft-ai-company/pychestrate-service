@@ -481,23 +481,46 @@ def _collect_admin_form_errors(
 
         :returns: List of messages (empty when the form is valid).
     """
-    rtnval: List[str] = []
+    field_errors = _collect_admin_field_errors(
+        login_name=login_name,
+        email=email,
+        password=password,
+        password_confirm=password_confirm,
+        display_name=display_name,
+    )
+    rtnval = list(field_errors.values())
+    return rtnval
+
+
+def _collect_admin_field_errors(
+        *, login_name: str, email: str, password: str,
+        password_confirm: str, display_name: str
+    ) -> Dict[str, str]:
+    """
+        Return every validation problem with the first-admin form,
+        keyed by the name of the field it belongs to and in the
+        form's field order, so the page can show each message under
+        its field and focus the first one.
+
+        :returns: Field name to message (empty when the form is valid).
+    """
+    rtnval: Dict[str, str] = {}
     if LOGIN_NAME_PATTERN.match(login_name) is None:
-        rtnval.append(
+        rtnval["login_name"] = (
             "Login must be 3-64 characters, alphanumeric with"
             " optional underscore or hyphen, starting with a letter"
             " or digit."
         )
     if EMAIL_PATTERN.match(email) is None:
-        rtnval.append("Email address looks invalid.")
-    if len(password) < MIN_PASSWORD_LENGTH:
-        rtnval.append("Password must be at least {} characters.".format(
-            MIN_PASSWORD_LENGTH
-        ))
-    if password != password_confirm:
-        rtnval.append("Password and confirmation do not match.")
+        rtnval["email"] = "Email address looks invalid."
     if len(display_name) == 0:
-        rtnval.append("Display name is required.")
+        rtnval["display_name"] = "Display name is required."
+    if len(password) < MIN_PASSWORD_LENGTH:
+        rtnval["password"] = "Password must be at least {} characters.".format(
+            MIN_PASSWORD_LENGTH
+        )
+    if password != password_confirm:
+        rtnval["password_confirm"] = "Password and confirmation do not match."
     return rtnval
 # ---------------------------------------------------------------------------
 # Handlers -- /setup/unlock
@@ -650,6 +673,8 @@ def handle_admin_form(request: Request) -> Response:
         "min_password_length": MIN_PASSWORD_LENGTH,
         "error": None,
         "errors": [],
+        "field_errors": {},
+        "first_invalid": None,
     }
     rtnval = templating.render_template_response(
         template_name="setup/admin.html",
@@ -705,13 +730,14 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
             )
             return rtnval
 
-        validation_errors = _collect_admin_form_errors(
+        field_errors = _collect_admin_field_errors(
             login_name=login_name,
             email=email,
             password=password,
             password_confirm=password_confirm,
             display_name=display_name,
         )
+        validation_errors = list(field_errors.values())
         validation_error = " ".join(validation_errors) if len(validation_errors) > 0 else None
         if validation_error is not None:
             context = {
@@ -723,6 +749,8 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                 "min_password_length": MIN_PASSWORD_LENGTH,
                 "error": validation_error,
                 "errors": validation_errors,
+                "field_errors": field_errors,
+                "first_invalid": next(iter(field_errors)),
             }
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",
@@ -755,6 +783,8 @@ def _handle_admin_submit_inner(*, request: Request) -> Response:
                     "Could not create the admin account. The login or"
                     " email may already be in use."
                 ),
+                "field_errors": {},
+                "first_invalid": "login_name",
             }
             rtnval = templating.render_template_response(
                 template_name="setup/admin.html",

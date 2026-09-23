@@ -45,15 +45,21 @@ by :func:`install_client_certificate_identity`:
    the attribute every mTLS route resolver already checks first -- and
    clears it on requests without a verified certificate.
 
-Trusted proxies come from ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES``: a
-comma-separated list of IP addresses or CIDR networks. When the
-variable is unset the loopback addresses are trusted (``127.0.0.1``,
-``::1``) -- the documented deployment runs nginx on the same host and
-binds the app to loopback, the same convention gunicorn uses for
-``forwarded_allow_ips``. ``none`` (or an empty value) trusts no proxy,
-leaving only server-populated environ keys. Every nginx ``location``
-that proxies to the app must set both headers (``proxy_set_header``
-replaces a client-supplied header only where it is declared).
+Trusted proxies come from ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES``, the
+variable the Secure-cookie policy uses for ``X-Forwarded-Proto``
+(:mod:`webinterface.foundation.cookie_session`), parsed by the same
+function so both decisions always name the same proxies: a
+comma-separated list of IP addresses or CIDR networks, or ``*`` for any
+peer. When the variable is unset the loopback addresses are trusted
+(``127.0.0.1``, ``::1``) -- the documented deployment runs nginx on the
+same host and binds the app to loopback, the same convention gunicorn
+uses for ``forwarded_allow_ips``. Set but empty trusts no proxy,
+leaving only server-populated environ keys; a malformed entry stops
+startup. ``*`` lets any peer assert a pod identity, so it is only safe
+when nothing but the TLS terminator can reach the app. Every nginx
+``location`` that proxies to the app must set both headers
+(``proxy_set_header`` replaces a client-supplied header only where it
+is declared).
 """
 
 __author__ = "Code Craft AI LLC"
@@ -62,23 +68,25 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import ipaddress
 import logging
 import os
 
 from contextvars import ContextVar
-from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, Iterator, Optional
+
+from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
+    DEFAULT_TRUSTED_PROXY_ADDRESSES,
+    TRUSTED_PROXY_ADDRESSES_ENV_VAR,
+    TrustedProxyPolicy,
+    parse_trusted_proxy_addresses as _parse_trusted_proxy_policy,
+)
 
 
 #: Environment variable naming the proxies whose client-certificate
-#: headers are trusted.
-ENV_TRUSTED_PROXY_ADDRESSES: str = "PYCHESTRATE_TRUSTED_PROXY_ADDRESSES"
-
-#: Trusted proxies when :data:`ENV_TRUSTED_PROXY_ADDRESSES` is unset.
-DEFAULT_TRUSTED_PROXY_ADDRESSES: str = "127.0.0.1,::1"
-
-#: Value of :data:`ENV_TRUSTED_PROXY_ADDRESSES` that trusts no proxy.
-TRUSTED_PROXY_ADDRESSES_NONE: str = "none"
+#: headers are trusted -- the Secure-cookie policy's variable (see the
+#: module docstring). Unset means :data:`DEFAULT_TRUSTED_PROXY_ADDRESSES`
+#: (loopback).
+ENV_TRUSTED_PROXY_ADDRESSES: str = TRUSTED_PROXY_ADDRESSES_ENV_VAR
 
 #: Request header the TLS terminator sets to the verified client
 #: certificate's subject CN (nginx: ``$ssl_client_s_dn_cn``).
@@ -110,92 +118,68 @@ _VERIFIED_CLIENT_CN: ContextVar[Optional[str]] = ContextVar(
     "pychestrate_verified_client_cn", default=None,
 )
 
-IpNetwork = Union[ipaddress.IPv4Network, ipaddress.IPv6Network]
-
 _LOGGER = logging.getLogger("pychestrate.clients.mtls_identity")
 
 
-def parse_trusted_proxy_addresses(*, raw: Optional[str]) -> Tuple[IpNetwork, ...]:
+def parse_trusted_proxy_addresses(*, raw: Optional[str]) -> TrustedProxyPolicy:
     """
-        Parse a trusted-proxy specification into networks.
+        Parse a ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES`` value with the
+        Secure-cookie policy's parser, so both read it the same way.
 
-        :param raw: Comma-separated IP addresses / CIDR networks;
-                    ``None`` selects :data:`DEFAULT_TRUSTED_PROXY_ADDRESSES`;
-                    an empty value or ``none`` trusts no proxy.
+        :param raw: Comma-separated IP addresses / CIDR networks, or
+                    ``*`` for any peer; ``None`` (unset) selects
+                    :data:`DEFAULT_TRUSTED_PROXY_ADDRESSES`; an empty
+                    value trusts no proxy.
 
-        :returns: Tuple of networks (possibly empty).
-        :raises ValueError: when an entry is not an IP address or network.
+        :returns: The trusted-proxy policy.
+        :raises: ConfigurationError when an entry is not ``*``, an IP
+                 address or a network.
     """
-    if raw is None:
-        raw = DEFAULT_TRUSTED_PROXY_ADDRESSES
-
-    networks: List[IpNetwork] = []
-    stripped = raw.strip()
-    if len(stripped) == 0 or stripped.lower() == TRUSTED_PROXY_ADDRESSES_NONE:
-        rtnval: Tuple[IpNetwork, ...] = tuple()
-        return rtnval
-
-    for entry in stripped.split(","):
-        candidate = entry.strip()
-        if len(candidate) == 0:
-            continue
-        try:
-            networks.append(ipaddress.ip_network(candidate, strict=False))
-        except ValueError as xcpt:
-            err_msg_lines = ["Invalid entry in {}.".format(ENV_TRUSTED_PROXY_ADDRESSES)]
-            err_msg_lines.append("ENTRY: {}".format(candidate))
-            err_msg_lines.append("EXPECTED: IP addresses or CIDR networks, comma separated, or 'none'.")
-            raise ValueError(os.linesep.join(err_msg_lines)) from xcpt
-
-    rtnval = tuple(networks)
+    rtnval = _parse_trusted_proxy_policy(raw=raw)
     return rtnval
 
 
-def trusted_proxy_addresses_from_environment() -> Tuple[IpNetwork, ...]:
+def trusted_proxy_addresses_from_environment() -> TrustedProxyPolicy:
     """
         Read :data:`ENV_TRUSTED_PROXY_ADDRESSES` from the process
         environment.
 
-        :returns: Tuple of trusted networks.
+        :returns: The trusted-proxy policy.
+        :raises: ConfigurationError when the value is malformed.
     """
     rtnval = parse_trusted_proxy_addresses(raw=os.environ.get(ENV_TRUSTED_PROXY_ADDRESSES, None))
     return rtnval
 
 
-def _is_trusted_peer(*, remote_addr: Optional[str], trusted_proxies: Tuple[IpNetwork, ...]) -> bool:
+def describe_trusted_proxies(*, trusted_proxies: TrustedProxyPolicy) -> str:
     """
-        Whether the TCP peer is one of the trusted proxies.
+        Human-readable form of a trusted-proxy policy.
 
-        :param remote_addr: ``REMOTE_ADDR`` from the environ.
-        :param trusted_proxies: Trusted networks.
+        :param trusted_proxies: The policy.
 
-        :returns: True when the peer address lies in a trusted network.
+        :returns: ``"any peer"``, ``"no proxy"`` or the comma-separated
+                  networks.
     """
-    if remote_addr is None or len(trusted_proxies) == 0:
-        return False
-    try:
-        peer = ipaddress.ip_address(str(remote_addr).strip())
-    except ValueError:
-        return False
-    if isinstance(peer, ipaddress.IPv6Address) and peer.ipv4_mapped is not None:
-        peer = peer.ipv4_mapped
-    for network in trusted_proxies:
-        if peer.version == network.version and peer in network:
-            return True
-    return False
+    if trusted_proxies.trust_any is True:
+        rtnval = "any peer"
+    elif len(trusted_proxies.networks) == 0:
+        rtnval = "no proxy"
+    else:
+        rtnval = ", ".join(str(network) for network in trusted_proxies.networks)
+    return rtnval
 
 
 def resolve_verified_client_cn(
         *,
         environ: Dict[str, Any],
-        trusted_proxies: Tuple[IpNetwork, ...]
+        trusted_proxies: TrustedProxyPolicy
     ) -> Optional[str]:
     """
         Decide the verified client-certificate CN for one request.
 
         :param environ: WSGI environ of the request.
-        :param trusted_proxies: Networks whose client-certificate headers
-                                are trusted.
+        :param trusted_proxies: The proxies whose client-certificate
+                                headers are trusted.
 
         :returns: The verified CN, or ``None`` when the request carries
                   no verified client certificate.
@@ -212,7 +196,7 @@ def resolve_verified_client_cn(
         return None
 
     remote_addr = environ.get("REMOTE_ADDR", None)
-    if _is_trusted_peer(remote_addr=remote_addr, trusted_proxies=trusted_proxies) is False:
+    if trusted_proxies.trusts(peer_address=remote_addr) is False:
         _LOGGER.warning(
             "clients.mtls_identity.untrusted_peer remote_addr=%s path=%s -- ignoring %s; set %s"
             " to the address of the TLS terminator",
@@ -280,17 +264,17 @@ class ClientCertificateIdentityWsgiMiddleware:
         identity for :class:`ClientCertificateIdentityMiddleware`.
 
         :param app: The wrapped WSGI application.
-        :param trusted_proxies: Networks whose client-certificate
+        :param trusted_proxies: The proxies whose client-certificate
                                 headers are trusted.
     """
 
-    def __init__(self, *, app: Callable, trusted_proxies: Tuple[IpNetwork, ...]) -> None:
+    def __init__(self, *, app: Callable, trusted_proxies: TrustedProxyPolicy) -> None:
         self._app: Callable = app
-        self._trusted_proxies: Tuple[IpNetwork, ...] = trusted_proxies
+        self._trusted_proxies: TrustedProxyPolicy = trusted_proxies
         return
 
     @property
-    def trusted_proxies(self) -> Tuple[IpNetwork, ...]:
+    def trusted_proxies(self) -> TrustedProxyPolicy:
         return self._trusted_proxies
 
     def __call__(self, environ: Dict[str, Any], start_response: Callable) -> Iterable[bytes]:
@@ -345,7 +329,7 @@ def install_client_certificate_identity(
         *,
         app: Any,
         wsgi_app: Callable,
-        trusted_proxies: Optional[Tuple[IpNetwork, ...]] = None
+        trusted_proxies: Optional[TrustedProxyPolicy] = None
     ) -> Callable:
     """
         Install client-certificate identity delivery: add
@@ -359,10 +343,12 @@ def install_client_certificate_identity(
 
         :param app: WebWorks application.
         :param wsgi_app: The finished WSGI application for ``app``.
-        :param trusted_proxies: Trusted proxy networks; ``None`` reads
+        :param trusted_proxies: Trusted-proxy policy; ``None`` reads
                                 :data:`ENV_TRUSTED_PROXY_ADDRESSES`.
 
         :returns: The wrapped WSGI application.
+        :raises: ConfigurationError when the trusted-proxy setting is
+                 malformed.
     """
     if trusted_proxies is None:
         trusted_proxies = trusted_proxy_addresses_from_environment()
@@ -372,7 +358,7 @@ def install_client_certificate_identity(
 
     _LOGGER.info(
         "clients.mtls_identity.installed trusted_proxies=%s headers=%s,%s",
-        ",".join(str(network) for network in trusted_proxies) or "none",
+        describe_trusted_proxies(trusted_proxies=trusted_proxies),
         CLIENT_CERT_CN_HEADER, CLIENT_CERT_VERIFY_HEADER,
     )
 
@@ -389,6 +375,7 @@ __all__ = [
     "DEFAULT_TRUSTED_PROXY_ADDRESSES",
     "ENV_TRUSTED_PROXY_ADDRESSES",
     "current_verified_client_cn",
+    "describe_trusted_proxies",
     "install_client_certificate_identity",
     "parse_trusted_proxy_addresses",
     "resolve_verified_client_cn",

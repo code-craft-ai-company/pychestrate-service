@@ -5,12 +5,11 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The ``backup_record`` table holds one row per triggered backup
-run. The p21d milestone is a manual-trigger baseline -- scheduled
-fulls / incrementals and restore-drill bookkeeping land with the
-scheduler follow-on. The row is deliberately self-contained: the
-``manifest`` JSON column carries the substrate inventory so a
-read does not have to fan out across substrate rows.
+The ``backup_record`` table holds one row per backup run, whether
+triggered over REST or by the scheduled operator command. The row is
+deliberately self-contained: the ``manifest`` JSON column carries the
+archive manifest (database snapshot checksum and counts, artifact
+count, key fingerprints) so a read does not have to open the archive.
 """
 
 __author__ = "Code Craft AI LLC"

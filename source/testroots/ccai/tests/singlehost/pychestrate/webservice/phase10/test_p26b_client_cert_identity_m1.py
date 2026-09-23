@@ -39,6 +39,7 @@ import time
 from typing import Any, Callable, Dict, Generator, List, Optional
 
 from ccai import testbase
+from ccai.errors.exceptions import ConfigurationError
 from ccai.testbase.resourcelifespan import ResourceLifespan
 from ccai.webworks.routing.middleware import MiddlewarePipeline
 from ccai.webworks.wsgi.application import create_wsgi_application
@@ -135,7 +136,7 @@ def test_server_populated_environ_keys_yield_the_cn():
     server (not a request header) is the verified identity.**
     """
     environ = _environ(SSL_CLIENT_S_DN_CN=_CLIENT_ID, SSL_CLIENT_VERIFY="SUCCESS")
-    cn = resolve_verified_client_cn(environ=environ, trusted_proxies=tuple())
+    cn = resolve_verified_client_cn(environ=environ, trusted_proxies=parse_trusted_proxy_addresses(raw=""))
     testbase.assert_equal(cn, _CLIENT_ID)
     return
 
@@ -152,14 +153,43 @@ def test_trusted_proxy_networks_accept_cidr_entries():
     return
 
 
-def test_none_trusts_no_proxy():
+def test_empty_setting_trusts_no_proxy():
     """
     **Feature: pod client-certificate identity (E2E-03)**
-    **Property: ``none`` disables header trust, even from loopback.**
+    **Property: PYCHESTRATE_TRUSTED_PROXY_ADDRESSES set but empty
+    disables header trust, even from loopback.**
     """
-    trusted = parse_trusted_proxy_addresses(raw="none")
+    trusted = parse_trusted_proxy_addresses(raw="")
     cn = resolve_verified_client_cn(environ=_environ(**_proxy_headers()), trusted_proxies=trusted)
-    testbase.assert_equal((trusted, cn), (tuple(), None))
+    testbase.assert_equal((trusted.trust_any, trusted.networks, cn), (False, tuple(), None))
+    return
+
+
+def test_wildcard_setting_trusts_any_peer():
+    """
+    **Feature: pod client-certificate identity (E2E-03)**
+    **Property: ``*`` -- the Secure-cookie policy's "any peer" value of
+    the shared variable -- trusts the headers from any address.**
+    """
+    trusted = parse_trusted_proxy_addresses(raw="*")
+    environ = _environ(REMOTE_ADDR="192.0.2.10", **_proxy_headers())
+    testbase.assert_equal(resolve_verified_client_cn(environ=environ, trusted_proxies=trusted), _CLIENT_ID)
+    return
+
+
+def test_identity_and_secure_cookie_policy_read_the_variable_alike():
+    """
+    **Feature: pod client-certificate identity (E2E-03)**
+    **Property: the identity middleware and the Secure-cookie policy
+    parse PYCHESTRATE_TRUSTED_PROXY_ADDRESSES to the same policy.**
+    """
+    from ccai.pychestrate.webservice.webinterface.foundation import cookie_session
+
+    values = [None, "", "*", "10.0.0.0/8, 127.0.0.1", "::1"]
+    testbase.assert_equal(
+        [parse_trusted_proxy_addresses(raw=value) for value in values],
+        [cookie_session.parse_trusted_proxy_addresses(raw=value) for value in values],
+    )
     return
 
 
@@ -183,7 +213,7 @@ def test_invalid_trusted_proxy_entry_is_rejected():
     message = ""
     try:
         parse_trusted_proxy_addresses(raw="127.0.0.1, nginx.local")
-    except ValueError as xcpt:
+    except ConfigurationError as xcpt:
         message = str(xcpt)
     testbase.assert_equal("nginx.local" in message, True)
     return

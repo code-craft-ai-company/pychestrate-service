@@ -149,28 +149,29 @@ def _check_client_certificate_proxies() -> Dict[str, str]:
     """
         Which proxies may vouch for a pod's client certificate?
     """
+    from ccai.errors.exceptions import ConfigurationError
     from ccai.pychestrate.webservice.clients import mtls_identity
     try:
-        networks = mtls_identity.trusted_proxy_addresses_from_environment()
-    except ValueError as xcpt:
+        policy = mtls_identity.trusted_proxy_addresses_from_environment()
+    except ConfigurationError as xcpt:
         rtnval = _backend(name="client-certificate-proxies", status=STATUS_ERROR, reason=str(xcpt))
         return rtnval
-    if len(networks) == 0:
+    if policy.trust_any is False and len(policy.networks) == 0:
         rtnval = _backend(
             name="client-certificate-proxies", status=STATUS_DEGRADED,
             reason=(
-                "{}=none -- pod identity is accepted only from a TLS-terminating server that sets"
-                " SSL_CLIENT_S_DN_CN.".format(mtls_identity.ENV_TRUSTED_PROXY_ADDRESSES)
+                "{} is set but empty -- pod identity is accepted only from a TLS-terminating server"
+                " that sets SSL_CLIENT_S_DN_CN.".format(mtls_identity.ENV_TRUSTED_PROXY_ADDRESSES)
             ),
         )
         return rtnval
-    rtnval = _backend(
-        name="client-certificate-proxies", status=STATUS_OK,
-        reason="Trusted for {} / {}: {}.".format(
-            mtls_identity.CLIENT_CERT_CN_HEADER, mtls_identity.CLIENT_CERT_VERIFY_HEADER,
-            ", ".join(str(network) for network in networks),
-        ),
+    reason = "Trusted for {} / {}: {}.".format(
+        mtls_identity.CLIENT_CERT_CN_HEADER, mtls_identity.CLIENT_CERT_VERIFY_HEADER,
+        mtls_identity.describe_trusted_proxies(trusted_proxies=policy),
     )
+    if policy.trust_any is True:
+        reason = reason + " Any peer can assert a pod identity: safe only when nothing but the TLS terminator reaches the service."
+    rtnval = _backend(name="client-certificate-proxies", status=STATUS_OK, reason=reason)
     return rtnval
 
 

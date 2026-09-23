@@ -137,10 +137,93 @@ Everything the pages do is available under ``/api/v1``:
 * ``GET /projects/{project_id}/rpa/jobs``, ``GET .../jobs/{job_id}``,
   ``GET .../jobs/{job_id}/logs``, ``POST .../jobs/{job_id}/cancel``.
 
-A trigger that fails packet validation answers ``422`` with an
-``errors`` list of ``{path, message}`` pairs. ``409`` means no eligible
-pod, a capability mismatch, or an inactive version. See
+Every ``POST`` and ``PATCH`` body is a JSON object. A field the endpoint
+does not read is refused with ``422`` and an ``unknown_fields`` list,
+so a misspelled field (``timeout_seconds`` for ``timeout_minutes``)
+fails loudly instead of being ignored. See
 ``specs/openapi/pychestrate.yaml`` for the full contract.
+
+Registering a job type (``POST /rpa/job-types``)::
+
+    {
+      "type_id": "invoice-import",
+      "display_name": "Invoice Import",
+      "execution_mode": "process",
+      "description": "Imports supplier invoices into the ledger.",
+      "capability_requirements": ["browser"],
+      "packet_schema": {"type": "object", "required": ["customer_id"],
+                        "properties": {"customer_id": {"type": "integer"}}},
+      "secret_fields": ["auth.token"]
+    }
+
+``type_id`` is a lowercase slug of 3 to 64 characters. ``PATCH
+/rpa/job-types/{type_id}`` takes the same body without ``type_id`` and
+``execution_mode``, which are fixed once registered.
+
+Publishing a version (``POST /rpa/job-types/{type_id}/versions``)::
+
+    {
+      "version": "1.0.0",
+      "source": {"kind": "git", "ref": "https://git.example.com/rpa-jobs.git#v1.0.0"},
+      "entrypoint": {"command": ["python", "-m", "jobs.invoice_import"]},
+      "environment": {"LEDGER_URL": "https://ledger.example.com"},
+      "timeout_minutes": 30
+    }
+
+``source`` may also be given as separate ``source_kind`` and
+``source_ref`` fields; the kind is ``git``, ``package`` or ``local``.
+
+Creating a specification (``POST /projects/{project_id}/rpa/specs``)::
+
+    {
+      "name": "nightly",
+      "type_id": "invoice-import",
+      "version_selector": "latest-active",
+      "default_packet": {"customer_id": 42, "dry_run": false},
+      "target_pod_id": null,
+      "required_capabilities": [],
+      "timeout_minutes": 45,
+      "description": "Nightly import for customer 42."
+    }
+
+Triggering a job
+----------------
+
+``POST /projects/{project_id}/rpa/specs/{spec_id}/trigger``::
+
+    {
+      "work_packet": {"customer_id": 42},
+      "idempotency_key": "nightly-2026-09-22",
+      "allow_duplicate": false
+    }
+
+All three fields are optional. The service checks, in this order:
+
+1. The body. Unknown fields answer ``422`` with ``unknown_fields``.
+2. The packet, merged over the specification's defaults. It is checked
+   before any pod is chosen, so a bad packet is always reported as such:
+
+   * ``422`` with an ``errors`` list of ``{path, message}`` pairs when
+     it fails the job type's schema, for example
+     ``{"path": "/customer_id", "message": "... is not of type 'integer'"}``;
+   * ``413`` when the packet is larger than 1 MiB.
+
+3. The version. ``409`` when the job type is retired or the selector
+   resolves to no active version.
+4. The pods. ``409`` with ``reason: no_eligible_pod`` when no pod has an
+   enrolled client and the required capabilities, or
+   ``reason: capability_mismatch``. ``503`` with
+   ``reason: dispatch_not_configured`` when the service has no dispatcher.
+
+On success the answer is ``202 Accepted`` with the new job. An identical
+trigger (same specification, packet and idempotency key; without a key,
+the same packet) within 60 seconds is treated as a retry. The answer is
+then ``200 OK`` with the earlier job and ``"replayed": true``, and no
+second job starts. Send ``"allow_duplicate": true`` to start another job
+anyway.
+
+A pipeline stage or a watch triggers through the same service, so the
+same packet, version and pod rules apply.
 
 Pipelines and watches
 =====================

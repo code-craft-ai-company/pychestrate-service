@@ -63,6 +63,9 @@ from ccai.pychestrate.webservice.embed.restapi.v1.embed_routes import (
 from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     register_system_health_routes,
 )
+from ccai.pychestrate.webservice.system.restapi.v1.operations_routes import (
+    register_operations_routes,
+)
 from ccai.pychestrate.webservice.mcp.service_endpoint import (
     MCP_MIDDLEWARE_PREFIX,
     register_mcp_service_routes,
@@ -107,6 +110,14 @@ from ccai.pychestrate.webservice.security.auth.restapi.v1.auth_routes import (
 )
 from ccai.pychestrate.webservice.security.auth.restapi.v1.me_routes import (
     register_me_routes,
+)
+# Machine identity: API tokens, service accounts, /api/v1/me.
+from ccai.pychestrate.webservice.security.auth.restapi.v1.api_tokens_routes import (
+    register_api_tokens_routes,
+)
+# The REST contract as JSON for the pyc CLI (/api/v1/_meta/openapi.json).
+from ccai.pychestrate.webservice.api.openapi_document import (
+    register_openapi_document_routes,
 )
 from ccai.pychestrate.webservice.metrics.restapi.v1.ui_metrics_routes import (
     register_ui_metrics_routes,
@@ -234,12 +245,18 @@ from ccai.pychestrate.webservice.webinterface.site_shell.shell_document import (
 from ccai.pychestrate.webservice.webinterface.foundation.url_for import (
     install_url_for_global,
 )
+from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
+    wrap_wsgi_app_with_secure_cookie_policy,
+)
 from ccai.pychestrate.webservice.clients.mtls_identity import (
     install_client_certificate_identity,
 )
 from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_GLOBALS
 from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
+)
+from ccai.pychestrate.webservice.hardening.platform_wsgi import (
+    wrap_platform_wsgi_application,
 )
 from ccai.webworks.webapplication import establish_webapp_persona
 from ccai.webworks.wsgi.application import create_wsgi_application
@@ -518,6 +535,9 @@ def register_service_extensions() -> None:
     register_audit_routes(app=app, version_prefix="/api/v1")
     register_catalog_routes(app=app, version_prefix="/api/v1")
     register_system_health_routes(app=app, version_prefix="/api/v1")
+    # Liveness / readiness probes and Prometheus /metrics (top level,
+    # no session; see system.operations).
+    register_operations_routes(app=app)
     # MCP server endpoint for agents (fixed path /mcp/1/service, not
     # under the versioned REST prefix).
     register_mcp_service_routes(app=app)
@@ -567,6 +587,10 @@ def register_service_extensions() -> None:
     register_webhooks_in_routes(app=app, version_prefix="/api/v1")
     register_webhooks_out_routes(app=app, version_prefix="/api/v1")
     register_backup_routes(app=app, version_prefix="/api/v1")
+    # Machine identity: API tokens, service accounts, /api/v1/me.
+    register_api_tokens_routes(app=app, version_prefix="/api/v1")
+    # The REST contract as JSON for the pyc CLI.
+    register_openapi_document_routes(app=app, version_prefix="/api/v1")
     register_static_routes(
         app=app,
         url_prefix="/static",
@@ -638,7 +662,9 @@ def pychestrate_website_main():
     # in journald / stdout immediately.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    # flush: stdout redirected to a file is block-buffered, and the
+    # server never exits to flush it (LD-11).
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
 
@@ -663,10 +689,20 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # Cookies carry ``Secure`` for HTTPS requests (direct or through a
+    # trusted proxy) and always in production; see cookie_session.
+    wsgi_app = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=wsgi_app)
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
+    wsgi_app = wrap_platform_wsgi_application(
+        wsgi_app=wsgi_app, runtime_environment=runtime_config.runtime_environment,
+    )
 
-    # Pod client-certificate identity (clients.mtls_identity): wraps
-    # the finished WSGI app so the certificate CN the TLS terminator
-    # verified reaches the mTLS routes as ``request.mtls_client_cn``.
+    # Pod client-certificate identity (clients.mtls_identity): the
+    # OUTERMOST wrapper, so it strips client-supplied certificate
+    # headers before any other layer reads the environ, and the CN the
+    # TLS terminator verified reaches the mTLS routes as
+    # ``request.mtls_client_cn``.
     wsgi_app = install_client_certificate_identity(app=app, wsgi_app=wsgi_app)
 
     bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
@@ -678,7 +714,8 @@ def pychestrate_website_main():
     print(
         "Starting native WebWorks WSGI Server on {}:{} (workers={}, threads={}, worker_class={})".format(
             bind_host, bind_port, workers, threads, worker_class
-        )
+        ),
+        flush=True,
     )
     run_server(app=wsgi_app, host=bind_host, port=bind_port,
                workers=workers, threads=threads, worker_class=worker_class)
@@ -717,7 +754,7 @@ def build_wsgi_application_for_production():
     # entry point exactly.
     session_factory = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY
     token_path = bootstrap_setup_state(session_factory=session_factory)
-    print("Initial-admin token path: {}".format(token_path))
+    print("Initial-admin token path: {}".format(token_path), flush=True)
 
     register_service_extensions()
     app.startup()
@@ -734,8 +771,18 @@ def build_wsgi_application_for_production():
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     rtnval = _eager_start_response_wsgi(rtnval_inner)
+    # Cookies carry ``Secure`` for HTTPS requests (direct or through a
+    # trusted proxy) and always in production; see cookie_session.
+    rtnval = wrap_wsgi_app_with_secure_cookie_policy(wsgi_app=rtnval)
+    # Platform layers (security headers + CSP nonce, request metrics)
+    # see every response.
+    rtnval = wrap_platform_wsgi_application(
+        wsgi_app=rtnval, runtime_environment=runtime_config.runtime_environment,
+    )
 
-    # Pod client-certificate identity (clients.mtls_identity); see
+    # Pod client-certificate identity (clients.mtls_identity), the
+    # OUTERMOST wrapper so it strips client-supplied certificate
+    # headers before anything else reads the environ; see
     # pychestrate_website_main.
     rtnval = install_client_certificate_identity(app=app, wsgi_app=rtnval)
     return rtnval

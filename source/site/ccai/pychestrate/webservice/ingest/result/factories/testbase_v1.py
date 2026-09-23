@@ -71,6 +71,19 @@ class TestBaseResultTreeParser(ResultTreeParserProtocol):
         return rtnval
 
     @classmethod
+    def recognizes_tree(cls, *, tree_path: str) -> bool:
+        """
+            A testbase tree has its summary or results stream at the root.
+        """
+        if tree_path is None or len(tree_path) == 0 or os.path.isdir(tree_path) is False:
+            return False
+        rtnval = False
+        for marker in (SUMMARY_FILENAME, RESULTS_STREAM_FILENAME, RESULTS_FINAL_FILENAME):
+            if os.path.isfile(os.path.join(tree_path, marker)):
+                rtnval = True
+        return rtnval
+
+    @classmethod
     def parse_tree(cls, *, tree_path: str) -> ParsedResultTree:
         if tree_path is None or len(tree_path) == 0:
             return ParsedResultTree(summary=None, tasks=[], artifacts=[], files_seen=0)

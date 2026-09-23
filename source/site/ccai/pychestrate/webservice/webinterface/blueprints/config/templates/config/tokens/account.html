@@ -1,0 +1,99 @@
+{% extends "config/base.html" %}
+{% import "site_shell/_macros.html" as ui %}
+
+{% block title %}API Tokens - Pychestrate{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>API Tokens</h1>
+    <p>
+        Tokens let the <code>pyc</code> command line, CI jobs, and agents call the
+        API as you, with <code>Authorization: Bearer &lt;token&gt;</code>. A token
+        has your permissions and never more; a read-only token can only read.
+    </p>
+</div>
+
+{% include "config/tokens/_minted.html" %}
+
+<div class="card narrow mb">
+    <h2 class="card-header">Create a token</h2>
+    <form method="post" action="{{ url_for('config.account_api_token_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <div class="form-group">
+            <label for="token-name">Name *</label>
+            <input type="text" id="token-name" name="name" class="form-control" required
+                   maxlength="128" placeholder="e.g. laptop CLI">
+            <p class="form-text">What the token is for, so you can recognise it later.</p>
+        </div>
+
+        <div class="form-group">
+            <label for="token-expires">Expires after</label>
+            <select id="token-expires" name="expires_in_days" class="form-control">
+                {% for days in lifetime_choices %}
+                <option value="{{ days }}" {% if days == default_lifetime_days %}selected{% endif %}>{{ days }} days</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="token-scope">Access</label>
+            <select id="token-scope" name="scope" class="form-control">
+                <option value="read-write" selected>Read and write (everything your roles allow)</option>
+                <option value="read-only">Read only (GET requests)</option>
+            </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Create token</button>
+    </form>
+</div>
+
+<div class="table-scroll" tabindex="0"><table class="data-table">
+    <caption class="visually-hidden">Your API tokens</caption>
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Token</th>
+            <th scope="col">Access</th>
+            <th scope="col">Status</th>
+            <th scope="col">Created</th>
+            <th scope="col">Last used</th>
+            <th scope="col">Expires</th>
+            <th scope="col">Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for token in tokens %}
+        <tr>
+            <td>{{ token.name }}</td>
+            <td class="mono">{{ token.token_hint }}&hellip;</td>
+            <td>{{ token.scope }}</td>
+            <td>{{ ui.status_badge(token.status) }}</td>
+            <td>{{ token.created_at | format_datetime }}</td>
+            <td>{% if token.last_used_at %}{{ token.last_used_at | format_datetime }}{% else %}never{% endif %}</td>
+            <td>{{ token.expires_at | format_datetime }}</td>
+            <td>
+                {% if token.status == 'active' %}
+                <form action="{{ url_for('config.account_api_token_revoke', token_id=token.token_id) }}"
+                      method="post" data-confirm="Revoke token '{{ token.name }}'? Anything using it stops working.">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger">Revoke</button>
+                </form>
+                {% else %}
+                <span class="muted">&mdash;</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% else %}
+        {{ ui.empty_state("You have no API tokens", hint="Create one above to use the pyc command line.", colspan=8) }}
+        {% endfor %}
+    </tbody>
+</table></div>
+
+{% if can_view_admin_tokens %}
+<p class="muted mt">
+    Administrators: service accounts and everyone's tokens are on
+    <a href="{{ url_for('config.admin_api_tokens') }}">Admin &rsaquo; API Tokens</a>.
+</p>
+{% endif %}
+{% endblock %}

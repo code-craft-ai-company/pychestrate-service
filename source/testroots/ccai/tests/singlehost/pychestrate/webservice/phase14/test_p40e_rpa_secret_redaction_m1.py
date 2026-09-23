@@ -435,7 +435,7 @@ def _spec_page_context() -> Dict[str, Any]:
     """
     rendered: List[Tuple[str, Dict[str, Any]]] = []
 
-    def _capture_render(*, template_name: str, context: Dict[str, Any]) -> HTMLResponse:
+    def _capture_render(*, template_name: str, context: Dict[str, Any], **kwargs: Any) -> HTMLResponse:
         rendered.append((template_name, context))
         return HTMLResponse(content="rendered", status_code=200)
 

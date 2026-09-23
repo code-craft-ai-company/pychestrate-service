@@ -86,6 +86,16 @@
 # systemd unit install (single ``install`` covers mv + chown + chmod).
 @USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.service /etc/systemd/system/pychestrate.service
 
+# Scheduled backup unit + timer (``pychestrate-backup.{service,timer}``):
+# install, enable the timer, and start a backup on demand.
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate-backup.service /etc/systemd/system/pychestrate-backup.service
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate-backup.timer /etc/systemd/system/pychestrate-backup.timer
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl enable --now pychestrate-backup.timer, /bin/systemctl enable --now pychestrate-backup.timer
+@USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl start pychestrate-backup.service, /bin/systemctl start pychestrate-backup.service
+
+# Log rotation policy for ~/.pychestrate/*.log (``pychestrate.logrotate.template``).
+@USER@ ALL=(root) NOPASSWD: /usr/bin/install -m 0644 -o root -g root /tmp/pychestrate.logrotate /etc/logrotate.d/pychestrate
+
 # systemd lifecycle for pychestrate.service ONLY.
 @USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload, /bin/systemctl daemon-reload
 @USER@ ALL=(root) NOPASSWD: /usr/bin/systemctl enable pychestrate.service, /bin/systemctl enable pychestrate.service

@@ -66,6 +66,19 @@ tags:
     description: Local-credential authentication and session lifecycle.
   - name: me
     description: Permissions and identity of the currently-authenticated actor.
+  - name: system
+    description: >-
+      Service health for monitoring. (Liveness / readiness probes and
+      the Prometheus scrape live outside /api/v1: /livez, /readyz,
+      /metrics.)
+  - name: api_tokens
+    description: |
+      API tokens (personal access tokens and service-account tokens)
+      that authenticate machine callers as `Authorization: Bearer pyc_...`.
+  - name: service_accounts
+    description: Non-human identities for CI and automation, authenticated by API tokens.
+  - name: meta
+    description: The API's own description (the OpenAPI document the pyc CLI reads).
   - name: users
     description: User account administration.
   - name: rbac
@@ -176,13 +189,16 @@ tags:
       subscription CRUD, delivery history, and test events.
   - name: backups
     description: >-
-      Backup and disaster-recovery -- manually-triggered backups
-      that snapshot the database, object-store references, and
-      secrets metadata into an archive, plus backup listing,
-      status / manifest reads, and restore.
+      Backup and disaster-recovery -- backups that snapshot the
+      database and the run artifacts into an archive and the key
+      material (KEK, password pepper, ...) into a separate key
+      bundle, plus backup listing, status / manifest reads, and
+      restore verification. The restore itself runs offline
+      (`python -m ccai.pychestrate.admin backup restore`).
 
 security:
   - pychestrate_session: []
+  - pychestrate_bearer: []
   - pychestrate_api_key: []
 
 paths:
@@ -213,6 +229,32 @@ paths:
               schema:
                 $ref: '#/components/schemas/LogoutResponse'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  # =====================================================================
+  # system
+  # =====================================================================
+
+  /system/health:
+    get:
+      tags: [system]
+      summary: Aggregate subsystem health.
+      operationId: system_health_read
+      description: |
+        The overall status of the database, feature-flag backends and
+        extension-route host. Callers holding `system:ui.admin.view`
+        get the per-subsystem document; every other caller -- including
+        an anonymous monitor -- gets the overall status only
+        (`details: "restricted"`).
+      security:
+        - {}
+        - pychestrate_session: []
+      responses:
+        '200':
+          description: Health document (full or restricted).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SystemHealth' }
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
 
   # =====================================================================
@@ -260,6 +302,259 @@ paths:
               schema:
                 $ref: '#/components/schemas/MeNavigation'
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # =====================================================================
+  # meta
+  # =====================================================================
+
+  /_meta/openapi.json:
+    get:
+      tags: [meta]
+      summary: This OpenAPI document, as JSON.
+      operationId: meta_get_openapi
+      description: |
+        The REST contract the server implements, rendered from
+        `specs/openapi/pychestrate.yaml`, with `servers` set to
+        `/api/v1` on the answering host. The `pyc` CLI builds its
+        commands from it. 404 when the deployment does not carry the
+        spec.
+      responses:
+        '200':
+          description: The OpenAPI document.
+          content:
+            application/json:
+              schema:
+                type: object
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  # =====================================================================
+  # machine identity: /me, API tokens, service accounts
+  # =====================================================================
+
+  /me:
+    get:
+      tags: [me]
+      summary: Who the caller is and how the request authenticated.
+      operationId: me_get_identity
+      description: |
+        The signed-in principal: identity, account kind (`user` or
+        `service_account`), and how the request authenticated -- a
+        session, or an API token (with the token's id, name, scope,
+        and expiry). `pyc whoami` and `pyc login` use it.
+      responses:
+        '200':
+          description: The caller's identity.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeIdentity'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /me/api-tokens:
+    get:
+      tags: [api_tokens]
+      summary: List the caller's API tokens.
+      operationId: api_tokens_list_mine
+      description: |
+        The caller's tokens, newest first, including expired and
+        revoked ones. Never includes a token secret.
+      responses:
+        '200':
+          description: The caller's tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [api_tokens]
+      summary: Issue an API token that acts as the caller.
+      operationId: api_tokens_create_mine
+      description: |
+        Issues a token with exactly the caller's permissions (or
+        fewer, when `read-only`). The response carries the secret
+        in `token` -- the only time it is ever returned -- with
+        `Cache-Control: no-store`. Requires a signed-in session: a
+        request authenticated with an API token gets 403, so a
+        leaked token cannot mint a longer-lived successor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreateRequest'
+      responses:
+        '201':
+          description: Token issued; `token` is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedApiToken'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /me/api-tokens/{token_id}:
+    parameters:
+      - $ref: '#/components/parameters/ApiTokenIdParam'
+    get:
+      tags: [api_tokens]
+      summary: Read one of the caller's API tokens.
+      operationId: api_tokens_read_mine
+      responses:
+        '200':
+          description: The token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [api_tokens]
+      summary: Revoke one of the caller's API tokens.
+      operationId: api_tokens_revoke_mine
+      description: |
+        Revokes the token immediately. A token may revoke itself.
+        Another user's token id answers 404.
+      responses:
+        '200':
+          description: The revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-tokens:
+    get:
+      tags: [api_tokens]
+      summary: List every API token (administration).
+      operationId: api_tokens_list
+      description: Requires `system:auth.read`.
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          description: Only this user's (or service account's) tokens.
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Tokens, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api-tokens/{token_id}:
+    parameters:
+      - $ref: '#/components/parameters/ApiTokenIdParam'
+    delete:
+      tags: [api_tokens]
+      summary: Revoke any API token (administration).
+      operationId: api_tokens_revoke
+      description: Requires `system:auth.admin`.
+      responses:
+        '200':
+          description: The revoked token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiToken'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /service-accounts:
+    get:
+      tags: [service_accounts]
+      summary: List service accounts.
+      operationId: service_accounts_list
+      description: Requires `system:users.read`.
+      responses:
+        '200':
+          description: Service accounts with their count of working tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccountList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [service_accounts]
+      summary: Create a service account.
+      operationId: service_accounts_create
+      description: |
+        Requires `system:users.write`. A service account is an
+        identity user with no password; bind roles to it like any
+        user and issue it API tokens.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceAccountCreateRequest'
+      responses:
+        '201':
+          description: Service account created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceAccount'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /service-accounts/{user_id}/api-tokens:
+    parameters:
+      - $ref: '#/components/parameters/UserIdParam'
+    get:
+      tags: [service_accounts]
+      summary: List a service account's API tokens.
+      operationId: service_accounts_list_tokens
+      description: Requires `system:auth.read`.
+      responses:
+        '200':
+          description: The service account's tokens.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiTokenList'
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [service_accounts]
+      summary: Issue an API token that acts as the service account.
+      operationId: service_accounts_create_token
+      description: |
+        Requires `system:auth.admin` and a signed-in session. The
+        secret is returned once. A user id that is not a service
+        account answers 404, so no token can impersonate a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApiTokenCreateRequest'
+      responses:
+        '201':
+          description: Token issued; `token` is shown once.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuedApiToken'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # =====================================================================
   # users
@@ -2182,6 +2477,12 @@ paths:
           `artifacts/`, `taskings/`, `tc-by-products/`,
           `diagnostics/` subtrees). The server kicks off the
           `result_tree_parser` extension chain.
+        * `junit-xml` (or any other tag) -- the tree goes through the
+          same chain, which uses the parser that recognizes it: a
+          tree of JUnit / xUnit XML reports (pytest `--junitxml`,
+          Surefire, GoogleTest, go-junit-report, jest-junit, ...) is
+          read by the `junit-xml` parser; a testbase tree by
+          `testbase-v1`.
         * `build` / `provision` -- the run is a build / provisioning
           run. The uploaded tree carries raw artifact files only
           (no per-test records), so the server takes a direct
@@ -3628,11 +3929,15 @@ paths:
       summary: Remove a resource from a pool.
       operationId: resource_pools_remove_member
       x-pychestrate-status: planned
-      description: Idempotent on a missing membership.
+      description: |
+        Idempotent on a missing membership. A `pool_id` or
+        `resource_id` that is not a UUID names nothing and answers
+        `404`.
       responses:
         '204': { description: Resource removed from the pool. }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /resource-pools/{pool_id}/reservations:
     parameters:
@@ -3807,7 +4112,8 @@ paths:
       x-pychestrate-status: planned
       description: |
         Returns the usage timeline newest-first as a `{items, meta}`
-        page.
+        page. A `resource_id` that is not a UUID names nothing and
+        answers `404`.
       parameters:
         - in: query
           name: limit
@@ -3821,6 +4127,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /projects/{project_id}/blast-radius-guards:
     parameters:
@@ -4511,10 +4818,13 @@ paths:
       summary: Trigger a backup.
       operationId: backups_create
       description: |
-        Triggers a manual backup. Snapshots the database, object-store
-        references, and secrets metadata into an archive written
-        through the configured `BackupStorageBackend`. Returns the
-        backup record with its terminal status synchronously.
+        Runs a backup now: a consistent database snapshot (SQLite
+        online backup, or `pg_dump --format=custom`) and the run
+        artifacts into an archive written through the configured
+        `BackupStorageBackend`, and the key material into a separate
+        key bundle in the key-bundle directory. Returns the backup
+        record with its terminal status synchronously. A failed run
+        is recorded with status `failed`.
       requestBody:
         required: false
         content:
@@ -4534,6 +4844,16 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/Unprocessable' }
+        '500':
+          description: A substrate failed (e.g. a key file could not be read); the run is recorded as failed.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '503':
+          description: The storage backend could not accept the archive.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /backups/{backup_id}:
     parameters:
@@ -4563,34 +4883,92 @@ paths:
         schema: { type: string, format: uuid }
     post:
       tags: [backups]
-      summary: Restore from a backup.
+      summary: Verify a backup / get its restore command.
       operationId: backups_restore
       description: |
-        Restore from a completed backup. Restore is scoped as a
-        documented follow-up in this release -- the endpoint
-        validates the target backup and records a restore request,
-        returning `501 Not Implemented` until the restore executor
-        lands.
+        Same operation as `POST /backups/{backup_id}/restore`. The
+        service's router only matches a parameter that fills a whole
+        path segment, so this `:restore` spelling is not reachable
+        until the router supports it; use `/restore`.
+
+        With `{"dry_run": true}`, verifies the backup end to end --
+        archive checksum, manifest, database snapshot integrity and
+        row counts, artifact count, key-bundle fingerprints, and that
+        the KEK unwraps the stored data keys -- and returns the checks
+        plus the command that restores it.
+
+        A restore replaces the database, the run artifacts and the
+        keys the running service has loaded, so the service cannot
+        perform it on itself: without `dry_run` the answer is `409`
+        with the command to run with the service stopped
+        (`restore_command` in the problem document).
       requestBody:
         required: false
         content:
           application/json:
             schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
       responses:
-        '202':
-          description: Restore accepted.
+        '200':
+          description: Verification result (dry run).
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BackupRestoreResult' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '501':
-          description: Restore execution is not yet implemented.
+        '409':
+          description: >-
+            Restore must run offline; the problem document carries
+            `restore_command`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+
+  /backups/{backup_id}/restore:
+    parameters:
+      - in: path
+        name: backup_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [backups]
+      summary: Verify a backup / get its restore command (reachable spelling of :restore).
+      operationId: backups_restore_subresource
+      description: |
+        With `{"dry_run": true}`, verifies the backup end to end --
+        archive checksum, manifest, database snapshot integrity and
+        row counts, artifact count, key-bundle fingerprints, and that
+        the KEK unwraps the stored data keys -- and returns the checks
+        plus the command that restores it.
+
+        A restore replaces the database, the run artifacts and the
+        keys the running service has loaded, so the service cannot
+        perform it on itself: without `dry_run` the answer is `409`
+        with the command to run with the service stopped
+        (`restore_command` in the problem document).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupRestoreRequest' }
+      responses:
+        '200':
+          description: Verification result (dry run).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupRestoreResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: >-
+            Restore must run offline; the problem document carries
+            `restore_command`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
 
   # ---------------------------------------------------------------------------
   # rpa -- 6-rpa-orchestration (Phase 11)
@@ -4882,13 +5260,22 @@ paths:
         (packet keys win), validates it against the job type's JSON
         schema, redacts `secret_fields` in storage, mints a signed
         `job_kind=rpa` envelope, and dispatches it to an eligible pod.
-        A repeat within the idempotency window returns the original job.
+        The packet is validated before any pod is chosen. An identical
+        request within the idempotency window (60 s) returns the original
+        job with `replayed: true` and status 200 instead of starting a new
+        one; send `allow_duplicate: true` to start a new job anyway.
+        Unknown body fields are refused with 422.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RpaTriggerRequest' }
       responses:
+        '200':
+          description: An identical run was submitted within the idempotency window; the earlier job is returned with `replayed` set to true and no new job is started.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RpaJob' }
         '202':
           description: Job dispatched.
           content:
@@ -4908,7 +5295,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
         '422':
-          description: Packet failed schema validation; `errors` lists `{path, message}` per failing JSON pointer.
+          description: Packet failed schema validation (`errors` lists `{path, message}` per failing JSON pointer), or the body has unknown fields (`unknown_fields`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -5106,13 +5493,24 @@ components:
         `/login` (HTML form, not part of the REST surface). The
         webworks `PychestrateSessionMiddleware` resolves this cookie
         to a request-scoped actor on every request.
+    pychestrate_bearer:
+      type: http
+      scheme: bearer
+      description: |
+        An API token (`pyc_...`) sent as `Authorization: Bearer <token>`.
+        Personal tokens are issued at Account > API tokens (or
+        `POST /me/api-tokens`); service-account tokens by an
+        administrator at Admin > API Tokens. A token acts with its
+        account's permissions (never more; a `read-only` token only
+        reads), expires, and can be revoked. Also accepted on the MCP
+        endpoint.
     pychestrate_api_key:
       type: apiKey
       in: header
       name: X-Pychestrate-Api-Key
       description: |
-        Long-lived API key for tooling and CI integrations. Issued
-        out-of-band through the admin UI.
+        The same API token as `pychestrate_bearer`, sent in the
+        `X-Pychestrate-Api-Key` header instead.
     pychestrate_mtls:
       type: mutualTLS
       description: |
@@ -5136,6 +5534,11 @@ components:
     UserIdParam:
       in: path
       name: user_id
+      required: true
+      schema: { type: string, format: uuid }
+    ApiTokenIdParam:
+      in: path
+      name: token_id
       required: true
       schema: { type: string, format: uuid }
     ProjectIdParam:
@@ -5273,6 +5676,34 @@ components:
   schemas:
 
     # ----------------------------------------------------------------
+    # system
+    # ----------------------------------------------------------------
+
+    SystemHealth:
+      type: object
+      required: [status, generated_at]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, error]
+          description: Worst subsystem status.
+        generated_at: { type: string, format: date-time }
+        details:
+          type: string
+          enum: [restricted]
+          description: Present (instead of `subsystems`) for callers without system:ui.admin.view.
+        subsystems:
+          type: array
+          items:
+            type: object
+            required: [name, status]
+            properties:
+              name: { type: string }
+              label: { type: string }
+              status: { type: string, enum: [ok, degraded, error] }
+              detail: { type: string }
+
+    # ----------------------------------------------------------------
     # Error / pagination envelopes
     # ----------------------------------------------------------------
 
@@ -5335,6 +5766,118 @@ components:
         status:
           type: string
           enum: [closed]
+
+    MeIdentity:
+      type: object
+      required: [user_id, login_name, account_kind, authentication]
+      properties:
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        display_name: { type: string }
+        primary_email: { type: string }
+        status: { type: string, enum: [ACTIVE, DEACTIVATED, PENDING] }
+        account_kind: { type: string, enum: [user, service_account] }
+        authentication:
+          type: object
+          required: [method]
+          properties:
+            method: { type: string, enum: [session, api_token] }
+            token_id: { type: string, format: uuid }
+            token_name: { type: string }
+            token_scope: { type: string, enum: [read-write, read-only] }
+            token_expires_at: { type: string, format: date-time }
+
+    ApiTokenCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: What the token is for.
+        expires_in_days:
+          type: integer
+          minimum: 1
+          maximum: 366
+          default: 90
+          description: Every token expires.
+        scope:
+          type: string
+          enum: [read-write, read-only]
+          default: read-write
+          description: |
+            `read-write` acts with every permission the account holds;
+            `read-only` additionally refuses every non-GET/HEAD/OPTIONS
+            request with 403.
+
+    ApiToken:
+      type: object
+      required: [token_id, user_id, name, token_hint, scope, status, expires_at]
+      properties:
+        token_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        is_service_account: { type: boolean }
+        name: { type: string }
+        token_hint:
+          type: string
+          description: The token's first characters (`pyc_` + 6), for recognition only.
+        scope: { type: string, enum: [read-write, read-only] }
+        status: { type: string, enum: [active, expired, revoked] }
+        created_at: { type: string, format: date-time }
+        created_by_user_id: { type: [string, 'null'], format: uuid }
+        expires_at: { type: string, format: date-time }
+        last_used_at: { type: [string, 'null'], format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+
+    IssuedApiToken:
+      allOf:
+        - $ref: '#/components/schemas/ApiToken'
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The secret. Returned only in this response; store it now.
+
+    ApiTokenList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ApiToken' }
+        total: { type: integer }
+
+    ServiceAccountCreateRequest:
+      type: object
+      required: [login_name]
+      properties:
+        login_name:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9._-]{1,62}$'
+        display_name: { type: string }
+
+    ServiceAccount:
+      type: object
+      required: [user_id, login_name, status, active_token_count]
+      properties:
+        user_id: { type: string, format: uuid }
+        login_name: { type: string }
+        display_name: { type: string }
+        status: { type: string }
+        created_at: { type: string, format: date-time }
+        active_token_count: { type: integer }
+
+    ServiceAccountList:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ServiceAccount' }
+        total: { type: integer }
 
     MePermissions:
       type: object
@@ -7088,9 +7631,10 @@ components:
           type: string
           description: >-
             Job-kind tag selecting the server-side ingest path:
-            `testbase` for a testbase result tree, `build` for a
-            build artifact tree, `provision` for a provisioning
-            artifact tree.
+            `testbase` for a testbase result tree, `junit-xml` for a
+            tree of JUnit / xUnit XML reports, `build` for a build
+            artifact tree, `provision` for a provisioning artifact
+            tree.
         backend_key_prefix:
           type: string
           description: Per-run prefix the agent wrote the tree under
@@ -9449,24 +9993,54 @@ components:
     BackupManifest:
       type: object
       description: >-
-        Inventory of what a completed backup archive contains.
+        Inventory of what a completed backup archive contains (the
+        archive's own manifest.json). Key bytes are never included --
+        only their fingerprints.
       properties:
+        format: { type: string }
+        format_version: { type: integer }
+        backup_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
         database:
           type: object
           properties:
             included: { type: boolean }
+            dialect: { type: string, enum: [sqlite, postgresql] }
             artifact: { type: string, nullable: true }
             size_bytes: { type: integer, minimum: 0, nullable: true }
+            sha256: { type: string }
+            table_count: { type: integer, minimum: 0 }
+            alembic_revision: { type: string, nullable: true }
+            row_counts:
+              type: object
+              additionalProperties: { type: integer }
         object_store:
           type: object
           properties:
             included: { type: boolean }
+            artifact_root: { type: string }
             object_count: { type: integer, minimum: 0, nullable: true }
+            size_bytes: { type: integer, minimum: 0 }
         secrets:
           type: object
           properties:
             included: { type: boolean }
             entry_count: { type: integer, minimum: 0, nullable: true }
+            key_bundle: { type: string, description: File name of the separate key bundle. }
+            keys:
+              type: array
+              items:
+                type: object
+                properties:
+                  name: { type: string }
+                  key_id: { type: string, nullable: true }
+                  source: { type: string, enum: [file, env] }
+                  origin: { type: string }
+                  sha256: { type: string }
+                  size_bytes: { type: integer }
+            skipped:
+              type: object
+              additionalProperties: { type: string }
 
     BackupRecord:
       type: object
@@ -9511,19 +10085,36 @@ components:
     BackupRestoreRequest:
       type: object
       properties:
-        confirm:
+        dry_run:
           type: boolean
-          description: Operator confirmation that a restore is intended.
+          default: false
+          description: >-
+            Verify the backup and return its restore command. Without
+            it the answer is 409 -- the restore runs offline.
 
     BackupRestoreResult:
       type: object
-      required: [backup_id, status]
+      required: [backup_id, status, checks, restore_command]
       properties:
         backup_id: { type: string, format: uuid }
         status:
           type: string
-          enum: [accepted, not_implemented]
+          enum: [verified, verification_failed]
         detail: { type: string }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, ok, detail]
+            properties:
+              name: { type: string }
+              ok: { type: boolean }
+              detail: { type: string }
+        archive_path: { type: string, nullable: true }
+        key_bundle_path: { type: string, nullable: true }
+        restore_command:
+          type: string
+          description: Command to run on the host with the service stopped.
 
     RpaExecutionMode:
       type: object
@@ -9692,9 +10283,11 @@ components:
 
     RpaTriggerRequest:
       type: object
+      additionalProperties: false
       properties:
         work_packet: { type: object, description: Merged over the specification's default packet; packet keys win. }
         idempotency_key: { type: string }
+        allow_duplicate: { type: boolean, default: false, description: Start a new job even when an identical one was submitted within the idempotency window. }
 
     RpaJob:
       type: object
@@ -9725,6 +10318,7 @@ components:
         started_at: { type: [string, 'null'], format: date-time }
         completed_at: { type: [string, 'null'], format: date-time }
         duration_seconds: { type: [integer, 'null'] }
+        replayed: { type: boolean, description: True when this response returned an earlier identical job instead of starting a new one. }
 
     RpaJobList:
       type: object

@@ -108,7 +108,7 @@ import time inside a running service.
 
 
 'source/site/\<namespace\>' Folder
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The *<namespace>* folder provides the root namespace for python imports related to the website server side code.  The
 *PYTHONPATH* variable is set to point to the *source/site* folder and imports are made relative to the *site* folder.
 Generally the name used for the namespace folder is the root namespace for the company and project.  For example, the
@@ -128,21 +128,21 @@ The *restapis* folder contains the implementation of REST API endpoints for the 
 endpoints define the server-side logic for handling HTTP requests and responses.
 
 'source/site/<namespace>/webinterface' Folder
-+++++++++++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++++++++++++++++++++++++
 The *webinterface* folder contains the server-side code for the web application's graphical interface. This includes
 templates, views, and other components that define the structure and behavior of the webinterface.
 
 'source/site/<namespace>/webinterface/blueprints' Folder
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The *blueprints* folder organizes the web application into modular components. Each blueprint represents a distinct
 feature or section of the web application, making the codebase easier to maintain and scale.
 
 'source/site/<namespace>/webinterface/blueprints/<blueprint-name>' Folder
-########################################################################
+#########################################################################
 The *<blueprint-name>* folder contains the implementation details for a specific blueprint. This includes route definitions, views, and any associated templates or static files for that feature.
 
 'source/site/<namespace>/webinterface/static' Folder
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 The *static* folder contains static assets for the web application, such as CSS, JavaScript, images, and other files
 that do not change dynamically.
 

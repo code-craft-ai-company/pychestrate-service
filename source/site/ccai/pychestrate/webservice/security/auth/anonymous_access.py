@@ -20,7 +20,12 @@ Routes land on the list for one of two reasons:
   one-time enrollment token. These handlers keep doing their own
   checks; the list only lets the request reach them.
 * **The route is harmless without a principal** -- the UI metrics
-  beacon validates its payload and stores nothing.
+  beacon validates its payload and stores nothing; the system-health
+  summary tells an anonymous monitor only the overall status.
+
+The operator endpoints outside ``/api/v1`` that answer without a
+session (liveness / readiness probes, the Prometheus scrape) are
+listed, with their reasons, in :data:`ANONYMOUS_OPERATIONS_ENDPOINTS`.
 
 Before this list existed, individual handlers decided whether to
 require a principal, and 52 of 217 REST routes ran without one,
@@ -106,6 +111,34 @@ ANONYMOUS_ROUTE_ALLOWLIST: Tuple[AnonymousRoute, ...] = (
     # Harmless without a principal.
     _route("POST", r"^/api/v1/_metrics/ui$",
            "UI metrics beacon: validates the payload, logs a summary, stores nothing"),
+    # --- platform: monitoring (ORG-F17) -------------------------------
+    _route("GET", r"^/api/v1/system/health$",
+           "monitoring: a caller without system:ui.admin.view gets only the"
+           " overall status word; subsystem details still need the permission"),
+)
+
+
+#: Operator endpoints served outside :data:`GOVERNED_PATH_PREFIX`
+#: (probes and scrapers look for them at the top level), listed here
+#: so every route reachable without a session is in one reviewed
+#: place. The session middleware never sees them; each handler
+#: enforces what it states, and the first-run setup gate lets them
+#: through.
+ANONYMOUS_OPERATIONS_ENDPOINTS: Tuple[AnonymousRoute, ...] = (
+    _route("GET", r"^/livez$",
+           "liveness probe: answers {\"status\": \"live\"} and nothing else"),
+    _route("GET", r"^/__health/live$",
+           "liveness probe (0-system-health spelling of /livez)"),
+    _route("GET", r"^/readyz$",
+           "readiness probe: status word plus the names of failing checks"),
+    _route("GET", r"^/healthz$",
+           "readiness probe (conventional alias of /readyz)"),
+    _route("GET", r"^/__health/ready$",
+           "readiness probe (0-system-health spelling of /readyz)"),
+    _route("GET", r"^/metrics$",
+           "Prometheus scrape: the handler requires the bearer scrape token"
+           " (PYCHESTRATE_METRICS_TOKEN_FILE) unless PYCHESTRATE_METRICS_PUBLIC"
+           " opts in; otherwise it answers 403"),
 )
 
 
@@ -137,6 +170,7 @@ def is_anonymous_request_permitted(method: str, path: str) -> bool:
 
 
 __all__ = [
+    "ANONYMOUS_OPERATIONS_ENDPOINTS",
     "ANONYMOUS_ROUTE_ALLOWLIST",
     "AnonymousRoute",
     "GOVERNED_PATH_PREFIX",

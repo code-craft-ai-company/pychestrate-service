@@ -47,23 +47,37 @@
 #       certificate nginx needs) and exit without starting the
 #       service.  deployment/deploy-alpha-to-host.sh runs this
 #       before it writes the nginx config.
+#
+#   development/run-staging-gunicorn admin backup create --keep 14
+#       Runs the operator command line (``python -m
+#       ccai.pychestrate.admin ...``) under the same composed
+#       environment instead of gunicorn, so a backup or restore sees
+#       exactly the database, presence directory and key files the
+#       service uses.  Admin mode never generates missing secrets --
+#       on a rebuilt host the restore puts the backed-up keys there.
 
 set -euo pipefail
 
-PROVISION_ONLY="false"
-for arg in "$@"; do
-    case "${arg}" in
-        --provision-only) PROVISION_ONLY="true" ;;
-        *)
-            echo "run-staging-gunicorn: unknown argument: ${arg}" >&2
-            echo "Usage: development/run-staging-gunicorn [--provision-only]" >&2
-            exit 2
-            ;;
-    esac
-done
-
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
+
+ADMIN_MODE="false"
+PROVISION_ONLY="false"
+if [[ "${1:-}" == "admin" ]]; then
+    ADMIN_MODE="true"
+    shift
+else
+    for arg in "$@"; do
+        case "${arg}" in
+            --provision-only) PROVISION_ONLY="true" ;;
+            *)
+                echo "run-staging-gunicorn: unknown argument: ${arg}" >&2
+                echo "Usage: development/run-staging-gunicorn [--provision-only | admin <command> ...]" >&2
+                exit 2
+                ;;
+        esac
+    done
+fi
 
 # ----------------------------------------------------------------------------
 # Refuse production
@@ -102,6 +116,17 @@ ENROLLMENT_CA_CERT_FILE="${SECRETS_DIR}/dev.enrollment-ca.crt"
 # with its own random secret and an upload landing on another
 # worker is rejected.
 RESULT_PRESIGN_SECRET_FILE="${SECRETS_DIR}/dev.result-presign-secret"
+# Bearer token Prometheus sends to scrape /metrics (see
+# system/operations.py); configure the scraper with this file.
+METRICS_TOKEN_FILE="${SECRETS_DIR}/dev.metrics-token"
+
+if [[ "${ADMIN_MODE}" == "false" ]]; then
+
+if [[ ! -s "${METRICS_TOKEN_FILE}" ]]; then
+    head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > "${METRICS_TOKEN_FILE}"
+    chmod 600 "${METRICS_TOKEN_FILE}"
+    echo "run-staging-gunicorn: generated ${METRICS_TOKEN_FILE} (/metrics scrape token)"
+fi
 
 if [[ ! -s "${KEK_FILE}" ]]; then
     head -c 32 /dev/urandom > "${KEK_FILE}"
@@ -141,7 +166,9 @@ if [[ ! -s "${ENROLLMENT_CA_FILE}" ]]; then
     echo "run-staging-gunicorn: generated ${ENROLLMENT_CA_FILE} (self-signed enrollment CA)"
 fi
 
-if [[ ! -s "${ENROLLMENT_CA_CERT_FILE}" ]]; then
+# Re-derived whenever the CA file is newer (a restore may have put
+# the backed-up CA back), so nginx always trusts the CA in use.
+if [[ ! -s "${ENROLLMENT_CA_CERT_FILE}" || "${ENROLLMENT_CA_FILE}" -nt "${ENROLLMENT_CA_CERT_FILE}" ]]; then
     openssl x509 -in "${ENROLLMENT_CA_FILE}" -out "${ENROLLMENT_CA_CERT_FILE}"
     chmod 644 "${ENROLLMENT_CA_CERT_FILE}"
     echo "run-staging-gunicorn: wrote ${ENROLLMENT_CA_CERT_FILE} (enrollment CA certificate for nginx)"
@@ -157,6 +184,8 @@ if [[ "${PROVISION_ONLY}" == "true" ]]; then
     echo "run-staging-gunicorn: secrets provisioned under ${SECRETS_DIR}; not starting the service (--provision-only)."
     exit 0
 fi
+
+fi  # ADMIN_MODE == false
 
 # ----------------------------------------------------------------------------
 # SQLite DB path (alembic-managed; auto-create disabled in staging)
@@ -184,6 +213,9 @@ DEV_DB_PATH="${PRESENCE_DIR}/pychestrate.sqlite"
 # ----------------------------------------------------------------------------
 
 export PYCHESTRATE_RUNTIME_ENVIRONMENT="${PYCHESTRATE_RUNTIME_ENVIRONMENT:-staging}"
+# Unbuffered stdout: under systemd / nohup it is a file, and buffered
+# startup lines (the initial-admin token path) could stay unwritten.
+export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 # PYCHESTRATE_DATABASE_URL is left UNSET on purpose -- the runtime
 # computes the persona-derived default. Operators who want a
 # different URL (e.g. Postgres) should set it in the systemd
@@ -208,7 +240,12 @@ export PYCHESTRATE_ENROLLMENT_CA_SOURCE="${PYCHESTRATE_ENROLLMENT_CA_SOURCE:-fil
 export PYCHESTRATE_ENROLLMENT_CA_FILE_PATH="${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH:-${ENROLLMENT_CA_FILE}}"
 export PYCHESTRATE_ENROLLMENT_CA_ID="${PYCHESTRATE_ENROLLMENT_CA_ID:-staging-enrollment-ca-1}"
 
-export PYCHESTRATE_RESULT_PRESIGN_SECRET="${PYCHESTRATE_RESULT_PRESIGN_SECRET:-$(cat "${RESULT_PRESIGN_SECRET_FILE}")}"
+# Admin mode generates nothing, so the file may not exist yet there.
+if [[ -z "${PYCHESTRATE_RESULT_PRESIGN_SECRET:-}" && -s "${RESULT_PRESIGN_SECRET_FILE}" ]]; then
+    export PYCHESTRATE_RESULT_PRESIGN_SECRET="$(cat "${RESULT_PRESIGN_SECRET_FILE}")"
+fi
+
+export PYCHESTRATE_METRICS_TOKEN_FILE="${PYCHESTRATE_METRICS_TOKEN_FILE:-${METRICS_TOKEN_FILE}}"
 
 export PYCHESTRATE_BIND_HOST="${PYCHESTRATE_BIND_HOST:-127.0.0.1}"
 export PYCHESTRATE_BIND_PORT="${PYCHESTRATE_BIND_PORT:-8888}"
@@ -230,6 +267,19 @@ echo "run-staging-gunicorn: enrollment-ca=${PYCHESTRATE_ENROLLMENT_CA_FILE_PATH}
 echo "run-staging-gunicorn: envelope-signing-key=${PYCHESTRATE_ENVELOPE_SIGNING_KEY_FILE_PATH} (id ${PYCHESTRATE_ENVELOPE_SIGNING_KEY_ID})"
 echo "run-staging-gunicorn: result-presign-secret=${RESULT_PRESIGN_SECRET_FILE}"
 echo
+
+# ----------------------------------------------------------------------------
+# Admin mode: run the operator command line instead of gunicorn
+# ----------------------------------------------------------------------------
+
+if [[ "${ADMIN_MODE}" == "true" ]]; then
+    if [[ -x "${REPO_ROOT}/.venv/bin/python" ]]; then
+        PYTHON="${REPO_ROOT}/.venv/bin/python"
+    else
+        PYTHON="$(command -v python3)"
+    fi
+    exec "${PYTHON}" -m ccai.pychestrate.admin "$@"
+fi
 
 # ----------------------------------------------------------------------------
 # Locate gunicorn (prefer the venv's, fall back to PATH)

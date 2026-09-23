@@ -1,3 +1,5 @@
+.. _18-00-ui-glossary:
+
 =========================
 Consumer UI Glossary
 =========================
@@ -50,8 +52,7 @@ Nouns
     The organising unit for repositories, specifications, jobs,
     releases, and members.
 
-``Build specification`` / ``Infrastructure specification`` /
-``Test specification``
+``Build specification`` / ``Infrastructure specification`` / ``Test specification``
     The saved definition a job runs from. Abbreviate to ``spec`` only
     inside a table column header where space is short, never in a
     heading or button.
@@ -77,8 +78,7 @@ Nouns
 ``Pipeline`` / ``Pipeline run``
     A release workflow definition and one execution of it.
 
-``Release`` / ``Release channel`` / ``Release schedule`` /
-``Release event``
+``Release`` / ``Release channel`` / ``Release schedule`` / ``Release event``
     A published version, the distribution channel it is promoted to,
     the cron-driven trigger that produces it, and its calendar window.
 

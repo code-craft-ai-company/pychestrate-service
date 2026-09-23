@@ -147,10 +147,10 @@ def _patch_check_permission(*, allowed: bool) -> Any:
     return patch
 
 
-def _make_resource_view(*, resource_id: str = "res-1") -> Any:
+def _make_resource_view(*, resource_id: str = "22222222-2222-4222-8222-000000000001") -> Any:
     rtnval = resources_routes.inventory_service.ResourceView(
         resource_id=resource_id,
-        project_id="proj-1",
+        project_id="33333333-3333-4333-8333-000000000001",
         kind="device",
         display_name="lab-device",
         description="",
@@ -164,11 +164,11 @@ def _make_resource_view(*, resource_id: str = "res-1") -> Any:
     return rtnval
 
 
-def _make_health_view(*, resource_id: str = "res-1") -> Any:
+def _make_health_view(*, resource_id: str = "22222222-2222-4222-8222-000000000001") -> Any:
     rtnval = resources_routes.health_service.HealthView(
         health_id="health-1",
         resource_id=resource_id,
-        project_id="proj-1",
+        project_id="33333333-3333-4333-8333-000000000001",
         probe_name="device-ping",
         probe_period_seconds=60,
         last_outcome=ProbeOutcome.PASS,
@@ -189,8 +189,8 @@ def _make_usage_view(*, event_id: str = "evt-1") -> Any:
     rtnval = resources_routes.usage_history_service.TimelineEventView(
         event_id=event_id,
         source_event_id="src-1",
-        resource_id="res-1",
-        project_id="proj-1",
+        resource_id="22222222-2222-4222-8222-000000000001",
+        project_id="33333333-3333-4333-8333-000000000001",
         event_type=UsageEventType.RESOURCE_REGISTERED,
         actor_id=None,
         pod_event_group_id=None,
@@ -240,7 +240,7 @@ def test_read_resource_returns_503_when_session_missing():
     """
     request = _FakeRequest(
         path="/api/v1/resources/res-1",
-        path_params={"resource_id": "res-1"},
+        path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
         db_session=None,
     )
     response = resources_routes.handle_read_resource(request)
@@ -258,7 +258,7 @@ def test_read_resource_returns_401_when_no_principal():
     """
     request = _FakeRequest(
         path="/api/v1/resources/res-1",
-        path_params={"resource_id": "res-1"},
+        path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
         db_session=object(),
         auth_principal=None,
     )
@@ -279,7 +279,7 @@ def test_read_resource_returns_403_when_permission_denied():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -313,7 +313,7 @@ def test_read_resource_returns_404_when_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-x",
-            path_params={"resource_id": "res-x"},
+            path_params={"resource_id": "22222222-2222-4222-8222-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -324,7 +324,7 @@ def test_read_resource_returns_404_when_missing():
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
-    testbase.assert_equal(body["resource_id"], "res-x")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-00000000000a")
     return
 
 
@@ -340,12 +340,12 @@ def test_read_resource_returns_200_on_happy_path():
     )
     get_mock = get_patch.activate()
     get_mock.configure(
-        side_effect=lambda **kwargs: _make_resource_view(resource_id="res-7"),
+        side_effect=lambda **kwargs: _make_resource_view(resource_id="22222222-2222-4222-8222-000000000007"),
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-7",
-            path_params={"resource_id": "res-7"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000007"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -355,7 +355,7 @@ def test_read_resource_returns_200_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
-    testbase.assert_equal(body["resource_id"], "res-7")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-000000000007")
     testbase.assert_equal(body["state"], "available")
     return
 
@@ -373,7 +373,7 @@ def test_transition_state_returns_401_when_no_principal():
     """
     request = _FakeRequest(
         path="/api/v1/resources/res-1/state",
-        path_params={"resource_id": "res-1"},
+        path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
         db_session=object(),
         auth_principal=None,
         body={"state": "quarantined"},
@@ -395,7 +395,7 @@ def test_transition_state_returns_403_when_permission_denied():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/state",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={"state": "quarantined"},
@@ -421,7 +421,7 @@ def test_transition_state_returns_422_on_unknown_state():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/state",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={"state": "not-a-state"},
@@ -445,7 +445,7 @@ def test_transition_state_returns_422_when_state_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/state",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={},
@@ -476,7 +476,7 @@ def test_transition_state_returns_404_when_resource_missing():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-x/state",
-            path_params={"resource_id": "res-x"},
+            path_params={"resource_id": "22222222-2222-4222-8222-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={"state": "quarantined"},
@@ -488,7 +488,7 @@ def test_transition_state_returns_404_when_resource_missing():
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
     testbase.assert_equal(body["type"], PROBLEM_TYPE_NOT_FOUND)
-    testbase.assert_equal(body["resource_id"], "res-x")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-00000000000a")
     return
 
 
@@ -512,7 +512,7 @@ def test_transition_state_returns_409_on_illegal_transition():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/state",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             body={"state": "available"},
@@ -545,14 +545,14 @@ def test_transition_state_returns_200_on_happy_path():
 
     def _capture(**kwargs):
         observed_kwargs.update(kwargs)
-        rtnval = _make_resource_view(resource_id="res-7")
+        rtnval = _make_resource_view(resource_id="22222222-2222-4222-8222-000000000007")
         return rtnval
 
     transition_mock.configure(side_effect=_capture)
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-7/state",
-            path_params={"resource_id": "res-7"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000007"},
             db_session=object(),
             auth_principal=_FakePrincipal(user_id="user-9"),
             body={"state": "quarantined", "reason": "flaky nic"},
@@ -563,7 +563,7 @@ def test_transition_state_returns_200_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
-    testbase.assert_equal(body["resource_id"], "res-7")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-000000000007")
     testbase.assert_equal(
         observed_kwargs["new_state"], ResourceState.QUARANTINED,
     )
@@ -596,7 +596,7 @@ def test_read_health_returns_404_when_never_seeded():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-x/health",
-            path_params={"resource_id": "res-x"},
+            path_params={"resource_id": "22222222-2222-4222-8222-00000000000a"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -606,7 +606,7 @@ def test_read_health_returns_404_when_never_seeded():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
-    testbase.assert_equal(body["resource_id"], "res-x")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-00000000000a")
     return
 
 
@@ -622,12 +622,12 @@ def test_read_health_returns_200_on_happy_path():
     )
     get_mock = get_patch.activate()
     get_mock.configure(
-        side_effect=lambda **kwargs: _make_health_view(resource_id="res-5"),
+        side_effect=lambda **kwargs: _make_health_view(resource_id="22222222-2222-4222-8222-000000000005"),
     )
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-5/health",
-            path_params={"resource_id": "res-5"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000005"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -637,7 +637,7 @@ def test_read_health_returns_200_on_happy_path():
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
-    testbase.assert_equal(body["resource_id"], "res-5")
+    testbase.assert_equal(body["resource_id"], "22222222-2222-4222-8222-000000000005")
     testbase.assert_equal(body["last_outcome"], "pass")
     testbase.assert_equal(body["pass_count"], 3)
     return
@@ -653,7 +653,7 @@ def test_read_health_returns_403_when_permission_denied():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-5/health",
-            path_params={"resource_id": "res-5"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000005"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -686,7 +686,7 @@ def test_usage_history_returns_page_on_happy_path():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/usage-history",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
         )
@@ -714,7 +714,7 @@ def test_usage_history_returns_400_on_bad_limit():
     try:
         request = _FakeRequest(
             path="/api/v1/resources/res-1/usage-history",
-            path_params={"resource_id": "res-1"},
+            path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
             db_session=object(),
             auth_principal=_FakePrincipal(),
             query={"limit": "not-an-int"},
@@ -736,10 +736,102 @@ def test_usage_history_returns_401_when_no_principal():
     """
     request = _FakeRequest(
         path="/api/v1/resources/res-1/usage-history",
-        path_params={"resource_id": "res-1"},
+        path_params={"resource_id": "22222222-2222-4222-8222-000000000001"},
         db_session=object(),
         auth_principal=None,
     )
     response = resources_routes.handle_list_resource_usage_history(request)
+    testbase.assert_equal(response.status_code, 401)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Malformed ids (audit finding RES-38)
+# ---------------------------------------------------------------------------
+
+
+def _call_with_malformed_resource_id(*, handler: Callable, body: Any = None) -> Any:
+    """
+        Call ``handler`` as an authorised caller with the resource id
+        ``not-a-uuid``. Returns ``(status_code, decoded_body)``.
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        response = handler(_FakeRequest(
+            path="/api/v1/resources/not-a-uuid",
+            path_params={"resource_id": "not-a-uuid"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body=body,
+        ))
+    finally:
+        perm_patch.deactivate()
+    rtnval = (response.status_code, _decode_body(response))
+    return rtnval
+
+
+def test_read_resource_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: GET resources/not-a-uuid answers a 404 problem document
+    naming the id, instead of a 500.**
+    """
+    status, body = _call_with_malformed_resource_id(handler=resources_routes.handle_read_resource)
+
+    testbase.assert_equal((status, body["type"], body["resource_id"]), (404, PROBLEM_TYPE_NOT_FOUND, "not-a-uuid"))
+    return
+
+
+def test_transition_state_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: POST resources/not-a-uuid/state answers 404, instead of
+    a 500.**
+    """
+    status, body = _call_with_malformed_resource_id(
+        handler=resources_routes.handle_transition_resource_state, body={"state": "maintenance"},
+    )
+
+    testbase.assert_equal((status, body["type"]), (404, PROBLEM_TYPE_NOT_FOUND))
+    return
+
+
+def test_read_health_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: GET resources/not-a-uuid/health answers 404, instead of
+    a 500.**
+    """
+    status, body = _call_with_malformed_resource_id(handler=resources_routes.handle_read_resource_health)
+
+    testbase.assert_equal((status, body["type"]), (404, PROBLEM_TYPE_NOT_FOUND))
+    return
+
+
+def test_usage_history_with_a_malformed_id_is_a_404_problem():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: GET resources/not-a-uuid/usage-history answers 404,
+    instead of a 500.**
+    """
+    status, body = _call_with_malformed_resource_id(handler=resources_routes.handle_list_resource_usage_history)
+
+    testbase.assert_equal((status, body["type"]), (404, PROBLEM_TYPE_NOT_FOUND))
+    return
+
+
+def test_malformed_id_from_an_anonymous_caller_is_still_401():
+    """
+    **Feature: resources (RES-38 malformed ids)**
+    **Property: the id is checked after authentication, so an anonymous
+    caller gets 401 whatever id it sends.**
+    """
+    response = resources_routes.handle_read_resource(_FakeRequest(
+        path="/api/v1/resources/not-a-uuid",
+        path_params={"resource_id": "not-a-uuid"},
+        db_session=object(),
+        auth_principal=None,
+    ))
+
     testbase.assert_equal(response.status_code, 401)
     return

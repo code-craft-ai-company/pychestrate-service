@@ -33,7 +33,13 @@ For every request whose path starts with one of ``path_prefixes``:
 
 * Open a SQLAlchemy session via the injected ``open_session``
   callable. Attach as ``request.db_session``.
-* Read the session cookie named ``cookie_name`` from
+* If the request presents an API token
+  (``Authorization: Bearer pyc_...`` or ``X-Pychestrate-Api-Key``)
+  and a ``resolve_api_token`` resolver is configured, the token alone
+  decides the principal (see :func:`extract_api_token`); a rejected
+  token leaves the request anonymous, and a ``read-only`` token used
+  with a write method is answered 403 before the handler runs.
+* Otherwise read the session cookie named ``cookie_name`` from
   ``request.cookies``. If present and non-empty, call
   ``resolve_actor(db_session, session_id, now)``; on success,
   attach the principal as ``request.auth_principal`` and the
@@ -94,6 +100,72 @@ SESSION_MIDDLEWARE_NAME: str = "pychestrate-session"
 CookieValueToSessionId = Callable[[str], Optional[str]]
 
 
+# ---------------------------------------------------------------------------
+# API tokens (machine identity)
+# ---------------------------------------------------------------------------
+#
+# A request may authenticate with an API token instead of a session
+# cookie: ``Authorization: Bearer pyc_...`` (or the
+# ``X-Pychestrate-Api-Key`` header the OpenAPI document has long
+# declared). The token resolver is a separate, optional seam so the
+# cookie path above is unchanged. A presented token that fails to
+# resolve leaves the request anonymous -- it does not fall back to a
+# cookie -- and the anonymous-access policy then answers 401.
+
+#: ``(db_session, token, now, request) -> Optional[AuthPrincipal]``.
+ApiTokenResolver = Callable[[Any, str, datetime, Any], Optional[Any]]
+
+API_KEY_HEADER_NAME: str = "X-Pychestrate-Api-Key"
+
+#: Only bearer values with this prefix are treated as API tokens, so
+#: any other bearer credential passes through to the handler untouched.
+API_TOKEN_PREFIX: str = "pyc_"
+
+#: Endpoints that read-only API tokens may POST to because the endpoint
+#: enforces the token's scope per operation (the MCP JSON-RPC transport
+#: carries read and write tools alike over POST).
+READ_ONLY_TOKEN_POST_PATHS: Tuple[str, ...] = ("/mcp/1/service",)
+
+
+def extract_api_token(request: Any) -> Optional[str]:
+    """
+        Return the API token a request presents, or ``None``.
+
+        Reads ``Authorization: Bearer <token>`` (scheme matched
+        case-insensitively) and falls back to the
+        ``X-Pychestrate-Api-Key`` header. Only values carrying
+        :data:`API_TOKEN_PREFIX` count.
+
+        :param request: Webworks Request (any object with ``headers``).
+
+        :returns: The token string or ``None``.
+    """
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+
+    candidates: List[str] = []
+    try:
+        authorization = headers.get("Authorization", None)
+    except Exception:
+        authorization = None
+    if isinstance(authorization, str):
+        scheme, _, value = authorization.strip().partition(" ")
+        if scheme.lower() == "bearer":
+            candidates.append(value.strip())
+    try:
+        api_key = headers.get(API_KEY_HEADER_NAME, None)
+    except Exception:
+        api_key = None
+    if isinstance(api_key, str):
+        candidates.append(api_key.strip())
+
+    for candidate in candidates:
+        if candidate.startswith(API_TOKEN_PREFIX) and len(candidate) > len(API_TOKEN_PREFIX):
+            return candidate
+    return None
+
+
 class PychestrateSessionMiddleware:
     """
         WebWorks middleware that opens a request-scoped SQLAlchemy
@@ -139,7 +211,8 @@ class PychestrateSessionMiddleware:
         ] = None,
         ctx_logger: Optional[logging.Logger] = None,
         clock: Optional[Callable[[], datetime]] = None,
-        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None
+        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None,
+        resolve_api_token: Optional[ApiTokenResolver] = None
     ) -> None:
         """
             Construct the middleware.
@@ -172,7 +245,14 @@ class PychestrateSessionMiddleware:
                 :mod:`security.auth.anonymous_access`). ``None``
                 keeps the historical behaviour of letting every
                 handler decide for itself.
+            :param resolve_api_token: Optional :data:`ApiTokenResolver`.
+                When set, a request presenting an API token (see
+                :func:`extract_api_token`) is authenticated by it
+                instead of by its cookies; ``None`` from the resolver
+                leaves the request anonymous. ``None`` (the default)
+                ignores API tokens.
         """
+        self._resolve_api_token: Optional[ApiTokenResolver] = resolve_api_token
         self._anonymous_access_policy: Optional[Callable[[str, str], bool]] = (
             anonymous_access_policy
         )
@@ -222,7 +302,7 @@ class PychestrateSessionMiddleware:
 
             :returns: None.
         """
-        principal = self._resolve_principal_from_cookies(
+        principal = self._resolve_principal_from_api_token_or_cookies(
             request=request, db_session=db_session
         )
         if principal is not None:
@@ -233,6 +313,93 @@ class PychestrateSessionMiddleware:
             request.actor_user_id = None
 
         return
+
+    def _resolve_principal_from_api_token_or_cookies(
+            self, *, request: Any, db_session: Any
+        ) -> Optional[Any]:
+        """
+            Resolve the request's principal from its API token when it
+            presents one (and a token resolver is configured), else
+            from its cookies.
+
+            A presented token that does not resolve leaves the request
+            anonymous and marks it ``api_token_rejected`` so the 401
+            can say why; it does not fall back to the cookies, so an
+            explicit bad credential never silently acts as whoever is
+            signed in to the browser.
+
+            :param request: Webworks Request instance.
+            :param db_session: Open SQLAlchemy session.
+
+            :returns: Resolved principal or ``None``.
+        """
+        request.api_token_rejected = False
+        if self._resolve_api_token is not None:
+            token = extract_api_token(request)
+            if token is not None:
+                try:
+                    principal = self._resolve_api_token(
+                        db_session, token, self._clock(), request
+                    )
+                except Exception as resolve_exc:
+                    # Fail closed: a resolver failure authenticates
+                    # nobody. Roll back so the session stays usable.
+                    self._logger.exception(
+                        "pychestrate.session.api_token.resolve_failed error=%s",
+                        resolve_exc,
+                    )
+                    self._safe_rollback(db_session=db_session)
+                    principal = None
+                if principal is None:
+                    request.api_token_rejected = True
+                return principal
+
+        rtnval = self._resolve_principal_from_cookies(
+            request=request, db_session=db_session
+        )
+        return rtnval
+
+    def _refuses_token_scope(self, *, request: Any) -> bool:
+        """
+            Whether a request authenticated with a ``read-only`` API
+            token is using a method that token may not use.
+
+            :param request: Webworks Request with the actor attached.
+
+            :returns: ``True`` when the request must end with a 403.
+        """
+        principal = getattr(request, "auth_principal", None)
+        if getattr(principal, "token_scope", None) != "read-only":
+            return False
+        # MCP speaks JSON-RPC over POST for reads and writes alike; the
+        # MCP endpoint refuses its state-changing tools to read-only
+        # tokens itself (mcp.service_endpoint).
+        if str(getattr(request, "path", "")) in READ_ONLY_TOKEN_POST_PATHS:
+            return False
+        method = str(getattr(request, "method", "GET")).upper()
+        rtnval = method not in ("GET", "HEAD", "OPTIONS")
+        return rtnval
+
+    def _token_scope_response(self, *, request: Any) -> Any:
+        """
+            Build the 403 problem document for a ``read-only`` token
+            used with a write method.
+
+            :param request: Webworks Request.
+
+            :returns: Webworks response (403, ``application/problem+json``).
+        """
+        from ccai.pychestrate.webservice.api.problem_json_webworks import (  # noqa: E402
+            problem_response_for_http_status,
+        )
+        method = str(getattr(request, "method", "")).upper()
+        rtnval = problem_response_for_http_status(
+            status=403,
+            detail="This API token is read-only; {} requests need a read-write token.".format(method),
+            instance=request.path,
+            extensions={"token_scope": "read-only"},
+        )
+        return rtnval
 
     def _resolve_principal_from_cookies(
             self, *, request: Any, db_session: Any
@@ -320,6 +487,8 @@ class PychestrateSessionMiddleware:
         try:
             if self._refuses_anonymous_request(request=request) is True:
                 response = self._unauthenticated_response(request=request)
+            elif self._refuses_token_scope(request=request) is True:
+                response = self._token_scope_response(request=request)
             else:
                 response = call_next(request)
         except BaseException:
@@ -367,9 +536,12 @@ class PychestrateSessionMiddleware:
         from ccai.pychestrate.webservice.api.problem_json_webworks import (  # noqa: E402
             problem_response_for_http_status,
         )
+        detail = "Authentication required."
+        if getattr(request, "api_token_rejected", False) is True:
+            detail = "The API token is invalid, expired, or revoked."
         rtnval = problem_response_for_http_status(
             status=401,
-            detail="Authentication required.",
+            detail=detail,
             instance=request.path,
         )
         return rtnval
@@ -556,6 +728,54 @@ def default_ui_cookie_value_to_session_id(
     return rtnval
 
 
+def default_resolve_api_token(
+        db_session: Any, token: str, now: datetime, request: Any
+    ) -> Optional[Any]:
+    """
+        Production default for the ``resolve_api_token`` constructor
+        arg: authenticate the token through
+        :func:`security.auth.api_tokens.service.authenticate_api_token`
+        (which also records the use) and return its principal.
+        A rejected token (unknown, expired, revoked, inactive account)
+        becomes ``None``; the reason is logged, never returned to the
+        client.
+
+        :param db_session: Active SQLAlchemy session.
+        :param token: The presented ``pyc_...`` token.
+        :param now: Evaluation timestamp.
+        :param request: Webworks Request (method and path are recorded
+                        with the use).
+
+        :returns: :class:`ApiTokenPrincipal` or ``None``.
+    """
+    from ccai.pychestrate.webservice.security.auth.api_tokens.exceptions import (
+        ApiTokenRejectedError,
+    )
+    from ccai.pychestrate.webservice.security.auth.api_tokens.service import (
+        authenticate_api_token,
+        digest_token,
+    )
+
+    try:
+        principal = authenticate_api_token(
+            db_session=db_session,
+            token=token,
+            now=now,
+            request_method=str(getattr(request, "method", "GET")),
+            request_path=str(getattr(request, "path", "")),
+        )
+    except ApiTokenRejectedError as xcpt:
+        _module_logger.info(
+            "pychestrate.session.api_token.rejected reason=%s digest_prefix=%s",
+            xcpt.reason,
+            digest_token(token=token)[:12],
+        )
+        return None
+
+    rtnval = principal
+    return rtnval
+
+
 def install_pychestrate_session_middleware(
         *,
         app: Any,
@@ -570,7 +790,8 @@ def install_pychestrate_session_middleware(
         ] = None,
         ctx_logger: Optional[logging.Logger] = None,
         clock: Optional[Callable[[], datetime]] = None,
-        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None
+        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None,
+        resolve_api_token: Optional[ApiTokenResolver] = None
     ) -> PychestrateSessionMiddleware:
     """
         Construct the middleware and add it to a webworks app's
@@ -609,6 +830,11 @@ def install_pychestrate_session_middleware(
             :func:`security.auth.anonymous_access.is_anonymous_request_permitted`,
             which refuses every ``/api/v1/*`` request without a
             principal unless the route is on the explicit allowlist.
+        :param resolve_api_token: See
+            :class:`PychestrateSessionMiddleware`. Defaults to
+            :func:`default_resolve_api_token`, so
+            ``Authorization: Bearer pyc_...`` authenticates machine
+            callers on every path the middleware covers.
 
         :returns: The installed middleware (useful in tests).
     """
@@ -658,6 +884,11 @@ def install_pychestrate_session_middleware(
     else:
         resolved_anonymous_access_policy = anonymous_access_policy
 
+    if resolve_api_token is None:
+        resolved_resolve_api_token: ApiTokenResolver = default_resolve_api_token
+    else:
+        resolved_resolve_api_token = resolve_api_token
+
     middleware = PychestrateSessionMiddleware(
         open_session=resolved_open_session,
         resolve_actor=resolved_resolve_actor,
@@ -667,6 +898,7 @@ def install_pychestrate_session_middleware(
         ctx_logger=ctx_logger,
         clock=clock,
         anonymous_access_policy=resolved_anonymous_access_policy,
+        resolve_api_token=resolved_resolve_api_token,
     )
 
     app.dispatcher.pipeline.add(
@@ -684,4 +916,10 @@ __all__ = [
     "default_resolve_actor",
     "default_ui_cookie_value_to_session_id",
     "install_pychestrate_session_middleware",
+    # API tokens (machine identity).
+    "API_KEY_HEADER_NAME",
+    "API_TOKEN_PREFIX",
+    "ApiTokenResolver",
+    "default_resolve_api_token",
+    "extract_api_token",
 ]

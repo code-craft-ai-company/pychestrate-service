@@ -17,10 +17,13 @@
         <p>{{ job_type.description or 'No description' }}</p>
     </div>
     {% if can_manage and job_type.state.value == 'active' %}
-    <form action="{{ url_for('config.rpa_type_retire', type_id=job_type.type_id) }}" method="post" data-confirm="Retire this job type? New runs will be refused and every version retired.">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn btn-danger">{{ ui.icon("block") }} Retire type</button>
-    </form>
+    <div class="actions-row">
+        <a href="{{ url_for('config.rpa_type_edit', type_id=job_type.type_id) }}" class="btn btn-secondary">{{ ui.icon("edit") }} Edit</a>
+        <form action="{{ url_for('config.rpa_type_retire', type_id=job_type.type_id) }}" method="post" data-confirm="Retire this job type? New runs will be refused and every version retired.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-danger">{{ ui.icon("block") }} Retire type</button>
+        </form>
+    </div>
     {% endif %}
 </div>
 
@@ -65,8 +68,8 @@
             <tr>
                 <td class="mono strong">{{ version.version }}</td>
                 <td>{{ ui.status_badge(version.state) }}</td>
-                <td class="mono small">{{ version.source_kind }}: {{ version.source_ref | display }}</td>
-                <td class="mono small">{% if version.entrypoint.command is defined and version.entrypoint.command %}{{ version.entrypoint.command | join(' ') }}{% elif version.entrypoint.workflow is defined and version.entrypoint.workflow %}workflow {{ version.entrypoint.workflow }}{% elif version.entrypoint.tasking is defined and version.entrypoint.tasking %}tasking {{ version.entrypoint.tasking }}{% else %}&mdash;{% endif %}</td>
+                <td class="mono small truncate" title="{{ version.source_kind }}: {{ version.source_ref | display }}">{{ version.source_kind }}: {{ version.source_ref | display }}</td>
+                <td class="mono small truncate" title="{% if version.entrypoint.command is defined and version.entrypoint.command %}{{ version.entrypoint.command | join(' ') }}{% elif version.entrypoint.workflow is defined and version.entrypoint.workflow %}workflow {{ version.entrypoint.workflow }}{% elif version.entrypoint.tasking is defined and version.entrypoint.tasking %}tasking {{ version.entrypoint.tasking }}{% endif %}">{% if version.entrypoint.command is defined and version.entrypoint.command %}{{ version.entrypoint.command | join(' ') }}{% elif version.entrypoint.workflow is defined and version.entrypoint.workflow %}workflow {{ version.entrypoint.workflow }}{% elif version.entrypoint.tasking is defined and version.entrypoint.tasking %}tasking {{ version.entrypoint.tasking }}{% else %}&mdash;{% endif %}</td>
                 <td>{{ version.timeout_minutes }}m</td>
                 <td>{{ version.published_at | format_datetime('%Y-%m-%d %H:%M') }}</td>
                 {% if can_manage %}
@@ -109,34 +112,34 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label for="version">Version *</label>
-            <input type="text" id="version" name="version" class="form-control mono" required placeholder="1.0.0">
+            <input type="text" id="version" name="version" class="form-control mono" required placeholder="1.0.0" value="{{ form_data.get('version', '') if form_data else '' }}">
             <div class="form-text">Semantic versions sort highest for <code>latest-active</code>; other labels sort after them.</div>
         </div>
         <div class="form-group">
             <label for="source_kind">Source</label>
             <select id="source_kind" name="source_kind" class="form-control">
-                <option value="git">git &mdash; clone a repository (url#ref)</option>
-                <option value="package">package &mdash; installed on the pod</option>
-                <option value="local">local &mdash; a directory already on the pod</option>
+                <option value="git"{% if not form_data or form_data.get('source_kind', 'git') == 'git' %} selected{% endif %}>git &mdash; clone a repository (url#ref)</option>
+                <option value="package"{% if form_data and form_data.get('source_kind', '') == 'package' %} selected{% endif %}>package &mdash; installed on the pod</option>
+                <option value="local"{% if form_data and form_data.get('source_kind', '') == 'local' %} selected{% endif %}>local &mdash; a directory already on the pod</option>
             </select>
         </div>
         <div class="form-group">
             <label for="source_ref">Source Reference</label>
-            <input type="text" id="source_ref" name="source_ref" class="form-control mono" placeholder="https://git.example.com/rpa-jobs.git#v1.0.0">
+            <input type="text" id="source_ref" name="source_ref" class="form-control mono" placeholder="https://git.example.com/rpa-jobs.git#v1.0.0" value="{{ form_data.get('source_ref', '') if form_data else '' }}">
         </div>
         <div class="form-group">
             <label for="entrypoint">Entrypoint (JSON) *</label>
             <textarea id="entrypoint" name="entrypoint" class="form-control mono" rows="4" spellcheck="false" required
-                      placeholder='{% if job_type.execution_mode.value == "tasker" %}{"workflow": "workflows/job.yaml"} or {"tasking": "jobs.flow@JobFlow"}{% else %}{"command": ["python", "-m", "jobs.invoice_import"], "packet_delivery": "file"}{% endif %}'></textarea>
-            <div class="form-text">{% if job_type.execution_mode.value == 'tasker' %}A taskplus workflow path inside the source, or a <code>module@Class</code> tasking.{% else %}An argv list; <code>packet_delivery</code> is <code>file</code> (default), <code>stdin</code>, or <code>env</code>.{% endif %}</div>
+                      placeholder='{% if job_type.execution_mode.value == "tasker" %}{"workflow": "workflows/job.yaml"} or {"tasking": "jobs.flow@JobFlow"}{% else %}{"command": ["python", "-m", "jobs.invoice_import"], "packet_delivery": "file"}{% endif %}' aria-describedby="entrypoint-help">{{ form_data.get('entrypoint', '') if form_data else '' }}</textarea>
+            <div id="entrypoint-help" class="form-text">{% if job_type.execution_mode.value == 'tasker' %}A JSON object naming a taskplus workflow path inside the source (<code>workflow</code>) or a <code>module@Class</code> tasking (<code>tasking</code>).{% else %}A JSON object: <code>command</code> is the argv list to run, and <code>packet_delivery</code> is <code>file</code> (default), <code>stdin</code>, or <code>env</code>.{% endif %}</div>
         </div>
         <div class="form-group">
             <label for="environment">Environment (JSON)</label>
-            <textarea id="environment" name="environment" class="form-control mono" rows="3" spellcheck="false" placeholder='{"LOG_LEVEL": "info"}'></textarea>
+            <textarea id="environment" name="environment" class="form-control mono" rows="3" spellcheck="false" placeholder='{"LOG_LEVEL": "info"}'>{{ form_data.get('environment', '') if form_data else '' }}</textarea>
         </div>
         <div class="form-group">
             <label for="timeout_minutes">Timeout (minutes)</label>
-            <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" value="60" min="1" max="1440">
+            <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" value="{{ form_data.get('timeout_minutes', '60') if form_data else '60' }}" min="1" max="1440">
         </div>
         <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Publish version</button>
     </form>

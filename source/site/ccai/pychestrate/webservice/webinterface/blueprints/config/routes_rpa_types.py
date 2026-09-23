@@ -10,6 +10,10 @@
 * ``POST /admin/rpa-job-types/create``                            -- register.
 * ``GET  /admin/rpa-job-types/{type_id}``                         -- detail + versions
                                                                      + publish form.
+* ``GET|POST /admin/rpa-job-types/{type_id}/edit``                 -- edit the display
+                                                                     name, description,
+                                                                     schema, secret
+                                                                     fields, capabilities.
 * ``POST /admin/rpa-job-types/{type_id}/versions``                -- publish a version.
 * ``POST /admin/rpa-job-types/{type_id}/versions/{version}/state`` -- deprecate /
                                                                      retire / activate.
@@ -60,6 +64,7 @@ _ROUTE_TABLE = (
     ("config.rpa_type_list", "/rpa-job-types", ("GET",)),
     ("config.rpa_type_create", "/rpa-job-types/create", ("GET", "POST")),
     ("config.rpa_type_detail", "/rpa-job-types/{type_id}", ("GET",)),
+    ("config.rpa_type_edit", "/rpa-job-types/{type_id}/edit", ("GET", "POST")),
     ("config.rpa_type_publish", "/rpa-job-types/{type_id}/versions", ("POST",)),
     ("config.rpa_type_version_state", "/rpa-job-types/{type_id}/versions/{version}/state", ("POST",)),
     ("config.rpa_type_retire", "/rpa-job-types/{type_id}/retire", ("POST",)),
@@ -255,6 +260,34 @@ def _resolve_type_or_redirect(*, auth: Any, rpa: Any, type_id: str) -> Any:
     return rtnval
 
 
+def _render_detail(
+        *,
+        auth: Any,
+        job_type: Any,
+        form_data: Optional[MultiFormView] = None,
+        status_code: int = 200
+    ) -> HTMLResponse:
+    """
+        Render the job type page. A failed publish re-renders it with the
+        submitted version fields in ``form_data`` so nothing is lost.
+    """
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="config.rpa_type_detail",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["job_type"] = job_type
+    context["versions"] = list(job_type.versions)
+    context["can_manage"] = _has_permission(auth=auth, permission=RPA_TYPES_MANAGE_PERMISSION)
+    context["packet_schema_json"] = _pretty_json(dict(job_type.packet_schema)) if job_type.packet_schema else ""
+    context["form_data"] = form_data
+    response = _render(template_name="config/rpa_types/detail.html", context=context, status_code=status_code)
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
 def handle_rpa_type_detail(request: Request) -> Response:
     """
         ``GET /admin/rpa-job-types/{type_id}``.
@@ -272,20 +305,112 @@ def handle_rpa_type_detail(request: Request) -> Response:
         job_type = _resolve_type_or_redirect(auth=auth, rpa=rpa, type_id=type_id)
         if isinstance(job_type, Response):
             return job_type
-        flashes = flash.consume_flashes(session=auth.session)
-        context = _build_default_template_context(
-            session=auth.session,
-            request_endpoint="config.rpa_type_detail",
-            flashes=flashes,
-            csrf_token=auth.csrf_token,
+        response = _render_detail(auth=auth, job_type=job_type)
+        return response
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _edit_form_values(*, job_type: Any) -> Dict[str, str]:
+    """
+        The edit form's initial values, from the stored job type.
+    """
+    rtnval = {
+        "display_name": str(job_type.display_name or ""),
+        "description": str(job_type.description or ""),
+        "capability_requirements": ", ".join(job_type.capability_requirements or ()),
+        "secret_fields": ", ".join(job_type.secret_fields or ()),
+        "packet_schema": _pretty_json(dict(job_type.packet_schema)) if job_type.packet_schema else "",
+    }
+    return rtnval
+
+
+def _render_edit_form(
+        *,
+        auth: Any,
+        job_type: Any,
+        form_data: Dict[str, str],
+        status_code: int = 200
+    ) -> HTMLResponse:
+    flashes = flash.consume_flashes(session=auth.session)
+    context = _build_default_template_context(
+        session=auth.session,
+        request_endpoint="config.rpa_type_edit",
+        flashes=flashes,
+        csrf_token=auth.csrf_token,
+    )
+    context["job_type"] = job_type
+    context["form_data"] = form_data
+    response = _render(template_name="config/rpa_types/edit.html", context=context, status_code=status_code)
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
+def handle_rpa_type_edit(request: Request) -> Response:
+    """
+        ``GET|POST /admin/rpa-job-types/{type_id}/edit`` -- edit the
+        fields a registered type may change. A validation error re-renders
+        the form with what was typed.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+    db_session = auth.db_session
+    try:
+        type_id = str(request.path_params.get("type_id", ""))
+        denied = _deny_manage(auth, fallback_endpoint="config.rpa_type_detail", type_id=type_id)
+        if denied is not None:
+            return denied
+        rpa = _build_rpa_service()
+        job_type = _resolve_type_or_redirect(auth=auth, rpa=rpa, type_id=type_id)
+        if isinstance(job_type, Response):
+            return job_type
+        if request.method.upper() == "GET":
+            return _render_edit_form(auth=auth, job_type=job_type, form_data=_edit_form_values(job_type=job_type))
+
+        edit_url = _url_for_module.url_for("config.rpa_type_edit", type_id=type_id)
+        single_form = _parse_form_or_empty(request=request)
+        csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+            form=single_form, session=auth.session, fallback_url=edit_url,
         )
-        context["job_type"] = job_type
-        context["versions"] = list(job_type.versions)
-        context["can_manage"] = _has_permission(auth=auth, permission=RPA_TYPES_MANAGE_PERMISSION)
-        context["packet_schema_json"] = _pretty_json(dict(job_type.packet_schema)) if job_type.packet_schema else ""
-        context["form_data"] = None
-        response = _render(template_name="config/rpa_types/detail.html", context=context)
-        _attach_session_to_response(response=response, session=auth.session)
+        if csrf_redirect is not None:
+            _attach_session_to_response(response=csrf_redirect, session=auth.session)
+            return csrf_redirect
+
+        submitted = {
+            key: str(single_form.get(key, "") or "")
+            for key in ("display_name", "description", "capability_requirements", "secret_fields", "packet_schema")
+        }
+        try:
+            packet_schema = _parse_json_or_default(
+                raw=submitted["packet_schema"], default=None, field_label="Packet schema",
+            )
+            rpa.update_job_type(
+                db_session=db_session,
+                type_id=type_id,
+                display_name=submitted["display_name"],
+                description=submitted["description"].strip(),
+                capability_requirements=_csv(submitted["capability_requirements"]),
+                secret_fields=_csv(submitted["secret_fields"]),
+                packet_schema=packet_schema,
+                actor_id=auth.user_id,
+            )
+        except Exception as exc:
+            flash.add_flash(
+                session=auth.session,
+                message="Error saving the job type: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
+                category=flash.CATEGORY_ERROR,
+            )
+            return _render_edit_form(auth=auth, job_type=job_type, form_data=submitted, status_code=400)
+        response = _redirect_with_flash(
+            session=auth.session,
+            url=_url_for_module.url_for("config.rpa_type_detail", type_id=type_id),
+            message="RPA job type {} saved.".format(type_id),
+            category=flash.CATEGORY_SUCCESS,
+        )
         return response
     finally:
         try:
@@ -317,6 +442,7 @@ def handle_rpa_type_publish(request: Request) -> Response:
             return csrf_redirect
 
         rpa = _build_rpa_service()
+        form_view = MultiFormView(data=_parse_form_multi(request=request))
         try:
             entrypoint = _parse_json_or_default(
                 raw=str(single_form.get("entrypoint", "")), default={}, field_label="Entrypoint",
@@ -348,12 +474,17 @@ def handle_rpa_type_publish(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            response = _redirect_with_flash(
-                session=auth.session, url=detail_url,
-                message="Error publishing version: {}".format(str(exc)),
+            # Re-render (don't redirect) so the typed version, source,
+            # entrypoint and environment survive the error.
+            job_type = _resolve_type_or_redirect(auth=auth, rpa=rpa, type_id=type_id)
+            if isinstance(job_type, Response):
+                return job_type
+            flash.add_flash(
+                session=auth.session,
+                message="Error publishing version: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
                 category=flash.CATEGORY_ERROR,
             )
-            return response
+            return _render_detail(auth=auth, job_type=job_type, form_data=form_view, status_code=400)
     finally:
         try:
             db_session.close()
@@ -457,6 +588,7 @@ _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "config.rpa_type_list": handle_rpa_type_list,
     "config.rpa_type_create": handle_rpa_type_create,
     "config.rpa_type_detail": handle_rpa_type_detail,
+    "config.rpa_type_edit": handle_rpa_type_edit,
     "config.rpa_type_publish": handle_rpa_type_publish,
     "config.rpa_type_version_state": handle_rpa_type_version_state,
     "config.rpa_type_retire": handle_rpa_type_retire,
@@ -481,6 +613,7 @@ __all__ = [
     "handle_rpa_type_list",
     "handle_rpa_type_create",
     "handle_rpa_type_detail",
+    "handle_rpa_type_edit",
     "handle_rpa_type_publish",
     "handle_rpa_type_version_state",
     "handle_rpa_type_retire",

@@ -81,6 +81,8 @@ def _run_server_arguments(*, threads: Optional[str]) -> Dict[str, Any]:
         kek_path = os.path.join(workdir, "kek")
         with open(kek_path, "wb") as handle:
             handle.write(b"\x2f" * 32)
+        # The KEK loader refuses a key file others can read.
+        os.chmod(kek_path, 0o600)
         env = os.environ.copy()
         for name in list(env):
             if name.startswith("PYCHESTRATE_"):

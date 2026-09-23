@@ -206,6 +206,9 @@ def create_pod_job_loop_observations(constraints: Optional[Dict[str, Any]] = Non
             path = os.path.join(workdir, name)
             with open(path, "wb") as handle:
                 handle.write(content)
+            # Key material is private to the service user; the KEK
+            # loader refuses a file others can read.
+            os.chmod(path, 0o600)
             return path
 
         presence_dir = os.path.join(workdir, "presence")

@@ -54,7 +54,7 @@ def _read(relative_path: str) -> str:
 
 def _missing_exports(script: str) -> List[str]:
     text = _read(script)
-    rtnval = [name for name in _JOB_LOOP_EXPORTS if re.search(r"^export {}=".format(name), text, re.M) is None]
+    rtnval = [name for name in _JOB_LOOP_EXPORTS if re.search(r"^\s*export {}=".format(name), text, re.M) is None]
     return rtnval
 
 
@@ -125,11 +125,11 @@ def test_alpha_deploy_points_nginx_at_the_enrollment_ca_certificate():
 def test_alpha_deploy_forwards_hyphenated_certificate_headers_only():
     """
     **Feature: pod certificate identity through nginx (E2E-03)**
-    **Property: the rendered nginx config forwards X-Client-Cert-CN and
-    X-Client-Cert-Verify in both proxy locations and no longer uses the
-    underscore header names gunicorn drops.**
+    **Property: the nginx site template the alpha deploy renders forwards
+    X-Client-Cert-CN and X-Client-Cert-Verify in both proxy locations and
+    no longer uses the underscore header names gunicorn drops.**
     """
-    text = _read("deployment/deploy-alpha-to-host.sh")
+    text = _read("deployment/pychestrate.nginx.conf.template")
     testbase.assert_equal(
         (text.count("proxy_set_header X-Client-Cert-CN"), text.count("proxy_set_header X-Client-Cert-Verify"),
          "proxy_set_header SSL_CLIENT_S_DN_CN" in text),

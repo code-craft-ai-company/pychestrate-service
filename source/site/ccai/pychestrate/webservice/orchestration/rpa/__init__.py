@@ -98,6 +98,7 @@ from ccai.pychestrate.webservice.orchestration.rpa.service import (
     RpaVersionInputs,
     apply_run_terminal,
     cancel_job,
+    check_trigger_packet,
     create_spec,
     delete_spec,
     get_job,

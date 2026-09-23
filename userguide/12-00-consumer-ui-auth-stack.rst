@@ -8,7 +8,7 @@ Pychestrate originally carried **two parallel authentication stacks**.
 As of PR p13aa the consumer-UI auth flow (login / session validation /
 logout) was wired to the modern stack via a small adapter, and as of PR
 p13ad the same adapter's ``check_permission`` was rewired onto the
-modern :mod:`rbac_evaluator` against the modern ``rbac_*`` tables. The
+modern ``rbac_evaluator`` against the modern ``rbac_*`` tables. The
 legacy ``SecurityManager`` is no longer consulted by any consumer-UI
 auth or RBAC path; the auth stack split is closed. This document
 captures the historical context of the migration and the residual
@@ -128,7 +128,8 @@ Alembic originally targeted ``PychestratePhase1Base.metadata`` only,
 so the legacy ``user`` / ``password_history`` / ``sessions`` tables
 that the consumer-UI's *legacy* login flow queried were not produced
 by any migration. The consumer UI's first
-``POST /config/login`` against an alembic-managed deployment would
+``POST /config/login`` (the sign-in route at the time; it has been
+``/login`` since PR #200) against an alembic-managed deployment would
 hit ``OperationalError: no such table: user``, the handler's broad
 ``except Exception`` would swallow it, and the form would re-render
 401 with a generic "Invalid username or password".  That was a P0
