@@ -134,10 +134,11 @@ file is consumed by `codecraftai-restclient-base`'s `RestClientGenerator`
 to generate the typed `codecraftai-restclient-pychestrate` Python
 client, and is the reference the server-side route implementations
 conform to. Every PR that touches the REST surface must update this spec
-in the same PR. `make openapi-validate` checks that the document is
-valid OpenAPI, not that it matches the live routes; the September 2026
-audit found live routes missing from it and implemented operations
-still flagged `planned`.
+in the same PR. The `docs` CI workflow (`.github/workflows/docs.yml`)
+runs `make openapi-validate` on every push and pull request; it checks
+that the document is valid OpenAPI, not that it matches the live
+routes, and the September 2026 audit found live routes missing from it
+and implemented operations still flagged `planned`.
 
 ## Site-Shell Refactor Sequence (PR1–PR6) — complete
 

@@ -79,7 +79,29 @@ without a reachable server they fail with connection errors, and several
 of them are behind the current web interface. CI does not run them. The
 browser needs a one-time `playwright install chromium`.
 
-**Writing tests.** One property per test, a docstring with
+## Check the documentation
+
+The `docs` CI workflow (`.github/workflows/docs.yml`) runs these three
+checks on every push and pull request; run them before you push a
+documentation change:
+
+```bash
+sphinx-build -W --keep-going -b html userguide .output/userguide-html   # the user manual, warnings as errors
+python3 docs/tools/check_doc_links.py                                    # every relative link and #anchor
+make openapi-validate                                                     # the OpenAPI contract
+```
+
+Link chapters to each other with plain hyperlinks to the `.rst` file
+(`` `Getting Started <02-00-getting-started.rst>`_ ``), not `:doc:` or
+`:ref:`, and write code as ``` ``code`` ```: GitHub renders the manual
+too, and shows Sphinx roles as raw text and single backticks as
+italics. The same workflow also installs the service and runs the
+runbook's smoke-test scripts, so a change that breaks a documented
+deployment step fails CI.
+
+## Write tests
+
+One property per test, a docstring with
 `**Feature: ...**` and `**Property: ...**`, mocks from
 `ccai.testbase.mocking`, and factories in `testshared` rather than in
 the test tree. [`AGENTS.md`](AGENTS.md) ("Writing Tests" and "Using
@@ -116,7 +138,7 @@ have the details and examples.
       `make openapi-validate` passes.
 - [ ] Model changes come with an alembic migration.
 - [ ] The user manual, `README.rst`, or the runbook are updated where
-      the change is user-visible.
+      the change is user-visible, and the documentation checks pass.
 - [ ] `CHANGELOG.md` has an `[Unreleased]` entry (and upgrade notes for
       anything breaking).
 - [ ] No secrets, `.env` files, or build output other than the
