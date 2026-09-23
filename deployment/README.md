@@ -150,8 +150,11 @@ Specifically:
   gunicorn against `build_wsgi_application_for_production()`
   bound to `127.0.0.1:8888`
 - `/etc/nginx/sites-available/pychestrate` — nginx site config,
-  rendered + symlinked to `sites-enabled/`, listening on port 80
-  and reverse-proxying to `127.0.0.1:8888`
+  rendered from `deployment/pychestrate.nginx.conf.template` +
+  symlinked to `sites-enabled/`, listening on port 80 (redirect)
+  and 443, reverse-proxying to `127.0.0.1:8888` and gzip-compressing
+  HTML / JavaScript / CSS / JSON / SVG responses (the ~1.6 MB mj-*
+  component library goes out as ~370 KB)
 - `~/.pychestrate/server.log` — tee'd stdout / stderr from the
   service (also available via `journalctl -u pychestrate`)
 
@@ -220,7 +223,7 @@ The script aborts with a typed error if:
 | 4 | `python3 repository-setup/rehome-repository --skip-workspaces` | generates `.env` with PYTHONPATH composition. |
 | 5 | `python3 development/setup-environment` | creates `.venv`, runs `poetry install`. **60-120 sec** while the nine private deps clone. |
 | 6 | `alembic upgrade head` | applies both migrations against `.cache/dev-db/pychestrate.sqlite`. |
-| 7 | nginx site write + reload | `/etc/nginx/sites-available/pychestrate` listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888). |
+| 7 | nginx site write + reload | renders `deployment/pychestrate.nginx.conf.template` to `/etc/nginx/sites-available/pychestrate`: listens on `--proxy-port` (80), proxies to `127.0.0.1:--port` (8888), gzip on for text responses. Validate a template edit locally with `nginx -t` against a rendered copy before deploying. |
 | 8 | systemd unit install + restart | `/etc/systemd/system/pychestrate.service` → `development/run-staging-gunicorn` → gunicorn on `127.0.0.1:8888`. |
 | 7 | `make dev-up` (in tmux) | starts the service. tmux session name: `pychestrate`. |
 
