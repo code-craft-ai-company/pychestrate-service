@@ -12,7 +12,7 @@ The entry point handles four classes of invocation:
 2. Built-in commands: ``login``, ``logout``, ``whoami``, ``config``,
    ``commands``, ``runs wait``, ``plugin-api catalog``, ``ext``.
 3. API commands generated from the server's OpenAPI document
-   (``pyc projects list``, ``pyc projects get-by-slug demo`` ...; see
+   (``pyc projects list``, ``pyc projects get demo`` ...; see
    :mod:`cli.commands.api`).
 4. Failures, each reported as one ``error: ...`` line (no traceback)
    with a documented exit code (see :mod:`cli.exit_codes`).
@@ -110,8 +110,8 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "                               Manage the credentials file.",
     "",
     "API commands:",
-    "  <noun> <verb> [args]         e.g. 'pyc projects list', 'pyc projects get-by-slug demo'.",
-    "                               Bodies: --data JSON|@FILE|- and --set KEY=VALUE.",
+    "  <noun> <verb> [args]         e.g. 'pyc projects list', 'pyc projects get demo'.",
+    "                               Bodies: --data JSON|@FILE|-, --from-file PATH, --set FIELD=VALUE.",
     "  commands                     List every API command the server offers.",
     "  project list                 List projects (same as 'projects list').",
     "  runs wait <run_id>           Wait for a run: exit 0 on success, 10 on failure.",
@@ -679,7 +679,10 @@ def _handle_api_command(*, ctx: CliContext, noun: str, verb: str, args: Sequence
     if descriptor is None:
         canonical = parser.resolve_noun(tree=tree, noun=noun)
         if canonical is not None:
-            verbs = ", ".join(entry.verb for entry in parser.verbs_for(tree=tree, noun=canonical))
+            verb_names = [entry.verb for entry in parser.verbs_for(tree=tree, noun=canonical)]
+            if len(verb_names) == 0:
+                verb_names = [alias for alias, _entry in parser.alias_verbs_for(tree=tree, noun=canonical)]
+            verbs = ", ".join(sorted(set(verb_names)))
             raise CliUsageError(
                 "'{}' has no verb '{}'. verbs: {}".format(canonical, verb, verbs)
             )

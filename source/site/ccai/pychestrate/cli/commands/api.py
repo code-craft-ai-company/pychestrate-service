@@ -6,18 +6,22 @@
 .. moduleauthor:: Code Craft AI LLC
 
 Every operation in the server's ``/api/v1/_meta/openapi.json`` is a
-command (see :mod:`cli.parser` for how nouns and verbs are named)::
+command (see :mod:`cli.parser` and :mod:`cli.command_names` for how
+nouns and verbs are named)::
 
-    pyc <noun> <verb> [PATH_PARAM ...] [--QUERY_PARAM VALUE ...]
-                      [--data JSON | --data @FILE | --data -]
-                      [--set KEY=VALUE ...] [--wait]
+    pyc <noun> <verb> [PATH_PARAM ...] [--query-param VALUE ...]
+                      [--data JSON | --data @FILE | --data - | --from-file PATH]
+                      [--set FIELD=VALUE ...] [--wait]
 
 * path parameters are positionals, in URL order;
-* query parameters are ``--name value`` (``--per-page`` or
-  ``--per_page``);
-* a JSON body comes from ``--data`` and/or repeated ``--set`` (values
-  are parsed as JSON when they can be -- ``--set count=3`` sends a
-  number -- and dotted keys nest);
+* query parameters are ``--kebab-case`` flags (``--per-page``; the
+  REST spelling ``--per_page`` is accepted too), typed and checked
+  against the document's allowed values; ``--help`` shows each one's
+  description and server default;
+* a JSON body comes from ``--data`` or ``--from-file`` and/or repeated
+  ``--set`` (values are parsed as JSON when they can be --
+  ``--set count=3`` sends a number -- and dotted keys nest);
+  ``--help`` lists the body's fields;
 * ``--wait`` (on POST commands) waits for the ``run_id`` the response
   names and exits with the run's result (see :mod:`cli.commands.runs`).
 
@@ -34,11 +38,12 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import argparse
 import json
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from ccai.pychestrate.cli import openapi_cache, parser, transport
+from ccai.pychestrate.cli import openapi_cache, parser, suggestions, transport
 from ccai.pychestrate.cli.argparsing import CliArgumentParser
 from ccai.pychestrate.cli.builtin_operations import FALLBACK_OPENAPI_DOCUMENT
 from ccai.pychestrate.cli.context import CliContext
@@ -51,6 +56,7 @@ from ccai.pychestrate.cli.models import (
     CliProfile,
     CommandDescriptor,
     CommandTree,
+    OperationParameter,
     RestOperation,
     RestResponse,
 )
@@ -62,6 +68,13 @@ OPENAPI_DOCUMENT_PATH: str = "/api/v1/_meta/openapi.json"
 OPENAPI_CACHE_MAX_AGE_SECONDS: float = 3600.0
 
 _BODY_METHODS = ("POST", "PUT", "PATCH")
+
+#: Most lines of an operation's description shown in ``--help``.
+_HELP_DESCRIPTION_LINE_LIMIT: int = 12
+
+#: Accepted spellings of a boolean query value.
+_TRUE_WORDS = ("true", "yes", "on", "1")
+_FALSE_WORDS = ("false", "no", "off", "0")
 
 
 # ---------------------------------------------------------------------------
@@ -172,7 +185,9 @@ def fallback_command_tree() -> CommandTree:
 
 def _describe(descriptor: CommandDescriptor) -> str:
     """
-        Help description for one command.
+        Help description for one command: the summary, the REST
+        endpoint, the operation's own description, and the command's
+        other spellings.
 
         :param descriptor: Command.
 
@@ -186,7 +201,152 @@ def _describe(descriptor: CommandDescriptor) -> str:
     lines.append("{} {}  (operationId {})".format(
         operation.method, operation.path_template, operation.operation_id
     ))
+    if len(operation.description) > 0:
+        description_lines = [line.rstrip() for line in operation.description.strip().splitlines()]
+        if len(description_lines) > _HELP_DESCRIPTION_LINE_LIMIT:
+            description_lines = description_lines[:_HELP_DESCRIPTION_LINE_LIMIT] + ["..."]
+        lines.append("")
+        lines.extend(description_lines)
+    if len(descriptor.aliases) > 0:
+        lines.append("")
+        spelled = ", ".join("pyc {} {}".format(noun, verb) for noun, verb in descriptor.aliases)
+        lines.append("also: {}".format(spelled))
     rtnval = "\n".join(lines)
+    return rtnval
+
+
+def _body_epilog(*, operation: RestOperation) -> Optional[str]:
+    """
+        The ``--help`` epilog listing the request body's fields.
+
+        :param operation: Operation.
+
+        :returns: Text, or ``None`` when the body has no known fields.
+    """
+    if len(operation.body_fields) == 0:
+        return None
+    width = max(len(body_field.name) for body_field in operation.body_fields)
+    width = min(max(width, 12), 28)
+    lines = ["request body fields (--set FIELD=VALUE, or --data / --from-file):"]
+    for body_field in operation.body_fields:
+        facts = []
+        if len(body_field.value_type) > 0:
+            facts.append(body_field.value_type)
+        if body_field.required is True:
+            facts.append("required")
+        text = ", ".join(facts)
+        if len(body_field.description) > 0:
+            text = "{}{}{}".format(text, " -- " if len(text) > 0 else "", body_field.description)
+        lines.append("  {:<{width}}  {}".format(body_field.name, text, width=width))
+    rtnval = "\n".join(lines)
+    return rtnval
+
+
+def flag_for(name: str) -> str:
+    """
+        The command-line flag of a query parameter: ``per_page`` ->
+        ``--per-page``.
+
+        :param name: Parameter name.
+
+        :returns: Flag.
+    """
+    rtnval = "--{}".format(name.replace("_", "-"))
+    return rtnval
+
+
+def _boolean_text(raw: str) -> str:
+    """
+        argparse ``type`` for boolean query values.
+
+        :param raw: Typed value.
+
+        :returns: ``"true"`` or ``"false"``.
+        :raises: argparse.ArgumentTypeError
+    """
+    lowered = str(raw).strip().lower()
+    if lowered in _TRUE_WORDS:
+        return "true"
+    if lowered in _FALSE_WORDS:
+        return "false"
+    raise argparse.ArgumentTypeError("expected true or false, got {!r}".format(raw))
+
+
+class _ChoiceNormalizer:
+    """
+        argparse ``type`` for an enumerated string parameter: a value
+        that matches an allowed value except for case is spelled the
+        way the document spells it (the server compares without
+        case); anything else is left for argparse's ``choices`` check
+        to reject with the list of allowed values.
+    """
+
+    def __init__(self, choices: Sequence[str]) -> None:
+        self._by_lower: Dict[str, str] = {}
+        for choice in choices:
+            self._by_lower[str(choice).lower()] = str(choice)
+        return
+
+    def __call__(self, raw: str) -> str:
+        rtnval = self._by_lower.get(str(raw).lower(), str(raw))
+        return rtnval
+
+
+def _sentence(text: str) -> str:
+    """
+        ``text`` ending with a period.
+
+        :param text: Text.
+
+        :returns: Text.
+    """
+    stripped = text.strip()
+    if len(stripped) > 0 and stripped[-1] not in ".!?":
+        stripped = stripped + "."
+    rtnval = stripped
+    return rtnval
+
+
+def _query_argument_options(*, parameter: OperationParameter) -> Dict[str, Any]:
+    """
+        The argparse options (type, choices, metavar, help) of one
+        query parameter.
+
+        :param parameter: Parameter.
+
+        :returns: Keyword arguments for ``add_argument``.
+    """
+    options: Dict[str, Any] = {"default": None}
+    help_parts: List[str] = []
+    if len(parameter.description) > 0:
+        help_parts.append(_sentence(parameter.description))
+    if parameter.value_type == "integer":
+        options["type"] = int
+        options["metavar"] = "N"
+    elif parameter.value_type == "number":
+        options["type"] = float
+        options["metavar"] = "NUMBER"
+    elif parameter.value_type == "boolean":
+        options["type"] = _boolean_text
+        options["metavar"] = "{true,false}"
+    else:
+        options["metavar"] = "VALUE"
+    if len(parameter.choices) > 0 and parameter.value_type not in ("boolean", "integer", "number"):
+        options["type"] = _ChoiceNormalizer(parameter.choices)
+        options["choices"] = list(parameter.choices)
+        options["metavar"] = "{" + ",".join(parameter.choices) + "}"
+    if parameter.value_type == "array":
+        options["action"] = "append"
+        help_parts.append("Repeatable.")
+    if parameter.required is True:
+        options["required"] = True
+        help_parts.append("Required.")
+    if parameter.default is not None:
+        help_parts.append("Server default: {}.".format(parameter.default))
+    if len(help_parts) == 0:
+        help_parts.append("Query parameter {}.".format(parameter.name))
+    options["help"] = " ".join(help_parts).replace("%", "%%")
+    rtnval = options
     return rtnval
 
 
@@ -198,37 +358,55 @@ def build_command_parser(*, ctx: CliContext, descriptor: CommandDescriptor) -> C
         :param descriptor: Command.
 
         :returns: Parser whose namespace carries ``p0..`` (path
-                  params), ``q0..`` (query params), ``data``, ``set``,
-                  ``wait``, ``wait_timeout``, ``wait_interval``.
+                  params), ``q0..`` (query params), ``data``,
+                  ``from_file``, ``set``, ``wait``, ``wait_timeout``,
+                  ``wait_interval``.
     """
     operation = descriptor.operation
     command_parser = CliArgumentParser(
         prog="pyc {} {}".format(descriptor.noun, descriptor.verb),
         description=_describe(descriptor),
+        epilog=_body_epilog(operation=operation),
         out_stream=ctx.stdout,
         err_stream=ctx.stderr,
     )
     for index, name in enumerate(operation.path_param_names):
-        command_parser.add_argument("p{}".format(index), metavar=name, help="path parameter {}".format(name))
+        parameter = operation.find_parameter(name)
+        help_text = "path parameter {}".format(name)
+        if parameter is not None and len(parameter.description) > 0:
+            help_text = parameter.description
+        command_parser.add_argument(
+            "p{}".format(index), metavar=name.upper(), help=help_text.replace("%", "%%"),
+        )
     for index, name in enumerate(operation.query_param_names):
-        flags = ["--{}".format(name)]
-        hyphenated = "--{}".format(name.replace("_", "-"))
-        if hyphenated not in flags:
-            flags.append(hyphenated)
-        is_required = name in operation.required_query_param_names
-        command_parser.add_argument(
-            *flags, dest="q{}".format(index), default=None, metavar="VALUE",
-            help="query parameter {}{}".format(name, " (the server requires it)" if is_required else ""),
-        )
+        parameter = operation.find_parameter(name)
+        if parameter is None:
+            parameter = OperationParameter(name=name, location="query")
+        options = _query_argument_options(parameter=parameter)
+        flag = flag_for(name)
+        command_parser.add_argument(flag, dest="q{}".format(index), **options)
+        rest_spelling = "--{}".format(name)
+        if rest_spelling != flag:
+            # The REST spelling (--per_page) keeps working, unlisted.
+            hidden_options = dict(options)
+            hidden_options["help"] = argparse.SUPPRESS
+            hidden_options.pop("required", None)
+            command_parser.add_argument(rest_spelling, dest="q{}".format(index), **hidden_options)
     if operation.has_request_body is True or operation.method in _BODY_METHODS:
-        command_parser.add_argument(
+        body_group = command_parser.add_argument_group("request body")
+        source_group = body_group.add_mutually_exclusive_group()
+        source_group.add_argument(
             "--data", default=None, metavar="JSON",
-            help="request body: JSON text, @FILE, or - for stdin",
+            help="the body as JSON text, @FILE, or - for standard input",
         )
-        command_parser.add_argument(
-            "--set", action="append", default=[], metavar="KEY=VALUE",
-            help="set one body field (repeatable; VALUE parsed as JSON when possible,"
-                 " dotted keys nest)",
+        source_group.add_argument(
+            "--from-file", dest="from_file", default=None, metavar="PATH",
+            help="read the JSON body from PATH (- for standard input)",
+        )
+        body_group.add_argument(
+            "--set", action="append", default=[], metavar="FIELD=VALUE",
+            help="set one body field (repeatable; VALUE is parsed as JSON when it can be,"
+                 " dotted fields nest: --set labels.env=ci)",
         )
     if operation.method == "POST":
         command_parser.add_argument(
@@ -263,6 +441,26 @@ def _parse_value(raw: str) -> Any:
     return rtnval
 
 
+def _read_file_text(*, file_path: str, option: str) -> str:
+    """
+        Read a body file.
+
+        :param file_path: Path.
+        :param option: The option that named it (for the error).
+
+        :returns: Text.
+        :raises: CliUsageError
+    """
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            rtnval = fh.read()
+    except OSError as xcpt:
+        raise CliUsageError(
+            "{}: cannot read {}: {}".format(option, file_path, xcpt.strerror or xcpt)
+        ) from None
+    return rtnval
+
+
 def _read_data_argument(*, ctx: CliContext, data_arg: str) -> Any:
     """
         Resolve ``--data``: inline JSON, ``@file``, or ``-`` for stdin.
@@ -279,11 +477,7 @@ def _read_data_argument(*, ctx: CliContext, data_arg: str) -> Any:
         source = "--data - (stdin)"
     elif data_arg.startswith("@"):
         file_path = data_arg[1:]
-        try:
-            with open(file_path, "r", encoding="utf-8") as fh:
-                text = fh.read()
-        except OSError as xcpt:
-            raise CliUsageError("cannot read {}: {}".format(file_path, xcpt.strerror or xcpt)) from None
+        text = _read_file_text(file_path=file_path, option="--data")
         source = "--data @{}".format(file_path)
     else:
         text = data_arg
@@ -294,25 +488,60 @@ def _read_data_argument(*, ctx: CliContext, data_arg: str) -> Any:
     return rtnval
 
 
-def build_request_body(*, ctx: CliContext, data_arg: Optional[str], set_args: Sequence[str]) -> Any:
+def _read_from_file_argument(*, ctx: CliContext, file_arg: str) -> Any:
     """
-        Combine ``--data`` and ``--set`` into the request body.
+        Resolve ``--from-file PATH`` (``-`` for standard input).
+
+        :param ctx: Invocation context.
+        :param file_arg: Raw value.
+
+        :returns: Parsed JSON.
+        :raises: CliUsageError
+    """
+    if file_arg == "-":
+        text = ctx.stdin.read()
+        source = "--from-file - (stdin)"
+    else:
+        text = _read_file_text(file_path=file_arg, option="--from-file")
+        source = "--from-file {}".format(file_arg)
+    try:
+        rtnval = json.loads(text)
+    except ValueError as xcpt:
+        raise CliUsageError("{} is not valid JSON: {}".format(source, xcpt)) from None
+    return rtnval
+
+
+def build_request_body(
+        *,
+        ctx: CliContext,
+        data_arg: Optional[str],
+        set_args: Sequence[str],
+        from_file_arg: Optional[str] = None
+    ) -> Any:
+    """
+        Combine ``--data`` / ``--from-file`` and ``--set`` into the
+        request body.
 
         :param ctx: Invocation context.
         :param data_arg: ``--data`` value or ``None``.
         :param set_args: ``--set`` values.
+        :param from_file_arg: ``--from-file`` value or ``None``.
 
-        :returns: Body (``None`` when neither was given).
+        :returns: Body (``None`` when nothing was given).
         :raises: CliUsageError
     """
     body: Any = None
+    if data_arg is not None and from_file_arg is not None:
+        raise CliUsageError("give the body with --data or --from-file, not both")
     if data_arg is not None:
         body = _read_data_argument(ctx=ctx, data_arg=data_arg)
+    if from_file_arg is not None:
+        body = _read_from_file_argument(ctx=ctx, file_arg=from_file_arg)
     if len(set_args) > 0:
         if body is None:
             body = {}
         if not isinstance(body, dict):
-            raise CliUsageError("--set needs --data to be a JSON object (or no --data)")
+            raise CliUsageError("--set needs the --data / --from-file body to be a JSON object")
         for assignment in set_args:
             key, separator, raw_value = assignment.partition("=")
             if separator != "=" or len(key.strip()) == 0:
@@ -328,6 +557,37 @@ def build_request_body(*, ctx: CliContext, data_arg: Optional[str], set_args: Se
             target[parts[-1]] = _parse_value(raw_value)
     rtnval = body
     return rtnval
+
+
+def _note_unknown_body_fields(*, ctx: CliContext, descriptor: CommandDescriptor, set_args: Sequence[str]) -> None:
+    """
+        Warn (on stderr) about ``--set`` fields the body schema does
+        not declare -- most often a typo. The request is still sent:
+        the server has the last word.
+
+        :param ctx: Invocation context.
+        :param descriptor: Command.
+        :param set_args: ``--set`` values.
+
+        :returns: None.
+    """
+    known = [body_field.name for body_field in descriptor.operation.body_fields]
+    if len(known) == 0:
+        return
+    for assignment in set_args:
+        key = assignment.partition("=")[0].strip()
+        top_level = key.split(".", 1)[0]
+        if len(top_level) == 0 or top_level in known:
+            continue
+        hint = suggestions.did_you_mean(word=top_level, candidates=known)
+        ctx.note(
+            "unknown-field-{}".format(top_level),
+            "note: '{}' is not a field of the {} request body{} (fields: {})".format(
+                top_level, descriptor.operation.operation_id,
+                "; " + hint if len(hint) > 0 else "", ", ".join(known),
+            ),
+        )
+    return
 
 
 # ---------------------------------------------------------------------------
@@ -400,8 +660,23 @@ def run_api_command(
 
     body = None
     if "data" in values:
-        body = build_request_body(ctx=ctx, data_arg=values.get("data"), set_args=values.get("set") or [])
+        set_args = values.get("set") or []
+        body = build_request_body(
+            ctx=ctx, data_arg=values.get("data"), set_args=set_args,
+            from_file_arg=values.get("from_file", None),
+        )
+        _note_unknown_body_fields(ctx=ctx, descriptor=descriptor, set_args=set_args)
         if body is None and operation.has_request_body is True:
+            required_fields = [f.name for f in operation.body_fields if f.required is True]
+            if operation.body_required is True and len(required_fields) > 0:
+                raise CliUsageError(
+                    "'pyc {} {}' needs a request body with {}: pass --set FIELD=VALUE for each,"
+                    " or the whole body with --data JSON or --from-file PATH"
+                    " (see 'pyc {} {} --help')".format(
+                        descriptor.noun, descriptor.verb, ", ".join(required_fields),
+                        descriptor.noun, descriptor.verb,
+                    )
+                )
             body = {}
 
     response = transport.execute_request(
@@ -445,12 +720,22 @@ def render_noun_help(*, tree: CommandTree, noun: str) -> str:
 
         :returns: Help text.
     """
-    lines = ["usage: pyc {} <verb> [args]".format(noun), "", "verbs:"]
-    for descriptor in parser.verbs_for(tree=tree, noun=noun):
-        summary = descriptor.operation.summary or descriptor.operation.operation_id
-        lines.append("  {:<32} {}".format(descriptor.verb, summary))
-    lines.append("")
-    lines.append("see 'pyc {} <verb> --help' for a verb's arguments.".format(noun))
+    lines = ["usage: pyc {} <verb> [args]".format(noun), ""]
+    descriptors = parser.verbs_for(tree=tree, noun=noun)
+    if len(descriptors) > 0:
+        lines.append("verbs:")
+        for descriptor in descriptors:
+            summary = descriptor.operation.summary or descriptor.operation.operation_id
+            lines.append("  {:<24} {}".format(descriptor.verb, summary))
+        lines.append("")
+        lines.append("see 'pyc {} <verb> --help' for a verb's arguments.".format(noun))
+    else:
+        # An alias-only noun (the tag of commands that were renamed).
+        lines.append("'{}' commands have their own nouns now:".format(noun))
+        for alias_verb, descriptor in parser.alias_verbs_for(tree=tree, noun=noun):
+            lines.append("  {:<32} -> pyc {} {}".format(alias_verb, descriptor.noun, descriptor.verb))
+        lines.append("")
+        lines.append("the old spellings keep working.")
     rtnval = "\n".join(lines) + "\n"
     return rtnval
 

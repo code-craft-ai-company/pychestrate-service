@@ -50,6 +50,48 @@ class CliProfile:
 
 
 @dataclass(frozen=True)
+class OperationParameter:
+    """
+        One path or query parameter of an operation, as the OpenAPI
+        document declares it.
+
+        :param name: Parameter name, as the server expects it.
+        :param location: ``"path"`` or ``"query"``.
+        :param required: Whether the server requires it.
+        :param description: One-line description (``""`` when the
+                            document has none).
+        :param value_type: JSON-schema type: ``string``, ``integer``,
+                           ``number``, ``boolean`` or ``array``.
+        :param choices: The allowed values (``enum``); empty when any
+                        value is accepted.
+        :param default: The server-side default as text, or ``None``.
+    """
+    name: str
+    location: str
+    required: bool = False
+    description: str = ""
+    value_type: str = "string"
+    choices: Tuple[str, ...] = field(default_factory=tuple)
+    default: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class BodyField:
+    """
+        One top-level field of an operation's JSON request body.
+
+        :param name: Field name.
+        :param required: Whether the body schema requires it.
+        :param value_type: JSON-schema type (``""`` when unspecified).
+        :param description: One-line description.
+    """
+    name: str
+    required: bool = False
+    value_type: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class RestOperation:
     """
         Subset of an OpenAPI operation needed to drive a request.
@@ -67,6 +109,11 @@ class RestOperation:
         :param summary: One-line summary from the OpenAPI document.
         :param has_request_body: Whether the operation takes a JSON
                                  body.
+        :param parameters: Every path and query parameter with its
+                           description, type, choices and default.
+        :param body_fields: The request body's top-level fields.
+        :param body_required: Whether the request body is required.
+        :param description: The operation's longer description.
     """
     operation_id: str
     method: str
@@ -77,6 +124,23 @@ class RestOperation:
     required_path_param_names: Tuple[str, ...] = field(default_factory=tuple)
     summary: str = ""
     has_request_body: bool = False
+    parameters: Tuple[OperationParameter, ...] = field(default_factory=tuple)
+    body_fields: Tuple[BodyField, ...] = field(default_factory=tuple)
+    body_required: bool = False
+    description: str = ""
+
+    def find_parameter(self, name: str) -> Optional[OperationParameter]:
+        """
+            The declared parameter called ``name``.
+
+            :param name: Parameter name.
+
+            :returns: :class:`OperationParameter` or ``None``.
+        """
+        for parameter in self.parameters:
+            if parameter.name == name:
+                return parameter
+        return None
 
 
 @dataclass(frozen=True)
@@ -85,13 +149,17 @@ class CommandDescriptor:
         Single ``pyc <noun> <verb>`` mapping built from an OpenAPI
         operation. Stored under :class:`CommandTree`.
 
-        :param noun: Top-level noun (e.g., ``project``).
+        :param noun: Top-level noun (e.g., ``projects``).
         :param verb: Action verb (e.g., ``list``, ``get``).
         :param operation: The OpenAPI operation backing this command.
+        :param aliases: Other ``(noun, verb)`` spellings that reach
+                        this command (the name derived from the tag
+                        and ``operationId``).
     """
     noun: str
     verb: str
     operation: RestOperation
+    aliases: Tuple[Tuple[str, str], ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -99,9 +167,13 @@ class CommandTree:
     """
         Frozen view of every parseable ``pyc <noun> <verb>`` invocation.
 
-        :param commands: Mapping ``(noun, verb)`` -> :class:`CommandDescriptor`.
+        :param commands: Mapping ``(noun, verb)`` -> :class:`CommandDescriptor`,
+                         keyed by the canonical names.
+        :param aliases: Mapping of alias ``(noun, verb)`` -> canonical
+                        ``(noun, verb)``.
     """
     commands: Mapping[Tuple[str, str], CommandDescriptor]
+    aliases: Mapping[Tuple[str, str], Tuple[str, str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

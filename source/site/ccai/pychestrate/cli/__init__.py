@@ -19,9 +19,10 @@ the service only through ``/api/v1``:
 * :mod:`transport` -- HTTP with the profile's API token as a bearer
   token, no redirect following, and one exception per exit-code
   category;
-* :mod:`parser` / :mod:`openapi_cache` / :mod:`builtin_operations` --
-  the command tree built from ``/api/v1/_meta/openapi.json`` (cached,
-  with a built-in fallback);
+* :mod:`parser` / :mod:`command_names` / :mod:`openapi_cache` /
+  :mod:`builtin_operations` -- the command tree built from
+  ``/api/v1/_meta/openapi.json`` (explicit command names, cached, with
+  a built-in fallback);
 * :mod:`extensions` -- the ``CLISubcommandExtension`` surface behind
   ``pyc ext <ext-name> <verb>``.
 """
