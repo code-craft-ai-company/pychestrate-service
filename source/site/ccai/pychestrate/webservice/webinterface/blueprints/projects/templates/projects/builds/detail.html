@@ -1,5 +1,6 @@
 {% extends "projects/base.html" %}
 {% import "site_shell/_macros.html" as ui %}
+{% import "projects/builds/_build_macros.html" as bm %}
 
 {% block title %}Build #{{ build.id }} - {{ project.name }} - Pychestrate{% endblock %}
 
@@ -22,7 +23,7 @@
         <a href="{{ url_for('projects.build_logs', project_id=project.id, build_id=build.id) }}" class="btn btn-secondary">
             {{ ui.icon("article") }} View Logs
         </a>
-        {% if can_manage and build.status.value in ['pending', 'running'] %}
+        {% if can_manage and build.status.value in ['pending', 'queued', 'running'] %}
         <form action="{{ url_for('projects.build_cancel', project_id=project.id, build_id=build.id) }}" method="post" data-confirm="Cancel this build?">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="btn btn-danger">
@@ -37,7 +38,7 @@
     <div class="card">
         <div class="muted">Status</div>
         <div>
-            {{ ui.status_badge(build.status) }}
+            {{ bm.build_status(build.status) }}
         </div>
     </div>
     <div class="card">
@@ -62,7 +63,7 @@
     <div class="table-scroll" tabindex="0"><table class="data-table">
         <tr>
             <th scope="row">Commit SHA</th>
-            <td class="mono">{{ build.commit_sha or 'N/A' }}</td>
+            <td>{{ bm.build_commit(build, full=true) }}</td>
         </tr>
         <tr>
             <th scope="row">Commit Message</th>

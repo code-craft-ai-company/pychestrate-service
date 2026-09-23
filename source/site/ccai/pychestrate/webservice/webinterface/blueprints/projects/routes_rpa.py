@@ -715,6 +715,51 @@ def handle_rpa_run(request: Request) -> Response:
             pass
 
 
+def _job_names(*, db_session: Any, job: Any) -> Dict[str, Optional[str]]:
+    """
+        The people and machines behind an RPA job, by name instead of
+        UUID (PRJ-33): who triggered it, and the pod and client that ran
+        it. A name that cannot be found is None (the page then shows the
+        id).
+
+        :param db_session: Open SQLAlchemy session.
+        :param job: The RPA job view.
+
+        :returns: ``{"triggered_by", "pod", "client"}``.
+    """
+    rtnval: Dict[str, Optional[str]] = {"triggered_by": None, "pod": None, "client": None}
+    lookups = (
+        ("triggered_by", "ccai.pychestrate.core.orm", "User", "id",
+         getattr(job, "triggered_by_id", None), ("display_name", "login")),
+        ("pod", "ccai.pychestrate.webservice.pods.models", "PodDefinition", "pod_id",
+         getattr(job, "pod_id", None), ("pod_name",)),
+        ("client", "ccai.pychestrate.webservice.clients.models", "Client", "client_id",
+         getattr(job, "client_id", None), ("pod_name",)),
+    )
+    for key, module_name, model_name, id_column, raw_id, name_columns in lookups:
+        if raw_id is None or len(str(raw_id)) == 0:
+            continue
+        try:
+            import importlib  # noqa: E402
+            import uuid as uuid_module  # noqa: E402
+            model = getattr(importlib.import_module(module_name), model_name)
+            row = db_session.query(model).filter(
+                getattr(model, id_column) == uuid_module.UUID(str(raw_id))
+            ).first()
+        except Exception:
+            row = None
+        if row is None:
+            continue
+        for column in name_columns:
+            value = getattr(row, column, None)
+            if value:
+                rtnval[key] = str(value)
+                break
+    if rtnval["client"] is not None:
+        rtnval["client"] = "client of {}".format(rtnval["client"])
+    return rtnval
+
+
 def handle_rpa_detail(request: Request) -> Response:
     """
         ``GET /projects/{project_id}/rpa/jobs/{job_id}``.
@@ -757,6 +802,7 @@ def handle_rpa_detail(request: Request) -> Response:
         context["can_manage"] = can_manage
         context["work_packet_json"] = _pretty_json(dict(job.work_packet))
         context["is_active"] = job.status.value in ("pending", "dispatching", "running")
+        context["job_names"] = _job_names(db_session=db_session, job=job)
 
         response = _render(template_name="projects/rpa/detail.html", context=context)
         _attach_session_to_response(response=response, session=auth.session)

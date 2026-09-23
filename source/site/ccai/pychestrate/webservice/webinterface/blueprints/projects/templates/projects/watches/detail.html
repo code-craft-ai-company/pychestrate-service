@@ -127,15 +127,17 @@
                 <td><span class="badge badge-info">{{ action_labels.get(action.action.value, action.action.value) }}</span></td>
                 <td>
                     {% if action.action.value == 'trigger_build' %}
-                    <a href="{{ url_for('projects.build_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Build specification #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.build_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_build:' ~ action.target_id) or ('Build specification #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_pipeline' %}
-                    <a href="{{ url_for('projects.pipeline_detail', project_id=project.id, pipeline_id=action.target_id) }}">Pipeline #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.pipeline_detail', project_id=project.id, pipeline_id=action.target_id) }}">{{ target_names.get('trigger_pipeline:' ~ action.target_id) or ('Pipeline #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_infra_job' %}
-                    <a href="{{ url_for('projects.infra_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Infrastructure specification #{{ action.target_id }}</a>
+                    <a href="{{ url_for('projects.infra_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_infra_job:' ~ action.target_id) or ('Infrastructure specification #' ~ action.target_id ~ ' (removed)') }}</a>
                     {% elif action.action.value == 'trigger_test_job' %}
-                    <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=action.target_id) }}">Test specification #{{ action.target_id }}</a>
-                    {% else %}
+                    <a href="{{ url_for('projects.test_spec_detail', project_id=project.id, spec_id=action.target_id) }}">{{ target_names.get('trigger_test_job:' ~ action.target_id) or ('Test specification #' ~ action.target_id ~ ' (removed)') }}</a>
+                    {% elif action.target_id %}
                     #{{ action.target_id }}
+                    {% else %}
+                    <span class="muted">none</span>
                     {% endif %}
                 </td>
                 <td class="mono">

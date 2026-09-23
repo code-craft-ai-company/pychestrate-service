@@ -922,6 +922,49 @@ def handle_watch_detail(request: Request) -> Response:
             pass
 
 
+#: The model each action's target id refers to.
+_ACTION_TARGET_MODELS = {
+    "trigger_build": "ProjectBuildSpec",
+    "trigger_infra_job": "ProjectInfraSpec",
+    "trigger_test_job": "ProjectTestSpec",
+    "trigger_pipeline": "ProjectReleasePipeline",
+}
+
+
+def _action_target_names(
+        *, db_session: Any, project_id: Any, actions: Any
+    ) -> Dict[str, Optional[str]]:
+    """
+        The names of the watch's action targets, so the page can say
+        "nightly" instead of "#2" (PRJ-33).
+
+        :param db_session: Open SQLAlchemy session.
+        :param project_id: The watch's project.
+        :param actions: The watch's action configurations.
+
+        :returns: ``{"<action>:<target id>": name}``; the name is None
+                  when the target no longer exists in the project.
+    """
+    from ccai.pychestrate.core import orm as core_orm  # noqa: E402
+
+    rtnval: Dict[str, Optional[str]] = {}
+    for action in actions or []:
+        value = getattr(getattr(action, "action", None), "value", getattr(action, "action", None))
+        target_id = getattr(action, "target_id", None)
+        model_name = _ACTION_TARGET_MODELS.get(str(value))
+        if model_name is None or target_id is None:
+            continue
+        model = getattr(core_orm, model_name)
+        try:
+            row = db_session.query(model).filter(
+                model.id == target_id, model.project_id == project_id
+            ).first()
+        except Exception:
+            row = None
+        rtnval["{}:{}".format(value, target_id)] = getattr(row, "name", None) if row is not None else None
+    return rtnval
+
+
 def _render_watch_detail(
         *,
         auth: _AuthResolution,
@@ -981,6 +1024,10 @@ def _render_watch_detail(
     context["can_delete"] = can_delete
     context["test_sample"] = test_sample if test_sample is not None else {}
     context["test_result"] = test_result
+    context["target_names"] = _action_target_names(
+        db_session=auth.db_session, project_id=project_id,
+        actions=getattr(watch, "actions", None),
+    )
     _add_watch_labels(context=context)
 
     response = _render(

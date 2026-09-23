@@ -1,5 +1,6 @@
 {% extends "projects/base.html" %}
 {% import "site_shell/_macros.html" as ui %}
+{% import "projects/builds/_build_macros.html" as bm %}
 
 {% block title %}{{ spec.name }} - Test Spec - {{ project.name }} - Pychestrate{% endblock %}
 
@@ -92,11 +93,11 @@
             <tr>
                 <td><a href="{{ url_for('projects.test_job_detail', project_id=project.id, job_id=job.id) }}">#{{ job.id }}</a></td>
                 <td>
-                    {{ ui.status_badge(job.status) }}
+                    {{ bm.build_status(job.status) }}
                 </td>
                 <td class="text-success">{{ job.result_summary.passed if job.result_summary else '-' }}</td>
                 <td class="text-danger">{{ job.result_summary.failed if job.result_summary else '-' }}</td>
-                <td>{{ job.started_at | format_datetime('%Y-%m-%d %H:%M', 'Pending') }}</td>
+                <td>{{ bm.build_started(job) }}</td>
             </tr>
             {% endfor %}
         </tbody>

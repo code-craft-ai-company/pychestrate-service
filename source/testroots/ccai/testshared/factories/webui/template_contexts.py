@@ -611,6 +611,12 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
             {"builds": 0, "active_builds": 0, "watches": []},
         ),
     },
+    "projects/rpa/detail": {
+        "job_names": _by_mode(
+            {"triggered_by": "Admin User", "pod": "lab-a", "client": "client of lab-a"},
+            {"triggered_by": None, "pod": None, "client": None},
+        ),
+    },
     "projects/builds/spec_edit": {
         "form_values": _by_mode(
             {"name": "nightly", "repository_id": "7", "branch": "main", "timeout_minutes": "60",
@@ -625,6 +631,7 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
             "build_completion": "A build finishes",
         }),
         "action_labels": _const({"trigger_build": "Run a build"}),
+        "target_names": _by_mode({"trigger_build:1": "nightly"}, {}),
         "test_sample": _by_mode({"sample_branch": "main", "sample_build_status": "failed"}, {}),
         "test_result": _by_mode(
             {

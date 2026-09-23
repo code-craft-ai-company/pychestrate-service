@@ -75,11 +75,13 @@
         </tr>
         <tr>
             <th scope="row">Triggered By</th>
-            <td>{{ job.triggered_by_id | display }}</td>
+            <td>{% if job_names.triggered_by %}<span title="{{ job.triggered_by_id }}">{{ job_names.triggered_by }}</span>{% else %}{{ job.triggered_by_id | display }}{% endif %}</td>
         </tr>
         <tr>
             <th scope="row">Pod / Client</th>
-            <td class="mono">{{ job.pod_id | display }} / {{ job.client_id | display }}</td>
+            <td>{% if job_names.pod %}<span title="{{ job.pod_id }}">{{ job_names.pod }}</span>{% else %}<span class="mono">{{ job.pod_id | display }}</span>{% endif %}
+                /
+                {% if job_names.client %}<span title="{{ job.client_id }}">{{ job_names.client }}</span>{% else %}<span class="mono">{{ job.client_id | display }}</span>{% endif %}</td>
         </tr>
         <tr>
             <th scope="row">Packet digest</th>
