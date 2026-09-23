@@ -11,12 +11,15 @@ The production webservice runs on ``ccai.webworks`` (see
 endpoint so AI agents can work with the Pychestrate service to manage
 projects and coordinate activities.
 
-One route:
+One endpoint, ``/mcp/1/service``, speaking the MCP Streamable HTTP
+transport:
 
-* ``POST /mcp/1/service``
-  -- the MCP JSON-RPC 2.0 transport endpoint.
-* ``GET /mcp/1/service``
-  -- a small human/agent-facing descriptor of the endpoint.
+* ``POST`` -- the MCP JSON-RPC 2.0 transport; replies are
+  ``application/json``, and a body of only notifications or responses is
+  answered ``202 Accepted`` with no body.
+* ``GET`` -- ``405 Method Not Allowed`` (``Allow: POST``): the server does
+  not open a server-to-client SSE stream. The problem body still names
+  the endpoint and its tools for a human probing it.
 
 The endpoint speaks the Model Context Protocol over JSON-RPC 2.0. It
 implements the protocol methods an MCP client needs to discover and
@@ -29,15 +32,17 @@ invoke tools:
 * ``tools/call`` -- invoke a named tool with arguments.
 
 Tools are wired to the in-process Pychestrate service layer (the same
-:mod:`projects.service` / :mod:`projects.repository` functions the REST
-routes call) so the MCP surface and the REST surface stay behaviourally
-consistent. Authentication + authorization reuse the request-scoped
-``db_session`` / ``auth_principal`` the session middleware attaches; the
-MCP path is added to that middleware's prefix allowlist so machine
-callers get the same session + RBAC treatment as the REST API. Discovery
-methods (``initialize`` / ``tools/list`` / ``ping``) are unauthenticated;
-tool invocations are RBAC-gated on the same ``system:projects.*`` keys the
-REST routes use.
+functions the REST routes call) so the MCP surface and the REST surface
+stay behaviourally consistent: projects and system health here, and the
+lab tools -- runs and failures, queue status, RPA jobs, lab devices -- in
+:mod:`mcp.lab_tools`. Authentication + authorization reuse the
+request-scoped ``db_session`` / ``auth_principal`` the session middleware
+attaches; the MCP path is added to that middleware's prefix allowlist so
+machine callers get the same session + RBAC treatment as the REST API.
+Discovery methods (``initialize`` / ``tools/list`` / ``ping``) are
+unauthenticated; tool invocations are RBAC-gated on the same permission
+keys the REST routes use. Each tool advertises MCP annotations saying
+whether it only reads.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -48,11 +53,27 @@ __version__ = "1.0.0"
 
 import json
 
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
+
+from ccai.pychestrate.webservice.api.problem_json_webworks import (
+    problem_response_for_http_status,
+)
+from ccai.pychestrate.webservice.mcp.lab_tools import build_lab_tools
+from ccai.pychestrate.webservice.mcp.tooling import (
+    MCP_AUTH_REQUIRED,
+    MCP_CONFLICT,
+    MCP_INVALID_ARGUMENT,
+    MCP_NOT_FOUND,
+    MCP_PERMISSION_DENIED,
+    MCP_SESSION_UNAVAILABLE,
+    McpToolError,
+    ToolDefinition,
+    require_permission as _require_permission,
+    require_session as _require_session,
+)
 
 from ccai.pychestrate.webservice.projects import repository as project_repository
 from ccai.pychestrate.webservice.projects import service as project_service
@@ -62,7 +83,6 @@ from ccai.pychestrate.webservice.projects.exceptions import (
     SlugValidationError,
 )
 from ccai.pychestrate.webservice.projects.models import ProjectState
-from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
 from ccai.pychestrate.webservice.system.restapi.v1.system_health_routes import (
     build_system_health_document,
 )
@@ -96,64 +116,9 @@ JSONRPC_METHOD_NOT_FOUND = -32601
 JSONRPC_INVALID_PARAMS = -32602
 JSONRPC_INTERNAL_ERROR = -32603
 
-# MCP / application error codes used for tool-execution failures that
-# are surfaced as tool results (isError) rather than protocol errors.
-MCP_AUTH_REQUIRED = -32001
-MCP_PERMISSION_DENIED = -32002
-MCP_SESSION_UNAVAILABLE = -32003
-MCP_INVALID_ARGUMENT = -32004
-MCP_NOT_FOUND = -32005
-MCP_CONFLICT = -32006
-
-
-# ---------------------------------------------------------------------------
-# Tool-execution error
-# ---------------------------------------------------------------------------
-
-class McpToolError(Exception):
-    """
-        Raised by a tool implementation when the invocation cannot be
-        completed. Carries an application error code + message that the
-        dispatcher renders as an ``isError`` tool result so the calling
-        agent sees a structured failure rather than a protocol error.
-    """
-
-    def __init__(self, *, code: int, message: str) -> None:
-        super().__init__(message)
-        self.code: int = code
-        self.message: str = message
-        return
-
-
 # ---------------------------------------------------------------------------
 # Request-scoped resolution helpers
 # ---------------------------------------------------------------------------
-
-def _resolve_db_session(*, request: Request) -> Optional[Any]:
-    """
-        Return the request-scoped SQLAlchemy session attached by the
-        session middleware, or ``None`` when absent.
-
-        :param request: Incoming webworks request.
-
-        :returns: The db session or None.
-    """
-    rtnval = getattr(request, "db_session", None)
-    return rtnval
-
-
-def _resolve_auth_principal(*, request: Request) -> Optional[Any]:
-    """
-        Return the ``AuthPrincipal`` attached by the session middleware,
-        or ``None`` when the request is anonymous.
-
-        :param request: Incoming webworks request.
-
-        :returns: AuthPrincipal or None.
-    """
-    rtnval = getattr(request, "auth_principal", None)
-    return rtnval
-
 
 def _resolve_actor_user_id(*, request: Request) -> Optional[str]:
     """
@@ -164,69 +129,6 @@ def _resolve_actor_user_id(*, request: Request) -> Optional[str]:
         :returns: The actor user id, or None when anonymous.
     """
     rtnval = getattr(request, "actor_user_id", None)
-    return rtnval
-
-
-def _require_session(*, request: Request) -> Any:
-    """
-        Resolve the request-scoped db session or raise.
-
-        :param request: Incoming webworks request.
-
-        :returns: The active db session.
-        :raises: :class:`McpToolError` when no session is attached.
-    """
-    db_session = _resolve_db_session(request=request)
-    if db_session is None:
-        raise McpToolError(
-            code=MCP_SESSION_UNAVAILABLE,
-            message="Request-scoped database session is not available.",
-        )
-    rtnval = db_session
-    return rtnval
-
-
-def _require_permission(
-        *,
-        request: Request,
-        db_session: Any,
-        permission_key: str
-    ) -> Any:
-    """
-        Require the calling principal to hold ``permission_key``.
-
-        :param request: Incoming webworks request.
-        :param db_session: Active SQLAlchemy session.
-        :param permission_key: Required ``system:*`` permission key.
-
-        :returns: The :class:`AuthPrincipal`.
-        :raises: :class:`McpToolError` when anonymous (auth required) or
-                 the permission is denied.
-    """
-    principal = _resolve_auth_principal(request=request)
-    if principal is None:
-        raise McpToolError(
-            code=MCP_AUTH_REQUIRED,
-            message=(
-                "Authentication required. Present a valid Pychestrate"
-                " session to invoke this tool."
-            ),
-        )
-
-    now = datetime.now(timezone.utc)
-    decision = rbac_evaluator.check_permission(
-        db_session=db_session,
-        principal=principal,
-        permission_key=permission_key,
-        now=now,
-    )
-    if decision.allowed is False:
-        raise McpToolError(
-            code=MCP_PERMISSION_DENIED,
-            message="Permission denied: {}".format(permission_key),
-        )
-
-    rtnval = principal
     return rtnval
 
 
@@ -485,36 +387,15 @@ def _tool_system_health(
 # Tool registry
 # ---------------------------------------------------------------------------
 
-class _ToolDefinition:
-    """
-        A single MCP tool: its advertised name / description / input
-        schema and the in-process handler that executes it.
-    """
-
-    def __init__(
-            self,
-            *,
-            name: str,
-            description: str,
-            input_schema: Dict[str, Any],
-            handler: Callable[..., Dict[str, Any]]
-        ) -> None:
-        self.name: str = name
-        self.description: str = description
-        self.input_schema: Dict[str, Any] = input_schema
-        self.handler: Callable[..., Dict[str, Any]] = handler
-        return
-
-
-def _build_tool_registry() -> List[_ToolDefinition]:
+def _build_tool_registry() -> List[ToolDefinition]:
     """
         Build the ordered list of MCP tools the endpoint advertises.
 
         :returns: The tool definitions.
     """
-    tools: List[_ToolDefinition] = []
+    tools: List[ToolDefinition] = []
 
-    tools.append(_ToolDefinition(
+    tools.append(ToolDefinition(
         name="list_projects",
         description=(
             "List Pychestrate projects. Optionally filter by lifecycle"
@@ -545,7 +426,7 @@ def _build_tool_registry() -> List[_ToolDefinition]:
         handler=_tool_list_projects,
     ))
 
-    tools.append(_ToolDefinition(
+    tools.append(ToolDefinition(
         name="get_project",
         description="Read a single Pychestrate project by its slug.",
         input_schema={
@@ -562,7 +443,7 @@ def _build_tool_registry() -> List[_ToolDefinition]:
         handler=_tool_get_project,
     ))
 
-    tools.append(_ToolDefinition(
+    tools.append(ToolDefinition(
         name="create_project",
         description=(
             "Create a new Pychestrate project. Requires the"
@@ -592,9 +473,10 @@ def _build_tool_registry() -> List[_ToolDefinition]:
             "additionalProperties": False,
         },
         handler=_tool_create_project,
+        read_only=False,
     ))
 
-    tools.append(_ToolDefinition(
+    tools.append(ToolDefinition(
         name="system_health",
         description=(
             "Get the aggregate Pychestrate subsystem-health summary to"
@@ -608,21 +490,22 @@ def _build_tool_registry() -> List[_ToolDefinition]:
         handler=_tool_system_health,
     ))
 
+    tools.extend(build_lab_tools())
     return tools
 
 
-_TOOL_REGISTRY: List[_ToolDefinition] = _build_tool_registry()
+_TOOL_REGISTRY: List[ToolDefinition] = _build_tool_registry()
 
 
-def _tool_by_name(*, name: str) -> Optional[_ToolDefinition]:
+def _tool_by_name(*, name: str) -> Optional[ToolDefinition]:
     """
         Look up a tool definition by advertised name.
 
         :param name: Tool name.
 
-        :returns: The matching :class:`_ToolDefinition` or None.
+        :returns: The matching :class:`ToolDefinition` or None.
     """
-    rtnval: Optional[_ToolDefinition] = None
+    rtnval: Optional[ToolDefinition] = None
     for tool in _TOOL_REGISTRY:
         if tool.name == name:
             rtnval = tool
@@ -699,8 +582,10 @@ def _handle_initialize(*, params: Dict[str, Any]) -> Dict[str, Any]:
         },
         "instructions": (
             "Pychestrate service MCP endpoint. Use 'tools/list' to"
-            " discover tools for managing projects and coordinating"
-            " activities, then 'tools/call' to invoke them."
+            " discover tools for projects, runs and their failures, the"
+            " execution queue, RPA jobs and lab devices, then 'tools/call'"
+            " to invoke them. Authenticate with a Pychestrate API token"
+            " (Authorization: Bearer pyc_...) or a signed-in session."
         ),
     }
     return rtnval
@@ -714,11 +599,7 @@ def _handle_tools_list() -> Dict[str, Any]:
     """
     tools: List[Dict[str, Any]] = []
     for tool in _TOOL_REGISTRY:
-        tools.append({
-            "name": tool.name,
-            "description": tool.description,
-            "inputSchema": tool.input_schema,
-        })
+        tools.append(tool.describe())
     rtnval = {"tools": tools}
     return rtnval
 
@@ -922,7 +803,7 @@ def handle_mcp_service(request: Request) -> Response:
                 responses.append(response)
 
         if len(responses) == 0:
-            rtnval = JSONResponse(content={}, status_code=202)
+            rtnval = Response(status_code=202)
             return rtnval
 
         rtnval = JSONResponse(content=responses, status_code=200)
@@ -931,7 +812,7 @@ def handle_mcp_service(request: Request) -> Response:
     # Single message form.
     response = _dispatch_message(request=request, message=payload)
     if response is None:
-        rtnval = JSONResponse(content={}, status_code=202)
+        rtnval = Response(status_code=202)
         return rtnval
 
     rtnval = JSONResponse(content=response, status_code=200)
@@ -940,31 +821,34 @@ def handle_mcp_service(request: Request) -> Response:
 
 def handle_mcp_service_descriptor(request: Request) -> Response:
     """
-        ``GET /mcp/1/service`` -- a small descriptor of the MCP endpoint
-        for humans / agents probing the service. The MCP protocol itself
-        is spoken over ``POST``.
+        ``GET /mcp/1/service`` -- ``405 Method Not Allowed``. Under the
+        MCP Streamable HTTP transport a client may GET the endpoint to
+        open a server-to-client SSE stream; a server that offers none
+        must answer 405. The problem body still names the endpoint,
+        protocol and tools for a human probing it.
 
         :param request: Incoming webworks request.
 
-        :returns: JSON response describing the endpoint.
+        :returns: 405 problem response with ``Allow: POST``.
     """
-    body = {
-        "service": MCP_SERVER_NAME,
-        "version": MCP_SERVER_VERSION,
-        "protocol": "Model Context Protocol",
-        "protocolVersion": MCP_PROTOCOL_VERSION,
-        "transport": "JSON-RPC 2.0 over HTTP POST",
-        "endpoint": MCP_SERVICE_PATH,
-        "methods": [
-            "initialize",
-            "notifications/initialized",
-            "ping",
-            "tools/list",
-            "tools/call",
-        ],
-        "tools": [tool.name for tool in _TOOL_REGISTRY],
-    }
-    rtnval: Response = JSONResponse(content=body, status_code=200)
+    rtnval = problem_response_for_http_status(
+        status=405,
+        detail=(
+            "This is a Model Context Protocol endpoint: send JSON-RPC 2.0"
+            " messages with POST. It does not open a server-to-client stream."
+        ),
+        instance=MCP_SERVICE_PATH,
+        extensions={
+            "service": MCP_SERVER_NAME,
+            "version": MCP_SERVER_VERSION,
+            "protocol": "Model Context Protocol",
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "transport": "Streamable HTTP (POST only)",
+            "endpoint": MCP_SERVICE_PATH,
+            "tools": [tool.name for tool in _TOOL_REGISTRY],
+        },
+    )
+    rtnval.headers["Allow"] = "POST"
     return rtnval
 
 
