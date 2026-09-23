@@ -127,6 +127,19 @@ class PycSandbox:
         )
         return
 
+    def cache_command_list(self, *, document: Dict[str, Any], server_url: str = SERVER) -> Path:
+        """
+            Store ``document`` as the cached command list of
+            ``server_url`` (what the last command would have left).
+
+            :returns: The cache file.
+        """
+        from ccai.pychestrate.cli import openapi_cache  # noqa: E402
+
+        openapi_cache.store(server_url=server_url, document=document, environ=self.environ)
+        rtnval = openapi_cache.cache_path_for(server_url=server_url, environ=self.environ)
+        return rtnval
+
     def close(self) -> None:
         for name, value in self._saved.items():
             if value is None:

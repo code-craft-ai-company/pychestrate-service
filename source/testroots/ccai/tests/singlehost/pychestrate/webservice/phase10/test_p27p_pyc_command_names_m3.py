@@ -414,8 +414,8 @@ def test_help_shows_kebab_case_flags_with_descriptions():
     sandbox = PycSandbox()
     try:
         sandbox.log_in()
-        rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "list", "--help"],
-                                opener=PycFakeServer(), openapi_fetcher=_small_fetcher)
+        sandbox.cache_command_list(document=_small_fetcher())
+        rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "list", "--help"], opener=PycFakeServer())
         testbase.assert_equal(
             (rc, "--per-page N" in out, "Page size. Server default: 50." in out, "--per_page" in out),
             (exit_codes.EXIT_OK, True, True, False),
@@ -434,8 +434,8 @@ def test_help_names_the_rest_endpoint():
     sandbox = PycSandbox()
     try:
         sandbox.log_in()
-        _rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "get", "--help"],
-                                 opener=PycFakeServer(), openapi_fetcher=_small_fetcher)
+        sandbox.cache_command_list(document=_small_fetcher())
+        _rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "get", "--help"], opener=PycFakeServer())
         testbase.assert_equal("GET /api/v1/widgets/{widget_id}  (operationId widgets_read)" in out, True)
     finally:
         sandbox.close()
@@ -451,8 +451,8 @@ def test_help_lists_the_request_body_fields():
     sandbox = PycSandbox()
     try:
         sandbox.log_in()
-        _rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "create", "--help"],
-                                 opener=PycFakeServer(), openapi_fetcher=_small_fetcher)
+        sandbox.cache_command_list(document=_small_fetcher())
+        _rc, out, _err = run_pyc(sandbox=sandbox, argv=["widgets", "create", "--help"], opener=PycFakeServer())
         testbase.assert_equal(
             ("request body fields" in out, "string, required -- Widget name." in out),
             (True, True),

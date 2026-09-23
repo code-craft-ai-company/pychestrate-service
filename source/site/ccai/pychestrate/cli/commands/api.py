@@ -123,26 +123,43 @@ def build_default_openapi_fetcher(*, ctx: CliContext, profile: CliProfile):
 def load_command_tree(
         *,
         ctx: CliContext,
-        profile: CliProfile,
-        force_refresh: bool = False
+        profile: Optional[CliProfile],
+        force_refresh: bool = False,
+        offline: bool = False
     ) -> Tuple[CommandTree, str]:
     """
         Load the command tree: a fresh cached document, else a fetched
         one (cached for next time), else a stale cached one, else the
         built-in fallback.
 
+        With ``offline`` (``--help``), nothing is fetched: the cached
+        document is used whatever its age, else the built-in fallback.
+
         :param ctx: Invocation context.
-        :param profile: Active profile.
+        :param profile: Active profile (``None`` when nothing is
+                        configured; only valid with ``offline``).
         :param force_refresh: Skip the fresh-cache shortcut.
+        :param offline: Never touch the network.
 
         :returns: ``(tree, source)`` with source ``cache``, ``server``
                   or ``builtin``.
     """
     document: Optional[Dict] = None
     source = "server"
-    if force_refresh is False and ctx.openapi_fetcher is None:
+    if offline is True:
+        source = "builtin"
+        if profile is not None:
+            document = openapi_cache.load_cached_any_age(
+                server_url=profile.server_url, environ=ctx.environ
+            )
+            if document is not None:
+                source = "cache"
+        if document is None:
+            document = FALLBACK_OPENAPI_DOCUMENT
+    elif force_refresh is False and ctx.openapi_fetcher is None:
         document = openapi_cache.load_cached_if_fresh(
-            server_url=profile.server_url, max_age_seconds=OPENAPI_CACHE_MAX_AGE_SECONDS
+            server_url=profile.server_url, max_age_seconds=OPENAPI_CACHE_MAX_AGE_SECONDS,
+            environ=ctx.environ,
         )
         if document is not None:
             source = "cache"
@@ -153,7 +170,7 @@ def load_command_tree(
             fetcher = build_default_openapi_fetcher(ctx=ctx, profile=profile)
         try:
             document = openapi_cache.load_or_fetch(
-                server_url=profile.server_url, fetch_callable=fetcher
+                server_url=profile.server_url, fetch_callable=fetcher, environ=ctx.environ
             )
         except OpenApiUnavailableError:
             document = FALLBACK_OPENAPI_DOCUMENT

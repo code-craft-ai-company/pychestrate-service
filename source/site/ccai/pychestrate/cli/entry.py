@@ -7,18 +7,24 @@
 
 The entry point handles four classes of invocation:
 
-1. Static metadata commands (``--version``, ``--help``, and the help of
-   built-in commands) that never touch the network.
+1. Help and the version banner. ``--help`` / ``-h`` anywhere on the
+   line (or ``pyc help [<noun> [<verb>]]``) prints help for the
+   command it follows and never touches the network: the API
+   commands' help comes from the cached OpenAPI document (or pyc's
+   built-in commands when nothing is cached).
 2. Built-in commands: ``login``, ``logout``, ``whoami``, ``config``,
    ``commands``, ``runs wait``, ``plugin-api catalog``, ``ext``.
 3. API commands generated from the server's OpenAPI document
    (``pyc projects list``, ``pyc projects get demo`` ...; see
    :mod:`cli.commands.api`).
 4. Failures, each reported as one ``error: ...`` line (no traceback)
-   with a documented exit code (see :mod:`cli.exit_codes`).
+   with a documented exit code (see :mod:`cli.exit_codes`). Unknown
+   commands, verbs and options exit 2 and name the closest known
+   spellings.
 
 Global options (``--profile``, ``--server-url``, ``--timeout``) may
-appear anywhere on the command line.
+appear anywhere on the command line, before a ``--`` that ends the
+options.
 
 The console script is :func:`console_main`
 (``pyc = "ccai.pychestrate.cli.entry:console_main"``).
@@ -30,7 +36,6 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import json
 import os
 import sys
 import traceback
@@ -40,7 +45,7 @@ from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from ccai.pychestrate.cli import (
     exit_codes,
     parser,
-    transport,
+    suggestions,
 )
 from ccai.pychestrate.cli.argparsing import ParserExit
 from ccai.pychestrate.cli.context import CliContext, resolve_profile
@@ -64,13 +69,7 @@ from ccai.pychestrate.cli.exceptions import (
     ServerUnreachableError,
     WaitTimeoutError,
 )
-from ccai.pychestrate.cli.extensions.discovery import (
-    find_descriptor,
-    find_listed_route,
-    find_subcommand_class,
-    parse_ext_listing,
-)
-from ccai.pychestrate.cli.models import CliProfile, RestOperation
+from ccai.pychestrate.cli.models import CliProfile, CommandTree
 
 
 CLI_PROG: str = "pyc"
@@ -78,22 +77,34 @@ CLI_VERSION: str = "0.2.0"
 
 PYC_DEBUG_ENV_VAR: str = "PYC_DEBUG"
 
-_PLUGIN_API_CATALOG_VERB: str = "catalog"
-_EXT_LIST_VERB: str = "list"
+HELP_FLAGS: Tuple[str, ...] = ("-h", "--help")
+HELP_COMMAND: str = "help"
+VERSION_FLAG: str = "--version"
+END_OF_OPTIONS: str = "--"
 
-#: Built-in commands, as listed when a command is unknown.
+#: pyc's own commands, as listed when a command is unknown.
 _BUILTIN_COMMANDS: Tuple[str, ...] = (
     "'login'",
     "'logout'",
     "'whoami'",
     "'config ...'",
     "'commands'",
+    "'help'",
     "'project list'",
     "'runs wait <run_id>'",
     "'plugin-api catalog [<entry-name>]'",
     "'ext list'",
     "'ext <ext-name> <verb> [args]'",
 )
+
+#: Words that are pyc commands whatever the server offers.
+_BUILTIN_NOUNS: Tuple[str, ...] = ("login", "logout", "whoami", "config", "commands", "ext", "help")
+
+#: Built-in verbs that live under an API noun.
+_BUILTIN_VERBS: Dict[Tuple[str, str], str] = {
+    ("runs", "wait"): "Wait for a run: exit 0 on success, 10 on failure, 11 on timeout.",
+    ("plugin-api", "catalog"): "List the published plugin-api surface, or read one entry.",
+}
 
 _TOP_HELP_LINES: Tuple[str, ...] = (
     "usage: pyc [--profile NAME] [--server-url URL] [--timeout SECONDS] <command> [args]",
@@ -112,7 +123,7 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "API commands:",
     "  <noun> <verb> [args]         e.g. 'pyc projects list', 'pyc projects get demo'.",
     "                               Bodies: --data JSON|@FILE|-, --from-file PATH, --set FIELD=VALUE.",
-    "  commands                     List every API command the server offers.",
+    "  commands [--refresh]         List every API command the server offers.",
     "  project list                 List projects (same as 'projects list').",
     "  runs wait <run_id>           Wait for a run: exit 0 on success, 10 on failure.",
     "                               POST commands take --wait to do this for their run.",
@@ -120,8 +131,13 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
     "extensions:",
     "  plugin-api catalog           List the published plugin-api surface.",
     "  plugin-api catalog <n>       Read a single catalog entry by name.",
-    "  ext list                     List concrete extension mounts.",
-    "  ext <name> <verb> [args]     Invoke a CLISubcommandExtension verb.",
+    "  ext list                     List the extension routes the server mounts.",
+    "  ext <name> <verb> [args]     Run a verb of an installed extension.",
+    "",
+    "help:",
+    "  pyc help [<noun> [<verb>]]   Same as 'pyc <noun> <verb> --help'. Help never",
+    "                               contacts the server: API commands are described from",
+    "                               the command list cached by the last command.",
     "",
     "global options (anywhere on the line):",
     "  --profile NAME               Credentials profile (PYC_PROFILE; default 'default').",
@@ -143,96 +159,22 @@ _TOP_HELP_LINES: Tuple[str, ...] = (
 
 
 # ---------------------------------------------------------------------------
-# Help
-# ---------------------------------------------------------------------------
-
-
-def _print_top_help(*, stream) -> None:
-    """
-        Print the static top-level help summary.
-
-        :param stream: Stream to write to.
-
-        :returns: None.
-    """
-    stream.write("\n".join(_TOP_HELP_LINES))
-    return
-
-
-def _is_help_flag(arg: str) -> bool:
-    """
-        Return True when ``arg`` requests help output.
-
-        :param arg: Single argv token.
-
-        :returns: Boolean.
-    """
-    rtnval = arg in ("-h", "--help", "help")
-    return rtnval
-
-
-def _is_version_flag(arg: str) -> bool:
-    """
-        Return True when ``arg`` requests the version banner.
-
-        :param arg: Single argv token.
-
-        :returns: Boolean.
-    """
-    rtnval = arg in ("--version", "version")
-    return rtnval
-
-
-_STATIC_NOUN_HELP: Dict[str, str] = {
-    "plugin-api": (
-        "usage: pyc plugin-api <verb> [args]\n\n"
-        "verbs:\n"
-        "  catalog              List every published plugin-api entry.\n"
-        "  catalog <entry>      Read a single entry by name.\n"
-    ),
-    "ext": (
-        "usage: pyc ext <verb> [args]\n\n"
-        "verbs:\n"
-        "  list                       List the concrete extension mounts the host discovered.\n"
-        "  <ext-name> <verb> [args]   Invoke a CLISubcommandExtension subcommand; the route\n"
-        "                             comes from the server's /api/v1/ext listing.\n"
-    ),
-    "project": (
-        "usage: pyc project <verb> [args]\n\n"
-        "verbs:\n"
-        "  list   List projects (the server's full set: 'pyc projects --help').\n"
-    ),
-}
-
-_STATIC_VERB_HELP: Dict[Tuple[str, str], str] = {
-    ("plugin-api", _PLUGIN_API_CATALOG_VERB): (
-        "usage: pyc plugin-api catalog [<entry-name>]\n\n"
-        "Read the published plugin-api surface.\n"
-        "With no argument, lists every entry.\n"
-        "With an argument, reads the named entry's metadata.\n"
-    ),
-    ("ext", _EXT_LIST_VERB): (
-        "usage: pyc ext list\n\n"
-        "List every concrete extension route the host has discovered.\n"
-        "Each line names ext_name, method, full path, and the\n"
-        "handler class.\n"
-    ),
-}
-
-
-# ---------------------------------------------------------------------------
 # Global options
 # ---------------------------------------------------------------------------
 
 
 _GLOBAL_OPTIONS_WITH_VALUE: Tuple[str, ...] = ("--profile", "--server-url", "--timeout")
 
+#: Every global option, for "did you mean" on an unknown leading one.
+_GLOBAL_OPTION_SPELLINGS: Tuple[str, ...] = _GLOBAL_OPTIONS_WITH_VALUE + (VERSION_FLAG,) + HELP_FLAGS
+
 
 def _split_global_args(*, argv: Sequence[str]) -> Tuple[Dict, List[str]]:
     """
         Pull ``--profile``, ``--server-url`` and ``--timeout`` (either
         ``--opt value`` or ``--opt=value``) out of argv wherever they
-        appear. A leading ``--`` is dropped.
+        appear before ``--``. A leading ``--`` is dropped; a later one
+        and everything after it are passed through untouched.
 
         :param argv: Tokens after ``pyc``.
 
@@ -242,17 +184,20 @@ def _split_global_args(*, argv: Sequence[str]) -> Tuple[Dict, List[str]]:
     parsed: Dict = {"profile": None, "server_url": None, "timeout": None}
     remainder: List[str] = []
     tokens = list(argv)
-    if len(tokens) > 0 and tokens[0] == "--":
+    if len(tokens) > 0 and tokens[0] == END_OF_OPTIONS:
         tokens = tokens[1:]
     index = 0
     while index < len(tokens):
         token = tokens[index]
+        if token == END_OF_OPTIONS:
+            remainder.extend(tokens[index:])
+            break
         matched = None
         value = None
         for option in _GLOBAL_OPTIONS_WITH_VALUE:
             if token == option:
                 matched = option
-                if index + 1 >= len(tokens) or tokens[index + 1].startswith("--"):
+                if index + 1 >= len(tokens) or tokens[index + 1].startswith("-"):
                     raise CliUsageError("{} needs a value".format(option))
                 value = tokens[index + 1]
                 index = index + 2
@@ -282,6 +227,69 @@ def _split_global_args(*, argv: Sequence[str]) -> Tuple[Dict, List[str]]:
             raise CliUsageError("{} needs a value".format(option))
 
     rtnval = (parsed, remainder)
+    return rtnval
+
+
+def _split_help_request(*, tokens: Sequence[str]) -> Tuple[bool, List[str]]:
+    """
+        Find ``-h`` / ``--help`` before ``--`` and take it out.
+
+        :param tokens: Remaining tokens.
+
+        :returns: ``(help_requested, tokens_without_help_flags)``.
+    """
+    help_requested = False
+    kept: List[str] = []
+    after_end = False
+    for token in tokens:
+        if after_end is False and token == END_OF_OPTIONS:
+            after_end = True
+        if after_end is False and token in HELP_FLAGS:
+            help_requested = True
+            continue
+        kept.append(token)
+    rtnval = (help_requested, kept)
+    return rtnval
+
+
+def _args_after_first_word(*, remainder: Sequence[str]) -> List[str]:
+    """
+        The tokens after the command word, in their original order
+        (help flags included, so the command's own parser answers
+        them). A help flag given before the command word is moved
+        after it: ``pyc --help login`` is ``pyc login --help``.
+
+        :param remainder: Argv without global options.
+
+        :returns: Arguments of the command.
+    """
+    leading_help = False
+    for index, token in enumerate(remainder):
+        if token in HELP_FLAGS:
+            leading_help = True
+            continue
+        args = list(remainder[index + 1:])
+        if leading_help is True:
+            args.append("--help")
+        return args
+    return []
+
+
+def _leading_words(tokens: Sequence[str], count: int) -> List[str]:
+    """
+        The first ``count`` tokens, stopping at the first option.
+
+        :param tokens: Tokens.
+        :param count: Most words wanted.
+
+        :returns: Words.
+    """
+    words: List[str] = []
+    for token in tokens:
+        if len(words) >= count or token.startswith("-"):
+            break
+        words.append(token)
+    rtnval = words
     return rtnval
 
 
@@ -339,19 +347,46 @@ def _map_exception_to_exit_code(*, xcpt: Exception, stderr) -> int:
     return exit_codes.EXIT_SERVER_ERROR
 
 
-def _unknown_command_error(*, noun: str, verb: Optional[str], detail: Optional[str] = None) -> CliUsageError:
+def _end_sentence(text: str) -> str:
     """
-        Build the usage error for an unknown command, listing the
-        built-in commands.
+        ``text`` ending with sentence punctuation (a trailing
+        "did you mean ...?" keeps its question mark).
+
+        :param text: Text.
+
+        :returns: Text.
+    """
+    if text.endswith(("?", ".", "!")):
+        return text
+    rtnval = text + "."
+    return rtnval
+
+
+def _unknown_command_error(
+        *,
+        noun: str,
+        verb: Optional[str],
+        known_nouns: Sequence[str],
+        detail: Optional[str] = None
+    ) -> CliUsageError:
+    """
+        Build the usage error for an unknown command: the closest
+        known nouns, pyc's own commands, and where the API commands
+        are listed.
 
         :param noun: First word.
         :param verb: Second word or ``None``.
+        :param known_nouns: Every noun pyc knows right now.
         :param detail: Extra explanation line.
 
         :returns: :class:`CliUsageError`.
     """
     shown = noun if verb is None else "{} {}".format(noun, verb)
-    lines = ["'{}' is not a known command.".format(shown)]
+    first_line = "'{}' is not a known command".format(shown)
+    hint = suggestions.did_you_mean(word=noun, candidates=known_nouns)
+    if len(hint) > 0:
+        first_line = "{}; {}".format(first_line, hint)
+    lines = [_end_sentence(first_line)]
     if detail is not None:
         lines.append(detail)
     lines.append("built-in: {}".format(", ".join(_BUILTIN_COMMANDS)))
@@ -360,315 +395,386 @@ def _unknown_command_error(*, noun: str, verb: Optional[str], detail: Optional[s
     return rtnval
 
 
+def _unknown_verb_error(*, noun: str, verb: str, verbs: Sequence[str]) -> CliUsageError:
+    """
+        Build the usage error for an unknown verb of a known noun.
+
+        :param noun: Noun (as the tree spells it).
+        :param verb: Verb as typed.
+        :param verbs: The noun's verbs.
+
+        :returns: :class:`CliUsageError`.
+    """
+    first_line = "'{}' has no verb '{}'".format(noun, verb)
+    hint = suggestions.did_you_mean(word=verb, candidates=verbs)
+    if len(hint) > 0:
+        first_line = "{}; {}".format(first_line, hint)
+    message = "{} verbs: {} (see 'pyc {} --help')".format(
+        _end_sentence(first_line), ", ".join(sorted(set(verbs))), noun
+    )
+    rtnval = CliUsageError(message)
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
-# plugin-api / ext
+# The command tree
 # ---------------------------------------------------------------------------
 
 
-def _plugin_api_catalog_operation() -> RestOperation:
+def _offline_tree(*, ctx: CliContext) -> Tuple[CommandTree, str]:
     """
-        Operation backing ``pyc plugin-api catalog``.
+        The command tree help is written from: the cached document of
+        the configured server (whatever its age), else the built-in
+        commands. Never touches the network.
 
-        :returns: :class:`RestOperation`.
+        :param ctx: Invocation context.
+
+        :returns: ``(tree, source)``.
     """
-    rtnval = RestOperation(
-        operation_id="plugin_api_catalog",
-        method="GET",
-        path_template="/api/v1/plugin-api/_meta/catalog",
-    )
-    return rtnval
+    from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
 
-
-def _plugin_api_catalog_entry_operation() -> RestOperation:
-    """
-        Operation backing ``pyc plugin-api catalog <entry-name>``.
-
-        :returns: :class:`RestOperation`.
-    """
-    rtnval = RestOperation(
-        operation_id="plugin_api_catalog_entry",
-        method="GET",
-        path_template="/api/v1/plugin-api/_meta/catalog/{name}",
-        path_param_names=("name",),
-        required_path_param_names=("name",),
-    )
-    return rtnval
-
-
-def _plugin_api_mounts_operation() -> RestOperation:
-    """
-        Operation backing ``pyc ext list``.
-
-        :returns: :class:`RestOperation`.
-    """
-    rtnval = RestOperation(
-        operation_id="plugin_api_mounts",
-        method="GET",
-        path_template="/api/v1/plugin-api/_meta/mounts",
-    )
-    return rtnval
-
-
-def _ext_listing_operation() -> RestOperation:
-    """
-        ``GET /api/v1/ext``: the server's own list of extension routes.
-
-        :returns: :class:`RestOperation`.
-    """
-    rtnval = RestOperation(
-        operation_id="plugin_api_list_ext",
-        method="GET",
-        path_template="/api/v1/ext",
-    )
-    return rtnval
-
-
-def _send(*, ctx: CliContext, profile: CliProfile, operation: RestOperation,
-          path_params: Optional[Dict[str, str]] = None,
-          query_params: Optional[Dict[str, str]] = None):
-    """
-        Send one request with the invocation's opener seam.
-
-        :returns: :class:`RestResponse`.
-    """
-    rtnval = transport.execute_request(
-        profile=profile,
-        operation=operation,
-        path_params=path_params or {},
-        query_params=query_params or {},
-        body=None,
-        idempotency_key=None,
-        timeout_seconds=None,
-        opener=ctx.request_opener,
-    )
-    return rtnval
-
-
-def _emit_json(*, ctx: CliContext, body, empty_text: str) -> None:
-    """
-        Print a response body the way the M1 commands did.
-
-        :returns: None.
-    """
-    if body is None:
-        ctx.stdout.write(empty_text + "\n")
-    elif isinstance(body, (dict, list)):
-        ctx.stdout.write(json.dumps(body, indent=2))
-        ctx.stdout.write("\n")
-    else:
-        ctx.stdout.write("{}\n".format(body))
-    return
-
-
-def _handle_plugin_api_catalog(*, ctx: CliContext, entry_name: Optional[str]) -> int:
-    """
-        ``pyc plugin-api catalog [<entry-name>]``.
-
-        :returns: Exit code.
-    """
-    profile = resolve_profile(ctx=ctx)
-    if entry_name is None:
-        response = _send(ctx=ctx, profile=profile, operation=_plugin_api_catalog_operation())
-        _emit_json(ctx=ctx, body=response.body, empty_text="{}")
-    else:
-        response = _send(
-            ctx=ctx, profile=profile, operation=_plugin_api_catalog_entry_operation(),
-            path_params={"name": entry_name},
-        )
-        _emit_json(ctx=ctx, body=response.body, empty_text="{}")
-    return exit_codes.EXIT_OK
-
-
-def _handle_ext_list(*, ctx: CliContext) -> int:
-    """
-        ``pyc ext list``.
-
-        :returns: Exit code.
-    """
-    profile = resolve_profile(ctx=ctx)
-    response = _send(ctx=ctx, profile=profile, operation=_plugin_api_mounts_operation())
-    _emit_json(ctx=ctx, body=response.body, empty_text="[]")
-    return exit_codes.EXIT_OK
-
-
-def _parse_ext_invocation_args(
-        *,
-        argv_tokens: Sequence[str]
-    ) -> Tuple[List[str], Dict[str, str]]:
-    """
-        Split the trailing tokens of a ``pyc ext`` invocation into
-        positional + flag halves. ``--flag=value`` and
-        ``--flag value`` are both accepted.
-
-        :param argv_tokens: Tokens after ``pyc ext <ext_name> <verb>``.
-
-        :returns: ``(positional, flags)`` tuple.
-    """
-    positional: List[str] = []
-    flags: Dict[str, str] = {}
-    iterator = iter(argv_tokens)
-    for token in iterator:
-        if token.startswith("--") and "=" in token:
-            flag_name, _, flag_value = token[2:].partition("=")
-            flags[flag_name] = flag_value
-            continue
-        if token.startswith("--"):
-            flag_name = token[2:]
-            flag_value = next(iterator, "")
-            flags[flag_name] = flag_value
-            continue
-        positional.append(token)
-    rtnval = (positional, flags)
-    return rtnval
-
-
-def _handle_ext_invocation(*, ctx: CliContext, ext_name: str, verb: str, tokens: Sequence[str]) -> int:
-    """
-        ``pyc ext <ext_name> <verb> [positional...] [--flag=value...]``.
-
-        The verb's argument layout comes from the locally installed
-        :class:`CLISubcommandExtension`; the route (method and URL)
-        comes from the server's ``/api/v1/ext`` listing, so the command
-        runs exactly what the server mounts.
-
-        :returns: Exit code.
-    """
-    subcommand_class = find_subcommand_class(ext_name=ext_name)
-    if subcommand_class is None:
-        raise CliUsageError("no extension is registered under '{}'.".format(ext_name))
-    descriptor = find_descriptor(subcommand_class=subcommand_class, verb=verb)
-    if descriptor is None:
-        raise CliUsageError("extension '{}' does not declare verb '{}'.".format(ext_name, verb))
-
-    if any(_is_help_flag(token) for token in tokens if token.startswith("-")):
-        flags_text = " ".join("[--{} VALUE]".format(flag) for flag in descriptor.flag_arg_names)
-        positional_text = " ".join("<{}>".format(name) for name in descriptor.positional_arg_names)
-        ctx.stdout.write(
-            "usage: pyc ext {} {} {} {}\n\n{}\n".format(
-                ext_name, verb, positional_text, flags_text, descriptor.description
-            ).replace("  ", " ")
-        )
-        return exit_codes.EXIT_OK
-
-    positional_args, flag_args = _parse_ext_invocation_args(argv_tokens=tokens)
-    if len(positional_args) != len(descriptor.positional_arg_names):
-        raise CliUsageError(
-            "'{} {}' expects {} positional argument(s); got {}.".format(
-                ext_name, verb, len(descriptor.positional_arg_names), len(positional_args)
-            )
-        )
-    for flag_name in flag_args.keys():
-        if flag_name not in descriptor.flag_arg_names:
-            raise CliUsageError(
-                "'{} {}' does not declare flag '--{}'.".format(ext_name, verb, flag_name)
-            )
-
-    profile = resolve_profile(ctx=ctx)
-    listing = _send(ctx=ctx, profile=profile, operation=_ext_listing_operation())
-    routes, dynamic_mount = parse_ext_listing(body=listing.body)
-    route = find_listed_route(routes=routes, ext_name=ext_name, verb=verb)
-    if route is None:
-        raise NotFoundError(
-            "the server at {} does not mount /api/v1/ext/{}/{} (its /api/v1/ext listing"
-            " names {} extension route(s)); the '{}' extension is not installed there.".format(
-                profile.server_url, ext_name, verb, len(routes), ext_name
-            )
-        )
-
-    query_params: Dict[str, str] = {}
-    for flag_name in descriptor.flag_arg_names:
-        if flag_name in flag_args:
-            query_params[flag_name] = flag_args[flag_name]
-
-    operation = RestOperation(
-        operation_id=descriptor.operation_id,
-        method=route.method,
-        path_template=route.full_path,
-    )
+    profile: Optional[CliProfile] = None
     try:
-        response = _send(ctx=ctx, profile=profile, operation=operation, query_params=query_params)
-    except NotFoundError as xcpt:
-        if dynamic_mount is not None and dynamic_mount != "mounted":
-            raise NotFoundError(
-                "{} -- the server lists {} but reports dynamic_mount={!r}: it does not"
-                " serve extension routes yet.".format(xcpt, route.full_path, dynamic_mount)
-            ) from None
-        raise
-    _emit_json(ctx=ctx, body=response.body, empty_text="{}")
-    return exit_codes.EXIT_OK
+        profile = resolve_profile(ctx=ctx, quiet=True)
+    except (NotConfiguredError, CredentialsFileNotFoundError, ProfileNotFoundError,
+            CredentialsFilePermissionError, CredentialsFileInvalidError):
+        profile = None
+    rtnval = api_commands.load_command_tree(ctx=ctx, profile=profile, offline=True)
+    return rtnval
+
+
+def _known_nouns(*, tree: CommandTree) -> List[str]:
+    """
+        Every noun pyc knows: its own commands, the builtin verbs'
+        nouns, and the tree's canonical and alias nouns.
+
+        :param tree: Command tree.
+
+        :returns: Nouns.
+    """
+    nouns = list(_BUILTIN_NOUNS)
+    nouns.extend(noun for (noun, _verb) in _BUILTIN_VERBS.keys())
+    nouns.extend(parser.canonical_nouns(tree=tree))
+    nouns.extend(parser.alias_nouns(tree=tree))
+    rtnval = sorted(set(nouns))
+    return rtnval
+
+
+def _builtin_verb_keys_for(noun: str) -> List[Tuple[str, str]]:
+    """
+        The built-in verbs under ``noun`` (``("runs", "wait")`` for
+        ``runs`` or ``run``).
+
+        :param noun: Noun as typed or as the tree spells it.
+
+        :returns: Keys of :data:`_BUILTIN_VERBS`, sorted.
+    """
+    normalized = parser.normalize_word(noun)
+    candidates = (normalized, normalized + "s")
+    rtnval = sorted(key for key in _BUILTIN_VERBS.keys() if key[0] in candidates)
+    return rtnval
+
+
+def _builtin_verbs_for(noun: str) -> List[str]:
+    """
+        The built-in verbs under ``noun`` (``wait`` for ``runs``).
+
+        :param noun: Noun as typed or as the tree spells it.
+
+        :returns: Verbs.
+    """
+    rtnval = [verb for (_noun, verb) in _builtin_verb_keys_for(noun)]
+    return rtnval
+
+
+def _builtin_verb_key(noun: str, verb: str) -> Optional[Tuple[str, str]]:
+    """
+        The built-in verb ``(noun, verb)`` names, accepting the
+        singular noun (``run wait``).
+
+        :param noun: Noun as typed.
+        :param verb: Verb as typed.
+
+        :returns: Key of :data:`_BUILTIN_VERBS` or ``None``.
+    """
+    normalized_noun = parser.normalize_word(noun)
+    normalized_verb = parser.normalize_word(verb)
+    for candidate in (normalized_noun, normalized_noun + "s"):
+        if (candidate, normalized_verb) in _BUILTIN_VERBS:
+            rtnval: Optional[Tuple[str, str]] = (candidate, normalized_verb)
+            return rtnval
+    return None
+
+
+def _verbs_of(*, tree: CommandTree, noun: str) -> List[str]:
+    """
+        Every verb of ``noun`` (as the tree spells it): canonical
+        verbs, or the alias verbs of an alias-only noun, plus built-in
+        verbs.
+
+        :param tree: Command tree.
+        :param noun: Noun.
+
+        :returns: Verbs.
+    """
+    verbs = [descriptor.verb for descriptor in parser.verbs_for(tree=tree, noun=noun)]
+    if len(verbs) == 0:
+        verbs = [alias for alias, _descriptor in parser.alias_verbs_for(tree=tree, noun=noun)]
+    verbs.extend(_builtin_verbs_for(noun))
+    rtnval = sorted(set(verbs))
+    return rtnval
 
 
 # ---------------------------------------------------------------------------
-# Dispatch
+# Built-in commands
 # ---------------------------------------------------------------------------
 
 
-def _handle_commands(*, ctx: CliContext, args: Sequence[str]) -> int:
+def _run_builtin_command(*, ctx: CliContext, noun: str, args: Sequence[str]) -> int:
+    """
+        Run one of pyc's own top-level commands.
+
+        :param ctx: Invocation context.
+        :param noun: Command word.
+        :param args: Arguments after it (help flags included; the
+                     command's own parser answers them).
+
+        :returns: Exit code.
+    """
+    if noun == "login":
+        from ccai.pychestrate.cli.commands.auth import run_login  # noqa: E402
+        return run_login(ctx=ctx, args=args)
+    if noun == "logout":
+        from ccai.pychestrate.cli.commands.auth import run_logout  # noqa: E402
+        return run_logout(ctx=ctx, args=args)
+    if noun == "whoami":
+        from ccai.pychestrate.cli.commands.auth import run_whoami  # noqa: E402
+        return run_whoami(ctx=ctx, args=args)
+    if noun == "config":
+        from ccai.pychestrate.cli.commands.config import run_config  # noqa: E402
+        if len(args) == 0:
+            args = ["--help"]
+        return run_config(ctx=ctx, args=args)
+    if noun == "commands":
+        return _run_commands(ctx=ctx, args=args)
+    if noun == "ext":
+        from ccai.pychestrate.cli.commands.ext import run_ext  # noqa: E402
+        return run_ext(ctx=ctx, args=args)
+    raise CliUsageError("'{}' is not a pyc command".format(noun))
+
+
+def _run_builtin_verb(*, ctx: CliContext, key: Tuple[str, str], args: Sequence[str]) -> int:
+    """
+        Run a built-in verb of an API noun.
+
+        :param ctx: Invocation context.
+        :param key: ``(noun, verb)`` of :data:`_BUILTIN_VERBS`.
+        :param args: Arguments after the verb.
+
+        :returns: Exit code.
+    """
+    if key == ("runs", "wait"):
+        from ccai.pychestrate.cli.commands.runs import run_runs_wait  # noqa: E402
+        return run_runs_wait(ctx=ctx, profile_resolver=lambda: resolve_profile(ctx=ctx), args=args)
+    if key == ("plugin-api", "catalog"):
+        from ccai.pychestrate.cli.commands.ext import run_plugin_api_catalog  # noqa: E402
+        return run_plugin_api_catalog(ctx=ctx, args=args)
+    raise CliUsageError("'{} {}' is not a pyc command".format(key[0], key[1]))
+
+
+def _run_commands(*, ctx: CliContext, args: Sequence[str]) -> int:
     """
         ``pyc commands [--refresh]``.
 
+        :param ctx: Invocation context.
+        :param args: Arguments after ``commands``.
+
         :returns: Exit code.
     """
+    from ccai.pychestrate.cli.argparsing import CliArgumentParser  # noqa: E402
     from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
 
-    refresh = "--refresh" in args
+    command_parser = CliArgumentParser(
+        prog="pyc commands",
+        description=(
+            "List every API command the server offers (from its OpenAPI document,\n"
+            "cached for an hour)."
+        ),
+        out_stream=ctx.stdout,
+        err_stream=ctx.stderr,
+    )
+    command_parser.add_argument(
+        "--refresh", action="store_true", default=False,
+        help="download the server's command list again now",
+    )
+    namespace = command_parser.parse_args(list(args))
     profile = resolve_profile(ctx=ctx)
-    tree, source = api_commands.load_command_tree(ctx=ctx, profile=profile, force_refresh=refresh)
+    tree, source = api_commands.load_command_tree(ctx=ctx, profile=profile, force_refresh=namespace.refresh)
     ctx.stdout.write(api_commands.render_command_list(tree=tree, source=source))
-    return exit_codes.EXIT_OK
+    rtnval = exit_codes.EXIT_OK
+    return rtnval
 
 
-def _handle_api_noun_help(*, ctx: CliContext, noun: str) -> int:
+# ---------------------------------------------------------------------------
+# Help
+# ---------------------------------------------------------------------------
+
+
+def _print_top_help(*, stream) -> None:
     """
-        ``pyc <noun> --help`` for a noun of the generated tree.
+        Print the static top-level help summary.
 
-        :returns: Exit code.
+        :param stream: Stream to write to.
+
+        :returns: None.
+    """
+    stream.write("\n".join(_TOP_HELP_LINES))
+    return
+
+
+def _not_cached_detail(*, source: str) -> Optional[str]:
+    """
+        The line explaining that help only knows pyc's built-in
+        commands because no command list is cached.
+
+        :param source: Where the tree came from.
+
+        :returns: Text or ``None``.
+    """
+    if source != "builtin":
+        return None
+    rtnval = (
+        "(help works offline and pyc has no copy of this server's command list yet;"
+        " run any command, or 'pyc commands', to download it)"
+    )
+    return rtnval
+
+
+def _print_noun_help(*, ctx: CliContext, tree: CommandTree, noun: str) -> None:
+    """
+        ``pyc <noun> --help``: the tree's verbs plus built-in verbs.
+
+        :param ctx: Invocation context.
+        :param tree: Command tree.
+        :param noun: Noun as the tree (or the built-in verbs) spell it.
+
+        :returns: None.
     """
     from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
 
-    try:
-        profile = resolve_profile(ctx=ctx)
-        tree, _source = api_commands.load_command_tree(ctx=ctx, profile=profile)
-    except (NotConfiguredError, CredentialsFileNotFoundError, ProfileNotFoundError):
-        tree = api_commands.fallback_command_tree()
+    has_tree_verbs = (
+        len(parser.verbs_for(tree=tree, noun=noun)) > 0
+        or len(parser.alias_verbs_for(tree=tree, noun=noun)) > 0
+    )
+    if has_tree_verbs is True:
+        text = api_commands.render_noun_help(tree=tree, noun=noun)
+    else:
+        text = "usage: pyc {} <verb> [args]\n\nverbs:\n".format(noun)
+    builtin_lines = []
+    for key in _builtin_verb_keys_for(noun):
+        builtin_lines.append("  {:<24} {}".format(key[1], _BUILTIN_VERBS[key]))
+    if len(builtin_lines) > 0:
+        if has_tree_verbs is True:
+            text = text + "\nbuilt-in verbs:\n" + "\n".join(builtin_lines) + "\n"
+        else:
+            text = text + "\n".join(builtin_lines) + "\n"
+    ctx.stdout.write(text)
+    return
 
-    canonical = parser.resolve_noun(tree=tree, noun=noun)
-    if canonical is None:
-        ctx.stdout.write(
-            "noun '{}' is not known here. Run 'pyc commands' for the server's API commands,"
-            " or 'pyc --help'.\n".format(noun)
-        )
+
+def _print_help_for(*, ctx: CliContext, words: Sequence[str]) -> int:
+    """
+        Help for the command named by ``words`` (``[]``, ``[noun]`` or
+        ``[noun, verb]``), without touching the network.
+
+        :param ctx: Invocation context.
+        :param words: Command words.
+
+        :returns: Exit code (2 for an unknown command).
+    """
+    from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
+
+    if len(words) == 0:
+        _print_top_help(stream=ctx.stdout)
         return exit_codes.EXIT_OK
-    ctx.stdout.write(api_commands.render_noun_help(tree=tree, noun=canonical))
+
+    noun = words[0]
+    if noun in _BUILTIN_NOUNS:
+        if noun == HELP_COMMAND:
+            _print_top_help(stream=ctx.stdout)
+            return exit_codes.EXIT_OK
+        rtnval = _run_builtin_command(ctx=ctx, noun=noun, args=list(words[1:]) + ["--help"])
+        return rtnval
+
+    if len(words) >= 2:
+        builtin_key = _builtin_verb_key(noun, words[1])
+        if builtin_key is not None:
+            rtnval = _run_builtin_verb(ctx=ctx, key=builtin_key, args=["--help"])
+            return rtnval
+
+    tree, source = _offline_tree(ctx=ctx)
+    resolved_noun = parser.resolve_noun(tree=tree, noun=noun)
+    builtin_keys = _builtin_verb_keys_for(noun)
+    if resolved_noun is None and len(builtin_keys) == 0:
+        raise _unknown_command_error(
+            noun=noun, verb=None, known_nouns=_known_nouns(tree=tree),
+            detail=_not_cached_detail(source=source),
+        )
+
+    if len(words) == 1:
+        shown_noun = resolved_noun
+        if shown_noun is None:
+            shown_noun = builtin_keys[0][0]
+        _print_noun_help(ctx=ctx, tree=tree, noun=shown_noun)
+        return exit_codes.EXIT_OK
+
+    verb = words[1]
+    descriptor = parser.lookup_command(tree=tree, noun=noun, verb=verb)
+    if descriptor is None:
+        error = _unknown_verb_error(
+            noun=resolved_noun or noun, verb=verb, verbs=_verbs_of(tree=tree, noun=resolved_noun or noun),
+        )
+        detail = _not_cached_detail(source=source)
+        if detail is not None:
+            error = CliUsageError("{}\n{}".format(error, detail))
+        raise error
+    api_commands.build_command_parser(ctx=ctx, descriptor=descriptor).print_help()
     return exit_codes.EXIT_OK
+
+
+# ---------------------------------------------------------------------------
+# API commands
+# ---------------------------------------------------------------------------
 
 
 def _handle_api_command(*, ctx: CliContext, noun: str, verb: str, args: Sequence[str]) -> int:
     """
         Run a generated API command, loading the command tree first.
 
+        :param ctx: Invocation context.
+        :param noun: Noun as typed.
+        :param verb: Verb as typed.
+        :param args: Arguments after the verb.
+
         :returns: Exit code.
     """
     from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
 
-    wants_help = any(_is_help_flag(token) for token in args if token.startswith("-"))
     try:
         profile = resolve_profile(ctx=ctx)
     except (NotConfiguredError, CredentialsFileNotFoundError, ProfileNotFoundError) as xcpt:
+        # Not configured: a command pyc cannot know is a usage error;
+        # a real one reports the configuration problem.
         fallback = api_commands.fallback_command_tree()
-        fallback_descriptor = parser.lookup_command(tree=fallback, noun=noun, verb=verb)
-        if fallback_descriptor is None:
+        if parser.lookup_command(tree=fallback, noun=noun, verb=verb) is None:
             raise _unknown_command_error(
-                noun=noun, verb=verb,
+                noun=noun, verb=verb, known_nouns=_known_nouns(tree=fallback),
                 detail=(
                     "pyc could not load the server's command list: {}".format(
                         str(xcpt).splitlines()[0]
                     )
                 ),
             ) from None
-        if wants_help is True:
-            api_commands.build_command_parser(ctx=ctx, descriptor=fallback_descriptor).print_help()
-            return exit_codes.EXIT_OK
         raise
 
     tree, source = api_commands.load_command_tree(ctx=ctx, profile=profile)
@@ -677,27 +783,21 @@ def _handle_api_command(*, ctx: CliContext, noun: str, verb: str, args: Sequence
         tree, source = api_commands.load_command_tree(ctx=ctx, profile=profile, force_refresh=True)
         descriptor = parser.lookup_command(tree=tree, noun=noun, verb=verb)
     if descriptor is None:
-        canonical = parser.resolve_noun(tree=tree, noun=noun)
-        if canonical is not None:
-            verb_names = [entry.verb for entry in parser.verbs_for(tree=tree, noun=canonical)]
-            if len(verb_names) == 0:
-                verb_names = [alias for alias, _entry in parser.alias_verbs_for(tree=tree, noun=canonical)]
-            verbs = ", ".join(sorted(set(verb_names)))
-            raise CliUsageError(
-                "'{}' has no verb '{}'. verbs: {}".format(canonical, verb, verbs)
-            )
+        resolved_noun = parser.resolve_noun(tree=tree, noun=noun)
+        if resolved_noun is not None:
+            raise _unknown_verb_error(noun=resolved_noun, verb=verb, verbs=_verbs_of(tree=tree, noun=resolved_noun))
         detail = None
         if source == "builtin":
             detail = "(the server's OpenAPI document could not be loaded, so only pyc's built-in commands are known)"
-        raise _unknown_command_error(noun=noun, verb=verb, detail=detail)
-
-    if wants_help is True:
-        command_parser = api_commands.build_command_parser(ctx=ctx, descriptor=descriptor)
-        command_parser.print_help()
-        return exit_codes.EXIT_OK
+        raise _unknown_command_error(noun=noun, verb=verb, known_nouns=_known_nouns(tree=tree), detail=detail)
 
     rtnval = api_commands.run_api_command(ctx=ctx, profile=profile, descriptor=descriptor, args=args)
     return rtnval
+
+
+# ---------------------------------------------------------------------------
+# Dispatch
+# ---------------------------------------------------------------------------
 
 
 def _dispatch(*, ctx: CliContext, remainder: List[str]) -> int:
@@ -709,73 +809,59 @@ def _dispatch(*, ctx: CliContext, remainder: List[str]) -> int:
 
         :returns: Exit code.
     """
-    if len(remainder) == 0 or _is_help_flag(remainder[0]):
-        _print_top_help(stream=ctx.stdout)
-        return exit_codes.EXIT_OK
-    if _is_version_flag(remainder[0]):
+    if len(remainder) > 0 and remainder[0] == VERSION_FLAG:
         ctx.stdout.write("pyc {}\n".format(CLI_VERSION))
         return exit_codes.EXIT_OK
 
-    noun = remainder[0]
-    if noun.startswith("-"):
-        raise CliUsageError("unknown option '{}'. See 'pyc --help'.".format(noun))
-    rest = remainder[1:]
-
-    if noun == "login":
-        from ccai.pychestrate.cli.commands.auth import run_login  # noqa: E402
-        return run_login(ctx=ctx, args=rest)
-    if noun == "logout":
-        from ccai.pychestrate.cli.commands.auth import run_logout  # noqa: E402
-        return run_logout(ctx=ctx, args=rest)
-    if noun == "whoami":
-        from ccai.pychestrate.cli.commands.auth import run_whoami  # noqa: E402
-        return run_whoami(ctx=ctx, args=rest)
-    if noun == "config":
-        from ccai.pychestrate.cli.commands.config import run_config  # noqa: E402
-        if len(rest) == 0:
-            rest = ["--help"]
-        return run_config(ctx=ctx, args=rest)
-    if noun == "commands":
-        if len(rest) > 0 and _is_help_flag(rest[0]):
-            ctx.stdout.write("usage: pyc commands [--refresh]\n\nList every API command the server offers.\n")
-            return exit_codes.EXIT_OK
-        return _handle_commands(ctx=ctx, args=rest)
-
-    if len(rest) > 0 and _is_help_flag(rest[0]):
-        if noun in _STATIC_NOUN_HELP:
-            ctx.stdout.write(_STATIC_NOUN_HELP[noun])
-            return exit_codes.EXIT_OK
-        return _handle_api_noun_help(ctx=ctx, noun=noun)
-
-    if len(rest) == 0:
-        raise CliUsageError(
-            "usage: pyc <noun> <verb> [args] -- '{}' needs a verb; see 'pyc {} --help'.".format(noun, noun)
-        )
-    verb = rest[0]
-    args = rest[1:]
-
-    if len(args) > 0 and _is_help_flag(args[0]) and (noun, verb) in _STATIC_VERB_HELP:
-        ctx.stdout.write(_STATIC_VERB_HELP[(noun, verb)])
+    help_requested, tokens = _split_help_request(tokens=remainder)
+    if len(tokens) == 0:
+        _print_top_help(stream=ctx.stdout)
         return exit_codes.EXIT_OK
 
-    if noun == "plugin-api":
-        if verb != _PLUGIN_API_CATALOG_VERB:
-            raise _unknown_command_error(noun=noun, verb=verb)
-        entry_name = args[0] if len(args) > 0 else None
-        return _handle_plugin_api_catalog(ctx=ctx, entry_name=entry_name)
+    first = tokens[0]
+    if first == HELP_COMMAND:
+        rtnval = _print_help_for(ctx=ctx, words=_leading_words(tokens[1:], 2))
+        return rtnval
+    if first.startswith("-"):
+        hint = suggestions.did_you_mean(word=first.split("=", 1)[0], candidates=_GLOBAL_OPTION_SPELLINGS)
+        first_line = "unknown option '{}'{}".format(first, "; " + hint if len(hint) > 0 else "")
+        raise CliUsageError("{} See 'pyc --help'.".format(_end_sentence(first_line)))
 
-    if noun == "ext":
-        if verb == _EXT_LIST_VERB:
-            return _handle_ext_list(ctx=ctx)
-        if len(args) == 0:
-            raise CliUsageError("usage: pyc ext <ext-name> <verb> [args]")
-        return _handle_ext_invocation(ctx=ctx, ext_name=verb, verb=args[0], tokens=args[1:])
+    if first in _BUILTIN_NOUNS:
+        # The built-in's own parser answers --help (offline).
+        rtnval = _run_builtin_command(ctx=ctx, noun=first, args=_args_after_first_word(remainder=remainder))
+        return rtnval
 
-    if parser.normalize_word(noun) in ("runs", "run") and verb == "wait":
-        from ccai.pychestrate.cli.commands.runs import run_runs_wait  # noqa: E402
-        return run_runs_wait(ctx=ctx, profile_resolver=lambda: resolve_profile(ctx=ctx), args=args)
+    if help_requested is True:
+        rtnval = _print_help_for(ctx=ctx, words=_leading_words(tokens, 2))
+        return rtnval
 
-    return _handle_api_command(ctx=ctx, noun=noun, verb=verb, args=args)
+    noun = first
+    if len(tokens) == 1 or tokens[1].startswith("-"):
+        tree, source = _offline_tree(ctx=ctx)
+        resolved_noun = parser.resolve_noun(tree=tree, noun=noun)
+        builtin_keys = _builtin_verb_keys_for(noun)
+        if resolved_noun is None and len(builtin_keys) == 0:
+            raise _unknown_command_error(
+                noun=noun, verb=None, known_nouns=_known_nouns(tree=tree),
+                detail=_not_cached_detail(source=source),
+            )
+        shown_noun = resolved_noun if resolved_noun is not None else builtin_keys[0][0]
+        raise CliUsageError(
+            "'pyc {}' needs a verb: {} (see 'pyc {} --help')".format(
+                shown_noun, ", ".join(_verbs_of(tree=tree, noun=shown_noun)), shown_noun
+            )
+        )
+
+    verb = tokens[1]
+    args = tokens[2:]
+    builtin_key = _builtin_verb_key(noun, verb)
+    if builtin_key is not None:
+        rtnval = _run_builtin_verb(ctx=ctx, key=builtin_key, args=args)
+        return rtnval
+
+    rtnval = _handle_api_command(ctx=ctx, noun=noun, verb=verb, args=args)
+    return rtnval
 
 
 def main(

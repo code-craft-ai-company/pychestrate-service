@@ -50,6 +50,19 @@ API_PREFIX: str = "/api/v1"
 EXAMPLE_SERVER_URL: str = "https://pychestrate.example.com"
 
 
+class _NullStream:
+    """
+        A text stream that discards everything written to it.
+    """
+
+    def write(self, text: str) -> int:
+        rtnval = len(text)
+        return rtnval
+
+    def flush(self) -> None:
+        return
+
+
 @dataclass
 class CliContext:
     """
@@ -216,19 +229,27 @@ def _load_stored_profile(ctx: CliContext) -> CliProfile:
     return rtnval
 
 
-def resolve_profile(*, ctx: CliContext) -> CliProfile:
+def resolve_profile(*, ctx: CliContext, quiet: bool = False) -> CliProfile:
     """
         Resolve the effective profile for this invocation (see module
         docs for precedence), warn about disabled TLS verification and
         an expired stored token, and normalize the server URL.
 
         :param ctx: Invocation context.
+        :param quiet: Print no notes or warnings (``--help`` only
+                      needs the server URL to find the cached command
+                      list).
 
         :returns: :class:`CliProfile`.
         :raises: NotConfiguredError, ProfileNotFoundError,
                  CredentialsFilePermissionError,
                  CredentialsFileInvalidError
     """
+    if quiet is True:
+        silent_ctx = replace(ctx, stderr=_NullStream())
+        rtnval = resolve_profile(ctx=silent_ctx, quiet=False)
+        return rtnval
+
     url_override = ctx.server_url
     if url_override is None or len(url_override.strip()) == 0:
         url_override = ctx.environ.get(PYC_SERVER_URL_ENV_VAR, "") or None

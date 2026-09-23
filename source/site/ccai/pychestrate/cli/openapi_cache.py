@@ -8,8 +8,17 @@
 The CLI builds its argparse tree from an OpenAPI document. The
 document is cached under ``$XDG_CACHE_HOME/pychestrate/openapi/
 <server-url-hash>.json`` (``~/.cache/pychestrate/openapi/``; see
-:mod:`cli.paths`) and refreshed whenever a fetch returns a different
-``info.version``; when a fetch fails the cached copy is used.
+:mod:`cli.paths`):
+
+* a command uses the cached copy for an hour
+  (:func:`load_cached_if_fresh`), then fetches again
+  (:func:`load_or_fetch`, which rewrites the file when ``info.version``
+  changed and falls back to the cached copy when the fetch fails);
+* ``--help`` never touches the network, so it reads the cached copy
+  whatever its age (:func:`load_cached_any_age`).
+
+Every function takes the invocation's environment so a test (or an
+embedding program) decides where the cache lives.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -24,7 +33,7 @@ import os
 import time
 
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Mapping, Optional
 
 from ccai.pychestrate.cli import paths
 from ccai.pychestrate.cli.exceptions import OpenApiUnavailableError
@@ -34,14 +43,16 @@ CACHE_DIR_RELATIVE: str = ".cache/pychestrate/openapi"
 PYC_OPENAPI_CACHE_DIR_ENV_VAR: str = paths.PYC_OPENAPI_CACHE_DIR_ENV_VAR
 
 
-def _resolve_cache_dir() -> Path:
+def _resolve_cache_dir(*, environ: Optional[Mapping[str, str]] = None) -> Path:
     """
         Return the cache directory path (``PYC_OPENAPI_CACHE_DIR`` or
         the XDG cache directory).
 
+        :param environ: Environment (``None`` for the process's).
+
         :returns: Absolute :class:`pathlib.Path`.
     """
-    rtnval = paths.resolve_openapi_cache_dir()
+    rtnval = paths.resolve_openapi_cache_dir(environ=environ)
     return rtnval
 
 
@@ -58,17 +69,31 @@ def _hash_server_url(*, server_url: str) -> str:
     return rtnval
 
 
-def _cache_path_for(*, server_url: str) -> Path:
+def cache_path_for(*, server_url: str, environ: Optional[Mapping[str, str]] = None) -> Path:
     """
         Return the on-disk path for the cache entry of ``server_url``.
 
         :param server_url: Fully qualified server URL.
+        :param environ: Environment (``None`` for the process's).
 
         :returns: Absolute :class:`pathlib.Path`.
     """
-    cache_dir = _resolve_cache_dir()
+    cache_dir = _resolve_cache_dir(environ=environ)
     file_name = "{}.json".format(_hash_server_url(server_url=server_url))
     rtnval = cache_dir / file_name
+    return rtnval
+
+
+def _cache_path_for(*, server_url: str, environ: Optional[Mapping[str, str]] = None) -> Path:
+    """
+        Backwards-compatible alias of :func:`cache_path_for`.
+
+        :param server_url: Fully qualified server URL.
+        :param environ: Environment (``None`` for the process's).
+
+        :returns: Absolute :class:`pathlib.Path`.
+    """
+    rtnval = cache_path_for(server_url=server_url, environ=environ)
     return rtnval
 
 
@@ -129,7 +154,12 @@ def _touch(*, cache_path: Path) -> None:
     return
 
 
-def load_cached_if_fresh(*, server_url: str, max_age_seconds: float) -> Optional[Dict]:
+def load_cached_if_fresh(
+        *,
+        server_url: str,
+        max_age_seconds: float,
+        environ: Optional[Mapping[str, str]] = None
+    ) -> Optional[Dict]:
     """
         Return the cached document for ``server_url`` when it was
         fetched (or re-confirmed) less than ``max_age_seconds`` ago, so
@@ -137,10 +167,11 @@ def load_cached_if_fresh(*, server_url: str, max_age_seconds: float) -> Optional
 
         :param server_url: Fully qualified server URL.
         :param max_age_seconds: Freshness window.
+        :param environ: Environment (``None`` for the process's).
 
         :returns: The document or ``None`` (missing, stale, corrupt).
     """
-    cache_path = _cache_path_for(server_url=server_url)
+    cache_path = cache_path_for(server_url=server_url, environ=environ)
     try:
         age_seconds = time.time() - cache_path.stat().st_mtime
     except OSError:
@@ -149,6 +180,37 @@ def load_cached_if_fresh(*, server_url: str, max_age_seconds: float) -> Optional
         return None
     rtnval = _read_cached(cache_path=cache_path)
     return rtnval
+
+
+def load_cached_any_age(*, server_url: str, environ: Optional[Mapping[str, str]] = None) -> Optional[Dict]:
+    """
+        Return the cached document for ``server_url`` however old it is
+        (``--help`` uses it: help never touches the network).
+
+        :param server_url: Fully qualified server URL.
+        :param environ: Environment (``None`` for the process's).
+
+        :returns: The document or ``None`` (missing or corrupt).
+    """
+    cache_path = cache_path_for(server_url=server_url, environ=environ)
+    rtnval = _read_cached(cache_path=cache_path)
+    return rtnval
+
+
+def store(*, server_url: str, document: Dict, environ: Optional[Mapping[str, str]] = None) -> None:
+    """
+        Cache ``document`` for ``server_url`` (best effort; an
+        unwritable cache directory is ignored).
+
+        :param server_url: Fully qualified server URL.
+        :param document: OpenAPI document.
+        :param environ: Environment (``None`` for the process's).
+
+        :returns: None.
+    """
+    cache_path = cache_path_for(server_url=server_url, environ=environ)
+    _write_cached(cache_path=cache_path, document=document)
+    return
 
 
 def _document_version(*, document: Dict) -> str:
@@ -170,7 +232,8 @@ def _document_version(*, document: Dict) -> str:
 def load_or_fetch(
         *,
         server_url: str,
-        fetch_callable: Callable[[], Dict]
+        fetch_callable: Callable[[], Dict],
+        environ: Optional[Mapping[str, str]] = None
     ) -> Dict:
     """
         Return the OpenAPI document for ``server_url``, refreshing the
@@ -180,11 +243,12 @@ def load_or_fetch(
         :param fetch_callable: No-arg callable that performs the actual
                                HTTP fetch and returns a parsed dict.
                                Exposed for testability.
+        :param environ: Environment (``None`` for the process's).
 
         :returns: Live OpenAPI document.
         :raises: OpenApiUnavailableError when both cache and fetch fail.
     """
-    cache_path = _cache_path_for(server_url=server_url)
+    cache_path = cache_path_for(server_url=server_url, environ=environ)
     cached_document = _read_cached(cache_path=cache_path)
 
     fetched_document: Optional[Dict] = None

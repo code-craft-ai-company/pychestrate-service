@@ -231,8 +231,34 @@ def run_login(*, ctx: CliContext, args: Sequence[str]) -> int:
         )
     )
     ctx.stdout.write("Saved profile '{}' in {} (mode 0600).\n".format(profile_name, path))
+    _warm_command_cache(ctx=ctx, profile=verify_profile)
     rtnval = exit_codes.EXIT_OK
     return rtnval
+
+
+def _warm_command_cache(*, ctx: CliContext, profile: CliProfile) -> None:
+    """
+        Download and cache the server's command list right after a
+        login, so ``--help`` (which never touches the network) knows
+        every API command from the start. Best effort: a failure here
+        is silent; the first API command fetches the list again.
+
+        :param ctx: Invocation context.
+        :param profile: The profile just saved.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.cli import openapi_cache  # noqa: E402
+    from ccai.pychestrate.cli.commands import api as api_commands  # noqa: E402
+
+    fetcher = ctx.openapi_fetcher
+    if fetcher is None:
+        fetcher = api_commands.build_default_openapi_fetcher(ctx=ctx, profile=profile)
+    try:
+        openapi_cache.load_or_fetch(server_url=profile.server_url, fetch_callable=fetcher, environ=ctx.environ)
+    except Exception:  # noqa: BLE001 -- purposeful: the cache is an optimisation
+        pass
+    return
 
 
 def run_logout(*, ctx: CliContext, args: Sequence[str]) -> int:
