@@ -1,8 +1,8 @@
 .. _13-00-alpha-deployment:
 
-****************************************
+*****************************************
 Deploying Pychestrate -- Operator Runbook
-****************************************
+*****************************************
 
 This runbook brings up Pychestrate on one Linux host for a team: the
 service under gunicorn, a Postgres database managed by alembic, secret

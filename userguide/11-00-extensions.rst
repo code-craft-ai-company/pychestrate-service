@@ -15,7 +15,7 @@ forking the service. This document covers:
   a production Argon2id implementation.
 
 Most of what follows applies to any extension point. The
-:ref:`11-01-argon2id-hasher` section is a concrete walk-through of the most
+`Worked example: adding an Argon2id password hasher`_ section is a concrete walk-through of the most
 commonly-needed operator customization: hardening local credential hashing.
 
 
@@ -29,14 +29,14 @@ Pychestrate has two Layer E extension patterns. They look similar but solve
 different problems; mixing them up is the first mistake to avoid.
 
 **Factory protocols** — *override or provide a named behavior.* A
-:class:`FactoryProtocolBase` subclass declares a contract identified by a
+``FactoryProtocolBase`` subclass declares a contract identified by a
 ``factory_protocol_name``. Concrete implementations inherit the protocol, set
-a numeric :attr:`PRECEDENCE` (lower = higher priority), and compete for the
+a numeric ``PRECEDENCE`` (lower = higher priority), and compete for the
 same slot. The registry returns the winning implementation to the consumer.
 Examples: ``secrets_backend``, ``audit_sink``, ``auth_provider``, ``password_hasher``.
 
 **Resource extensions** — *add a new kind of thing to a registry.* A
-:class:`ResourceExtension` subclass is the collection base type. Concrete
+``ResourceExtension`` subclass is the collection base type. Concrete
 subclasses contribute a kind; the registry returns the full set in
 registration order. There is no PRECEDENCE — every subclass is enumerated.
 Examples: ``PermissionExtension``, ``AuditEventTypeExtension``,
@@ -99,7 +99,7 @@ To contribute an implementation of an existing factory protocol:
 2. **Subclass it.** Set ``PRECEDENCE`` to a value lower than the in-tree
    reference. Implement every classmethod listed on the base.
 3. **Register it.** Call
-   :func:`ccai.pychestrate.webservice.extensions.registry.register_factory_implementation`
+   ``ccai.pychestrate.webservice.extensions.registry.register_factory_implementation``
    once at service startup, before the first consumer reads from the registry.
 
 Resource extension contribution
@@ -114,7 +114,7 @@ To add a new kind of thing:
 2. **Subclass it.** Set every class attribute the base declares. Do not set
    ``PRECEDENCE`` — resource extensions are not ordered.
 3. **Register it.** Call
-   :func:`ccai.pychestrate.webservice.extensions.registry.register_resource_extension`
+   ``ccai.pychestrate.webservice.extensions.registry.register_resource_extension``
    once at startup with both the base class and your subclass.
 
 Registering multiple extensions at once
@@ -138,7 +138,7 @@ Confirm the extension is active
 -------------------------------
 
 Call
-:func:`ccai.pychestrate.webservice.extensions.registry.list_factory_implementations`
+``ccai.pychestrate.webservice.extensions.registry.list_factory_implementations``
 after bootstrap and assert your class is in the returned tuple. The tuple is
 sorted ascending by ``PRECEDENCE`` so the winning implementation for new
 resolutions is always ``result[0]``.
@@ -306,7 +306,7 @@ Notes on the implementation:
   through the protocol argument.
 * Verification returns ``False`` on mismatch rather than raising. The
   ``local_flow`` wrapper translates ``False`` into an
-  :class:`AuthenticationError` after recording a backoff failure.
+  ``AuthenticationError`` after recording a backoff failure.
 * The stored bytes are the argon2-cffi canonical encoding,
   e.g. ``$argon2id$v=19$m=65536,t=3,p=1$<b64 salt>$<b64 digest>``. No custom
   serialization — argon2-cffi owns the format.
@@ -354,7 +354,7 @@ Step 5 — Wire it into service bootstrap
 
 Call the extension's ``register()`` function after the Phase-1 built-ins
 register and before the first request. If the service uses
-:func:`bootstrap_phase1_runtime`, do this:
+``bootstrap_phase1_runtime``, do this:
 
 .. code-block:: python
 
@@ -458,7 +458,7 @@ Protocol                     Owning feature                                What 
 ``resource_health_probe``    ``4-resource-health``                         Per-device-kind health probes.
 ===========================  ============================================  ========================================================
 
-The :ref:`Phase 1 exit criterion <implementation-plan-phase-1>` calls
+The Phase 1 exit criterion in `specs/implementation-plan.md <../specs/implementation-plan.md>`_ calls
 out ``notification_channel`` specifically: "an out-of-tree extension
 can register a new ``notification_channel`` and receive traffic." The
 mechanism is identical to the Argon2id walk-through above -- the
@@ -601,7 +601,7 @@ pack must be registered explicitly in the service bootstrap code.
 
 **Tests interact with each other through global registry state.**
 
-Use :func:`ccai.pychestrate.webservice.extensions.registry.reset_registry_for_testing`
+Use ``ccai.pychestrate.webservice.extensions.registry.reset_registry_for_testing``
 at the top of each test, then call the specific extension's ``register()``
 within the test. Most Phase-1 testbase fixtures already do this through the
 ``reset_phase1_runtime()`` helper.

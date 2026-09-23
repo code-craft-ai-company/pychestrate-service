@@ -8,7 +8,7 @@ Pychestrate originally carried **two parallel authentication stacks**.
 As of PR p13aa the consumer-UI auth flow (login / session validation /
 logout) was wired to the modern stack via a small adapter, and as of PR
 p13ad the same adapter's ``check_permission`` was rewired onto the
-modern :mod:`rbac_evaluator` against the modern ``rbac_*`` tables. The
+modern ``rbac_evaluator`` against the modern ``rbac_*`` tables. The
 legacy ``SecurityManager`` is no longer consulted by any consumer-UI
 auth or RBAC path; the auth stack split is closed. This document
 captures the historical context of the migration and the residual

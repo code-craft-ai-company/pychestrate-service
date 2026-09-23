@@ -17,15 +17,15 @@ Testing Frameworks - PyTest
 Purpose and Scope
 -----------------
 
-- Describe how contributors and CodeCraftX agents apply ``pytest`` inside this repository while staying aligned with :doc:`10-03-testing-patterns-and-practices`.
+- Describe how contributors and CodeCraftX agents apply ``pytest`` inside this repository while staying aligned with `Testing Patterns and Practices <10-03-testing-patterns-and-practices.rst>`_.
 - Provide a quick-start outline covering environment setup, directory layout, authoring guidance, and execution commands.
-- Call out places where ``pytest`` differs from the ``unittest`` conventions documented in :doc:`10-04-01-testing-frameworks-unittest`.
+- Call out places where ``pytest`` differs from the ``unittest`` conventions documented in `Testing Frameworks - UnitTest <10-04-01-testing-frameworks-unittest.rst>`_.
 
 Test Root and File Layout
 -------------------------
 
 - All ``pytest`` suites live in ``<repository>/source/testroots/pytest``; mirror the project package structure that resides under ``source``.
-- Follow the same naming conventions described in :doc:`10-02-naming-conventions`: use ``test_*.py`` modules, ``Test*`` classes when applicable, and descriptive function names.
+- Follow the same naming conventions described in `Naming Conventions <10-02-naming-conventions.rst>`_: use ``test_*.py`` modules, ``Test*`` classes when applicable, and descriptive function names.
 - Store shared fixtures/helpers under ``source/testroots/pytest/conftest.py`` or nested ``conftest.py`` files near the tests that need them; keep reusable utilities in dedicated helper modules to avoid circular imports.
 - Keep the test hierarchy synchronized with new source modules so discovery remains predictable for tooling and CI.
 

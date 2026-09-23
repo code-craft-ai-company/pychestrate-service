@@ -12,7 +12,7 @@ Purpose and Audience
 
 - Describe how this repository applies the ``testbase`` and ``testplus`` frameworks so contributors and CodeCraftX can create, organize, and run scenarios consistently.
 - Clarify when to choose ``testbase`` (single-host or self-contained integration tests) versus ``testplus`` (multi-host or clustered resources).
-- Complement :doc:`10-03-testing-patterns-and-practices` by focusing on framework-specific conventions, directory layout, and result artifacts.
+- Complement `Testing Patterns and Practices <10-03-testing-patterns-and-practices.rst>`_ by focusing on framework-specific conventions, directory layout, and result artifacts.
 
 Test Roots and Resource Layout
 ------------------------------

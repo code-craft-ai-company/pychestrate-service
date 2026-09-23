@@ -20,7 +20,7 @@ Purpose and Audience
 
 - Explain how to create, organize, and run tests in this repository with the standard library ``unittest`` package.
 - Provide a single reference that works for human developers and automation agents (for example, CodeCraftX) working inside Codex or local workspaces.
-- Highlight where this document fits relative to :doc:`10-03-testing-patterns-and-practices` and other userguide references.
+- Highlight where this document fits relative to `Testing Patterns and Practices <10-03-testing-patterns-and-practices.rst>`_ and other userguide references.
 
 Test Root and Discovery
 -----------------------
@@ -41,7 +41,7 @@ Environment Preparation
 Writing Tests with unittest
 ---------------------------
 
-- Follow :doc:`10-00-coding-standards` and :doc:`10-02-naming-conventions` for class, method, and constant names in test modules.
+- Follow the `Coding Standards <10-00-coding-standards.rst>`_ and `Naming Conventions <10-02-naming-conventions.rst>`_ for class, method, and constant names in test modules.
 - Structure each test module with:
 
   * Imports grouped as stdlib, third-party, then project modules.
