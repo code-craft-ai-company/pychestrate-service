@@ -50,11 +50,14 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import secrets
+
 from ccai import testbase
 
 from ccai.pychestrate.webservice.webinterface.foundation import (
     cookie_session,
 )
+from ccai.pychestrate.webservice.metadata import SITE_SHARED_GLOBALS
 from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
     decode_session_cookie,
     drive_request,
@@ -62,6 +65,7 @@ from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
     ensure_seeded_admin,
     ensure_seeded_admin_role,
     ensure_seeded_viewer,
+    extract_csrf_token_from_cookies,
     login_as,
 )
 
@@ -277,4 +281,75 @@ def test_anonymous_resources_create_redirects_to_login_not_dashboard():
     testbase.assert_equal(
         location.split("?")[0].endswith("/login"), True
     )
+    return
+
+
+# ===========================================================================
+# Admin pages are gated server-side (XC-01)
+# ===========================================================================
+
+
+def test_viewer_gets_403_from_the_admin_dashboard():
+    """
+    **Feature: admin page permission gate (XC-01)**
+    **Property: a signed-in viewer (no system:ui.admin.view) who
+    requests ``/admin/dashboard`` directly gets 403 -- hiding the
+    navigation link is not the only protection.**
+    """
+    handle = ensure_app()
+    viewer = ensure_seeded_viewer()
+    cookies = login_as(wsgi_app=handle.wsgi_app, user=viewer)
+
+    response = drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="GET",
+        path="/admin/dashboard",
+        cookies=cookies,
+    )
+    testbase.assert_equal(response.status_code, 403)
+    return
+
+
+def test_viewer_cannot_create_a_system_admin_account():
+    """
+    **Feature: admin page permission gate (XC-01)**
+    **Property: a signed-in viewer who POSTs a valid (CSRF-signed)
+    user-create form asking for the system-admin role gets 403 and no
+    account is created -- the escalation path the audit found is
+    closed.**
+    """
+    from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
+        IdentityUser,
+    )
+
+    handle = ensure_app()
+    viewer = ensure_seeded_viewer()
+    cookies = login_as(wsgi_app=handle.wsgi_app, user=viewer)
+    csrf_token = extract_csrf_token_from_cookies(cookies=cookies)
+    login_name = "escalated-{}".format(secrets.token_hex(4))
+    body = (
+        "csrf_token={csrf}&username={login}&email={login}@example.invalid"
+        "&password=Escalate-Me-9!Now&display_name=Escalated"
+        "&firstname=&lastname=&role_names=system-admin"
+    ).format(csrf=csrf_token, login=login_name).encode("utf-8")
+
+    response = drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="POST",
+        path="/admin/users/create",
+        body=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        cookies=cookies,
+    )
+
+    db_session = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY()
+    try:
+        created = (
+            db_session.query(IdentityUser)
+            .filter(IdentityUser.login_name == login_name)
+            .count()
+        )
+    finally:
+        db_session.close()
+    testbase.assert_equal((response.status_code, created), (403, 0))
     return

@@ -219,6 +219,95 @@ def redact_packet(*, packet: Mapping[str, Any], secret_fields: Iterable[str]) ->
     return rtnval
 
 
+def secret_top_level_keys(*, secret_fields: Iterable[str]) -> List[str]:
+    """
+        Top-level packet keys that contain at least one secret path.
+
+        Packets merge at the top level (see :func:`merge_packet`), so a
+        form or client that must not see a secret has to leave out the
+        whole top-level key holding it; the stored default then applies.
+
+        :param secret_fields: Secret paths declared by the job type.
+
+        :returns: Sorted, de-duplicated top-level keys.
+    """
+    keys = set()
+    for field_path in list(secret_fields or []):
+        segments = _split_pointer(field_path)
+        if len(segments) > 0:
+            keys.add(segments[0])
+    rtnval = sorted(keys)
+    return rtnval
+
+
+def _value_at(node: Any, segments: List[str]) -> Any:
+    """
+        Read the value at ``segments`` (no wildcards), or raise
+        ``KeyError`` when the path does not exist.
+    """
+    current = node
+    for segment in segments:
+        if isinstance(current, dict) and segment in current:
+            current = current[segment]
+        elif isinstance(current, list):
+            index = int(segment)
+            current = current[index]
+        else:
+            raise KeyError(segment)
+    return current
+
+
+def _set_at(node: Any, segments: List[str], value: Any) -> None:
+    """
+        Write ``value`` at ``segments`` (no wildcards) when the parent
+        path exists.
+    """
+    parent = _value_at(node, segments[:-1])
+    last = segments[-1]
+    if isinstance(parent, dict):
+        parent[last] = value
+    elif isinstance(parent, list):
+        parent[int(last)] = value
+    return
+
+
+def restore_redacted_secrets(
+        *,
+        incoming: Mapping[str, Any],
+        stored: Mapping[str, Any],
+        secret_fields: Iterable[str]
+    ) -> Dict[str, Any]:
+    """
+        Replace :data:`REDACTION_MARKER` values at secret paths in
+        ``incoming`` with the stored value, so a client that saves back
+        a packet it read (redacted) does not overwrite the real secret
+        with the marker. Wildcard paths are not restored.
+
+        :param incoming: Packet the caller submitted.
+        :param stored: Packet currently stored.
+        :param secret_fields: Secret paths declared by the job type.
+
+        :returns: A copy of ``incoming`` with markers restored.
+    """
+    rtnval = copy.deepcopy(dict(incoming or {}))
+    for field_path in list(secret_fields or []):
+        segments = _split_pointer(field_path)
+        if len(segments) == 0 or "*" in segments:
+            continue
+        try:
+            submitted = _value_at(rtnval, segments)
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue
+        if submitted != REDACTION_MARKER:
+            continue
+        try:
+            original = _value_at(stored, segments)
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue
+        _set_at(rtnval, segments, copy.deepcopy(original))
+    return rtnval
+
+
 def validate_packet(*, packet: Mapping[str, Any], schema: Optional[Mapping[str, Any]]) -> None:
     """
         Validate ``packet`` against ``schema`` (JSON Schema draft

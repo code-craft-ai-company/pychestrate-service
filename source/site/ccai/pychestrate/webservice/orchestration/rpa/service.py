@@ -288,6 +288,10 @@ class RpaSpecView:
     updated_at: Optional[datetime]
     packet_schema: Optional[Mapping[str, Any]] = None
     resolved_version: Optional[str] = None
+    # Packet paths the job type declares secret. ``default_packet``
+    # above is the stored value (needed for merging); anything that
+    # shows or returns it must redact these paths first.
+    secret_fields: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1696,10 +1700,12 @@ def _spec_to_view(*, db_session: DbSession, row: RpaSpec) -> RpaSpecView:
     display_name = row.type_id
     mode = RpaExecutionMode.PROCESS
     schema: Optional[Dict[str, Any]] = None
+    secret_fields: Tuple[str, ...] = ()
     if type_row is not None:
         display_name = type_row.display_name or type_row.type_id
         mode = type_row.execution_mode
         schema = dict(type_row.packet_schema) if type_row.packet_schema else None
+        secret_fields = tuple(str(p) for p in (type_row.secret_fields or []))
     resolved: Optional[str] = None
     try:
         resolved = resolve_version(
@@ -1726,6 +1732,7 @@ def _spec_to_view(*, db_session: DbSession, row: RpaSpec) -> RpaSpecView:
         updated_at=row.updated_at,
         packet_schema=schema,
         resolved_version=resolved,
+        secret_fields=secret_fields,
     )
     return rtnval
 

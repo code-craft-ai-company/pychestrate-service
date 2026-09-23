@@ -35,6 +35,7 @@ from typing import Any, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -291,10 +292,10 @@ def register_audit_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + AUDIT_PATH
 
-    app.attach_route(base, methods=["GET"])(handle_list_audit_records)
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_audit_records, permission_key="system:audit.read"))
     app.attach_route(
         base + "/{sequence_number:int}", methods=["GET"]
-    )(handle_read_audit_record)
+    )(require_rest_permission(handle_read_audit_record, permission_key="system:audit.read"))
 
     return
 

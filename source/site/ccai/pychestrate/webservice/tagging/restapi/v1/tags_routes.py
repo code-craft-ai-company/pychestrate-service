@@ -39,6 +39,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import AUTHENTICATED_ONLY, require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -501,20 +502,20 @@ def register_tags_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + TAGS_PATH
 
-    app.attach_route(base + "/search", methods=["GET"])(handle_search_tags)
+    app.attach_route(base + "/search", methods=["GET"])(require_rest_permission(handle_search_tags, permission_key=AUTHENTICATED_ONLY))
     app.attach_route(
         base + "/taxonomies", methods=["GET"]
-    )(handle_list_taxonomies)
+    )(require_rest_permission(handle_list_taxonomies, permission_key=AUTHENTICATED_ONLY))
 
     app.attach_route(
         base + "/{entity_kind}/{entity_id}", methods=["POST"]
-    )(handle_assign_tag)
+    )(require_rest_permission(handle_assign_tag, permission_key="system:ui.admin.view"))
     app.attach_route(
         base + "/{entity_kind}/{entity_id}", methods=["GET"]
-    )(handle_list_tags)
+    )(require_rest_permission(handle_list_tags, permission_key=AUTHENTICATED_ONLY))
     app.attach_route(
         base + "/{entity_kind}/{entity_id}/{tag:path}", methods=["DELETE"]
-    )(handle_remove_tag)
+    )(require_rest_permission(handle_remove_tag, permission_key="system:ui.admin.view"))
 
     return
 

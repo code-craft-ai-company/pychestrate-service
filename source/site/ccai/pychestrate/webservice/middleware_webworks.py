@@ -138,7 +138,8 @@ class PychestrateSessionMiddleware:
             List[Tuple[str, CookieValueToSessionId]]
         ] = None,
         ctx_logger: Optional[logging.Logger] = None,
-        clock: Optional[Callable[[], datetime]] = None
+        clock: Optional[Callable[[], datetime]] = None,
+        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None
     ) -> None:
         """
             Construct the middleware.
@@ -162,7 +163,19 @@ class PychestrateSessionMiddleware:
                 unified-login refactor.
             :param ctx_logger: See class docstring.
             :param clock: See class docstring.
+            :param anonymous_access_policy: Optional callable
+                ``(method, path) -> bool`` deciding whether a request
+                that resolved to no principal may still reach its
+                handler. When set, a ``False`` answer ends the
+                request with a 401 problem document before the
+                handler runs (deny by default; see
+                :mod:`security.auth.anonymous_access`). ``None``
+                keeps the historical behaviour of letting every
+                handler decide for itself.
         """
+        self._anonymous_access_policy: Optional[Callable[[str, str], bool]] = (
+            anonymous_access_policy
+        )
         self._open_session: Callable[[], Any] = open_session
         self._resolve_actor: Callable[[Any, str, datetime], Optional[Any]] = (
             resolve_actor
@@ -305,7 +318,10 @@ class PychestrateSessionMiddleware:
 
         request_failed = False
         try:
-            response = call_next(request)
+            if self._refuses_anonymous_request(request=request) is True:
+                response = self._unauthenticated_response(request=request)
+            else:
+                response = call_next(request)
         except BaseException:
             request_failed = True
             raise
@@ -318,6 +334,44 @@ class PychestrateSessionMiddleware:
             request.actor_user_id = None
 
         rtnval = response
+        return rtnval
+
+    def _refuses_anonymous_request(self, *, request: Any) -> bool:
+        """
+            Whether the request must be refused because it carries no
+            principal and the anonymous-access policy does not allow
+            the route.
+
+            :param request: Webworks Request with the actor attached.
+
+            :returns: ``True`` when the request must end with a 401.
+        """
+        if self._anonymous_access_policy is None:
+            return False
+        if getattr(request, "auth_principal", None) is not None:
+            return False
+        method = str(getattr(request, "method", "GET")).upper()
+        permitted = self._anonymous_access_policy(method, request.path)
+        rtnval = permitted is False
+        return rtnval
+
+    def _unauthenticated_response(self, *, request: Any) -> Any:
+        """
+            Build the 401 problem document returned when the
+            anonymous-access policy refuses a request.
+
+            :param request: Webworks Request.
+
+            :returns: Webworks response (401, ``application/problem+json``).
+        """
+        from ccai.pychestrate.webservice.api.problem_json_webworks import (  # noqa: E402
+            problem_response_for_http_status,
+        )
+        rtnval = problem_response_for_http_status(
+            status=401,
+            detail="Authentication required.",
+            instance=request.path,
+        )
         return rtnval
 
     def _safe_rollback(self, *, db_session: Any) -> None:
@@ -515,7 +569,8 @@ def install_pychestrate_session_middleware(
             List[Tuple[str, CookieValueToSessionId]]
         ] = None,
         ctx_logger: Optional[logging.Logger] = None,
-        clock: Optional[Callable[[], datetime]] = None
+        clock: Optional[Callable[[], datetime]] = None,
+        anonymous_access_policy: Optional[Callable[[str, str], bool]] = None
     ) -> PychestrateSessionMiddleware:
     """
         Construct the middleware and add it to a webworks app's
@@ -549,6 +604,11 @@ def install_pychestrate_session_middleware(
         :param ctx_logger: See
                            :class:`PychestrateSessionMiddleware`.
         :param clock: See :class:`PychestrateSessionMiddleware`.
+        :param anonymous_access_policy: See
+            :class:`PychestrateSessionMiddleware`. Defaults to
+            :func:`security.auth.anonymous_access.is_anonymous_request_permitted`,
+            which refuses every ``/api/v1/*`` request without a
+            principal unless the route is on the explicit allowlist.
 
         :returns: The installed middleware (useful in tests).
     """
@@ -590,6 +650,14 @@ def install_pychestrate_session_middleware(
     else:
         resolved_fallback_cookie_resolvers = fallback_cookie_resolvers
 
+    if anonymous_access_policy is None:
+        from ccai.pychestrate.webservice.security.auth.anonymous_access import (
+            is_anonymous_request_permitted,
+        )
+        resolved_anonymous_access_policy = is_anonymous_request_permitted
+    else:
+        resolved_anonymous_access_policy = anonymous_access_policy
+
     middleware = PychestrateSessionMiddleware(
         open_session=resolved_open_session,
         resolve_actor=resolved_resolve_actor,
@@ -598,6 +666,7 @@ def install_pychestrate_session_middleware(
         fallback_cookie_resolvers=resolved_fallback_cookie_resolvers,
         ctx_logger=ctx_logger,
         clock=clock,
+        anonymous_access_policy=resolved_anonymous_access_policy,
     )
 
     app.dispatcher.pipeline.add(

@@ -577,7 +577,21 @@ def handle_rpa_spec_detail(request: Request) -> Response:
         context["spec"] = spec
         context["recent_jobs"] = list(recent.jobs)
         context["can_manage"] = can_manage
-        context["default_packet_json"] = _pretty_json(dict(spec.default_packet))
+        # Secret-declared paths are never shown. The display gets the
+        # redacted packet; the run form leaves out every top-level key
+        # that holds a secret, so the stored default applies unless the
+        # operator types a new value (packets merge at the top level).
+        from ccai.pychestrate.webservice.orchestration.rpa import packet as _rpa_packet  # noqa: E402
+
+        secret_fields = list(getattr(spec, "secret_fields", ()) or ())
+        secret_keys = _rpa_packet.secret_top_level_keys(secret_fields=secret_fields)
+        context["default_packet_json"] = _pretty_json(
+            _rpa_packet.redact_packet(packet=dict(spec.default_packet), secret_fields=secret_fields)
+        )
+        context["run_packet_json"] = _pretty_json(
+            {k: v for k, v in dict(spec.default_packet).items() if k not in secret_keys}
+        )
+        context["secret_packet_keys"] = secret_keys
         context["packet_schema_json"] = (
             _pretty_json(dict(spec.packet_schema)) if spec.packet_schema else ""
         )

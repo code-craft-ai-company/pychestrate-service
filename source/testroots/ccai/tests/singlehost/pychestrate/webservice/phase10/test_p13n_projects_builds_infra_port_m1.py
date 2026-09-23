@@ -1064,6 +1064,9 @@ def test_handle_build_trigger_happy_path_redirects_to_new_build_detail():
         )
 
         def _seed(instance: _FakeBuildManager) -> None:
+            instance.get_spec_response = _FakeBuildSpec(
+                spec_id=3, project_id=7
+            )
             instance.trigger_build_response = _FakeBuild(
                 build_id=99, project_id=7
             )
@@ -1167,7 +1170,14 @@ def test_handle_build_cancel_happy_path_redirects_to_build_detail():
         pm_patch = _patch_project_manager_in(
             target_module=projects_routes_builds,
         )
-        bm_patch = _patch_build_manager()
+
+        def _seed(instance: _FakeBuildManager) -> None:
+            instance.get_build_response = _FakeBuild(
+                build_id=42, project_id=7
+            )
+            return
+
+        bm_patch = _patch_build_manager(configure=_seed)
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1186,6 +1196,113 @@ def test_handle_build_cancel_happy_path_redirects_to_build_detail():
         bm = _FakeBuildManager.last_instance
         testbase.assert_equal(
             bm.cancel_build_calls, [(42, "u-admin")]
+        )
+    finally:
+        for p in (bm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_build_trigger_refuses_spec_from_another_project():
+    """
+    **Feature: webworks projects builds (PRJ-04 cross-project guard)**
+    **Property: A trigger POST to project 7 naming a build spec
+    that belongs to project 8 triggers nothing and redirects to
+    project 7's build list -- the developer permission checked
+    for project 7 does not reach project 8's specs.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    bm_patch = None
+    tr_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_builds,
+        )
+
+        def _seed(instance: _FakeBuildManager) -> None:
+            instance.get_spec_response = _FakeBuildSpec(
+                spec_id=3, project_id=8
+            )
+            return
+
+        bm_patch = _patch_build_manager(configure=_seed)
+        tr_patch = _patch_build_trigger_request_factory()
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh&spec_id=3",
+            path_params={"project_id": "7"},
+        )
+        response = projects_routes_builds.handle_build_trigger(request)
+
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/builds"
+        )
+        testbase.assert_equal(
+            _FakeBuildManager.last_instance.trigger_build_calls, []
+        )
+    finally:
+        for p in (tr_patch, bm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_build_cancel_refuses_build_from_another_project():
+    """
+    **Feature: webworks projects builds (PRJ-04 cross-project guard)**
+    **Property: A cancel POST under project 7 for a build that
+    belongs to project 8 cancels nothing and redirects to
+    project 7's build list.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    bm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_builds,
+        )
+
+        def _seed(instance: _FakeBuildManager) -> None:
+            instance.get_build_response = _FakeBuild(
+                build_id=42, project_id=8
+            )
+            return
+
+        bm_patch = _patch_build_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7", "build_id": "42"},
+        )
+        response = projects_routes_builds.handle_build_cancel(request)
+
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/builds"
+        )
+        testbase.assert_equal(
+            _FakeBuildManager.last_instance.cancel_build_calls, []
         )
     finally:
         for p in (bm_patch, pm_patch, sm_patch):

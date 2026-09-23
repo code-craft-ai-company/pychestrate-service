@@ -388,6 +388,8 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "default_packet_json": _const('{\n  "region": "eu"\n}'),
     "packet_schema_json": _by_mode('{\n  "type": "object"\n}', ""),
     "work_packet_json": _const('{\n  "customer_id": 42\n}'),
+    "run_packet_json": _const('{\n  "region": "eu"\n}'),
+    "secret_packet_keys": _by_mode(["auth"], []),
     "is_active": _by_mode(True, False),
     "job_types": _many(RpaJobTypeView),
     "job_type": _one(RpaJobTypeView),

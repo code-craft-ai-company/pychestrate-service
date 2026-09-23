@@ -1494,6 +1494,9 @@ def test_handle_watch_test_truthy_yields_success_flash_redirect():
         )
 
         def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=7
+            )
             instance.test_watch_response = True
             return
 
@@ -1553,6 +1556,9 @@ def test_handle_watch_test_falsey_yields_no_matches_flash():
         )
 
         def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=7
+            )
             instance.test_watch_response = False
             return
 
@@ -1608,7 +1614,14 @@ def test_handle_watch_enable_redirects_to_detail():
             target_module=projects_routes_watches,
             configure=_seed_pm,
         )
-        wm_patch = _patch_watch_manager()
+
+        def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=7
+            )
+            return
+
+        wm_patch = _patch_watch_manager(configure=_seed_wm)
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1626,6 +1639,65 @@ def test_handle_watch_enable_redirects_to_detail():
         )
         testbase.assert_equal(
             _FakeWatchManager.last_instance.enable_watch_called, True
+        )
+    finally:
+        for p in (wm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_watch_enable_refuses_watch_from_another_project():
+    """
+    **Feature: webworks projects watches (PRJ-04 cross-project guard)**
+    **Property: An enable POST under project 7 for a watch that
+    belongs to project 8 never calls enable_watch and redirects
+    to project 7's watch list. Enable, disable, and test share
+    one action helper, so this covers all three.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    wm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        def _seed_pm(instance: _FakeProjectManager) -> None:
+            instance.get_project_response = _FakeProject(project_id=7)
+            return
+
+        pm_patch = _patch_project_manager_in(
+            target_module=projects_routes_watches,
+            configure=_seed_pm,
+        )
+
+        def _seed_wm(instance: _FakeWatchManager) -> None:
+            instance.get_watch_response = _FakeWatch(
+                watch_id=42, project_id=8
+            )
+            return
+
+        wm_patch = _patch_watch_manager(configure=_seed_wm)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            path_params={"project_id": "7", "watch_id": "42"},
+            body=b"csrf_token=csrf-fresh",
+        )
+        response = projects_routes_watches.handle_watch_enable(request)
+
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/watches"
+        )
+        testbase.assert_equal(
+            _FakeWatchManager.last_instance.enable_watch_called, False
         )
     finally:
         for p in (wm_patch, pm_patch, sm_patch):

@@ -65,6 +65,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import AUTHENTICATED_ONLY, require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -657,23 +658,23 @@ def register_flags_routes(*, app: Any, version_prefix: str) -> None:
     base = version_prefix + FLAGS_PATH
 
     app.attach_route(base + "/backends", methods=["GET"])(
-        handle_list_flag_backends
+        require_rest_permission(handle_list_flag_backends, permission_key="system:flags.admin")
     )
 
-    app.attach_route(base, methods=["GET"])(handle_list_flags)
-    app.attach_route(base, methods=["POST"])(handle_create_flag)
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_flags, permission_key=AUTHENTICATED_ONLY))
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_flag, permission_key="system:flags.admin"))
 
-    app.attach_route(base + "/{flag_key}", methods=["GET"])(handle_read_flag)
-    app.attach_route(base + "/{flag_key}", methods=["PATCH"])(handle_update_flag)
+    app.attach_route(base + "/{flag_key}", methods=["GET"])(require_rest_permission(handle_read_flag, permission_key=AUTHENTICATED_ONLY))
+    app.attach_route(base + "/{flag_key}", methods=["PATCH"])(require_rest_permission(handle_update_flag, permission_key="system:flags.admin"))
 
     app.attach_route(base + "/{flag_key}/retire", methods=["POST"])(
-        handle_retire_flag
+        require_rest_permission(handle_retire_flag, permission_key="system:flags.admin")
     )
     app.attach_route(base + "/{flag_key}/history", methods=["GET"])(
-        handle_list_flag_versions
+        require_rest_permission(handle_list_flag_versions, permission_key="system:flags.admin")
     )
     app.attach_route(base + "/{flag_key}/evaluate", methods=["POST"])(
-        handle_evaluate_flag
+        require_rest_permission(handle_evaluate_flag, permission_key=AUTHENTICATED_ONLY)
     )
 
     return

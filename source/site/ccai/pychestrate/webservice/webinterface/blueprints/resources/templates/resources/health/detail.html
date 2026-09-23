@@ -67,10 +67,12 @@
                     <th scope="row">Probe URL</th>
                     <td>{{ config.probe_url or '-' }}</td>
                 </tr>
+                {% if config.probe_command %}
                 <tr>
                     <th scope="row">Probe Command</th>
-                    <td><code>{{ config.probe_command or '-' }}</code></td>
+                    <td><code>{{ config.probe_command }}</code> — not run: command probes are no longer supported. Reconfigure this check with a probe URL.</td>
                 </tr>
+                {% endif %}
                 <tr>
                     <th scope="row">Interval</th>
                     <td>{{ config.interval_seconds }} seconds</td>

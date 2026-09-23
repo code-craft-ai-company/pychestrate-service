@@ -1258,6 +1258,17 @@ def _handle_watch_action(
         )
 
         watch_manager = _build_watch_manager(db_session=db_session)
+        # The permission check above is for the project in the URL:
+        # refuse watches that belong to any other project.
+        watch_resolved = _resolve_owned_watch_or_redirect(
+            auth=auth,
+            watch_manager=watch_manager,
+            project_id=project_id,
+            watch_id=watch_id,
+        )
+        if isinstance(watch_resolved, RedirectResponse):
+            return watch_resolved
+
         action = getattr(watch_manager, action_callable_name)
         try:
             if invokes_with_user_id:

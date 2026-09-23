@@ -905,6 +905,17 @@ def handle_repository_delete(request: Request) -> Response:
         repository_manager = _build_repository_manager(
             db_session=db_session
         )
+        # The permission check above is for the project in the URL:
+        # refuse repositories that belong to any other project.
+        repo_resolved = _resolve_repository_or_redirect(
+            auth=auth,
+            repository_manager=repository_manager,
+            project_id=project_id,
+            repository_id=repository_id,
+        )
+        if isinstance(repo_resolved, RedirectResponse):
+            return repo_resolved
+
         try:
             repository_manager.remove_repository(
                 repository_id, auth.user_id
@@ -1035,6 +1046,17 @@ def _handle_repository_action(
         repository_manager = _build_repository_manager(
             db_session=db_session
         )
+        # The permission check above is for the project in the URL:
+        # refuse repositories that belong to any other project.
+        repo_resolved = _resolve_repository_or_redirect(
+            auth=auth,
+            repository_manager=repository_manager,
+            project_id=project_id,
+            repository_id=repository_id,
+        )
+        if isinstance(repo_resolved, RedirectResponse):
+            return repo_resolved
+
         action = getattr(repository_manager, action_callable_name)
         try:
             result = action(repository_id)

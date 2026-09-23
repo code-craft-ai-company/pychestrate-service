@@ -1055,6 +1055,10 @@ def update_identity_user(
             principal_uuid=user_uuid,
         )
 
+        if is_active is False:
+            # Deactivation must end access now, not at session expiry.
+            _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
+
         db_session.commit()
     except IdentityAdminError:
         db_session.rollback()
@@ -1068,6 +1072,28 @@ def update_identity_user(
         raise RuntimeError(err_msg) from commit_exc
 
     _invalidate_rbac_cache_for_principal(principal_id=str(user_uuid))
+    return
+
+
+def _close_user_sessions(*, db_session: Any, user_uuid: Any) -> None:
+    """
+        Close every sign-in session of a user being deactivated, in
+        the caller's transaction. Without this a deactivated user
+        kept every permission until their session expired.
+
+        :param db_session: The active SQLAlchemy session.
+        :param user_uuid: Identity user id.
+
+        :returns: None.
+    """
+    from ccai.pychestrate.webservice.security.auth.session_service import (  # noqa: E402
+        close_sessions_for_user,
+    )
+    close_sessions_for_user(
+        db_session=db_session,
+        user_id=user_uuid,
+        reason="user_deactivated",
+    )
     return
 
 
@@ -1133,6 +1159,9 @@ def deactivate_identity_user(
             status=_LEGACY_STATUS_INACTIVE,
             role_names=None,
         )
+
+        # Deactivation must end access now, not at session expiry.
+        _close_user_sessions(db_session=db_session, user_uuid=user_uuid)
 
         db_session.commit()
     except Exception as commit_exc:

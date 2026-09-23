@@ -57,7 +57,9 @@ __version__ = "1.0.0"
 
 
 from dataclasses import dataclass, field
+import functools
 import html as _html_module
+import logging
 import re
 
 from typing import Any, Dict, List, Optional, Tuple
@@ -163,6 +165,20 @@ _ADMIN_ROUTE_TABLE = (
     ("config.extension_registry", "/extensions", ("GET",)),
     ("config.system_health", "/system-health", ("GET",)),
 )
+
+# Permission each ``_ADMIN_ROUTE_TABLE`` endpoint enforces server-side
+# (see :func:`_require_admin_permission_for`). Keys mirror the
+# navigation manifest's gates for the same pages. Looked up strictly
+# at registration, so a new admin route without an entry fails at
+# startup instead of shipping ungated.
+_ADMIN_ROUTE_PERMISSIONS: Dict[str, str] = {
+    "config.dashboard_root": "system:ui.admin.view",
+    "config.dashboard": "system:ui.admin.view",
+    "config.admin_overview": "system:ui.admin.view",
+    "config.feature_flags": "system:ui.admin.view",
+    "config.extension_registry": "system:plugin_api.read",
+    "config.system_health": "system:ui.admin.view",
+}
 
 
 # Path-prefix → page-label table for the ``/admin`` surface. The
@@ -1346,6 +1362,74 @@ def _has_permission(*, auth: _AuthResolution, permission: str) -> bool:
     return rtnval
 
 
+_authz_logger = logging.getLogger("pychestrate.ui.admin.authz")
+
+
+def _require_admin_permission_for(handler: Any, *, permission: str) -> Any:
+    """
+        Wrap an admin route handler so the server checks
+        ``permission`` before the handler runs, for every HTTP
+        method the route accepts.
+
+        The site shell hides admin navigation from users who lack
+        ``system:ui.admin.view``, but hiding a link is not access
+        control: before this gate most ``/admin/*`` handlers only
+        checked that a session existed, so any signed-in user could
+        load the pages and POST to them (including creating a
+        ``system-admin`` account). Every admin route table now
+        declares the permission each endpoint needs and registers
+        its handler through this wrapper.
+
+        * Unauthenticated requests keep the normal sign-in redirect.
+        * A signed-in user without ``permission`` gets the shared
+          403 page and the handler never runs.
+        * Any failure while evaluating the permission counts as a
+          denial (fail closed; see :func:`_has_permission`).
+
+        The handler resolves the session again itself, so its
+        behaviour is unchanged for users who hold the permission.
+
+        :param handler: The (already shell-wrapped) route handler.
+        :param permission: Canonical permission key the route
+                           requires, e.g. ``"system:users.write"``.
+
+        :returns: The gated handler.
+    """
+
+    @functools.wraps(handler)
+    def _gated_handler(request: Request) -> Response:
+        auth = _resolve_authenticated_request(request=request)
+        if auth.redirect_response is not None:
+            return auth.redirect_response
+
+        try:
+            allowed = _has_permission(auth=auth, permission=permission)
+        finally:
+            try:
+                auth.db_session.close()
+            except Exception:
+                pass
+
+        if allowed is False:
+            _authz_logger.warning(
+                "pychestrate.ui.admin.authz.denied user_id=%s method=%s path=%s permission=%s",
+                auth.user_id,
+                getattr(request, "method", "?"),
+                getattr(request, "path", "?"),
+                permission,
+            )
+            from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+                render_error_response,
+            )
+            rtnval = render_error_response(request=request, status_code=403)
+            return rtnval
+
+        rtnval = handler(request)
+        return rtnval
+
+    return _gated_handler
+
+
 def _same_origin_referer(*, request: Any) -> Optional[str]:
     """
         The request's ``Referer`` reduced to a same-origin path, or
@@ -1731,7 +1815,10 @@ def register_config_routes(*, app: Any) -> None:
         )
 
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ADMIN_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
 
     for endpoint_name, relative_path in _FUTURE_ENDPOINT_PATTERNS:

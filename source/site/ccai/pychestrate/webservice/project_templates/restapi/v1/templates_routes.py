@@ -32,6 +32,7 @@ from typing import Any
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import AUTHENTICATED_ONLY, require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -137,10 +138,10 @@ def register_templates_routes(*, app: Any, version_prefix: str) -> None:
         :returns: None.
     """
     base = version_prefix + TEMPLATES_PATH
-    app.attach_route(base, methods=["GET"])(handle_list_templates)
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_templates, permission_key=AUTHENTICATED_ONLY))
     app.attach_route(
         base + "/{template_id}", methods=["GET"]
-    )(handle_read_template)
+    )(require_rest_permission(handle_read_template, permission_key=AUTHENTICATED_ONLY))
     return
 
 

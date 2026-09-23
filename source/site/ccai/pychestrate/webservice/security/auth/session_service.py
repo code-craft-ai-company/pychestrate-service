@@ -194,6 +194,19 @@ def resolve_session(
             err_msg = os.linesep.join(err_msg_lines)
             raise SessionExpiredError(err_msg) from None
 
+    # A session only carries the rights of an account that can still
+    # sign in. Deactivation closes the account's sessions
+    # (:func:`close_sessions_for_user`); this check also refuses any
+    # session that outlived its account's status change.
+    if _user_can_hold_session(db_session=db_session, user_id=session.user_id) is False:
+        err_msg_lines = [
+            "Session resolution failed — the account is not active."
+        ]
+        err_msg_lines.append("SESSION_ID: {}".format(session_id))
+        err_msg_lines.append("USER_ID: {}".format(session.user_id))
+        err_msg = os.linesep.join(err_msg_lines)
+        raise SessionExpiredError(err_msg) from None
+
     # Activity refreshes the idle window so long-lived interactive
     # sessions stay alive under sustained use.
     session.last_seen_at = now
@@ -205,6 +218,74 @@ def resolve_session(
         provider_kind=session.provider_kind,
         provider_name=session.provider_name,
     )
+    return rtnval
+
+
+def _user_can_hold_session(*, db_session: DbSession, user_id: object) -> bool:
+    """
+        Whether the identity user behind a session may still use it.
+        Only ``ACTIVE`` accounts may; a missing identity row counts as
+        not active (fail closed).
+
+        :param db_session: Active SQLAlchemy session.
+        :param user_id: The session's ``user_id``.
+
+        :returns: ``True`` when the account is active.
+    """
+    from ccai.pychestrate.webservice.identity.users.models import (  # noqa: E402
+        IdentityUser,
+        UserStatus,
+    )
+    status = (
+        db_session.query(IdentityUser.status)
+        .filter(IdentityUser.user_id == user_id)
+        .scalar()
+    )
+    rtnval = status == UserStatus.ACTIVE
+    return rtnval
+
+
+def close_sessions_for_user(
+        *,
+        db_session: DbSession,
+        user_id: object,
+        reason: str
+    ) -> int:
+    """
+        Close every open session belonging to ``user_id`` and publish
+        ``entity.session.closed`` for each, without committing: the
+        caller commits, so the closure lands in the same transaction
+        as the change that required it (for example deactivation).
+
+        :param db_session: Active SQLAlchemy session.
+        :param user_id: Identity user id (UUID or string).
+        :param reason: Why the sessions were closed, recorded on each
+                       event (e.g. ``"user_deactivated"``).
+
+        :returns: Number of sessions closed.
+    """
+    sessions = (
+        db_session.query(AuthSession)
+        .filter(AuthSession.user_id == user_id)
+        .all()
+    )
+    closed_at = utc_now().isoformat()
+    for session in sessions:
+        payload = {
+            "session_id": str(session.session_id),
+            "user_id": str(session.user_id),
+            "reason": reason,
+            "closed_at": closed_at,
+        }
+        event = EntityEvent(
+            topic=AuthEventTopics.SESSION_CLOSED,
+            payload=payload,
+            source_event_id=new_uuid(),
+        )
+        db_session.delete(session)
+        enqueue_event(db_session=db_session, event=event)
+
+    rtnval = len(sessions)
     return rtnval
 
 

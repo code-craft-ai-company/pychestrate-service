@@ -42,6 +42,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -612,21 +613,21 @@ def register_variables_routes(*, app: Any, version_prefix: str) -> None:
 
     app.attach_route(
         base + "/effective", methods=["GET"]
-    )(handle_effective_variable)
+    )(require_rest_permission(handle_effective_variable, permission_key="system:ui.admin.view"))
 
     app.attach_route(
         base + "/{scope}/{scope_id}", methods=["GET"]
-    )(handle_list_variables)
+    )(require_rest_permission(handle_list_variables, permission_key="system:ui.admin.view"))
 
     app.attach_route(
         base + "/{scope}/{scope_id}/{name}", methods=["GET"]
-    )(handle_read_variable)
+    )(require_rest_permission(handle_read_variable, permission_key="system:ui.admin.view"))
     app.attach_route(
         base + "/{scope}/{scope_id}/{name}", methods=["PUT"]
-    )(handle_set_variable)
+    )(require_rest_permission(handle_set_variable, permission_key="system:ui.admin.view"))
     app.attach_route(
         base + "/{scope}/{scope_id}/{name}", methods=["DELETE"]
-    )(handle_unset_variable)
+    )(require_rest_permission(handle_unset_variable, permission_key="system:ui.admin.view"))
 
     return
 

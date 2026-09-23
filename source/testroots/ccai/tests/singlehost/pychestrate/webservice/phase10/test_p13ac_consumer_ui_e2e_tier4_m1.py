@@ -26,6 +26,8 @@ module fills in the session-lifecycle properties:
   authorize requests (the modern adapter's
   ``validate_token`` returns ``None`` because
   ``resolve_session`` raises ``SessionNotFoundError``).
+* **Deactivation** -- after an admin deactivates a user, the
+  cookie that user already holds stops authorizing requests.
 
 Builds on the Tier-3 PR's harness (PR #163) plus the modern
 auth adapter (PR p13aa) -- session_id is a real
@@ -73,9 +75,9 @@ def test_admin_and_viewer_can_hold_concurrent_sessions():
     """
     **Feature: consumer UI tier-4 T19.1**
     **Property: An admin and a viewer can be logged in
-    simultaneously; each cookie jar drives its own dashboard
-    request without cross-talk. Decoded payloads from the two
-    cookies carry distinct ``user_id`` / ``session_token``
+    simultaneously; each cookie jar drives its own projects
+    dashboard request without cross-talk. Decoded payloads from
+    the two cookies carry distinct ``user_id`` / ``session_token``
     values, proving the modern :class:`AuthSession` rows are
     independent.**
     """
@@ -103,17 +105,19 @@ def test_admin_and_viewer_can_hold_concurrent_sessions():
         True,
     )
 
-    # Each cookie reaches its own dashboard.
+    # Each cookie reaches its own projects dashboard. (Not the
+    # admin dashboard: the viewer holds no admin permission, so
+    # every /admin/* page answers it with a 403.)
     admin_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/admin/dashboard",
+        path="/projects",
         cookies=admin_cookies,
     )
     viewer_response = drive_request(
         wsgi_app=handle.wsgi_app,
         method="GET",
-        path="/admin/dashboard",
+        path="/projects",
         cookies=viewer_cookies,
     )
     testbase.assert_equal(admin_response.status_code, 200)
@@ -378,4 +382,77 @@ def test_post_logout_cookie_cannot_re_authorize():
         and location_path.endswith("/login")
     )
     testbase.assert_equal(is_redirect_to_login, True)
+    return
+
+
+# ===========================================================================
+# Deactivation ends access (ADM-03)
+# ===========================================================================
+
+
+def test_deactivating_a_user_signs_out_their_open_session():
+    """
+    **Feature: consumer UI tier-4 (ADM-03)**
+    **Property: when an admin deactivates a user through
+    ``POST /admin/users/{id}/deactivate``, the cookie that user is
+    already holding stops working at once -- their next request is
+    sent to the login page instead of being served.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (  # noqa: E402
+        identity_admin,
+    )
+
+    handle = ensure_app()
+    admin = ensure_seeded_admin()
+    login_name = "e2e-leaver-{}".format(secrets.token_hex(4))
+    password = "Leaver-Pass-9!Word"
+    db_session = SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY()
+    try:
+        user_id = identity_admin.create_identity_user(
+            db_session=db_session,
+            username=login_name,
+            email="{}@example.invalid".format(login_name),
+            password=password,
+            display_name="E2E Leaver",
+            firstname="",
+            lastname="",
+            role_names=[],
+            actor_user_id=None,
+        )
+    finally:
+        db_session.close()
+
+    _login_response, leaver_cookies = login_via_post(
+        wsgi_app=handle.wsgi_app, login=login_name, password=password,
+    )
+    before = drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="GET",
+        path="/projects",
+        cookies=leaver_cookies,
+    )
+    testbase.assert_equal(before.status_code, 200)
+
+    admin_cookies = login_as(wsgi_app=handle.wsgi_app, user=admin)
+    csrf_token = extract_csrf_token_from_cookies(cookies=admin_cookies)
+    drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="POST",
+        path="/admin/users/{}/deactivate".format(user_id),
+        body="csrf_token={}".format(csrf_token).encode("utf-8"),
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        cookies=admin_cookies,
+    )
+
+    after = drive_request(
+        wsgi_app=handle.wsgi_app,
+        method="GET",
+        path="/projects",
+        cookies=leaver_cookies,
+    )
+    location_path = (after.header("Location") or "").split("?", 1)[0]
+    testbase.assert_equal(
+        (after.status_code in (301, 302, 303, 307, 308), location_path.endswith("/login")),
+        (True, True),
+    )
     return

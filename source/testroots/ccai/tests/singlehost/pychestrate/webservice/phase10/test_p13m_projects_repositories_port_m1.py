@@ -408,6 +408,17 @@ def _patch_repository_manager(
     return patch
 
 
+def _seed_repository_in_project_7(instance: _FakeRepositoryManager) -> None:
+    """
+        Make repository 11 belong to project 7, the project the
+        tests' URLs name, so the handlers' ownership check passes.
+    """
+    instance.get_repository_response = _FakeRepository(
+        repository_id=11, project_id=7
+    )
+    return
+
+
 def _patch_repository_auth_type_resolver() -> Any:
     def _resolve(*, auth_type_str: str) -> Any:
         return type("RAT", (), {"value": auth_type_str})()
@@ -1028,7 +1039,9 @@ def test_handle_repository_delete_happy_path_redirects_to_list():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
         pm_patch = _patch_project_manager()
-        rm_patch = _patch_repository_manager()
+        rm_patch = _patch_repository_manager(
+            configure=_seed_repository_in_project_7
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1083,6 +1096,7 @@ def test_handle_repository_test_truthy_yields_success_flash():
         pm_patch = _patch_project_manager()
 
         def _seed(instance: _FakeRepositoryManager) -> None:
+            _seed_repository_in_project_7(instance)
             instance.test_connectivity_response = True
             return
 
@@ -1134,6 +1148,7 @@ def test_handle_repository_test_falsey_yields_error_flash():
         pm_patch = _patch_project_manager()
 
         def _seed(instance: _FakeRepositoryManager) -> None:
+            _seed_repository_in_project_7(instance)
             instance.test_connectivity_response = False
             return
 
@@ -1152,6 +1167,10 @@ def test_handle_repository_test_falsey_yields_error_flash():
 
         is_redirect = isinstance(response, RedirectResponse)
         testbase.assert_equal(is_redirect, True)
+        testbase.assert_equal(
+            response.headers["Location"],
+            "/projects/7/repositories/11",
+        )
     finally:
         for p in (rm_patch, pm_patch, sm_patch):
             if p is not None:
@@ -1177,7 +1196,9 @@ def test_handle_repository_fetch_happy_path_redirects_to_detail():
         _register_url_for_endpoints()
         sm_patch = _patch_security_manager()
         pm_patch = _patch_project_manager()
-        rm_patch = _patch_repository_manager()
+        rm_patch = _patch_repository_manager(
+            configure=_seed_repository_in_project_7
+        )
 
         cookie_value = _build_authenticated_cookie()
         request = _FakeRequest(
@@ -1194,6 +1215,112 @@ def test_handle_repository_fetch_happy_path_redirects_to_detail():
         testbase.assert_equal(is_redirect, True)
         rm = _FakeRepositoryManager.last_instance
         testbase.assert_equal(rm.fetch_latest_calls, [11])
+    finally:
+        for p in (rm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_repository_delete_refuses_repository_from_another_project():
+    """
+    **Feature: webworks projects repositories (PRJ-04 cross-project guard)**
+    **Property: A delete POST under project 7 for a repository
+    that belongs to project 8 removes nothing and redirects to
+    project 7's repository list -- the admin permission checked
+    for project 7 does not reach project 8's repositories.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    rm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        pm_patch = _patch_project_manager()
+
+        def _seed(instance: _FakeRepositoryManager) -> None:
+            instance.get_repository_response = _FakeRepository(
+                repository_id=11, project_id=8
+            )
+            return
+
+        rm_patch = _patch_repository_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7", "repository_id": "11"},
+        )
+        response = (
+            projects_routes_repositories.handle_repository_delete(request)
+        )
+
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/repositories"
+        )
+        testbase.assert_equal(
+            _FakeRepositoryManager.last_instance.remove_repository_calls, []
+        )
+    finally:
+        for p in (rm_patch, pm_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_repository_fetch_refuses_repository_from_another_project():
+    """
+    **Feature: webworks projects repositories (PRJ-04 cross-project guard)**
+    **Property: A fetch POST under project 7 for a repository
+    that belongs to project 8 never calls fetch_latest and
+    redirects to project 7's repository list. Fetch and test
+    share one action helper, so this covers both.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    pm_patch = None
+    rm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        pm_patch = _patch_project_manager()
+
+        def _seed(instance: _FakeRepositoryManager) -> None:
+            instance.get_repository_response = _FakeRepository(
+                repository_id=11, project_id=8
+            )
+            return
+
+        rm_patch = _patch_repository_manager(configure=_seed)
+
+        cookie_value = _build_authenticated_cookie()
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"project_id": "7", "repository_id": "11"},
+        )
+        response = (
+            projects_routes_repositories.handle_repository_fetch(request)
+        )
+
+        testbase.assert_equal(
+            response.headers["Location"], "/projects/7/repositories"
+        )
+        testbase.assert_equal(
+            _FakeRepositoryManager.last_instance.fetch_latest_calls, []
+        )
     finally:
         for p in (rm_patch, pm_patch, sm_patch):
             if p is not None:

@@ -185,10 +185,13 @@ class _FakeSessionInfo:
 class _FakeSecurityManager:
     """
         Returns a configured SessionInfo on validate_token. Used
-        by all tests to get past the auth gate.
+        by all tests to get past the auth gate. ``check_permission``
+        grants every permission except those a test lists in
+        ``denied_permissions``.
     """
 
     last_instance: Optional["_FakeSecurityManager"] = None
+    denied_permissions: List[str] = []
 
     def __init__(self, db_session: Any) -> None:
         self.db_session: Any = db_session
@@ -200,6 +203,10 @@ class _FakeSecurityManager:
     def validate_token(self, token: str) -> Optional[_FakeSessionInfo]:
         self.validate_token_calls.append(token)
         return self.validate_token_response
+
+    def check_permission(self, user_id: str, permission: str) -> bool:
+        rtnval = permission not in _FakeSecurityManager.denied_permissions
+        return rtnval
 
 
 class _StubTemplate:
@@ -370,6 +377,7 @@ def _reset_global_state() -> None:
     SITE_SHARED_GLOBALS.UI_COOKIE_SECRET = None
     SITE_SHARED_GLOBALS.DATABASE_SESSION_FACTORY = None
     _FakeSecurityManager.last_instance = None
+    _FakeSecurityManager.denied_permissions = []
     return
 
 
@@ -2714,6 +2722,291 @@ def test_truth_custom_role_created_via_route_grants_access():
             testbase.assert_equal(not_granted.allowed, False)
         finally:
             check_session.close()
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _restore_ambient_pepper()
+        _reset_global_state()
+    return
+
+
+# ===========================================================================
+# Role assignment needs system:rbac.admin (XC-01)
+# ===========================================================================
+
+
+def test_handle_user_create_without_rbac_admin_creates_the_user_without_roles():
+    """
+    **Feature: admin page permission gate (XC-01)**
+    **Property: when the acting user lacks system:rbac.admin, a
+    create POST that names roles still creates the account but with
+    no roles -- a user manager cannot hand out system-admin.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    create_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_user_exception_classes()
+        _FakeSecurityManager.denied_permissions = ["system:rbac.admin"]
+
+        create_calls: List[Dict[str, Any]] = []
+
+        def _create(**kwargs: Any) -> str:
+            create_calls.append(kwargs)
+            return "u-new"
+
+        create_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_create_user",
+            side_effect=_create,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&username=newbie&email=n@example.com"
+            b"&password=Sup3rS3cr3t!&display_name=Newbie"
+            b"&firstname=New&lastname=Bie"
+            b"&role_names=system-admin"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+        )
+        config_routes_users.handle_user_create(request)
+
+        testbase.assert_equal(
+            [call["role_names"] for call in create_calls], [[]]
+        )
+    finally:
+        for p in (create_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+def test_handle_user_edit_without_rbac_admin_keeps_the_current_roles():
+    """
+    **Feature: admin page permission gate (XC-01)**
+    **Property: when the acting user lacks system:rbac.admin, an edit
+    POST that changes the target's roles saves the target's current
+    roles instead of the submitted ones.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    get_patch = None
+    update_patch = None
+    exc_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+        exc_patch = _patch_user_exception_classes()
+        _FakeSecurityManager.denied_permissions = ["system:rbac.admin"]
+
+        get_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_get_user",
+            side_effect=lambda **kwargs: _FakeUserView(
+                user_id="u-7", roles=["viewer"]
+            ),
+        )
+        update_calls: List[Dict[str, Any]] = []
+
+        def _update(**kwargs: Any) -> None:
+            update_calls.append(kwargs)
+            return
+
+        update_patch = _patch_seam(
+            module=config_routes_users,
+            seam_name="_svc_update_user",
+            side_effect=_update,
+        )
+
+        cookie_value = _build_authenticated_cookie()
+        body = (
+            b"csrf_token=csrf-fresh&email=new@example.com"
+            b"&display_name=Updated&firstname=New&lastname=Name"
+            b"&is_active=on&role_names=system-admin"
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: cookie_value},
+            body=body,
+            path_params={"user_id": "u-7"},
+        )
+        config_routes_users.handle_user_edit(request)
+
+        testbase.assert_equal(
+            [call["role_names"] for call in update_calls], [["viewer"]]
+        )
+    finally:
+        for p in (update_patch, get_patch, exc_patch, sm_patch):
+            if p is not None:
+                p.deactivate()
+        _reset_global_state()
+    return
+
+
+# ===========================================================================
+# END-TO-END TRUTH: deactivation ends the user's sessions (ADM-03)
+# ===========================================================================
+
+
+def _seed_user_with_open_session(*, engine: Any, username: str) -> str:
+    """
+        Create an identity user through the real service and open
+        one sign-in session for them. Returns the user id.
+    """
+    from ccai.pychestrate.webservice.security.auth import session_service
+    from ccai.pychestrate.webservice.security.auth.models import (
+        AuthProviderKind,
+    )
+    from ccai.pychestrate.webservice.webinterface.blueprints.config import (
+        identity_admin,
+    )
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+        session_for,
+    )
+
+    create_session = session_for(engine=engine)
+    try:
+        user_id = identity_admin.create_identity_user(
+            db_session=create_session,
+            username=username,
+            email="{}@example.com".format(username),
+            password="CorrectHorse9!Battery",
+            display_name=username.title(),
+            firstname="",
+            lastname="",
+            role_names=[],
+            actor_user_id=None,
+        )
+    finally:
+        create_session.close()
+
+    open_db = session_for(engine=engine)
+    try:
+        session_service.open_session(
+            db_session=open_db,
+            user_id=user_id,
+            provider_kind=AuthProviderKind.LOCAL,
+            provider_name="local",
+            mfa_method_name=None,
+            access_token_payload=None,
+            refresh_token_payload=None,
+            request_fingerprint=session_service.RequestFingerprint(
+                ip_fingerprint="ip", user_agent_fingerprint="ua",
+            ),
+            idle_timeout_seconds=1800,
+            max_lifetime_seconds=3600,
+        )
+        open_db.commit()
+    finally:
+        open_db.close()
+    return user_id
+
+
+def _count_sessions_for(*, engine: Any, user_id: str) -> int:
+    import uuid
+
+    from ccai.pychestrate.webservice.security.auth.models import AuthSession
+    from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+        session_for,
+    )
+
+    count_db = session_for(engine=engine)
+    try:
+        rtnval = (
+            count_db.query(AuthSession)
+            .filter(AuthSession.user_id == uuid.UUID(str(user_id)))
+            .count()
+        )
+    finally:
+        count_db.close()
+    return rtnval
+
+
+def test_truth_deactivate_route_closes_the_users_sessions():
+    """
+    **Feature: END-TO-END TRUTH (ADM-03)**
+    **Property: POST /admin/users/{id}/deactivate closes every open
+    sign-in session of that user, so their access ends immediately
+    instead of when the session would have expired.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        engine = _setup_real_stack()
+        _install_engine_session_factory(engine=engine)
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        user_id = _seed_user_with_open_session(engine=engine, username="leaver")
+
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=b"csrf_token=csrf-fresh",
+            path_params={"user_id": user_id},
+        )
+        config_routes_users.handle_user_deactivate(request)
+
+        testbase.assert_equal(
+            _count_sessions_for(engine=engine, user_id=user_id), 0
+        )
+    finally:
+        if sm_patch is not None:
+            sm_patch.deactivate()
+        _restore_ambient_pepper()
+        _reset_global_state()
+    return
+
+
+def test_truth_edit_route_deactivation_closes_the_users_sessions():
+    """
+    **Feature: END-TO-END TRUTH (ADM-03)**
+    **Property: saving the edit form with "active" unchecked also
+    closes every open sign-in session of that user.**
+    """
+    _reset_global_state()
+    sm_patch = None
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        engine = _setup_real_stack()
+        _install_engine_session_factory(engine=engine)
+        _register_url_for_endpoints()
+        sm_patch = _patch_security_manager()
+
+        user_id = _seed_user_with_open_session(engine=engine, username="mover")
+
+        body = (
+            b"csrf_token=csrf-fresh&email=mover@example.com"
+            b"&display_name=Mover&firstname=&lastname="
+        )
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+            path_params={"user_id": user_id},
+        )
+        config_routes_users.handle_user_edit(request)
+
+        testbase.assert_equal(
+            _count_sessions_for(engine=engine, user_id=user_id), 0
+        )
     finally:
         if sm_patch is not None:
             sm_patch.deactivate()

@@ -55,6 +55,10 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
 from ccai.pychestrate.webservice.orchestration.rpa import service as rpa_service
+from ccai.pychestrate.webservice.orchestration.rpa.packet import (
+    redact_packet,
+    restore_redacted_secrets,
+)
 from ccai.pychestrate.webservice.orchestration.rpa.candidates import (
     resolve_dispatch_candidates,
 )
@@ -309,7 +313,10 @@ def _spec_to_dict(view: Any) -> Dict[str, Any]:
         "execution_mode": _enum_value(view.execution_mode),
         "version_selector": view.version_selector,
         "resolved_version": view.resolved_version,
-        "default_packet": dict(view.default_packet),
+        # Secret-declared packet paths are never returned.
+        "default_packet": redact_packet(
+            packet=dict(view.default_packet), secret_fields=list(view.secret_fields)
+        ),
         "packet_schema": dict(view.packet_schema) if view.packet_schema else None,
         "target_pod_id": view.target_pod_id,
         "required_capabilities": list(view.required_capabilities),
@@ -764,6 +771,14 @@ def handle_update_spec(request: Request) -> Response:
             "description": current.description,
         }
         merged.update(body)
+        if isinstance(body.get("default_packet", None), dict):
+            # A client that saves back a spec it read gets the redaction
+            # marker at secret paths; keep the stored secret there.
+            merged["default_packet"] = restore_redacted_secrets(
+                incoming=body["default_packet"],
+                stored=dict(current.default_packet),
+                secret_fields=list(current.secret_fields),
+            )
         inputs = _spec_inputs_from_body(request=request, body=merged)
         try:
             view = rpa_service.update_spec(

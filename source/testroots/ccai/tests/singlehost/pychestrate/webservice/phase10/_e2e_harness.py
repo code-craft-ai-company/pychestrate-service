@@ -819,10 +819,13 @@ def ensure_seeded_admin() -> SeededAdmin:
     """
         Create an admin user with both modern (``identity_users``
         + ``auth_local_credentials``) and legacy (``user``)
-        schema rows sharing the same UUID. The auth flow uses
-        the modern half; ``check_permission`` still uses the
-        legacy ``user.roles`` -> ``system_roles`` ->
-        ``permissions`` chain.
+        schema rows sharing the same UUID, and bind the modern
+        ``"system-admin"`` role to it at SYSTEM scope.
+
+        Every ``/admin/*`` page checks its permission server-side,
+        and :func:`rbac_evaluator.check_permission` reads only
+        ``rbac_role_bindings``, so without the binding the seeded
+        "admin" would be refused like any other signed-in user.
     """
     global _SEEDED_ADMIN
     if _SEEDED_ADMIN is not None:
@@ -841,6 +844,7 @@ def ensure_seeded_admin() -> SeededAdmin:
         last_name="Admin",
         display_name="E2E Admin",
     )
+    grant_role_to_user(user_id=user_id, role_name="system-admin")
 
     _SEEDED_ADMIN = SeededAdmin(
         user_id=user_id,

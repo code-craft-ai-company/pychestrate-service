@@ -37,6 +37,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -410,11 +411,11 @@ def register_channels_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + CHANNELS_PATH
 
-    app.attach_route(base, methods=["GET"])(handle_list_channels)
-    app.attach_route(base, methods=["POST"])(handle_create_channel)
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_channels, permission_key="system:ui.admin.view"))
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_channel, permission_key="system:ui.admin.view"))
     app.attach_route(
         base + "/{channel_id}", methods=["GET"]
-    )(handle_read_channel)
+    )(require_rest_permission(handle_read_channel, permission_key="system:ui.admin.view"))
 
     return
 

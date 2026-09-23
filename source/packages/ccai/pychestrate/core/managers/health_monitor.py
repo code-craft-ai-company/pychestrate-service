@@ -12,13 +12,15 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-import subprocess
+import ipaddress
+import socket
 import urllib.request
 import urllib.error
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -28,6 +30,23 @@ from ccai.pychestrate.core.defaults import utc_now
 # =============================================================================
 # Constants
 # =============================================================================
+
+# Probes run inside the web request (and on the Pychestrate server,
+# not near the device), so a probe may not hold a worker thread for
+# longer than this.
+MAX_PROBE_TIMEOUT_SECONDS = 30
+
+# Command probes executed ``subprocess.run(command, shell=True)`` on the
+# Pychestrate server as the service account: anyone able to configure a
+# health check could run arbitrary commands there. They are no longer
+# accepted, and configurations saved before this change are not run.
+COMMAND_PROBES_UNSUPPORTED_MESSAGE = (
+    "Command probes are not supported: they would run on the Pychestrate "
+    "server, not on the device. Configure a URL probe that targets the "
+    "device instead."
+)
+
+PROBE_URL_SCHEMES = ('http', 'https')
 
 # Valid health statuses
 VALID_HEALTH_STATUSES = {'online', 'offline', 'degraded', 'maintenance'}
@@ -159,9 +178,112 @@ class HealthCheckConfigNotFoundError(HealthMonitorError):
 
 class InvalidHealthCheckConfigError(HealthMonitorError):
     """Exception raised when health check configuration is invalid."""
-    
+
     def __init__(self, message: str, error_code: str = "INVALID_HEALTH_CHECK_CONFIG"):
         super().__init__(message, error_code)
+
+
+class ProbeTargetRejectedError(HealthMonitorError):
+    """Exception raised when a probe URL targets an address the server must not call."""
+
+    def __init__(self, message: str, error_code: str = "PROBE_TARGET_REJECTED"):
+        super().__init__(message, error_code)
+
+
+# =============================================================================
+# Probe target guard
+# =============================================================================
+
+def _forbidden_probe_address_reason(address: str) -> Optional[str]:
+    """
+    Why the server must not send a probe to ``address``, or None when it may.
+
+    Private ranges stay allowed -- lab devices live there. Loopback,
+    link-local (including the 169.254.169.254 cloud-metadata endpoint),
+    unspecified, multicast and reserved addresses are refused, so a
+    health check cannot be used to reach the Pychestrate server itself,
+    its local services, or the host's metadata service.
+
+    :param address: IPv4 or IPv6 address literal.
+    :returns: A human-readable reason, or None when the address is allowed.
+    """
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return "an address that is not valid ({})".format(address)
+    mapped = getattr(ip, 'ipv4_mapped', None)
+    if mapped is not None:
+        ip = mapped
+    if ip.is_loopback:
+        return "a loopback address ({})".format(ip)
+    if ip.is_link_local:
+        return "a link-local address ({})".format(ip)
+    if ip.is_unspecified:
+        return "an unspecified address ({})".format(ip)
+    if ip.is_multicast:
+        return "a multicast address ({})".format(ip)
+    if ip.is_reserved:
+        return "a reserved address ({})".format(ip)
+    return None
+
+
+def validate_probe_url(url: str, resolve: bool = True) -> Optional[str]:
+    """
+    Check that a probe URL is one the server may call.
+
+    :param url: The configured probe URL.
+    :param resolve: Also resolve the host name and check every address
+                    it resolves to (done at probe time; skipped when a
+                    configuration is saved so a temporarily unresolvable
+                    device name can still be configured).
+    :returns: A human-readable problem, or None when the URL is allowed.
+    """
+    try:
+        parsed = urlparse(str(url).strip())
+    except ValueError:
+        return "The probe URL is not a valid URL."
+    if parsed.scheme not in PROBE_URL_SCHEMES:
+        return "The probe URL must start with http:// or https://."
+    host = parsed.hostname
+    if host is None or len(host) == 0:
+        return "The probe URL must include the device's host name or address."
+    if host.lower() == 'localhost' or host.lower().endswith('.localhost'):
+        return "The probe URL may not target the Pychestrate server itself (localhost)."
+
+    try:
+        ipaddress.ip_address(host)
+        literal = True
+    except ValueError:
+        literal = False
+
+    if literal is True:
+        reason = _forbidden_probe_address_reason(host)
+        if reason is not None:
+            return "The probe URL may not target {}.".format(reason)
+        return None
+
+    if resolve is False:
+        return None
+
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == 'https' else 80))
+    except socket.gaierror:
+        return "The probe host '{}' could not be resolved.".format(host)
+    for info in infos:
+        reason = _forbidden_probe_address_reason(info[4][0])
+        if reason is not None:
+            return "The probe host '{}' resolves to {}, which probes may not target.".format(host, reason)
+    return None
+
+
+class _GuardedRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects only to targets :func:`validate_probe_url` allows."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        problem = validate_probe_url(newurl, resolve=True)
+        if problem is not None:
+            raise ProbeTargetRejectedError("Probe redirect refused: " + problem)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 
@@ -393,11 +515,23 @@ class HealthMonitor:
         from ccai.pychestrate.core.orm import Resource, HealthCheckConfig
         
         # Validate configuration
-        if not config.probe_url and not config.probe_command:
+        if config.probe_command:
+            raise InvalidHealthCheckConfigError(COMMAND_PROBES_UNSUPPORTED_MESSAGE)
+
+        if not config.probe_url:
             raise InvalidHealthCheckConfigError(
-                "Either probe_url or probe_command must be specified"
+                "A probe URL is required (for example http://10.0.4.21/health)."
             )
-        
+
+        url_problem = validate_probe_url(config.probe_url, resolve=False)
+        if url_problem is not None:
+            raise InvalidHealthCheckConfigError(url_problem)
+
+        if config.timeout_seconds > MAX_PROBE_TIMEOUT_SECONDS:
+            raise InvalidHealthCheckConfigError(
+                "The probe timeout may be at most {} seconds.".format(MAX_PROBE_TIMEOUT_SECONDS)
+            )
+
         if config.interval_seconds < 1:
             raise InvalidHealthCheckConfigError(
                 "interval_seconds must be at least 1"
@@ -582,15 +716,40 @@ class HealthMonitor:
                 error_message="Health check is disabled"
             )
         
+        # Configurations saved before command probes were withdrawn are
+        # never executed; the resource keeps its status and the result
+        # explains how to reconfigure it.
+        if not config.probe_url:
+            return HealthCheckResult(
+                resource_id=resource_id,
+                resource_name=resource.name,
+                healthy=resource.health_status == 'online',
+                old_status=resource.health_status,
+                new_status=resource.health_status,
+                status_changed=False,
+                error_message=COMMAND_PROBES_UNSUPPORTED_MESSAGE
+            )
+
         # Execute the health check
         check_passed = False
         error_message = None
-        
+
         try:
-            if config.probe_url:
-                check_passed = self._execute_url_probe(config.probe_url, config.timeout_seconds)
-            elif config.probe_command:
-                check_passed = self._execute_command_probe(config.probe_command, config.timeout_seconds)
+            check_passed = self._execute_url_probe(
+                config.probe_url, min(config.timeout_seconds, MAX_PROBE_TIMEOUT_SECONDS)
+            )
+        except ProbeTargetRejectedError as rejected:
+            # A target the server may not call is a configuration
+            # problem, not evidence about the device's health.
+            return HealthCheckResult(
+                resource_id=resource_id,
+                resource_name=resource.name,
+                healthy=resource.health_status == 'online',
+                old_status=resource.health_status,
+                new_status=resource.health_status,
+                status_changed=False,
+                error_message=str(rejected)
+            )
         except Exception as e:
             check_passed = False
             error_message = str(e)
@@ -708,36 +867,27 @@ class HealthMonitor:
         """
         Execute a URL health probe.
         
+        The target (and every redirect hop) is checked with
+        :func:`validate_probe_url` so a probe cannot be pointed at the
+        Pychestrate server, its local services, or a metadata endpoint.
+
         :param url: URL to probe
         :param timeout_seconds: Timeout in seconds
         :returns: True if probe succeeded (HTTP 2xx), False otherwise
+        :raises ProbeTargetRejectedError: If the target may not be called
         """
+        problem = validate_probe_url(url, resolve=True)
+        if problem is not None:
+            raise ProbeTargetRejectedError(problem)
+
+        opener = urllib.request.build_opener(_GuardedRedirectHandler())
         try:
             request = urllib.request.Request(url, method='GET')
-            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            with opener.open(request, timeout=timeout_seconds) as response:
                 return 200 <= response.status < 300
+        except ProbeTargetRejectedError:
+            raise
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-            return False
-        except Exception:
-            return False
-    
-    def _execute_command_probe(self, command: str, timeout_seconds: int) -> bool:
-        """
-        Execute a command health probe.
-        
-        :param command: Command to execute
-        :param timeout_seconds: Timeout in seconds
-        :returns: True if command exited with code 0, False otherwise
-        """
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                timeout=timeout_seconds,
-                capture_output=True
-            )
-            return result.returncode == 0
-        except subprocess.TimeoutExpired:
             return False
         except Exception:
             return False

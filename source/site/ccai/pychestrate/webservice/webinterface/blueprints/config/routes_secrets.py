@@ -56,6 +56,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
+    _require_admin_permission_for,
     _wrap_admin_handler_in_shell,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_scopes import (
@@ -80,6 +81,15 @@ _ROUTE_TABLE = (
         ("POST",),
     ),
 )
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``). Legacy secrets.
+_ROUTE_PERMISSIONS = {
+    "config.secret_list": "system:secrets.read",
+    "config.secret_create": "system:secrets.write",
+    "config.secret_edit": "system:secrets.write",
+    "config.secret_delete": "system:secrets.write",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -622,7 +632,10 @@ def register_secrets_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

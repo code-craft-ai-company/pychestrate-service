@@ -67,10 +67,12 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _AuthResolution,
     _attach_session_to_response,
     _build_default_template_context,
+    _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
+    _require_admin_permission_for,
     _resolve_authenticated_request,
     _resolve_db_session,
     _wrap_admin_handler_in_shell,
@@ -89,6 +91,29 @@ _ROUTE_TABLE = (
     ("config.user_edit", "/users/{user_id}/edit", ("GET", "POST")),
     ("config.user_deactivate", "/users/{user_id}/deactivate", ("POST",)),
 )
+
+USERS_READ_PERMISSION: str = "system:users.read"
+USERS_WRITE_PERMISSION: str = "system:users.write"
+
+#: Granting or removing roles changes what a user may do, so it needs
+#: the RBAC administration key on top of ``system:users.write``.
+#: Without it, a user manager could hand out ``system-admin``.
+ROLE_ASSIGN_PERMISSION: str = "system:rbac.admin"
+
+ROLE_CHANGE_NOT_APPLIED_MESSAGE: str = (
+    "Role changes were not applied: changing a user's roles requires "
+    "the system:rbac.admin permission."
+)
+
+# Permission each route enforces server-side. Create and edit forms
+# need the write key even to display, since they exist only to write.
+_ROUTE_PERMISSIONS = {
+    "config.user_list": USERS_READ_PERMISSION,
+    "config.user_create": USERS_WRITE_PERMISSION,
+    "config.user_detail": USERS_READ_PERMISSION,
+    "config.user_edit": USERS_WRITE_PERMISSION,
+    "config.user_deactivate": USERS_WRITE_PERMISSION,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -475,6 +500,18 @@ def handle_user_create(request: Request) -> Response:
         role_names = _clean_role_names(
             raw_values=multi_form.get("role_names", [])
         )
+        if (
+            len(role_names) > 0
+            and _has_permission(auth=auth, permission=ROLE_ASSIGN_PERMISSION) is False
+        ):
+            # Create the account, but never let a user manager grant
+            # roles they could not grant through the Roles pages.
+            role_names = []
+            flash.add_flash(
+                session=auth.session,
+                message=ROLE_CHANGE_NOT_APPLIED_MESSAGE,
+                category=flash.CATEGORY_WARNING,
+            )
 
         exc_classes = _admin_exception_classes()
 
@@ -650,6 +687,21 @@ def handle_user_edit(request: Request) -> Response:
                 if current is not None:
                     is_active = current.is_active
                     role_names = list(current.roles)
+            elif _has_permission(auth=auth, permission=ROLE_ASSIGN_PERMISSION) is False:
+                # A user manager without RBAC administration may edit
+                # profile fields and status, but not roles: keep the
+                # user's current role set whatever the form posted.
+                current = _svc_get_user(
+                    db_session=db_session, user_id=user_id
+                )
+                current_roles = list(current.roles) if current is not None else []
+                if set(role_names) != set(current_roles):
+                    role_names = current_roles
+                    flash.add_flash(
+                        session=auth.session,
+                        message=ROLE_CHANGE_NOT_APPLIED_MESSAGE,
+                        category=flash.CATEGORY_WARNING,
+                    )
 
             exc_classes = _admin_exception_classes()
 
@@ -851,7 +903,10 @@ def register_users_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

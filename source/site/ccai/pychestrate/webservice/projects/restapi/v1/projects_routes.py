@@ -51,6 +51,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -949,37 +950,57 @@ def register_projects_routes(*, app: Any, version_prefix: str) -> None:
     base = version_prefix + PROJECTS_PATH
 
     app.attach_route(base, methods=["GET"])(handle_list_projects)
-    app.attach_route(base, methods=["POST"])(handle_create_project)
+    app.attach_route(base, methods=["POST"])(
+        require_rest_permission(handle_create_project, permission_key=PROJECTS_WRITE_PERMISSION_KEY)
+    )
 
     app.attach_route(
         base + "/{slug}", methods=["GET"]
-    )(handle_read_project)
+    )(
+        require_rest_permission(handle_read_project, permission_key=PROJECTS_READ_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}", methods=["PATCH"]
-    )(handle_patch_project)
+    )(
+        require_rest_permission(handle_patch_project, permission_key=PROJECTS_WRITE_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}", methods=["DELETE"]
-    )(handle_delete_project)
+    )(
+        require_rest_permission(handle_delete_project, permission_key=PROJECTS_WRITE_PERMISSION_KEY)
+    )
 
     app.attach_route(
         base + "/{slug}/archive", methods=["POST"]
-    )(handle_archive_project)
+    )(
+        require_rest_permission(handle_archive_project, permission_key=PROJECTS_WRITE_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}/unarchive", methods=["POST"]
-    )(handle_unarchive_project)
+    )(
+        require_rest_permission(handle_unarchive_project, permission_key=PROJECTS_WRITE_PERMISSION_KEY)
+    )
 
     app.attach_route(
         base + "/{slug}/members", methods=["GET"]
-    )(handle_list_members)
+    )(
+        require_rest_permission(handle_list_members, permission_key=PROJECTS_READ_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}/members", methods=["POST"]
-    )(handle_add_member)
+    )(
+        require_rest_permission(handle_add_member, permission_key=PROJECTS_MEMBERS_MANAGE_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}/members/{user_id}", methods=["DELETE"]
-    )(handle_remove_member_owner_binding)
+    )(
+        require_rest_permission(handle_remove_member_owner_binding, permission_key=PROJECTS_MEMBERS_MANAGE_PERMISSION_KEY)
+    )
     app.attach_route(
         base + "/{slug}/members/{user_id}/{role_name}", methods=["DELETE"]
-    )(handle_remove_member_specific_role)
+    )(
+        require_rest_permission(handle_remove_member_specific_role, permission_key=PROJECTS_MEMBERS_MANAGE_PERMISSION_KEY)
+    )
 
     return
 

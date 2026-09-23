@@ -994,6 +994,22 @@ def handle_build_trigger(request: Request) -> Response:
         ).strip()
 
         build_manager = _build_build_manager(db_session=db_session)
+        # The permission check above is for the project in the URL; the
+        # spec id comes from the form, so confirm it belongs to that
+        # project before triggering (otherwise a developer on one
+        # project could trigger builds in any other).
+        spec_or_redirect = _resolve_owned_resource_or_redirect(
+            auth=auth,
+            project_id=project_id,
+            manager=build_manager,
+            getter_name="get_spec",
+            target_id=spec_id,
+            list_endpoint="projects.build_list",
+            not_found_message="Build specification not found.",
+        )
+        if isinstance(spec_or_redirect, RedirectResponse):
+            return spec_or_redirect
+
         try:
             trigger_request = _build_build_trigger_request(
                 spec_id=spec_id,
@@ -1100,6 +1116,20 @@ def handle_build_cancel(request: Request) -> Response:
         )
 
         build_manager = _build_build_manager(db_session=db_session)
+        # Cancel only builds that belong to the project in the URL, the
+        # one the permission check above was evaluated for.
+        build_or_redirect = _resolve_owned_resource_or_redirect(
+            auth=auth,
+            project_id=project_id,
+            manager=build_manager,
+            getter_name="get_build",
+            target_id=build_id,
+            list_endpoint="projects.build_list",
+            not_found_message="Build not found.",
+        )
+        if isinstance(build_or_redirect, RedirectResponse):
+            return build_or_redirect
+
         try:
             build_manager.cancel_build(build_id, auth.user_id)
             response = _redirect_with_flash(

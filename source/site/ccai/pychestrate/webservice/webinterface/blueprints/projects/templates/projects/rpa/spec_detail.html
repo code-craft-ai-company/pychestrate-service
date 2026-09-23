@@ -55,8 +55,8 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-group">
             <label for="work_packet">Work Packet (JSON)</label>
-            <textarea id="work_packet" name="work_packet" class="form-control mono" rows="10" spellcheck="false" aria-describedby="work-packet-help work-packet-errors">{{ default_packet_json }}</textarea>
-            <p id="work-packet-help" class="form-text">Pre-filled from the specification defaults. Keys you change here override the defaults for this run only.</p>
+            <textarea id="work_packet" name="work_packet" class="form-control mono" rows="10" spellcheck="false" aria-describedby="work-packet-help work-packet-errors">{{ run_packet_json }}</textarea>
+            <p id="work-packet-help" class="form-text">Pre-filled from the specification defaults. Keys you change here override the defaults for this run only.{% if secret_packet_keys %} Secret fields ({{ secret_packet_keys | join(", ") }}) are not shown; their stored values are used unless you enter new ones.{% endif %}</p>
         </div>
         <button type="submit" class="btn btn-success" {% if not spec.resolved_version %}disabled{% endif %}>{{ ui.icon("play_arrow") }} Run job now</button>
         {% if not spec.resolved_version %}<span class="muted small">The job type has no active version to run.</span>{% endif %}

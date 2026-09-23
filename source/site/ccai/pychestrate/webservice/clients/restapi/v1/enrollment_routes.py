@@ -50,6 +50,7 @@ from typing import Any, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -634,21 +635,21 @@ def register_enrollment_routes(*, app: Any, version_prefix: str) -> None:
 
     app.attach_route(
         base, methods=["GET"]
-    )(handle_list_enrollment_tokens)
+    )(require_rest_permission(handle_list_enrollment_tokens, permission_key="system:clients.read"))
     app.attach_route(
         base, methods=["POST"]
-    )(handle_issue_enrollment_token)
+    )(require_rest_permission(handle_issue_enrollment_token, permission_key="system:clients.write"))
 
     app.attach_route(
         base + "/redeem", methods=["POST"]
     )(handle_redeem_enrollment_token)
     app.attach_route(
         base + "/clients/{client_id}/revoke", methods=["POST"]
-    )(handle_revoke_client_under_enrollment)
+    )(require_rest_permission(handle_revoke_client_under_enrollment, permission_key="system:clients.write"))
 
     app.attach_route(
         base + "/{token_id}", methods=["DELETE"]
-    )(handle_revoke_enrollment_token)
+    )(require_rest_permission(handle_revoke_enrollment_token, permission_key="system:clients.write"))
 
     return
 

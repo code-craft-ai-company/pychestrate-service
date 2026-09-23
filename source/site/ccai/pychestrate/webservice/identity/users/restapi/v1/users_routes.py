@@ -29,6 +29,7 @@ from typing import Any, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -287,10 +288,10 @@ def register_users_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + USERS_PATH
 
-    app.attach_route(base, methods=["POST"])(handle_create_user)
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_user, permission_key="system:users.write"))
     app.attach_route(
         base + "/{user_id}", methods=["GET"]
-    )(handle_read_user)
+    )(require_rest_permission(handle_read_user, permission_key="system:users.read"))
 
     return
 

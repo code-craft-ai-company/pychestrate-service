@@ -53,6 +53,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _render,
     _resolve_authenticated_request,
+    _require_admin_permission_for,
     _wrap_admin_handler_in_shell,
 )
 
@@ -60,6 +61,12 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 _ROUTE_TABLE = (
     ("config.audit_log_list", "/audit-logs", ("GET",)),
 )
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``). Audit log.
+_ROUTE_PERMISSIONS = {
+    "config.audit_log_list": "system:audit.read",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -367,7 +374,10 @@ def register_audit_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

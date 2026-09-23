@@ -68,6 +68,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
+    _require_admin_permission_for,
     _wrap_admin_handler_in_shell,
 )
 
@@ -79,6 +80,16 @@ _ROUTE_TABLE = (
     ("config.role_edit", "/roles/{role_id}/edit", ("GET", "POST")),
     ("config.role_delete", "/roles/{role_id}/delete", ("POST",)),
 )
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``). Roles and their permission sets.
+_ROUTE_PERMISSIONS = {
+    "config.role_list": "system:rbac.read",
+    "config.role_create": "system:rbac.admin",
+    "config.role_detail": "system:rbac.read",
+    "config.role_edit": "system:rbac.admin",
+    "config.role_delete": "system:rbac.admin",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -756,7 +767,10 @@ def register_roles_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 

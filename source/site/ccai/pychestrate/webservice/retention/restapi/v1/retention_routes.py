@@ -37,6 +37,7 @@ from ccai.errors.exceptions import SemanticError
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.pychestrate.webservice.api.rest_authz import AUTHENTICATED_ONLY, require_rest_permission
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -531,14 +532,14 @@ def register_retention_routes(*, app: Any, version_prefix: str) -> None:
     """
     base = version_prefix + RETENTION_PATH
 
-    app.attach_route(base, methods=["GET"])(handle_list_policies)
-    app.attach_route(base, methods=["POST"])(handle_create_policy)
+    app.attach_route(base, methods=["GET"])(require_rest_permission(handle_list_policies, permission_key=AUTHENTICATED_ONLY))
+    app.attach_route(base, methods=["POST"])(require_rest_permission(handle_create_policy, permission_key="system:ui.admin.view"))
     app.attach_route(
         base + "/{policy_id}", methods=["GET"]
-    )(handle_read_policy)
+    )(require_rest_permission(handle_read_policy, permission_key=AUTHENTICATED_ONLY))
     app.attach_route(
         base + "/{policy_id}/publish", methods=["POST"]
-    )(handle_publish_policy)
+    )(require_rest_permission(handle_publish_policy, permission_key="system:ui.admin.view"))
 
     return
 

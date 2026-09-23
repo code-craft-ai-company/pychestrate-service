@@ -56,6 +56,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
+    _require_admin_permission_for,
     _wrap_admin_handler_in_shell,
 )
 
@@ -68,6 +69,17 @@ _ROUTE_TABLE = (
     ("config.variable_delete", "/variables/{name}/delete", ("POST",)),
     ("config.variable_history", "/variables/{name}/history", ("GET",)),
 )
+
+# Permission each route enforces server-side (see
+# ``routes._require_admin_permission_for``). Global variables. The catalog has no dedicated ``system:variables.*`` key yet, so the page keeps the admin gate the navigation already uses.
+_ROUTE_PERMISSIONS = {
+    "config.variable_list": "system:ui.admin.view",
+    "config.variable_create": "system:ui.admin.view",
+    "config.variable_detail": "system:ui.admin.view",
+    "config.variable_edit": "system:ui.admin.view",
+    "config.variable_delete": "system:ui.admin.view",
+    "config.variable_history": "system:ui.admin.view",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -675,7 +687,10 @@ def register_variables_routes(*, app: Any) -> None:
             endpoint=endpoint_name, pattern=full_path
         )
         handler = _HANDLERS_BY_ENDPOINT[endpoint_name]
-        wrapped_handler = _wrap_admin_handler_in_shell(handler)
+        wrapped_handler = _require_admin_permission_for(
+            _wrap_admin_handler_in_shell(handler),
+            permission=_ROUTE_PERMISSIONS[endpoint_name],
+        )
         app.attach_route(full_path, methods=list(methods))(wrapped_handler)
     return
 
