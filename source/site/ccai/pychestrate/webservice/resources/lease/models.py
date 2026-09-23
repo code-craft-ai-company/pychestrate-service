@@ -13,7 +13,6 @@ import enum
 
 from sqlalchemy import (
     Column,
-    DateTime,
     Enum,
     Index,
     Integer,
@@ -23,6 +22,7 @@ from sqlalchemy import (
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -69,10 +69,10 @@ class Lease(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=LeaseState.ACTIVE,
     )
-    attached_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    last_heartbeat_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    closed_at = Column(DateTime(timezone=True), nullable=True)
+    attached_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    last_heartbeat_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    closed_at = Column(UtcDateTime(timezone=True), nullable=True)
     close_reason = Column(String(64), nullable=True)
     heartbeat_count = Column(Integer, nullable=False, default=0)
     version = Column(Integer, nullable=False, default=1)

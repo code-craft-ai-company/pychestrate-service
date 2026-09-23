@@ -40,9 +40,12 @@ __version__ = "1.0.0"
 
 
 import enum
+import math
 import os
 
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
 
 import jinja2
 
@@ -143,6 +146,8 @@ def install_template_globals(*, environment: jinja2.Environment) -> None:
     install_static_url_global(environment=environment)
     install_ui_profile_global(environment=environment)
     environment.filters["format_datetime"] = format_datetime_filter
+    environment.filters["input_datetime"] = input_datetime_filter
+    environment.filters["humanize_count"] = humanize_count_filter
     environment.filters["display"] = display_filter
     environment.filters["status_tone"] = status_tone_filter
     environment.filters["enum_value"] = enum_value_filter
@@ -250,6 +255,85 @@ def format_datetime_filter(
             jinja2.escape(zone_label),
         )
     ) if hasattr(jinja2, "Markup") else _markup_time(iso_value, display_value, zone_label)
+    return rtnval
+
+
+def input_datetime_filter(value: Any, zone_name: Optional[str] = "UTC") -> str:
+    """
+        Render a datetime as the ``value`` of an ``<input
+        type="datetime-local">``: plain ``YYYY-MM-DDTHH:MM`` text in
+        ``zone_name`` (an IANA zone; UTC when empty or unknown). A
+        naive value is taken to be UTC. ``None`` and anything that is
+        not a datetime render as an empty string, so the input shows
+        blank instead of markup (``format_datetime`` returns a
+        ``<time>`` element, which does not belong inside ``value=""``).
+
+        :param value: The datetime to render.
+        :param zone_name: IANA zone the input is filled in.
+
+        :returns: The input value, or an empty string.
+    """
+    if not isinstance(value, datetime):
+        return ""
+    zone: Any = timezone.utc
+    name = str(zone_name or "").strip()
+    if len(name) > 0 and name != "UTC":
+        try:
+            zone = ZoneInfo(name)
+        except (KeyError, ValueError, OSError):
+            zone = timezone.utc
+    if value.tzinfo is None or value.utcoffset() is None:
+        value = value.replace(tzinfo=timezone.utc)
+    rtnval = value.astimezone(zone).strftime("%Y-%m-%dT%H:%M")
+    return rtnval
+
+
+_SUPERSCRIPT_DIGITS = str.maketrans("0123456789", "\u2070\u00b9\u00b2\u00b3\u2074\u2075\u2076\u2077\u2078\u2079")
+
+_COUNT_SCALES = (
+    (10 ** 12, "trillion"),
+    (10 ** 9, "billion"),
+    (10 ** 6, "million"),
+)
+
+
+def humanize_count_filter(value: Any) -> Any:
+    """
+        Render a count people can read at a glance: exact with
+        thousands separators below a million (``65,534``), in words up
+        to the trillions (``16.8 million``), and beyond that as the
+        power of two it is within 1% of (``≈ 2⁶⁴`` for an IPv6 /64's
+        18446744073709551615 addresses) or else in scientific notation
+        (``≈ 1.4 × 10¹⁹``). Anything that is not an integer is returned
+        as is.
+
+        :param value: The count.
+
+        :returns: The readable count.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return value
+    magnitude = abs(value)
+    if magnitude < 10 ** 6:
+        rtnval = "{:,}".format(value)
+        return rtnval
+    sign = "-" if value < 0 else ""
+    if magnitude < 10 ** 15:
+        for scale, word in _COUNT_SCALES:
+            if magnitude >= scale:
+                rtnval = "{}{:.1f} {}".format(sign, magnitude / scale, word)
+                return rtnval
+    exponent = round(math.log2(magnitude))
+    power = 1 << exponent
+    if abs(magnitude - power) * 100 <= power:
+        shown = "2" + str(exponent).translate(_SUPERSCRIPT_DIGITS)
+    else:
+        decimal_exponent = len(str(magnitude)) - 1
+        shown = "{:.1f} \u00d7 10{}".format(
+            magnitude / (10 ** decimal_exponent),
+            str(decimal_exponent).translate(_SUPERSCRIPT_DIGITS),
+        )
+    rtnval = "\u2248 {}{}".format(sign, shown)
     return rtnval
 
 

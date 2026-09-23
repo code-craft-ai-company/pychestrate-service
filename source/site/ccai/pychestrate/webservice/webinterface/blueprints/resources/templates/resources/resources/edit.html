@@ -57,15 +57,29 @@
             </p>
         </div>
 
-        {% if all_tags %}
+        {% set listed_tag_names = all_tags | map(attribute='name') | list %}
+        {% if all_tags or resource.tags %}
         <div class="form-group">
             <label>Tags</label>
+            {#- Unticked checkboxes are not submitted; this marker tells the
+                handler the tag list was on the form, so unticking every tag
+                removes them all instead of changing nothing (RES-07). #}
+            <input type="hidden" name="tags_present" value="1">
             <div class="actions-row">
                 {% for tag in all_tags %}
                 <label class="regular">
                     <input type="checkbox" name="tags" value="{{ tag.name }}"
                            {% if form_data %}{% if tag.name in form_data.getlist('tags') %}checked{% endif %}{% elif tag.name in resource.tags %}checked{% endif %}>
                     {{ tag.name }}
+                </label>
+                {% endfor %}
+                {#- The resource's own tags always appear, even beyond the
+                    listed page of tags, so saving never drops one unseen. #}
+                {% for tag_name in resource.tags if tag_name not in listed_tag_names %}
+                <label class="regular">
+                    <input type="checkbox" name="tags" value="{{ tag_name }}"
+                           {% if form_data %}{% if tag_name in form_data.getlist('tags') %}checked{% endif %}{% else %}checked{% endif %}>
+                    {{ tag_name }}
                 </label>
                 {% endfor %}
             </div>

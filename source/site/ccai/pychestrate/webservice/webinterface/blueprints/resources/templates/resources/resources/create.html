@@ -35,7 +35,10 @@
         <div class="form-group">
             <label for="pool_id">Resource Pool</label>
             <select id="pool_id" name="pool_id" class="form-control">
-                <option value="">Default Pool</option>
+                {#- No pool is picked unless one is flagged as the default pool,
+                    which then receives the resource; say which it is (RES-47). #}
+                {% set default_pools = pools | selectattr('is_default') | list %}
+                <option value="">{% if default_pools %}Default pool ({{ default_pools[0].name }}){% else %}No pool{% endif %}</option>
                 {% for pool in pools %}
                 <option value="{{ pool.id }}" {% if form_data and form_data.pool_id|string == pool.id|string %}selected{% endif %}>{{ pool.name }}</option>
                 {% endfor %}

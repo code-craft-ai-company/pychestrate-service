@@ -75,7 +75,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _as_sentence,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -249,6 +251,8 @@ def _parse_pagination_params(
     )
     if per_page < 1:
         per_page = default_per_page
+    if per_page > RESOURCES_MAX_PER_PAGE:
+        per_page = RESOURCES_MAX_PER_PAGE
     rtnval = {"page": page, "per_page": per_page}
     return rtnval
 
@@ -284,18 +288,8 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
     except ImportError:
         return None
 
-    if isinstance(exc, CIDROverlapError):
-        msg_parts = ["{}.".format(exc.message)]
-        if len(exc.overlapping_pools) > 0:
-            msg_parts.append(
-                "Overlapping pools: {}.".format(
-                    ", ".join(exc.overlapping_pools)
-                )
-            )
-        rtnval = " ".join(msg_parts)
-        return rtnval
-
     typed_errors = (
+        CIDROverlapError,
         DuplicateIPPoolError,
         IPAllocationNotFoundError,
         IPNotAvailableError,
@@ -307,10 +301,56 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
         IPReservedError,
         NotIPAllocationOwnerError,
     )
-    if isinstance(exc, typed_errors):
-        rtnval = exc.message
+    if not isinstance(exc, typed_errors):
+        return None
+
+    # The manager's text (ids, Python ipaddress wording) is for the
+    # log; the person gets the copy below.
+    _LOGGER.info(
+        "IP pool request refused [%s]: %s",
+        getattr(exc, "error_code", type(exc).__name__),
+        getattr(exc, "message", str(exc)),
+    )
+
+    if isinstance(exc, CIDROverlapError):
+        # Name the overlapping pools once (the manager's message
+        # already listed them, so appending them repeated the list).
+        if len(exc.overlapping_pools) > 0:
+            rtnval = "That range overlaps the IP pool{} {}.".format(
+                "s" if len(exc.overlapping_pools) > 1 else "",
+                ", ".join(exc.overlapping_pools),
+            )
+        else:
+            rtnval = "That range overlaps an existing IP pool."
         return rtnval
-    return None
+
+    if isinstance(exc, IPPoolHasAllocationsError):
+        rtnval = "{}. Check those addresses in first.".format(exc.message)
+        return rtnval
+
+    copy = _IP_POOL_ERROR_COPY.get(getattr(exc, "error_code", ""), None)
+    if copy is not None:
+        return copy
+    # The remaining messages (reserved / unavailable / outside the
+    # range / not an IP address / duplicate name / exhausted) are
+    # written for people.
+    rtnval = _as_sentence(text=exc.message)
+    return rtnval
+
+
+# User-facing copy for typed IPPoolManager errors, by error code (the
+# managers' own messages stay in the log).
+_IP_POOL_ERROR_COPY: Dict[str, str] = {
+    "INVALID_CIDR": (
+        "Enter the range in CIDR notation, such as 192.168.1.0/24 or"
+        " 2001:db8::/64."
+    ),
+    "INVALID_DNS_SERVER": "Each DNS server must be an IP address, such as 8.8.8.8.",
+    "INVALID_POOL_NAME": "Enter a name for the IP pool.",
+    "IP_POOL_NOT_FOUND": "That IP pool no longer exists.",
+    "IP_ALLOCATION_NOT_FOUND": "That IP allocation no longer exists.",
+    "NOT_IP_ALLOCATION_OWNER": "Only the person who checked this address out can check it in.",
+}
 
 
 def _parse_csv_string(*, raw: str) -> List[str]:
@@ -482,14 +522,21 @@ def handle_ip_pool_create(request: Request) -> Response:
             pool = ip_pool_manager.create_pool(
                 create_request, auth.user_id
             )
+            message = 'IP Pool "{}" created successfully.'.format(name)
+            stored_cidr = getattr(pool, "cidr", cidr)
+            if isinstance(stored_cidr, str) and stored_cidr != cidr:
+                # The manager stores the canonical network
+                # (10.50.0.5/29 -> 10.50.0.0/29); say so.
+                message = (
+                    'IP Pool "{}" created with range {} (entered as'
+                    " {}).".format(name, stored_cidr, cidr)
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.ip_pool_detail", pool_id=pool.id
                 ),
-                message='IP Pool "{}" created successfully.'.format(
-                    name
-                ),
+                message=message,
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
@@ -673,38 +720,35 @@ def handle_ip_pool_edit(request: Request) -> Response:
                 )
                 return csrf_redirect
 
-            gateway = str(single_form.get("gateway", "")).strip()
-            dns_servers_str = str(
-                single_form.get("dns_servers", "")
-            ).strip()
-            description = str(
-                single_form.get("description", "")
-            ).strip()
-            reserved_ips_str = str(
-                single_form.get("reserved_ips", "")
-            ).strip()
-
-            # Legacy semantics: empty CSV input passes None
-            # (don't update), non-empty passes the parsed list.
-            if len(dns_servers_str) > 0:
-                dns_servers: Optional[List[str]] = _parse_csv_string(
-                    raw=dns_servers_str
+            # A field the form submitted is an explicit value even when
+            # it is empty: clearing the gateway, the DNS servers, the
+            # reserved list or the description saves exactly that.
+            # Only a field the form did not send means "no change"
+            # (audit finding RES-07; these used to be ignored under an
+            # "updated successfully" message).
+            gateway: Optional[str] = None
+            if "gateway" in multi_form:
+                gateway = str(single_form.get("gateway", "")).strip()
+            description: Optional[str] = None
+            if "description" in multi_form:
+                description = str(
+                    single_form.get("description", "")
+                ).strip()
+            dns_servers: Optional[List[str]] = None
+            if "dns_servers" in multi_form:
+                dns_servers = _parse_csv_string(
+                    raw=str(single_form.get("dns_servers", "")).strip()
                 )
-            else:
-                dns_servers = None
-            if len(reserved_ips_str) > 0:
-                reserved_ips: Optional[List[str]] = _parse_csv_string(
-                    raw=reserved_ips_str
+            reserved_ips: Optional[List[str]] = None
+            if "reserved_ips" in multi_form:
+                reserved_ips = _parse_csv_string(
+                    raw=str(single_form.get("reserved_ips", "")).strip()
                 )
-            else:
-                reserved_ips = None
 
             try:
                 update_request = _build_ip_pool_update_request(
-                    description=(
-                        description if len(description) > 0 else None
-                    ),
-                    gateway=gateway if len(gateway) > 0 else None,
+                    description=description,
+                    gateway=gateway,
                     dns_servers=dns_servers,
                     reserved_ips=reserved_ips,
                 )

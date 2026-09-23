@@ -35,16 +35,16 @@
             <td><a href="{{ url_for('resources.ip_pool_detail', pool_id=pool.id) }}">{{ pool.name }}</a></td>
             <td><code>{{ pool.cidr }}</code></td>
             <td>{{ pool.ip_version }}</td>
-            <td>{{ pool.total_addresses }}</td>
+            <td><span title="{{ pool.total_addresses }}">{{ pool.total_addresses | humanize_count }}</span></td>
             <td>
                 {% if pool.available_count > 0 %}
-                <span class="badge badge-success">{{ pool.available_count }}</span>
+                <span class="badge badge-success" title="{{ pool.available_count }}">{{ pool.available_count | humanize_count }}</span>
                 {% else %}
                 <span class="badge badge-danger">0</span>
                 {% endif %}
             </td>
-            <td>{{ pool.allocated_count }}</td>
-            <td>{{ pool.reserved_count }}</td>
+            <td>{{ pool.allocated_count | humanize_count }}</td>
+            <td>{{ pool.reserved_count | humanize_count }}</td>
             <td>
                 <a href="{{ url_for('resources.ip_pool_edit', pool_id=pool.id) }}" class="btn btn-sm btn-secondary">Edit</a>
                 <form action="{{ url_for('resources.ip_pool_delete', pool_id=pool.id) }}" method="post" data-confirm="{% if pool.allocated_count > 0 %}This pool has {{ pool.allocated_count }} active IP allocation(s) -- deletion will fail until they are checked in. {% endif %}Delete this IP pool?">

@@ -63,7 +63,9 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _as_sentence,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
     _build_page_window,
@@ -238,23 +240,46 @@ def _describe_health_monitor_error(*, exc: Exception) -> Optional[str]:
     """
     try:
         from ccai.pychestrate.core.managers.health_monitor import (  # noqa: E402
-            HealthCheckConfigNotFoundError,
             HealthMonitorError,
         )
     except ImportError:
         return None
 
-    if isinstance(exc, HealthCheckConfigNotFoundError):
-        rtnval = (
-            "{}. Configure a health check for this resource"
-            " first.".format(exc.message)
-        )
-        return rtnval
+    if not isinstance(exc, HealthMonitorError):
+        return None
 
-    if isinstance(exc, HealthMonitorError):
-        rtnval = exc.message
-        return rtnval
-    return None
+    # The manager's text (field names, ids) is for the log; the person
+    # gets the copy below.
+    _LOGGER.info(
+        "Health request refused [%s]: %s", exc.error_code, exc.message
+    )
+    copy = _HEALTH_ERROR_COPY.get(exc.error_code, None)
+    if copy is not None:
+        return copy
+    # Probe URL problems and the timeout limit are written for people.
+    rtnval = _as_sentence(text=exc.message)
+    return rtnval
+
+
+# User-facing copy for typed HealthMonitor errors, by error code (the
+# managers' own messages stay in the log).
+_HEALTH_ERROR_COPY: Dict[str, str] = {
+    "HEALTH_CHECK_CONFIG_NOT_FOUND": (
+        "This resource has no health check yet. Configure one first."
+    ),
+    "HEALTH_CHANGE_REASON_REQUIRED": (
+        "Enter a reason for the status change (at least 3 characters);"
+        " it is kept in the audit trail."
+    ),
+    "INVALID_HEALTH_STATUS": (
+        "Choose a health status: online, degraded, maintenance or offline."
+    ),
+    "RESOURCE_NOT_FOUND": "That resource no longer exists.",
+    "INTERVAL_TOO_SHORT": "The check interval must be at least 1 second.",
+    "TIMEOUT_TOO_SHORT": "The probe timeout must be at least 1 second.",
+    "FAILURE_THRESHOLD_TOO_LOW": "The failure threshold must be at least 1.",
+    "SUCCESS_THRESHOLD_TOO_LOW": "The success threshold must be at least 1.",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -362,6 +387,8 @@ def handle_health_detail(request: Request) -> Response:
         )
         if per_page < 1:
             per_page = 20
+        if per_page > RESOURCES_MAX_PER_PAGE:
+            per_page = RESOURCES_MAX_PER_PAGE
         offset = (page - 1) * per_page
 
         health_monitor = _build_health_monitor(db_session=db_session)
