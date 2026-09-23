@@ -475,9 +475,9 @@ EOF
 
 # Derive the client-certificate Common Name from the verified
 # subject DN. Stock nginx exposes \$ssl_client_s_dn (RFC2253
-# format, e.g. ``CN=worker1,O=codecraftai``) but has no built-in
-# CN accessor -- this map extracts it so the orchestration-ingest
-# location blocks can forward it as the SSL_CLIENT_S_DN_CN header.
+# format, e.g. ``CN=<client-id>``) but has no built-in CN accessor
+# -- this map extracts it so every location block can forward it
+# as the X-Client-Cert-CN header.
 map \$ssl_client_s_dn \$ssl_client_s_dn_cn {
     default        "";
     ~CN=(?<cn>[^,]+) \$cn;
@@ -515,7 +515,7 @@ server {
     # endpoints below are gated explicitly with an
     # ``\$ssl_client_verify`` check, double-gated by the
     # application-level mTLS check that consumes the
-    # ``SSL_CLIENT_S_DN_CN`` forwarded header.
+    # X-Client-Cert-CN / X-Client-Cert-Verify forwarded headers.
     ssl_client_certificate ${CLIENT_CA_PATH};
     ssl_verify_client       optional;
     ssl_verify_depth        2;
@@ -528,8 +528,8 @@ server {
     # progress / results / dispatch-ack callbacks.  These MUST
     # present a client cert verified against our CA bundle.
     # nginx fails fast with 401 for unverified clients; the
-    # application STILL re-checks ``SSL_CLIENT_S_DN_CN`` so a
-    # misconfigured proxy cannot grant ingress unauthenticated.
+    # application STILL re-checks the forwarded certificate CN so
+    # a misconfigured proxy cannot grant ingress unauthenticated.
     location ~ ^/api/v1/runs/[^/]+/(progress|results/complete|dispatch-ack)\$ {
         if (\$ssl_client_verify != "SUCCESS") {
             return 401;
@@ -544,11 +544,16 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host  \$host;
 
-        # Forward the verified subject + verify result so the
-        # app's _require_mtls_client_cn() helper can read the
-        # CN and bind the request to the calling worker.
-        proxy_set_header SSL_CLIENT_S_DN_CN \$ssl_client_s_dn_cn;
-        proxy_set_header SSL_CLIENT_VERIFY  \$ssl_client_verify;
+        # Forward the verified subject CN + verify result so the
+        # app (clients.mtls_identity) can bind the request to the
+        # calling pod.  Hyphenated names are required: gunicorn
+        # drops header names that contain underscores, which is
+        # why the old SSL_CLIENT_S_DN_CN header never arrived.
+        # proxy_set_header replaces any client-supplied value; the
+        # app trusts these headers only from 127.0.0.1 / ::1
+        # (PYCHESTRATE_TRUSTED_PROXY_ADDRESSES).
+        proxy_set_header X-Client-Cert-CN     \$ssl_client_s_dn_cn;
+        proxy_set_header X-Client-Cert-Verify \$ssl_client_verify;
 
         proxy_connect_timeout 30s;
         proxy_send_timeout    300s;
@@ -569,12 +574,14 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-Host  \$host;
 
-        # Forward mTLS-verified subject + verify result even on
-        # the catch-all so future routes that opt into the mTLS
-        # check see the same environ keys without a separate
-        # location block.
-        proxy_set_header SSL_CLIENT_S_DN_CN \$ssl_client_s_dn_cn;
-        proxy_set_header SSL_CLIENT_VERIFY  \$ssl_client_verify;
+        # Forward the mTLS-verified subject CN + verify result on
+        # the catch-all too: the pod's heartbeat, dispatch
+        # long-poll, capability, presign and signing-key calls go
+        # through this block.  Every location that proxies to the
+        # app MUST set both headers, so a client can never pass
+        # its own value through.
+        proxy_set_header X-Client-Cert-CN     \$ssl_client_s_dn_cn;
+        proxy_set_header X-Client-Cert-Verify \$ssl_client_verify;
 
         # WebSocket / long-poll friendliness.
         proxy_set_header Upgrade           \$http_upgrade;

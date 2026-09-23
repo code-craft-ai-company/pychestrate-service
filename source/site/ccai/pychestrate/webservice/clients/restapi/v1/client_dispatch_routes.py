@@ -27,6 +27,10 @@ PR p19g adds two pod-client-facing endpoints sitting on the
 The endpoints are mTLS-only -- there is no ``system:*`` permission
 gate. The presence of an nginx-verified client certificate plus a
 cert-CN that matches the path ``client_id`` is the auth contract.
+The certificate CN reaches the handlers as ``request.mtls_client_cn``,
+set by :mod:`clients.mtls_identity` from the ``X-Client-Cert-CN`` /
+``X-Client-Cert-Verify`` headers of a trusted proxy (or from the
+``SSL_CLIENT_S_DN_CN`` environ key of a TLS-terminating server).
 
 The :class:`LongPollTransport` instance is published on the
 module-level ``ACTIVE_LONG_POLL_TRANSPORT`` seam by the Phase-6
@@ -250,8 +254,11 @@ def _require_mtls_client_cn(request: Request) -> str:
             request=request,
             status=401,
             detail=(
-                "Mutual-TLS client certificate required (nginx must"
-                " forward SSL_CLIENT_S_DN_CN)."
+                "Mutual-TLS client certificate required: the TLS"
+                " terminator must verify the pod's client certificate"
+                " and forward its CN (X-Client-Cert-CN, with"
+                " X-Client-Cert-Verify: SUCCESS) from an address listed"
+                " in PYCHESTRATE_TRUSTED_PROXY_ADDRESSES."
             ),
         )
     rtnval = candidate

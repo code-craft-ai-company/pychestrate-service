@@ -19,9 +19,34 @@ the three orchestration-ingest endpoints (worker callbacks):
 (cookie-session UI + API-key REST) keeps working without a
 client cert. The three paths above are gated explicitly in
 nginx (`if ($ssl_client_verify != "SUCCESS") return 401;`) and
-again at the application layer
-(`_require_mtls_client_cn(request)` consumes the
-`SSL_CLIENT_S_DN_CN` WSGI environ key forwarded by nginx).
+again at the application layer: the pod routes (heartbeat,
+dispatch long-poll, capabilities, dispatch-ack, progress,
+results, artifacts) require the verified certificate's CN and
+compare it with the client they act for.
+
+### How the certificate identity reaches the app
+
+nginx forwards the verification result and the certificate CN
+in two **hyphenated** request headers, set in every `location`
+that proxies to the app:
+
+```nginx
+proxy_set_header X-Client-Cert-CN     $ssl_client_s_dn_cn;
+proxy_set_header X-Client-Cert-Verify $ssl_client_verify;
+```
+
+gunicorn drops request headers whose names contain underscores,
+so the older `SSL_CLIENT_S_DN_CN` header never reached the app
+and every pod call answered 401. The app
+(`clients/mtls_identity.py`) accepts the two headers only when
+the TCP peer is a trusted proxy -- `PYCHESTRATE_TRUSTED_PROXY_ADDRESSES`,
+comma-separated IPs / CIDRs, default `127.0.0.1,::1` (nginx on
+the same host, app bound to loopback); `none` disables header
+trust -- and only when `X-Client-Cert-Verify` is `SUCCESS`. It
+removes both headers before any handler runs and hands the CN to
+the routes as `request.mtls_client_cn`. `proxy_set_header`
+replaces a client-supplied header of the same name, so a pod
+cannot claim another identity through nginx.
 
 ### 1. Bootstrap the client-CA (one-time)
 
@@ -63,9 +88,9 @@ ssh myron@tc-app-server.local 'sudo openssl x509 -req \
     -days 365 -sha256' < client.csr > client.crt
 ```
 
-The CN you set in the CSR is what nginx forwards to the app as
-`SSL_CLIENT_S_DN_CN`. The app uses it to bind the request to
-the calling worker.
+The certificate CN is what nginx forwards to the app as
+`X-Client-Cert-CN`. The app uses it to bind the request to
+the calling pod.
 
 ### 3. Present the cert in client traffic
 
