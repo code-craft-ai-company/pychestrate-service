@@ -39,6 +39,21 @@
                     <td>{{ pool.dns_servers | join(', ') if pool.dns_servers else '-' }}</td>
                 </tr>
                 <tr>
+                    <th scope="row">Reserved Addresses</th>
+                    <td>
+                        {#- Never handed out: the gateway and in-range DNS
+                            servers (reserved automatically), then the
+                            pool's reserved list. #}
+                        {% for address, role in pool.infrastructure_ips.items() %}
+                        <div><code>{{ address }}</code> <span class="muted small">({{ role }})</span></div>
+                        {% endfor %}
+                        {% for address in pool.reserved_ips if address not in pool.infrastructure_ips %}
+                        <div><code>{{ address }}</code></div>
+                        {% endfor %}
+                        {% if not pool.infrastructure_ips and not pool.reserved_ips %}{{ none | display }}{% endif %}
+                    </td>
+                </tr>
+                <tr>
                     <th scope="row">Description</th>
                     <td>{{ pool.description or '-' }}</td>
                 </tr>

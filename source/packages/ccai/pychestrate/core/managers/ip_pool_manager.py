@@ -67,6 +67,9 @@ class IPPoolResponse:
     created_at: datetime
     created_by: Optional[str]
     reserved_ips: List[str] = field(default_factory=list)
+    # The pool's gateway and in-range DNS servers (canonical address ->
+    # role). They are never handed out and count as reserved.
+    infrastructure_ips: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -404,12 +407,87 @@ def validate_ip_address(ip_address: str) -> Tuple[bool, Optional[str]]:
     """
     if not ip_address:
         return False, "IP address cannot be empty"
-    
+
     try:
         ipaddress.ip_address(ip_address)
         return True, None
     except ValueError as e:
         return False, str(e)
+
+
+def canonical_ip(ip_address: Any) -> Optional[str]:
+    """
+    Return the canonical text of an IP address (``2001:DB8::0001`` becomes
+    ``2001:db8::1``), the form addresses are compared and stored in.
+
+    :param ip_address: The address text.
+    :returns: The canonical text, or None when the value is not an IP address.
+    """
+    if not isinstance(ip_address, str):
+        return None
+    try:
+        rtnval = str(ipaddress.ip_address(ip_address.strip()))
+    except ValueError:
+        return None
+    return rtnval
+
+
+def infrastructure_addresses(cidr: str, gateway: Any = None, dns_servers: Any = None) -> Dict[str, str]:
+    """
+    The pool's own infrastructure addresses inside its range: the gateway and
+    any DNS servers that fall inside the CIDR. Handing one of them to a job
+    would break the network it serves, so they are never allocated and they
+    count as reserved.
+
+    :param cidr: The pool's CIDR.
+    :param gateway: The pool's gateway address, if any.
+    :param dns_servers: The pool's DNS server addresses, if any.
+    :returns: Ordered mapping of canonical address to its role ("gateway",
+              "DNS server", or "gateway and DNS server").
+    """
+    try:
+        network = ipaddress.ip_network(cidr, strict=False)
+    except (TypeError, ValueError):
+        return {}
+
+    candidates: List[Tuple[Any, str]] = []
+    if gateway:
+        candidates.append((gateway, "gateway"))
+    if isinstance(dns_servers, (list, tuple)):
+        for dns in dns_servers:
+            candidates.append((dns, "DNS server"))
+
+    roles: Dict[str, List[str]] = {}
+    for raw_address, role in candidates:
+        address = canonical_ip(raw_address)
+        if address is None or ipaddress.ip_address(address) not in network:
+            continue
+        address_roles = roles.setdefault(address, [])
+        if role not in address_roles:
+            address_roles.append(role)
+
+    rtnval = {address: " and ".join(names) for address, names in roles.items()}
+    return rtnval
+
+
+def _is_usable_host(address: str, network: Any) -> bool:
+    """
+    Whether ``address`` is one of the network's assignable host addresses
+    (inside the range, and not the IPv4 network/broadcast address or the
+    IPv6 subnet-router anycast address).
+    """
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+    if ip not in network:
+        return False
+    if network.version == 4 and network.prefixlen < 31:
+        if ip == network.network_address or ip == network.broadcast_address:
+            return False
+    if network.version == 6 and network.prefixlen < 127 and ip == network.network_address:
+        return False
+    return True
 
 
 
@@ -505,8 +583,13 @@ class IPPoolManager:
         # Calculate total usable addresses
         total_usable = calculate_usable_hosts(pool.cidr, [])
         
-        # Count reserved IPs
-        reserved_count = len(pool.reserved_ips) if pool.reserved_ips else 0
+        # Count reserved IPs: the reserved list plus the gateway and in-range
+        # DNS servers, each assignable address counted once.
+        network = ipaddress.ip_network(pool.cidr, strict=False)
+        reserved_count = sum(
+            1 for address in self._reserved_addresses(pool)
+            if _is_usable_host(address, network)
+        )
         
         # Count active allocations
         allocated_count = self._db_session.query(IPAllocation).filter(
@@ -945,13 +1028,15 @@ class IPPoolManager:
         if not is_ip_in_cidr(ip_address, pool.cidr):
             return False
         
-        # Check if IP is reserved
-        if pool.reserved_ips and ip_address in pool.reserved_ips:
+        # Check if IP is reserved (the reserved list, the gateway, or an
+        # in-range DNS server)
+        address = canonical_ip(ip_address) or ip_address
+        if address in self._reserved_addresses(pool):
             return False
         
         # Check if IP is network or broadcast address (for IPv4)
         network = ipaddress.ip_network(pool.cidr, strict=False)
-        ip = ipaddress.ip_address(ip_address)
+        ip = ipaddress.ip_address(address)
         
         if network.version == 4 and network.prefixlen < 31:
             if ip == network.network_address or ip == network.broadcast_address:
@@ -960,7 +1045,7 @@ class IPPoolManager:
         # Check if IP is already allocated
         active_allocation = self._db_session.query(IPAllocation).filter(
             IPAllocation.pool_id == pool_id,
-            IPAllocation.ip_address == ip_address,
+            IPAllocation.ip_address == address,
             IPAllocation.status == IPAllocationStatus.ACTIVE.value
         ).first()
         
@@ -989,8 +1074,8 @@ class IPPoolManager:
             ).all()
         )
         
-        # Get reserved IPs
-        reserved_ips = set(pool.reserved_ips) if pool.reserved_ips else set()
+        # Get reserved IPs (including the gateway and in-range DNS servers)
+        reserved_ips = self._reserved_addresses(pool)
         
         # Get usable IPs from CIDR
         network = ipaddress.ip_network(pool.cidr, strict=False)
@@ -1030,8 +1115,8 @@ class IPPoolManager:
             ).all()
         )
         
-        # Get reserved IPs
-        reserved_ips = set(pool.reserved_ips) if pool.reserved_ips else set()
+        # Get reserved IPs (including the gateway and in-range DNS servers)
+        reserved_ips = self._reserved_addresses(pool)
         unavailable = allocated_ips | reserved_ips
         
         # Get all usable IPs in order
@@ -1086,25 +1171,35 @@ class IPPoolManager:
         
         # Determine which IP to allocate
         if request.specific_ip:
+            # Compare and store addresses in canonical form
+            specific_ip = canonical_ip(request.specific_ip) or request.specific_ip
+            
             # Validate specific IP is in pool range
-            if not is_ip_in_cidr(request.specific_ip, pool.cidr):
+            if not is_ip_in_cidr(specific_ip, pool.cidr):
                 raise IPNotInPoolError(
                     f"IP address '{request.specific_ip}' is not in pool CIDR range '{pool.cidr}'"
                 )
             
-            # Check if IP is reserved
-            if pool.reserved_ips and request.specific_ip in pool.reserved_ips:
+            # The pool's gateway and in-range DNS servers are never handed out
+            infrastructure = infrastructure_addresses(pool.cidr, pool.gateway, pool.dns_servers)
+            if specific_ip in infrastructure:
                 raise IPReservedError(
-                    f"IP address '{request.specific_ip}' is reserved"
+                    f"IP address '{specific_ip}' is the pool's {infrastructure[specific_ip]} and is reserved"
+                )
+            
+            # Check if IP is reserved
+            if specific_ip in self._reserved_addresses(pool):
+                raise IPReservedError(
+                    f"IP address '{specific_ip}' is reserved"
                 )
             
             # Check if IP is available
-            if not self.is_ip_available(request.pool_id, request.specific_ip):
+            if not self.is_ip_available(request.pool_id, specific_ip):
                 raise IPNotAvailableError(
-                    f"IP address '{request.specific_ip}' is not available"
+                    f"IP address '{specific_ip}' is not available"
                 )
             
-            ip_to_allocate = request.specific_ip
+            ip_to_allocate = specific_ip
         else:
             # Get next available IP
             available_ips = self.get_available_ips(request.pool_id, count=1)
@@ -1517,6 +1612,21 @@ class IPPoolManager:
     # Helper Methods
     # =========================================================================
     
+    def _reserved_addresses(self, pool) -> set:
+        """
+        Every address in a pool that is never handed out: the pool's reserved
+        list plus its gateway and in-range DNS servers, in canonical form.
+        
+        :param pool: The IPPool ORM object
+        :returns: Set of address strings
+        """
+        rtnval = set()
+        reserved_ips = pool.reserved_ips if isinstance(pool.reserved_ips, (list, tuple, set)) else []
+        for raw_address in reserved_ips:
+            rtnval.add(canonical_ip(raw_address) or raw_address)
+        rtnval.update(infrastructure_addresses(pool.cidr, pool.gateway, pool.dns_servers).keys())
+        return rtnval
+    
     def _pool_to_response(self, pool) -> IPPoolResponse:
         """
         Convert an IPPool ORM object to an IPPoolResponse dataclass.
@@ -1544,7 +1654,8 @@ class IPPoolManager:
             available_count=stats["available_count"],
             created_at=pool.created_at,
             created_by=created_by,
-            reserved_ips=list(pool.reserved_ips or [])
+            reserved_ips=list(pool.reserved_ips or []),
+            infrastructure_ips=infrastructure_addresses(pool.cidr, pool.gateway, pool.dns_servers)
         )
     
     def _allocation_to_response(self, allocation, pool) -> IPAllocationResponse:

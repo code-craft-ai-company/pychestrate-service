@@ -34,6 +34,7 @@ from ccai.testshared.factories.webui.template_contexts import (
 )
 
 from ccai.pychestrate.core.managers.allocation_manager import ReservationResponse
+from ccai.pychestrate.core.managers.ip_pool_manager import IPPoolResponse
 from ccai.pychestrate.webservice.webinterface.foundation import templating
 
 from ccai.tests.singlehost.pychestrate.webservice.phase13._template_harness import (
@@ -266,4 +267,28 @@ def test_reservation_form_has_no_get_submit_button():
     post_bodies = [body for tag, body in _forms(html=html) if 'method="post"' in tag]
 
     testbase.assert_equal(any("formmethod" in body for body in post_bodies), False)
+    return
+
+
+# ---------------------------------------------------------------------------
+# RES-13: the gateway and in-range DNS servers show as reserved
+# ---------------------------------------------------------------------------
+
+
+def test_ip_pool_detail_shows_the_gateway_as_reserved():
+    """
+    **Feature: resources (RES-13 infrastructure addresses)**
+    **Property: the IP pool detail page lists the gateway, labelled
+    "(gateway)", in its Reserved Addresses row.**
+    """
+    pool = build_fixture(
+        IPPoolResponse,
+        mode=MODE_SPARSE,
+        overrides={"cidr": "10.20.30.0/28", "gateway": "10.20.30.1", "infrastructure_ips": {"10.20.30.1": "gateway"}},
+    )
+    html = _render(template_name="resources/ip_pools/detail.html", overrides={"pool": pool})
+    row = re.search(r"Reserved Addresses</th>\s*<td>(.*?)</td>", html, re.DOTALL)
+    row_text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>|\{#.*?#\}", "", row.group(1))).strip() if row is not None else ""
+
+    testbase.assert_equal(row_text, "10.20.30.1 (gateway)")
     return
