@@ -83,7 +83,7 @@
     <main class="setup-card pyc-admin-page-fragment">
         {% block content %}{% endblock %}
     </main>
-    <script>
+    <script nonce="{{ csp_nonce() }}">
         // Show / hide toggle for secret fields (data-reveal-for="<input id>").
         document.addEventListener("click", function (event) {
             var button = event.target.closest ? event.target.closest("[data-reveal-for]") : null;

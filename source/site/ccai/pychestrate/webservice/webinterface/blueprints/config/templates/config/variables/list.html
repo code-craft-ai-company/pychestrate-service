@@ -72,7 +72,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Per-row reveal toggle for masked variable values.
     document.addEventListener("click", function (event) {
         var target = event.target;

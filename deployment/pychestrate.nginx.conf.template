@@ -63,6 +63,15 @@ server {
     # (artifacts, logs) and 1MiB nginx default is too tight.
     client_max_body_size 50M;
 
+    # HSTS: this site is HTTPS-only (the :80 server redirects), so
+    # browsers should never try plain HTTP again.  The app adds its
+    # own HSTS only in the production runtime environment; hide that
+    # copy so the header appears exactly once.  The other security
+    # headers (CSP with per-response nonces, frame protection,
+    # nosniff, referrer policy, no-store) come from the app itself.
+    proxy_hide_header Strict-Transport-Security;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
     # Response compression.  Every shell page loads the ~1.6 MB
     # mj-* component library plus the pyc-* bundles; gzip brings
     # the JavaScript down to roughly a fifth of that on the wire.

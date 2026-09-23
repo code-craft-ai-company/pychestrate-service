@@ -238,6 +238,9 @@ from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES, SITE_SHARED_G
 from ccai.pychestrate.webservice.pychestrate_variables import (
     PychestrateVariables,
 )
+from ccai.pychestrate.webservice.hardening.platform_wsgi import (
+    wrap_platform_wsgi_application,
+)
 from ccai.webworks.webapplication import establish_webapp_persona
 from ccai.webworks.wsgi.application import create_wsgi_application
 from ccai.webworks.wsgi.server import run_server
@@ -651,6 +654,10 @@ def pychestrate_website_main():
 
     wsgi_app_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     wsgi_app = _eager_start_response_wsgi(wsgi_app_inner)
+    # Platform layers (security headers + CSP nonce) see every response.
+    wsgi_app = wrap_platform_wsgi_application(
+        wsgi_app=wsgi_app, runtime_environment=runtime_config.runtime_environment,
+    )
 
     bind_host = PychestrateVariables.PYCHESTRATE_BIND_HOST
     bind_port = int(PychestrateVariables.PYCHESTRATE_BIND_PORT)
@@ -716,6 +723,10 @@ def build_wsgi_application_for_production():
 
     rtnval_inner = create_wsgi_application(config={"handler": build_wsgi_compat_dispatch(app=app)})
     rtnval = _eager_start_response_wsgi(rtnval_inner)
+    # Platform layers (security headers + CSP nonce) see every response.
+    rtnval = wrap_platform_wsgi_application(
+        wsgi_app=rtnval, runtime_environment=runtime_config.runtime_environment,
+    )
     return rtnval
 
 if __name__ == "__main__":

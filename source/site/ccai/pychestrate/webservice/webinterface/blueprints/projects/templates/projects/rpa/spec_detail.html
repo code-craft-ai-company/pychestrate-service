@@ -134,7 +134,7 @@
 {% block extra_js %}
 {% if can_manage %}
 <script id="rpa-packet-schema" type="application/json">{{ (packet_schema_json or 'null') | safe }}</script>
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Client-side pre-check of the work packet before the confirm dialog
     // and the POST. The server validates again with the full JSON Schema;
     // this catches malformed JSON, missing required keys, and primitive
