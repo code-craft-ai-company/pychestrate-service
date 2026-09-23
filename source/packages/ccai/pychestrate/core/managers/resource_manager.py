@@ -35,6 +35,10 @@ RESOURCE_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}$')
 # Must be 1-64 characters
 TAG_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_\-]{0,63}$')
 
+# Pool name validation: alphanumeric, underscore, hyphen only (the rule the
+# create form states); must start with alphanumeric, 1-128 characters
+POOL_NAME_PATTERN = re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_\-]{0,127}$')
+
 
 # =============================================================================
 # Request/Response Dataclasses
@@ -852,7 +856,15 @@ class ResourceManager:
                 field="name",
                 error_code="INVALID_POOL_NAME"
             )
-        
+
+        if not POOL_NAME_PATTERN.match(request.name):
+            raise ResourceValidationError(
+                "Pool name must be 1-128 characters, start with a letter or digit, "
+                "and contain only letters, digits, underscores and hyphens",
+                field="name",
+                error_code="INVALID_POOL_NAME"
+            )
+
         # Check for duplicate pool name
         existing_pool = self._db_session.query(ResourcePool).filter(
             ResourcePool.name == request.name

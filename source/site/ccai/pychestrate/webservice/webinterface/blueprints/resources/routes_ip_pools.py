@@ -75,6 +75,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
@@ -249,6 +250,8 @@ def _parse_pagination_params(
     )
     if per_page < 1:
         per_page = default_per_page
+    if per_page > RESOURCES_MAX_PER_PAGE:
+        per_page = RESOURCES_MAX_PER_PAGE
     rtnval = {"page": page, "per_page": per_page}
     return rtnval
 
@@ -482,14 +485,21 @@ def handle_ip_pool_create(request: Request) -> Response:
             pool = ip_pool_manager.create_pool(
                 create_request, auth.user_id
             )
+            message = 'IP Pool "{}" created successfully.'.format(name)
+            stored_cidr = getattr(pool, "cidr", cidr)
+            if isinstance(stored_cidr, str) and stored_cidr != cidr:
+                # The manager stores the canonical network
+                # (10.50.0.5/29 -> 10.50.0.0/29); say so.
+                message = (
+                    'IP Pool "{}" created with range {} (entered as'
+                    " {}).".format(name, stored_cidr, cidr)
+                )
             response = _redirect_with_flash(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.ip_pool_detail", pool_id=pool.id
                 ),
-                message='IP Pool "{}" created successfully.'.format(
-                    name
-                ),
+                message=message,
                 category=flash.CATEGORY_SUCCESS,
             )
             return response

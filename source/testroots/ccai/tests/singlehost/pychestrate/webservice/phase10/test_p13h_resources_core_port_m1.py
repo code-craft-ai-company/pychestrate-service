@@ -1964,3 +1964,39 @@ def test_resource_deletion_message_without_history_is_plain():
 
     testbase.assert_equal(message, "Resource deleted successfully.")
     return
+
+
+# ===========================================================================
+# per_page is capped (audit finding RES-24)
+# ===========================================================================
+
+
+def test_resource_list_caps_per_page():
+    """
+    **Feature: resources (RES-24 server-side validation)**
+    **Property: GET /resources/list?per_page=100000 asks the manager for
+    at most RESOURCES_MAX_PER_PAGE rows.**
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        resources_routes.register_resources_routes(app=_FakeApp())
+        patches.append(_patch_security_manager())
+        patches.append(_patch_resource_manager())
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            query_mapping={"page": "1", "per_page": "100000"},
+        )
+        resources_routes.handle_resource_list(request)
+        limit = _FakeResourceManager.last_instance.list_resources_calls[0]["limit"]
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+
+    testbase.assert_equal(limit, resources_routes.RESOURCES_MAX_PER_PAGE)
+    return

@@ -635,14 +635,19 @@ class IPPoolManager:
             )
         
         # Validate CIDR
-        is_valid, error_msg = self.validate_cidr(request.cidr)
+        raw_cidr = (request.cidr or "").strip()
+        is_valid, error_msg = self.validate_cidr(raw_cidr)
         if not is_valid:
             raise IPPoolValidationError(
                 f"Invalid CIDR: {error_msg}",
                 field="cidr",
                 error_code="INVALID_CIDR"
             )
-        
+
+        # Store the canonical network: "10.50.0.5/29" names 10.50.0.0/29 and
+        # "2001:DB8::/32" is 2001:db8::/32.
+        cidr = str(ipaddress.ip_network(raw_cidr, strict=False))
+
         # Check for duplicate pool name
         existing_pool = self._db_session.query(IPPool).filter(
             IPPool.name == request.name
@@ -655,59 +660,46 @@ class IPPoolManager:
             )
         
         # Check for CIDR overlap
-        overlapping_pools = self.check_cidr_overlap(request.cidr)
+        overlapping_pools = self.check_cidr_overlap(cidr)
         if overlapping_pools:
             pool_names = [p.name for p in overlapping_pools]
             raise CIDROverlapError(
-                f"CIDR range '{request.cidr}' overlaps with existing pools: {', '.join(pool_names)}",
+                f"CIDR range '{cidr}' overlaps with existing pools: {', '.join(pool_names)}",
                 overlapping_pools=pool_names
             )
-        
+
         # Parse CIDR to get network information
-        cidr_info = parse_cidr(request.cidr)
-        
-        # Validate reserved IPs are in the CIDR range
-        for ip in request.reserved_ips:
-            if not is_ip_in_cidr(ip, request.cidr):
-                raise IPPoolValidationError(
-                    f"Reserved IP '{ip}' is not in CIDR range '{request.cidr}'",
-                    field="reserved_ips",
-                    error_code="IP_NOT_IN_POOL"
-                )
-        
+        cidr_info = parse_cidr(cidr)
+
+        # Validate reserved IPs are in the CIDR range (stored canonical)
+        reserved_ips = self._validated_pool_addresses(
+            addresses=request.reserved_ips, cidr=cidr, label="Reserved IP", field="reserved_ips"
+        )
+
         # Validate gateway is in the CIDR range (if provided)
+        gateway = None
         if request.gateway:
-            if not is_ip_in_cidr(request.gateway, request.cidr):
-                raise IPPoolValidationError(
-                    f"Gateway '{request.gateway}' is not in CIDR range '{request.cidr}'",
-                    field="gateway",
-                    error_code="IP_NOT_IN_POOL"
-                )
-        
-        # Validate DNS servers are valid IP addresses
-        for dns in request.dns_servers:
-            is_valid, error_msg = validate_ip_address(dns)
-            if not is_valid:
-                raise IPPoolValidationError(
-                    f"Invalid DNS server '{dns}': {error_msg}",
-                    field="dns_servers",
-                    error_code="INVALID_DNS_SERVER"
-                )
-        
+            gateway = self._validated_pool_addresses(
+                addresses=[request.gateway], cidr=cidr, label="Gateway", field="gateway"
+            )[0]
+
+        # Validate DNS servers are valid IP addresses (stored canonical)
+        dns_servers = self._validated_dns_servers(dns_servers=request.dns_servers)
+
         # Create the pool
         now = utc_now()
-        
+
         pool = IPPool(
             name=request.name,
-            cidr=request.cidr,
+            cidr=cidr,
             ip_version=cidr_info["ip_version"],
             network_address=cidr_info["network_address"],
             broadcast_address=cidr_info["broadcast_address"],
             subnet_mask=cidr_info["subnet_mask"],
-            gateway=request.gateway,
-            dns_servers=request.dns_servers,
+            gateway=gateway,
+            dns_servers=dns_servers,
             description=request.description,
-            reserved_ips=request.reserved_ips,
+            reserved_ips=reserved_ips,
             created_at=now,
             created_by_id=user_id
         )
@@ -785,38 +777,24 @@ class IPPoolManager:
         if request.description is not None:
             pool.description = request.description
         
-        # Update gateway if provided
+        # Update gateway if provided (an empty value clears it)
         if request.gateway is not None:
-            if request.gateway and not is_ip_in_cidr(request.gateway, pool.cidr):
-                raise IPPoolValidationError(
-                    f"Gateway '{request.gateway}' is not in CIDR range '{pool.cidr}'",
-                    field="gateway",
-                    error_code="IP_NOT_IN_POOL"
-                )
-            pool.gateway = request.gateway
-        
-        # Update DNS servers if provided
+            gateway = None
+            if request.gateway:
+                gateway = self._validated_pool_addresses(
+                    addresses=[request.gateway], cidr=pool.cidr, label="Gateway", field="gateway"
+                )[0]
+            pool.gateway = gateway
+
+        # Update DNS servers if provided (stored canonical)
         if request.dns_servers is not None:
-            for dns in request.dns_servers:
-                is_valid, error_msg = validate_ip_address(dns)
-                if not is_valid:
-                    raise IPPoolValidationError(
-                        f"Invalid DNS server '{dns}': {error_msg}",
-                        field="dns_servers",
-                        error_code="INVALID_DNS_SERVER"
-                    )
-            pool.dns_servers = request.dns_servers
-        
-        # Update reserved IPs if provided
+            pool.dns_servers = self._validated_dns_servers(dns_servers=request.dns_servers)
+
+        # Update reserved IPs if provided (stored canonical)
         if request.reserved_ips is not None:
-            for ip in request.reserved_ips:
-                if not is_ip_in_cidr(ip, pool.cidr):
-                    raise IPPoolValidationError(
-                        f"Reserved IP '{ip}' is not in CIDR range '{pool.cidr}'",
-                        field="reserved_ips",
-                        error_code="IP_NOT_IN_POOL"
-                    )
-            pool.reserved_ips = request.reserved_ips
+            pool.reserved_ips = self._validated_pool_addresses(
+                addresses=request.reserved_ips, cidr=pool.cidr, label="Reserved IP", field="reserved_ips"
+            )
         
         self._db_session.commit()
         
@@ -1612,6 +1590,63 @@ class IPPoolManager:
     # Helper Methods
     # =========================================================================
     
+    def _validated_pool_addresses(self, *, addresses: List[str], cidr: str, label: str, field: str) -> List[str]:
+        """
+        Validate addresses that must lie inside the pool (gateway, reserved
+        IPs) and return them in canonical form, without duplicates.
+
+        :param addresses: The submitted addresses
+        :param cidr: The pool's canonical CIDR
+        :param label: What the addresses are ("Gateway", "Reserved IP")
+        :param field: The request field, for the error
+        :returns: Canonical addresses in submitted order
+        :raises IPPoolValidationError: INVALID_IP_ADDRESS for a value that is
+                                       not an IP address, IP_NOT_IN_POOL for
+                                       one outside the range
+        """
+        rtnval: List[str] = []
+        for raw_address in addresses:
+            address = canonical_ip(raw_address)
+            if address is None:
+                raise IPPoolValidationError(
+                    f"{label} '{raw_address}' is not a valid IP address",
+                    field=field,
+                    error_code="INVALID_IP_ADDRESS"
+                )
+            if not is_ip_in_cidr(address, cidr):
+                raise IPPoolValidationError(
+                    f"{label} '{raw_address}' is not in CIDR range '{cidr}'",
+                    field=field,
+                    error_code="IP_NOT_IN_POOL"
+                )
+            if address not in rtnval:
+                rtnval.append(address)
+        return rtnval
+
+    def _validated_dns_servers(self, *, dns_servers: List[str]) -> List[str]:
+        """
+        Validate DNS server addresses and return them in canonical form,
+        without duplicates.
+
+        :param dns_servers: The submitted addresses
+        :returns: Canonical addresses in submitted order
+        :raises IPPoolValidationError: INVALID_DNS_SERVER for a value that is
+                                       not an IP address
+        """
+        rtnval: List[str] = []
+        for dns in dns_servers:
+            is_valid, error_msg = validate_ip_address(dns)
+            if not is_valid:
+                raise IPPoolValidationError(
+                    f"Invalid DNS server '{dns}': {error_msg}",
+                    field="dns_servers",
+                    error_code="INVALID_DNS_SERVER"
+                )
+            address = canonical_ip(dns)
+            if address not in rtnval:
+                rtnval.append(address)
+        return rtnval
+
     def _reserved_addresses(self, pool) -> set:
         """
         Every address in a pool that is never handed out: the pool's reserved

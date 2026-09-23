@@ -59,6 +59,10 @@ TRIGGER_USER = 'user'
 TRIGGER_HEALTH_CHECK = 'health_check'
 TRIGGER_SYSTEM = 'system'
 
+# A person changing a health status must say why (the reason is the audit
+# trail's record of the change); this is the shortest reason accepted.
+MIN_MANUAL_REASON_LENGTH = 3
+
 
 # =============================================================================
 # Request/Response Dataclasses
@@ -166,6 +170,13 @@ class InvalidHealthStatusError(HealthMonitorError):
     """Exception raised when an invalid health status is provided."""
     
     def __init__(self, message: str, error_code: str = "INVALID_HEALTH_STATUS"):
+        super().__init__(message, error_code)
+
+
+class HealthChangeReasonRequiredError(HealthMonitorError):
+    """Exception raised when a manual health status change gives no reason."""
+
+    def __init__(self, message: str, error_code: str = "HEALTH_CHANGE_REASON_REQUIRED"):
         super().__init__(message, error_code)
 
 
@@ -338,17 +349,28 @@ class HealthMonitor:
         :returns: HealthTransitionResponse with the transition details
         :raises ResourceNotFoundError: If resource is not found
         :raises InvalidHealthStatusError: If status is invalid
-        
+        :raises HealthChangeReasonRequiredError: If a user-triggered change has
+                                                 no reason (fewer than
+                                                 MIN_MANUAL_REASON_LENGTH
+                                                 characters)
+
         Validates: Requirements 6.1, 6.2
         """
         from ccai.pychestrate.core.orm import Resource, HealthTransitionLog
-        
+
         # Validate status
         if status not in VALID_HEALTH_STATUSES:
             raise InvalidHealthStatusError(
                 f"Health status must be one of: {', '.join(sorted(VALID_HEALTH_STATUSES))}"
             )
-        
+
+        # A person changing the status must say why
+        if triggered_by == TRIGGER_USER and len((reason or "").strip()) < MIN_MANUAL_REASON_LENGTH:
+            raise HealthChangeReasonRequiredError(
+                f"A reason of at least {MIN_MANUAL_REASON_LENGTH} characters is required "
+                "for a manual health status change"
+            )
+
         # Get the resource
         resource = self._db_session.query(Resource).filter(Resource.id == resource_id).first()
         

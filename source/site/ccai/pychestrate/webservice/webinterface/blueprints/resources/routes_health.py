@@ -63,6 +63,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
@@ -362,6 +363,8 @@ def handle_health_detail(request: Request) -> Response:
         )
         if per_page < 1:
             per_page = 20
+        if per_page > RESOURCES_MAX_PER_PAGE:
+            per_page = RESOURCES_MAX_PER_PAGE
         offset = (page - 1) * per_page
 
         health_monitor = _build_health_monitor(db_session=db_session)
