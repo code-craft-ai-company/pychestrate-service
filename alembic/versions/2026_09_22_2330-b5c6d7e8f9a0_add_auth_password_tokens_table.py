@@ -8,7 +8,7 @@ redemption page.
 Purely additive so ``alembic upgrade head`` is non-destructive.
 
 Revision ID: b5c6d7e8f9a0
-Revises: 77772d8791e2
+Revises: a6ad11324568
 Create Date: 2026-09-22 23:30:00+00:00
 
 """
@@ -21,7 +21,7 @@ import sqlalchemy_utils
 
 # revision identifiers, used by Alembic.
 revision: str = "b5c6d7e8f9a0"
-down_revision: Union[str, Sequence[str], None] = "77772d8791e2"
+down_revision: Union[str, Sequence[str], None] = "a6ad11324568"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

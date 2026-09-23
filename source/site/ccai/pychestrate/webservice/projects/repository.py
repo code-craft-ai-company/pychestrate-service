@@ -12,6 +12,9 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import os
+import uuid as _uuid
+
 from typing import List, Optional
 
 from sqlalchemy.orm import Session as DbSession
@@ -61,6 +64,164 @@ def get_project_by_id(*, db_session: DbSession, project_id: str) -> Optional[Pro
         :returns: The :class:`Project` or None.
     """
     rtnval = db_session.query(Project).filter(Project.project_id == project_id).first()
+    return rtnval
+
+
+def get_project_by_legacy_id(
+        *,
+        db_session: DbSession,
+        legacy_proj_id: int
+    ) -> Optional[Project]:
+    """
+        Look up a slug-:class:`Project` by the legacy ``proj_id``
+        it is bridged to.
+
+        :param db_session: Active SQLAlchemy session.
+        :param legacy_proj_id: Legacy ``projects.proj_id`` BigInt.
+
+        :returns: The :class:`Project` or None when no slug-Project
+                  is bridged to that legacy id.
+    """
+    rtnval = (
+        db_session.query(Project)
+        .filter(Project.legacy_proj_id == legacy_proj_id)
+        .first()
+    )
+    return rtnval
+
+
+def _looks_like_uuid(*, candidate: str) -> bool:
+    """
+        Return True when ``candidate`` parses as a UUID.
+
+        :param candidate: Candidate reference token.
+
+        :returns: True when parseable as a UUID, else False.
+    """
+    try:
+        _uuid.UUID(candidate)
+    except (ValueError, AttributeError, TypeError):
+        rtnval = False
+        return rtnval
+    rtnval = True
+    return rtnval
+
+
+def resolve_project(
+        *,
+        db_session: DbSession,
+        slug: Optional[str] = None,
+        uuid: Optional[str] = None,
+        legacy_id: Optional[int] = None
+    ) -> Optional[Project]:
+    """
+        Resolve the canonical slug-:class:`Project` from exactly one
+        of three identity forms. This is the single entry point
+        every project-scoped surface should use to translate a
+        caller-supplied project reference into the canonical row
+        (from which ``.project_id``, ``.slug``, and
+        ``.legacy_proj_id`` are all readable).
+
+        Exactly one of ``slug`` / ``uuid`` / ``legacy_id`` must be
+        supplied. Supplying none or more than one is an API misuse
+        and raises :class:`ValueError`.
+
+        :param db_session: Active SQLAlchemy session.
+        :param slug: Canonical project slug.
+        :param uuid: New-model UUID ``project_id`` (string form).
+        :param legacy_id: Legacy ``projects.proj_id`` BigInt.
+
+        :returns: The :class:`Project` or None when unresolved.
+
+        :raises ValueError: When not exactly one identity form is
+                            supplied.
+    """
+    supplied = [
+        value
+        for value in (slug, uuid, legacy_id)
+        if value is not None
+    ]
+    if len(supplied) != 1:
+        err_msg_lines = [
+            "resolve_project requires exactly one of slug / uuid /"
+            " legacy_id.",
+            "    slug: {}".format(slug),
+            "    uuid: {}".format(uuid),
+            "    legacy_id: {}".format(legacy_id),
+        ]
+        err_msg = os.linesep.join(err_msg_lines)
+        raise ValueError(err_msg)
+
+    if slug is not None:
+        rtnval = get_project_by_slug(db_session=db_session, slug=slug)
+        return rtnval
+
+    if uuid is not None:
+        rtnval = get_project_by_id(db_session=db_session, project_id=uuid)
+        return rtnval
+
+    rtnval = get_project_by_legacy_id(
+        db_session=db_session, legacy_proj_id=legacy_id
+    )
+    return rtnval
+
+
+def resolve_project_ref(
+        *,
+        db_session: DbSession,
+        ref: str
+    ) -> Optional[Project]:
+    """
+        Resolve a project from a single opaque reference token,
+        sniffing its form: a parseable UUID resolves by
+        ``project_id``; an all-digits token resolves by legacy
+        ``proj_id``; anything else resolves by slug.
+
+        :param db_session: Active SQLAlchemy session.
+        :param ref: Project reference (slug | uuid | int as string).
+
+        :returns: The :class:`Project` or None when unresolved.
+    """
+    if ref is None or len(ref) == 0:
+        rtnval = None
+        return rtnval
+
+    if _looks_like_uuid(candidate=ref) is True:
+        rtnval = resolve_project(db_session=db_session, uuid=ref)
+        return rtnval
+
+    if ref.isdigit() is True:
+        rtnval = resolve_project(
+            db_session=db_session, legacy_id=int(ref)
+        )
+        return rtnval
+
+    rtnval = resolve_project(db_session=db_session, slug=ref)
+    return rtnval
+
+
+def resolve_legacy_proj_id(
+        *,
+        db_session: DbSession,
+        ref: str
+    ) -> Optional[int]:
+    """
+        Resolve a project reference to its bridged legacy
+        ``proj_id``, for callers that must drive a legacy
+        ``core/managers`` manager.
+
+        :param db_session: Active SQLAlchemy session.
+        :param ref: Project reference (slug | uuid | int as string).
+
+        :returns: The legacy ``proj_id`` BigInt, or None when the
+                  project is unresolved or has no legacy
+                  counterpart.
+    """
+    project = resolve_project_ref(db_session=db_session, ref=ref)
+    if project is None:
+        rtnval = None
+        return rtnval
+    rtnval = project.legacy_proj_id
     return rtnval
 
 
