@@ -1,0 +1,28 @@
+# pychestrate-service -- logrotate policy
+#
+# Rendered + installed as /etc/logrotate.d/pychestrate by
+# ``deployment/deploy-alpha-to-host.sh``.  Placeholders:
+#   @USER@   -- the deploy user (e.g. myron)
+#
+# pychestrate.service and pychestrate-backup.service append their
+# stdout/stderr to these files (StandardOutput=append:...), so the
+# files are rotated with copytruncate: systemd keeps its O_APPEND
+# descriptor and simply continues at the start of the truncated file.
+# ``su`` is required because the files live in the service user's
+# home directory.
+#
+# Check the policy without rotating anything:
+#   sudo logrotate --debug /etc/logrotate.d/pychestrate
+
+/home/@USER@/.pychestrate/server.log /home/@USER@/.pychestrate/backup.log {
+    su @USER@ @USER@
+    daily
+    maxsize 100M
+    rotate 14
+    dateext
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

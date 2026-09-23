@@ -41,7 +41,10 @@ Three operations are hosted here:
   ``:presign`` operation mints URLs that point back here. The URL
   carries an HMAC signature over ``run_id`` + path + expiry; this
   handler re-verifies the signature, then writes the request body
-  under the run's allocated ``backend_key_prefix``. The signature
+  under the run's allocated ``backend_key_prefix``, anchored under
+  the configured artifact root (``PYCHESTRATE_ARTIFACT_ROOT``,
+  default ``<presence_dir>/artifacts``; see
+  :mod:`jobs.results.artifact_root`). The signature
   is the auth contract for this endpoint -- a forged or expired URL
   is rejected with 403, so no object-store credential is needed.
 
@@ -83,6 +86,9 @@ from ccai.pychestrate.webservice.jobs.dispatch.receipt import (
     repository as receipt_repo,
 )
 from ccai.pychestrate.webservice.jobs.results import presign
+from ccai.pychestrate.webservice.jobs.results.artifact_root import (
+    resolve_result_tree_path,
+)
 from ccai.pychestrate.webservice.jobs.results.backend import (
     SharedResultsBackend,
 )
@@ -927,17 +933,21 @@ def _write_local_artifact(
         escape ``prefix``. A defensive ``commonpath`` check guards
         the invariant a second time.
 
+        The prefix is anchored under the configured artifact root
+        (:func:`jobs.results.artifact_root.resolve_result_tree_path`),
+        never the process working directory -- see LD-14.
+
         :param request: Incoming webworks request (for problem
                          aborts).
         :param prefix: The run's allocated ``backend_key_prefix``
-                       -- a local filesystem directory on the alpha
-                       deploy.
+                       -- relative to the artifact root on the
+                       local-filesystem results backend.
         :param relative_path: Canonicalized relative artifact path.
         :param body_bytes: The artifact bytes to write.
 
         :returns: The absolute filesystem path the bytes landed at.
     """
-    prefix_abs = os.path.abspath(prefix)
+    prefix_abs = _resolve_prefix_directory(request=request, prefix=prefix)
     destination = os.path.abspath(os.path.join(prefix_abs, relative_path))
 
     common = os.path.commonpath([prefix_abs, destination])
@@ -956,6 +966,31 @@ def _write_local_artifact(
         handle.write(body_bytes)
 
     rtnval = destination
+    return rtnval
+
+
+def _resolve_prefix_directory(*, request: Request, prefix: str) -> str:
+    """
+        Resolve an allocation's ``backend_key_prefix`` to its
+        absolute result-tree directory under the artifact root,
+        aborting 409 when the stored prefix is unusable.
+
+        :param request: Incoming webworks request (for problem
+                        aborts).
+        :param prefix: The run's allocated ``backend_key_prefix``.
+
+        :returns: Absolute directory path.
+    """
+    try:
+        rtnval = resolve_result_tree_path(backend_key_prefix=prefix)
+    except ArtifactPathInvalidError as xcpt:
+        _abort_problem(
+            request=request,
+            status=409,
+            detail=str(xcpt),
+            extensions={"backend_key_prefix": prefix},
+        )
+        rtnval = ""  # unreachable -- _abort_problem raises.
     return rtnval
 
 
@@ -1091,7 +1126,9 @@ def handle_get_artifact(request: Request) -> Response:
             )
             allocation = None  # unreachable
 
-        prefix_abs = os.path.abspath(allocation.backend_key_prefix)
+        prefix_abs = _resolve_prefix_directory(
+            request=request, prefix=allocation.backend_key_prefix,
+        )
         destination = os.path.abspath(
             os.path.join(prefix_abs, relative_path),
         )

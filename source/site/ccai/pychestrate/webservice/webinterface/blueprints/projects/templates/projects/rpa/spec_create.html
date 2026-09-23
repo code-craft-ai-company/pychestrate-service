@@ -71,9 +71,14 @@
         </div>
 
         <div class="form-group">
-            <label for="target_pod_id">Target Pod (optional)</label>
-            <input type="text" id="target_pod_id" name="target_pod_id" class="form-control mono"
-                   value="{{ form_data.target_pod_id if form_data else '' }}" placeholder="pod UUID">
+            <label for="target_pod_id">Target Pod</label>
+            <select id="target_pod_id" name="target_pod_id" class="form-control" aria-describedby="target-pod-help">
+                <option value="">Any eligible pod</option>
+                {% for pod in pod_choices %}
+                <option value="{{ pod.pod_id }}"{% if form_data and form_data.target_pod_id == pod.pod_id %} selected{% endif %}>{{ pod.label }}</option>
+                {% endfor %}
+            </select>
+            <div id="target-pod-help" class="form-text">{% if pod_choices %}Pin every run to one pod, or let each run go to any pod that can take it.{% else %}No pods are defined yet; runs will go to any eligible pod.{% endif %}</div>
         </div>
 
         <div class="form-group">

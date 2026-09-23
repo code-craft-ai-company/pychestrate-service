@@ -21,6 +21,7 @@ __version__ = "1.0.0"
 from ccai import testbase
 
 from ccai.pychestrate.webservice.webinterface.blueprints.setup.routes import (
+    _collect_admin_field_errors,
     _collect_admin_form_errors,
 )
 
@@ -139,9 +140,10 @@ def test_setup_wizard_refuses_a_password_breaking_the_policy():
     """
     **Feature: password policy (ADM-17)**
     **Property: the first-administrator form reports the policy
-    problems for "aaaaaaaaaaaa", not just its length.**
+    problems for "aaaaaaaaaaaa", not just its length, under the
+    password field.**
     """
-    problems = _collect_admin_form_errors(
+    field_errors = _collect_admin_field_errors(
         login_name="firstadmin",
         email="first@example.com",
         password="a" * 12,
@@ -149,7 +151,8 @@ def test_setup_wizard_refuses_a_password_breaking_the_policy():
         display_name="First Admin",
     )
     testbase.assert_true(
-        "Password must contain an uppercase letter." in problems, str(problems)
+        "Password must contain an uppercase letter." in field_errors.get("password", ""),
+        str(field_errors),
     )
     return
 

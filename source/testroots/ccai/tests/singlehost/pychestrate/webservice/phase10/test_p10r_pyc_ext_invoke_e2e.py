@@ -68,6 +68,37 @@ def _build_profile():
     return rtnval
 
 
+#: The server's ``GET /api/v1/ext`` answer for the in-tree example: the
+#: dispatcher resolves the route (method + URL) from this listing.
+_EXAMPLE_EXT_LISTING = {
+    "items": [
+        {
+            "ext_name": "example",
+            "method": "GET",
+            "path_suffix": "/echo",
+            "full_path": "/api/v1/ext/example/echo",
+        }
+    ],
+    "total": 1,
+    "dynamic_mount": "mounted",
+}
+
+
+def _is_ext_listing_request(request) -> bool:
+    rtnval = request.full_url.endswith("/api/v1/ext")
+    return rtnval
+
+
+def _listing_response() -> RestResponse:
+    rtnval = RestResponse(
+        status_code=200,
+        headers={"content-type": "application/json"},
+        body=_EXAMPLE_EXT_LISTING,
+        raw_text="",
+    )
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Discovery
 # ---------------------------------------------------------------------------
@@ -166,6 +197,8 @@ def test_pyc_ext_example_echo_round_trips_through_transport():
     captured = {}
 
     def _fake_opener(*, request, timeout, context):
+        if _is_ext_listing_request(request):
+            return _listing_response()
         captured["url"] = request.full_url
         captured["method"] = request.get_method()
         captured["authorization"] = (
@@ -208,6 +241,8 @@ def test_pyc_ext_accepts_separated_flag_form():
     captured = {}
 
     def _fake_opener(*, request, timeout, context):
+        if _is_ext_listing_request(request):
+            return _listing_response()
         captured["url"] = request.full_url
         rtnval = RestResponse(
             status_code=200, headers={}, body={}, raw_text="{}"
@@ -313,6 +348,8 @@ def test_pyc_ext_propagates_authentication_error():
     """
 
     def _fake_opener(*, request, timeout, context):
+        if _is_ext_listing_request(request):
+            return _listing_response()
         rtnval = RestResponse(
             status_code=401, headers={}, body=None, raw_text="not authenticated"
         )
@@ -402,5 +439,108 @@ def test_unknown_noun_diagnostic_lists_ext_invocation_form():
     testbase.assert_equal(rtnval, exit_codes.EXIT_USAGE_ERROR)
     testbase.assert_equal(
         "'ext <ext-name> <verb> [args]'" in err.getvalue(), True
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Server-side route resolution (CLI-01)
+# ---------------------------------------------------------------------------
+
+
+def test_pyc_ext_resolves_the_route_from_the_server_listing():
+    """
+    **Feature: 8-cli (ext invocation, CLI-01)**
+    **Property: the dispatcher asks the server's GET /api/v1/ext for
+    the route before calling it, so the call targets what the server
+    mounts rather than what the CLI process happens to import.**
+    """
+    urls = []
+
+    def _fake_opener(*, request, timeout, context):
+        urls.append(request.full_url)
+        if _is_ext_listing_request(request):
+            return _listing_response()
+        rtnval = RestResponse(status_code=200, headers={}, body={}, raw_text="{}")
+        return rtnval
+
+    rtnval = entry.main(
+        argv=["ext", "example", "echo", "--message=x"],
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        request_opener=_fake_opener,
+        profile_loader=lambda name: _build_profile(),
+    )
+    testbase.assert_equal(
+        (rtnval, urls),
+        (exit_codes.EXIT_OK, [
+            "https://example.test/api/v1/ext",
+            "https://example.test/api/v1/ext/example/echo?message=x",
+        ]),
+    )
+    return
+
+
+def test_pyc_ext_route_missing_from_the_server_is_not_found():
+    """
+    **Feature: 8-cli (ext invocation, CLI-01)**
+    **Property: when the server's listing does not name the route, the
+    CLI exits 4 saying the server does not mount it (instead of the old
+    false "does not declare verb").**
+    """
+
+    def _fake_opener(*, request, timeout, context):
+        rtnval = RestResponse(
+            status_code=200, headers={"content-type": "application/json"},
+            body={"items": [], "total": 0, "dynamic_mount": "deferred"}, raw_text="",
+        )
+        return rtnval
+
+    err = io.StringIO()
+    rtnval = entry.main(
+        argv=["ext", "example", "echo", "--message=x"],
+        stdout=io.StringIO(),
+        stderr=err,
+        request_opener=_fake_opener,
+        profile_loader=lambda name: _build_profile(),
+    )
+    testbase.assert_equal(
+        (rtnval, "does not mount /api/v1/ext/example/echo" in err.getvalue(),
+         "does not declare verb" in err.getvalue()),
+        (exit_codes.EXIT_NOT_FOUND, True, False),
+    )
+    return
+
+
+def test_pyc_ext_unserved_listed_route_explains_the_deferred_mount():
+    """
+    **Feature: 8-cli (ext invocation, CLI-01)**
+    **Property: a route the server lists but answers 404 for (its
+    listing says dynamic_mount is deferred) exits 4 and says the server
+    does not serve extension routes yet.**
+    """
+
+    def _fake_opener(*, request, timeout, context):
+        if _is_ext_listing_request(request):
+            listing = dict(_EXAMPLE_EXT_LISTING)
+            listing["dynamic_mount"] = "deferred"
+            return RestResponse(
+                status_code=200, headers={"content-type": "application/json"},
+                body=listing, raw_text="",
+            )
+        rtnval = RestResponse(status_code=404, headers={}, body=None, raw_text="Not Found")
+        return rtnval
+
+    err = io.StringIO()
+    rtnval = entry.main(
+        argv=["ext", "example", "echo", "--message=x"],
+        stdout=io.StringIO(),
+        stderr=err,
+        request_opener=_fake_opener,
+        profile_loader=lambda name: _build_profile(),
+    )
+    testbase.assert_equal(
+        (rtnval, "does not serve extension routes yet" in err.getvalue()),
+        (exit_codes.EXIT_NOT_FOUND, True),
     )
     return

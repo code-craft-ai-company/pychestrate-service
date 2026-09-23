@@ -5,11 +5,11 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-The CLI builds its argparse tree from an OpenAPI document. Refetching
-on every invocation is wasteful, so the document is cached under
-``~/.pychestrate/cache/openapi/<server-url-hash>.json``. The cached
-copy is reused until the server's reported ``info.version`` changes,
-at which point the file is refreshed.
+The CLI builds its argparse tree from an OpenAPI document. The
+document is cached under ``$XDG_CACHE_HOME/pychestrate/openapi/
+<server-url-hash>.json`` (``~/.cache/pychestrate/openapi/``; see
+:mod:`cli.paths`) and refreshed whenever a fetch returns a different
+``info.version``; when a fetch fails the cached copy is used.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -21,29 +21,27 @@ __version__ = "1.0.0"
 import hashlib
 import json
 import os
+import time
 
 from pathlib import Path
 from typing import Callable, Dict, Optional
 
+from ccai.pychestrate.cli import paths
 from ccai.pychestrate.cli.exceptions import OpenApiUnavailableError
 
 
-CACHE_DIR_RELATIVE: str = ".pychestrate/cache/openapi"
-PYC_OPENAPI_CACHE_DIR_ENV_VAR: str = "PYC_OPENAPI_CACHE_DIR"
+CACHE_DIR_RELATIVE: str = ".cache/pychestrate/openapi"
+PYC_OPENAPI_CACHE_DIR_ENV_VAR: str = paths.PYC_OPENAPI_CACHE_DIR_ENV_VAR
 
 
 def _resolve_cache_dir() -> Path:
     """
-        Return the cache directory path, honoring the test override env
-        var :data:`PYC_OPENAPI_CACHE_DIR_ENV_VAR`.
+        Return the cache directory path (``PYC_OPENAPI_CACHE_DIR`` or
+        the XDG cache directory).
 
         :returns: Absolute :class:`pathlib.Path`.
     """
-    override = os.environ.get(PYC_OPENAPI_CACHE_DIR_ENV_VAR, None)
-    if override is not None and len(override) > 0:
-        rtnval = Path(override).expanduser().resolve()
-        return rtnval
-    rtnval = Path.home() / CACHE_DIR_RELATIVE
+    rtnval = paths.resolve_openapi_cache_dir()
     return rtnval
 
 
@@ -88,7 +86,9 @@ def _read_cached(*, cache_path: Path) -> Optional[Dict]:
     try:
         text = cache_path.read_text(encoding="utf-8")
         rtnval = json.loads(text)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
+        rtnval = None
+    if not isinstance(rtnval, dict):
         rtnval = None
     return rtnval
 
@@ -102,11 +102,53 @@ def _write_cached(*, cache_path: Path, document: Dict) -> None:
 
         :returns: None.
     """
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(document, indent=2), encoding="utf-8")
-    os.replace(str(tmp_path), str(cache_path))
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(document, indent=2), encoding="utf-8")
+        os.replace(str(tmp_path), str(cache_path))
+    except OSError:
+        # The cache is an optimisation: an unwritable cache directory
+        # must not fail the command.
+        pass
     return
+
+
+def _touch(*, cache_path: Path) -> None:
+    """
+        Mark a cache entry fresh (its document was just re-confirmed).
+
+        :param cache_path: Cache file.
+
+        :returns: None.
+    """
+    try:
+        os.utime(str(cache_path), None)
+    except OSError:
+        pass
+    return
+
+
+def load_cached_if_fresh(*, server_url: str, max_age_seconds: float) -> Optional[Dict]:
+    """
+        Return the cached document for ``server_url`` when it was
+        fetched (or re-confirmed) less than ``max_age_seconds`` ago, so
+        most commands need no extra request.
+
+        :param server_url: Fully qualified server URL.
+        :param max_age_seconds: Freshness window.
+
+        :returns: The document or ``None`` (missing, stale, corrupt).
+    """
+    cache_path = _cache_path_for(server_url=server_url)
+    try:
+        age_seconds = time.time() - cache_path.stat().st_mtime
+    except OSError:
+        return None
+    if age_seconds < 0 or age_seconds > max_age_seconds:
+        return None
+    rtnval = _read_cached(cache_path=cache_path)
+    return rtnval
 
 
 def _document_version(*, document: Dict) -> str:
@@ -152,11 +194,19 @@ def load_or_fetch(
     except Exception as xcpt:  # noqa: BLE001 — purposeful capture
         fetch_failure_reason = "{}: {}".format(type(xcpt).__name__, xcpt)
 
+    if fetched_document is not None and not isinstance(fetched_document, dict):
+        fetch_failure_reason = "fetch returned {} instead of a document".format(
+            type(fetched_document).__name__
+        )
+        fetched_document = None
+
     if fetched_document is not None:
         cached_version = "" if cached_document is None else _document_version(document=cached_document)
         fetched_version = _document_version(document=fetched_document)
         if cached_document is None or cached_version != fetched_version:
             _write_cached(cache_path=cache_path, document=fetched_document)
+        else:
+            _touch(cache_path=cache_path)
         rtnval = fetched_document
         return rtnval
 

@@ -24,10 +24,12 @@ from ccai import testbase
 
 from ccai.pychestrate.webservice.security.auth.client_address import (
     PEER_ADDRESS_HEADER,
-    _parse_networks,
     describe_user_agent,
     resolve_client_address,
     wrap_wsgi_app_with_peer_address,
+)
+from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
+    parse_trusted_proxy_addresses,
 )
 
 
@@ -48,7 +50,8 @@ class _Request:
         return
 
 
-_LOOPBACK = _parse_networks(text="127.0.0.1/32,::1/128")
+#: The default: the loopback addresses (PYCHESTRATE_TRUSTED_PROXY_ADDRESSES unset).
+_LOOPBACK = parse_trusted_proxy_addresses(raw=None)
 
 
 def test_an_untrusted_peer_is_the_client_whatever_it_forwards():
@@ -59,7 +62,7 @@ def test_an_untrusted_peer_is_the_client_whatever_it_forwards():
     """
     request = _Request({PEER_ADDRESS_HEADER: "203.0.113.9", "X-Forwarded-For": "10.1.2.3"})
     testbase.assert_equal(
-        resolve_client_address(request=request, trusted_networks=_LOOPBACK), "203.0.113.9"
+        resolve_client_address(request=request, policy=_LOOPBACK), "203.0.113.9"
     )
     return
 
@@ -76,7 +79,7 @@ def test_a_trusted_proxy_hop_is_resolved_to_the_entry_it_appended():
         "X-Forwarded-For": "6.6.6.6, 198.51.100.7",
     })
     testbase.assert_equal(
-        resolve_client_address(request=request, trusted_networks=_LOOPBACK), "198.51.100.7"
+        resolve_client_address(request=request, policy=_LOOPBACK), "198.51.100.7"
     )
     return
 
@@ -87,13 +90,13 @@ def test_trusted_hops_are_skipped():
     **Property: entries from further trusted proxies are skipped, so a
     chain of internal proxies still resolves to the client.**
     """
-    networks = _parse_networks(text="127.0.0.1/32,10.0.0.0/8")
+    networks = parse_trusted_proxy_addresses(raw="127.0.0.1,10.0.0.0/8")
     request = _Request({
         PEER_ADDRESS_HEADER: "127.0.0.1",
         "X-Forwarded-For": "198.51.100.7, 10.0.0.5",
     })
     testbase.assert_equal(
-        resolve_client_address(request=request, trusted_networks=networks), "198.51.100.7"
+        resolve_client_address(request=request, policy=networks), "198.51.100.7"
     )
     return
 
@@ -106,7 +109,7 @@ def test_a_trusted_proxy_without_forwarded_for_falls_back_to_x_real_ip():
     """
     request = _Request({PEER_ADDRESS_HEADER: "127.0.0.1", "X-Real-IP": "192.0.2.44"})
     testbase.assert_equal(
-        resolve_client_address(request=request, trusted_networks=_LOOPBACK), "192.0.2.44"
+        resolve_client_address(request=request, policy=_LOOPBACK), "192.0.2.44"
     )
     return
 
@@ -119,7 +122,24 @@ def test_an_unknown_peer_yields_no_address():
     """
     request = _Request({"X-Forwarded-For": "198.51.100.7"})
     testbase.assert_equal(
-        resolve_client_address(request=request, trusted_networks=_LOOPBACK), ""
+        resolve_client_address(request=request, policy=_LOOPBACK), ""
+    )
+    return
+
+
+def test_trusting_every_peer_takes_the_original_client():
+    """
+    **Feature: client address (ADM-16)**
+    **Property: with PYCHESTRATE_TRUSTED_PROXY_ADDRESSES="*" every hop
+    is trusted, so the client is the left-most X-Forwarded-For entry.**
+    """
+    request = _Request({
+        PEER_ADDRESS_HEADER: "203.0.113.9",
+        "X-Forwarded-For": "198.51.100.7, 10.0.0.5",
+    })
+    testbase.assert_equal(
+        resolve_client_address(request=request, policy=parse_trusted_proxy_addresses(raw="*")),
+        "198.51.100.7",
     )
     return
 

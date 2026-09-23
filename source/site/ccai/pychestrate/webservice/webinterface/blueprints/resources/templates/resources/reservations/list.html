@@ -19,9 +19,10 @@
             {% endfor %}
         </select>
 
-        <input type="datetime-local" name="start_after" class="form-control w-md" value="{{ start_after }}" aria-label="Starting after">
+        <input type="datetime-local" name="start_after" class="form-control w-md" value="{{ start_after }}" aria-label="Starting after (UTC)">
         <span>to</span>
-        <input type="datetime-local" name="end_before" class="form-control w-md" value="{{ end_before }}" aria-label="Ending before">
+        <input type="datetime-local" name="end_before" class="form-control w-md" value="{{ end_before }}" aria-label="Ending before (UTC)">
+        <span class="muted">UTC</span>
 
         <button type="submit" class="btn btn-secondary">
             {{ ui.icon("filter_list") }} Filter

@@ -1,0 +1,16 @@
+# pychestrate-service scheduled backup -- systemd timer
+#
+# Rendered + installed by ``deployment/deploy-alpha-to-host.sh``;
+# runs ``pychestrate-backup.service`` once a day.  ``Persistent``
+# catches up a run missed while the host was off.
+[Unit]
+Description=Daily pychestrate-service backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+Persistent=true
+Unit=pychestrate-backup.service
+
+[Install]
+WantedBy=timers.target

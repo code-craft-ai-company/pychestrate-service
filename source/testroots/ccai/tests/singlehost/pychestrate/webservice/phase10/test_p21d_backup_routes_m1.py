@@ -14,9 +14,9 @@ Covers the backup operations attached by
 * POST /api/v1/backups/{backup_id}:restore
 
 Auth (401/403), session boundary (503), record not-found (404),
-malformed body (422), restore-stub (501), pagination, the
-storage-backend factory, and the happy-path 2xx each get
-explicit coverage.
+malformed body (422), restore verification (200 dry run) and the
+offline-restore answer (409), pagination, the storage-backend
+factory, and the happy-path 2xx each get explicit coverage.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -217,11 +217,12 @@ def test_local_backend_round_trips_an_archive():
 # ---------------------------------------------------------------------------
 
 
-def test_register_backup_routes_attaches_four_endpoints():
+def test_register_backup_routes_attaches_the_endpoints():
     """
     **Feature: 10-backup-dr PR p21d**
-    **Property: register_backup_routes attaches the four
-    method+path pairs from the OpenAPI spec.**
+    **Property: register_backup_routes attaches the method+path pairs
+    from the OpenAPI spec, including the reachable /restore spelling
+    of the :restore operation.**
     """
     app = _FakeApp()
     backup_routes.register_backup_routes(app=app, version_prefix="/api/v1")
@@ -230,6 +231,7 @@ def test_register_backup_routes_attaches_four_endpoints():
         ("/api/v1/backups", ("POST",)),
         ("/api/v1/backups/{backup_id}", ("GET",)),
         ("/api/v1/backups/{backup_id}:restore", ("POST",)),
+        ("/api/v1/backups/{backup_id}/restore", ("POST",)),
     )
     actual_pairs = tuple((path, methods) for path, methods, _ in app.calls)
     testbase.assert_equal(actual_pairs, expected_pairs)
@@ -500,28 +502,32 @@ def test_read_returns_200_on_happy_path():
 
 
 # ---------------------------------------------------------------------------
-# POST restore -- documented 501 stub
+# POST restore -- dry-run verification / offline restore
 # ---------------------------------------------------------------------------
 
 
-def test_restore_returns_501_stub():
+def test_restore_without_dry_run_answers_409_with_the_offline_command():
     """
-    **Feature: 10-backup-dr PR p21d**
-    **Property: POST backups/{backup_id}:restore returns 501 --
-    the restore executor is a documented follow-on.**
+    **Feature: 10-backup-dr (ORG-F04)**
+    **Property: POST backups/{backup_id}:restore without dry_run answers
+    409 and the problem document carries the offline restore
+    command -- the service cannot replace its own database.**
     """
     from ccai.pychestrate.webservice.backup.errors import (
-        BackupRestoreNotImplementedError,
+        BackupRestoreRequiresOfflineError,
     )
 
     perm_patch = _patch_check_permission(allowed=True)
     restore_patch = create_module_patch(
-        backup_routes.backup_service, "request_restore",
+        backup_routes.backup_service, "plan_restore",
     )
     restore_mock = restore_patch.activate()
 
     def _raise(**kwargs: Any) -> Any:
-        raise BackupRestoreNotImplementedError("not yet implemented")
+        raise BackupRestoreRequiresOfflineError(
+            "stop the service first",
+            restore_command="python -m ccai.pychestrate.admin backup restore a.tar.gz --yes",
+        )
 
     restore_mock.configure(side_effect=_raise)
     try:
@@ -536,7 +542,82 @@ def test_restore_returns_501_stub():
     finally:
         restore_patch.deactivate()
         perm_patch.deactivate()
-    testbase.assert_equal(response.status_code, 501)
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body["restore_command"].endswith("--yes")),
+        (409, True),
+    )
+    return
+
+
+def test_restore_dry_run_returns_the_verification_checks():
+    """
+    **Feature: 10-backup-dr (ORG-F04)**
+    **Property: POST backups/{backup_id}:restore with dry_run answers
+    200 with the verification checks, the verdict and the restore
+    command.**
+    """
+    from ccai.pychestrate.webservice.backup.service import (
+        RestorePlan,
+        VerificationCheck,
+        VerificationReport,
+    )
+
+    plan = RestorePlan(
+        backup_id="backup-1",
+        archive_path="/b/backup-1.backup.tar.gz",
+        key_bundle_path="/k/backup-1.keys.tar",
+        restore_command="python -m ccai.pychestrate.admin backup restore /b/backup-1.backup.tar.gz --yes",
+        verification=VerificationReport(
+            archive_path="/b/backup-1.backup.tar.gz",
+            key_bundle_path="/k/backup-1.keys.tar",
+            manifest={},
+            checks=[VerificationCheck(name="archive.checksum", ok=True, detail="sha256 matches")],
+        ),
+    )
+    perm_patch = _patch_check_permission(allowed=True)
+    restore_patch = create_module_patch(
+        backup_routes.backup_service, "plan_restore",
+    )
+    restore_patch.activate().configure(side_effect=lambda **kwargs: plan)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/backups/backup-1:restore",
+            path_params={"backup_id": "backup-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"dry_run": True},
+        )
+        response = backup_routes.handle_restore_backup(request)
+    finally:
+        restore_patch.deactivate()
+        perm_patch.deactivate()
+    body = _decode_body(response)
+    testbase.assert_equal(
+        (response.status_code, body["status"], body["checks"][0]["name"]),
+        (200, "verified", "archive.checksum"),
+    )
+    return
+
+
+def test_restore_rejects_a_non_boolean_dry_run():
+    """
+    **Feature: 10-backup-dr (ORG-F04)**
+    **Property: a dry_run that is not a boolean is answered 422.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/backups/backup-1:restore",
+            path_params={"backup_id": "backup-1"},
+            db_session=object(),
+            auth_principal=_FakePrincipal(),
+            body={"dry_run": "yes"},
+        )
+        response = backup_routes.handle_restore_backup(request)
+    finally:
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
     return
 
 
@@ -552,7 +633,7 @@ def test_restore_returns_404_when_unknown():
 
     perm_patch = _patch_check_permission(allowed=True)
     restore_patch = create_module_patch(
-        backup_routes.backup_service, "request_restore",
+        backup_routes.backup_service, "plan_restore",
     )
     restore_mock = restore_patch.activate()
 

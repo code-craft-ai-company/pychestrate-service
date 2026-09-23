@@ -66,11 +66,13 @@ PASSWORD_POLICY_RULES: Tuple[Tuple[str, str], ...] = (
 )
 
 #: ``pattern`` attribute for password inputs. Browsers compile it with
-#: the ``v`` flag, so it uses Unicode property escapes (valid under
-#: ``v``) rather than raw ASCII ranges; the server check stays the
-#: authority.
+#: the ``v`` flag, so it uses Unicode property escapes rather than raw
+#: ASCII ranges, and no character class at all (the symbol rule is "a
+#: character that is neither a letter nor a number", written as two
+#: negative lookaheads), which keeps it clear of the ``v`` flag's class
+#: syntax rules; the server check stays the authority.
 PASSWORD_HTML_PATTERN: str = (
-    r"(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\p{Nd})(?=.*[^\p{L}\p{N}]).{"
+    r"(?=.*\p{Ll})(?=.*\p{Lu})(?=.*\p{Nd})(?=.*(?!\p{L})(?!\p{N}).).{"
     + str(MIN_PASSWORD_LENGTH) + "," + str(MAX_PASSWORD_LENGTH) + "}"
 )
 

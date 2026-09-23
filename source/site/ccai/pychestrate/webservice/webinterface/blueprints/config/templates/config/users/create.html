@@ -17,7 +17,7 @@
             <label for="username">Username *</label>
             <input type="text" id="username" name="username" class="form-control" required
                    value="{{ form_data.username if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}">
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}">
             <p class="form-text">3-64 characters, alphanumeric, underscores, and hyphens only</p>
         </div>
         
@@ -101,7 +101,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce() }}">
     // Invite mode needs no password: hide the field and drop its
     // browser-side requirements (the server checks either way).
     (function () {

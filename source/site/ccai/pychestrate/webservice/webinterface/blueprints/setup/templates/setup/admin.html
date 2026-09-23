@@ -1,67 +1,82 @@
 {% extends "setup/_setup_base.html" %}
+{% import "site_shell/_macros.html" as ui %}
 
-{% block title %}Create the administrator account{% endblock %}
+{% block title %}{% if field_errors or error %}Error: {% endif %}Create the administrator account{% endblock %}
 
 {% block content %}
 <h1>Create the administrator account</h1>
 <p class="lede">This is the first user. When it is created you will be taken to the sign-in page.</p>
 
-{% if error %}
+{% if field_errors %}
 <div class="alert alert-error" role="alert">
-    {% if errors is defined and errors and errors | length > 1 %}
-    <strong>Please fix the following:</strong>
+    <strong>{% if field_errors | length == 1 %}Fix the field marked below:{% else %}Fix the {{ field_errors | length }} fields marked below:{% endif %}</strong>
     <ul>
-        {% for item in errors %}<li>{{ item }}</li>{% endfor %}
+        {% for name, message in field_errors.items() %}<li><a href="#{{ name }}">{{ message }}</a></li>{% endfor %}
     </ul>
-    {% else %}
-    {{ error }}
-    {% endif %}
 </div>
+{% elif error %}
+<div class="alert alert-error" role="alert">{{ error }}</div>
 {% endif %}
 
-<form method="post" action="/setup/admin">
+<form method="post" action="/setup/admin" novalidate>
     <div class="form-group">
         <label for="login_name">Username</label>
         <input type="text" id="login_name" name="login_name" class="form-control" required
-               autofocus minlength="3" maxlength="64" autocomplete="username"
+               {% if first_invalid is none or first_invalid == "login_name" %}autofocus{% endif %}
+               minlength="3" maxlength="64" autocomplete="username"
                value="{{ form_values.login_name }}"
-               pattern="[a-zA-Z0-9][a-zA-Z0-9_-]{2,63}"
-               title="3 to 64 characters: letters, digits, underscore, or hyphen, starting with a letter or digit"
-               spellcheck="false" autocapitalize="off">
-        <p class="form-text">3 to 64 characters: letters, digits, underscore, or hyphen, starting with a letter or digit.</p>
+               pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}"
+               spellcheck="false" autocapitalize="off"
+               aria-describedby="login_name-help{% if field_errors and 'login_name' in field_errors %} login_name-error{% endif %}"
+               {%- if field_errors and 'login_name' in field_errors %} aria-invalid="true"{% endif %}>
+        <p class="form-text" id="login_name-help">3 to 64 characters: letters, digits, underscore, or hyphen, starting with a letter or digit.</p>
+        {{ ui.field_error(field_errors, "login_name") }}
     </div>
 
     <div class="form-group">
         <label for="email">Email</label>
         <input type="email" id="email" name="email" class="form-control" required autocomplete="email"
-               value="{{ form_values.email }}" spellcheck="false" autocapitalize="off">
+               {% if first_invalid == "email" %}autofocus{% endif %}
+               value="{{ form_values.email }}" spellcheck="false" autocapitalize="off"
+               {{- ui.invalid_attrs(field_errors, "email") }}>
+        {{ ui.field_error(field_errors, "email") }}
     </div>
 
     <div class="form-group">
         <label for="display_name">Display name</label>
         <input type="text" id="display_name" name="display_name" class="form-control" required autocomplete="name"
-               value="{{ form_values.display_name }}">
+               {% if first_invalid == "display_name" %}autofocus{% endif %}
+               value="{{ form_values.display_name }}"
+               {{- ui.invalid_attrs(field_errors, "display_name") }}>
+        {{ ui.field_error(field_errors, "display_name") }}
     </div>
 
     <div class="form-group">
         <label for="password">Password</label>
         <div class="actions-row">
             <input type="password" id="password" name="password" class="form-control" required
+                   {% if first_invalid == "password" %}autofocus{% endif %}
                    minlength="{{ min_password_length }}" maxlength="{{ password_max_length }}"
                    pattern="{{ password_pattern }}" title="{{ password_title }}"
-                   aria-describedby="password-rules" autocomplete="new-password">
+                   autocomplete="new-password"
+                   aria-describedby="password-rules{% if field_errors and 'password' in field_errors %} password-error{% endif %}"
+                   {%- if field_errors and 'password' in field_errors %} aria-invalid="true"{% endif %}>
             <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
         </div>
         {% with password_input_id="password" %}
             {% include "config/_password_rules.html" %}
         {% endwith %}
         <p class="form-text">Your password manager may save it.</p>
+        {{ ui.field_error(field_errors, "password") }}
     </div>
 
     <div class="form-group">
         <label for="password_confirm">Confirm password</label>
         <input type="password" id="password_confirm" name="password_confirm" class="form-control" required
-               minlength="{{ min_password_length }}" autocomplete="new-password">
+               {% if first_invalid == "password_confirm" %}autofocus{% endif %}
+               minlength="{{ min_password_length }}" autocomplete="new-password"
+               {{- ui.invalid_attrs(field_errors, "password_confirm") }}>
+        {{ ui.field_error(field_errors, "password_confirm") }}
     </div>
 
     <button type="submit" class="btn btn-primary btn-block">Create administrator</button>

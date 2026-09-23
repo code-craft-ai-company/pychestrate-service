@@ -53,6 +53,52 @@
 
 set -euo pipefail
 
+# ----------------------------------------------------------------------------
+# Arguments are checked before anything is created: --help, a missing
+# password, or a bad option must not generate secret files or touch .cache.
+# ----------------------------------------------------------------------------
+
+usage() {
+    sed -n '3,51p' "$0" | sed 's/^# \{0,1\}//'
+    echo
+    echo "options: --login NAME  --email ADDRESS  --password SECRET  --display-name NAME  -h|--help"
+}
+
+HAVE_PASSWORD_FLAG=0
+EXPECT_VALUE=""
+for arg in "$@"; do
+    if [[ -n "${EXPECT_VALUE}" ]]; then
+        EXPECT_VALUE=""
+        continue
+    fi
+    case "${arg}" in
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        --password)
+            HAVE_PASSWORD_FLAG=1
+            EXPECT_VALUE="--password"
+            ;;
+        --password=*)
+            HAVE_PASSWORD_FLAG=1
+            ;;
+        --login|--email|--display-name)
+            EXPECT_VALUE="${arg}"
+            ;;
+        --login=*|--email=*|--display-name=*)
+            ;;
+        *)
+            echo "seed-test-admin: unknown argument '${arg}' (see --help)" >&2
+            exit 2
+            ;;
+    esac
+done
+if [[ -n "${EXPECT_VALUE}" ]]; then
+    echo "seed-test-admin: ${EXPECT_VALUE} needs a value (see --help)" >&2
+    exit 2
+fi
+
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
@@ -83,6 +129,12 @@ if [[ -f "${ENV_FILE}" ]]; then
     source "${ENV_FILE}"
     set +a
     echo "seed-test-admin: sourced ${ENV_FILE}"
+fi
+
+# The password has no default: fail now, before any secret file is created.
+if [[ "${HAVE_PASSWORD_FLAG}" == "0" && -z "${PYCHESTRATE_TEST_ADMIN_PASSWORD:-}" ]]; then
+    echo "seed-test-admin: a password is required: pass --password or set PYCHESTRATE_TEST_ADMIN_PASSWORD (see --help)" >&2
+    exit 2
 fi
 
 # ----------------------------------------------------------------------------

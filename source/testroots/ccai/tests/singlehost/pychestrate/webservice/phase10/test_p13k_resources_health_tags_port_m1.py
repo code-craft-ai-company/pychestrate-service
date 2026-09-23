@@ -1146,3 +1146,49 @@ def test_legacy_resources_blueprint_attribute_no_longer_exposed():
     has_attr = hasattr(resources_pkg, "resources_blueprint")
     testbase.assert_equal(has_attr, False)
     return
+
+
+# ---------------------------------------------------------------------------
+# per_page is capped (audit finding RES-24)
+# ---------------------------------------------------------------------------
+
+
+def test_health_detail_caps_per_page():
+    """
+    **Feature: resources (RES-24 server-side validation)**
+    **Property: GET /resources/health/{id}?per_page=100000 pages the
+    history at most RESOURCES_MAX_PER_PAGE rows at a time.**
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed_rm(instance: _FakeResourceManager) -> None:
+            instance.get_resource_response = _FakeResource(resource_id=7, name="boardA")
+            return
+
+        def _seed_hm(instance: _FakeHealthMonitor) -> None:
+            instance.history_response = _FakeHealthTransitionList(transitions=[])
+            return
+
+        patches.append(_patch_resource_manager_in(target_module=resources_routes_health, configure=_seed_rm))
+        patches.append(_patch_health_monitor(configure=_seed_hm))
+        request = _FakeRequest(
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            path_params={"resource_id": "7"},
+            query_mapping={"per_page": "100000"},
+        )
+        resources_routes_health.handle_health_detail(request)
+        per_page = env.last_template.render_calls[0]["per_page"]
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+
+    testbase.assert_equal(per_page, 100)
+    return

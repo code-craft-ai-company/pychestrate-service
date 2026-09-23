@@ -19,12 +19,16 @@ proxy deployment needs:
   :func:`wrap_wsgi_app_with_peer_address` copies ``REMOTE_ADDR`` into a
   private header (overwriting anything a client sent under that name)
   before the framework parses the request.
-* When the peer is a trusted proxy (``PYCHESTRATE_TRUSTED_PROXIES``,
-  a comma-separated list of addresses / CIDR networks; default the
-  loopback addresses, where the deployed nginx runs), the client is
-  the right-most ``X-Forwarded-For`` entry that is not itself a
-  trusted proxy -- the entry the proxy appended, which a client cannot
-  forge -- or ``X-Real-IP`` when there is no usable ``X-Forwarded-For``.
+* When the peer is a trusted proxy, the client is the right-most
+  ``X-Forwarded-For`` entry that is not itself a trusted proxy -- the
+  entry the proxy appended, which a client cannot forge -- or
+  ``X-Real-IP`` when there is no usable ``X-Forwarded-For``. The
+  trusted proxies are the ones the Secure-cookie policy trusts:
+  ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES`` (see
+  :mod:`webinterface.foundation.cookie_session`; unset means the
+  loopback addresses, where the deployed nginx runs). With ``*``
+  (trust every peer) the left-most entry, the original client, is
+  used.
 * Otherwise the peer is the client, and forwarding headers are
   ignored.
 """
@@ -36,15 +40,20 @@ __version__ = "1.0.0"
 
 
 import ipaddress
+import logging
 import os
 import re
 
-from typing import Any, Callable, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
+
+from ccai.pychestrate.webservice.webinterface.foundation.cookie_session import (
+    TRUSTED_PROXY_ADDRESSES_ENV_VAR,
+    TrustedProxyPolicy,
+    parse_trusted_proxy_addresses,
+)
 
 
-ENV_TRUSTED_PROXIES: str = "PYCHESTRATE_TRUSTED_PROXIES"
-
-DEFAULT_TRUSTED_PROXIES: str = "127.0.0.1/32,::1/128"
+_module_logger = logging.getLogger(__name__)
 
 #: Private request header carrying the socket peer address, set by
 #: :func:`wrap_wsgi_app_with_peer_address`.
@@ -54,37 +63,28 @@ _PEER_ADDRESS_ENVIRON_KEY: str = "HTTP_X_PYCHESTRATE_PEER_ADDRESS"
 #: Longest user-agent string kept on a session.
 MAX_USER_AGENT_LENGTH: int = 512
 
-_Network = Any
+_TRUST_NO_PROXY = TrustedProxyPolicy(trust_any=False, networks=())
 
 
-def _parse_networks(*, text: str) -> List[_Network]:
+def trusted_proxy_policy() -> TrustedProxyPolicy:
     """
-        Parse a comma-separated list of addresses / networks, skipping
-        entries that do not parse.
-    """
-    networks: List[_Network] = []
-    for part in str(text).split(","):
-        candidate = part.strip()
-        if len(candidate) == 0:
-            continue
-        try:
-            networks.append(ipaddress.ip_network(candidate, strict=False))
-        except ValueError:
-            continue
-    return networks
+        The trusted proxies, from ``PYCHESTRATE_TRUSTED_PROXY_ADDRESSES``
+        (the same setting the Secure-cookie policy reads; unset means
+        the loopback addresses). A malformed value trusts no proxy here
+        -- the cookie policy refuses it at startup.
 
-
-def trusted_proxy_networks() -> List[_Network]:
+        :returns: The :class:`TrustedProxyPolicy`.
     """
-        The trusted proxy networks from ``PYCHESTRATE_TRUSTED_PROXIES``
-        (default: the loopback addresses).
-
-        :returns: List of ``ipaddress`` networks.
-    """
-    configured = os.environ.get(ENV_TRUSTED_PROXIES, None)
-    if configured is None or len(configured.strip()) == 0:
-        configured = DEFAULT_TRUSTED_PROXIES
-    rtnval = _parse_networks(text=configured)
+    try:
+        rtnval = parse_trusted_proxy_addresses(
+            raw=os.environ.get(TRUSTED_PROXY_ADDRESSES_ENV_VAR, None)
+        )
+    except Exception:
+        _module_logger.warning(
+            "pychestrate.auth.client_address.bad_trusted_proxies variable=%s",
+            TRUSTED_PROXY_ADDRESSES_ENV_VAR,
+        )
+        rtnval = _TRUST_NO_PROXY
     return rtnval
 
 
@@ -114,15 +114,21 @@ def _normalize_address(*, value: Any) -> Optional[str]:
     return rtnval
 
 
-def _is_trusted(*, address: str, networks: Iterable[_Network]) -> bool:
-    try:
-        parsed = ipaddress.ip_address(address)
-    except ValueError:
-        return False
-    for network in networks:
-        if parsed.version == network.version and parsed in network:
-            return True
-    return False
+def _forwarded_hops(*, request: Any) -> list:
+    """
+        The ``X-Forwarded-For`` entries, left (client) to right (last
+        proxy), each normalized to a bare address or None when it is
+        not one.
+    """
+    forwarded = _header(request=request, name="X-Forwarded-For")
+    if forwarded is None:
+        return []
+    rtnval = [
+        _normalize_address(value=part)
+        for part in str(forwarded).split(",")
+        if len(part.strip()) > 0
+    ]
+    return rtnval
 
 
 def _header(*, request: Any, name: str) -> Optional[str]:
@@ -170,35 +176,38 @@ def peer_address(*, request: Any) -> Optional[str]:
 def resolve_client_address(
         *,
         request: Any,
-        trusted_networks: Optional[List[_Network]] = None
+        policy: Optional[TrustedProxyPolicy] = None
     ) -> str:
     """
         The client's address, honouring forwarding headers only when the
         request came through a trusted proxy.
 
         :param request: Incoming webworks request.
-        :param trusted_networks: Trusted proxy networks (defaults to
-                                 :func:`trusted_proxy_networks`).
+        :param policy: Trusted proxies (defaults to
+                       :func:`trusted_proxy_policy`).
 
         :returns: The address, or ``""`` when it cannot be determined.
     """
-    networks = trusted_networks if trusted_networks is not None else trusted_proxy_networks()
+    trusted = policy if policy is not None else trusted_proxy_policy()
     peer = peer_address(request=request)
     if peer is None:
         return ""
-    if _is_trusted(address=peer, networks=networks) is False:
+    if trusted.trusts(peer_address=peer) is False:
         return peer
 
-    forwarded = _header(request=request, name="X-Forwarded-For")
-    if forwarded is not None:
-        hops = [part for part in str(forwarded).split(",") if len(part.strip()) > 0]
-        for hop in reversed(hops):
-            address = _normalize_address(value=hop)
+    hops = _forwarded_hops(request=request)
+    if trusted.trust_any is True:
+        # Every hop is trusted, so the original client is the left-most
+        # entry.
+        if len(hops) > 0 and hops[0] is not None:
+            return hops[0]
+    else:
+        for address in reversed(hops):
             if address is None:
                 # A malformed hop: stop rather than trust what is left
                 # of it (it came from beyond the last trusted proxy).
                 break
-            if _is_trusted(address=address, networks=networks) is True:
+            if trusted.trusts(peer_address=address) is True:
                 continue
             return address
 
@@ -312,14 +321,12 @@ def wrap_wsgi_app_with_peer_address(app: Callable[..., Any]) -> Callable[..., An
 
 
 __all__ = [
-    "DEFAULT_TRUSTED_PROXIES",
-    "ENV_TRUSTED_PROXIES",
     "MAX_USER_AGENT_LENGTH",
     "PEER_ADDRESS_HEADER",
     "describe_user_agent",
     "peer_address",
     "request_user_agent",
     "resolve_client_address",
-    "trusted_proxy_networks",
+    "trusted_proxy_policy",
     "wrap_wsgi_app_with_peer_address",
 ]

@@ -44,7 +44,7 @@
         removed: no admin template mounts a Vue widget any more, so
         the ~2.4 MB stack was dead weight on every /admin page.
     #}
-    <script>
+    <script nonce="{{ csp_nonce() }}">
         // Unsaved-changes guard for the admin POST forms: warn on
         // navigation after an edit until the form is submitted.
         // GET filter forms are exempt -- losing an unsubmitted

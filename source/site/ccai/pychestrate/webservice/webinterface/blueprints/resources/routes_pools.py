@@ -57,6 +57,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _resolve_authenticated_request,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
+    RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
@@ -159,6 +160,8 @@ def _parse_pagination_params(
     )
     if per_page < 1:
         per_page = default_per_page
+    if per_page > RESOURCES_MAX_PER_PAGE:
+        per_page = RESOURCES_MAX_PER_PAGE
     rtnval = {"page": page, "per_page": per_page}
     return rtnval
 

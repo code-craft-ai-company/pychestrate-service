@@ -220,3 +220,16 @@ def test_the_template_context_carries_the_same_minimum_length():
         PASSWORD_HTML_PATTERN,
     )
     return
+
+
+def test_the_html_pattern_is_valid_under_the_v_flag():
+    """
+    **Feature: password policy (ADM-17)**
+    **Property: the password inputs' pattern passes the RegExp v-flag
+    model the form-pattern checks use, so browsers do not ignore it.**
+    """
+    from ccai.tests.singlehost.pychestrate.webservice.phase14.test_p40j_form_patterns_m1 import (  # noqa: E402
+        v_flag_class_problem,
+    )
+    testbase.assert_equal(v_flag_class_problem(PASSWORD_HTML_PATTERN), None)
+    return

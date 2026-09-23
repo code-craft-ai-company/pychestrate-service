@@ -26,7 +26,7 @@
     {% endif %}
     {% if can_delete %}
     <form method="post" action="{{ url_for('projects.release_template_delete', project_id=project.id, template_id=template.id) }}"
-          onsubmit="return confirm('Delete this release template? This cannot be undone.');">
+          data-confirm="Delete this release template? This cannot be undone.">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn btn-danger">
             {{ ui.icon("delete") }} Delete

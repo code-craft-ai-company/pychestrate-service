@@ -52,7 +52,7 @@ For details on the framework state, the dead pre-migration scaffold, and the RFC
 The main entry point is `<repository folder>/source/site/app_pychestrate_main.py`.  It calls `ccai.webworks.webapplication.establish_webapp_persona` to build the app, registers feature routes via `register_service_extensions()`, runs `app.startup()`, installs `PychestrateSessionMiddleware` (per-request SQLAlchemy session + cookie-resolved actor), and then serves with `ccai.webworks.wsgi.server.run_server`.
 
 ## Web Interface
-The customer-facing web interface code is organized under `<repository folder>/source/site/ccai/pychestrate/webservice/webinterface/` and runs on webworks alongside the REST API. The three blueprints (`/config`, `/resources`, `/projects`) each expose a top-level `register_<area>_routes(*, app)` registrar that `app_pychestrate_main` invokes during bootstrap. Templates render through the jinja2 + `url_for` shim in `webinterface/foundation`; sessions are HMAC-signed cookies; CSRF is enforced per-POST via `auth_guard.enforce_csrf_or_redirect`.
+The customer-facing web interface code is organized under `<repository folder>/source/site/ccai/pychestrate/webservice/webinterface/` and runs on webworks alongside the REST API. The three blueprints (`config`, served under `/admin/*` together with `/login`, `/logout` and `/account/*`; `resources`, under `/resources/*`; and `projects`, under `/projects/*`) each expose a top-level `register_<area>_routes(*, app)` registrar that `app_pychestrate_main` invokes during bootstrap. Templates render through the jinja2 + `url_for` shim in `webinterface/foundation`; sessions are HMAC-signed cookies; CSRF is enforced per-POST via `auth_guard.enforce_csrf_or_redirect`.
 
 Rules:
 
@@ -108,7 +108,9 @@ This project utilizes python poetry for package management.  The dependencies ar
 When checking out the code for this repository in order to test changes, agents must:
 
 * run the 'repository-setup/rehome-repository' script.  It creates a needed '.env' file.
-* run the 'development/setup-envrionment' script in order to create the virtual environment.
+* run the 'development/setup-environment' script in order to create the virtual environment.
+
+The dependencies are private Code Craft AI packages; [CONTRIBUTING.md](CONTRIBUTING.md) links to how to get access.
 
 # Writing Tests
 
@@ -464,7 +466,12 @@ Before making a recommendation to change a file.  Make sure you have the latest 
 
 
 # Pull Request Guidelines
+Follow the pull request checklist in [CONTRIBUTING.md](CONTRIBUTING.md): testbase tests for the change, the
+OpenAPI spec updated for REST changes (`make openapi-validate`), an alembic migration for model changes, the
+user manual and `CHANGELOG.md` updated for user-visible changes.
 
 
 # Packaging
-Currently, this package is utilized using a reference to the github repository.  It is currently not published.
+The service is not published as a package; it runs from a checkout (see the operator runbook,
+[userguide/13-00-alpha-deployment.rst](userguide/13-00-alpha-deployment.rst)). Its `codecraftai-*` framework
+dependencies come from private Code Craft AI sources declared in `pyproject.toml`.

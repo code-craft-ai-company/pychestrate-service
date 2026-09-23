@@ -82,6 +82,19 @@ def counter_value(*, name: str, labels: Mapping[str, str]) -> int:
     return rtnval
 
 
+def snapshot_counters() -> Dict[Tuple[str, Tuple[Tuple[str, str], ...]], int]:
+    """
+        Return a copy of every counter, keyed by ``(name, labels)``
+        where ``labels`` is the sorted ``(key, value)`` tuple. Read by
+        the ``/metrics`` exposition.
+
+        :returns: ``{(name, labels): value}``.
+    """
+    with _LOCK:
+        rtnval = dict(_COUNTERS)
+    return rtnval
+
+
 def sample_count(*, name: str) -> int:
     """
         Return the count of samples recorded under ``name``.

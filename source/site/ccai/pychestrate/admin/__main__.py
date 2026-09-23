@@ -5,9 +5,10 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-Routes the first positional argument to a registered subsystem. M1 ships
-``pack-template``; future subsystems (``manifest``, ``extensions``, …)
-register themselves here.
+Routes the first positional argument to a registered subsystem:
+``pack-template`` and ``backup`` (create / list / verify / restore
+backups, see :mod:`ccai.pychestrate.webservice.backup.cli`); future
+subsystems (``manifest``, ``extensions``, …) register themselves here.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -24,6 +25,7 @@ from ccai.pychestrate.webservice.extension.pack_template import cli as pack_temp
 
 
 SUBSYSTEM_PACK_TEMPLATE: str = "pack-template"
+SUBSYSTEM_BACKUP: str = "backup"
 
 
 _SUBSYSTEM_HELP_LINES: List[str] = [
@@ -31,6 +33,7 @@ _SUBSYSTEM_HELP_LINES: List[str] = [
     "",
     "subsystems:",
     "  pack-template   Generate / upgrade pychestrate-ext-<name> packs.",
+    "  backup          Create, list, verify and restore backups.",
     "",
 ]
 
@@ -69,6 +72,13 @@ def main(*, argv: Optional[Sequence[str]]) -> int:
 
     if subsystem == SUBSYSTEM_PACK_TEMPLATE:
         rtnval = pack_template_cli.main(argv=remainder)
+        return rtnval
+
+    if subsystem == SUBSYSTEM_BACKUP:
+        # Imported here: the backup command pulls in SQLAlchemy and the
+        # service models, which pack-template does not need.
+        from ccai.pychestrate.webservice.backup import cli as backup_cli
+        rtnval = backup_cli.main(argv=remainder)
         return rtnval
 
     if subsystem in ("-h", "--help", "help"):

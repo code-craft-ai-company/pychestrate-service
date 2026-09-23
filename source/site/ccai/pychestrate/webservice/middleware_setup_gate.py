@@ -19,9 +19,10 @@ Allowlist
   themselves; redirecting setup pages to setup pages would loop.
 * Anything under ``/static/`` -- CSS, fonts, etc. for the setup
   pages.
-* ``/healthz`` and ``/health`` -- monitoring probes must not flap
-  during the (rare, brief) period between first boot and the
-  operator finishing the wizard.
+* ``/healthz``, ``/health``, ``/livez``, ``/readyz``,
+  ``/__health/live``, ``/__health/ready`` and ``/metrics`` --
+  monitoring probes must not flap during the (rare, brief) period
+  between first boot and the operator finishing the wizard.
 * ``/favicon.ico`` -- browsers fetch this aggressively; redirecting
   the favicon to an HTML page is just noise.
 
@@ -66,6 +67,12 @@ DEFAULT_ALLOWLIST_EXACT: Tuple[str, ...] = (
     "/health",
     "/healthz",
     "/favicon.ico",
+    # Operator probes and the metrics scrape (system.operations).
+    "/livez",
+    "/readyz",
+    "/__health/live",
+    "/__health/ready",
+    "/metrics",
 )
 
 

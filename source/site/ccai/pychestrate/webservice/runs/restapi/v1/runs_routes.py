@@ -110,6 +110,12 @@ from ccai.pychestrate.webservice.jobs.dispatch.receipt.errors import (
 from ccai.pychestrate.webservice.jobs.envelope import (
     repository as envelope_repo,
 )
+from ccai.pychestrate.webservice.jobs.results.artifact_root import (
+    resolve_result_tree_path,
+)
+from ccai.pychestrate.webservice.jobs.results.errors import (
+    ArtifactPathInvalidError,
+)
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
 from ccai.pychestrate.webservice.jobs.run.state.enums import (
     RunState,
@@ -1914,12 +1920,32 @@ def handle_post_results_complete(request: Request) -> Response:
             scan_status = "completed"
         else:
             # testbase result tree -- parse + persist via the
-            # result scanner exactly as PR p19c established.
+            # result scanner exactly as PR p19c established. The
+            # manifest's prefix is relative to the artifact root
+            # (never the process working directory, LD-14); a
+            # client-supplied absolute or escaping prefix is
+            # refused rather than read.
+            try:
+                tree_path = resolve_result_tree_path(
+                    backend_key_prefix=backend_key_prefix,
+                    allow_absolute=False,
+                )
+            except ArtifactPathInvalidError as xcpt:
+                _abort_problem(
+                    request=request,
+                    status=400,
+                    detail=str(xcpt),
+                    extensions={
+                        "run_id": run_id,
+                        "backend_key_prefix": backend_key_prefix,
+                    },
+                )
+                tree_path = ""  # unreachable -- _abort_problem raises.
             try:
                 outcome = result_scanner.scan_once(
                     db_session=db_session,
                     run_id=run_id,
-                    tree_path=backend_key_prefix,
+                    tree_path=tree_path,
                 )
                 scan_status = "scanned"
                 scan_detail = getattr(outcome, "status", None)

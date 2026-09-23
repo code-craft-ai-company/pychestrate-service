@@ -1976,6 +1976,13 @@ def register_config_routes(*, app: Any) -> None:
     )
     register_password_routes(app=app)
 
+    # Machine identity -- API tokens (/account/api-tokens) and
+    # service accounts (/admin/api-tokens).
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_tokens import (  # noqa: E402
+        register_tokens_routes,
+    )
+    register_tokens_routes(app=app)
+
     return
 
 

@@ -31,7 +31,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from ccai import testbase
@@ -1088,11 +1088,13 @@ def test_handle_reservation_create_post_happy_path_redirects_to_detail():
         ar, user_id = am.create_reservation_calls[0]
         testbase.assert_equal(ar.resource_id, 3)
         testbase.assert_equal(ar.job_id, "job-7")
+        # No zone posted (the page's script did not run): the form
+        # said UTC, so the times are read as UTC and passed aware.
         testbase.assert_equal(
-            ar.start_time, datetime(2026, 5, 4, 10, 0)
+            ar.start_time, datetime(2026, 5, 4, 10, 0, tzinfo=timezone.utc)
         )
         testbase.assert_equal(
-            ar.end_time, datetime(2026, 5, 4, 12, 0)
+            ar.end_time, datetime(2026, 5, 4, 12, 0, tzinfo=timezone.utc)
         )
         testbase.assert_equal(user_id, "u-admin")
     finally:
@@ -1307,10 +1309,10 @@ def test_handle_reservation_edit_post_happy_path_calls_modify():
         target_id, kwargs = am.modify_reservation_calls[0]
         testbase.assert_equal(target_id, 7)
         testbase.assert_equal(
-            kwargs["start_time"], datetime(2026, 5, 5, 9, 0)
+            kwargs["start_time"], datetime(2026, 5, 5, 9, 0, tzinfo=timezone.utc)
         )
         testbase.assert_equal(
-            kwargs["end_time"], datetime(2026, 5, 5, 11, 0)
+            kwargs["end_time"], datetime(2026, 5, 5, 11, 0, tzinfo=timezone.utc)
         )
         testbase.assert_equal(kwargs["user_id"], "u-admin")
     finally:
@@ -1459,4 +1461,311 @@ def test_handle_reservation_cancel_manager_error_flashes_error():
             if p is not None:
                 p.deactivate()
         _reset_global_state()
+    return
+
+
+# ---------------------------------------------------------------------------
+# Reservation times in the viewer's zone (audit findings RES-02 / RES-17)
+# ---------------------------------------------------------------------------
+
+
+def _run_reservation_create_post(*, body: bytes) -> Any:
+    """
+        POST ``body`` to the reservation create handler with the usual
+        fakes installed. Returns ``(response, env, allocation_manager)``.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+        patches.append(_patch_allocation_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        patches.append(_patch_resource_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        patches.append(_patch_reservation_request_factory())
+        patches.append(_patch_allocation_mode_resolver())
+
+        request = _FakeRequest(
+            method="POST",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+        )
+        response = resources_routes_reservations.handle_reservation_create(request)
+        rtnval = (response, env, _FakeAllocationManager.last_instance)
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def _run_reservation_edit(*, method: str, body: bytes = b"") -> Any:
+    """
+        Drive the reservation edit handler for reservation 7 with the
+        usual fakes. Returns ``(response, env, allocation_manager)``.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+
+        def _seed(instance: _FakeAllocationManager) -> None:
+            instance.list_reservations_response = [_FakeReservation(reservation_id=7)]
+            return
+
+        patches.append(_patch_allocation_manager_in(
+            target_module=resources_routes_reservations, configure=_seed,
+        ))
+        request = _FakeRequest(
+            method=method,
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            body=body,
+            path_params={"reservation_id": "7"},
+        )
+        response = resources_routes_reservations.handle_reservation_edit(request)
+        rtnval = (response, env, _FakeAllocationManager.last_instance)
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_reservation_create_reads_times_in_the_posted_browser_zone():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: a create POST whose tz is America/Los_Angeles reads
+    10:00-12:00 on 4 May (PDT, UTC-7) as 17:00-19:00 UTC, aware.**
+    """
+    response, _, am = _run_reservation_create_post(body=(
+        b"csrf_token=csrf-fresh&resource_id=3&tz=America%2FLos_Angeles"
+        b"&start_time=2026-05-04T10%3A00&end_time=2026-05-04T12%3A00&mode=exclusive"
+    ))
+
+    ar, _ = am.create_reservation_calls[0]
+    testbase.assert_equal(
+        (ar.start_time, ar.end_time),
+        (
+            datetime(2026, 5, 4, 17, 0, tzinfo=timezone.utc),
+            datetime(2026, 5, 4, 19, 0, tzinfo=timezone.utc),
+        ),
+    )
+    return
+
+
+def test_reservation_create_refuses_a_zone_the_server_does_not_know():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: a create POST naming an unknown zone is re-rendered
+    (400) with an error that says so, and nothing is created.**
+    """
+    response, env, am = _run_reservation_create_post(body=(
+        b"csrf_token=csrf-fresh&resource_id=3&tz=Mars%2FOlympus_Mons"
+        b"&start_time=2026-05-04T10%3A00&end_time=2026-05-04T12%3A00"
+    ))
+
+    ctx = env.last_template.render_calls[0]
+    category, message = ctx["flashes"][0]
+    testbase.assert_equal(
+        (response.status_code, category, "Mars/Olympus_Mons" in message, am.create_reservation_calls),
+        (400, "error", True, []),
+    )
+    return
+
+
+def test_reservation_create_re_render_names_the_zone_the_times_were_typed_in():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: when a submitted create form is shown again, the zone it
+    was typed in is passed back as viewer_timezone so the note beside
+    the inputs and the hidden tz field keep naming it.**
+    """
+    response, env, _ = _run_reservation_create_post(body=(
+        b"csrf_token=csrf-fresh&tz=America%2FLos_Angeles"
+        b"&start_time=2026-05-04T10%3A00&end_time=2026-05-04T12%3A00"
+    ))
+
+    ctx = env.last_template.render_calls[0]
+    testbase.assert_equal(ctx["viewer_timezone"], "America/Los_Angeles")
+    return
+
+
+def test_reservation_edit_reads_times_in_the_posted_browser_zone():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: an edit POST whose tz is Europe/Berlin reads 09:00 on
+    5 May (CEST, UTC+2) as 07:00 UTC and passes it to
+    modify_reservation aware.**
+    """
+    response, _, am = _run_reservation_edit(method="POST", body=(
+        b"csrf_token=csrf-fresh&tz=Europe%2FBerlin"
+        b"&start_time=2026-05-05T09%3A00&end_time=2026-05-05T11%3A00"
+    ))
+
+    _, kwargs = am.modify_reservation_calls[0]
+    testbase.assert_equal(kwargs["start_time"], datetime(2026, 5, 5, 7, 0, tzinfo=timezone.utc))
+    return
+
+
+def test_reservation_edit_with_a_cleared_time_is_refused():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: an edit POST with an empty end time is re-rendered with
+    "Start time and end time are required." instead of being passed on
+    as "no change".**
+    """
+    response, env, am = _run_reservation_edit(method="POST", body=(
+        b"csrf_token=csrf-fresh&start_time=2026-05-05T09%3A00&end_time="
+    ))
+
+    ctx = env.last_template.render_calls[0]
+    category, message = ctx["flashes"][0]
+    testbase.assert_equal(
+        (category, message, am.modify_reservation_calls),
+        ("error", "Start time and end time are required.", []),
+    )
+    return
+
+
+def test_reservation_edit_form_is_pre_filled_in_utc():
+    """
+    **Feature: resources (RES-17 edit pre-fill)**
+    **Property: GET on the edit form renders with viewer_timezone ""
+    (the stored times are pre-filled in UTC; the page's script moves
+    them into the browser's zone).**
+    """
+    response, env, _ = _run_reservation_edit(method="GET")
+
+    ctx = env.last_template.render_calls[0]
+    testbase.assert_equal(ctx["viewer_timezone"], "")
+    return
+
+
+def test_parse_form_datetime_keeps_an_explicit_offset():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: a value that already carries an offset is read at that
+    offset, whatever zone the form names.**
+    """
+    parsed = resources_routes_reservations._parse_form_datetime(
+        raw="2026-05-04T10:00+02:00",
+        zone=resources_routes_reservations._resolve_viewer_zone(zone_name="America/Los_Angeles"),
+    )
+
+    testbase.assert_equal(parsed, datetime(2026, 5, 4, 8, 0, tzinfo=timezone.utc))
+    return
+
+
+def test_parse_form_datetime_rejects_malformed_input():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: a malformed datetime-local value parses to None.**
+    """
+    parsed = resources_routes_reservations._parse_form_datetime(
+        raw="tomorrow at noon", zone=timezone.utc,
+    )
+
+    testbase.assert_equal(parsed, None)
+    return
+
+
+def test_resolve_viewer_zone_refuses_path_like_names():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: a posted zone that is not an IANA-shaped name (a path)
+    is refused before it reaches ZoneInfo.**
+    """
+    resolved = resources_routes_reservations._resolve_viewer_zone(zone_name="../../etc/passwd")
+
+    testbase.assert_equal(resolved, None)
+    return
+
+
+def test_resolve_viewer_zone_treats_an_empty_zone_as_utc():
+    """
+    **Feature: resources (RES-02 reservation times)**
+    **Property: an empty tz (the page's script did not run) means UTC,
+    which is what the form said.**
+    """
+    resolved = resources_routes_reservations._resolve_viewer_zone(zone_name="")
+
+    testbase.assert_equal(resolved, timezone.utc)
+    return
+
+
+# ---------------------------------------------------------------------------
+# Resource-list filter outside the reservation form (audit finding RES-32)
+# ---------------------------------------------------------------------------
+
+
+def _run_reservation_create_get(*, query: Dict[str, str]) -> Any:
+    """
+        GET the reservation create form with ``query``. Returns the
+        render context the handler passed to the template.
+    """
+    _reset_global_state()
+    patches: List[Any] = []
+    try:
+        env = _install_stub_environment()
+        _install_ui_cookie_secret()
+        _install_db_session_factory(db_session=_FakeDbSession())
+        _register_url_for_endpoints()
+        patches.append(_patch_security_manager())
+        patches.append(_patch_allocation_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        patches.append(_patch_resource_manager_in(
+            target_module=resources_routes_reservations
+        ))
+        request = _FakeRequest(
+            method="GET",
+            cookies={cookie_session.COOKIE_NAME: _build_authenticated_cookie()},
+            query_mapping=query,
+        )
+        resources_routes_reservations.handle_reservation_create(request)
+        rtnval = env.last_template.render_calls[0]
+    finally:
+        for p in patches:
+            p.deactivate()
+        _reset_global_state()
+    return rtnval
+
+
+def test_reservation_create_get_does_not_echo_a_draft_from_the_url():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: reservation fields in the query string (reason, times,
+    job id) are not echoed into the form; the draft never rides in a
+    URL.**
+    """
+    ctx = _run_reservation_create_get(query={
+        "pool_id": "2", "reason": "secret rack move", "start_time": "2026-05-04T10:00",
+        "job_id": "job-9", "csrf_token": "leaked",
+    })
+
+    form_data = ctx["form_data"]
+    echoed = None if form_data is None else (form_data.get("reason"), form_data.get("start_time"))
+    testbase.assert_true(echoed is None or echoed == (None, None), repr(echoed))
+    return
+
+
+def test_reservation_create_get_keeps_the_pool_filter():
+    """
+    **Feature: resources (RES-32 filter outside the POST form)**
+    **Property: the pool / type filter from the query string still
+    narrows the resource selector.**
+    """
+    ctx = _run_reservation_create_get(query={"pool_id": "2", "resource_type": "device"})
+
+    testbase.assert_equal((ctx["selector_pool_id"], ctx["selector_resource_type"]), (2, "device"))
     return

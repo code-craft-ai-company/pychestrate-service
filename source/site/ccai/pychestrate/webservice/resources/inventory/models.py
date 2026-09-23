@@ -13,7 +13,6 @@ import enum
 
 from sqlalchemy import (
     Column,
-    DateTime,
     Enum,
     Index,
     String,
@@ -23,6 +22,7 @@ from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
 from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -65,8 +65,8 @@ class Resource(PychestratePhase1Base, SerializableModel):
     )
     tags = Column(JSON, nullable=False, default=list)
     attributes = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_resources_resource_kind_state", "kind", "state"),

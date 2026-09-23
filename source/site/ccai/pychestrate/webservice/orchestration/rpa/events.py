@@ -16,6 +16,7 @@ class RpaEventTopics:
     JOB_TYPE_REGISTERED = "entity.rpa.job_type_registered"
     JOB_TYPE_VERSION_PUBLISHED = "entity.rpa.job_type_published"
     JOB_TYPE_RETIRED = "entity.rpa.job_type_retired"
+    JOB_TYPE_UPDATED = "entity.rpa.job_type_updated"
     SPEC_CREATED = "entity.rpa.spec_created"
     SPEC_UPDATED = "entity.rpa.spec_updated"
     SPEC_DELETED = "entity.rpa.spec_deleted"
