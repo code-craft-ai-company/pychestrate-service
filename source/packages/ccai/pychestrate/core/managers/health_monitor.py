@@ -18,13 +18,13 @@ import urllib.request
 import urllib.error
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Callable, Dict, List, Optional
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session as DbSession
 
-from ccai.pychestrate.core.defaults import utc_now
+from ccai.pychestrate.core.defaults import ensure_utc, utc_now
 
 
 # =============================================================================
@@ -885,6 +885,97 @@ class HealthMonitor:
             results=results
         )
     
+    def due_health_check_resource_ids(self, now: Optional[datetime] = None) -> List[int]:
+        """
+        List the resources whose health check is due: enabled, with a
+        probe URL, and never run or last run at least ``interval_seconds``
+        ago. Never-checked resources come first, then the longest-waiting.
+
+        :param now: The time to judge against (defaults to now, UTC)
+        :returns: Resource IDs in the order their checks should run
+
+        Validates: Requirements 6.5
+        """
+        from ccai.pychestrate.core.orm import HealthCheckConfig
+
+        now = utc_now() if now is None else ensure_utc(now)
+
+        configs = self._db_session.query(HealthCheckConfig).filter(
+            HealthCheckConfig.enabled == True,
+            HealthCheckConfig.probe_url != None
+        ).all()
+
+        waiting = []
+        for config in configs:
+            last_check_time = config.last_check_time
+            if last_check_time is None:
+                waiting.append((0, now, config.resource_id))
+                continue
+            last_check_time = ensure_utc(last_check_time)
+            interval = timedelta(seconds=max(config.interval_seconds or 0, 1))
+            if last_check_time + interval <= now:
+                waiting.append((1, last_check_time, config.resource_id))
+
+        waiting.sort()
+        return [resource_id for _, _, resource_id in waiting]
+
+    def run_due_health_checks(
+        self,
+        now: Optional[datetime] = None,
+        should_continue: Optional[Callable[[], bool]] = None
+    ) -> HealthCheckSummary:
+        """
+        Run the health checks that are due (see
+        :meth:`due_health_check_resource_ids`), longest-waiting first. This
+        is what the background scheduler runs, so each check keeps its
+        configured interval without anyone pressing "Run check".
+
+        :param now: The time to judge due-ness against (defaults to now, UTC)
+        :param should_continue: Asked before each check; the run stops
+            early when it returns False (the caller's time budget is spent
+            or it lost its lease). Checks left over stay due.
+        :returns: HealthCheckSummary for the checks that ran
+
+        Validates: Requirements 6.5, 6.6
+        """
+        results = []
+        healthy_count = 0
+        unhealthy_count = 0
+        status_changes = 0
+
+        for resource_id in self.due_health_check_resource_ids(now=now):
+            if should_continue is not None and not should_continue():
+                break
+            try:
+                result = self.run_health_check(resource_id)
+            except Exception as e:
+                # Keep the session usable for the checks that follow.
+                self._db_session.rollback()
+                result = HealthCheckResult(
+                    resource_id=resource_id,
+                    resource_name="unknown",
+                    healthy=False,
+                    old_status="unknown",
+                    new_status="unknown",
+                    status_changed=False,
+                    error_message=str(e)
+                )
+            results.append(result)
+            if result.healthy:
+                healthy_count += 1
+            else:
+                unhealthy_count += 1
+            if result.status_changed:
+                status_changes += 1
+
+        return HealthCheckSummary(
+            total_checked=len(results),
+            healthy_count=healthy_count,
+            unhealthy_count=unhealthy_count,
+            status_changes=status_changes,
+            results=results
+        )
+
     def _execute_url_probe(self, url: str, timeout_seconds: int) -> bool:
         """
         Execute a URL health probe.
