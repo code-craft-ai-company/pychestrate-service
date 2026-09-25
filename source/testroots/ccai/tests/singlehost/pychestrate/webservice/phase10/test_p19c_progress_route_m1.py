@@ -266,3 +266,71 @@ def test_progress_mtls_via_environ_key_is_accepted():
         run_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
     return
+
+
+def _post_records_and_capture_tags(*, summary: Any) -> List[str]:
+    """
+        POST a frame with two untagged records (and ``summary`` when not
+        None) and return the format_tag each record was ingested under.
+    """
+    record_tags: List[str] = []
+
+    def fake_ingest_record(**kwargs: Any) -> Any:
+        record_tags.append(kwargs["format_tag"])
+        return object()
+
+    run_patch = _patch_find_run(exists=True)
+    summary_patch = create_module_patch(runs_routes.progress_service, "ingest_summary")
+    summary_patch.activate().configure(side_effect=lambda **kwargs: object())
+    record_patch = create_module_patch(runs_routes.progress_service, "ingest_record")
+    record_patch.activate().configure(side_effect=fake_ingest_record)
+    try:
+        body: Dict[str, Any] = {"records": [
+            {"client_id": "client-7", "record_index": 0, "test_name": "t1", "result": "UNSET"},
+            {"client_id": "client-7", "record_index": 1, "test_name": "t1", "result": "PASSED"},
+        ]}
+        if summary is not None:
+            body["summary"] = summary
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/progress",
+            path_params={"run_id": "run-1"},
+            body=body,
+            db_session=object(),
+            mtls_client_cn="pod-client-cert",
+        )
+        runs_routes.handle_post_progress(request)
+    finally:
+        record_patch.deactivate()
+        summary_patch.deactivate()
+        run_patch.deactivate()
+    return record_tags
+
+
+def test_untagged_records_take_the_frame_summary_format_tag():
+    """
+    **Feature: progress ingest (live E2E finding)**
+    **Property: records without their own format_tag are parsed with the
+    frame summary's tag -- they used to fall back to "testbase", which
+    names no registered parser, so every record frame answered 400.**
+    """
+    tags = _post_records_and_capture_tags(summary={
+        "run_id": "run-1", "client_id": "client-7", "format_tag": "testbase-v1",
+        "tests_passed": 1, "tests_failed": 0, "tests_skipped": 0, "tests_errored": 0,
+        "recorded_at": "2026-09-25T12:00:00+00:00",
+    })
+
+    testbase.assert_equal(tags, ["testbase-v1", "testbase-v1"])
+    return
+
+
+def test_untagged_records_without_a_summary_use_the_testbase_parser():
+    """
+    **Feature: progress ingest (live E2E finding)**
+    **Property: with neither a record tag nor a summary, records use the
+    registered testbase parser's tag.**
+    """
+    tags = _post_records_and_capture_tags(summary=None)
+
+    testbase.assert_equal(tags, [runs_routes.DEFAULT_PROGRESS_RECORD_FORMAT_TAG] * 2)
+    testbase.assert_equal(runs_routes.DEFAULT_PROGRESS_RECORD_FORMAT_TAG, "testbase-v1")
+    return

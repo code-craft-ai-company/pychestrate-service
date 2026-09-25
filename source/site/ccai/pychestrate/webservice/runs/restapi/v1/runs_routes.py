@@ -89,6 +89,9 @@ from ccai.pychestrate.webservice.orchestration.build.errors import (
 from ccai.pychestrate.webservice.orchestration.infra.runs.errors import (
     InfraRunNotFoundError,
 )
+from ccai.pychestrate.webservice.ingest.progress.factories.testbase_v1 import (
+    TESTBASE_V1_FORMAT_TAG,
+)
 from ccai.pychestrate.webservice.jobs.cancel.client_cancel import (
     queue_client_cancel,
     set_active_cancel_dispatcher,
@@ -169,6 +172,10 @@ def runs_cancel_permission_key(*, project_id: str) -> str:
     """
     rtnval = "project:{}:{}".format(project_id, RUNS_CANCEL_PERMISSION_ACTION)
     return rtnval
+
+#: Parser tag a progress record without its own ``format_tag`` gets when
+#: its frame carries no summary either: the registered testbase parser.
+DEFAULT_PROGRESS_RECORD_FORMAT_TAG = TESTBASE_V1_FORMAT_TAG
 
 #: ``TerminalOutcome`` value a pod reports when an operator cancel
 #: stopped the run. Distinguished from ``failure`` at ingest so a
@@ -1421,7 +1428,17 @@ def handle_post_progress(request: Request) -> Response:
                         )
                     record_client_id = record.get("client_id", "")
                     record_index = record.get("record_index", None)
-                    record_format_tag = record.get("format_tag", "testbase")
+                    # A record inherits the frame summary's format_tag; the
+                    # client sends it once per frame. The old fallback,
+                    # "testbase", names no registered parser, so every
+                    # record frame was refused with 400.
+                    record_format_tag = record.get("format_tag", None)
+                    if isinstance(record_format_tag, str) is False or len(record_format_tag) == 0:
+                        record_format_tag = DEFAULT_PROGRESS_RECORD_FORMAT_TAG
+                        if isinstance(summary_payload, dict):
+                            summary_tag = summary_payload.get("format_tag", None)
+                            if isinstance(summary_tag, str) and len(summary_tag) > 0:
+                                record_format_tag = summary_tag
                     if isinstance(record_client_id, str) is False or len(record_client_id) == 0:
                         _abort_problem(
                             request=request,

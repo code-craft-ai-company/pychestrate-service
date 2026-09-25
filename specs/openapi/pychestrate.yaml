@@ -2496,8 +2496,11 @@ paths:
         Posted by the pod client agent over mTLS after it has accepted
         a dispatch and minted a local run identifier. Signals that the
         envelope was received and is being prepared for execution; the
-        server transitions the run's state from `DISPATCHING` to
-        `DISPATCHED` on success.
+        server records the dispatch receipt (which progress frames and
+        artifact presigns require), marks the dispatch attempt ACKED, and
+        transitions the run's state from `DISPATCHING` to `DISPATCHED`.
+        The pod acks on receipt, before running the job. A repeated ack
+        for the same local run is idempotent and answers 202 again.
       security:
         - pychestrate_mtls: []
       requestBody:
@@ -2506,8 +2509,17 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/DispatchAck' }
       responses:
-        '204':
+        '202':
           description: Ack recorded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run_id, dispatch_attempt_id, status]
+                properties:
+                  run_id: { type: string, format: uuid }
+                  dispatch_attempt_id: { type: string, format: uuid }
+                  status: { type: string, enum: [acked] }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
