@@ -1,4 +1,4 @@
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/webhooks-view.js
 var WEBHOOKS_IN_PATH = "/api/v1/webhooks/in";
 var WEBHOOKS_OUT_PATH = "/api/v1/webhooks/out/subscriptions";
 var TEST_EVENT_HISTORY_REFRESH_MS = 1500;
@@ -1846,7 +1846,7 @@ var PycWebhooks = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/release-channels-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/release-channels-view.js
 var RELEASE_CHANNELS_PATH = "/api/v1/release-channels";
 var UPDATES_HEADING = "Pychestrate Updates";
 var UPDATES_INTRO = "Releases of the Pychestrate service and agent, published to the canary, beta and stable update channels that installations follow. A project's own releases and channels are under that project.";
@@ -2642,7 +2642,7 @@ var PycReleaseChannels = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-ops-bundle/index.entry.js
 var OPERATIONS_GROUP_ID = "operations";
 var WEBHOOKS_READ_PERMISSION = "system:webhooks.read";
 var RELEASE_CHANNELS_READ_PERMISSION = "system:release_channels.read";

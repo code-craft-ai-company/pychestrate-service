@@ -1,4 +1,4 @@
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/test-metrics-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/test-metrics-view.js
 var PROJECTS_API_PATH = "/api/v1/projects";
 function build_test_metrics_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/test-metrics";
@@ -620,7 +620,7 @@ function extract_projects(body) {
   return rtnval;
 }
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/timeseries-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/timeseries-view.js
 var METRICS_API_PATH = "/api/v1/metrics";
 var TIME_RANGE_PRESETS = [
   { id: "1h", label: "Last hour", hours: 1 },
@@ -979,7 +979,7 @@ function extract_catalog(body) {
   return rtnval;
 }
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboards-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboards-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var DASHBOARDS_ROUTE = "/dashboards";
 function build_dashboards_collection_url(project_id) {
@@ -1915,7 +1915,7 @@ function extract_dashboards(body) {
   return rtnval;
 }
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/slos-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/slos-view.js
 var PROJECTS_API_PATH3 = "/api/v1/projects";
 var DEFAULT_SLO_KIND = "availability_ratio";
 var SLO_CONFIG_EXAMPLE = '{"good_metric_name": "pychestrate_rpa_jobs_completed_total", "total_metric_name": "pychestrate_rpa_jobs_triggered_total"}';
@@ -2981,7 +2981,7 @@ var PycSlos = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/alert-rules-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/alert-rules-view.js
 var PROJECTS_API_PATH4 = "/api/v1/projects";
 var ALERT_RULES_ROUTE = "/metric-alerts";
 var ALERT_RULE_KIND = "threshold";
@@ -4000,7 +4000,7 @@ var PycAlertRules = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboard-editor-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboard-editor-view.js
 var PROJECTS_API_PATH5 = "/api/v1/projects";
 var TILE_KIND_OPTIONS = [
   { value: "metric-line-chart", label: "Line chart" },
@@ -4739,7 +4739,7 @@ var PycDashboardEditor = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/index.entry.js
 var INSIGHTS_GROUP_ID = "insights";
 var METRICS_READ_PERMISSION = "system:metrics.read";
 var TEST_METRICS_ROUTE = "/test-metrics";

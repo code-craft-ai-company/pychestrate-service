@@ -1,4 +1,4 @@
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environments-view.js
 var ENVIRONMENT_STATES = [
   "active",
   "frozen",
@@ -1263,7 +1263,7 @@ var PycEnvironments = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environment-detail-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environment-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var DRIFT_SECTION_HEADING = "Drift detection (preview)";
@@ -1738,7 +1738,7 @@ var PycEnvironmentDetail = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
   "pending",
   "running",
@@ -2644,7 +2644,7 @@ var PycProvisioningList = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-detail-view.js
 var PROJECTS_API_PATH4 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
 var UUID_PATTERN2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -3172,7 +3172,7 @@ var PycProvisioningDetail = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/guards-view.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/guards-view.js
 var PROJECTS_API_PATH5 = "/api/v1/projects";
 function build_guards_collection_url(project_id, environment_id) {
   let url = PROJECTS_API_PATH5 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards";
@@ -4615,7 +4615,7 @@ var PycGuards = class extends HTMLElement {
   }
 };
 
-// ../../../../../home/myron/repos/pychestrate/pychestrate-service/.claude/worktrees/agent-aa68f63f3be399873/source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/index.entry.js
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/index.entry.js
 var ORCHESTRATION_GROUP_ID = "orchestration";
 var ENVIRONMENTS_READ_PERMISSION = "system:environments.read";
 var PROVISIONING_READ_PERMISSION = "system:provisioning.read";
