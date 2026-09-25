@@ -58,6 +58,10 @@ class SystemAdminRole(RoleExtension):
             permission_key="system:runs.read",
             effect=PermissionEffect.ALLOW,
         ),
+        PermissionGrant(
+            permission_key="system:runs.cancel",
+            effect=PermissionEffect.ALLOW,
+        ),
         # 6-test-orchestration PR p19d: test-catalog + test-runs
         # REST surface grants for the admin role.
         PermissionGrant(

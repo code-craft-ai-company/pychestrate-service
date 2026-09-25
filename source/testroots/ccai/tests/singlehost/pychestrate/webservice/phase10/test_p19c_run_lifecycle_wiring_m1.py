@@ -1230,3 +1230,51 @@ def test_cancel_handler_denies_without_the_grant_instead_of_crashing():
 
     testbase.assert_equal(response.status_code, 403)
     return
+
+
+def test_cancel_handler_accepts_the_system_wide_cancel_grant():
+    """
+    **Feature: run cancel (E2E-09)**
+    **Property: a principal without the project grant but holding
+    ``system:runs.cancel`` (system-admin) can cancel -- an administrator
+    can cancel from the global runs page.**
+    """
+    _prepare_state()
+    _engine, session = build_in_memory_session()
+    run_id = new_uuid()
+    create_run(
+        db_session=session, run_id=run_id,
+        project_id=PROJECT_UUID, job_type="testbase",
+    )
+    transition(
+        db_session=session, run_id=run_id,
+        event=RunEvent.DISPATCH_STARTED, actor="system:dispatcher",
+    )
+    transition(
+        db_session=session, run_id=run_id,
+        event=RunEvent.RECEIPT_RECORDED, actor="system:dispatch-ack",
+    )
+    transition(
+        db_session=session, run_id=run_id,
+        event=RunEvent.FIRST_PROGRESS, actor="system:progress-ingest",
+    )
+
+    def _only_system_key(**kwargs):
+        return _FakeRbacDecision(allowed=kwargs["permission_key"] == "system:runs.cancel")
+
+    patch = create_module_patch(runs_routes.rbac_evaluator, "check_permission")
+    patch.activate().configure(side_effect=_only_system_key)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/runs/{}/cancel".format(run_id),
+            path_params={"run_id": run_id},
+            body={"reason": "admin cancel"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+        )
+        response = runs_routes.handle_cancel_run(request=request)
+    finally:
+        patch.deactivate()
+
+    testbase.assert_equal(response.status_code, 200)
+    return

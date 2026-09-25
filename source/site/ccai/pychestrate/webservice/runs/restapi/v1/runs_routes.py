@@ -162,6 +162,8 @@ RUNS_READ_PERMISSION_KEY = "system:runs.read"
 #: :func:`runs_cancel_permission_key`.
 RUNS_CANCEL_PERMISSION_KEY = "project:runs.cancel"
 RUNS_CANCEL_PERMISSION_ACTION = "runs.cancel"
+#: System-wide alternative (granted to system-admin): cancel any run.
+RUNS_CANCEL_SYSTEM_PERMISSION_KEY = "system:runs.cancel"
 
 
 def runs_cancel_permission_key(*, project_id: str) -> str:
@@ -2077,9 +2079,10 @@ def handle_post_results_complete(request: Request) -> Response:
 def _require_runs_cancel_permission(*, request: Request, db_session: Any, project_id: str) -> None:
     """
         Require the calling principal to hold the cancel permission in
-        the run's project: ``project:<project_id>:runs.cancel``, granted
-        to the ``operator`` and ``admin`` project roles by the built-in
-        role definitions in :mod:`security.rbac.extensions.project_roles`.
+        the run's project -- ``project:<project_id>:runs.cancel``, granted
+        to the ``operator`` and ``admin`` project roles by
+        :mod:`security.rbac.extensions.project_roles` -- or the system-wide
+        ``system:runs.cancel`` (granted to ``system-admin``).
 
         :param request: Incoming webworks request.
         :param db_session: Active SQLAlchemy session.
@@ -2095,20 +2098,29 @@ def _require_runs_cancel_permission(*, request: Request, db_session: Any, projec
             detail="Authentication required.",
         )
 
+    # Either the project grant or the system-wide one (system-admin), so
+    # an administrator can cancel from the global runs page.
     permission_key = runs_cancel_permission_key(project_id=project_id)
     now = datetime.now(timezone.utc)
-    decision = rbac_evaluator.check_permission(
-        db_session=db_session,
-        principal=principal,
-        permission_key=permission_key,
-        now=now,
-    )
-    if decision.allowed is False:
+    allowed = False
+    for candidate_key in (permission_key, RUNS_CANCEL_SYSTEM_PERMISSION_KEY):
+        decision = rbac_evaluator.check_permission(
+            db_session=db_session,
+            principal=principal,
+            permission_key=candidate_key,
+            now=now,
+        )
+        if decision.allowed is True:
+            allowed = True
+            break
+    if allowed is False:
         _abort_problem(
             request=request,
             status=403,
-            detail="Permission denied: {}".format(permission_key),
-            extensions={"required_permission": permission_key},
+            detail="Permission denied: {} or {}".format(
+                permission_key, RUNS_CANCEL_SYSTEM_PERMISSION_KEY),
+            extensions={"required_permission": permission_key,
+                        "alternative_permission": RUNS_CANCEL_SYSTEM_PERMISSION_KEY},
         )
     return
 

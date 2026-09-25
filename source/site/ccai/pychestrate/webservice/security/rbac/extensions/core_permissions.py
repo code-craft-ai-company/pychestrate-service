@@ -69,6 +69,12 @@ _CORE_PERMISSION_DESCRIPTIONS = {
     "system:runs.read": (
         "Read runs and run-state listings via the REST surface"
     ),
+    # Cancel any in-flight run (POST /api/v1/runs/{id}/cancel), in any
+    # project -- what the global "Cancel run" control needs. Project
+    # members cancel through the project-scoped ``project:runs.cancel``.
+    "system:runs.cancel": (
+        "Cancel any in-flight run via the REST surface"
+    ),
     # Operator-facing read access for the test-catalog REST
     # surface (GET /api/v1/projects/{id}/test-catalog). Introduced
     # by 6-test-orchestration PR p19d.
