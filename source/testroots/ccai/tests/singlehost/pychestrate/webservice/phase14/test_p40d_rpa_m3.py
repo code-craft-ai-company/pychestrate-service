@@ -246,7 +246,13 @@ def test_rest_registry_spec_and_trigger_round_trip():
             db_session=session, path_params={"project_id": PROJECT_REF, "job_id": job["job_id"]},
         ))
         testbase.assert_equal(response.status_code, 200)
-        testbase.assert_equal(_body(response)["status"], "cancelled")
+        # Dispatched: the cancel is queued for the pod and the job stays
+        # active until the pod reports the cancelled outcome.
+        testbase.assert_equal(_body(response)["status"], "running")
+        rpa_service.apply_run_terminal(
+            db_session=session, job_id=job["job_id"], final_status=rpa_service.RpaJobStatus.CANCELLED,
+            reason="rpa result manifest: outcome=cancelled",
+        )
 
         response = rpa_routes.handle_cancel_job(_Request(
             db_session=session, path_params={"project_id": PROJECT_REF, "job_id": job["job_id"]},

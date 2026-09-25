@@ -527,7 +527,14 @@ def test_apply_run_terminal_and_cancel():
         db_session=session, project_id=CONSUMER_PROJECT_REF, spec_id=spec.spec_id,
         work_packet={"customer_id": 2}, aspects=_aspects(),
     )
-    cancelled = cancel_job(db_session=session, job_id=other.job_id, actor_id=ACTOR_ID)
+    # A dispatched job is not cancelled by the request alone: a cancel is
+    # queued for its pod, and the job ends when the pod reports it.
+    requested = cancel_job(db_session=session, job_id=other.job_id, actor_id=ACTOR_ID)
+    testbase.assert_true(requested.status not in rpa_service.TERMINAL_STATUSES)
+    cancelled = apply_run_terminal(
+        db_session=session, job_id=other.job_id, final_status=RpaJobStatus.CANCELLED,
+        reason="rpa result manifest: outcome=cancelled",
+    )
     testbase.assert_equal(cancelled.status, RpaJobStatus.CANCELLED)
     return
 

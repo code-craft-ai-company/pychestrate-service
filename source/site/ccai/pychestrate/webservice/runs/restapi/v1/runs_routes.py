@@ -89,14 +89,11 @@ from ccai.pychestrate.webservice.orchestration.build.errors import (
 from ccai.pychestrate.webservice.orchestration.infra.runs.errors import (
     InfraRunNotFoundError,
 )
-from ccai.pychestrate.webservice.jobs.cancel.dispatcher import (
-    CancelDispatcher,
-)
-from ccai.pychestrate.webservice.jobs.cancel.errors import (
-    CancelDuplicateRequestError,
+from ccai.pychestrate.webservice.jobs.cancel.client_cancel import (
+    queue_client_cancel,
+    set_active_cancel_dispatcher,
 )
 from ccai.pychestrate.webservice.jobs.cancel.heartbeattransport import (
-    HeartbeatCancelTransport,
     acknowledge_client_cancellation,
 )
 from ccai.pychestrate.webservice.jobs.dispatch import repository as dispatch_repo
@@ -155,22 +152,28 @@ MTLS_CLIENT_CN_ENVIRON_KEY = "SSL_CLIENT_S_DN_CN"
 #: Permission key the operator-facing GET endpoints require.
 RUNS_READ_PERMISSION_KEY = "system:runs.read"
 
-#: Permission key required to cancel an in-flight run.  Maps to the
-#: project-scoped ``project:runs.cancel`` grant registered in
-#: ``security.rbac.extensions.project_roles``.
+#: Permission required to cancel an in-flight run: the project-scoped
+#: ``project:runs.cancel`` grant registered in
+#: ``security.rbac.extensions.project_roles``. The evaluator needs the
+#: run's project in the key (``project:<id>:runs.cancel``); build it with
+#: :func:`runs_cancel_permission_key`.
 RUNS_CANCEL_PERMISSION_KEY = "project:runs.cancel"
+RUNS_CANCEL_PERMISSION_ACTION = "runs.cancel"
+
+
+def runs_cancel_permission_key(*, project_id: str) -> str:
+    """
+        :param project_id: The run's project UUID.
+
+        :returns: ``project:<project_id>:runs.cancel``.
+    """
+    rtnval = "project:{}:{}".format(project_id, RUNS_CANCEL_PERMISSION_ACTION)
+    return rtnval
 
 #: ``TerminalOutcome`` value a pod reports when an operator cancel
 #: stopped the run. Distinguished from ``failure`` at ingest so a
 #: cancelled run does not land in ``FAILED``.
 TERMINAL_OUTCOME_CANCELLED = "cancelled"
-
-#: Transport the cancel endpoint queues client-bound cancels on.
-#: Published as a module-level seam so tests can substitute the
-#: in-memory transport without reaching into the handler.
-ACTIVE_CANCEL_DISPATCHER: Optional[CancelDispatcher] = CancelDispatcher(
-    transport=HeartbeatCancelTransport(),
-)
 
 #: Default + bounds for the page-size query param. Matches the
 #: OpenAPI ``PerPageParam`` schema (default 50, max 500).
@@ -2054,17 +2057,16 @@ def handle_post_results_complete(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-def _require_runs_cancel_permission(*, request: Request, db_session: Any) -> None:
+def _require_runs_cancel_permission(*, request: Request, db_session: Any, project_id: str) -> None:
     """
-        Require the calling principal to hold the cancel permission.
-
-        The permission key is ``project:runs.cancel``; it is granted
-        to the ``operator`` and ``admin`` project roles by the
-        built-in role definitions in
-        :mod:`security.rbac.extensions.project_roles`.
+        Require the calling principal to hold the cancel permission in
+        the run's project: ``project:<project_id>:runs.cancel``, granted
+        to the ``operator`` and ``admin`` project roles by the built-in
+        role definitions in :mod:`security.rbac.extensions.project_roles`.
 
         :param request: Incoming webworks request.
         :param db_session: Active SQLAlchemy session.
+        :param project_id: The run's project UUID.
 
         :returns: None.
     """
@@ -2076,162 +2078,22 @@ def _require_runs_cancel_permission(*, request: Request, db_session: Any) -> Non
             detail="Authentication required.",
         )
 
+    permission_key = runs_cancel_permission_key(project_id=project_id)
     now = datetime.now(timezone.utc)
     decision = rbac_evaluator.check_permission(
         db_session=db_session,
         principal=principal,
-        permission_key=RUNS_CANCEL_PERMISSION_KEY,
+        permission_key=permission_key,
         now=now,
     )
     if decision.allowed is False:
         _abort_problem(
             request=request,
             status=403,
-            detail="Permission denied: {}".format(RUNS_CANCEL_PERMISSION_KEY),
-            extensions={"required_permission": RUNS_CANCEL_PERMISSION_KEY},
+            detail="Permission denied: {}".format(permission_key),
+            extensions={"required_permission": permission_key},
         )
     return
-
-
-def set_active_cancel_dispatcher(
-        *, dispatcher: Optional[CancelDispatcher]
-    ) -> None:
-    """
-        Publish the :class:`CancelDispatcher` the cancel endpoint
-        queues client-bound cancels through.
-
-        :param dispatcher: Dispatcher instance (or ``None`` to
-                           disable client-bound cancel delivery).
-
-        :returns: None.
-    """
-    global ACTIVE_CANCEL_DISPATCHER
-    ACTIVE_CANCEL_DISPATCHER = dispatcher
-    return
-
-
-def _resolve_cancel_target_client(
-        *, db_session: Any, run_id: str
-    ) -> Optional[Tuple[str, str, str]]:
-    """
-        Resolve which pod client is holding a run, so the cancel can
-        be addressed to it.
-
-        The run row carries no client id -- the dispatch attempt
-        does. The most recent attempt is the one that put the job on
-        a pod, so that is the attempt whose client must be told to
-        stop.
-
-        :param db_session: Active SQLAlchemy session.
-        :param run_id: Run UUID.
-
-        :returns: A ``(client_id, pod_id, project_id)`` tuple, or
-                  ``None`` when the run was never dispatched.
-    """
-    attempts = dispatch_repo.list_attempts_for_run(
-        db_session=db_session, run_id=run_id,
-    )
-    if len(attempts) == 0:
-        rtnval = None
-        return rtnval
-
-    latest = attempts[-1]
-    client_id = str(latest.client_id)
-    pod_id = str(latest.pod_id)
-    project_id = str(latest.project_id)
-
-    rtnval = (client_id, pod_id, project_id)
-    return rtnval
-
-
-def _queue_client_cancel(
-        *, db_session: Any, run_id: str, reason: str, actor_id: str
-    ) -> Optional[str]:
-    """
-        Open a cancel request against the pod holding the run so the
-        client heartbeat can deliver it.
-
-        Without this the cancel is purely bookkeeping: the run row
-        reads ``cancel_requested`` while the pod keeps running the
-        job to completion, because nothing ever reaches the pod.
-
-        Every failure here is logged rather than raised. The state
-        transition the caller already performed is the authoritative
-        record of the operator's intent, and denying the operator a
-        200 because delivery could not be queued would tell them the
-        cancel did not happen when in fact it did.
-
-        :param db_session: Active SQLAlchemy session.
-        :param run_id: Run UUID being cancelled.
-        :param reason: Operator-supplied cancel reason.
-        :param actor_id: Actor tag of the requesting principal.
-
-        :returns: The cancel-request UUID, or ``None`` when nothing
-                  was queued.
-    """
-    dispatcher = ACTIVE_CANCEL_DISPATCHER
-    if dispatcher is None:
-        _LOGGER.warning(
-            "pychestrate.runs.cancel.no_dispatcher run_id=%s", run_id,
-        )
-        rtnval = None
-        return rtnval
-
-    target = _resolve_cancel_target_client(
-        db_session=db_session, run_id=run_id,
-    )
-    if target is None:
-        _LOGGER.info(
-            "pychestrate.runs.cancel.not_dispatched run_id=%s", run_id,
-        )
-        rtnval = None
-        return rtnval
-
-    client_id, pod_id, project_id = target
-
-    try:
-        request_row = dispatcher.send_cancel_rpc(
-            db_session=db_session,
-            run_id=run_id,
-            project_id=project_id,
-            client_id=client_id,
-            requested_by=None,
-            reason=reason,
-        )
-    except CancelDuplicateRequestError as xcpt:
-        # A cancel is already queued for this run.  Re-cancelling is
-        # idempotent by design, so this is a normal outcome of an
-        # operator clicking twice, not an error.
-        _LOGGER.info(
-            "pychestrate.runs.cancel.already_queued run_id=%s detail=%s",
-            run_id,
-            xcpt,
-        )
-        rtnval = None
-        return rtnval
-    except Exception as xcpt:
-        _LOGGER.warning(
-            "pychestrate.runs.cancel.queue_error run_id=%s client_id=%s"
-            " err=%s",
-            run_id,
-            client_id,
-            xcpt,
-        )
-        rtnval = None
-        return rtnval
-
-    _LOGGER.info(
-        "pychestrate.runs.cancel.queued run_id=%s client_id=%s pod_id=%s"
-        " request_id=%s actor=%s",
-        run_id,
-        client_id,
-        pod_id,
-        str(request_row.request_id),
-        actor_id,
-    )
-
-    rtnval = str(request_row.request_id)
-    return rtnval
 
 
 def handle_cancel_run(request: Request) -> Response:
@@ -2259,12 +2121,15 @@ def handle_cancel_run(request: Request) -> Response:
     run_id = request.path_params.get("run_id", "")
     try:
         db_session = _require_session(request=request)
+
+        # The permission is project-scoped, so the run (and its project)
+        # is loaded first; an unknown run is still a 404.
+        run_row = _require_run_exists(
+            request=request, db_session=db_session, run_id=run_id,
+        )
         _require_runs_cancel_permission(
             request=request, db_session=db_session,
-        )
-
-        _require_run_exists(
-            request=request, db_session=db_session, run_id=run_id,
+            project_id=str(run_row.project_id),
         )
 
         payload = {}
@@ -2324,7 +2189,7 @@ def handle_cancel_run(request: Request) -> Response:
             )
             snapshot = None  # unreachable.
 
-        cancel_request_id = _queue_client_cancel(
+        cancel_request_id = queue_client_cancel(
             db_session=db_session,
             run_id=run_id,
             reason=reason,

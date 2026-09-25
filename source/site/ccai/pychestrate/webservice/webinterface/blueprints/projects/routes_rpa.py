@@ -1085,10 +1085,14 @@ def handle_rpa_cancel(request: Request) -> Response:
         if isinstance(job_or_redirect, RedirectResponse):
             return job_or_redirect
         try:
-            rpa.cancel_job(db_session=db_session, job_id=job_id, actor_id=auth.user_id)
+            view = rpa.cancel_job(db_session=db_session, job_id=job_id, actor_id=auth.user_id)
+            message = "RPA job cancelled."
+            if getattr(view, "status", None) != "cancelled":
+                message = ("Cancel requested. The job stops when its pod picks up the "
+                           "cancel on its next heartbeat.")
             response = _redirect_with_flash(
                 session=auth.session, url=detail_url,
-                message="RPA job cancelled.", category=flash.CATEGORY_SUCCESS,
+                message=message, category=flash.CATEGORY_SUCCESS,
             )
             return response
         except Exception as exc:

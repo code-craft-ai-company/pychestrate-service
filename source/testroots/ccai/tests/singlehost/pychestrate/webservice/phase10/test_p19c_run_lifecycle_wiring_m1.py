@@ -1161,3 +1161,72 @@ def test_timer_wheel_timeout_is_tolerant_of_already_dispatched():
     row = run_repo.find_run(db_session=session, run_id=run_id)
     testbase.assert_equal(row.state, RunState.DISPATCHED)
     return
+
+
+def test_cancel_handler_checks_the_project_scoped_permission():
+    """
+    **Feature: run cancel (E2E-09)**
+    **Property: POST /runs/{id}/cancel checks
+    ``project:<run's project>:runs.cancel`` -- the form the RBAC
+    evaluator accepts -- not the bare ``project:runs.cancel`` it rejects.**
+    """
+    _prepare_state()
+    _engine, session = build_in_memory_session()
+    run_id = new_uuid()
+    create_run(
+        db_session=session, run_id=run_id,
+        project_id=PROJECT_UUID, job_type="testbase",
+    )
+
+    checked_keys = []
+
+    def _record_and_allow(**kwargs):
+        checked_keys.append(kwargs["permission_key"])
+        return _FakeRbacDecision(allowed=True)
+
+    patch = create_module_patch(runs_routes.rbac_evaluator, "check_permission")
+    mock = patch.activate()
+    mock.configure(side_effect=_record_and_allow)
+    try:
+        request = _FakeRequest(
+            path="/api/v1/runs/{}/cancel".format(run_id),
+            path_params={"run_id": run_id},
+            body={"reason": "operator cancel"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+        )
+        runs_routes.handle_cancel_run(request=request)
+    finally:
+        patch.deactivate()
+
+    testbase.assert_equal(checked_keys, ["project:{}:runs.cancel".format(PROJECT_UUID)])
+    return
+
+
+def test_cancel_handler_denies_without_the_grant_instead_of_crashing():
+    """
+    **Feature: run cancel (E2E-09)**
+    **Property: with the real RBAC evaluator, a principal that holds no
+    cancel grant gets 403 -- the malformed key used to raise
+    SemanticError and answer 500.**
+    """
+    _prepare_state()
+    _engine, session = build_in_memory_session()
+    run_id = new_uuid()
+    create_run(
+        db_session=session, run_id=run_id,
+        project_id=PROJECT_UUID, job_type="testbase",
+    )
+
+    # The real evaluator looks the principal up by UUID.
+    request = _FakeRequest(
+        path="/api/v1/runs/{}/cancel".format(run_id),
+        path_params={"run_id": run_id},
+        body={"reason": "operator cancel"},
+        db_session=session,
+        auth_principal=_FakePrincipal(user_id=new_uuid()),
+    )
+    response = runs_routes.handle_cancel_run(request=request)
+
+    testbase.assert_equal(response.status_code, 403)
+    return

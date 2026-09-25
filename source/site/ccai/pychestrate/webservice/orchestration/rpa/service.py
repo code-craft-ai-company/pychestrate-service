@@ -36,6 +36,10 @@ from ccai.pychestrate.core.defaults import new_uuid, utc_now
 from ccai.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
 )
+from ccai.pychestrate.webservice.jobs.cancel.client_cancel import (
+    queue_client_cancel,
+    resolve_cancel_target_client,
+)
 from ccai.pychestrate.webservice.jobs.dispatch import (
     DispatchRequestInputs,
     JobDispatcher,
@@ -1588,10 +1592,16 @@ def cancel_job(
         actor_id: Optional[str] = None
     ) -> RpaJobView:
     """
-        Request cancellation of an active job. Drives the run-state
-        machine to cancel-requested (best effort) and marks the job
-        ``CANCELLED``; the client's cancel acknowledgement arrives
-        through Layer 5.
+        Request cancellation of an active job and drive the run-state
+        machine to cancel-requested (best effort).
+
+        A job that was dispatched to a pod gets a client cancel queued
+        (:func:`jobs.cancel.client_cancel.queue_client_cancel`, delivered
+        on the pod's next heartbeat) and stays in its current status: it
+        becomes ``CANCELLED`` when the pod reports the ``cancelled``
+        outcome through Layer 5, or ends however the pod finished if the
+        cancel arrived too late. Only a job that never reached a pod is
+        marked ``CANCELLED`` at once -- nothing is running to stop.
 
         :raises: RpaJobNotFoundError, RpaJobNotCancellableError.
     """
@@ -1600,22 +1610,37 @@ def cancel_job(
         raise RpaJobNotCancellableError(
             "RPA job {} is already {}.".format(job_id, row.status.value)
         ) from None
+    actor = actor_id or RPA_ACTOR
+    reason = "cancelled by {}".format(actor_id or "operator")
     try:
         transition_run_state(
             db_session=db_session,
             run_id=job_id,
             event=RunEvent.CANCEL_REQUESTED,
-            actor=actor_id or RPA_ACTOR,
+            actor=actor,
             reason="cancel requested",
         )
     except Exception:
         _LOGGER.warning("pychestrate.rpa.cancel.run_state_transition_skipped job_id=%s", job_id)
-    rtnval = apply_run_terminal(
-        db_session=db_session,
-        job_id=job_id,
-        final_status=RpaJobStatus.CANCELLED,
-        reason="cancelled by {}".format(actor_id or "operator"),
+
+    target = resolve_cancel_target_client(db_session=db_session, run_id=job_id)
+    if target is None:
+        rtnval = apply_run_terminal(
+            db_session=db_session,
+            job_id=job_id,
+            final_status=RpaJobStatus.CANCELLED,
+            reason=reason,
+        )
+        return rtnval
+
+    queue_client_cancel(
+        db_session=db_session, run_id=job_id, reason=reason, actor_id=actor,
     )
+    row.final_state_reason = "cancel requested by {}; waiting for the pod".format(
+        actor_id or "operator")
+    db_session.flush()
+    db_session.commit()
+    rtnval = get_job(db_session=db_session, job_id=job_id)
     return rtnval
 
 
