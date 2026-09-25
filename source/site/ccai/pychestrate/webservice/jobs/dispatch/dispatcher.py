@@ -281,6 +281,7 @@ class JobDispatcher:
                 client_id=chosen.client_id,
                 pod_id=chosen.pod_id,
                 signed=signed,
+                dispatch_attempt_id=str(attempt.attempt_id),
             )
         except DispatchTransportError as xcpt:
             repository.mark_attempt_transport_failed(

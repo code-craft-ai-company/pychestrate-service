@@ -561,3 +561,25 @@ def test_default_timeout_constant_matches_spec():
     testbase.assert_equal(DEFAULT_LONG_POLL_TIMEOUT_SECONDS, 30)
     testbase.assert_equal(MAX_LONG_POLL_TIMEOUT_SECONDS, 60)
     return
+
+
+def test_long_poll_transport_hands_out_the_dispatch_attempt_id():
+    """
+    **Feature: dispatch protocol (E2E-07)**
+    **Property: the record a pod long-polls carries the dispatcher's
+    attempt id as dispatch_attempt_id, so the pod's ack finds the attempt
+    (the envelope id used to stand in for it, and every ack 404'd).**
+    """
+    transport = LongPollTransport(ack_deadline_seconds=10)
+    signed = _build_signed_envelope()
+
+    transport.transmit(
+        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
+        dispatch_attempt_id="attempt-0001",
+    )
+    record = transport.await_pending_dispatch(
+        client_id=_TEST_CLIENT_ID, timeout_seconds=1,
+    )
+
+    testbase.assert_equal(record.dispatch_attempt_id, "attempt-0001")
+    return

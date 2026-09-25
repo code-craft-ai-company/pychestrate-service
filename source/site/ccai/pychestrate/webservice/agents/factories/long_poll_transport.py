@@ -124,12 +124,11 @@ class LongPollTransport(ClientTransportProtocol):
         p19a) and the long-poll worker thread can race without
         corrupting the map.
 
-        PR p19g does NOT carry the ``dispatch_attempt_id`` through
-        :meth:`transmit` — the dispatcher's existing protocol
-        method does not pass it. The transport falls back to the
-        envelope id as a stand-in. Once the dispatcher is updated
-        to pass the attempt id explicitly (back-compatible default),
-        the stand-in goes away.
+        The dispatcher passes the attempt row's id to
+        :meth:`transmit`, and the queued ``PendingDispatch`` carries
+        it as ``dispatch_attempt_id`` so the client's ack finds the
+        attempt. A caller that passes none (older tests) gets the
+        envelope id as a stand-in, which no ack can match.
     """
 
     def __init__(
@@ -166,7 +165,8 @@ class LongPollTransport(ClientTransportProtocol):
             *,
             client_id: str,
             pod_id: str,
-            signed: SignedJobEnvelope
+            signed: SignedJobEnvelope,
+            dispatch_attempt_id: Optional[str] = None
         ) -> None:
         """
             Enqueue the signed envelope for ``client_id`` to pull
@@ -178,6 +178,8 @@ class LongPollTransport(ClientTransportProtocol):
             :param client_id: Target client UUID.
             :param pod_id: Target pod UUID.
             :param signed: The :class:`SignedJobEnvelope` to queue.
+            :param dispatch_attempt_id: The dispatcher's attempt row id,
+                                        handed to the client to ack.
 
             :returns: None.
             :raises: DispatchTransportError when the client_id is
@@ -192,8 +194,12 @@ class LongPollTransport(ClientTransportProtocol):
         now = datetime.now(timezone.utc)
         ack_deadline_at = now + timedelta(seconds=self._ack_deadline_seconds)
 
+        attempt_id_for_client = dispatch_attempt_id
+        if attempt_id_for_client is None or len(attempt_id_for_client) == 0:
+            attempt_id_for_client = signed.envelope.envelope_id
+
         record = DispatchRecord(
-            dispatch_attempt_id=signed.envelope.envelope_id,
+            dispatch_attempt_id=attempt_id_for_client,
             run_id=signed.envelope.run_id,
             client_id=client_id,
             pod_id=pod_id,

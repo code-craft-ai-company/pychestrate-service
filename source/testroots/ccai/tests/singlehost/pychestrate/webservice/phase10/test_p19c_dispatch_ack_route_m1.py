@@ -23,7 +23,7 @@ __version__ = "1.0.0"
 
 import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from ccai import testbase
 from ccai.testbase.mocking import create_module_patch
@@ -104,6 +104,13 @@ def _patch_get_attempt(*, attempt: Optional[Any]) -> Any:
     return patch
 
 
+def _patch_mark_attempt_acked(*, calls: List[Any]) -> Any:
+    patch = create_module_patch(runs_routes.dispatch_repo, "mark_attempt_acked")
+    mock = patch.activate()
+    mock.configure(side_effect=lambda **kwargs: calls.append(kwargs))
+    return patch
+
+
 def test_dispatch_ack_returns_401_when_mtls_cn_absent():
     """
     **Feature: 5-run-state-machine PR p19c**
@@ -181,6 +188,7 @@ def test_dispatch_ack_returns_202_on_success():
 
     run_patch = _patch_find_run(exists=True)
     attempt_patch = _patch_get_attempt(attempt=_FakeAttempt())
+    acked_patch = _patch_mark_attempt_acked(calls=[])
     svc_patch = create_module_patch(runs_routes.receipt_service, "record")
     svc_mock = svc_patch.activate()
     svc_mock.configure(side_effect=fake_record)
@@ -195,6 +203,7 @@ def test_dispatch_ack_returns_202_on_success():
         response = runs_routes.handle_dispatch_ack(request)
     finally:
         svc_patch.deactivate()
+        acked_patch.deactivate()
         attempt_patch.deactivate()
         run_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
@@ -219,6 +228,7 @@ def test_dispatch_ack_idempotent_replay_returns_202():
     # repeat acks are idempotent.
     run_patch = _patch_find_run(exists=True)
     attempt_patch = _patch_get_attempt(attempt=_FakeAttempt())
+    acked_patch = _patch_mark_attempt_acked(calls=[])
     svc_patch = create_module_patch(runs_routes.receipt_service, "record")
     svc_mock = svc_patch.activate()
     svc_mock.configure(side_effect=lambda **kwargs: object())
@@ -233,6 +243,7 @@ def test_dispatch_ack_idempotent_replay_returns_202():
         response = runs_routes.handle_dispatch_ack(request)
     finally:
         svc_patch.deactivate()
+        acked_patch.deactivate()
         attempt_patch.deactivate()
         run_patch.deactivate()
     testbase.assert_equal(response.status_code, 202)
@@ -250,6 +261,7 @@ def test_dispatch_ack_returns_409_on_duplicate_run_receipt():
 
     run_patch = _patch_find_run(exists=True)
     attempt_patch = _patch_get_attempt(attempt=_FakeAttempt())
+    acked_patch = _patch_mark_attempt_acked(calls=[])
     svc_patch = create_module_patch(runs_routes.receipt_service, "record")
     svc_mock = svc_patch.activate()
     svc_mock.configure(side_effect=raise_dup)
@@ -264,6 +276,7 @@ def test_dispatch_ack_returns_409_on_duplicate_run_receipt():
         response = runs_routes.handle_dispatch_ack(request)
     finally:
         svc_patch.deactivate()
+        acked_patch.deactivate()
         attempt_patch.deactivate()
         run_patch.deactivate()
     testbase.assert_equal(response.status_code, 409)
@@ -294,4 +307,37 @@ def test_dispatch_ack_returns_400_when_body_fields_missing():
     body = _decode_body(response)
     testbase.assert_true("dispatch_attempt_id" in body["missing_fields"])
     testbase.assert_true("client_id" in body["missing_fields"])
+    return
+
+
+def test_dispatch_ack_marks_the_attempt_acked():
+    """
+    **Feature: dispatch protocol (E2E-07)**
+    **Property: A valid ack moves the dispatch attempt it names to
+    ACKED, so the attempt row records that the pod received the job.**
+    """
+    acked_calls: List[Any] = []
+    attempt = _FakeAttempt()
+    run_patch = _patch_find_run(exists=True)
+    attempt_patch = _patch_get_attempt(attempt=attempt)
+    acked_patch = _patch_mark_attempt_acked(calls=acked_calls)
+    svc_patch = create_module_patch(runs_routes.receipt_service, "record")
+    svc_mock = svc_patch.activate()
+    svc_mock.configure(side_effect=lambda **kwargs: object())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/dispatch-ack",
+            path_params={"run_id": "run-1"},
+            body=_VALID_BODY,
+            db_session=object(),
+            mtls_client_cn="pod-client-cert",
+        )
+        runs_routes.handle_dispatch_ack(request)
+    finally:
+        svc_patch.deactivate()
+        acked_patch.deactivate()
+        attempt_patch.deactivate()
+        run_patch.deactivate()
+    testbase.assert_equal(len(acked_calls), 1)
+    testbase.assert_true(acked_calls[0]["attempt"] is attempt)
     return

@@ -1100,6 +1100,12 @@ def handle_dispatch_ack(request: Request) -> Response:
                 },
             )
 
+        dispatch_repo.mark_attempt_acked(
+            db_session=db_session,
+            attempt=attempt,
+            acked_at=datetime.now(timezone.utc),
+        )
+
         try:
             _advance_to_dispatched(
                 db_session=db_session,

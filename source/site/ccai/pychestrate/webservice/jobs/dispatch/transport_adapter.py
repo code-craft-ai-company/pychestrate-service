@@ -70,7 +70,8 @@ class ClientTransportProtocol:
             *,
             client_id: str,
             pod_id: str,
-            signed: SignedJobEnvelope
+            signed: SignedJobEnvelope,
+            dispatch_attempt_id: Optional[str] = None
         ) -> None:
         """
             Hand the signed envelope to the target client. MUST
@@ -80,6 +81,12 @@ class ClientTransportProtocol:
             :param client_id: Target client UUID.
             :param pod_id: Target pod UUID.
             :param signed: The :class:`SignedJobEnvelope` to send.
+            :param dispatch_attempt_id: The attempt row's id. A transport
+                                        that hands the client an attempt
+                                        id to ack (the long-poll
+                                        ``PendingDispatch``) must use this
+                                        one; the dispatch-ack route looks
+                                        the attempt up by it.
 
             :returns: None.
             :raises: DispatchTransportError on transport failure.
@@ -129,7 +136,8 @@ class InMemoryTransport(ClientTransportProtocol):
             *,
             client_id: str,
             pod_id: str,
-            signed: SignedJobEnvelope
+            signed: SignedJobEnvelope,
+            dispatch_attempt_id: Optional[str] = None
         ) -> None:
         from ccai.pychestrate.webservice.jobs.dispatch.errors import (
             DispatchTransportError,
