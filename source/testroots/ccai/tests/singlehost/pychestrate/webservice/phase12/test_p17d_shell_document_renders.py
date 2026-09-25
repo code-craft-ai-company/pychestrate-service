@@ -39,6 +39,7 @@ import httpx
 
 from ccai import testbase
 
+from ccai.testshared.login_form import extract_login_csrf_token
 from ccai.testshared.skip_helper import skip_test
 from ccai.testshared.test_config import BASE_URL
 
@@ -99,10 +100,15 @@ def test_root_path_serves_site_shell_document():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
-        client.get("/login")
+        form_response = client.get("/login")
+        csrf_token = extract_login_csrf_token(html=form_response.text)
         login_response = client.post(
             "/login",
-            data={"username": login_name, "password": password},
+            data={
+                "username": login_name,
+                "password": password,
+                "csrf_token": csrf_token,
+            },
         )
         testbase.assert_equal(login_response.status_code, 303)
 

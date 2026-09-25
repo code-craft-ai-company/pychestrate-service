@@ -46,6 +46,7 @@ __version__ = "1.0.0"
 
 
 import os
+import time
 
 from typing import Tuple
 
@@ -53,6 +54,7 @@ import httpx
 
 from ccai import testbase
 
+from ccai.testshared.login_form import extract_login_csrf_token
 from ccai.testshared.skip_helper import skip_test
 from ccai.testshared.test_config import BASE_URL
 
@@ -61,6 +63,16 @@ from ccai.testshared.test_config import BASE_URL
 # round trip through nginx, tight enough that a hung server
 # fails fast rather than blocking the suite.
 REQUEST_TIMEOUT_SECONDS: float = 10.0
+
+
+# A wrong password puts the admin's (login_name, source_ip) key in
+# the server's login backoff: the next attempt within a second is
+# refused with a 401 even when its credentials are valid. The
+# wrong-password test signs in once more afterwards -- a success
+# clears the key -- retrying until the window has passed, so the
+# next test's sign-in is not refused.
+LOGIN_MAX_ATTEMPTS: int = 4
+LOGIN_RETRY_DELAY_SECONDS: float = 2.0
 
 
 # Test-credential env vars. Both must be set or the tests skip.
@@ -101,6 +113,44 @@ def _resolve_admin_credentials() -> Tuple[str, str]:
     return rtnval
 
 
+def _clear_login_backoff(*, login_name: str, password: str) -> None:
+    """
+        Sign in with valid credentials so the server clears the
+        backoff a deliberate wrong-password attempt left on the
+        admin's key. Attempts made inside the backoff window are
+        refused without extending it, so a short retry rides
+        through it.
+
+        :param login_name: Admin login name.
+        :param password: Admin password.
+
+        :returns: None.
+    """
+    attempt = 0
+    while attempt < LOGIN_MAX_ATTEMPTS:
+        with httpx.Client(
+                base_url=BASE_URL,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                follow_redirects=False,
+            ) as client:
+            form_response = client.get("/login")
+            csrf_token = extract_login_csrf_token(html=form_response.text)
+            response = client.post(
+                "/login",
+                data={
+                    "username": login_name,
+                    "password": password,
+                    "csrf_token": csrf_token,
+                },
+            )
+        if response.status_code == 303:
+            return
+        attempt = attempt + 1
+        if attempt < LOGIN_MAX_ATTEMPTS:
+            time.sleep(LOGIN_RETRY_DELAY_SECONDS)
+    return
+
+
 def test_login_post_with_valid_credentials_redirects_to_safe_target():
     """
     **Feature: consumer-ui-login**
@@ -117,12 +167,18 @@ def test_login_post_with_valid_credentials_redirects_to_safe_target():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=False,
         ) as client:
-        # GET the form first so any prep cookies are in the jar.
-        client.get("/login")
+        # GET the form first: its session cookie lands in the jar and
+        # its CSRF token goes into the POST.
+        form_response = client.get("/login")
+        csrf_token = extract_login_csrf_token(html=form_response.text)
 
         response = client.post(
             "/login",
-            data={"username": login_name, "password": password},
+            data={
+                "username": login_name,
+                "password": password,
+                "csrf_token": csrf_token,
+            },
         )
 
         testbase.assert_equal(response.status_code, 303)
@@ -148,10 +204,15 @@ def test_authenticated_session_grants_dashboard_access():
             timeout=REQUEST_TIMEOUT_SECONDS,
             follow_redirects=True,
         ) as client:
-        client.get("/login")
+        form_response = client.get("/login")
+        csrf_token = extract_login_csrf_token(html=form_response.text)
         response = client.post(
             "/login",
-            data={"username": login_name, "password": password},
+            data={
+                "username": login_name,
+                "password": password,
+                "csrf_token": csrf_token,
+            },
         )
 
         testbase.assert_equal(response.status_code, 200)
@@ -170,29 +231,34 @@ def test_login_post_with_wrong_password_does_not_authenticate():
     wrong password does NOT issue a 303 redirect -- the
     response is a 4xx with the form re-rendered.**
     """
-    login_name, _ = _resolve_admin_credentials()
+    login_name, password = _resolve_admin_credentials()
 
-    with httpx.Client(
-            base_url=BASE_URL,
-            timeout=REQUEST_TIMEOUT_SECONDS,
-            follow_redirects=False,
-        ) as client:
-        client.get("/login")
-        response = client.post(
-            "/login",
-            data={
-                "username": login_name,
-                "password": "obviously-not-the-right-password",
-            },
-        )
+    try:
+        with httpx.Client(
+                base_url=BASE_URL,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+                follow_redirects=False,
+            ) as client:
+            form_response = client.get("/login")
+            csrf_token = extract_login_csrf_token(html=form_response.text)
+            response = client.post(
+                "/login",
+                data={
+                    "username": login_name,
+                    "password": "obviously-not-the-right-password",
+                    "csrf_token": csrf_token,
+                },
+            )
 
-        # Per ``config/routes.handle_login_submit``: bad creds
-        # re-render the login form with status 401 (or 400 if
-        # the form fails earlier validation). Either is a
-        # rejection; neither is a 303.
-        rejected_codes = (400, 401)
-        testbase.assert_true(response.status_code in rejected_codes)
-        # And no redirect Location header.
-        location = response.headers.get("location", None)
-        testbase.assert_true(location is None or len(location) == 0)
+            # Per ``config/routes.handle_login_submit``: bad creds
+            # re-render the login form with status 401 (or 400 if
+            # the form fails earlier validation). Either is a
+            # rejection; neither is a 303.
+            rejected_codes = (400, 401)
+            testbase.assert_true(response.status_code in rejected_codes)
+            # And no redirect Location header.
+            location = response.headers.get("location", None)
+            testbase.assert_true(location is None or len(location) == 0)
+    finally:
+        _clear_login_backoff(login_name=login_name, password=password)
     return
