@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai import testbase
+
+from ccai.errors.exceptions import SemanticError
 from ccai.testbase.mocking import create_module_patch
 
 from ccai.pychestrate.webservice.api.problem_json import (
@@ -807,4 +809,45 @@ def test_trigger_returns_503_when_orchestrator_unconfigured():
         proj_patch.deactivate()
         perm_patch.deactivate()
     testbase.assert_equal(response.status_code, 503)
+    return
+
+
+def test_trigger_returns_422_when_runner_rejects_inputs():
+    """
+    **Feature: test-run trigger (live E2E finding)**
+    **Property: a SemanticError from the runner's input validation (for
+    example no includes) answers 422 with its message -- it used to
+    escape the route, and the request hung until the client timed out.**
+    """
+    perm_patch = _patch_check_permission(allowed=True)
+    proj_patch = _patch_project_exists(project=_FakeProject(project_id="proj-1"))
+    cat_patch = _patch_catalog_find_by_id(row=_FakeCatalogEntry(entry_id="ent-1", project_id="proj-1"))
+    saved = test_runs_routes.ACTIVE_TEST_ORCHESTRATOR
+    test_runs_routes.set_active_test_orchestrator(
+        orchestrator=_FakeOrchestrator(
+            raise_with=SemanticError("Invalid testbase runner inputs."),
+        ),
+    )
+    try:
+        session = _FakeSession(
+            pods=[_FakePodDefinition(pod_id="pod-1", project_id="proj-1")],
+            registrations=[
+                _FakePodRegistration(pod_id="pod-1", client_id="client-1"),
+            ],
+        )
+        request = _FakeRequest(
+            path="/api/v1/projects/proj-1/test-runs",
+            path_params={"project_id": "proj-1"},
+            db_session=session,
+            auth_principal=_FakePrincipal(),
+            body={"pod_id": "pod-1", "catalog_entry_id": "ent-1"},
+        )
+        response = test_runs_routes.handle_trigger_test_run(request)
+    finally:
+        test_runs_routes.set_active_test_orchestrator(orchestrator=saved)
+        cat_patch.deactivate()
+        proj_patch.deactivate()
+        perm_patch.deactivate()
+    testbase.assert_equal(response.status_code, 422)
+    testbase.assert_equal(_decode_body(response)["reason"], "invalid_runner_inputs")
     return

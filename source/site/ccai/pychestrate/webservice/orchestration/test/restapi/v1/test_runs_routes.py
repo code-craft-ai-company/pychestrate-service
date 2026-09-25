@@ -34,6 +34,8 @@ from typing import Any, Dict, List, Optional
 from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
+from ccai.errors.exceptions import SemanticError
+
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
 )
@@ -782,6 +784,16 @@ def handle_trigger_test_run(request: Request) -> Response:
                 status=409,
                 detail=str(xcpt),
                 extensions={"reason": "dispatch_error"},
+            )
+            outcome = None  # unreachable
+        except SemanticError as xcpt:
+            # The runner rejected the inputs (for example no includes):
+            # the caller's request is at fault, and the message says how.
+            _abort_problem(
+                request=request,
+                status=422,
+                detail=str(xcpt),
+                extensions={"reason": "invalid_runner_inputs"},
             )
             outcome = None  # unreachable
         except TestOrchestrationError as xcpt:

@@ -48,6 +48,24 @@ class TestbaseRunnerKind(TestRunnerKindProtocol):
         return rtnval
 
     @classmethod
+    def _resolve_includes(
+            cls,
+            *,
+            snapshot: TestCatalogEntrySnapshot,
+            inputs: Mapping[str, Any]
+        ) -> Any:
+        """
+            The includes to run: the trigger's ``includes`` when given,
+            otherwise the ones the catalog entry was imported with
+            (``raw_metadata.includes``), as ``root`` already falls back.
+        """
+        rtnval = inputs.get("includes", None) if inputs is not None else None
+        if rtnval is None:
+            metadata = snapshot.raw_metadata if snapshot.raw_metadata is not None else {}
+            rtnval = metadata.get("includes", None)
+        return rtnval
+
+    @classmethod
     def validate_inputs(
             cls,
             *,
@@ -55,9 +73,9 @@ class TestbaseRunnerKind(TestRunnerKindProtocol):
             inputs: Mapping[str, Any]
         ) -> None:
         errors = []
-        includes_raw = inputs.get("includes", None) if inputs is not None else None
+        includes_raw = cls._resolve_includes(snapshot=snapshot, inputs=inputs)
         if includes_raw is None:
-            errors.append("'includes' is required")
+            errors.append("'includes' is required (in the trigger's params or the catalog entry's metadata)")
         elif isinstance(includes_raw, list) is False:
             errors.append("'includes' must be a list of strings")
         else:
@@ -93,7 +111,7 @@ class TestbaseRunnerKind(TestRunnerKindProtocol):
         rtnval = {
             "runner": TESTBASE_RUNNER_KIND,
             "root": inputs.get("root", snapshot.raw_metadata.get("root", "")),
-            "includes": list(inputs.get("includes", [])),
+            "includes": list(cls._resolve_includes(snapshot=snapshot, inputs=inputs) or []),
             "extras": dict(inputs.get("extras", {}) or {}),
         }
         return rtnval
