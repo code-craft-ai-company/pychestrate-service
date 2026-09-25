@@ -1978,15 +1978,27 @@ def handle_post_results_complete(request: Request) -> Response:
                 scan_status = "scanned"
                 scan_detail = getattr(outcome, "status", None)
             except ResultTreeNotFoundError as xcpt:
-                _abort_problem(
-                    request=request,
-                    status=409,
-                    detail=str(xcpt),
-                    extensions={
-                        "run_id": run_id,
-                        "backend_key_prefix": backend_key_prefix,
-                    },
-                )
+                if terminal_outcome == TERMINAL_OUTCOME_CANCELLED:
+                    # A job stopped by a cancel may have written nothing;
+                    # the cancelled outcome is what the run needs, and
+                    # refusing it left the run in CANCEL_REQUESTED with
+                    # the cancel re-sent on every heartbeat.
+                    scan_status = "not_found"
+                    scan_detail = "no result tree for a cancelled run"
+                    _LOGGER.info(
+                        "pychestrate.runs.results_complete.cancelled_without_tree"
+                        " run_id=%s", run_id,
+                    )
+                else:
+                    _abort_problem(
+                        request=request,
+                        status=409,
+                        detail=str(xcpt),
+                        extensions={
+                            "run_id": run_id,
+                            "backend_key_prefix": backend_key_prefix,
+                        },
+                    )
             except ResultIngestError as xcpt:
                 # Parse failures shouldn't deny the manifest; record
                 # the failure and let the operator inspect via the

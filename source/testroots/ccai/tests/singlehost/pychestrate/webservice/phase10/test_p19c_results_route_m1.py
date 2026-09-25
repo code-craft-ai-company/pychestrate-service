@@ -390,3 +390,36 @@ def test_results_complete_publishes_result_manifest_event():
 
     testbase.assert_true(session.commits >= 1)
     return
+
+
+def test_results_complete_accepts_a_cancelled_run_without_a_result_tree():
+    """
+    **Feature: run cancel (E2E-09, live E2E finding)**
+    **Property: a "cancelled" completion is accepted even when no result
+    tree exists -- a job stopped by a cancel may have written nothing, and
+    refusing it left the run in CANCEL_REQUESTED with the cancel re-sent
+    on every heartbeat.**
+    """
+    def raise_missing(**kwargs: Any) -> Any:
+        raise ResultTreeNotFoundError("tree not yet written")
+
+    run_patch = _patch_find_run(exists=True)
+    scan_patch = create_module_patch(runs_routes.result_scanner, "scan_once")
+    scan_mock = scan_patch.activate()
+    scan_mock.configure(side_effect=raise_missing)
+    try:
+        body = dict(_MANIFEST_BODY)
+        body["terminal_outcome"] = "cancelled"
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/results/complete",
+            path_params={"run_id": "run-1"},
+            body=body,
+            db_session=object(),
+            mtls_client_cn="pod-client-cert",
+        )
+        response = runs_routes.handle_post_results_complete(request)
+    finally:
+        scan_patch.deactivate()
+        run_patch.deactivate()
+    testbase.assert_equal(response.status_code, 202)
+    return

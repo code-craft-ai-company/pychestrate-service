@@ -164,6 +164,9 @@ UPLOAD_ACCEPTING_STATES = frozenset({
     RunState.RUNNING,
     RunState.PROGRESS_STALLED,
     RunState.COMPLETING,
+    # A pod that stopped a cancelled job uploads what it had produced; the
+    # run sits in CANCEL_REQUESTED until that completion reports "cancelled".
+    RunState.CANCEL_REQUESTED,
 })
 
 #: Hard cap on the size of a single artifact body the local-fs

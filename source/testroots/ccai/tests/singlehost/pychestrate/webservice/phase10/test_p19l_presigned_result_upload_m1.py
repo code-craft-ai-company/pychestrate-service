@@ -598,3 +598,34 @@ def test_presign_then_upload_round_trip_lands_file_at_result_tree_path():
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
     return
+
+
+def test_presign_accepts_a_run_awaiting_its_cancel():
+    """
+    **Feature: run cancel (E2E-09, live E2E finding)**
+    **Property: a run in CANCEL_REQUESTED still accepts result upload --
+    the pod uploads what the stopped job produced before reporting the
+    cancelled outcome; it used to get 409.**
+    """
+    artifacts_routes.set_presign_signing_secret(secret=_TEST_SECRET)
+    artifacts_routes.set_shared_results_backend(
+        backend=SharedResultsBackend(backend_driver="local-test"),
+    )
+    run_patch = _patch_find_run(run_row=_FakeRun(state=RunState.CANCEL_REQUESTED))
+    receipt_patch = _patch_find_receipt(
+        receipt=_FakeReceipt(client_id="client-1"),
+    )
+    try:
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/artifacts:presign",
+            path_params={"run_id": "run-1"},
+            body=_PRESIGN_BODY,
+            db_session=object(),
+            mtls_client_cn="client-1",
+        )
+        response = artifacts_routes.handle_presign_artifacts(request)
+    finally:
+        receipt_patch.deactivate()
+        run_patch.deactivate()
+    testbase.assert_true(response.status_code != 409)
+    return
