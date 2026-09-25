@@ -84,11 +84,13 @@ from ccai.webworks.routing.request import Request
 from ccai.webworks.routing.response import JSONResponse, Response
 
 from ccai.pychestrate.webservice.agents.factories.long_poll_transport import (
+    DEFAULT_ACK_DEADLINE_SECONDS,
     DEFAULT_LONG_POLL_TIMEOUT_SECONDS,
     DispatchRecord,
     LONG_POLL_TRANSPORT_NAME,
     LongPollTransport,
     MAX_LONG_POLL_TIMEOUT_SECONDS,
+    await_next_dispatch,
 )
 from ccai.pychestrate.webservice.api.problem_json_webworks import (
     problem_response_for_http_status,
@@ -475,9 +477,21 @@ def handle_next_dispatch(request: Request) -> Response:
             raw=request.query_params.get("timeout_seconds", None),
         )
 
-        record = transport.await_pending_dispatch(
+        db_session = getattr(request, "db_session", None)
+        if db_session is None:
+            _abort_problem(
+                request=request,
+                status=503,
+                detail="Database session unavailable; dispatches are delivered from the database.",
+            )
+        # Delivered from the dispatch-attempt rows, so the worker that
+        # answers the poll need not be the one that dispatched the job.
+        record = await_next_dispatch(
+            db_session=db_session,
             client_id=client_id,
             timeout_seconds=timeout_seconds,
+            ack_deadline_seconds=getattr(
+                transport, "ack_deadline_seconds", DEFAULT_ACK_DEADLINE_SECONDS),
         )
 
         if record is None:

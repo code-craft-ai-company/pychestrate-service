@@ -6,23 +6,27 @@
 
 .. moduleauthor:: Code Craft AI LLC
 
-PR p19g introduces the first real client transport for the
-dispatcher. Earlier PRs (5-job-dispatch M1) used the in-process
-:class:`InMemoryTransport` reference adapter so the dispatcher
-could be exercised without a wire protocol. With the pod-client
-agent landing in a sibling repository (PRs S/T/U), the server now
-needs to queue signed dispatches for remote agents to fetch + ack
-via HTTP.
+Pods fetch their signed dispatches over HTTP: the long-poll REST
+handler (``GET /api/v1/clients/{client_id}/dispatches:next``) waits
+for the next dispatch addressed to the calling client, and the pod acks
+it with ``POST /runs/{run_id}/dispatch-ack``.
 
-The shape is intentionally simple — a per-client in-memory
-:class:`queue.Queue` keyed by ``client_id``. The dispatcher
-enqueues a :class:`DispatchRecord` via :meth:`transmit`; the
-long-poll REST handler (``GET /api/v1/clients/{client_id}/
-dispatches:next``) pops the next record (or times out and answers
-204) via :meth:`await_pending_dispatch`. Persistence is out of
-scope for the alpha — server restart drops in-flight dispatches.
-The reconciler from PR p19a (``jobs_dispatch_attempt`` watchdog)
-is the durability story for now.
+The queue is the database. The dispatcher persists the signed envelope
+(``jobs_envelope_archive``) and a ``jobs_dispatch_attempt`` row, then
+calls :meth:`LongPollTransport.transmit`, which only validates the
+target -- it keeps nothing in memory. The handler claims the oldest
+TRANSMITTED attempt for the client with :func:`await_next_dispatch`.
+Earlier versions kept a per-client ``queue.Queue`` in the process that
+ran the dispatcher, which only worked with one worker: under gunicorn's
+four workers the pod's poll landed on a worker that had never seen the
+job, and the run sat in "dispatched" (E2E-17). Any worker can now
+serve any pod, and a service restart no longer drops queued jobs.
+
+A claim stamps ``delivered_at`` with a conditional UPDATE, so one poll
+gets each attempt. An attempt that was delivered but not acked within
+:data:`DEFAULT_ACK_DEADLINE_SECONDS` can be claimed again, so a pod
+that died between receiving and acking gets the job re-delivered
+(E2E-16); the ack moves the attempt to ACKED and ends that.
 
 The class implements the dispatcher-side
 :class:`jobs.dispatch.transport_adapter.ClientTransportProtocol`
@@ -30,8 +34,7 @@ The class implements the dispatcher-side
 ``ClientTransportProtocol`` as the Layer-3 factory protocol in
 :mod:`agents.factories.transport` — that one models frame
 encode/decode for an extension-host transport, which is a separate
-concern. PR p19g leaves the factory-protocol version untouched and
-adds the long-poll queue as a concrete dispatcher adapter.
+concern.
 """
 
 __author__ = "Code Craft AI LLC"
@@ -41,20 +44,31 @@ __version__ = "1.0.0"
 
 
 import logging
-import queue
-import threading
+import time
+import uuid
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Any, Callable, Optional
 
+from sqlalchemy import or_
+
+from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.webservice.jobs.dispatch.errors import (
     DispatchTransportError,
+)
+from ccai.pychestrate.webservice.jobs.dispatch.models import (
+    DispatchAttempt,
+    DispatchAttemptStatus,
 )
 from ccai.pychestrate.webservice.jobs.dispatch.transport_adapter import (
     ClientTransportProtocol,
 )
-from ccai.pychestrate.webservice.jobs.envelope import SignedJobEnvelope
+from ccai.pychestrate.webservice.jobs.envelope import (
+    SignedJobEnvelope,
+    get_envelope,
+    parse,
+)
 
 
 #: Transport identifier persisted on every ``jobs_dispatch_attempt``
@@ -62,12 +76,9 @@ from ccai.pychestrate.webservice.jobs.envelope import SignedJobEnvelope
 #: releases — downstream tooling filters on this string.
 LONG_POLL_TRANSPORT_NAME: str = "http-long-poll"
 
-#: Default ack-deadline for a queued dispatch. The agent has this
-#: many seconds from the moment the long-poll handler dequeues the
-#: record to POST a matching ``dispatch-ack`` before the reconciler
-#: rolls the attempt back to ``PENDING``. Tuned conservatively for
-#: alpha; production should drive this off the envelope's
-#: ``deadline`` claim.
+#: Seconds a pod has, from the moment its long-poll claims a dispatch,
+#: to POST the matching ``dispatch-ack``. An attempt still unacked after
+#: this is claimable again, so the job is re-delivered.
 DEFAULT_ACK_DEADLINE_SECONDS: int = 60
 
 #: Hard cap on the long-poll wait the REST handler will honor. Set
@@ -81,6 +92,12 @@ MAX_LONG_POLL_TIMEOUT_SECONDS: int = 60
 #: window.
 DEFAULT_LONG_POLL_TIMEOUT_SECONDS: int = 30
 
+#: How often a waiting long-poll looks for a newly transmitted attempt.
+DEFAULT_DELIVERY_POLL_INTERVAL_SECONDS: float = 1.0
+
+#: How many candidate attempts one claim pass considers.
+CLAIM_CANDIDATE_LIMIT: int = 10
+
 
 _LOGGER = logging.getLogger("pychestrate.agents.long_poll_transport")
 
@@ -88,7 +105,7 @@ _LOGGER = logging.getLogger("pychestrate.agents.long_poll_transport")
 @dataclass(frozen=True)
 class DispatchRecord:
     """
-        One queued dispatch awaiting agent pickup.
+        One dispatch handed to a pod's long-poll.
 
         :param dispatch_attempt_id: UUID of the ``jobs_dispatch_attempt``
                                     row the dispatcher persisted.
@@ -97,8 +114,8 @@ class DispatchRecord:
         :param pod_id: Target pod UUID.
         :param envelope_id: Signed envelope UUID.
         :param signed: The :class:`SignedJobEnvelope` itself.
-        :param enqueued_at: UTC moment :meth:`LongPollTransport.transmit`
-                            queued the record.
+        :param enqueued_at: UTC moment the dispatcher transmitted the
+                            attempt.
         :param ack_deadline_at: UTC deadline for the agent to POST
                                 its dispatch-ack before the reconciler
                                 marks the attempt lost.
@@ -115,20 +132,10 @@ class DispatchRecord:
 
 class LongPollTransport(ClientTransportProtocol):
     """
-        Per-client in-memory queue of pending signed dispatches.
-        The dispatcher writes; the long-poll HTTP handler reads.
-
-        Thread-safe: the underlying :class:`queue.Queue` instances
-        carry their own lock, and the per-client queue lookup is
-        guarded by an instance lock so the scheduler thread (PR
-        p19a) and the long-poll worker thread can race without
-        corrupting the map.
-
-        The dispatcher passes the attempt row's id to
-        :meth:`transmit`, and the queued ``PendingDispatch`` carries
-        it as ``dispatch_attempt_id`` so the client's ack finds the
-        attempt. A caller that passes none (older tests) gets the
-        envelope id as a stand-in, which no ack can match.
+        Dispatcher-side adapter for pods that long-poll over HTTP. The
+        attempt row and archived envelope the dispatcher writes before
+        :meth:`transmit` are the queue; :func:`await_next_dispatch`
+        delivers from them.
     """
 
     def __init__(
@@ -137,19 +144,18 @@ class LongPollTransport(ClientTransportProtocol):
             ack_deadline_seconds: int = DEFAULT_ACK_DEADLINE_SECONDS
         ) -> None:
         """
-            Construct an empty long-poll transport.
-
-            :param ack_deadline_seconds: Seconds the dequeue handler
-                                         grants an agent to ack the
-                                         dispatched envelope before
-                                         the reconciler rolls it back.
+            :param ack_deadline_seconds: Seconds a pod has to ack a
+                                         claimed dispatch before it is
+                                         re-delivered.
 
             :returns: None.
         """
         self._ack_deadline_seconds: int = ack_deadline_seconds
-        self._queues: Dict[str, "queue.Queue[DispatchRecord]"] = {}
-        self._lock: threading.Lock = threading.Lock()
         return
+
+    @property
+    def ack_deadline_seconds(self) -> int:
+        return self._ack_deadline_seconds
 
     def transport_name(self) -> str:
         """
@@ -169,21 +175,19 @@ class LongPollTransport(ClientTransportProtocol):
             dispatch_attempt_id: Optional[str] = None
         ) -> None:
         """
-            Enqueue the signed envelope for ``client_id`` to pull
-            on its next long-poll. Returns immediately; the call
-            never blocks waiting for the agent. The dispatcher
-            treats this as a successful "transmit" and proceeds to
-            mark the attempt ``TRANSMITTED``.
+            Accept a dispatch for ``client_id``. Nothing is held in
+            memory: the dispatcher has already persisted the attempt
+            row and the signed envelope, and marks the attempt
+            TRANSMITTED when this returns, which makes it claimable by
+            the client's next long-poll on any worker.
 
             :param client_id: Target client UUID.
             :param pod_id: Target pod UUID.
-            :param signed: The :class:`SignedJobEnvelope` to queue.
-            :param dispatch_attempt_id: The dispatcher's attempt row id,
-                                        handed to the client to ack.
+            :param signed: The :class:`SignedJobEnvelope` being sent.
+            :param dispatch_attempt_id: The attempt row's id (logged).
 
             :returns: None.
-            :raises: DispatchTransportError when the client_id is
-                     empty or the queue write fails.
+            :raises: DispatchTransportError when the client_id is empty.
         """
         if client_id is None or len(client_id) == 0:
             err_lines = ["LongPollTransport.transmit rejected — empty client_id."]
@@ -191,142 +195,198 @@ class LongPollTransport(ClientTransportProtocol):
             err_msg = "\n".join(err_lines)
             raise DispatchTransportError(err_msg) from None
 
-        now = datetime.now(timezone.utc)
-        ack_deadline_at = now + timedelta(seconds=self._ack_deadline_seconds)
-
-        attempt_id_for_client = dispatch_attempt_id
-        if attempt_id_for_client is None or len(attempt_id_for_client) == 0:
-            attempt_id_for_client = signed.envelope.envelope_id
-
-        record = DispatchRecord(
-            dispatch_attempt_id=attempt_id_for_client,
-            run_id=signed.envelope.run_id,
-            client_id=client_id,
-            pod_id=pod_id,
-            envelope_id=signed.envelope.envelope_id,
-            signed=signed,
-            enqueued_at=now,
-            ack_deadline_at=ack_deadline_at,
-        )
-
-        target_queue = self._queue_for_client(client_id=client_id)
-        try:
-            target_queue.put(record, block=False)
-        except queue.Full as xcpt:
-            err_lines = ["LongPollTransport queue full for client."]
-            err_lines.append("CLIENT_ID: {}".format(client_id))
-            err_lines.append("UNDERLYING: {}".format(str(xcpt)))
-            err_msg = "\n".join(err_lines)
-            raise DispatchTransportError(err_msg) from xcpt
-
         _LOGGER.info(
-            "long_poll_transport.enqueued client_id=%s run_id=%s envelope_id=%s",
+            "long_poll_transport.transmitted client_id=%s run_id=%s envelope_id=%s attempt_id=%s",
             client_id,
             signed.envelope.run_id,
             signed.envelope.envelope_id,
+            dispatch_attempt_id,
         )
         return
 
-    def await_pending_dispatch(
-            self,
-            *,
-            client_id: str,
-            timeout_seconds: int
-        ) -> Optional[DispatchRecord]:
-        """
-            Block up to ``timeout_seconds`` waiting for a queued
-            dispatch for ``client_id``. Returns the next record on
-            arrival or ``None`` on timeout.
 
-            The record is dequeued on read — there is no re-delivery.
-            The agent ack contract (``POST /runs/{run_id}/
-            dispatch-ack``) is the durability seam; missed acks roll
-            the attempt back through the reconciler.
+def _record_from_rows(
+        *,
+        attempt: DispatchAttempt,
+        envelope_row: Any,
+        claimed_at: datetime,
+        ack_deadline_seconds: int
+    ) -> DispatchRecord:
+    """
+        Rebuild the :class:`DispatchRecord` a pod receives from the
+        attempt row and the archived signed envelope.
+    """
+    canonical_payload = bytes(envelope_row.canonical_payload)
+    signed = SignedJobEnvelope(
+        envelope=parse(canonical_payload=canonical_payload),
+        canonical_payload=canonical_payload,
+        signature=bytes(envelope_row.signature),
+        key_id=str(envelope_row.key_id),
+        signed_at=envelope_row.issued_at,
+    )
+    enqueued_at = attempt.transmitted_at
+    if enqueued_at is None:
+        enqueued_at = attempt.created_at
+    rtnval = DispatchRecord(
+        dispatch_attempt_id=str(attempt.attempt_id),
+        run_id=str(attempt.run_id),
+        client_id=str(attempt.client_id),
+        pod_id=str(attempt.pod_id),
+        envelope_id=str(attempt.envelope_id),
+        signed=signed,
+        enqueued_at=enqueued_at,
+        ack_deadline_at=claimed_at + timedelta(seconds=ack_deadline_seconds),
+    )
+    return rtnval
 
-            :param client_id: Target client UUID.
-            :param timeout_seconds: Seconds to wait. Clamped to
-                                    :data:`MAX_LONG_POLL_TIMEOUT_SECONDS`.
 
-            :returns: :class:`DispatchRecord` or ``None`` on timeout.
-        """
-        effective_timeout = timeout_seconds
-        if effective_timeout < 0:
-            effective_timeout = 0
-        if effective_timeout > MAX_LONG_POLL_TIMEOUT_SECONDS:
-            effective_timeout = MAX_LONG_POLL_TIMEOUT_SECONDS
+def claim_next_dispatch(
+        *,
+        db_session: Any,
+        client_id: str,
+        ack_deadline_seconds: int = DEFAULT_ACK_DEADLINE_SECONDS,
+        now: Optional[datetime] = None
+    ) -> Optional[DispatchRecord]:
+    """
+        Claim the oldest dispatch waiting for ``client_id``: a
+        TRANSMITTED attempt never delivered, or delivered more than
+        ``ack_deadline_seconds`` ago without an ack. The claim is a
+        conditional UPDATE of ``delivered_at``, so two workers polling
+        for the same client never both get it. Commits a successful
+        claim; ends the transaction either way, so a waiting poll holds
+        no database lock.
 
-        target_queue = self._queue_for_client(client_id=client_id)
-        try:
-            record = target_queue.get(
-                block=True, timeout=float(effective_timeout),
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: The polling client's UUID.
+        :param ack_deadline_seconds: Re-delivery window for unacked claims.
+        :param now: Evaluation time (tests); defaults to now.
+
+        :returns: The claimed :class:`DispatchRecord`, or ``None``.
+    """
+    claimed_at = now if now is not None else utc_now()
+    redeliver_before = claimed_at - timedelta(seconds=ack_deadline_seconds)
+    try:
+        client_uuid = uuid.UUID(str(client_id))
+    except ValueError:
+        rtnval: Optional[DispatchRecord] = None
+        return rtnval
+
+    candidates = (
+        db_session.query(DispatchAttempt)
+        .filter(DispatchAttempt.client_id == client_uuid)
+        .filter(DispatchAttempt.status == DispatchAttemptStatus.TRANSMITTED)
+        .filter(or_(
+            DispatchAttempt.delivered_at.is_(None),
+            DispatchAttempt.delivered_at < redeliver_before,
+        ))
+        .order_by(DispatchAttempt.created_at.asc())
+        .limit(CLAIM_CANDIDATE_LIMIT)
+        .all()
+    )
+    candidate_keys = [(row.attempt_id, row.delivered_at) for row in candidates]
+    db_session.rollback()
+
+    for attempt_id, previous_delivered_at in candidate_keys:
+        claim = (
+            db_session.query(DispatchAttempt)
+            .filter(DispatchAttempt.attempt_id == attempt_id)
+            .filter(DispatchAttempt.status == DispatchAttemptStatus.TRANSMITTED)
+        )
+        if previous_delivered_at is None:
+            claim = claim.filter(DispatchAttempt.delivered_at.is_(None))
+        else:
+            claim = claim.filter(DispatchAttempt.delivered_at == previous_delivered_at)
+        claimed_rows = claim.update(
+            {DispatchAttempt.delivered_at: claimed_at}, synchronize_session=False,
+        )
+        if claimed_rows != 1:
+            db_session.rollback()
+            continue
+
+        attempt = db_session.query(DispatchAttempt).filter(
+            DispatchAttempt.attempt_id == attempt_id).one()
+        envelope_row = get_envelope(db_session=db_session, envelope_id=str(attempt.envelope_id))
+        if envelope_row is None:
+            _LOGGER.error(
+                "long_poll_transport.envelope_missing attempt_id=%s envelope_id=%s",
+                attempt_id, attempt.envelope_id,
             )
-        except queue.Empty:
-            rtnval: Optional[DispatchRecord] = None
-            return rtnval
+            db_session.rollback()
+            continue
 
+        record = _record_from_rows(
+            attempt=attempt, envelope_row=envelope_row,
+            claimed_at=claimed_at, ack_deadline_seconds=ack_deadline_seconds,
+        )
+        db_session.commit()
         _LOGGER.info(
-            "long_poll_transport.dequeued client_id=%s run_id=%s envelope_id=%s",
-            client_id,
-            record.run_id,
-            record.envelope_id,
+            "long_poll_transport.claimed client_id=%s run_id=%s attempt_id=%s redelivery=%s",
+            client_id, record.run_id, record.dispatch_attempt_id,
+            previous_delivered_at is not None,
         )
         rtnval = record
         return rtnval
 
-    def pending_count(self, *, client_id: str) -> int:
-        """
-            Return the number of records queued for ``client_id``.
-            Approximate (the underlying ``Queue.qsize`` is
-            best-effort) — intended for diagnostics, not gating.
+    rtnval = None
+    return rtnval
 
-            :param client_id: Target client UUID.
 
-            :returns: Best-effort pending-record count.
-        """
-        with self._lock:
-            target_queue = self._queues.get(client_id, None)
-        if target_queue is None:
-            rtnval = 0
+def await_next_dispatch(
+        *,
+        db_session: Any,
+        client_id: str,
+        timeout_seconds: int,
+        ack_deadline_seconds: int = DEFAULT_ACK_DEADLINE_SECONDS,
+        poll_interval_seconds: float = DEFAULT_DELIVERY_POLL_INTERVAL_SECONDS,
+        sleep_func: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.monotonic
+    ) -> Optional[DispatchRecord]:
+    """
+        Wait up to ``timeout_seconds`` for a dispatch to claim for
+        ``client_id``, checking every ``poll_interval_seconds``.
+
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: The polling client's UUID.
+        :param timeout_seconds: Seconds to wait; clamped to
+                                0..:data:`MAX_LONG_POLL_TIMEOUT_SECONDS`.
+        :param ack_deadline_seconds: Re-delivery window for unacked claims.
+        :param poll_interval_seconds: Seconds between claim attempts.
+        :param sleep_func: Sleep override (tests).
+        :param clock: Monotonic clock override (tests).
+
+        :returns: The claimed :class:`DispatchRecord`, or ``None`` on timeout.
+    """
+    effective_timeout = timeout_seconds
+    if effective_timeout < 0:
+        effective_timeout = 0
+    if effective_timeout > MAX_LONG_POLL_TIMEOUT_SECONDS:
+        effective_timeout = MAX_LONG_POLL_TIMEOUT_SECONDS
+    give_up_at = clock() + float(effective_timeout)
+
+    while True:
+        record = claim_next_dispatch(
+            db_session=db_session, client_id=client_id,
+            ack_deadline_seconds=ack_deadline_seconds,
+        )
+        if record is not None:
+            rtnval: Optional[DispatchRecord] = record
             return rtnval
-        rtnval = int(target_queue.qsize())
-        return rtnval
-
-    def known_client_ids(self) -> List[str]:
-        """
-            Return a snapshot of every client UUID this transport
-            has ever queued a dispatch for.
-
-            :returns: List of client UUID strings.
-        """
-        with self._lock:
-            rtnval = list(self._queues.keys())
-        return rtnval
-
-    def _queue_for_client(self, *, client_id: str) -> "queue.Queue[DispatchRecord]":
-        """
-            Lazily create the per-client :class:`queue.Queue` and
-            return it.
-
-            :param client_id: Target client UUID.
-
-            :returns: The (possibly newly created) queue.
-        """
-        with self._lock:
-            existing = self._queues.get(client_id, None)
-            if existing is not None:
-                rtnval = existing
-                return rtnval
-            created: "queue.Queue[DispatchRecord]" = queue.Queue()
-            self._queues[client_id] = created
-            rtnval = created
-        return rtnval
+        remaining = give_up_at - clock()
+        if remaining <= 0:
+            rtnval = None
+            return rtnval
+        sleep_func(min(poll_interval_seconds, remaining))
 
 
 __all__ = [
+    "CLAIM_CANDIDATE_LIMIT",
     "DEFAULT_ACK_DEADLINE_SECONDS",
+    "DEFAULT_DELIVERY_POLL_INTERVAL_SECONDS",
     "DEFAULT_LONG_POLL_TIMEOUT_SECONDS",
     "DispatchRecord",
     "LONG_POLL_TRANSPORT_NAME",
     "LongPollTransport",
     "MAX_LONG_POLL_TIMEOUT_SECONDS",
+    "await_next_dispatch",
+    "claim_next_dispatch",
 ]

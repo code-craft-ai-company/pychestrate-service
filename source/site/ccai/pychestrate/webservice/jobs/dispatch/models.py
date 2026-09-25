@@ -80,6 +80,7 @@ class DispatchAttempt(PychestratePhase1Base, SerializableModel):
     )
     created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     transmitted_at = Column(UtcDateTime(timezone=True), nullable=True)
+    delivered_at = Column(UtcDateTime(timezone=True), nullable=True)
     acked_at = Column(UtcDateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
 

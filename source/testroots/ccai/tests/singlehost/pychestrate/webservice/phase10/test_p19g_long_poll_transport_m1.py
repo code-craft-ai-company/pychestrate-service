@@ -34,11 +34,26 @@ from typing import Any, Dict, Optional
 from ccai import testbase
 from ccai.testbase.mocking import create_module_patch
 
+from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.webservice.agents.factories.long_poll_transport import (
     DEFAULT_LONG_POLL_TIMEOUT_SECONDS,
     LONG_POLL_TRANSPORT_NAME,
     LongPollTransport,
     MAX_LONG_POLL_TIMEOUT_SECONDS,
+    await_next_dispatch,
+    claim_next_dispatch,
+)
+from ccai.pychestrate.webservice.jobs.dispatch import repository as dispatch_repo
+from ccai.pychestrate.webservice.jobs.envelope import persist_signed_envelope
+from ccai.pychestrate.webservice.jobs.envelope.canonical import serialize_canonical
+
+# Side-effect imports so the dispatch-attempt and envelope-archive tables
+# exist when the in-memory fixture runs create_all.
+from ccai.pychestrate.webservice.jobs.dispatch import models as _dispatch_models  # noqa: F401
+from ccai.pychestrate.webservice.jobs.envelope import models as _envelope_models  # noqa: F401
+
+from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
+    build_in_memory_session,
 )
 from ccai.pychestrate.webservice.clients.restapi.v1 import (
     client_dispatch_routes,
@@ -117,7 +132,7 @@ def _build_signed_envelope() -> SignedJobEnvelope:
     envelope = build_envelope(request=request)
     signed = SignedJobEnvelope(
         envelope=envelope,
-        canonical_payload=b"canonical-bytes",
+        canonical_payload=serialize_canonical(envelope=envelope),
         signature=b"\x01\x02\x03\x04",
         key_id="test-ed25519",
         signed_at=now,
@@ -170,48 +185,6 @@ def _decode_body(response: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def test_long_poll_transport_transmit_then_await_returns_record():
-    """
-    **Feature: 5-job-dispatch + 3-client-agent-protocol PR p19g**
-    **Property: transmit() enqueues; await_pending_dispatch() returns
-    the same SignedJobEnvelope on the next call.**
-    """
-    transport = LongPollTransport(ack_deadline_seconds=10)
-    signed = _build_signed_envelope()
-
-    transport.transmit(
-        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
-    )
-    testbase.assert_equal(
-        transport.pending_count(client_id=_TEST_CLIENT_ID), 1,
-    )
-
-    record = transport.await_pending_dispatch(
-        client_id=_TEST_CLIENT_ID, timeout_seconds=1,
-    )
-    testbase.assert_true(record is not None)
-    testbase.assert_equal(record.client_id, _TEST_CLIENT_ID)
-    testbase.assert_equal(record.pod_id, _TEST_POD_ID)
-    testbase.assert_equal(record.envelope_id, signed.envelope.envelope_id)
-    testbase.assert_equal(record.run_id, _TEST_RUN_ID)
-    testbase.assert_equal(
-        transport.pending_count(client_id=_TEST_CLIENT_ID), 0,
-    )
-    return
-
-
-def test_long_poll_transport_await_returns_none_on_timeout():
-    """
-    **Feature: PR p19g**
-    **Property: await_pending_dispatch() returns None when no record
-    is queued before the timeout elapses.**
-    """
-    transport = LongPollTransport()
-    record = transport.await_pending_dispatch(
-        client_id=_TEST_CLIENT_ID, timeout_seconds=0,
-    )
-    testbase.assert_true(record is None)
-    return
 
 
 def test_long_poll_transport_rejects_empty_client_id():
@@ -231,29 +204,6 @@ def test_long_poll_transport_rejects_empty_client_id():
     return
 
 
-def test_long_poll_transport_clamps_timeout_to_max():
-    """
-    **Feature: PR p19g**
-    **Property: await_pending_dispatch() clamps an over-large
-    timeout to MAX_LONG_POLL_TIMEOUT_SECONDS rather than honoring
-    the caller's value.**
-    """
-    transport = LongPollTransport()
-    signed = _build_signed_envelope()
-
-    transport.transmit(
-        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
-    )
-    # Pass a huge timeout — the record is already queued so the
-    # call returns immediately regardless. We just want to prove
-    # the clamp does not crash.
-    record = transport.await_pending_dispatch(
-        client_id=_TEST_CLIENT_ID,
-        timeout_seconds=MAX_LONG_POLL_TIMEOUT_SECONDS * 1000,
-    )
-    testbase.assert_true(record is not None)
-    return
-
 
 def test_long_poll_transport_transport_name_is_stable():
     """
@@ -265,38 +215,6 @@ def test_long_poll_transport_transport_name_is_stable():
     testbase.assert_equal(transport.transport_name(), LONG_POLL_TRANSPORT_NAME)
     return
 
-
-def test_long_poll_transport_concurrent_transmit_and_await():
-    """
-    **Feature: PR p19g**
-    **Property: a thread blocked in await_pending_dispatch() wakes
-    when transmit() runs on another thread.**
-    """
-    transport = LongPollTransport()
-    signed = _build_signed_envelope()
-    captured: Dict[str, Any] = {}
-
-    def waiter() -> None:
-        record = transport.await_pending_dispatch(
-            client_id=_TEST_CLIENT_ID, timeout_seconds=5,
-        )
-        captured["record"] = record
-        return
-
-    waiter_thread = threading.Thread(target=waiter, daemon=True)
-    waiter_thread.start()
-    time.sleep(0.05)
-    transport.transmit(
-        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
-    )
-    waiter_thread.join(timeout=3.0)
-
-    testbase.assert_equal(waiter_thread.is_alive(), False)
-    testbase.assert_true(captured.get("record") is not None)
-    testbase.assert_equal(
-        captured["record"].envelope_id, signed.envelope.envelope_id,
-    )
-    return
 
 
 # ---------------------------------------------------------------------------
@@ -401,64 +319,6 @@ def test_next_dispatch_returns_503_when_transport_unconfigured():
     return
 
 
-def test_next_dispatch_returns_204_on_timeout():
-    """
-    **Feature: PR p19g**
-    **Property: an empty queue + timeout=0 returns 204 with empty
-    body.**
-    """
-    transport = LongPollTransport()
-    _install_transport(transport=transport)
-    try:
-        request = _FakeRequest(
-            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
-            path_params={"client_id": _TEST_CLIENT_ID},
-            query_params={"timeout_seconds": "0"},
-            mtls_client_cn=_TEST_CLIENT_ID,
-        )
-        response = client_dispatch_routes.handle_next_dispatch(request)
-    finally:
-        _install_transport(transport=None)
-    testbase.assert_equal(response.status_code, 204)
-    testbase.assert_equal(response.body, b"")
-    return
-
-
-def test_next_dispatch_returns_200_with_envelope_when_queued():
-    """
-    **Feature: PR p19g (integration)**
-    **Property: a record enqueued via transport.transmit() is
-    delivered by the route on the next pull with the signed
-    envelope in the body.**
-    """
-    transport = LongPollTransport()
-    signed = _build_signed_envelope()
-    transport.transmit(
-        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
-    )
-    _install_transport(transport=transport)
-    try:
-        request = _FakeRequest(
-            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
-            path_params={"client_id": _TEST_CLIENT_ID},
-            query_params={"timeout_seconds": "1"},
-            mtls_client_cn=_TEST_CLIENT_ID,
-        )
-        response = client_dispatch_routes.handle_next_dispatch(request)
-    finally:
-        _install_transport(transport=None)
-    testbase.assert_equal(response.status_code, 200)
-    body = _decode_body(response)
-    testbase.assert_equal(body["client_id"], _TEST_CLIENT_ID)
-    testbase.assert_equal(body["pod_id"], _TEST_POD_ID)
-    testbase.assert_equal(body["run_id"], _TEST_RUN_ID)
-    testbase.assert_equal(
-        body["envelope_id"], signed.envelope.envelope_id,
-    )
-    testbase.assert_equal(body["transport_name"], LONG_POLL_TRANSPORT_NAME)
-    testbase.assert_equal(body["envelope"]["run_id"], _TEST_RUN_ID)
-    testbase.assert_equal(body["signature"], "01020304")
-    return
 
 
 # ---------------------------------------------------------------------------
@@ -563,23 +423,229 @@ def test_default_timeout_constant_matches_spec():
     return
 
 
-def test_long_poll_transport_hands_out_the_dispatch_attempt_id():
+# ---------------------------------------------------------------------------
+# Database-backed delivery (E2E-17 / E2E-16)
+# ---------------------------------------------------------------------------
+
+
+def _seed_transmitted_attempt(*, session: Any, signed: SignedJobEnvelope) -> Any:
     """
-    **Feature: dispatch protocol (E2E-07)**
-    **Property: the record a pod long-polls carries the dispatcher's
-    attempt id as dispatch_attempt_id, so the pod's ack finds the attempt
-    (the envelope id used to stand in for it, and every ack 404'd).**
+        Persist what the dispatcher writes before a pod can poll: the
+        archived signed envelope and a TRANSMITTED attempt row.
     """
-    transport = LongPollTransport(ack_deadline_seconds=10)
+    persist_signed_envelope(db_session=session, signed=signed)
+    attempt = dispatch_repo.create_attempt(
+        db_session=session,
+        run_id=_TEST_RUN_ID,
+        project_id=_TEST_PROJECT_ID,
+        client_id=_TEST_CLIENT_ID,
+        pod_id=_TEST_POD_ID,
+        envelope_id=signed.envelope.envelope_id,
+        strategy_name="fifo",
+        transport_name=LONG_POLL_TRANSPORT_NAME,
+        created_at=utc_now(),
+    )
+    dispatch_repo.mark_attempt_transmitted(
+        db_session=session, attempt=attempt, transmitted_at=utc_now(),
+    )
+    session.commit()
+    rtnval = attempt
+    return rtnval
+
+
+def test_claim_delivers_a_transmitted_attempt_with_its_attempt_id():
+    """
+    **Feature: dispatch delivery (E2E-17, E2E-07)**
+    **Property: a TRANSMITTED attempt is claimed from the database with
+    the attempt row's id, run and envelope -- no in-process queue.**
+    """
+    _engine, session = build_in_memory_session()
     signed = _build_signed_envelope()
+    attempt = _seed_transmitted_attempt(session=session, signed=signed)
 
-    transport.transmit(
-        client_id=_TEST_CLIENT_ID, pod_id=_TEST_POD_ID, signed=signed,
-        dispatch_attempt_id="attempt-0001",
-    )
-    record = transport.await_pending_dispatch(
-        client_id=_TEST_CLIENT_ID, timeout_seconds=1,
-    )
+    record = claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID)
 
-    testbase.assert_equal(record.dispatch_attempt_id, "attempt-0001")
+    testbase.assert_equal(record.dispatch_attempt_id, str(attempt.attempt_id))
+    testbase.assert_equal(record.run_id, _TEST_RUN_ID)
+    testbase.assert_equal(record.envelope_id, signed.envelope.envelope_id)
+    testbase.assert_equal(record.signed.envelope.run_id, _TEST_RUN_ID)
+    return
+
+
+def test_claim_is_delivered_once():
+    """
+    **Feature: dispatch delivery (E2E-17)**
+    **Property: a second poll inside the ack deadline does not get the
+    attempt another poll already claimed.**
+    """
+    _engine, session = build_in_memory_session()
+    _seed_transmitted_attempt(session=session, signed=_build_signed_envelope())
+
+    first = claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID)
+    second = claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID)
+
+    testbase.assert_true(first is not None)
+    testbase.assert_true(second is None)
+    return
+
+
+def test_unacked_claim_is_redelivered_after_the_ack_deadline():
+    """
+    **Feature: dispatch delivery (E2E-16)**
+    **Property: an attempt claimed but not acked within the ack deadline
+    is delivered again.**
+    """
+    _engine, session = build_in_memory_session()
+    _seed_transmitted_attempt(session=session, signed=_build_signed_envelope())
+    claimed_at = utc_now()
+    claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID,
+                        ack_deadline_seconds=60, now=claimed_at)
+
+    redelivered = claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID,
+                                      ack_deadline_seconds=60,
+                                      now=claimed_at + timedelta(seconds=61))
+
+    testbase.assert_true(redelivered is not None)
+    return
+
+
+def test_acked_attempt_is_not_delivered():
+    """
+    **Feature: dispatch delivery (E2E-16)**
+    **Property: once the pod acks, the attempt is never delivered again,
+    even after the ack deadline.**
+    """
+    _engine, session = build_in_memory_session()
+    attempt = _seed_transmitted_attempt(session=session, signed=_build_signed_envelope())
+    claimed_at = utc_now()
+    claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID, now=claimed_at)
+    dispatch_repo.mark_attempt_acked(db_session=session, attempt=attempt, acked_at=utc_now())
+    session.commit()
+
+    again = claim_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID,
+                                now=claimed_at + timedelta(hours=1))
+
+    testbase.assert_true(again is None)
+    return
+
+
+def test_other_clients_attempts_are_not_delivered():
+    """
+    **Feature: dispatch delivery (E2E-17)**
+    **Property: a poll only claims attempts addressed to its own client.**
+    """
+    _engine, session = build_in_memory_session()
+    _seed_transmitted_attempt(session=session, signed=_build_signed_envelope())
+
+    record = claim_next_dispatch(db_session=session,
+                                 client_id="99999999-9999-9999-9999-999999999999")
+
+    testbase.assert_true(record is None)
+    return
+
+
+def test_await_returns_none_when_nothing_is_waiting():
+    """
+    **Feature: dispatch delivery (E2E-17)**
+    **Property: with no attempt for the client, await_next_dispatch
+    gives up after the timeout and returns None.**
+    """
+    _engine, session = build_in_memory_session()
+    ticks = {"now": 0.0}
+
+    def _clock() -> float:
+        return ticks["now"]
+
+    def _sleep(seconds: float) -> None:
+        ticks["now"] += seconds
+        return
+
+    record = await_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID,
+                                 timeout_seconds=3, sleep_func=_sleep, clock=_clock)
+
+    testbase.assert_true(record is None)
+    testbase.assert_equal(ticks["now"], 3.0)
+    return
+
+
+def test_await_clamps_the_wait_to_the_maximum():
+    """
+    **Feature: dispatch delivery**
+    **Property: an over-large timeout waits no longer than
+    MAX_LONG_POLL_TIMEOUT_SECONDS.**
+    """
+    _engine, session = build_in_memory_session()
+    ticks = {"now": 0.0}
+
+    def _clock() -> float:
+        return ticks["now"]
+
+    def _sleep(seconds: float) -> None:
+        ticks["now"] += seconds
+        return
+
+    await_next_dispatch(db_session=session, client_id=_TEST_CLIENT_ID,
+                        timeout_seconds=MAX_LONG_POLL_TIMEOUT_SECONDS * 10,
+                        sleep_func=_sleep, clock=_clock)
+
+    testbase.assert_equal(ticks["now"], float(MAX_LONG_POLL_TIMEOUT_SECONDS))
+    return
+
+
+def test_next_dispatch_returns_204_on_timeout():
+    """
+    **Feature: PR p19g**
+    **Property: nothing waiting + timeout=0 returns 204 with an empty
+    body.**
+    """
+    _engine, session = build_in_memory_session()
+    _install_transport(transport=LongPollTransport())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path_params={"client_id": _TEST_CLIENT_ID},
+            query_params={"timeout_seconds": "0"},
+            mtls_client_cn=_TEST_CLIENT_ID,
+            db_session=session,
+        )
+        response = client_dispatch_routes.handle_next_dispatch(request)
+    finally:
+        _install_transport(transport=None)
+    testbase.assert_equal(response.status_code, 204)
+    testbase.assert_equal(response.body, b"")
+    return
+
+
+def test_next_dispatch_returns_200_with_envelope_when_transmitted():
+    """
+    **Feature: PR p19g (integration), E2E-17**
+    **Property: an attempt the dispatcher persisted and transmitted is
+    delivered by the route -- whichever process handles the poll -- with
+    the signed envelope and the attempt id in the body.**
+    """
+    _engine, session = build_in_memory_session()
+    signed = _build_signed_envelope()
+    attempt = _seed_transmitted_attempt(session=session, signed=signed)
+    _install_transport(transport=LongPollTransport())
+    try:
+        request = _FakeRequest(
+            path="/api/v1/clients/{}/dispatches:next".format(_TEST_CLIENT_ID),
+            path_params={"client_id": _TEST_CLIENT_ID},
+            query_params={"timeout_seconds": "1"},
+            mtls_client_cn=_TEST_CLIENT_ID,
+            db_session=session,
+        )
+        response = client_dispatch_routes.handle_next_dispatch(request)
+    finally:
+        _install_transport(transport=None)
+    testbase.assert_equal(response.status_code, 200)
+    body = _decode_body(response)
+    testbase.assert_equal(body["dispatch_attempt_id"], str(attempt.attempt_id))
+    testbase.assert_equal(body["client_id"], _TEST_CLIENT_ID)
+    testbase.assert_equal(body["pod_id"], _TEST_POD_ID)
+    testbase.assert_equal(body["run_id"], _TEST_RUN_ID)
+    testbase.assert_equal(body["envelope_id"], signed.envelope.envelope_id)
+    testbase.assert_equal(body["transport_name"], LONG_POLL_TRANSPORT_NAME)
+    testbase.assert_equal(body["envelope"]["run_id"], _TEST_RUN_ID)
+    testbase.assert_equal(body["signature"], "01020304")
     return
