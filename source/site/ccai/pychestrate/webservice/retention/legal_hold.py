@@ -23,6 +23,7 @@ from sqlalchemy import Column, DateTime, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Session as DbSession
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -40,8 +41,8 @@ class LegalHold(PychestratePhase1Base, SerializableModel):
     entity_id = Column(String(128), nullable=False)
     reason = Column(Text(), nullable=False, default="")
     created_by_user_id = Column(UUIDType(binary=False), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    released_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    released_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

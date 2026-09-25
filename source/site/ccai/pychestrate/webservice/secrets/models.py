@@ -27,6 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -93,8 +94,8 @@ class SecretRecord(PychestratePhase1Base, SerializableModel):
         default=SecretScopeKind.ORG,
     )
     scope_ref = Column(String(64), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_phase1_secrets_scope", "scope_kind", "scope_ref"),
@@ -122,8 +123,8 @@ class SecretVersion(PychestratePhase1Base, SerializableModel):
     ciphertext_bytes = Column(LargeBinary, nullable=True)
     wrapped_dek = Column(LargeBinary, nullable=True)
     kek_id = Column(String(128), nullable=True)
-    grace_expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    grace_expires_at = Column(UtcDateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
     __table_args__ = (
@@ -148,7 +149,7 @@ class SecretAcl(PychestratePhase1Base, SerializableModel):
     principal_kind = Column(String(16), nullable=False)
     principal_id = Column(UUIDType(binary=False), nullable=False)
     actions_json = Column(JSON, nullable=False, default=list)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
 
@@ -162,7 +163,7 @@ class SecretOutboxEntry(PychestratePhase1Base, SerializableModel):
     outbox_id = Column(UUIDType(binary=False), primary_key=True)
     operation = Column(String(64), nullable=False)
     payload = Column(LargeBinary, nullable=False)
-    enqueued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    enqueued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     retry_count = Column(Integer, nullable=False, default=0)
-    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    next_attempt_at = Column(UtcDateTime(timezone=True), nullable=True)
     status = Column(Enum(SecretOutboxStatus, name="secret_outbox_status"), nullable=False)

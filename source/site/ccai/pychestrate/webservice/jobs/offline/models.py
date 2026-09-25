@@ -23,6 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -71,9 +72,9 @@ class PodOfflineState(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=PodLivenessTier.HEALTHY,
     )
-    last_session_dropped_at = Column(DateTime(timezone=True), nullable=True)
-    last_reconnected_at = Column(DateTime(timezone=True), nullable=True)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    last_session_dropped_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_reconnected_at = Column(UtcDateTime(timezone=True), nullable=True)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_jobs_pod_offline_state_tier", "tier"),
@@ -92,7 +93,7 @@ class ClientReplayCursor(PychestratePhase1Base, SerializableModel):
     client_id = Column(UUIDType(binary=False), nullable=False)
     run_id = Column(UUIDType(binary=False), nullable=False)
     next_expected_sequence = Column(Integer, nullable=False, default=0)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -122,9 +123,9 @@ class DeferredCancel(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=DeferredCancelStatus.QUEUED,
     )
-    queued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    delivered_at = Column(DateTime(timezone=True), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
+    queued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    delivered_at = Column(UtcDateTime(timezone=True), nullable=True)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
 
     __table_args__ = (

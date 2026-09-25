@@ -48,6 +48,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -82,11 +83,11 @@ class Client(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=LivenessState.ALIVE,
     )
-    enrolled_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    last_seen = Column(DateTime(timezone=True), nullable=True)
+    enrolled_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    last_seen = Column(UtcDateTime(timezone=True), nullable=True)
     last_agent_version = Column(String(64), nullable=True)
     transport_name = Column(String(64), nullable=True)
-    degraded_at = Column(DateTime(timezone=True), nullable=True)
+    degraded_at = Column(UtcDateTime(timezone=True), nullable=True)
     revision_token = Column(String(128), nullable=False, default="")
     bearer_token_hash = Column(LargeBinary, nullable=True)
 
@@ -117,7 +118,7 @@ class ClientAttribute(PychestratePhase1Base, SerializableModel):
     )
     kind = Column(String(128), nullable=False)
     value_json = Column(JSON, nullable=False, default=dict)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -141,15 +142,15 @@ class EnrollmentToken(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=False)
     pod_name = Column(String(128), nullable=False)
     issued_by = Column(UUIDType(binary=False), nullable=True)
-    issued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    issued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
     one_shot = Column(Boolean, nullable=False, default=True)
     status = Column(
         Enum(TokenStatus, name="clients_token_status"),
         nullable=False,
         default=TokenStatus.PENDING,
     )
-    redeemed_at = Column(DateTime(timezone=True), nullable=True)
+    redeemed_at = Column(UtcDateTime(timezone=True), nullable=True)
     redeemed_by_client_id = Column(UUIDType(binary=False), nullable=True)
     issuer_algorithm = Column(String(64), nullable=False, default="")
 
@@ -184,7 +185,7 @@ class ClientRevocation(PychestratePhase1Base, SerializableModel):
         nullable=False,
     )
     revoked_by = Column(UUIDType(binary=False), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    revoked_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     note = Column(String(512), nullable=False, default="")
 
     __table_args__ = (
@@ -213,12 +214,12 @@ class ClientCert(PychestratePhase1Base, SerializableModel):
         ForeignKey("clients_clients.client_id", ondelete="CASCADE"),
         nullable=False,
     )
-    not_before = Column(DateTime(timezone=True), nullable=False)
-    not_after = Column(DateTime(timezone=True), nullable=False)
+    not_before = Column(UtcDateTime(timezone=True), nullable=False)
+    not_after = Column(UtcDateTime(timezone=True), nullable=False)
     issuer_subject = Column(String(256), nullable=False, default="")
     subject_cn = Column(String(128), nullable=False, default="")
     pem_public = Column(Text, nullable=False, default="")
-    issued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    issued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_clients_client_certs_client_id", "client_id"),

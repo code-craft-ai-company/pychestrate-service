@@ -22,6 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -67,8 +68,8 @@ class TriageCase(PychestratePhase1Base, SerializableModel):
     tracker = Column(String(64), nullable=True)
     ticket_key = Column(String(128), nullable=True)
     ticket_url = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(
@@ -105,7 +106,7 @@ class TriageCaseLedger(PychestratePhase1Base, SerializableModel):
         nullable=False,
     )
     rationale = Column(Text, nullable=False, default="")
-    at_ts = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    at_ts = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_orch_triage_case_ledger_case_at", "case_id", "at_ts"),

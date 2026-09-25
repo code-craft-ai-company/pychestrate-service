@@ -22,6 +22,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -40,9 +41,9 @@ class GuardAttachment(PychestratePhase1Base, SerializableModel):
     rule_id = Column(String(128), nullable=False)
     enabled = Column(Boolean, nullable=False, default=True)
     added_by = Column(UUIDType(binary=False), nullable=True)
-    added_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    added_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     updated_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (

@@ -35,6 +35,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -75,15 +76,15 @@ class AuthApiToken(PychestratePhase1Base, SerializableModel):
     token_sha256 = Column(String(64), nullable=False, unique=True)
     token_hint = Column(String(16), nullable=False)
     scope = Column(String(16), nullable=False, default="read-write")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by_user_id = Column(
         UUIDType(binary=False),
         ForeignKey("identity_users.user_id", ondelete="SET NULL"),
         nullable=True,
     )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    last_used_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
+    last_used_at = Column(UtcDateTime(timezone=True), nullable=True)
+    revoked_at = Column(UtcDateTime(timezone=True), nullable=True)
     revoked_by_user_id = Column(
         UUIDType(binary=False),
         ForeignKey("identity_users.user_id", ondelete="SET NULL"),

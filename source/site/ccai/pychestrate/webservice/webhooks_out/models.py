@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -77,8 +78,8 @@ class WebhookTarget(PychestratePhase1Base, SerializableModel):
     enabled = Column(Boolean, nullable=False, default=True)
     custom_headers = Column(JSON, nullable=False, default=dict)
     created_by = Column(UUIDType(binary=False), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -115,7 +116,7 @@ class WebhookDelivery(PychestratePhase1Base, SerializableModel):
     response_status = Column(Integer, nullable=True)
     response_excerpt = Column(Text, nullable=True)
     duration_ms = Column(Integer, nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    attempted_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(

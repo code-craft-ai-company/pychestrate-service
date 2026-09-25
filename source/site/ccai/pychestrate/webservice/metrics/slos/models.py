@@ -24,6 +24,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -50,8 +51,8 @@ class SLO(PychestratePhase1Base, SerializableModel):
         Boolean, nullable=False, default=False,
     )
     version = Column(Integer, nullable=False, default=1)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -79,6 +80,6 @@ class SLOBurnRateState(PychestratePhase1Base, SerializableModel):
     )
     last_fast_burn_rate = Column(Float, nullable=False, default=0.0)
     last_slow_burn_rate = Column(Float, nullable=False, default=0.0)
-    last_fast_over_since = Column(DateTime(timezone=True), nullable=True)
-    last_slow_over_since = Column(DateTime(timezone=True), nullable=True)
-    last_evaluated_at = Column(DateTime(timezone=True), nullable=True)
+    last_fast_over_since = Column(UtcDateTime(timezone=True), nullable=True)
+    last_slow_over_since = Column(UtcDateTime(timezone=True), nullable=True)
+    last_evaluated_at = Column(UtcDateTime(timezone=True), nullable=True)

@@ -362,8 +362,8 @@ class Release(PychestrateModelBase, SerializableModel):
     name = Column("release_name", VARCHAR(128), nullable=False)
     description = Column("release_description", Text, nullable=True)
     documentation_url = Column("release_documentation_url", VARCHAR(2048), nullable=True)
-    start_date = Column("release_start_date", DateTime(timezone=True), nullable=True)
-    release_date = Column("release_release_date", DateTime(timezone=True), nullable=True)
+    start_date = Column("release_start_date", UtcDateTime(timezone=True), nullable=True)
+    release_date = Column("release_release_date", UtcDateTime(timezone=True), nullable=True)
 
     product_id = Column(
         "prod_id", BigInteger, ForeignKey("product.prod_id"), nullable=False, index=True
@@ -464,8 +464,8 @@ class BuildJob(PychestrateModelBase, SerializableModel):
 
     id = Column('bjob_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('bjob_name', VARCHAR(128), nullable=False)
-    start = Column('bjob_start', DateTime(timezone=True), nullable=False, server_default=func.now())
-    stop = Column('bjob_stop', DateTime(timezone=True), nullable=True)
+    start = Column('bjob_start', UtcDateTime(timezone=True), nullable=False, server_default=func.now())
+    stop = Column('bjob_stop', UtcDateTime(timezone=True), nullable=True)
     change = Column('bjob_change', VARCHAR(128), nullable=False)
     status = Column('bjob_status', Enum(WorkPacketStatus, name='build_job_status', native_enum=False), nullable=False, default=WorkPacketStatus.QUEUED)
 
@@ -484,8 +484,8 @@ class BuildResult(PychestrateModelBase, SerializableModel):
 
     id = Column('build_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     name = Column('build_name', VARCHAR(128), nullable=False)
-    start = Column('build_start', DateTime(timezone=True), nullable=False, server_default=func.now())
-    stop = Column('build_stop', DateTime(timezone=True), nullable=True)
+    start = Column('build_start', UtcDateTime(timezone=True), nullable=False, server_default=func.now())
+    stop = Column('build_stop', UtcDateTime(timezone=True), nullable=True)
     change = Column('build_change', VARCHAR(128), nullable=False)
 
     branch_id = Column('branch_id', BigInteger, ForeignKey('branch.branch_id'), nullable=False, index=True)
@@ -537,9 +537,9 @@ class User(PychestrateModelBase, SerializableModel):
                    doc="Comma-separated list of roles assigned to the user")
     authtype = Column('user_authtype', VARCHAR(20), nullable=False, default='consumer',
                       doc="Type of user (e.g., 'internal', 'consumer')")
-    created_at = Column('user_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('user_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the user record was created")
-    updated_at = Column('user_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('user_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the user record was last updated")
 
     work_packets = relationship('WorkPacket', back_populates='user', lazy='selectin')
@@ -579,9 +579,9 @@ class WorkPacket(PychestrateModelBase, SerializableModel):
     build =  Column('wkpk_build', String(1024), nullable=True)
     flavor =  Column('wkpk_flavor', String(1024), nullable=True)
     ownertag = Column('wkpk_ownertag', VARCHAR(40), nullable=True)
-    added = Column('wkpk_added', DateTime(timezone=True), nullable=False, server_default=func.now())
-    start = Column('wkpk_start', DateTime(timezone=True), nullable=True)
-    stop = Column('wkpk_stop', DateTime(timezone=True), nullable=True)
+    added = Column('wkpk_added', UtcDateTime(timezone=True), nullable=False, server_default=func.now())
+    start = Column('wkpk_start', UtcDateTime(timezone=True), nullable=True)
+    stop = Column('wkpk_stop', UtcDateTime(timezone=True), nullable=True)
     progress = Column('wkpk_progress', Float, default=0.0)
     status = Column('wkpk_status', Enum(WorkPacketStatus, name='work_packet_status', native_enum=False), nullable=False, index=True)
     packet = Column('wkpk_packet', TEXT, nullable=False)
@@ -643,8 +643,8 @@ class TestJobRun(PychestrateModelBase, SerializableModel):
     build =  Column('tjr_build', VARCHAR(1024), nullable=True)
     flavor =  Column('tjr_flavor', VARCHAR(1024), nullable=True)
     ownertag = Column('wkpk_ownertag', UUIDType, nullable=True)
-    start = Column('tjr_start', DateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
-    stop = Column('tjr_stop', DateTime(timezone=True), nullable=True)
+    start = Column('tjr_start', UtcDateTime(timezone=True), nullable=False, server_default=func.now(), index=True)
+    stop = Column('tjr_stop', UtcDateTime(timezone=True), nullable=True)
     detail = Column('tjr_detail', JSON, nullable=True)
 
     job_id = Column('job_id', UUIDType, ForeignKey('test_job.tj_id'), nullable=False, index=True)
@@ -673,8 +673,8 @@ class TestResult(PychestrateModelBase, SerializableModel):
     pivots = Column('tstr_pivots', JSON, nullable=True)
     rtype = Column('tstr_rtype', String(50), nullable=False)
     result = Column('tstr_result', String(50), nullable=False)
-    start = Column('tstr_start', DateTime(timezone=True), nullable=False, server_default=func.now())
-    stop = Column('tstr_stop', DateTime(timezone=True), nullable=True)
+    start = Column('tstr_start', UtcDateTime(timezone=True), nullable=False, server_default=func.now())
+    stop = Column('tstr_stop', UtcDateTime(timezone=True), nullable=True)
     detail = Column('tstr_detail', JSON, nullable=True)
 
     testrun = Column('tjr_instance', UUIDType, ForeignKey('test_job_run.tjr_instance'), nullable=True, index=True)
@@ -710,8 +710,8 @@ class FeatureGroupMembership(PychestrateModelBase, SerializableModel):
     fg_id = Column('fg_id', BigInteger, ForeignKey('feature_group.fg_id'), primary_key=True, index=True)
     user_id = Column('user_id', UUIDType, ForeignKey('user.user_id'), primary_key=True, index=True)
 
-    join_date = Column('fgm_join_date', DateTime(timezone=True), nullable=False, server_default=func.now())
-    departure_date = Column('fgm_departure_date', DateTime(timezone=True), nullable=True)
+    join_date = Column('fgm_join_date', UtcDateTime(timezone=True), nullable=False, server_default=func.now())
+    departure_date = Column('fgm_departure_date', UtcDateTime(timezone=True), nullable=True)
 
     feature_group = relationship('FeatureGroup', back_populates='memberships', lazy='selectin')
 
@@ -762,7 +762,7 @@ class SystemRole(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the role's purpose")
     is_system = Column('role_is_system', Boolean, default=False, nullable=False,
                        doc="Flag indicating if this is a system-defined role that cannot be deleted")
-    created_at = Column('role_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('role_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the role was created")
 
     permissions = relationship('Permission', secondary=role_permissions, back_populates='roles', lazy='selectin')
@@ -780,11 +780,11 @@ class Session(PychestrateModelBase, SerializableModel):
                    doc="Unique session token used for authentication")
     user_id = Column('sess_user_id', UUIDType, ForeignKey('user.user_id'), nullable=False, index=True,
                      doc="Reference to the authenticated user")
-    created_at = Column('sess_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('sess_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the session was created")
-    expires_at = Column('sess_expires_at', DateTime(timezone=True), nullable=False,
+    expires_at = Column('sess_expires_at', UtcDateTime(timezone=True), nullable=False,
                         doc="Timestamp when the session expires")
-    last_activity = Column('sess_last_activity', DateTime(timezone=True), default=utc_now, nullable=False,
+    last_activity = Column('sess_last_activity', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                            doc="Timestamp of the last activity in this session")
     client_ip = Column('sess_client_ip', VARCHAR(45), nullable=True,
                        doc="IP address of the client (supports IPv6)")
@@ -806,7 +806,7 @@ class PasswordHistory(PychestrateModelBase, SerializableModel):
                      doc="Reference to the user whose password history this is")
     password_hash = Column('pwdhist_password_hash', VARCHAR(255), nullable=False,
                            doc="Hashed password value (bcrypt or argon2)")
-    created_at = Column('pwdhist_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pwdhist_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when this password was set")
 
 
@@ -839,9 +839,9 @@ class GlobalVariable(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the variable's purpose")
     default_value_json = Column('gvar_default_value_json', Text, nullable=True,
                                 doc="JSON-encoded default value for the variable")
-    created_at = Column('gvar_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('gvar_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the variable was created")
-    updated_at = Column('gvar_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('gvar_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the variable was last updated")
     updated_by_id = Column('gvar_updated_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who last updated this variable")
@@ -865,7 +865,7 @@ class GlobalVariableHistory(PychestrateModelBase, SerializableModel):
                             doc="JSON-encoded new value")
     changed_by_id = Column('gvarhist_changed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who made the change")
-    changed_at = Column('gvarhist_changed_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    changed_at = Column('gvarhist_changed_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the change was made")
 
 
@@ -905,7 +905,7 @@ class SecretScope(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the scope's purpose")
     is_system = Column('scope_is_system', Boolean, default=False, nullable=False,
                        doc="Flag indicating if this is a system scope accessible only to administrators")
-    created_at = Column('scope_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('scope_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the scope was created")
     created_by_id = Column('scope_created_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who created this scope")
@@ -939,9 +939,9 @@ class Secret(PychestrateModelBase, SerializableModel):
                      doc="Version number, incremented on each update")
     is_deleted = Column('secret_is_deleted', Boolean, default=False, nullable=False,
                         doc="Soft delete flag")
-    created_at = Column('secret_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('secret_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the secret was created")
-    updated_at = Column('secret_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('secret_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the secret was last updated")
     updated_by_id = Column('secret_updated_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who last updated this secret")
@@ -962,7 +962,7 @@ class SecretVersion(PychestrateModelBase, SerializableModel):
                        doc="Reference to the secret")
     version = Column('secver_version', Integer, nullable=False,
                      doc="Version number")
-    changed_at = Column('secver_changed_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    changed_at = Column('secver_changed_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when this version was created")
     changed_by_id = Column('secver_changed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                            doc="Reference to the user who made the change")
@@ -1009,9 +1009,9 @@ class PasswordResetToken(PychestrateModelBase, SerializableModel):
                      doc="Reference to the user requesting password reset")
     token = Column('prt_token', VARCHAR(64), unique=True, nullable=False, index=True,
                    doc="Unique reset token")
-    created_at = Column('prt_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prt_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the token was created")
-    expires_at = Column('prt_expires_at', DateTime(timezone=True), nullable=False,
+    expires_at = Column('prt_expires_at', UtcDateTime(timezone=True), nullable=False,
                         doc="Timestamp when the token expires")
     used = Column('prt_used', Boolean, default=False, nullable=False,
                   doc="Flag indicating if the token has been used")
@@ -1027,7 +1027,7 @@ class AuditLog(PychestrateModelBase, SerializableModel):
     id = Column('audit_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     event_type = Column('audit_event_type', VARCHAR(64), nullable=False, index=True,
                         doc="Type of audit event")
-    timestamp = Column('audit_timestamp', DateTime(timezone=True), default=utc_now, nullable=False, index=True,
+    timestamp = Column('audit_timestamp', UtcDateTime(timezone=True), default=utc_now, nullable=False, index=True,
                        doc="Timestamp when the event occurred")
     user_id = Column('audit_user_id', VARCHAR(40), nullable=True,
                      doc="ID of the user who performed the action")
@@ -1487,7 +1487,7 @@ project_resources = Table(
     PychestrateModelBase.metadata,
     Column('proj_id', BigInteger, ForeignKey('projects.proj_id'), primary_key=True),
     Column('res_id', BigInteger, ForeignKey('resources.res_id'), primary_key=True),
-    Column('assigned_at', DateTime(timezone=True), default=utc_now, nullable=False),
+    Column('assigned_at', UtcDateTime(timezone=True), default=utc_now, nullable=False),
     Column('assigned_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True)
 )
 
@@ -1518,11 +1518,11 @@ class Project(PychestrateModelBase, SerializableModel):
                       doc="Reference to the user who owns this project")
     metadata_json = Column('proj_metadata_json', JSON, default={}, nullable=False,
                            doc="JSON-encoded metadata for the project")
-    created_at = Column('proj_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('proj_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the project was created")
-    updated_at = Column('proj_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('proj_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the project was last updated")
-    last_activity_at = Column('proj_last_activity_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    last_activity_at = Column('proj_last_activity_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                               doc="Timestamp of the last activity in this project")
 
     # Relationships
@@ -1559,7 +1559,7 @@ class ProjectMember(PychestrateModelBase, SerializableModel):
                      doc="Reference to the user")
     role = Column('pm_role', VARCHAR(32), nullable=False,
                   doc="Role of the user in the project (owner, administrator, developer, viewer)")
-    joined_at = Column('pm_joined_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    joined_at = Column('pm_joined_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                        doc="Timestamp when the user joined the project")
 
     project = relationship('Project', back_populates='members', lazy='selectin')
@@ -1590,9 +1590,9 @@ class ProjectVariable(PychestrateModelBase, SerializableModel):
                           doc="Flag indicating if the variable should be masked in logs and UI")
     description = Column('pvar_description', VARCHAR(512), nullable=True,
                          doc="Human-readable description of the variable's purpose")
-    created_at = Column('pvar_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pvar_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the variable was created")
-    updated_at = Column('pvar_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pvar_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the variable was last updated")
 
     project = relationship('Project', back_populates='variables', lazy='selectin')
@@ -1641,11 +1641,11 @@ class ProjectRepository(PychestrateModelBase, SerializableModel):
                                  doc="Message of the last known commit")
     last_commit_author = Column('prepo_last_commit_author', VARCHAR(128), nullable=True,
                                 doc="Author of the last known commit")
-    last_commit_time = Column('prepo_last_commit_time', DateTime(timezone=True), nullable=True,
+    last_commit_time = Column('prepo_last_commit_time', UtcDateTime(timezone=True), nullable=True,
                               doc="Timestamp of the last known commit")
-    last_fetch_time = Column('prepo_last_fetch_time', DateTime(timezone=True), nullable=True,
+    last_fetch_time = Column('prepo_last_fetch_time', UtcDateTime(timezone=True), nullable=True,
                              doc="Timestamp of the last fetch operation")
-    created_at = Column('prepo_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prepo_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the repository was added")
 
     project = relationship('Project', back_populates='repositories', lazy='selectin')
@@ -1677,9 +1677,9 @@ class ProjectRepositoryRef(PychestrateModelBase, SerializableModel):
                   doc="Branch or tag name, without the refs/heads/ or refs/tags/ prefix")
     commit_sha = Column('prref_commit_sha', VARCHAR(64), nullable=False,
                         doc="Commit the ref pointed at (the peeled commit for annotated tags)")
-    first_seen_at = Column('prref_first_seen_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    first_seen_at = Column('prref_first_seen_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                            doc="Timestamp of the fetch that first saw the ref")
-    updated_at = Column('prref_updated_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    updated_at = Column('prref_updated_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp of the fetch that last saw the ref move")
 
 
@@ -1738,9 +1738,9 @@ class ProjectBuildSpec(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the build specification")
     version = Column('pbspec_version', Integer, default=1, nullable=False,
                      doc="Version number, incremented on each update")
-    created_at = Column('pbspec_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pbspec_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the specification was created")
-    updated_at = Column('pbspec_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pbspec_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the specification was last updated")
 
     project = relationship('Project', back_populates='build_specs', lazy='selectin')
@@ -1781,15 +1781,15 @@ class ProjectBuild(PychestrateModelBase, SerializableModel):
                              doc="Reference to the user who triggered the build")
     parameters_json = Column('pbuild_parameters_json', JSON, default={}, nullable=False,
                              doc="JSON-encoded parameters for the build")
-    started_at = Column('pbuild_started_at', DateTime(timezone=True), nullable=True,
+    started_at = Column('pbuild_started_at', UtcDateTime(timezone=True), nullable=True,
                         doc="Timestamp when the build started")
-    completed_at = Column('pbuild_completed_at', DateTime(timezone=True), nullable=True,
+    completed_at = Column('pbuild_completed_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the build completed")
     duration_seconds = Column('pbuild_duration_seconds', Integer, nullable=True,
                               doc="Duration of the build in seconds")
     logs_path = Column('pbuild_logs_path', VARCHAR(512), nullable=True,
                        doc="Path to the build logs")
-    created_at = Column('pbuild_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pbuild_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the build record was created")
 
     spec = relationship('ProjectBuildSpec', back_populates='builds', lazy='selectin')
@@ -1816,7 +1816,7 @@ class ProjectBuildArtifact(PychestrateModelBase, SerializableModel):
                       doc="Checksum of the artifact")
     checksum_algorithm = Column('pbartifact_checksum_algorithm', VARCHAR(16), default='sha256', nullable=False,
                                 doc="Algorithm used for the checksum")
-    created_at = Column('pbartifact_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pbartifact_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the artifact was created")
 
     build = relationship('ProjectBuild', back_populates='artifacts', lazy='selectin')
@@ -1886,9 +1886,9 @@ class ProjectInfraSpec(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the infrastructure specification")
     version = Column('pispec_version', Integer, default=1, nullable=False,
                      doc="Version number, incremented on each update")
-    created_at = Column('pispec_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pispec_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the specification was created")
-    updated_at = Column('pispec_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pispec_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the specification was last updated")
 
     project = relationship('Project', back_populates='infra_specs', lazy='selectin')
@@ -1928,15 +1928,15 @@ class ProjectInfraJob(PychestrateModelBase, SerializableModel):
                                         doc="JSON-encoded list of provisioned resources")
     connection_details_json = Column('pijob_connection_details_json', JSON, default={}, nullable=False,
                                      doc="JSON-encoded connection details for provisioned infrastructure")
-    started_at = Column('pijob_started_at', DateTime(timezone=True), nullable=True,
+    started_at = Column('pijob_started_at', UtcDateTime(timezone=True), nullable=True,
                         doc="Timestamp when the job started")
-    completed_at = Column('pijob_completed_at', DateTime(timezone=True), nullable=True,
+    completed_at = Column('pijob_completed_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the job completed")
     duration_seconds = Column('pijob_duration_seconds', Integer, nullable=True,
                               doc="Duration of the job in seconds")
     logs_path = Column('pijob_logs_path', VARCHAR(512), nullable=True,
                        doc="Path to the job logs")
-    created_at = Column('pijob_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pijob_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the job record was created")
 
     spec = relationship('ProjectInfraSpec', back_populates='jobs', lazy='selectin')
@@ -1999,9 +1999,9 @@ class ProjectTestSpec(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the test specification")
     version = Column('ptspec_version', Integer, default=1, nullable=False,
                      doc="Version number, incremented on each update")
-    created_at = Column('ptspec_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('ptspec_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the specification was created")
-    updated_at = Column('ptspec_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('ptspec_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the specification was last updated")
 
     project = relationship('Project', back_populates='test_specs', lazy='selectin')
@@ -2039,9 +2039,9 @@ class ProjectTestJob(PychestrateModelBase, SerializableModel):
                              doc="JSON-encoded parameters for the job")
     result_summary_json = Column('ptjob_result_summary_json', JSON, nullable=True,
                                  doc="JSON-encoded test result summary (total, passed, failed, skipped, errors)")
-    started_at = Column('ptjob_started_at', DateTime(timezone=True), nullable=True,
+    started_at = Column('ptjob_started_at', UtcDateTime(timezone=True), nullable=True,
                         doc="Timestamp when the job started")
-    completed_at = Column('ptjob_completed_at', DateTime(timezone=True), nullable=True,
+    completed_at = Column('ptjob_completed_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the job completed")
     duration_seconds = Column('ptjob_duration_seconds', Integer, nullable=True,
                               doc="Duration of the job in seconds")
@@ -2049,7 +2049,7 @@ class ProjectTestJob(PychestrateModelBase, SerializableModel):
                        doc="Path to the job logs")
     results_path = Column('ptjob_results_path', VARCHAR(512), nullable=True,
                           doc="Path to the test results file")
-    created_at = Column('ptjob_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('ptjob_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the job record was created")
 
     spec = relationship('ProjectTestSpec', back_populates='jobs', lazy='selectin')
@@ -2159,9 +2159,9 @@ class ProjectReleasePipeline(PychestrateModelBase, SerializableModel):
                          doc="Human-readable description of the pipeline")
     version = Column('prpipe_version', Integer, default=1, nullable=False,
                      doc="Version number, incremented on each update")
-    created_at = Column('prpipe_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prpipe_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the pipeline was created")
-    updated_at = Column('prpipe_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('prpipe_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the pipeline was last updated")
 
     project = relationship('Project', back_populates='release_pipelines', lazy='selectin')
@@ -2196,11 +2196,11 @@ class ProjectPipelineRun(PychestrateModelBase, SerializableModel):
                             doc="JSON-encoded variables for the run")
     release_id = Column('prrun_release_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=True,
                         doc="Reference to the release created by this run")
-    started_at = Column('prrun_started_at', DateTime(timezone=True), nullable=True,
+    started_at = Column('prrun_started_at', UtcDateTime(timezone=True), nullable=True,
                         doc="Timestamp when the run started")
-    completed_at = Column('prrun_completed_at', DateTime(timezone=True), nullable=True,
+    completed_at = Column('prrun_completed_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the run completed")
-    created_at = Column('prrun_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prrun_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the run record was created")
 
     pipeline = relationship('ProjectReleasePipeline', back_populates='runs', lazy='selectin')
@@ -2226,11 +2226,11 @@ class ProjectStageRun(PychestrateModelBase, SerializableModel):
                                doc="Flag indicating if the stage requires manual approval")
     approved_by_id = Column('pstagerun_approved_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                             doc="Reference to the user who approved the stage")
-    approved_at = Column('pstagerun_approved_at', DateTime(timezone=True), nullable=True,
+    approved_at = Column('pstagerun_approved_at', UtcDateTime(timezone=True), nullable=True,
                          doc="Timestamp when the stage was approved")
-    started_at = Column('pstagerun_started_at', DateTime(timezone=True), nullable=True,
+    started_at = Column('pstagerun_started_at', UtcDateTime(timezone=True), nullable=True,
                         doc="Timestamp when the stage started")
-    completed_at = Column('pstagerun_completed_at', DateTime(timezone=True), nullable=True,
+    completed_at = Column('pstagerun_completed_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the stage completed")
     logs_path = Column('pstagerun_logs_path', VARCHAR(512), nullable=True,
                        doc="Path to the stage logs")
@@ -2270,11 +2270,11 @@ class ProjectRelease(PychestrateModelBase, SerializableModel):
                              doc="Reference to the pipeline run that created this release")
     schedule_id = Column('prelease_schedule_id', BigInteger, ForeignKey('project_release_schedules.prsched_id'), nullable=True,
                          doc="Reference to the schedule that created this release")
-    created_at = Column('prelease_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prelease_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the release was created")
-    updated_at = Column('prelease_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('prelease_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the release was last updated")
-    published_at = Column('prelease_published_at', DateTime(timezone=True), nullable=True,
+    published_at = Column('prelease_published_at', UtcDateTime(timezone=True), nullable=True,
                           doc="Timestamp when the release was published")
     published_by_id = Column('prelease_published_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                              doc="Reference to the user who published the release")
@@ -2310,7 +2310,7 @@ class ProjectReleaseArtifact(PychestrateModelBase, SerializableModel):
                           doc="Storage path of the artifact")
     signature = Column('prartifact_signature', Text, nullable=True,
                        doc="Digital signature of the artifact")
-    created_at = Column('prartifact_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prartifact_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the artifact was created")
 
     release = relationship('ProjectRelease', back_populates='artifacts', lazy='selectin')
@@ -2339,9 +2339,9 @@ class ProjectReleaseChannel(PychestrateModelBase, SerializableModel):
                                 doc="Reference to the current release on this channel")
     requires_approval = Column('prchan_requires_approval', Boolean, default=False, nullable=False,
                                doc="Flag indicating if publishing to this channel requires approval")
-    created_at = Column('prchan_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prchan_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the channel was created")
-    updated_at = Column('prchan_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('prchan_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the channel was last updated")
 
     project = relationship('Project', back_populates='release_channels', lazy='selectin')
@@ -2359,7 +2359,7 @@ class ProjectChannelHistory(PychestrateModelBase, SerializableModel):
                         doc="Reference to the channel")
     release_id = Column('prelease_id', BigInteger, ForeignKey('project_releases.prelease_id'), nullable=False, index=True,
                         doc="Reference to the release")
-    published_at = Column('pchanhist_published_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    published_at = Column('pchanhist_published_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                           doc="Timestamp when the release was published to the channel")
     published_by_id = Column('pchanhist_published_by_id', UUIDType, ForeignKey('user.user_id'), nullable=False,
                              doc="Reference to the user who published the release")
@@ -2395,15 +2395,15 @@ class ProjectReleaseSchedule(PychestrateModelBase, SerializableModel):
                      doc="Flag indicating if the schedule is enabled")
     description = Column('prsched_description', VARCHAR(512), nullable=True,
                          doc="Human-readable description of the schedule")
-    last_run_time = Column('prsched_last_run_time', DateTime(timezone=True), nullable=True,
+    last_run_time = Column('prsched_last_run_time', UtcDateTime(timezone=True), nullable=True,
                            doc="Timestamp of the last scheduled run")
-    next_run_time = Column('prsched_next_run_time', DateTime(timezone=True), nullable=True,
+    next_run_time = Column('prsched_next_run_time', UtcDateTime(timezone=True), nullable=True,
                            doc="Timestamp of the next scheduled run")
     run_count = Column('prsched_run_count', Integer, default=0, nullable=False,
                        doc="Number of times the schedule has been triggered")
-    created_at = Column('prsched_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prsched_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the schedule was created")
-    updated_at = Column('prsched_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('prsched_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the schedule was last updated")
 
     project = relationship('Project')
@@ -2461,13 +2461,13 @@ class ProjectCalendarEvent(PychestrateModelBase, SerializableModel):
                   doc="Name of the event")
     description = Column('pcalevent_description', Text, nullable=True,
                          doc="Description of the event")
-    start_time = Column('pcalevent_start_time', DateTime(timezone=True), nullable=False,
+    start_time = Column('pcalevent_start_time', UtcDateTime(timezone=True), nullable=False,
                         doc="Start time of the event")
-    end_time = Column('pcalevent_end_time', DateTime(timezone=True), nullable=False,
+    end_time = Column('pcalevent_end_time', UtcDateTime(timezone=True), nullable=False,
                       doc="End time of the event")
-    created_at = Column('pcalevent_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pcalevent_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the event was created")
-    updated_at = Column('pcalevent_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pcalevent_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the event was last updated")
 
 
@@ -2492,13 +2492,13 @@ class ProjectReleaseEvent(PychestrateModelBase, SerializableModel):
                   doc="Name of the release event")
     description = Column('prelevent_description', Text, nullable=True,
                          doc="Description of the release event")
-    start_time = Column('prelevent_start_time', DateTime(timezone=True), nullable=False,
+    start_time = Column('prelevent_start_time', UtcDateTime(timezone=True), nullable=False,
                         doc="Start time of the release event")
-    end_time = Column('prelevent_end_time', DateTime(timezone=True), nullable=False,
+    end_time = Column('prelevent_end_time', UtcDateTime(timezone=True), nullable=False,
                       doc="End time of the release event")
-    created_at = Column('prelevent_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prelevent_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the event was created")
-    updated_at = Column('prelevent_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('prelevent_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the event was last updated")
 
     release = relationship('ProjectRelease', back_populates='events', lazy='selectin')
@@ -2523,17 +2523,17 @@ class ProjectPhaseEvent(PychestrateModelBase, SerializableModel):
                   doc="Name of the phase")
     description = Column('pphase_description', Text, nullable=True,
                          doc="Description of the phase")
-    start_time = Column('pphase_start_time', DateTime(timezone=True), nullable=False,
+    start_time = Column('pphase_start_time', UtcDateTime(timezone=True), nullable=False,
                         doc="Start time of the phase")
-    end_time = Column('pphase_end_time', DateTime(timezone=True), nullable=False,
+    end_time = Column('pphase_end_time', UtcDateTime(timezone=True), nullable=False,
                       doc="End time of the phase")
     order = Column('pphase_order', Integer, nullable=False,
                    doc="Order of the phase within the release event")
     status = Column('pphase_status', VARCHAR(32), default='planned', nullable=False,
                     doc="Status of the phase (planned, in_progress, completed)")
-    created_at = Column('pphase_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pphase_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the phase was created")
-    updated_at = Column('pphase_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pphase_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the phase was last updated")
 
     release_event = relationship('ProjectReleaseEvent', back_populates='phases', lazy='selectin')
@@ -2559,7 +2559,7 @@ class ProjectReleaseBranch(PychestrateModelBase, SerializableModel):
                          doc="Name of the branch")
     description = Column('prelbranch_description', Text, nullable=True,
                          doc="Description of the branch association")
-    created_at = Column('prelbranch_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('prelbranch_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the association was created")
 
     release = relationship('ProjectRelease', back_populates='branches', lazy='selectin')
@@ -2593,19 +2593,19 @@ class ProjectMergeEvent(PychestrateModelBase, SerializableModel):
                   doc="Name of the merge event")
     description = Column('pmerge_description', Text, nullable=True,
                          doc="Description of the merge event")
-    scheduled_time = Column('pmerge_scheduled_time', DateTime(timezone=True), nullable=False,
+    scheduled_time = Column('pmerge_scheduled_time', UtcDateTime(timezone=True), nullable=False,
                             doc="Scheduled time for the merge")
     status = Column('pmerge_status', VARCHAR(32), default='scheduled', nullable=False,
                     doc="Status of the merge event (scheduled, in_progress, completed, failed)")
-    executed_at = Column('pmerge_executed_at', DateTime(timezone=True), nullable=True,
+    executed_at = Column('pmerge_executed_at', UtcDateTime(timezone=True), nullable=True,
                          doc="Timestamp when the merge was executed")
     executed_by_id = Column('pmerge_executed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                             doc="Reference to the user who executed the merge")
     error_message = Column('pmerge_error_message', Text, nullable=True,
                            doc="Error message if the merge failed")
-    created_at = Column('pmerge_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pmerge_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the event was created")
-    updated_at = Column('pmerge_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pmerge_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the event was last updated")
 
     release = relationship('ProjectRelease', back_populates='merge_events', lazy='selectin')
@@ -2639,19 +2639,19 @@ class ProjectPullEvent(PychestrateModelBase, SerializableModel):
                   doc="Name of the pull event")
     description = Column('ppull_description', Text, nullable=True,
                          doc="Description of the pull event")
-    scheduled_time = Column('ppull_scheduled_time', DateTime(timezone=True), nullable=False,
+    scheduled_time = Column('ppull_scheduled_time', UtcDateTime(timezone=True), nullable=False,
                             doc="Scheduled time for the pull")
     status = Column('ppull_status', VARCHAR(32), default='scheduled', nullable=False,
                     doc="Status of the pull event (scheduled, in_progress, completed, failed)")
-    executed_at = Column('ppull_executed_at', DateTime(timezone=True), nullable=True,
+    executed_at = Column('ppull_executed_at', UtcDateTime(timezone=True), nullable=True,
                          doc="Timestamp when the pull was executed")
     executed_by_id = Column('ppull_executed_by_id', UUIDType, ForeignKey('user.user_id'), nullable=True,
                             doc="Reference to the user who executed the pull")
     error_message = Column('ppull_error_message', Text, nullable=True,
                            doc="Error message if the pull failed")
-    created_at = Column('ppull_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('ppull_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the event was created")
-    updated_at = Column('ppull_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('ppull_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the event was last updated")
 
     release = relationship('ProjectRelease', back_populates='pull_events', lazy='selectin')
@@ -2712,13 +2712,13 @@ class ProjectWatch(PychestrateModelBase, SerializableModel):
                      doc="Flag indicating if the watch is enabled")
     description = Column('pwatch_description', VARCHAR(512), nullable=True,
                          doc="Human-readable description of the watch")
-    last_trigger_time = Column('pwatch_last_trigger_time', DateTime(timezone=True), nullable=True,
+    last_trigger_time = Column('pwatch_last_trigger_time', UtcDateTime(timezone=True), nullable=True,
                                doc="Timestamp of the last trigger")
     trigger_count = Column('pwatch_trigger_count', Integer, default=0, nullable=False,
                            doc="Number of times the watch has been triggered")
-    created_at = Column('pwatch_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('pwatch_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the watch was created")
-    updated_at = Column('pwatch_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
+    updated_at = Column('pwatch_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False,
                         doc="Timestamp when the watch was last updated")
 
     project = relationship('Project', back_populates='watches', lazy='selectin')
@@ -2736,7 +2736,7 @@ class ProjectWatchTriggerLog(PychestrateModelBase, SerializableModel):
     id = Column('pwatchlog_id', BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
     watch_id = Column('pwatch_id', BigInteger, ForeignKey('project_watches.pwatch_id'), nullable=False, index=True,
                       doc="Reference to the watch")
-    triggered_at = Column('pwatchlog_triggered_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    triggered_at = Column('pwatchlog_triggered_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                           doc="Timestamp when the watch was triggered")
     trigger_event_json = Column('pwatchlog_trigger_event_json', JSON, nullable=False,
                                 doc="JSON-encoded event data that triggered the watch")
@@ -2785,9 +2785,9 @@ class ProjectReleaseTemplate(PychestrateModelBase, SerializableModel):
                               doc="JSON-encoded default pipeline blob")
     default_schedule = Column('rtmpl_default_schedule', JSON, nullable=True,
                               doc="JSON-encoded default schedule blob")
-    created_at = Column('rtmpl_created_at', DateTime(timezone=True), default=utc_now, nullable=False,
+    created_at = Column('rtmpl_created_at', UtcDateTime(timezone=True), default=utc_now, nullable=False,
                         doc="Timestamp when the template was created")
-    updated_at = Column('rtmpl_updated_at', DateTime(timezone=True), default=utc_now, onupdate=utc_now,
+    updated_at = Column('rtmpl_updated_at', UtcDateTime(timezone=True), default=utc_now, onupdate=utc_now,
                         nullable=False, doc="Timestamp when the template was last updated")
 
     project = relationship('Project', back_populates='release_templates', lazy='selectin')

@@ -28,6 +28,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -55,8 +56,8 @@ class JobEnvelopeRecord(PychestratePhase1Base, SerializableModel):
     job_type = Column(String(64), nullable=False, default="")
     client_id = Column(UUIDType(binary=False), nullable=False)
     pod_id = Column(UUIDType(binary=False), nullable=False)
-    issued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    hard_deadline_at = Column(DateTime(timezone=True), nullable=False)
+    issued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    hard_deadline_at = Column(UtcDateTime(timezone=True), nullable=False)
     key_id = Column(String(128), nullable=False, default="")
     canonical_payload = Column(LargeBinary, nullable=False)
     signature = Column(LargeBinary, nullable=False)

@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -68,7 +69,7 @@ class DriftSchedule(PychestratePhase1Base, SerializableModel):
     cron_expression = Column(String(128), nullable=False, default="")
     enabled = Column(Boolean, nullable=False, default=True)
     updated_by = Column(UUIDType(binary=False), nullable=True)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         PrimaryKeyConstraint(
@@ -99,8 +100,8 @@ class DriftRun(PychestratePhase1Base, SerializableModel):
         Enum(DriftTriggerKind, name=DRIFT_TRIGGER_KIND_ENUM),
         nullable=False,
     )
-    scheduled_for = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    ran_at = Column(DateTime(timezone=True), nullable=True)
+    scheduled_for = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    ran_at = Column(UtcDateTime(timezone=True), nullable=True)
     drift_count = Column(Integer, nullable=True)
     added = Column(Integer, nullable=True)
     changed = Column(Integer, nullable=True)
@@ -129,10 +130,10 @@ class DriftTickLedger(PychestratePhase1Base, SerializableModel):
 
     project_id = Column(UUIDType(binary=False), nullable=False)
     environment_id = Column(UUIDType(binary=False), nullable=False)
-    scheduled_for = Column(DateTime(timezone=True), nullable=False)
+    scheduled_for = Column(UtcDateTime(timezone=True), nullable=False)
     run_id = Column(UUIDType(binary=False), nullable=False)
     recorded_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (

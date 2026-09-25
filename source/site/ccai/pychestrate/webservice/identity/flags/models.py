@@ -30,6 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -80,11 +81,11 @@ class FeatureFlag(PychestratePhase1Base, SerializableModel):
     flag_kind = Column(Enum(FlagKind, name="feature_flag_kind"), nullable=False)
     current_version = Column(Integer, nullable=False, default=1)
     state = Column(Enum(FlagState, name="feature_flag_state"), nullable=False, default=FlagState.ACTIVE)
-    retired_at = Column(DateTime(timezone=True), nullable=True)
-    grace_expires_at = Column(DateTime(timezone=True), nullable=True)
+    retired_at = Column(UtcDateTime(timezone=True), nullable=True)
+    grace_expires_at = Column(UtcDateTime(timezone=True), nullable=True)
     owner_user_id = Column(UUIDType(binary=False), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class FeatureFlagVersion(PychestratePhase1Base, SerializableModel):
@@ -103,7 +104,7 @@ class FeatureFlagVersion(PychestratePhase1Base, SerializableModel):
     version = Column(Integer, nullable=False)
     default_value = Column(JSON, nullable=False)
     rules_json = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
     __table_args__ = (

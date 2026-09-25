@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -39,7 +40,7 @@ class TimeseriesSample(PychestratePhase1Base, SerializableModel):
     label_signature = Column(String(64), nullable=False, default="")
     labels = Column(JSON, nullable=False, default=dict)
     value = Column(Float, nullable=False, default=0.0)
-    observed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    observed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(

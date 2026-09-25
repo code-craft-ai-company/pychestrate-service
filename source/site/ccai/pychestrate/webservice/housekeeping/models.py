@@ -23,6 +23,7 @@ __version__ = "1.0.0"
 
 from sqlalchemy import Column, DateTime, String
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.orm import SerializableModel
 
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -37,7 +38,7 @@ class HousekeepingLease(PychestratePhase1Base, SerializableModel):
 
     task_name = Column(String(128), primary_key=True)
     holder_id = Column(String(256), nullable=False)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    last_started_at = Column(DateTime(timezone=True), nullable=True)
-    last_finished_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
+    last_started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     last_outcome = Column(String(512), nullable=True)

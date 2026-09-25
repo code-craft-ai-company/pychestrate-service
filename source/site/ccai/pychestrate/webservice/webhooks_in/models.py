@@ -43,6 +43,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -186,9 +187,9 @@ class WebhookConfiguration(PychestratePhase1Base, SerializableModel):
     enabled = Column(Boolean, nullable=False, default=True)
     created_by = Column(UUIDType(binary=False), nullable=True)
     created_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
-    disabled_at = Column(DateTime(timezone=True), nullable=True)
+    disabled_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -215,9 +216,9 @@ class WebhookSeenDelivery(PychestratePhase1Base, SerializableModel):
     hook_name = Column(String(128), primary_key=True)
     delivery_id = Column(String(256), primary_key=True)
     first_seen_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
 
     __table_args__ = (
         Index(
@@ -246,9 +247,9 @@ class WebhookDeadletter(PychestratePhase1Base, SerializableModel):
     reason = Column(String(64), nullable=False)
     recoverable = Column(Boolean, nullable=False, default=True)
     stored_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
 
     __table_args__ = (
         Index(

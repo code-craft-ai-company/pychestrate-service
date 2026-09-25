@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -43,8 +44,8 @@ class ArtifactBlob(PychestratePhase1Base, SerializableModel):
     content_type = Column(String(128), nullable=True)
     reference_count = Column(Integer, nullable=False, default=0)
     tier = Column(String(16), nullable=False, default="hot")
-    first_seen_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    last_referenced_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    first_seen_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    last_referenced_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class RunArtifactReference(PychestratePhase1Base, SerializableModel):
@@ -60,7 +61,7 @@ class RunArtifactReference(PychestratePhase1Base, SerializableModel):
     label = Column(String(256), nullable=False, default="")
     artifact_type = Column(String(64), nullable=False, default="generic")
     cas_digest = Column(String(64), nullable=False)
-    registered_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    registered_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -98,9 +99,9 @@ class ArtifactRetentionPlan(PychestratePhase1Base, SerializableModel):
     plan_id = Column(UUIDType(binary=False), primary_key=True)
     cas_digest = Column(String(64), nullable=False)
     target_tier = Column(String(16), nullable=False, default="cold")
-    apply_at = Column(DateTime(timezone=True), nullable=True)
+    apply_at = Column(UtcDateTime(timezone=True), nullable=True)
     reason = Column(String(512), nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_artifacts_retention_plan_digest", "cas_digest"),

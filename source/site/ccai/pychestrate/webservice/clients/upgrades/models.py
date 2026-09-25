@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -51,7 +52,7 @@ class AgentRollout(PychestratePhase1Base, SerializableModel):
     artifact_sha256 = Column(String(64), nullable=False)
     signature = Column(Text, nullable=False, default="")
     issued_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
     state = Column(
         Enum(RolloutState, name=ROLLOUT_STATE_ENUM),
@@ -89,8 +90,8 @@ class AgentRolloutStage(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=StageState.PENDING,
     )
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    ended_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    ended_at = Column(UtcDateTime(timezone=True), nullable=True)
     success_count = Column(Integer, nullable=False, default=0)
     failure_count = Column(Integer, nullable=False, default=0)
     deferred_count = Column(Integer, nullable=False, default=0)
@@ -119,14 +120,14 @@ class AgentUpgradeOffer(PychestratePhase1Base, SerializableModel):
     client_id = Column(String(128), nullable=False)
     version = Column(String(64), nullable=False)
     offered_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
     outcome = Column(
         Enum(OfferOutcome, name=OFFER_OUTCOME_ENUM),
         nullable=False,
         default=OfferOutcome.OFFERED,
     )
-    outcome_at = Column(DateTime(timezone=True), nullable=True)
+    outcome_at = Column(UtcDateTime(timezone=True), nullable=True)
     outcome_detail = Column(JSON, nullable=True)
 
     __table_args__ = (
@@ -153,6 +154,6 @@ class AgentPodPin(PychestratePhase1Base, SerializableModel):
     pinned_version = Column(String(64), nullable=False)
     set_by = Column(UUIDType(binary=False), nullable=True)
     set_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
     reason = Column(Text, nullable=True)

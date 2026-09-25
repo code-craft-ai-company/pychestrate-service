@@ -32,6 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -52,8 +53,8 @@ class DispatchReceipt(PychestratePhase1Base, SerializableModel):
     attempt_id = Column(UUIDType(binary=False), nullable=False)
     envelope_id = Column(UUIDType(binary=False), nullable=False)
     client_local_run_id = Column(String(128), nullable=False)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    deadline_at = Column(DateTime(timezone=True), nullable=True)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    deadline_at = Column(UtcDateTime(timezone=True), nullable=True)
     late_arrival = Column(Boolean, nullable=False, default=False)
     launch_pid = Column(Integer, nullable=True)
 

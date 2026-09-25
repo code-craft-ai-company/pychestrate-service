@@ -34,6 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -70,8 +71,8 @@ class Run(PychestratePhase1Base, SerializableModel):
         Enum(RunState, name=RUN_STATE_ENUM),
         nullable=True,
     )
-    entered_state_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    progress_last_observed_at = Column(DateTime(timezone=True), nullable=True)
+    entered_state_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    progress_last_observed_at = Column(UtcDateTime(timezone=True), nullable=True)
     terminal_outcome = Column(
         Enum(TerminalOutcome, name=TERMINAL_OUTCOME_ENUM),
         nullable=True,
@@ -105,7 +106,7 @@ class RunStateAudit(PychestratePhase1Base, SerializableModel):
     event = Column(Enum(RunEvent, name=RUN_EVENT_ENUM), nullable=False)
     actor = Column(String(256), nullable=False, default="")
     reason = Column(Text, nullable=True)
-    transitioned_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    transitioned_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_runs_run_state_audit_run_id", "run_id"),
@@ -129,8 +130,8 @@ class RunEventOutbox(PychestratePhase1Base, SerializableModel):
     run_id = Column(UUIDType(binary=False), nullable=False)
     topic = Column(String(128), nullable=False)
     payload = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    published_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_runs_run_event_outbox_run_id", "run_id"),

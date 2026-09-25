@@ -25,6 +25,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -65,8 +66,8 @@ class BuildRun(PychestratePhase1Base, SerializableModel):
     pipeline_run_id = Column(UUIDType(binary=False), nullable=True)
     pipeline_step_run_id = Column(UUIDType(binary=False), nullable=True)
     actor_id = Column(UUIDType(binary=False), nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
     inputs = Column(JSON, nullable=False, default=dict)
     annotations = Column(JSON, nullable=False, default=dict)
@@ -117,7 +118,7 @@ class BuildCacheScope(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=False)
     scope_name = Column(String(128), nullable=False, default="")
     bytes_allocated = Column(Integer, nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_orch_build_cache_scope_project", "project_id"),

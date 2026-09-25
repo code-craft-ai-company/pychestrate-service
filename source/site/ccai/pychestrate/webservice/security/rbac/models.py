@@ -26,6 +26,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -86,7 +87,7 @@ class RbacRole(PychestratePhase1Base, SerializableModel):
     source = Column(Enum(RoleSource, name="rbac_role_source"), nullable=False)
     source_name = Column(String(128), nullable=True)
     description = Column(String(512), nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class RbacPermission(PychestratePhase1Base, SerializableModel):
@@ -137,7 +138,7 @@ class RbacRoleBinding(PychestratePhase1Base, SerializableModel):
     scope_kind = Column(Enum(BindingScope, name="rbac_binding_scope"), nullable=False)
     scope_id = Column(UUIDType(binary=False), nullable=True)
     inherits_into_project = Column(Boolean, nullable=False, default=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
     __table_args__ = (

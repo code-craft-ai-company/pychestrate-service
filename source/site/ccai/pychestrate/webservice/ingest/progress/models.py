@@ -34,6 +34,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -58,8 +59,8 @@ class RunProgressSummary(PychestratePhase1Base, SerializableModel):
     tests_errored = Column(Integer, nullable=False, default=0)
     percent_complete = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
-    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    recorded_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     raw_payload = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -81,10 +82,10 @@ class RunProgressRecord(PychestratePhase1Base, SerializableModel):
     record_index = Column(Integer, nullable=False)
     test_name = Column(String(512), nullable=False, default="")
     result = Column(String(32), nullable=False, default="UNSET")
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     duration_seconds = Column(Float, nullable=True)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     raw_payload = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -122,8 +123,8 @@ class RunProgressFrame(PychestratePhase1Base, SerializableModel):
     status = Column(String(32), nullable=True)
     percent_complete = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
-    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    recorded_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     raw_payload = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -152,7 +153,7 @@ class RunProgressCounters(PychestratePhase1Base, SerializableModel):
     tests_skipped = Column(Integer, nullable=False, default=0)
     tests_errored = Column(Integer, nullable=False, default=0)
     percent_complete = Column(Float, nullable=True)
-    last_summary_at = Column(DateTime(timezone=True), nullable=True)
+    last_summary_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_ingest_run_progress_counters_project_id", "project_id"),

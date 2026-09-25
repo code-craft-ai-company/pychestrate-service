@@ -21,6 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -39,7 +40,7 @@ class TagAssignment(PychestratePhase1Base, SerializableModel):
     taxonomy_name = Column(String(32), nullable=False)
     canonical_value = Column(String(256), nullable=False)
     assigned_by_user_id = Column(UUIDType(binary=False), nullable=True)
-    assigned_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    assigned_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(

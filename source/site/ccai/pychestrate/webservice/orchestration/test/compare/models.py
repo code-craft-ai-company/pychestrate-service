@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -64,8 +65,8 @@ class CompareReport(PychestratePhase1Base, SerializableModel):
     per_test_payload = Column(JSON, nullable=False, default=list)
     warnings = Column(JSON, nullable=False, default=list)
     note = Column(Text, nullable=False, default="")
-    computed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    computed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(

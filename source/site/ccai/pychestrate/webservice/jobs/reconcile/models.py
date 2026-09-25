@@ -21,6 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -60,7 +61,7 @@ class ReconcileDecision(PychestratePhase1Base, SerializableModel):
     )
     source = Column(String(64), nullable=False, default="client_truth")
     note = Column(Text, nullable=True)
-    decided_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    decided_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_jobs_reconcile_decision_run", "run_id"),

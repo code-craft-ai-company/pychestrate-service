@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -72,8 +73,8 @@ class NotificationChannel(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=True)
     config = Column(_JsonPayload, nullable=False, default=dict)
     disabled = Column(Boolean(), nullable=False, default=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -100,8 +101,8 @@ class NotificationRoutingRule(PychestratePhase1Base, SerializableModel):
     template_name = Column(String(128), nullable=False)
     rate_limit_per_minute = Column(Integer(), nullable=True)
     disabled = Column(Boolean(), nullable=False, default=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_notifications_routing_project", "project_id"),
@@ -128,7 +129,7 @@ class NotificationDispatchEnvelope(PychestratePhase1Base, SerializableModel):
     severity = Column(String(16), nullable=False, default="INFO")
     rendered_subject = Column(String(512), nullable=False, default="")
     rendered_body = Column(Text(), nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_notifications_dispatch_channel", "channel_id"),
@@ -146,7 +147,7 @@ class UserNotificationPreferences(PychestratePhase1Base, SerializableModel):
     user_id = Column(UUIDType(binary=False), primary_key=True)
     topics_enabled = Column(_JsonPayload, nullable=False, default=dict)
     quiet_hours = Column(_JsonPayload, nullable=False, default=dict)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class NotificationDeadLetter(PychestratePhase1Base, SerializableModel):
@@ -167,7 +168,7 @@ class NotificationDeadLetter(PychestratePhase1Base, SerializableModel):
     last_error = Column(Text(), nullable=False, default="")
     attempt_count = Column(Integer(), nullable=False, default=0)
     replayable = Column(Boolean(), nullable=False, default=True)
-    parked_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    parked_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class NotificationDispatchAttempt(PychestratePhase1Base, SerializableModel):
@@ -193,7 +194,7 @@ class NotificationDispatchAttempt(PychestratePhase1Base, SerializableModel):
     )
     error_message = Column(Text(), nullable=True)
     latency_ms = Column(Integer(), nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    attempted_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_notifications_attempts_envelope", "envelope_id"),

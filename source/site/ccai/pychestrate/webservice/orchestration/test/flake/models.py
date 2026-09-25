@@ -24,6 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -93,7 +94,7 @@ class TestOutcome(PychestratePhase1Base, SerializableModel):
         default=Outcome.PASS,
     )
     duration_ms = Column(Integer, nullable=False, default=0)
-    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    started_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -134,7 +135,7 @@ class FlakeClassification(PychestratePhase1Base, SerializableModel):
     sample_count = Column(Integer, nullable=False, default=0)
     rationale_tag = Column(String(128), nullable=False, default="")
     last_computed_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (
@@ -172,7 +173,7 @@ class FlakeQuarantineLedger(PychestratePhase1Base, SerializableModel):
     )
     actor_id = Column(UUIDType(binary=False), nullable=True)
     reason = Column(Text, nullable=False, default="")
-    at_ts = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    at_ts = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(

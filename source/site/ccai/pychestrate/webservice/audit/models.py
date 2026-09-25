@@ -29,6 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -67,7 +68,7 @@ class AuditRecord(PychestratePhase1Base, SerializableModel):
     payload_hash = Column(LargeBinary(64), nullable=False)
     previous_hash = Column(LargeBinary(64), nullable=False)
     record_hash = Column(LargeBinary(64), nullable=False)
-    written_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    written_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_audit_records_kind_written_at", "kind", "written_at"),
@@ -100,8 +101,8 @@ class AuditSinkOutbox(PychestratePhase1Base, SerializableModel):
     sink_name = Column(String(128), nullable=False)
     sequence_number = Column(BigInteger().with_variant(Integer, "sqlite"), nullable=False)
     status = Column(Enum(AuditSinkOutboxStatus, name="audit_sink_outbox_status"), nullable=False)
-    enqueued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    next_attempt_at = Column(DateTime(timezone=True), nullable=True)
+    enqueued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    next_attempt_at = Column(UtcDateTime(timezone=True), nullable=True)
     retry_count = Column(Integer, nullable=False, default=0)
 
 

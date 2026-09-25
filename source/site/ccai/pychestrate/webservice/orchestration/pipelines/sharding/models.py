@@ -27,6 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -87,8 +88,8 @@ class ShardSet(PychestratePhase1Base, SerializableModel):
     allow_partial_success = Column(Boolean, nullable=False, default=False)
     min_success_fraction = Column(Float, nullable=False, default=1.0)
     shard_count = Column(Integer, nullable=False, default=0)
-    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     note = Column(Text, nullable=False, default="")
 
     __table_args__ = (
@@ -123,8 +124,8 @@ class ShardSpec(PychestratePhase1Base, SerializableModel):
         default=ShardState.PENDING,
     )
     run_id = Column(UUIDType(binary=False), nullable=True)
-    dispatched_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    dispatched_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint(

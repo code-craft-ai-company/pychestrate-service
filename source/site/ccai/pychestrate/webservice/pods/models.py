@@ -36,6 +36,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -92,9 +93,9 @@ class PodDefinition(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=False)
     pod_name = Column(String(128), nullable=False)
     current_version = Column(Integer(), nullable=False, default=1)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("project_id", "pod_name", name="uq_pods_definition_project_name"),
@@ -117,7 +118,7 @@ class PodDefinitionVersion(PychestratePhase1Base, SerializableModel):
     spec_json = Column(_Json, nullable=False, default=dict)
     spec_hash = Column(String(64), nullable=False)
     validator_report = Column(_Json, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
 
@@ -141,9 +142,9 @@ class PodRuntimeState(PychestratePhase1Base, SerializableModel):
         Enum(PodState, name="pods_pod_state"),
         nullable=True,
     )
-    last_transition_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    last_transition_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     last_transition_event = Column(String(64), nullable=True)
-    in_use_since = Column(DateTime(timezone=True), nullable=True)
+    in_use_since = Column(UtcDateTime(timezone=True), nullable=True)
     runs_remaining = Column(Integer(), nullable=True)
     transition_cursor = Column(Integer(), nullable=False, default=0)
 
@@ -165,7 +166,7 @@ class PodLifecycleLog(PychestratePhase1Base, SerializableModel):
     event_kind = Column(String(64), nullable=False)
     event_payload = Column(_Json, nullable=False, default=dict)
     actor = Column(String(128), nullable=True)
-    applied_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    applied_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_pods_lifecycle_log_pod", "pod_id"),
@@ -193,11 +194,11 @@ class PodRegistration(PychestratePhase1Base, SerializableModel):
     )
     report_hash = Column(String(64), nullable=False)
     report_json = Column(_Json, nullable=False, default=dict)
-    registered_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    last_report_at = Column(DateTime(timezone=True), nullable=True)
-    deregistered_at = Column(DateTime(timezone=True), nullable=True)
+    registered_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    last_report_at = Column(UtcDateTime(timezone=True), nullable=True)
+    deregistered_at = Column(UtcDateTime(timezone=True), nullable=True)
     deregister_reason = Column(String(256), nullable=True)
-    client_lost_at = Column(DateTime(timezone=True), nullable=True)
+    client_lost_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_pods_registration_pod", "pod_id"),
@@ -219,7 +220,7 @@ class PodTemplate(PychestratePhase1Base, SerializableModel):
     source_json = Column(_Json, nullable=False, default=dict)
     parameter_schema = Column(_Json, nullable=False, default=dict)
     created_by = Column(UUIDType(binary=False), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("project_id", "name", name="uq_pods_template_project_name"),
@@ -255,8 +256,8 @@ class DynamicPodMaterialization(PychestratePhase1Base, SerializableModel):
     error_summary = Column(Text(), nullable=True)
     reservation_ids = Column(_Json, nullable=False, default=list)
     requested_by = Column(UUIDType(binary=False), nullable=True)
-    requested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    ready_at = Column(DateTime(timezone=True), nullable=True)
+    requested_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    ready_at = Column(UtcDateTime(timezone=True), nullable=True)
     orphaned_reason = Column(String(256), nullable=True)
 
 
@@ -271,8 +272,8 @@ class PodScopedBearer(PychestratePhase1Base, SerializableModel):
     pod_id = Column(UUIDType(binary=False), nullable=False)
     secret_ref = Column(String(512), nullable=False)
     policy = Column(_Json, nullable=False, default=dict)
-    issued_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
+    issued_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=True)
     consumed = Column(Boolean(), nullable=False, default=False)
 
     __table_args__ = (
@@ -294,7 +295,7 @@ class PodRunVariable(PychestratePhase1Base, SerializableModel):
     value_schema = Column(_Json, nullable=True)
     locked = Column(Boolean(), nullable=False, default=False)
     set_by = Column(UUIDType(binary=False), nullable=True)
-    set_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    set_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("run_id", "pod_id", "name", name="uq_pods_run_variable_scope"),

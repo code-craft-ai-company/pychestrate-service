@@ -23,6 +23,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -83,12 +84,12 @@ class InfraRun(PychestratePhase1Base, SerializableModel):
     plan_summary = Column(JSON, nullable=True)
     plan_artifact_ref = Column(Text, nullable=True)
     plan_diff_digest_sha256 = Column(String(64), nullable=False, default="")
-    plan_issued_at = Column(DateTime(timezone=True), nullable=True)
+    plan_issued_at = Column(UtcDateTime(timezone=True), nullable=True)
     replay_of = Column(UUIDType(binary=False), nullable=True)
     output_digest_sha256 = Column(String(64), nullable=False, default="")
     failing_guard_rule_id = Column(String(128), nullable=True)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
 
     __table_args__ = (

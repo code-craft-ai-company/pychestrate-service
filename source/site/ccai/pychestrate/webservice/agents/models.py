@@ -31,6 +31,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -71,8 +72,8 @@ class ClientSession(PychestratePhase1Base, SerializableModel):
     transport_name = Column(String(64), nullable=False)
     remote_addr = Column(String(128), nullable=True)
     cert_serial = Column(String(64), nullable=True)
-    opened_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    closed_at = Column(DateTime(timezone=True), nullable=True)
+    opened_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    closed_at = Column(UtcDateTime(timezone=True), nullable=True)
     close_code = Column(String(64), nullable=True)
     enrollment_nonce = Column(String(128), nullable=True)
 
@@ -96,7 +97,7 @@ class ClientFrameAudit(PychestratePhase1Base, SerializableModel):
     kind = Column(String(64), nullable=False)
     direction = Column(Enum(FrameDirection, name="agents_frame_direction"), nullable=False)
     size_bytes = Column(Integer(), nullable=False, default=0)
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     accepted = Column(Boolean(), nullable=False, default=True)
     reject_reason = Column(String(256), nullable=True)
 
@@ -113,7 +114,7 @@ class ClientCapability(PychestratePhase1Base, SerializableModel):
     value_json = Column(_Json, nullable=False, default=dict)
     sensitive_ref = Column(String(256), nullable=True)
     revision_token = Column(String(64), nullable=False, default="")
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("client_id", "kind", name="uq_agents_capability_client_kind"),
@@ -132,7 +133,7 @@ class ClientInventoryChangeLog(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=True)
     change_kind = Column(String(64), nullable=False)
     payload_summary = Column(_Json, nullable=False, default=dict)
-    logged_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    logged_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_agents_inventory_change_client", "client_id"),
@@ -156,7 +157,7 @@ class AgentRollout(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=RolloutState.DRAFT,
     )
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
 
 
@@ -191,9 +192,9 @@ class AgentRolloutStage(PychestratePhase1Base, SerializableModel):
     success_count = Column(Integer(), nullable=False, default=0)
     failure_count = Column(Integer(), nullable=False, default=0)
     deferred_count = Column(Integer(), nullable=False, default=0)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    completed_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -210,7 +211,7 @@ class AgentPodPin(PychestratePhase1Base, SerializableModel):
 
     pod_id = Column(UUIDType(binary=False), primary_key=True)
     pinned_version = Column(String(64), nullable=False)
-    set_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    set_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     reason = Column(String(256), nullable=False, default="")
 
 
@@ -233,8 +234,8 @@ class AgentUpgradeOffer(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=UpgradeOfferOutcome.OFFERED,
     )
-    offered_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    offered_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    resolved_at = Column(UtcDateTime(timezone=True), nullable=True)
     detail = Column(Text(), nullable=True)
 
     __table_args__ = (

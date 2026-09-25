@@ -19,6 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -45,9 +46,9 @@ class ScmProjectConfig(PychestratePhase1Base, SerializableModel):
     )
     use_polling = Column(Boolean, nullable=False, default=False)
     polling_ref_glob = Column(String(128), nullable=False, default="")
-    last_poll_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    last_poll_at = Column(UtcDateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class ScmWebhookDelivery(PychestratePhase1Base, SerializableModel):
@@ -63,8 +64,8 @@ class ScmWebhookDelivery(PychestratePhase1Base, SerializableModel):
     delivery_id = Column(String(128), nullable=False)
     provider_name = Column(String(64), nullable=False, default="")
     event_kind = Column(String(64), nullable=False, default="")
-    received_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    first_seen_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    received_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    first_seen_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         PrimaryKeyConstraint(
@@ -90,7 +91,7 @@ class ScmLastSeenHead(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=False)
     ref = Column(String(256), nullable=False)
     commit_sha = Column(String(64), nullable=False, default="")
-    observed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    observed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         PrimaryKeyConstraint(

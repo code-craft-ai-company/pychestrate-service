@@ -39,6 +39,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -73,9 +74,9 @@ class RunResultSummary(PychestratePhase1Base, SerializableModel):
     tests_failed = Column(Integer, nullable=False, default=0)
     tests_skipped = Column(Integer, nullable=False, default=0)
     tests_errored = Column(Integer, nullable=False, default=0)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
-    ingested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
+    ingested_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     raw_payload = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -101,9 +102,9 @@ class TaskResult(PychestratePhase1Base, SerializableModel):
     instance_uuid = Column(String(64), nullable=False, default="")
     rtype = Column(String(32), nullable=False, default="TEST")
     result = Column(String(32), nullable=False, default="UNSET")
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
-    ingested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
+    ingested_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     raw_payload = Column(JSON, nullable=False, default=dict)
 
     __table_args__ = (
@@ -130,7 +131,7 @@ class RunArtifact(PychestratePhase1Base, SerializableModel):
     classification = Column(String(64), nullable=False, default="other")
     size_bytes = Column(BigInteger, nullable=False, default=0)
     content_type = Column(String(128), nullable=True)
-    ingested_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    ingested_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -151,8 +152,8 @@ class ResultScanAttempt(PychestratePhase1Base, SerializableModel):
 
     attempt_id = Column(UUIDType(binary=False), primary_key=True)
     run_id = Column(UUIDType(binary=False), nullable=False)
-    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     status = Column(
         Enum(ScanOutcomeStatus, name=SCAN_OUTCOME_STATUS_ENUM),
         nullable=False,

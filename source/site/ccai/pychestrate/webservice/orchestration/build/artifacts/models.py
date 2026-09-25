@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -58,7 +59,7 @@ class BuildArtifactManifest(PychestratePhase1Base, SerializableModel):
     entry_count = Column(Integer, nullable=False, default=0)
     note = Column(Text, nullable=False, default="")
     synthesized_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (
@@ -127,7 +128,7 @@ class BuildArtifactPromotionLedger(PychestratePhase1Base, SerializableModel):
     )
     actor_id = Column(UUIDType(binary=False), nullable=True)
     note = Column(Text, nullable=False, default="")
-    at_ts = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    at_ts = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(
@@ -150,7 +151,7 @@ class ChannelHead(PychestratePhase1Base, SerializableModel):
     artifact_id = Column(String(128), nullable=False)
     manifest_id = Column(UUIDType(binary=False), nullable=False)
     promoted_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (

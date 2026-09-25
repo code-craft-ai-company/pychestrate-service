@@ -28,6 +28,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -61,9 +62,9 @@ class AuthSession(PychestratePhase1Base, SerializableModel):
         nullable=False,
     )
     provider_name = Column(String(128), nullable=False)
-    opened_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    last_seen_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    opened_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
+    last_seen_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     idle_timeout_seconds = Column(Integer, nullable=False, default=1800)
     access_token_enc = Column(LargeBinary, nullable=True)
     refresh_token_enc = Column(LargeBinary, nullable=True)
@@ -122,8 +123,8 @@ class AuthLocalCredentials(PychestratePhase1Base, SerializableModel):
     )
     argon2id_hash = Column(LargeBinary, nullable=False)
     algo_params = Column(JSON, nullable=False, default=dict)
-    must_rotate_after = Column(DateTime(timezone=True), nullable=True)
-    last_changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    must_rotate_after = Column(UtcDateTime(timezone=True), nullable=True)
+    last_changed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class PasswordTokenPurpose(enum.Enum):
@@ -157,11 +158,11 @@ class AuthPasswordToken(PychestratePhase1Base, SerializableModel):
         nullable=False,
     )
     token_hash = Column(String(64), nullable=False, unique=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     created_by = Column(UUIDType(binary=False), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
-    used_at = Column(DateTime(timezone=True), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
+    used_at = Column(UtcDateTime(timezone=True), nullable=True)
+    revoked_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_auth_password_tokens_user", "user_id"),
@@ -176,7 +177,7 @@ class AuthSamlReplayCache(PychestratePhase1Base, SerializableModel):
     __tablename__ = "auth_saml_replay_cache"
 
     response_id = Column(String(128), primary_key=True)
-    not_on_or_after = Column(DateTime(timezone=True), nullable=False)
+    not_on_or_after = Column(UtcDateTime(timezone=True), nullable=False)
 
 
 class AuthMfaEnrollment(PychestratePhase1Base, SerializableModel):
@@ -195,8 +196,8 @@ class AuthMfaEnrollment(PychestratePhase1Base, SerializableModel):
     )
     method_name = Column(String(64), nullable=False)
     secret_ref = Column(String(256), nullable=False)
-    verified_at = Column(DateTime(timezone=True), nullable=True)
-    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    verified_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_used_at = Column(UtcDateTime(timezone=True), nullable=True)
 
 
 class AuthOidcState(PychestratePhase1Base, SerializableModel):
@@ -210,6 +211,6 @@ class AuthOidcState(PychestratePhase1Base, SerializableModel):
     nonce = Column(String(128), nullable=False)
     pkce_verifier_enc = Column(LargeBinary, nullable=False)
     provider_name = Column(String(128), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)
     redirect_target = Column(String(1024), nullable=False, default="")

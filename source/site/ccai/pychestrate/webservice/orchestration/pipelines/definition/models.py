@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -117,8 +118,8 @@ class PipelineRun(PychestratePhase1Base, SerializableModel):
     # PR p20q). False on M1 definition-only ``trigger_run`` rows that
     # persist stages/steps but never dispatch a Layer-5 job.
     orchestrated = Column(Boolean, nullable=False, default=False)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
 
     __table_args__ = (
@@ -153,8 +154,8 @@ class PipelineStageRun(PychestratePhase1Base, SerializableModel):
     when_clause = Column(String(64), nullable=False, default="succeeded")
     when_clause_resolved = Column(String(64), nullable=False, default="")
     needs_csv = Column(Text, nullable=False, default="")
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
 
     __table_args__ = (
@@ -193,8 +194,8 @@ class PipelineStepRun(PychestratePhase1Base, SerializableModel):
     )
     attempt = Column(Integer, nullable=False, default=0)
     inputs = Column(JSON, nullable=False, default=dict)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
 
     __table_args__ = (
@@ -218,7 +219,7 @@ class PipelineDocumentCache(PychestratePhase1Base, SerializableModel):
     filename = Column(String(256), nullable=False)
     pipeline_digest_sha256 = Column(String(64), nullable=False)
     canonical_json = Column(Text, nullable=False, default="")
-    cached_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    cached_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         PrimaryKeyConstraint(

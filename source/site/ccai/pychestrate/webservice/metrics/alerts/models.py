@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -78,8 +79,8 @@ class AlertRule(PychestratePhase1Base, SerializableModel):
     enabled = Column(Boolean, nullable=False, default=True)
     notification_targets = Column(JSON, nullable=False, default=list)
     created_by = Column(UUIDType(binary=False), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -111,9 +112,9 @@ class AlertLiveState(PychestratePhase1Base, SerializableModel):
     last_value = Column(JSON, nullable=True)
     last_threshold = Column(JSON, nullable=True)
     last_reason = Column(Text, nullable=False, default="")
-    last_evaluated_at = Column(DateTime(timezone=True), nullable=True)
-    last_state_changed_at = Column(DateTime(timezone=True), nullable=True)
-    fired_at = Column(DateTime(timezone=True), nullable=True)
-    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    last_evaluated_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_state_changed_at = Column(UtcDateTime(timezone=True), nullable=True)
+    fired_at = Column(UtcDateTime(timezone=True), nullable=True)
+    resolved_at = Column(UtcDateTime(timezone=True), nullable=True)
     fire_count = Column(Integer, nullable=False, default=0)
     resolve_count = Column(Integer, nullable=False, default=0)

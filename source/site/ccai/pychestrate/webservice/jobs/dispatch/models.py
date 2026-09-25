@@ -30,6 +30,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -77,9 +78,9 @@ class DispatchAttempt(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=DispatchAttemptStatus.PENDING,
     )
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    transmitted_at = Column(DateTime(timezone=True), nullable=True)
-    acked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    transmitted_at = Column(UtcDateTime(timezone=True), nullable=True)
+    acked_at = Column(UtcDateTime(timezone=True), nullable=True)
     failure_reason = Column(Text, nullable=True)
 
     __table_args__ = (

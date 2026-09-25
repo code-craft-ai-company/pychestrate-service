@@ -52,6 +52,7 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session as DbSession
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 
 from ccai.pychestrate.webservice.identity.users.models import IdentityUser, UserStatus
@@ -264,7 +265,7 @@ class ServiceAccountView:
 def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     """
         Return ``value`` as a timezone-aware UTC datetime. SQLite hands
-        back naive datetimes for ``DateTime(timezone=True)`` columns;
+        back naive datetimes for ``UtcDateTime(timezone=True)`` columns;
         they were written as UTC.
 
         :param value: Datetime or ``None``.

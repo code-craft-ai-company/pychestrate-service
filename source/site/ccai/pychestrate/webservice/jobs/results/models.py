@@ -21,6 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -43,7 +44,7 @@ class SharedResultsAllocation(PychestratePhase1Base, SerializableModel):
     project_id = Column(UUIDType(binary=False), nullable=False)
     backend_driver = Column(String(64), nullable=False, default="")
     backend_key_prefix = Column(String(512), nullable=False, default="")
-    allocated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    allocated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(

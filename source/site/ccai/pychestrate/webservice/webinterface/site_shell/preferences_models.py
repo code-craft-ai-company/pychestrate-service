@@ -19,6 +19,7 @@ __version__ = "1.0.0"
 from sqlalchemy import Column, DateTime, PrimaryKeyConstraint, String
 from sqlalchemy.types import JSON
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -35,7 +36,7 @@ class UserPreference(PychestratePhase1Base, SerializableModel):
     user_id = Column(String(64), nullable=False)
     key = Column(String(128), nullable=False)
     value_json = Column(JSON, nullable=False, default=dict)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         PrimaryKeyConstraint("user_id", "key", name="pk_ui_user_preference"),

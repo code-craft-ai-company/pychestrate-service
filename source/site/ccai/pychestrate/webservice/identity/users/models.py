@@ -31,6 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -65,8 +66,8 @@ class IdentityUser(PychestratePhase1Base, SerializableModel):
     provisioning_source = Column(String(128), nullable=False, default="local")
     external_id = Column(String(256), nullable=True)
     timezone = Column(String(64), nullable=False, default="UTC")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -87,7 +88,7 @@ class IdentityGroup(PychestratePhase1Base, SerializableModel):
     group_id = Column(UUIDType(binary=False), primary_key=True)
     group_name = Column(String(128), nullable=False, unique=True)
     description = Column(String(512), nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
 
 class IdentityGroupMembership(PychestratePhase1Base, SerializableModel):
@@ -107,7 +108,7 @@ class IdentityGroupMembership(PychestratePhase1Base, SerializableModel):
         ForeignKey("identity_users.user_id", ondelete="CASCADE"),
         primary_key=True,
     )
-    added_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    added_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     added_by = Column(
         UUIDType(binary=False),
         ForeignKey("identity_users.user_id", ondelete="SET NULL"),
@@ -130,5 +131,5 @@ class IdentityEmailVerification(PychestratePhase1Base, SerializableModel):
     )
     new_email = Column(String(320), nullable=False)
     token_hash = Column(LargeBinary(64), nullable=False)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    expires_at = Column(UtcDateTime(timezone=True), nullable=False)

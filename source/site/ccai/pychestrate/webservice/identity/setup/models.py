@@ -32,6 +32,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import (
@@ -89,12 +90,12 @@ class InitialSetup(PychestratePhase1Base, SerializableModel):
     token_hash = Column(LargeBinary(32), nullable=False)
     token_path = Column(String(1024), nullable=False)
     created_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(timezone=True),
         nullable=False,
         default=utc_now,
     )
     completed_at = Column(
-        DateTime(timezone=True),
+        UtcDateTime(timezone=True),
         nullable=True,
     )
     completed_by_user_id = Column(

@@ -19,6 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -38,9 +39,9 @@ class ExtensionCapabilityGrant(PychestratePhase1Base, SerializableModel):
     ext_name = Column(String(128), nullable=False)
     capability = Column(String(64), nullable=False)
     source = Column(String(16), nullable=False, default="manifest")
-    granted_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    granted_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     granted_by = Column(UUIDType(binary=False), nullable=True)
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    revoked_at = Column(UtcDateTime(timezone=True), nullable=True)
     revoked_by = Column(UUIDType(binary=False), nullable=True)
     revoked_reason = Column(Text, nullable=True)
 

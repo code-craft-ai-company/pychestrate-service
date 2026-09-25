@@ -27,6 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -103,9 +104,9 @@ class TrustedIssuerKey(PychestratePhase1Base, SerializableModel):
     issuer_key_id = Column(String(128), primary_key=True)
     public_key_bytes = Column(LargeBinary, nullable=False)
     valid_from = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
-    valid_until = Column(DateTime(timezone=True), nullable=True)
+    valid_until = Column(UtcDateTime(timezone=True), nullable=True)
     replaced_by = Column(String(128), nullable=True)
 
 
@@ -133,7 +134,7 @@ class ReleaseRow(PychestratePhase1Base, SerializableModel):
     signature = Column(LargeBinary, nullable=False)
     issuer_key_id = Column(String(128), nullable=False)
     issued_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
     issued_by = Column(UUIDType(binary=False), nullable=True)
     status = Column(
@@ -143,7 +144,7 @@ class ReleaseRow(PychestratePhase1Base, SerializableModel):
     )
     rollout_fraction = Column(Float, nullable=False, default=0.0)
     stage_started_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
     previous_release_id = Column(
         UUIDType(binary=False), nullable=True,
@@ -187,8 +188,8 @@ class ChannelStateRow(PychestratePhase1Base, SerializableModel):
     previous_release_id = Column(
         UUIDType(binary=False), nullable=True,
     )
-    last_promotion_at = Column(DateTime(timezone=True), nullable=True)
-    last_rollback_at = Column(DateTime(timezone=True), nullable=True)
+    last_promotion_at = Column(UtcDateTime(timezone=True), nullable=True)
+    last_rollback_at = Column(UtcDateTime(timezone=True), nullable=True)
 
 
 class ReleaseStageEvent(PychestratePhase1Base, SerializableModel):
@@ -213,7 +214,7 @@ class ReleaseStageEvent(PychestratePhase1Base, SerializableModel):
     reason = Column(Text, nullable=True)
     actor_user_id = Column(UUIDType(binary=False), nullable=True)
     occurred_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (
@@ -247,7 +248,7 @@ class ConsumerOutcomeRow(PychestratePhase1Base, SerializableModel):
     )
     reason = Column(Text, nullable=True)
     reported_at = Column(
-        DateTime(timezone=True), nullable=False, default=utc_now,
+        UtcDateTime(timezone=True), nullable=False, default=utc_now,
     )
 
     __table_args__ = (

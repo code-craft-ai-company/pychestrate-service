@@ -32,6 +32,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -74,8 +75,8 @@ class TestRun(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=TestRunState.TRIGGERED,
     )
-    triggered_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    triggered_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     dispatch_attempt_id = Column(UUIDType(binary=False), nullable=True)
     failure_reason = Column(Text, nullable=True)
     inputs_json = Column(JSON, nullable=False, default=dict)

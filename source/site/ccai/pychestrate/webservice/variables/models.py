@@ -25,6 +25,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -75,7 +76,7 @@ class VariableBinding(PychestratePhase1Base, SerializableModel):
     )
     value_text = Column(Text(), nullable=True)
     set_by_user_id = Column(UUIDType(binary=False), nullable=True)
-    set_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    set_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(

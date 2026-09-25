@@ -32,6 +32,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -122,9 +123,9 @@ class RetentionPolicy(PychestratePhase1Base, SerializableModel):
         nullable=False,
         default=PolicyState.DRAFT,
     )
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    published_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    published_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
@@ -149,8 +150,8 @@ class RetentionRunRecord(PychestratePhase1Base, SerializableModel):
         ForeignKey("retention_policies.policy_id", ondelete="CASCADE"),
         nullable=False,
     )
-    started_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    finished_at = Column(DateTime(timezone=True), nullable=True)
+    started_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    finished_at = Column(UtcDateTime(timezone=True), nullable=True)
     matched_count = Column(Integer(), nullable=False, default=0)
     actioned_count = Column(Integer(), nullable=False, default=0)
     skipped_count = Column(Integer(), nullable=False, default=0)
@@ -183,7 +184,7 @@ class RetentionActionResult(PychestratePhase1Base, SerializableModel):
     )
     reason = Column(Text(), nullable=True)
     terminal = Column(String(8), nullable=False, default="false")
-    applied_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    applied_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_retention_action_results_run", "run_id"),

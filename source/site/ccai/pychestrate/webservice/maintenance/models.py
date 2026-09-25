@@ -19,6 +19,7 @@ from sqlalchemy import (
 )
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -38,8 +39,8 @@ class MaintenanceModeRow(PychestratePhase1Base, SerializableModel):
     scope = Column(String(160), primary_key=True)
     mode = Column(String(16), nullable=False, default="active")
     reason = Column(Text, nullable=False, default="")
-    ends_at = Column(DateTime(timezone=True), nullable=True)
-    changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    ends_at = Column(UtcDateTime(timezone=True), nullable=True)
+    changed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     changed_by = Column(UUIDType(binary=False), nullable=True)
     version = Column(Integer, nullable=False, default=1)
 
@@ -57,9 +58,9 @@ class MaintenanceModeAudit(PychestratePhase1Base, SerializableModel):
     from_mode = Column(String(16), nullable=False)
     to_mode = Column(String(16), nullable=False)
     reason = Column(Text, nullable=False, default="")
-    ends_at = Column(DateTime(timezone=True), nullable=True)
+    ends_at = Column(UtcDateTime(timezone=True), nullable=True)
     actor_user_id = Column(UUIDType(binary=False), nullable=True)
-    changed_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    changed_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(

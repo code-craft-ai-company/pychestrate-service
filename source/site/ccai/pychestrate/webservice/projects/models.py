@@ -28,6 +28,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -64,9 +65,9 @@ class Project(PychestratePhase1Base, SerializableModel):
     template_id = Column(String(128), nullable=True)
     template_version = Column(String(32), nullable=True)
     extension_fields = Column(_ExtensionFields, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    archived_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    archived_at = Column(UtcDateTime(timezone=True), nullable=True)
     # Soft link to the legacy ``Project`` aggregate
     # (``projects.proj_id`` BigInt) that every ``core/managers``
     # feature manager FKs against. Not a cross-base SQLAlchemy
@@ -103,7 +104,7 @@ class ProjectMemberBinding(PychestratePhase1Base, SerializableModel):
     )
     user_id = Column(UUIDType(binary=False), nullable=False)
     role_name = Column(String(64), nullable=False)
-    added_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    added_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     added_by_user_id = Column(UUIDType(binary=False), nullable=True)
 
     __table_args__ = (

@@ -45,6 +45,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -138,8 +139,8 @@ class RpaJobType(PychestratePhase1Base, SerializableModel):
         default=RpaJobTypeState.ACTIVE,
     )
     created_by_id = Column(String(64), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index("ix_orch_rpa_job_type_state", "state"),
@@ -175,7 +176,7 @@ class RpaJobTypeVersion(PychestratePhase1Base, SerializableModel):
         default=RpaVersionState.ACTIVE,
     )
     published_by_id = Column(String(64), nullable=True)
-    published_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    published_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("type_id", "version", name="uq_orch_rpa_type_version"),
@@ -209,8 +210,8 @@ class RpaSpec(PychestratePhase1Base, SerializableModel):
     description = Column(Text, nullable=False, default="")
     revision = Column(Integer, nullable=False, default=1)
     created_by_id = Column(String(64), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("project_id", "name", name="uq_orch_rpa_spec_name"),
@@ -234,7 +235,7 @@ class RpaSpecRevision(PychestratePhase1Base, SerializableModel):
     )
     revision = Column(Integer, nullable=False)
     snapshot = Column(JSON, nullable=False, default=dict)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint("spec_id", "revision", name="uq_orch_rpa_spec_revision"),
@@ -281,9 +282,9 @@ class RpaJob(PychestratePhase1Base, SerializableModel):
     idempotency_key = Column(String(128), nullable=False, default="")
     result_root_key = Column(Text, nullable=True)
     final_state_reason = Column(Text, nullable=False, default="")
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    started_at = Column(DateTime(timezone=True), nullable=True)
-    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    started_at = Column(UtcDateTime(timezone=True), nullable=True)
+    completed_at = Column(UtcDateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index("ix_orch_rpa_job_project_created", "project_id", "created_at"),

@@ -26,6 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 
@@ -78,15 +79,15 @@ class Environment(PychestratePhase1Base, SerializableModel):
     attrs = Column(JSON, nullable=False, default=dict)
     frozen_by = Column(UUIDType(binary=False), nullable=True)
     frozen_reason = Column(Text, nullable=True)
-    frozen_at = Column(DateTime(timezone=True), nullable=True)
+    frozen_at = Column(UtcDateTime(timezone=True), nullable=True)
     last_applied_run_id = Column(UUIDType(binary=False), nullable=True)
     last_output_digest_sha256 = Column(String(64), nullable=False, default="")
-    last_applied_at = Column(DateTime(timezone=True), nullable=True)
+    last_applied_at = Column(UtcDateTime(timezone=True), nullable=True)
     archived_reason = Column(Text, nullable=True)
-    archived_at = Column(DateTime(timezone=True), nullable=True)
-    destroyed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
-    updated_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    archived_at = Column(UtcDateTime(timezone=True), nullable=True)
+    destroyed_at = Column(UtcDateTime(timezone=True), nullable=True)
+    created_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
+    updated_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         UniqueConstraint(
@@ -119,7 +120,7 @@ class EnvironmentHistory(PychestratePhase1Base, SerializableModel):
     actor_id = Column(UUIDType(binary=False), nullable=True)
     run_id = Column(UUIDType(binary=False), nullable=True)
     payload = Column(JSON, nullable=False, default=dict)
-    at_ts = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    at_ts = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
 
     __table_args__ = (
         Index(

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session as DbSession
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
 
+from ccai.pychestrate.core.utc_datetime import UtcDateTime
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 from ccai.pychestrate.core.orm import SerializableModel
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
@@ -50,7 +51,7 @@ class IdempotencyRecord(PychestratePhase1Base, SerializableModel):
     record_id = Column(UUIDType(binary=False), primary_key=True)
     scope = Column(String(64), nullable=False)
     idempotency_key = Column(String(128), nullable=False)
-    recorded_at = Column(DateTime(timezone=True), nullable=False, default=utc_now)
+    recorded_at = Column(UtcDateTime(timezone=True), nullable=False, default=utc_now)
     response_payload = Column(_JsonPayload, nullable=False, default=dict)
 
     __table_args__ = (
