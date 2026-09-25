@@ -160,6 +160,13 @@ preview tag.
   dependencies, which are now the `codecraftai-*` packages. Extension
   packs must update their imports.
 
+- **Dependency source:** the `codecraftai-*` framework packages install
+  as published 1.x releases from the Code Craft AI package index
+  (`https://code-craft.ai/licensed-repository/simple/`) instead of as
+  git checkouts of `github.com/automationmojo/codecraftai-*`.
+  `codecraftai-errors` is replaced by `codecraftai-foundations`, which
+  provides the same `ccai.errors` module.
+
 - **License:** the MIT license was replaced by a proprietary Code Craft
   AI end-user license agreement (`LICENSE.txt`); Pychestrate is licensed
   per organization for on-premises use.
@@ -365,6 +372,11 @@ preview tag.
   `ccai.*`.
 - **CI secret rename.** The workflows read the dependency token from the
   `CODECRAFTAI_REPO_TOKEN` secret.
+- **Dependency index.** `poetry install` resolves the `codecraftai-*`
+  packages from the `codecraftai` source in `pyproject.toml`, so Poetry
+  needs access to that index (see "A package index" in
+  `userguide/02-00-getting-started.rst`); the GitHub token for the old
+  git-source dependencies is no longer used for them.
 
 ## [0.0.7-preview] — 2026-05-20
 
