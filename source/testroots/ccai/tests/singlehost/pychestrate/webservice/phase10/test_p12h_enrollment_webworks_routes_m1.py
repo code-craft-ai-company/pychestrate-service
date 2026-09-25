@@ -350,7 +350,7 @@ def test_handle_issue_returns_201_with_secret_payload_and_actor_propagation():
             db_session=object(),
             actor_user_id="user-42",
             body={
-                "project_id": "p-1",
+                "project_id": "11111111-2222-3333-4444-555555555555",
                 "pod_name": "pod-x",
                 "ttl_seconds": 60,
                 "one_shot": True,
@@ -1257,4 +1257,38 @@ def test_handle_redeem_still_accepts_the_legacy_secret_field():
 
     testbase.assert_equal(response.status_code, 200)
     testbase.assert_equal(seen["secret"], "legacy-secret")
+    return
+
+
+def test_handle_issue_returns_400_when_project_or_pod_missing():
+    """
+    **Feature: enrollment tokens (live E2E finding)**
+    **Property: issuing without project_id / pod_name answers 400 naming
+    the missing fields -- it used to reach the insert and answer 500.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/enrollment-tokens",
+        db_session=object(),
+        body={"ttl_seconds": 60},
+    )
+    response = enrollment_routes.handle_issue_enrollment_token(request)
+    testbase.assert_equal(response.status_code, 400)
+    testbase.assert_equal(_decode_body(response)["missing_fields"], ["project_id", "pod_name"])
+    return
+
+
+def test_handle_issue_returns_400_when_project_id_is_not_a_uuid():
+    """
+    **Feature: enrollment tokens (live E2E finding)**
+    **Property: a project_id that is not a UUID answers 400 instead of
+    failing in the UUID column.**
+    """
+    request = _FakeRequest(
+        path="/api/v1/enrollment-tokens",
+        db_session=object(),
+        body={"project_id": "orchestrate", "pod_name": "pod-x", "ttl_seconds": 60},
+    )
+    response = enrollment_routes.handle_issue_enrollment_token(request)
+    testbase.assert_equal(response.status_code, 400)
+    testbase.assert_equal(_decode_body(response)["project_id"], "orchestrate")
     return

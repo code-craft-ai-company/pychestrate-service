@@ -1721,7 +1721,7 @@ paths:
           description: Token issued.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/EnrollmentTokenWithSecret' }
+              schema: { $ref: '#/components/schemas/EnrollmentTokenIssued' }
         '400': { $ref: '#/components/responses/BadRequest' }
   /enrollment-tokens/redeem:
     post:
@@ -6675,19 +6675,37 @@ components:
           nullable: true
     EnrollmentTokenCreateRequest:
       type: object
+      required: [project_id, pod_name, ttl_seconds]
       properties:
-        description: { type: string }
-        ttl_seconds: { type: integer, minimum: 60 }
-        max_redemptions: { type: integer, minimum: 1, default: 1 }
-    EnrollmentTokenWithSecret:
-      allOf:
-        - $ref: '#/components/schemas/EnrollmentToken'
-        - type: object
-          required: [bootstrap_secret]
-          properties:
-            bootstrap_secret:
-              type: string
-              description: One-time secret returned only at issuance.
+        project_id:
+          type: string
+          format: uuid
+          description: Project the enrolled pod belongs to.
+        pod_name:
+          type: string
+          description: |
+            Pod name the token commits to; the pod must enroll with the
+            same name (`pychestrate-client enroll --name`).
+        ttl_seconds:
+          type: integer
+          minimum: 1
+          description: Lifetime in seconds (capped by the service).
+        one_shot:
+          type: boolean
+          default: true
+          description: Consume the token on its first redemption.
+    EnrollmentTokenIssued:
+      type: object
+      required: [token_id, secret, project_id, pod_name, expires_at, algorithm_name]
+      properties:
+        token_id: { type: string, format: uuid }
+        secret:
+          type: string
+          description: One-time bootstrap secret, returned only at issuance.
+        project_id: { type: string, format: uuid }
+        pod_name: { type: string }
+        expires_at: { type: string, format: date-time }
+        algorithm_name: { type: string }
     EnrollmentRedeemRequest:
       type: object
       required: [bootstrap_secret, csr_pem]

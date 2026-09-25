@@ -44,6 +44,7 @@ __version__ = "1.0.0"
 
 
 import base64
+import uuid
 
 from typing import Any, Optional
 
@@ -344,10 +345,35 @@ def handle_issue_enrollment_token(request: Request) -> Response:
                 extensions={"ttl_seconds": ttl_seconds},
             )
 
+        # A token commits the pod that redeems it to one project and one
+        # pod name; without them the insert failed on the UUID column
+        # and the caller got a bare 500.
+        project_id = str(payload.get("project_id", "") or "").strip()
+        pod_name = str(payload.get("pod_name", "") or "").strip()
+        missing = [name for name, value in (("project_id", project_id), ("pod_name", pod_name))
+                   if len(value) == 0]
+        if len(missing) > 0:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="Missing required field(s): {}. A token commits the pod that redeems it "
+                       "to one project (project_id, a UUID) and one pod name (pod_name, the "
+                       "--name the pod enrolls with).".format(", ".join(missing)),
+                extensions={"missing_fields": missing},
+            )
+        try:
+            project_id = str(uuid.UUID(project_id))
+        except ValueError:
+            _abort_problem(
+                request=request,
+                status=400,
+                detail="project_id must be a project UUID.",
+                extensions={"project_id": project_id},
+            )
         issued = issue_enrollment_token(
             db_session=db_session,
-            project_id=payload.get("project_id", ""),
-            pod_name=payload.get("pod_name", ""),
+            project_id=project_id,
+            pod_name=pod_name,
             ttl_seconds=ttl_seconds,
             one_shot=bool(payload.get("one_shot", True)),
             issued_by=actor,
