@@ -24,7 +24,7 @@ binary" is queryable rather than buried in a ``notes`` string.
 
 Why ``extras`` and not a top-level manifest field: the pod client
 reaches the service exclusively through the generated
-``automojo-restclient-pychestrate`` package and is forbidden from
+``codecraftai-restclient-pychestrate`` package and is forbidden from
 hand-rolling HTTP. The generated ``Resultmanifest`` model has no
 ``failure_classification`` field, but it does carry ``extras`` as a
 ``Dict[str, Any]``, so ``extras`` is the only structured member the
