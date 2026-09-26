@@ -751,6 +751,41 @@ def _outcome_reason(
     return rtnval
 
 
+def _assigned_client_block(*, db_session: Any, client_id: Optional[str]) -> Optional[Dict[str, Any]]:
+    """
+        The client the run was dispatched to, as the run page needs it
+        to say "waiting for pod <name>, last heard from <when>" instead
+        of sitting silently in DISPATCHED while that pod is offline
+        (E2E-16).
+
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: The latest dispatch attempt's client, if any.
+
+        :returns: ``{client_id, pod_name, status, liveness_state,
+                  last_seen}``, or None when there is no such client.
+    """
+    if client_id is None:
+        return None
+    from ccai.pychestrate.webservice.clients.models import Client  # noqa: E402
+
+    try:
+        client = db_session.query(Client).filter(Client.client_id == client_id).first()
+    except Exception:
+        # Sessions without the clients table (unit-test fakes) have no
+        # client to describe.
+        client = None
+    if client is None:
+        return None
+    rtnval = {
+        "client_id": str(client.client_id),
+        "pod_name": client.pod_name,
+        "status": _enum_value_or_none(client.status),
+        "liveness_state": _enum_value_or_none(client.liveness_state),
+        "last_seen": _iso_or_none(client.last_seen),
+    }
+    return rtnval
+
+
 def _run_to_dict(
         *,
         row: Run,
@@ -825,10 +860,12 @@ def _run_to_dict(
         )
 
     outcome_reason: Optional[str] = None
+    assigned_client: Optional[Dict[str, Any]] = None
     if include_result_manifest is True:
         outcome_reason = _outcome_reason(
             db_session=db_session, row=row, result_manifest=result_manifest,
         )
+        assigned_client = _assigned_client_block(db_session=db_session, client_id=client_id)
     rtnval: Dict[str, Any] = {
         "run_id": run_id,
         "project_id": str(row.project_id),
@@ -840,6 +877,7 @@ def _run_to_dict(
         "state": _enum_value_or_none(row.state),
         "terminal_outcome": _enum_value_or_none(row.terminal_outcome),
         "outcome_reason": outcome_reason,
+        "assigned_client": assigned_client,
         "current_dispatch_attempt_id": current_attempt_id,
         "progress_summary": progress_summary,
         "result_manifest": result_manifest,

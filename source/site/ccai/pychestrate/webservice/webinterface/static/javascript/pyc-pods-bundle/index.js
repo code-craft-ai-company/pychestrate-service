@@ -1453,9 +1453,14 @@ var PycPodDetail = class extends HTMLElement {
     const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-pod-detail__badge");
     badge.setAttribute("data-role", "state-badge");
+    const awaiting_client = this._state_row === null && this._runtime_status.state === 404;
     if (this._state_row !== null) {
       badge.setAttribute("data-tone", pod_state_tone(this._state_row.state));
       badge.textContent = this._state_row.state;
+    } else if (awaiting_client === true) {
+      badge.setAttribute("data-tone", "neutral");
+      badge.textContent = "Declared";
+      badge.title = "Waiting for a client to enroll on this pod.";
     } else {
       badge.setAttribute("data-tone", "neutral");
       badge.textContent = "State unavailable";
@@ -1467,7 +1472,13 @@ var PycPodDetail = class extends HTMLElement {
     id_row.appendChild(badge);
     id_row.appendChild(this._build_actions());
     section.appendChild(id_row);
-    if (this._state_row === null) {
+    if (awaiting_client === true) {
+      const waiting = document.createElement("p");
+      waiting.classList.add("pyc-pod-detail__status", "pyc-pod-detail__status--inline");
+      waiting.setAttribute("data-role", "state-awaiting-client");
+      waiting.textContent = "Declared \u2014 waiting for a client. Mint an enrollment token for this pod name and enroll a machine to bring it online.";
+      section.appendChild(waiting);
+    } else if (this._state_row === null) {
       const state_error = document.createElement("p");
       state_error.classList.add(
         "pyc-pod-detail__status",
@@ -1988,6 +1999,25 @@ function liveness_tone(liveness) {
     return rtnval2;
   }
   const rtnval = "neutral";
+  return rtnval;
+}
+function client_liveness_display(client) {
+  if (client === null || client === void 0) {
+    const rtnval2 = { label: "\u2014", tone: "neutral" };
+    return rtnval2;
+  }
+  if (client.status === "REVOKED") {
+    const rtnval2 = { label: "\u2014", tone: "neutral" };
+    return rtnval2;
+  }
+  const tone = liveness_tone(client.liveness_state);
+  if (client.last_seen === null || client.last_seen === void 0 || client.last_seen === "") {
+    const rtnval2 = { label: "Never seen", tone: tone === "ok" ? "neutral" : tone };
+    return rtnval2;
+  }
+  const labels = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
+  const label = labels[client.liveness_state] || String(client.liveness_state || "\u2014");
+  const rtnval = { label, tone };
   return rtnval;
 }
 function capability_tags(attributes) {
@@ -2719,11 +2749,9 @@ var PycClientsList = class extends HTMLElement {
         render: (client) => {
           const liveness_badge = document.createElement("mj-chip");
           liveness_badge.classList.add("pyc-clients-list__badge");
-          liveness_badge.setAttribute(
-            "data-tone",
-            liveness_tone(client.liveness_state)
-          );
-          liveness_badge.textContent = client.liveness_state;
+          const liveness = client_liveness_display(client);
+          liveness_badge.setAttribute("data-tone", liveness.tone);
+          liveness_badge.textContent = liveness.label;
           return liveness_badge;
         }
       },
@@ -3368,11 +3396,9 @@ var PycClientDetail = class extends HTMLElement {
     const liveness_badge = document.createElement("mj-chip");
     liveness_badge.classList.add("pyc-client-detail__badge");
     liveness_badge.setAttribute("data-role", "liveness-badge");
-    liveness_badge.setAttribute(
-      "data-tone",
-      liveness_tone(client.liveness_state)
-    );
-    liveness_badge.textContent = client.liveness_state;
+    const liveness = client_liveness_display(client);
+    liveness_badge.setAttribute("data-tone", liveness.tone);
+    liveness_badge.textContent = liveness.label;
     id_row.appendChild(liveness_badge);
     id_row.appendChild(this._build_actions(client));
     section.appendChild(id_row);

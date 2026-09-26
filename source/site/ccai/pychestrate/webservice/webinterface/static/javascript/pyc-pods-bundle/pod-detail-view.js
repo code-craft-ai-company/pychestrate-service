@@ -790,9 +790,17 @@ class PycPodDetail extends HTMLElement {
     const badge = document.createElement("mj-chip");
     badge.classList.add("pyc-pod-detail__badge");
     badge.setAttribute("data-role", "state-badge");
+    // A pod no client has registered on yet has no state row: the
+    // state endpoint answers 404. That is a normal, declared pod
+    // waiting for its client -- not an error (RES-36).
+    const awaiting_client = this._state_row === null && this._runtime_status.state === 404;
     if (this._state_row !== null) {
       badge.setAttribute("data-tone", pod_state_tone(this._state_row.state));
       badge.textContent = this._state_row.state;
+    } else if (awaiting_client === true) {
+      badge.setAttribute("data-tone", "neutral");
+      badge.textContent = "Declared";
+      badge.title = "Waiting for a client to enroll on this pod.";
     } else {
       // The state fetch failed -- say so instead of inventing a
       // state the pod may not be in.
@@ -806,7 +814,13 @@ class PycPodDetail extends HTMLElement {
     id_row.appendChild(badge);
     id_row.appendChild(this._build_actions());
     section.appendChild(id_row);
-    if (this._state_row === null) {
+    if (awaiting_client === true) {
+      const waiting = document.createElement("p");
+      waiting.classList.add("pyc-pod-detail__status", "pyc-pod-detail__status--inline");
+      waiting.setAttribute("data-role", "state-awaiting-client");
+      waiting.textContent = "Declared \u2014 waiting for a client. Mint an enrollment token for this pod name and enroll a machine to bring it online.";
+      section.appendChild(waiting);
+    } else if (this._state_row === null) {
       const state_error = document.createElement("p");
       state_error.classList.add(
         "pyc-pod-detail__status",

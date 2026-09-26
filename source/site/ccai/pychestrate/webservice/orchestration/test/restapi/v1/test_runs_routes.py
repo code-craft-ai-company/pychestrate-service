@@ -557,6 +557,27 @@ def _parse_positive_int_field(
 # ---------------------------------------------------------------------------
 
 
+def _pod_availability_warnings(*, db_session: Any, client_id: Optional[str]) -> List[str]:
+    """
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: The client the run was dispatched to.
+
+        :returns: ``[warning]`` when that pod is not heartbeating, else
+                  an empty list.
+    """
+    from ccai.pychestrate.webservice.clients.liveness_watchdog import (  # noqa: E402
+        pod_availability_warning,
+    )
+
+    try:
+        warning = pod_availability_warning(db_session=db_session, client_id=client_id)
+    except Exception:
+        # Sessions without the clients table (unit-test fakes).
+        warning = None
+    rtnval = [warning] if warning is not None else []
+    return rtnval
+
+
 def _trigger_outcome_to_run_dict(
         *,
         outcome: Any,
@@ -585,10 +606,14 @@ def _trigger_outcome_to_run_dict(
     """
     dispatch = getattr(outcome, "dispatch", None)
     attempt_id = None
+    client_id = None
     if dispatch is not None:
         candidate_attempt = getattr(dispatch, "attempt_id", None)
         if candidate_attempt is not None:
             attempt_id = str(candidate_attempt)
+        candidate_client = getattr(dispatch, "client_id", None)
+        if candidate_client is not None:
+            client_id = str(candidate_client)
 
     state_value = getattr(outcome.test_run_state, "value", None)
     if state_value is None:
@@ -598,7 +623,7 @@ def _trigger_outcome_to_run_dict(
         "run_id": str(outcome.run_id),
         "project_id": str(project_id),
         "pod_id": str(pod_id) if pod_id is not None else None,
-        "client_id": None,
+        "client_id": client_id,
         "job_id": str(catalog_entry.entry_id),
         "job_name": catalog_entry.display_name,
         "job_type": str(catalog_entry.raw_metadata.get("runner_kind", "testbase"))
@@ -833,6 +858,11 @@ def handle_trigger_test_run(request: Request) -> Response:
             pod_id=resolved_pod_id,
             catalog_entry=catalog_entry,
             triggered_at=triggered_at,
+        )
+        # The run is queued either way; say so when its pod is not
+        # heartbeating instead of accepting silently (E2E-16).
+        body_dict["warnings"] = _pod_availability_warnings(
+            db_session=db_session, client_id=body_dict["client_id"],
         )
         rtnval: Response = JSONResponse(content=body_dict, status_code=202)
     except _ProblemAbort as xcpt:

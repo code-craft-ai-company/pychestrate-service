@@ -10,9 +10,9 @@ import {
   build_client_capabilities_url,
   build_client_detail_url,
   capability_tags,
+  client_liveness_display,
   format_timestamp,
   latest_capability_update,
-  liveness_tone,
   perform_client_revoke,
   short_id,
   status_tone
@@ -527,11 +527,9 @@ class PycClientDetail extends HTMLElement {
     const liveness_badge = document.createElement("mj-chip");
     liveness_badge.classList.add("pyc-client-detail__badge");
     liveness_badge.setAttribute("data-role", "liveness-badge");
-    liveness_badge.setAttribute(
-      "data-tone",
-      liveness_tone(client.liveness_state)
-    );
-    liveness_badge.textContent = client.liveness_state;
+    const liveness = client_liveness_display(client);
+    liveness_badge.setAttribute("data-tone", liveness.tone);
+    liveness_badge.textContent = liveness.label;
     id_row.appendChild(liveness_badge);
     id_row.appendChild(this._build_actions(client));
     section.appendChild(id_row);

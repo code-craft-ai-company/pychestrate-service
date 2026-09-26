@@ -7526,6 +7526,26 @@ components:
             result manifest, else the reason recorded with the transition into
             the terminal state (a rejected dispatch, a passed hard deadline),
             else, while a cancel is pending, the cancel reason.
+        assigned_client:
+          type: object
+          nullable: true
+          description: |
+            The client the latest dispatch attempt went to (run detail only),
+            so a run waiting on an offline pod can say so. Liveness follows
+            heartbeat silence: DEGRADED after 90 s, LOST after 5 minutes.
+          properties:
+            client_id: { type: string, format: uuid }
+            pod_name: { type: string }
+            status: { type: string, enum: [ACTIVE, SUSPENDED, REVOKED] }
+            liveness_state: { type: string, enum: [ALIVE, DEGRADED, LOST] }
+            last_seen: { type: string, format: date-time, nullable: true }
+        warnings:
+          type: array
+          items: { type: string }
+          description: |
+            Trigger responses only. Present when the pod the run was queued for
+            is not heartbeating: the run waits and starts when the pod
+            reconnects.
         current_dispatch_attempt_id:
           type: string
           format: uuid

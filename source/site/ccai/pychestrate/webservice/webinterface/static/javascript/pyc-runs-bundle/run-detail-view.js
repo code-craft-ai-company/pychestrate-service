@@ -57,6 +57,36 @@ function coerce_count(value) {
   const rtnval = 0;
   return rtnval;
 }
+// States in which a run is waiting for its pod to take it. A trigger
+// against a stopped pod used to sit here with no hint why (E2E-16).
+var WAITING_FOR_POD_STATES = ["pending", "dispatching", "dispatched", "dispatch_unconfirmed"];
+function waiting_for_pod_message(run) {
+  if (run === null || run === void 0 || WAITING_FOR_POD_STATES.includes(run.state) === false) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const client = run.assigned_client;
+  if (client === null || client === void 0) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const pod = client.pod_name || "its pod";
+  let text = "Waiting for pod " + pod + " to pick up this run.";
+  let tone = "neutral";
+  if (client.status === "REVOKED") {
+    text += " Its client has been revoked, so the run will not start; cancel it and trigger it again.";
+    tone = "warn";
+  } else if (client.last_seen === null || client.last_seen === void 0 || client.last_seen === "") {
+    text += " Its client has never checked in; the run starts once it connects.";
+    tone = "warn";
+  } else if (client.liveness_state !== "ALIVE") {
+    const label = client.liveness_state === "LOST" ? "offline" : "not responding";
+    text += " Its client is " + label + " (last heard from " + format_timestamp(client.last_seen) + "); the run starts when it reconnects.";
+    tone = "warn";
+  }
+  const rtnval = { text, tone };
+  return rtnval;
+}
 // Build, provision and RPA runs carry "<kind>-" job types. Test
 // counters mean nothing for them: an RPA run's loudest element was a
 // row of 0 passed / 0 failed tiles (E2E-23).
@@ -793,6 +823,16 @@ class PycRunDetail extends HTMLElement {
       id_row.appendChild(cancel_button);
     }
     section.appendChild(id_row);
+    const waiting = waiting_for_pod_message(run);
+    if (waiting !== null) {
+      const banner = document.createElement("p");
+      banner.classList.add("pyc-run-detail__banner");
+      banner.setAttribute("data-role", "waiting-for-pod");
+      banner.setAttribute("data-tone", waiting.tone);
+      banner.setAttribute("role", "status");
+      banner.textContent = waiting.text;
+      section.appendChild(banner);
+    }
     const grid = document.createElement("dl");
     grid.classList.add("pyc-run-detail__grid");
     this._append_field(
@@ -801,7 +841,12 @@ class PycRunDetail extends HTMLElement {
       this._project_display_name(run.project_id),
       run.project_id
     );
-    this._append_field(grid, "Pod", run.pod_id);
+    const assigned = run.assigned_client;
+    if (assigned !== null && assigned !== void 0 && typeof assigned.pod_name === "string" && assigned.pod_name.length > 0) {
+      this._append_field(grid, "Pod", assigned.pod_name, run.pod_id);
+    } else {
+      this._append_field(grid, "Pod", run.pod_id);
+    }
     this._append_field(grid, "Job type", run.job_type);
     const job_name = run.job_name;
     if (job_name !== void 0 && job_name !== null && job_name.length > 0) {
@@ -1082,6 +1127,7 @@ export {
   is_terminal_state,
   is_test_run,
   is_valid_run_id,
+  waiting_for_pod_message,
   manifest_artifacts,
   progress_percent,
   run_id_from_path

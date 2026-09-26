@@ -107,6 +107,30 @@ function liveness_tone(liveness) {
   const rtnval = "neutral";
   return rtnval;
 }
+// What the liveness chip says (RES-36). The heartbeat watchdog keeps
+// liveness_state honest (ALIVE / DEGRADED after 90 s of silence / LOST
+// after 5 min), and two cases read better than the raw state: a client
+// that never heartbeated, and a revoked client, which is not expected
+// to heartbeat at all.
+function client_liveness_display(client) {
+  if (client === null || client === void 0) {
+    const rtnval2 = { label: "\u2014", tone: "neutral" };
+    return rtnval2;
+  }
+  if (client.status === "REVOKED") {
+    const rtnval2 = { label: "\u2014", tone: "neutral" };
+    return rtnval2;
+  }
+  const tone = liveness_tone(client.liveness_state);
+  if (client.last_seen === null || client.last_seen === void 0 || client.last_seen === "") {
+    const rtnval2 = { label: "Never seen", tone: tone === "ok" ? "neutral" : tone };
+    return rtnval2;
+  }
+  const labels = { ALIVE: "Alive", DEGRADED: "Stale", LOST: "Lost" };
+  const label = labels[client.liveness_state] || String(client.liveness_state || "\u2014");
+  const rtnval = { label, tone };
+  return rtnval;
+}
 function capability_tags(attributes) {
   const rtnval = [];
   if (attributes === null || attributes === void 0) {
@@ -864,11 +888,9 @@ class PycClientsList extends HTMLElement {
         render: (client) => {
           const liveness_badge = document.createElement("mj-chip");
           liveness_badge.classList.add("pyc-clients-list__badge");
-          liveness_badge.setAttribute(
-            "data-tone",
-            liveness_tone(client.liveness_state)
-          );
-          liveness_badge.textContent = client.liveness_state;
+          const liveness = client_liveness_display(client);
+          liveness_badge.setAttribute("data-tone", liveness.tone);
+          liveness_badge.textContent = liveness.label;
           return liveness_badge;
         }
       },
@@ -1015,6 +1037,7 @@ export {
   build_client_revoke_url,
   build_clients_query_url,
   capability_tags,
+  client_liveness_display,
   clients_load_message_for_status,
   format_timestamp,
   has_next_page,

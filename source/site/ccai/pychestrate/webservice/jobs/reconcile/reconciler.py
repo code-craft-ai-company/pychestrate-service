@@ -30,6 +30,7 @@ from ccai.pychestrate.webservice.jobs.reconcile.models import (
 )
 from sqlalchemy import func
 
+from ccai.pychestrate.webservice.clients.liveness_watchdog import scan_client_liveness
 from ccai.pychestrate.webservice.jobs.cancel.client_cancel import (
     resolve_cancel_target_client,
 )
@@ -85,9 +86,11 @@ class RunReconciler:
         ) -> int:
         """
             Periodic-tick entry point. Ends every run past its hard
-            deadline (:meth:`expire_overdue_runs`), then counts the runs
-            still in a non-terminal state -- the population the
-            reconciler tracks.
+            deadline (:meth:`expire_overdue_runs`), re-derives client
+            liveness from heartbeat silence
+            (:func:`clients.liveness_watchdog.scan_client_liveness`),
+            then counts the runs still in a non-terminal state -- the
+            population the reconciler tracks.
 
             :param db_session: Active SQLAlchemy session.
             :param now: Evaluation time (tests); defaults to now.
@@ -98,6 +101,14 @@ class RunReconciler:
         if len(expired) > 0:
             _LOGGER.info("pychestrate.reconcile.deadline_expired count=%d runs=%s",
                          len(expired), ",".join(expired))
+        # Client liveness follows heartbeat silence (RES-36): without
+        # this a stopped pod stayed ALIVE forever.
+        for change in scan_client_liveness(db_session=db_session, now=now):
+            _LOGGER.info(
+                "pychestrate.reconcile.client_liveness client_id=%s %s->%s silent_seconds=%d",
+                change.client_id, change.previous_state.value, change.new_state.value,
+                int(change.silent_seconds),
+            )
         terminal_members = list(TERMINAL_STATES)
         rows = (
             db_session.query(Run)
