@@ -17,6 +17,9 @@
     <p class="strong text-danger mb-sm">
         Shown once &mdash; save it now. The secret cannot be retrieved again.
     </p>
+    {% for warning in minted.warnings | default([]) %}
+    <p class="text-danger small" data-role="mint-warning">{{ warning }}</p>
+    {% endfor %}
     <p class="muted small">Enrollment token secret:</p>
     <pre class="command-box">{{ minted.secret }}</pre>
     <p class="muted small">

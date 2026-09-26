@@ -385,6 +385,7 @@ def handle_issue_enrollment_token(request: Request) -> Response:
             "pod_name": issued.pod_name,
             "expires_at": issued.expires_at_iso,
             "algorithm_name": issued.algorithm_name,
+            "warnings": list(issued.warnings),
         }
         rtnval: Response = JSONResponse(content=body, status_code=201)
     except _ProblemAbort as xcpt:

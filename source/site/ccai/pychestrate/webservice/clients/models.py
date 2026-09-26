@@ -44,6 +44,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.types import JSON
 from sqlalchemy_utils.types.uuid import UUIDType
@@ -64,8 +65,9 @@ from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
 class Client(PychestratePhase1Base, SerializableModel):
     """
         Authoritative client record. ``(project_id, pod_name)`` is unique
-        so re-enrollment under the same scope collides until the existing
-        client is revoked.
+        among clients that are not REVOKED, so re-enrollment under the same
+        scope collides until the existing client is revoked; revoked rows
+        stay for history and no longer hold the pod name (E2E-25).
     """
 
     __tablename__ = "clients_clients"
@@ -92,9 +94,12 @@ class Client(PychestratePhase1Base, SerializableModel):
     bearer_token_hash = Column(LargeBinary, nullable=True)
 
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_clients_clients_project_pod_unrevoked",
             "project_id", "pod_name",
-            name="uq_clients_clients_project_pod",
+            unique=True,
+            sqlite_where=text("status != 'REVOKED'"),
+            postgresql_where=text("status != 'REVOKED'"),
         ),
         Index("ix_clients_clients_liveness", "liveness_state"),
         Index("ix_clients_clients_last_seen", "last_seen"),

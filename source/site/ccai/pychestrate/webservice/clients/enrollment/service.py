@@ -39,7 +39,7 @@ import os
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, List, Mapping, Optional
+from typing import Any, List, Mapping, Optional, Tuple
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -80,6 +80,7 @@ from ccai.pychestrate.webservice.clients.models import (
     EnrollmentToken,
 )
 from ccai.pychestrate.webservice.clients.registry.service import (
+    find_scope_holder,
     register_client,
 )
 from ccai.pychestrate.webservice.extensions.registry import (
@@ -108,6 +109,10 @@ class IssuedEnrollmentToken:
         :param pod_name: Pod the token commits to.
         :param expires_at_iso: ISO-8601 expiry timestamp.
         :param algorithm_name: Issuer algorithm used.
+        :param warnings: Operator-facing warnings about the token, e.g.
+                         that its pod name is still held by an enrolled
+                         client, so redeeming it will be refused until
+                         that client is revoked (E2E-25).
     """
     token_id: str
     secret: str
@@ -115,6 +120,7 @@ class IssuedEnrollmentToken:
     pod_name: str
     expires_at_iso: str
     algorithm_name: str
+    warnings: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -308,6 +314,17 @@ def issue_enrollment_token(
     )
     db_session.commit()
 
+    warnings: List[str] = []
+    holder = find_scope_holder(
+        db_session=db_session, project_id=str(project_id), pod_name=pod_name,
+    )
+    if holder is not None:
+        warnings.append(
+            "Pod name {!r} is still enrolled in this project as client {} ({}). This "
+            "token will be refused when redeemed until that client is revoked.".format(
+                pod_name, holder.client_id, holder.status.value)
+        )
+
     rtnval = IssuedEnrollmentToken(
         token_id=str(token.token_id),
         secret=secret_bundle.secret,
@@ -315,6 +332,7 @@ def issue_enrollment_token(
         pod_name=pod_name,
         expires_at_iso=expires_at.isoformat(),
         algorithm_name=secret_bundle.algorithm_name,
+        warnings=tuple(warnings),
     )
     return rtnval
 

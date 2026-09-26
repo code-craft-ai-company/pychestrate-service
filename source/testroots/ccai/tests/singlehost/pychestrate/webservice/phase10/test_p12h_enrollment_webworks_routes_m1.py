@@ -128,6 +128,7 @@ class _FakeIssued:
         secret: str = "sek-secret",
         project_id: str = "p-1",
         pod_name: str = "pod-x",
+        warnings: Tuple[str, ...] = (),
     ) -> None:
         self.token_id: str = token_id
         self.secret: str = secret
@@ -135,6 +136,7 @@ class _FakeIssued:
         self.pod_name: str = pod_name
         self.expires_at_iso: str = "2026-05-04T12:00:00+00:00"
         self.algorithm_name: str = "hmac-sha256"
+        self.warnings: Tuple[str, ...] = warnings
         return
 
 
@@ -339,7 +341,8 @@ def test_handle_issue_returns_201_with_secret_payload_and_actor_propagation():
 
     def fake_issue(**kwargs: Any) -> Any:
         captured.update(kwargs)
-        return _FakeIssued(token_id="tok-1", secret="sek-secret")
+        return _FakeIssued(token_id="tok-1", secret="sek-secret",
+                           warnings=("Pod name 'pod-x' is still enrolled.",))
 
     patch = _patch_routes_attr(
         name="issue_enrollment_token", value=fake_issue
@@ -364,6 +367,7 @@ def test_handle_issue_returns_201_with_secret_payload_and_actor_propagation():
     body = _decode_body(response)
     testbase.assert_equal(body["token_id"], "tok-1")
     testbase.assert_equal(body["secret"], "sek-secret")
+    testbase.assert_equal(body["warnings"], ["Pod name 'pod-x' is still enrolled."])
     testbase.assert_equal(captured["issued_by"], "user-42")
     testbase.assert_equal(captured["one_shot"], True)
     return

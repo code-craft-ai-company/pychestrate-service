@@ -1745,6 +1745,15 @@ paths:
               schema: { $ref: '#/components/schemas/EnrollmentRedeemResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: |
+            A client that is not revoked already holds the token's pod name
+            in this project. Revoke that client (its id is in the detail)
+            or mint a token for a different pod name. A revoked client does
+            not hold its pod name.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /enrollment-tokens/{token_id}:
     parameters:
       - in: path
@@ -6718,6 +6727,14 @@ components:
         pod_name: { type: string }
         expires_at: { type: string, format: date-time }
         algorithm_name: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+          description: |
+            Operator-facing warnings about the token. Present (non-empty)
+            when a client that is not revoked still holds the pod name in
+            this project: redeeming the token is refused with 409 until
+            that client is revoked.
     EnrollmentRedeemRequest:
       type: object
       required: [bootstrap_secret, csr_pem]

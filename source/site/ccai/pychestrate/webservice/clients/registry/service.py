@@ -20,6 +20,8 @@ M1 implements the read/write core the rest of Phase 2 relies on:
   heartbeat watchdogs and admin flows).
 * :func:`list_clients` / :func:`get_client` / :func:`get_client_by_scope` —
   read surface.
+* :func:`find_scope_holder` — the non-revoked client holding a
+  ``(project_id, pod_name)`` scope, if any.
 
 The richer Python facade described in ``specs/3-client-registry/design.md``
 (with a dedicated ``ClientRegistry`` class, async repository, and cache
@@ -244,6 +246,35 @@ def _load_client(*, db_session: DbSession, client_id: str) -> Client:
     return client
 
 
+def find_scope_holder(
+        *,
+        db_session: DbSession,
+        project_id: str,
+        pod_name: str
+    ) -> Optional[Client]:
+    """
+        Return the client that holds the ``(project_id, pod_name)``
+        scope: the one that is not REVOKED. A revoked client gives up
+        its pod name so a replacement machine can enroll under it
+        (E2E-25); its row stays for history.
+
+        :param db_session: Active SQLAlchemy session.
+        :param project_id: Project UUID.
+        :param pod_name: Pod name.
+
+        :returns: The holding :class:`Client`, or None when the scope
+                  is free.
+    """
+    rtnval = (
+        db_session.query(Client)
+        .filter(Client.project_id == project_id)
+        .filter(Client.pod_name == pod_name)
+        .filter(Client.status != ClientStatus.REVOKED)
+        .first()
+    )
+    return rtnval
+
+
 def register_client(
         *,
         db_session: DbSession,
@@ -281,16 +312,18 @@ def register_client(
         :returns: The persisted :class:`Client`.
         :raises: ClientAlreadyExistsError
     """
-    existing = (
-        db_session.query(Client)
-        .filter(Client.project_id == project_id)
-        .filter(Client.pod_name == pod_name)
-        .first()
+    existing = find_scope_holder(
+        db_session=db_session, project_id=project_id, pod_name=pod_name,
     )
     if existing is not None:
-        err_msg_lines = ["A client is already registered under this scope."]
+        err_msg_lines = [
+            "Pod name {!r} is already enrolled in this project as client {} ({}). Revoke "
+            "that client before enrolling a replacement, or enroll under a different "
+            "pod name.".format(pod_name, existing.client_id, existing.status.value)
+        ]
         err_msg_lines.append("PROJECT_ID: {}".format(project_id))
         err_msg_lines.append("POD_NAME: {}".format(pod_name))
+        err_msg_lines.append("CLIENT_ID: {}".format(existing.client_id))
         err_msg = os.linesep.join(err_msg_lines)
         raise ClientAlreadyExistsError(err_msg) from None
 
@@ -582,16 +615,23 @@ def get_client_by_scope(
         pod_name: str
     ) -> ClientView:
     """
-        Return the :class:`ClientView` for the ``(project_id, pod_name)`` pair.
+        Return the :class:`ClientView` for the ``(project_id, pod_name)``
+        pair: the client holding the scope, else the most recently
+        enrolled revoked one.
 
         :raises: ClientNotFoundError
     """
-    client = (
-        db_session.query(Client)
-        .filter(Client.project_id == project_id)
-        .filter(Client.pod_name == pod_name)
-        .first()
+    client = find_scope_holder(
+        db_session=db_session, project_id=project_id, pod_name=pod_name,
     )
+    if client is None:
+        client = (
+            db_session.query(Client)
+            .filter(Client.project_id == project_id)
+            .filter(Client.pod_name == pod_name)
+            .order_by(Client.enrolled_at.desc())
+            .first()
+        )
     if client is None:
         err_msg_lines = ["Client not found for scope."]
         err_msg_lines.append("PROJECT_ID: {}".format(project_id))

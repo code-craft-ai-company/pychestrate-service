@@ -741,6 +741,7 @@ def handle_enrollment_token_mint(request: Request) -> Response:
             "secret": issued.secret,
             "enroll_command": enroll_command,
             "run_command": "pychestrate-client run",
+            "warnings": list(issued.warnings),
         }
         response = _render_token_page(
             auth=auth, db_session=db_session, minted=minted

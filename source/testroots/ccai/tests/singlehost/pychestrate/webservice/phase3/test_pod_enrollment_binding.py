@@ -31,7 +31,11 @@ from ccai.pychestrate.webservice.clients.enrollment.factories.identity_verifier 
 from ccai.pychestrate.webservice.clients.enrollment.service import (
     issue_enrollment_token,
     redeem_enrollment_token,
+    revoke_client,
 )
+from ccai.pychestrate.webservice.clients.enums import RevocationReason
+from ccai.pychestrate.webservice.clients.exceptions import ClientAlreadyExistsError
+from ccai.pychestrate.webservice.clients.registry.service import get_client_by_scope
 from ccai.pychestrate.webservice.orchestration.rpa.candidates import (
     resolve_dispatch_candidates,
 )
@@ -62,7 +66,18 @@ def _enroll(*, session, project_id: str, pod_name: str) -> str:
 
         :returns: The enrolled client id.
     """
-    issued = issue_enrollment_token(
+    issued = _mint(session=session, project_id=project_id, pod_name=pod_name)
+    rtnval = _redeem(session=session, secret=issued.secret, pod_name=pod_name)
+    return rtnval
+
+
+def _mint(*, session, project_id: str, pod_name: str):
+    """
+        Issue a one-shot token for ``(project_id, pod_name)``.
+
+        :returns: The :class:`IssuedEnrollmentToken`.
+    """
+    rtnval = issue_enrollment_token(
         db_session=session,
         project_id=project_id,
         pod_name=pod_name,
@@ -70,15 +85,24 @@ def _enroll(*, session, project_id: str, pod_name: str) -> str:
         one_shot=True,
         issued_by=None,
     )
+    return rtnval
+
+
+def _redeem(*, session, secret: str, pod_name: str) -> str:
+    """
+        Redeem ``secret`` bearer-only (no CSR, so no CA is needed).
+
+        :returns: The enrolled client id.
+    """
     result = redeem_enrollment_token(
         db_session=session,
-        secret=issued.secret,
+        secret=secret,
         payload=EnrollmentPayload(
             pod_name=pod_name, agent_version="0.1.0", transport_name="http-long-poll",
             extras={}, csr_pem=None,
         ),
     )
-    rtnval = result.client_id
+    rtnval = str(result.client_id)
     return rtnval
 
 
@@ -245,5 +269,47 @@ def test_binding_the_same_client_twice_keeps_one_registration():
     testbase.assert_equal(
         (str(second.registration_id), len(_registered_rows(session=session, client_id=client_id))),
         (str(first.registration_id), 1),
+    )
+    return
+
+
+def test_a_revoked_client_gives_up_its_pod_name_to_a_replacement():
+    """
+    **Feature: re-enrolling a replaced pod (E2E-25)**
+    **Property: while a client holds a pod name, a token minted for it
+    carries a warning and redeeming it is refused without consuming the
+    token; once the client is revoked, that token enrolls a replacement
+    that takes over the pod.**
+    """
+    _engine, session = _fresh_session()
+    project_id = new_uuid()
+    original = _enroll(session=session, project_id=project_id, pod_name="lab-pod-r")
+
+    issued = _mint(session=session, project_id=project_id, pod_name="lab-pod-r")
+    testbase.assert_equal(len(issued.warnings), 1)
+    testbase.assert_equal(original in issued.warnings[0], True)
+
+    refused = False
+    try:
+        _redeem(session=session, secret=issued.secret, pod_name="lab-pod-r")
+    except ClientAlreadyExistsError as xcpt:
+        refused = True
+        testbase.assert_equal(original in str(xcpt), True)
+    testbase.assert_equal(refused, True)
+
+    revoke_client(
+        db_session=session, client_id=original,
+        reason=RevocationReason.DECOMMISSIONED, revoked_by=None,
+    )
+    after_revoke = _mint(session=session, project_id=project_id, pod_name="lab-pod-r")
+    testbase.assert_equal(after_revoke.warnings, ())
+
+    replacement = _redeem(session=session, secret=issued.secret, pod_name="lab-pod-r")
+    holder = get_client_by_scope(db_session=session, project_id=project_id, pod_name="lab-pod-r")
+    testbase.assert_equal(
+        (replacement != original, str(holder.client_id),
+         len(_registered_rows(session=session, client_id=replacement)),
+         len(_registered_rows(session=session, client_id=original))),
+        (True, replacement, 1, 0),
     )
     return

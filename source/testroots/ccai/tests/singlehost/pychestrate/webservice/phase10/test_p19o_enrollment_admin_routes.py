@@ -37,7 +37,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai import testbase
 from ccai.testbase.mocking import create_module_patch
@@ -218,13 +218,15 @@ class _FakeTokenView:
 
 
 class _FakeIssuedToken:
-    def __init__(self, *, token_id: str, secret: str) -> None:
+    def __init__(self, *, token_id: str, secret: str,
+                 warnings: Tuple[str, ...] = ()) -> None:
         self.token_id: str = token_id
         self.secret: str = secret
         self.project_id: str = "proj-1"
         self.pod_name: str = "pod-1"
         self.expires_at_iso: str = "2026-05-21T00:00:00+00:00"
         self.algorithm_name: str = "sha256"
+        self.warnings: Tuple[str, ...] = warnings
         return
 
 
@@ -576,7 +578,8 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
         def _issue(**kwargs: Any) -> _FakeIssuedToken:
             issued_calls.append(kwargs)
             return _FakeIssuedToken(
-                token_id="tok-new", secret="s3cr3t-value"
+                token_id="tok-new", secret="s3cr3t-value",
+                warnings=("Pod name 'pod-1' is still enrolled.",),
             )
 
         issue_patch = create_module_patch(
@@ -616,6 +619,7 @@ def test_handle_enrollment_token_mint_happy_path_renders_result_panel():
         testbase.assert_equal(minted["token_id"], "tok-new")
         testbase.assert_equal(minted["pod_name"], "pod-1")
         testbase.assert_equal(minted["secret"], "s3cr3t-value")
+        testbase.assert_equal(minted["warnings"], ["Pod name 'pod-1' is still enrolled."])
         enroll_ok = (
             minted["enroll_command"].startswith(
                 "pychestrate-client enroll --service-url "
