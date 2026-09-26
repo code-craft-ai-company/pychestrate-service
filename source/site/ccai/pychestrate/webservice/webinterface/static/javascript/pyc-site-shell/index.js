@@ -694,6 +694,92 @@ function install_live_region(root) {
   return;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/chip-tone.js
+var TONE_PROPERTIES = {
+  ok: {
+    "--mj-chip-bg": "var(--pyc-color-success-surface, hsla(145, 63%, 42%, 0.16))",
+    "--mj-chip-color": "var(--pyc-color-on-success-surface, hsl(145, 63%, 24%))",
+    "--mj-chip-border-color": "transparent"
+  },
+  warn: {
+    "--mj-chip-bg": "var(--pyc-color-warning-surface, hsla(38, 100%, 67%, 0.2))",
+    "--mj-chip-color": "var(--pyc-color-on-warning-surface, hsl(32, 75%, 21%))",
+    "--mj-chip-border-color": "transparent"
+  },
+  error: {
+    "--mj-chip-bg": "var(--pyc-color-error-surface, hsla(0, 72%, 51%, 0.14))",
+    "--mj-chip-color": "var(--pyc-color-on-error-surface, hsl(0, 72%, 34%))",
+    "--mj-chip-border-color": "transparent"
+  }
+};
+var MANAGED_PROPERTIES = ["--mj-chip-bg", "--mj-chip-color", "--mj-chip-border-color"];
+var TONE_ATTRIBUTE = "data-tone";
+var PATCHED_FLAG = "__pycChipTonePatched";
+var OBSERVER_KEY = "__pycChipToneObserver";
+function apply_chip_tone(chip) {
+  const tone = chip.getAttribute(TONE_ATTRIBUTE) || "";
+  const properties = TONE_PROPERTIES[tone];
+  for (const name of MANAGED_PROPERTIES) {
+    if (properties !== void 0) {
+      chip.style.setProperty(name, properties[name]);
+    } else {
+      chip.style.removeProperty(name);
+    }
+  }
+  return;
+}
+function watch_chip_tone(chip) {
+  apply_chip_tone(chip);
+  if (chip[OBSERVER_KEY] === void 0 && typeof MutationObserver === "function") {
+    const observer = new MutationObserver(() => {
+      apply_chip_tone(chip);
+    });
+    observer.observe(chip, { attributes: true, attributeFilter: [TONE_ATTRIBUTE] });
+    chip[OBSERVER_KEY] = observer;
+  }
+  return;
+}
+function patch_chip_class(chip_class) {
+  const proto = chip_class.prototype;
+  if (proto[PATCHED_FLAG] === true) {
+    return;
+  }
+  proto[PATCHED_FLAG] = true;
+  const original_connected = proto.onConnected;
+  const original_disconnected = proto.onDisconnected;
+  proto.onConnected = function onConnected() {
+    if (typeof original_connected === "function") {
+      original_connected.call(this);
+    }
+    watch_chip_tone(this);
+    return;
+  };
+  proto.onDisconnected = function onDisconnected() {
+    if (typeof original_disconnected === "function") {
+      original_disconnected.call(this);
+    }
+    const observer = this[OBSERVER_KEY];
+    if (observer !== void 0) {
+      observer.disconnect();
+      delete this[OBSERVER_KEY];
+    }
+    return;
+  };
+  return;
+}
+function install_chip_tone() {
+  if (typeof customElements === "undefined") {
+    return;
+  }
+  customElements.whenDefined("mj-chip").then(() => {
+    patch_chip_class(customElements.get("mj-chip"));
+    document.querySelectorAll("mj-chip[" + TONE_ATTRIBUTE + "]").forEach((chip) => {
+      watch_chip_tone(chip);
+    });
+  });
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/home-view.js
 function build_home_view(options) {
   const panel = document.createElement("section");
@@ -3141,6 +3227,7 @@ var PycSiteShell = class extends HTMLElement {
     install_reveal_toggle(document);
     install_log_viewer(document);
     install_live_region(document);
+    install_chip_tone();
     this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();

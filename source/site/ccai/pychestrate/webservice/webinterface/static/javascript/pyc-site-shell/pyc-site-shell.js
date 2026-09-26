@@ -8,6 +8,7 @@ import { install_confirm_delegate } from "./chrome/confirm-delegate.js";
 import { install_reveal_toggle } from "./chrome/reveal-toggle.js";
 import { install_log_viewer } from "./chrome/log-viewer.js";
 import { install_live_region } from "./chrome/live-region.js";
+import { install_chip_tone } from "./chrome/chip-tone.js";
 import { build_home_view } from "./chrome/home-view.js";
 import { build_not_found_view } from "./chrome/not-found-view.js";
 import { DegradedBanner } from "./chrome/degraded-banner.js";
@@ -146,6 +147,7 @@ class PycSiteShell extends HTMLElement {
     install_reveal_toggle(document);
     install_log_viewer(document);
     install_live_region(document);
+    install_chip_tone();
     this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();

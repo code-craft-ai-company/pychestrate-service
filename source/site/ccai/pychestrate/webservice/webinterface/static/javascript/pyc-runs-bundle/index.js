@@ -933,6 +933,23 @@ function waiting_for_pod_message(run) {
   const rtnval = { text, tone };
   return rtnval;
 }
+function progress_bar_tone(run) {
+  const state = run !== null && run !== void 0 ? run.state : "";
+  if (state === "failed" || state === "dispatch_failed") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  if (state === "cancelled") {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  if (state === "completed") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  const rtnval = "active";
+  return rtnval;
+}
 var NON_TEST_JOB_TYPE_PREFIXES = ["rpa-", "build-", "provision-"];
 function is_test_run(run) {
   const job_type = run !== null && run !== void 0 && typeof run.job_type === "string" ? run.job_type : "";
@@ -1830,6 +1847,7 @@ var PycRunDetail = class extends HTMLElement {
     bar.setAttribute("aria-valuenow", String(Math.round(percent)));
     const fill = document.createElement("div");
     fill.classList.add("pyc-run-detail__bar-fill");
+    fill.setAttribute("data-tone", progress_bar_tone(this._run));
     fill.style.width = String(percent) + "%";
     bar.appendChild(fill);
     section.appendChild(bar);

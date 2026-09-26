@@ -463,6 +463,18 @@ pyc-run-detail {
     background-color: var(--pyc-runs-accent);
 }
 
+.pyc-run-detail__bar-fill[data-tone="ok"] {
+    background-color: var(--pyc-color-on-success-surface, hsl(145, 63%, 24%));
+}
+
+.pyc-run-detail__bar-fill[data-tone="warn"] {
+    background-color: var(--pyc-color-on-warning-surface, hsl(32, 75%, 21%));
+}
+
+.pyc-run-detail__bar-fill[data-tone="error"] {
+    background-color: var(--pyc-color-on-error-surface, hsl(0, 72%, 34%));
+}
+
 .pyc-run-detail__progress-phase {
     margin: 0;
     font-size: var(--pyc-font-size-small, 0.875rem);

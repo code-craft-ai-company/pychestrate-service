@@ -87,6 +87,23 @@ function waiting_for_pod_message(run) {
   const rtnval = { text, tone };
   return rtnval;
 }
+function progress_bar_tone(run) {
+  const state = run !== null && run !== void 0 ? run.state : "";
+  if (state === "failed" || state === "dispatch_failed") {
+    const rtnval2 = "error";
+    return rtnval2;
+  }
+  if (state === "cancelled") {
+    const rtnval2 = "warn";
+    return rtnval2;
+  }
+  if (state === "completed") {
+    const rtnval2 = "ok";
+    return rtnval2;
+  }
+  const rtnval = "active";
+  return rtnval;
+}
 // Build, provision and RPA runs carry "<kind>-" job types. Test
 // counters mean nothing for them: an RPA run's loudest element was a
 // row of 0 passed / 0 failed tiles (E2E-23).
@@ -989,6 +1006,9 @@ class PycRunDetail extends HTMLElement {
     bar.setAttribute("aria-valuenow", String(Math.round(percent)));
     const fill = document.createElement("div");
     fill.classList.add("pyc-run-detail__bar-fill");
+    // A finished run's bar takes its outcome's tone: a failed run's
+    // full bar was the same blue as a healthy one (ORC-09).
+    fill.setAttribute("data-tone", progress_bar_tone(this._run));
     fill.style.width = String(percent) + "%";
     bar.appendChild(fill);
     section.appendChild(bar);
@@ -1127,6 +1147,7 @@ export {
   is_terminal_state,
   is_test_run,
   is_valid_run_id,
+  progress_bar_tone,
   waiting_for_pod_message,
   manifest_artifacts,
   progress_percent,
