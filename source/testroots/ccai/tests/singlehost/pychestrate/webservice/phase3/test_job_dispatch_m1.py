@@ -390,6 +390,72 @@ def test_receipt_distinct_local_for_same_run_raises_duplicate():
     return
 
 
+def test_receipt_local_key_reused_by_another_run_raises_duplicate():
+    """
+    **Feature: 5-dispatch-receipt (M1)**
+    **Property: a receipt whose (client_id, client_local_run_id) was
+    already recorded for a DIFFERENT run raises
+    DuplicateRunReceiptError instead of returning the other run's
+    receipt (E2E-40), and the second run is left without a receipt.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    dispatcher = JobDispatcher(transport=InMemoryTransport())
+    first_run_id = new_uuid()
+    first = dispatcher.dispatch(
+        db_session=session,
+        inputs=_build_inputs(run_id=first_run_id, candidates=_two_candidates()),
+    )
+    second_run_id = new_uuid()
+    second = dispatcher.dispatch(
+        db_session=session,
+        inputs=_build_inputs(run_id=second_run_id, candidates=_two_candidates()),
+    )
+    testbase.assert_equal(first.client_id, second.client_id)
+
+    first_receipt = record(
+        db_session=session,
+        run_id=first_run_id,
+        project_id=PROJECT_UUID,
+        client_id=first.client_id,
+        attempt_id=first.attempt_id,
+        envelope_id=first.envelope_id,
+        client_local_run_id="reused-local",
+    )
+
+    raised = False
+    try:
+        record(
+            db_session=session,
+            run_id=second_run_id,
+            project_id=PROJECT_UUID,
+            client_id=second.client_id,
+            attempt_id=second.attempt_id,
+            envelope_id=second.envelope_id,
+            client_local_run_id="reused-local",
+        )
+    except DuplicateRunReceiptError as xcpt:
+        raised = True
+        testbase.assert_equal(str(first_run_id) in str(xcpt), True)
+    testbase.assert_equal(raised, True)
+
+    fresh = session_for(engine=_engine)
+    first_rows = (
+        fresh.query(DispatchReceipt)
+        .filter(DispatchReceipt.run_id == first_run_id)
+        .all()
+    )
+    testbase.assert_equal(len(first_rows), 1)
+    testbase.assert_equal(str(first_rows[0].receipt_id), str(first_receipt.receipt_id))
+    second_count = (
+        fresh.query(DispatchReceipt)
+        .filter(DispatchReceipt.run_id == second_run_id)
+        .count()
+    )
+    testbase.assert_equal(second_count, 0)
+    return
+
+
 def test_receipt_mismatched_envelope_rejected():
     """
     **Feature: 5-dispatch-receipt (M1)**

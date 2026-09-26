@@ -83,7 +83,9 @@ def record(
 
         :returns: :class:`ReceiptRecord`.
         :raises: DuplicateRunReceiptError when a second distinct
-                 receipt arrives for the same ``run_id``;
+                 receipt arrives for the same ``run_id``, or when the
+                 ``(client_id, client_local_run_id)`` pair already
+                 acknowledged a different run;
                  ReceiptEnvelopeMismatchError when ``envelope_id``
                  does not match any attempt of the run.
     """
@@ -97,8 +99,20 @@ def record(
         client_local_run_id=client_local_run_id,
     )
     if existing_by_local is not None:
-        rtnval = _to_record(row=existing_by_local)
-        return rtnval
+        if str(existing_by_local.run_id) == str(run_id):
+            # A replayed ack for the same run: idempotent.
+            rtnval = _to_record(row=existing_by_local)
+            return rtnval
+        # The same local run id already acknowledged a *different* run.
+        # Returning that receipt made this ack look successful while this
+        # run got no receipt, so its progress and artifacts were refused
+        # and its logs lost (E2E-40). Refuse it visibly instead.
+        err_lines = ["client_local_run_id already acknowledged a different run."]
+        err_lines.append("RUN_ID: {}".format(run_id))
+        err_lines.append("OTHER_RUN_ID: {}".format(existing_by_local.run_id))
+        err_lines.append("CLIENT_LOCAL_RUN_ID: {}".format(client_local_run_id))
+        err_msg = os.linesep.join(err_lines)
+        raise DuplicateRunReceiptError(err_msg) from None
 
     existing_for_run = repository.find_by_run(db_session=db_session, run_id=run_id)
     if existing_for_run is not None:
