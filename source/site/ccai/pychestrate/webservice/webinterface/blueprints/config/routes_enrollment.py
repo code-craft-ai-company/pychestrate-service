@@ -134,11 +134,9 @@ class ProjectChoice:
     """
         One entry of the mint form's project picker.
 
-        The token's scope is a project UUID. Projects created in the
-        web UI have integer ids; the run pipeline maps each onto a
-        stable UUID (``rpa.packet.canonical_project_uuid``), so that
-        UUID is what a token for a web-UI project commits to. Projects
-        created through the REST API / CLI already have a UUID.
+        The token's scope is a project's registry UUID. Every project
+        has one -- web-UI projects included, through the project bridge
+        (:mod:`projects.bridge`).
 
         :param value: The project UUID the form submits.
         :param label: What the admin sees (project name).
@@ -176,55 +174,36 @@ def _service_list_tokens(*, db_session: Any) -> Any:
 
 def _list_project_choices(*, db_session: Any) -> List[ProjectChoice]:
     """
-        Every project a token can be scoped to: the web UI's projects
-        (under their canonical run-pipeline UUID) and the active
-        projects of the REST project registry (under their own UUID).
+        Every project a token can be scoped to, under its registry UUID
+        (the project a pod enrolled with the token belongs to). Since the
+        project bridge (PRJ-06) every web-UI project has a registry
+        project; one not linked yet (the startup reconcile has not run) is
+        offered under the UUID its registry project will get.
         Test-patchable seam.
 
         :param db_session: Open SQLAlchemy session.
 
-        :returns: Choices, web-UI projects first, each group sorted by
-                  name.
+        :returns: Choices sorted by name.
     """
     from sqlalchemy.exc import OperationalError  # noqa: E402
 
     from ccai.pychestrate.core.orm import Project as UiProject  # noqa: E402
-    from ccai.pychestrate.webservice.orchestration.rpa.packet import (  # noqa: E402
-        canonical_project_uuid,
+    from ccai.pychestrate.webservice.projects.legacy_identity import (  # noqa: E402
+        derived_project_uuid,
     )
     from ccai.pychestrate.webservice.projects.models import (  # noqa: E402
-        Project as ApiProject,
+        Project as RegistryProject,
         ProjectState,
     )
 
     rtnval: List[ProjectChoice] = []
+    linked_ui_ids = set()
 
     savepoint = db_session.begin_nested()
     try:
-        ui_rows = (
-            db_session.query(UiProject.id, UiProject.name)
-            .order_by(UiProject.name.asc())
-            .all()
-        )
-        savepoint.commit()
-    except OperationalError:
-        # A development database created without the legacy tables.
-        savepoint.rollback()
-        ui_rows = []
-    for project_id, project_name in ui_rows:
-        rtnval.append(ProjectChoice(
-            value=canonical_project_uuid(str(project_id)),
-            label=str(project_name),
-            detail="web UI project #{}".format(project_id),
-            source=PROJECT_SOURCE_UI,
-        ))
-
-    savepoint = db_session.begin_nested()
-    try:
-        api_rows = (
-            db_session.query(ApiProject)
-            .filter(ApiProject.state == ProjectState.ACTIVE)
-            .order_by(ApiProject.display_name.asc(), ApiProject.slug.asc())
+        registry_rows = (
+            db_session.query(RegistryProject)
+            .filter(RegistryProject.state == ProjectState.ACTIVE)
             .all()
         )
         savepoint.commit()
@@ -237,16 +216,38 @@ def _list_project_choices(*, db_session: Any) -> List[ProjectChoice]:
             "pychestrate.ui.enrollment.project_registry_unavailable",
             exc_info=True,
         )
-        api_rows = []
-    for row in api_rows:
+        registry_rows = []
+    for row in registry_rows:
         display_name = row.display_name if row.display_name is not None else ""
         label = display_name if len(display_name.strip()) > 0 else row.slug
+        if row.legacy_proj_id is not None:
+            linked_ui_ids.add(int(row.legacy_proj_id))
         rtnval.append(ProjectChoice(
             value=str(row.project_id),
             label=label,
             detail=row.slug,
-            source=PROJECT_SOURCE_API,
+            source=PROJECT_SOURCE_UI,
         ))
+
+    savepoint = db_session.begin_nested()
+    try:
+        ui_rows = db_session.query(UiProject.id, UiProject.name).all()
+        savepoint.commit()
+    except OperationalError:
+        # A development database created without the legacy tables.
+        savepoint.rollback()
+        ui_rows = []
+    for project_id, project_name in ui_rows:
+        if int(project_id) in linked_ui_ids:
+            continue
+        rtnval.append(ProjectChoice(
+            value=derived_project_uuid(project_id),
+            label=str(project_name),
+            detail="web UI project #{}".format(project_id),
+            source=PROJECT_SOURCE_UI,
+        ))
+
+    rtnval.sort(key=lambda choice: (choice.label.lower(), choice.detail))
     return rtnval
 
 

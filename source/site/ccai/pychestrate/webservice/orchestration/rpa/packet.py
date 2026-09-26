@@ -26,6 +26,10 @@ import uuid
 
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from ccai.pychestrate.webservice.projects.legacy_identity import (
+    LEGACY_PROJECT_NAMESPACE,
+    derived_project_uuid,
+)
 from ccai.pychestrate.webservice.orchestration.rpa.errors import (
     PacketTooLargeError,
     PacketValidationError,
@@ -43,7 +47,9 @@ TYPE_ID_PATTERN = re.compile(r"^[a-z][a-z0-9-]{2,63}$")
 
 #: UUID5 namespace used to map consumer-UI integer project ids onto a
 #: stable UUID for the UUID-typed Layer-5 tables.
-CONSUMER_PROJECT_NAMESPACE = uuid.UUID("7f4b6a2e-5c8d-4e1f-9a3b-2d6c8e0f1a5b")
+# The namespace moved to projects.legacy_identity, which the project
+# bridge shares; the name stays for existing importers.
+CONSUMER_PROJECT_NAMESPACE = LEGACY_PROJECT_NAMESPACE
 
 
 def is_valid_type_id(candidate: Any) -> bool:
@@ -81,7 +87,7 @@ def canonical_project_uuid(project_ref: str) -> str:
         return rtnval
     except (ValueError, AttributeError, TypeError):
         pass
-    rtnval = str(uuid.uuid5(CONSUMER_PROJECT_NAMESPACE, "consumer-project:{}".format(text)))
+    rtnval = derived_project_uuid(text)
     return rtnval
 
 

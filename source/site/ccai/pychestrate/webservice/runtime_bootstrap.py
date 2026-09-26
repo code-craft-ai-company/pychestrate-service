@@ -79,7 +79,7 @@ import logging
 import os
 
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine.base import Engine
@@ -671,6 +671,38 @@ def _load_ui_cookie_secret_or_none(
 # ---------------------------------------------------------------------------
 
 
+def _reconcile_project_links(*, session_factory: Any) -> None:
+    """
+        Run :func:`projects.bridge.reconcile_project_links` once at
+        startup. A failure is logged, not fatal: the project pages keep
+        working, and the next start retries.
+
+        :param session_factory: Callable returning a new session, or None.
+
+        :returns: None.
+    """
+    if session_factory is None:
+        return
+    from ccai.pychestrate.webservice.projects.bridge import reconcile_project_links  # noqa: E402
+
+    session = session_factory()
+    try:
+        report = reconcile_project_links(db_session=session)
+        if len(report.linked) + len(report.registry_created) + len(report.legacy_created) + len(report.skipped) > 0:
+            _module_logger.info(
+                "pychestrate.projects.bridge.reconciled linked=%d registry_created=%d "
+                "legacy_created=%d skipped=%d",
+                len(report.linked), len(report.registry_created),
+                len(report.legacy_created), len(report.skipped),
+            )
+    except Exception:
+        session.rollback()
+        _module_logger.exception("pychestrate.projects.bridge.reconcile_failed")
+    finally:
+        session.close()
+    return
+
+
 def _install_enrollment_ca_or_skip(
         *, config: RuntimeBootstrapConfig
     ) -> bool:
@@ -964,6 +996,10 @@ def bootstrap_runtime(
 
     phase2_config = Phase2BootstrapConfig(session_factory=session_factory)
     bootstrap_phase2_runtime(config=phase2_config)
+
+    # One owner for projects (PRJ-06): give projects that predate the
+    # bridge their missing half (registry <-> web UI).
+    _reconcile_project_links(session_factory=session_factory)
 
     phase3_config = Phase3BootstrapConfig(session_factory=session_factory)
     bootstrap_phase3_runtime(config=phase3_config)

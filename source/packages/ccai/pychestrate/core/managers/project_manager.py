@@ -499,7 +499,8 @@ class ProjectManager:
         self,
         db_session: DbSession,
         audit_logger=None,
-        access_resolver: Optional[Callable[[str], Optional[ProjectRole]]] = None
+        access_resolver: Optional[Callable[[str], Optional[ProjectRole]]] = None,
+        lifecycle_listener: Optional[Any] = None
     ):
         """
         Initialize the ProjectManager with a database session.
@@ -514,11 +515,34 @@ class ProjectManager:
                                 layer, which knows the RBAC tables; without
                                 it, access comes from project membership
                                 alone.
+        :param lifecycle_listener: Optional object told about project
+                                   changes inside their transaction,
+                                   before the commit: ``project_created`` /
+                                   ``project_updated`` ``(db_session,
+                                   project, user_id)`` and
+                                   ``project_deleting`` ``(db_session,
+                                   project_id, user_id)``. Supplied by the
+                                   web layer, which keeps the project
+                                   registry (the owner of project
+                                   identity) in step; if it raises, the
+                                   change is rolled back.
         """
         self._db_session = db_session
         self._audit_logger = audit_logger
         self._access_resolver = access_resolver
+        self._lifecycle_listener = lifecycle_listener
         self._global_roles: Dict[str, Optional[ProjectRole]] = {}
+
+    def _notify_listener(self, event_name: str, *args: Any) -> None:
+        """
+        Tell the lifecycle listener (if any, and if it handles
+        ``event_name``) about a project change, inside its transaction.
+        """
+        listener = self._lifecycle_listener
+        handler = getattr(listener, event_name, None) if listener is not None else None
+        if callable(handler):
+            handler(self._db_session, *args)
+        return
 
     # =========================================================================
     # Access resolution
@@ -646,12 +670,16 @@ class ProjectManager:
     # Project CRUD Operations
     # =========================================================================
     
-    def create_project(self, request: ProjectCreateRequest, user_id: str) -> ProjectResponse:
+    def create_project(self, request: ProjectCreateRequest, user_id: str, *,
+                       commit: bool = True) -> ProjectResponse:
         """
         Create a new project with the user as owner.
         
         :param request: The project creation request containing project data
         :param user_id: The ID of the user creating the project (becomes owner)
+        :param commit: Commit the new rows (the default). ``False`` leaves the
+                       caller's transaction open so the project can be created
+                       together with other rows.
         :returns: ProjectResponse with the created project data
         :raises ProjectValidationError: If validation fails
         :raises DuplicateProjectError: If project name already exists
@@ -708,7 +736,15 @@ class ProjectManager:
         )
         
         self._db_session.add(member)
-        self._db_session.commit()
+        self._db_session.flush()
+        try:
+            self._notify_listener("project_created", project, user_id)
+        except Exception:
+            if commit is True:
+                self._db_session.rollback()
+            raise
+        if commit is True:
+            self._db_session.commit()
         
         # Log the project creation event
         if self._audit_logger:
@@ -809,6 +845,12 @@ class ProjectManager:
             project.metadata_json = request.metadata
         
         project.updated_at = utc_now()
+        self._db_session.flush()
+        try:
+            self._notify_listener("project_updated", project, user_id)
+        except Exception:
+            self._db_session.rollback()
+            raise
         self._db_session.commit()
         
         # Log the project update event
@@ -830,7 +872,8 @@ class ProjectManager:
         project_id: int,
         user_id: str,
         *,
-        related_rows_cleanup: Optional[Callable[[DbSession, int], None]] = None
+        related_rows_cleanup: Optional[Callable[[DbSession, int], None]] = None,
+        commit: bool = True
     ) -> None:
         """
         Delete a project. Fails if active jobs exist.
@@ -844,6 +887,9 @@ class ProjectManager:
                                      runs in the same transaction, before the
                                      project row is deleted; if it raises, the
                                      whole deletion is rolled back.
+        :param commit: Commit the deletion (the default). ``False`` leaves it
+                       in the caller's transaction (nothing is rolled back
+                       here on failure either).
         :raises ProjectNotFoundError: If project is not found
         :raises ProjectHasActiveJobsError: If project has active jobs
 
@@ -892,12 +938,15 @@ class ProjectManager:
             # transaction, so a failure leaves the project untouched.
             if related_rows_cleanup is not None:
                 related_rows_cleanup(self._db_session, project_id)
+            self._notify_listener("project_deleting", project_id, user_id)
 
             # Delete everything the project owns, then the project.
             self._delete_project_rows(project_id)
-            self._db_session.commit()
+            if commit is True:
+                self._db_session.commit()
         except Exception:
-            self._db_session.rollback()
+            if commit is True:
+                self._db_session.rollback()
             raise
         
         # Log the project deletion event

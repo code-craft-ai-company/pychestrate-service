@@ -57,6 +57,7 @@ from ccai.pychestrate.webservice.api.problem_json_webworks import (
 )
 from ccai.pychestrate.webservice.projects import repository as project_repository
 from ccai.pychestrate.webservice.projects import service as project_service
+from ccai.pychestrate.core.managers.project_manager import ProjectHasActiveJobsError
 from ccai.pychestrate.webservice.projects.exceptions import (
     LastAdminRemovalError,
     MemberBindingNotFoundError,
@@ -621,6 +622,16 @@ def handle_delete_project(request: Request) -> Response:
                 extensions={"slug": slug},
             )
         except ProjectStateTransitionError as xcpt:
+            _abort_problem(
+                request=request,
+                status=409,
+                detail=str(xcpt),
+                extensions={"slug": slug},
+            )
+        except ProjectHasActiveJobsError as xcpt:
+            # The project's web-UI half still has pending or running
+            # build / infrastructure / test jobs (projects.bridge).
+            db_session.rollback()
             _abort_problem(
                 request=request,
                 status=409,

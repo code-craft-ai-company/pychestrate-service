@@ -57,6 +57,7 @@ from ccai.pychestrate.webservice.projects.models import (
     ProjectMemberBinding,
     ProjectState,
 )
+from ccai.pychestrate.webservice.projects import bridge as project_bridge
 from ccai.pychestrate.webservice.projects import repository as project_repository
 from ccai.pychestrate.webservice.projects.repository import (
     get_project_by_slug,
@@ -202,6 +203,13 @@ def create_project(
             response_payload={"project_id": str(project.project_id), "slug": project.slug},
         )
 
+    # The web UI's pages work on a legacy project row; create it in the
+    # same transaction so the project shows up there too (PRJ-06).
+    if project_bridge.bridge_tables_present(db_session=db_session) is True:
+        project_bridge.ensure_legacy_project(
+            db_session=db_session, project=project, owner_user_id=actor_user_id,
+        )
+
     db_session.commit()
 
     hardening_metrics.increment_counter(name="project.create.ok", labels={})
@@ -325,6 +333,12 @@ def delete_project(
     project_id_str = str(project.project_id)
     project_slug = project.slug
 
+    # The web UI's legacy project goes with it (refused while it has
+    # pending or running jobs: ProjectHasActiveJobsError).
+    project_bridge.delete_legacy_project_for_registry(
+        db_session=db_session, project=project, actor_user_id=actor_user_id,
+    )
+
     # Explicitly cascade member bindings before removing the project
     # row. Per 2-projects design the DB FK ``ON DELETE CASCADE`` is the
     # canonical mechanism on PostgreSQL; we also perform the cascade in
@@ -389,6 +403,8 @@ def patch_project(
     project.updated_at = utc_now()
     db_session.add(project)
     db_session.flush()
+    if description is not None:
+        project_bridge.sync_legacy_from_registry(db_session=db_session, project=project)
     db_session.commit()
 
     rtnval = project

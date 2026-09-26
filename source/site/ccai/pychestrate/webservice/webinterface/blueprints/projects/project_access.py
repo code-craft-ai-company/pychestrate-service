@@ -254,7 +254,8 @@ def build_project_access_resolver(*, db_session: Any) -> Callable[[str], Any]:
 def build_access_aware_project_manager(*, db_session: Any) -> Any:
     """
         A :class:`ProjectManager` whose permission checks and project
-        lists honour global roles as well as membership.
+        lists honour global roles as well as membership, and whose
+        project changes keep the project registry in step.
 
         :param db_session: Open SQLAlchemy session.
 
@@ -263,9 +264,15 @@ def build_access_aware_project_manager(*, db_session: Any) -> Any:
     from ccai.pychestrate.core.managers.project_manager import (  # noqa: E402
         ProjectManager,
     )
+    from ccai.pychestrate.webservice.projects.bridge import (  # noqa: E402
+        LegacyProjectListener,
+    )
+    # The listener keeps each UI project's registry project (the owner
+    # of project identity) in step with it -- see projects.bridge.
     rtnval = ProjectManager(
         db_session,
         access_resolver=build_project_access_resolver(db_session=db_session),
+        lifecycle_listener=LegacyProjectListener(),
     )
     return rtnval
 

@@ -107,9 +107,9 @@ from ccai.pychestrate.webservice.orchestration.rpa.models import (
     RpaSpec,
     RpaVersionState,
 )
+from ccai.pychestrate.webservice.projects.bridge import registry_project_uuid_for_ref
 from ccai.pychestrate.webservice.orchestration.rpa.packet import (
     DEFAULT_MAX_PACKET_BYTES,
-    canonical_project_uuid,
     enforce_packet_size,
     is_valid_type_id,
     merge_packet,
@@ -1276,7 +1276,9 @@ def trigger_job(
     )
     db_session.commit()
 
-    layer5_project_id = canonical_project_uuid(project_ref)
+    # The run belongs to the project's registry UUID (a web-UI project
+    # id resolves through its link -- projects.bridge).
+    layer5_project_id = registry_project_uuid_for_ref(db_session=db_session, project_ref=project_ref)
     create_run_state(
         db_session=db_session,
         run_id=job_id,
