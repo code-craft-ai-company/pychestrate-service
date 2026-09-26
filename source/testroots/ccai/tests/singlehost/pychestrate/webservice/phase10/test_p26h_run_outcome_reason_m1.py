@@ -17,7 +17,7 @@ from ccai import testbase
 from ccai.pychestrate.core.defaults import new_uuid
 from ccai.pychestrate.webservice.jobs.run.state import RunEvent, create_run, transition
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
-from ccai.pychestrate.webservice.messaging.event_bus import reset_event_bus
+from ccai.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
 from ccai.pychestrate.webservice.runs.restapi.v1 import runs_routes
 
 from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
@@ -68,4 +68,27 @@ def test_outcome_reason_falls_back_to_the_terminal_transition():
     reason = runs_routes._outcome_reason(db_session=session, row=row, result_manifest=None)
 
     testbase.assert_equal(reason, "REJECTED: envelope verification failed")
+    return
+
+
+def test_trigger_response_reports_the_run_state_machine_state():
+    """
+    **Feature: consistent run state across views (E2E-23)**
+    **Property: the test-run trigger reports the run's own state (what
+    GET /runs/{id} shows), not the test-run record's; with no readable
+    run it leaves the record's state alone.**
+    """
+    from ccai.pychestrate.webservice.orchestration.test.restapi.v1 import test_runs_routes
+
+    reset_event_bus()
+    _engine, session = build_in_memory_session()
+    run_id = new_uuid()
+    create_run(db_session=session, run_id=run_id, project_id=PROJECT_UUID, job_type="testbase")
+    transition(db_session=session, run_id=run_id, event=RunEvent.DISPATCH_STARTED, actor="system:test")
+
+    testbase.assert_equal(
+        (test_runs_routes._run_state_value(db_session=session, run_id=run_id),
+         test_runs_routes._run_state_value(db_session=object(), run_id=run_id)),
+        ("dispatching", None),
+    )
     return

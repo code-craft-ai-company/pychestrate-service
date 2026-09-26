@@ -557,6 +557,24 @@ def _parse_positive_int_field(
 # ---------------------------------------------------------------------------
 
 
+def _run_state_value(*, db_session: Any, run_id: str) -> Optional[str]:
+    """
+        :param db_session: Active SQLAlchemy session.
+        :param run_id: Run UUID.
+
+        :returns: The run-state machine's current state, or None when it
+                  cannot be read (unit-test fakes).
+    """
+    from ccai.pychestrate.webservice.jobs.run.state import get_snapshot  # noqa: E402
+
+    try:
+        snapshot = get_snapshot(db_session=db_session, run_id=run_id)
+    except Exception:
+        return None
+    rtnval = snapshot.state.value
+    return rtnval
+
+
 def _pod_availability_warnings(*, db_session: Any, client_id: Optional[str]) -> List[str]:
     """
         :param db_session: Active SQLAlchemy session.
@@ -859,6 +877,12 @@ def handle_trigger_test_run(request: Request) -> Response:
             catalog_entry=catalog_entry,
             triggered_at=triggered_at,
         )
+        # Report the run's own state, as GET /runs/{id} does: the
+        # test-run record says "dispatched" while the run is still
+        # "dispatching" (not yet delivered to its pod) -- E2E-23.
+        run_state = _run_state_value(db_session=db_session, run_id=str(outcome.run_id))
+        if run_state is not None:
+            body_dict["state"] = run_state
         # The run is queued either way; say so when its pod is not
         # heartbeating instead of accepting silently (E2E-16).
         body_dict["warnings"] = _pod_availability_warnings(
