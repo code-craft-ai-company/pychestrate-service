@@ -167,6 +167,7 @@ def _valid_makefile_inputs() -> BuildRunInputs:
             "targets": ["build"],
             "makefile_path": "Makefile",
             "parallelism": 4,
+            "git_url": "https://git.example.test/demo.git",
         },
         input_files={"Makefile": "abc123", "src/main.c": "deadbeef"},
         toolchain=(

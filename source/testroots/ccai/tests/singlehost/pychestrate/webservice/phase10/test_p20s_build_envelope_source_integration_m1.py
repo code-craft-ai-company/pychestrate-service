@@ -127,15 +127,21 @@ def _build_inputs(
         source_integration_id=None
     ) -> build_service.BuildRunInputs:
     """
-        A valid Makefile build-run input payload.
+        A valid Makefile build-run input payload. Without a source
+        integration it names its source the pod's fallback way,
+        ``runner_inputs.git_url`` (a build with no source at all is
+        refused at the trigger).
 
         :param source_integration_id: Optional source-integration id.
 
         :returns: :class:`BuildRunInputs`.
     """
+    runner_inputs = {"targets": ["all"]}
+    if source_integration_id is None:
+        runner_inputs["git_url"] = "https://git.example.test/demo.git"
     rtnval = build_service.BuildRunInputs(
         runner_kind="makefile",
-        runner_inputs={"targets": ["all"]},
+        runner_inputs=runner_inputs,
         input_files={"Makefile": "d" * 64},
         env={"CC": "gcc"},
         source_integration_id=source_integration_id,
@@ -228,8 +234,9 @@ def test_build_with_source_integration_embeds_source_block():
 def test_build_without_source_integration_still_works():
     """
     **Feature: 6-source-integrations PR p20s**
-    **Property: a build triggered WITHOUT a source_integration_id
-    still dispatches; the envelope carries no `source` block.**
+    **Property: a build triggered WITHOUT a source_integration_id but
+    with runner_inputs.git_url still dispatches; the envelope carries
+    no `source` block (the pod clones git_url).**
     """
     _prepare_runtime()
     _engine, session = build_in_memory_session()
@@ -252,6 +259,44 @@ def test_build_without_source_integration_still_works():
     signed = transport.calls()[0].signed
     testbase.assert_equal(signed.envelope.source, None)
     testbase.assert_equal(view.source, None)
+    return
+
+
+def test_build_with_no_source_at_all_is_refused_at_the_trigger():
+    """
+    **Feature: build source contract (E2E-14)**
+    **Property: a build naming no source integration, no git_url and no
+    source_dir is refused before anything is persisted or dispatched --
+    it used to reach the pod and fail there.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    transport = InMemoryTransport()
+    build_service.set_active_job_dispatcher(
+        dispatcher=JobDispatcher(transport=transport),
+    )
+    no_source = build_service.BuildRunInputs(
+        runner_kind="makefile",
+        runner_inputs={"targets": ["all"]},
+    )
+
+    raised = None
+    try:
+        build_service.trigger_run(
+            db_session=session,
+            project_id=PROJECT_UUID,
+            inputs=no_source,
+            aspects=build_service.BuildTriggerAspects(
+                candidates=_one_candidate(),
+                project_slug="proj-slug",
+            ),
+        )
+    except build_service.BuildInputsInvalidError as xcpt:
+        raised = str(xcpt)
+    testbase.assert_equal(
+        (raised is not None and "needs a source" in raised, len(transport.calls())),
+        (True, 0),
+    )
     return
 
 

@@ -3051,10 +3051,16 @@ paths:
       description: |
         Resolves the named `runner_kind` (via the
         `build_runner_kind` factory protocol), validates the
-        runner inputs, computes the reproducibility digest, and
-        persists a build run in `PENDING` state. The Layer-5
-        dispatch handoff is M2 work -- until then a triggered
-        build run remains queued in `PENDING`.
+        runner inputs, computes the reproducibility digest,
+        persists the build run and dispatches a `job_kind=build`
+        envelope to an eligible pod.
+
+        A build must name its source: a registered
+        `source_integration_id`, or `runner_inputs.git_url` (with an
+        optional `git_ref`), or `runner_inputs.source_dir` for a tree
+        already present on the pod. A trigger naming none of these is
+        refused with 422 instead of dispatching a build the pod cannot
+        run.
       requestBody:
         required: true
         content:
@@ -3062,7 +3068,7 @@ paths:
             schema: { $ref: '#/components/schemas/BuildRunCreateRequest' }
       responses:
         '202':
-          description: Build run accepted (queued; dispatch is M2).
+          description: Build run accepted and dispatched.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/BuildRun' }

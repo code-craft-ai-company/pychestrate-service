@@ -135,7 +135,7 @@ def _build_inputs() -> build_service.BuildRunInputs:
     """
     rtnval = build_service.BuildRunInputs(
         runner_kind="makefile",
-        runner_inputs={"targets": ["all"], "branch": "main"},
+        runner_inputs={"targets": ["all"], "branch": "main", "git_url": "https://git.example.test/demo.git"},
         input_files={"Makefile": "d" * 64},
         env={"CC": "gcc"},
     )

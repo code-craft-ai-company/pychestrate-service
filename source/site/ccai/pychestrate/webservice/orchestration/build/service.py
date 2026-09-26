@@ -346,6 +346,18 @@ def trigger_run(
         db_session=db_session,
         source_integration_id=inputs.source_integration_id,
     )
+    # A build with nothing to build from was dispatched anyway and
+    # failed on the pod ("source acquisition has nothing to fetch"),
+    # after tying up the pod (E2E-14). Refuse it at the trigger.
+    if source_ref is None and _names_a_source(runner_inputs=inputs.runner_inputs) is False:
+        err_lines = [
+            "A build needs a source: choose a source integration "
+            "(source_integration_id), or pass runner_inputs.git_url (with optional "
+            "git_ref), or runner_inputs.source_dir for a tree already on the pod.",
+        ]
+        err_lines.append("RUNNER_KIND: {}".format(inputs.runner_kind))
+        err_msg = os.linesep.join(err_lines)
+        raise BuildInputsInvalidError(err_msg) from None
 
     snapshot = ReproSnapshot(
         input_files=dict(inputs.input_files),
@@ -640,6 +652,25 @@ def _dispatch_build_job(
         raise BuildDispatchFailedError(err_msg) from xcpt
 
     return rtnval
+
+
+#: ``runner_inputs`` keys through which a build names its source
+#: without a registered source integration (the pod's fallbacks).
+RUNNER_INPUT_SOURCE_KEYS: Tuple[str, ...] = ("git_url", "source_dir")
+
+
+def _names_a_source(*, runner_inputs: Mapping[str, Any]) -> bool:
+    """
+        :param runner_inputs: The build's runner inputs.
+
+        :returns: True when they carry a non-empty ``git_url`` or
+                  ``source_dir``.
+    """
+    for key in RUNNER_INPUT_SOURCE_KEYS:
+        value = runner_inputs.get(key, None) if runner_inputs is not None else None
+        if value is not None and len(str(value).strip()) > 0:
+            return True
+    return False
 
 
 def _resolve_source_reference(
