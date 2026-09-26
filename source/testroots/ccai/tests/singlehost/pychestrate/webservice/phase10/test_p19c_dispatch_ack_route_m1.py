@@ -341,3 +341,65 @@ def test_dispatch_ack_marks_the_attempt_acked():
     testbase.assert_equal(len(acked_calls), 1)
     testbase.assert_true(acked_calls[0]["attempt"] is attempt)
     return
+
+
+def _ack_and_capture_transitions(*, notes: Optional[str]) -> List[Any]:
+    """
+        Post a valid ack (with ``notes`` when given) and return the
+        run-state transitions the route asked for.
+    """
+    transitions: List[Any] = []
+    run_patch = _patch_find_run(exists=True)
+    attempt_patch = _patch_get_attempt(attempt=_FakeAttempt())
+    acked_patch = _patch_mark_attempt_acked(calls=[])
+    svc_patch = create_module_patch(runs_routes.receipt_service, "record")
+    svc_patch.activate().configure(side_effect=lambda **kwargs: object())
+    transition_patch = create_module_patch(runs_routes, "_run_state_transition")
+    transition_patch.activate().configure(side_effect=lambda **kwargs: transitions.append(kwargs))
+    try:
+        body = dict(_VALID_BODY)
+        if notes is not None:
+            body["notes"] = notes
+        request = _FakeRequest(
+            path="/api/v1/runs/run-1/dispatch-ack",
+            path_params={"run_id": "run-1"},
+            body=body,
+            db_session=object(),
+            mtls_client_cn="pod-client-cert",
+        )
+        runs_routes.handle_dispatch_ack(request)
+    finally:
+        transition_patch.deactivate()
+        svc_patch.deactivate()
+        acked_patch.deactivate()
+        attempt_patch.deactivate()
+        run_patch.deactivate()
+    return transitions
+
+
+def test_rejected_dispatch_ends_the_run_with_the_pods_reason():
+    """
+    **Feature: pod refusals (E2E-15)**
+    **Property: an ack whose notes start "REJECTED:" ends the run
+    (FAILURE_OBSERVED) with the pod's notes as the reason, instead of
+    leaving it dispatched with no explanation.**
+    """
+    notes = "REJECTED: envelope verification failed (unknown_key): no key 'k1'"
+
+    transitions = _ack_and_capture_transitions(notes=notes)
+
+    testbase.assert_equal(len(transitions), 1)
+    testbase.assert_equal(transitions[0]["event"], runs_routes.RunEvent.FAILURE_OBSERVED)
+    testbase.assert_equal(transitions[0]["reason"], notes)
+    return
+
+
+def test_accepted_dispatch_does_not_end_the_run():
+    """
+    **Feature: pod refusals (E2E-15)**
+    **Property: an ordinary ack ("ACCEPTED: ...") does not end the run.**
+    """
+    transitions = _ack_and_capture_transitions(notes="ACCEPTED: starting job_kind=test")
+
+    testbase.assert_equal(transitions, [])
+    return

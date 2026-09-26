@@ -826,6 +826,17 @@ class PycRunDetail extends HTMLElement {
     outcome_field.appendChild(outcome_term);
     outcome_field.appendChild(outcome_def);
     grid.appendChild(outcome_field);
+    // Why the run ended as it did -- the pod's note, a rejected dispatch, a
+    // passed deadline -- so a failed run is never shown without a cause.
+    const reason = run.outcome_reason;
+    if (typeof reason === "string" && reason.length > 0) {
+      this._append_field(grid, "Reason", reason);
+      const reason_def = grid.lastElementChild.querySelector("dd");
+      if (reason_def !== null) {
+        reason_def.setAttribute("data-role", "outcome-reason");
+        reason_def.classList.add("pyc-run-detail__outcome-reason");
+      }
+    }
     section.appendChild(grid);
     return section;
   }

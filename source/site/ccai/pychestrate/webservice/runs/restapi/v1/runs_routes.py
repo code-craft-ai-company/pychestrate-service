@@ -118,8 +118,12 @@ from ccai.pychestrate.webservice.jobs.results.errors import (
 )
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
 from ccai.pychestrate.webservice.jobs.run.state.enums import (
+    RunEvent,
     RunState,
     TERMINAL_STATES,
+)
+from ccai.pychestrate.webservice.jobs.run.state.machine import (
+    transition as _run_state_transition,
 )
 from ccai.pychestrate.webservice.jobs.run.state.advance import (
     advance_to_cancelled as _advance_to_cancelled,
@@ -178,6 +182,9 @@ def runs_cancel_permission_key(*, project_id: str) -> str:
 #: Parser tag a progress record without its own ``format_tag`` gets when
 #: its frame carries no summary either: the registered testbase parser.
 DEFAULT_PROGRESS_RECORD_FORMAT_TAG = TESTBASE_V1_FORMAT_TAG
+
+#: Notes prefix a pod uses when it refuses a dispatch; the run is ended.
+DISPATCH_REJECTED_NOTE_PREFIX = "REJECTED:"
 
 #: ``TerminalOutcome`` value a pod reports when an operator cancel
 #: stopped the run. Distinguished from ``failure`` at ingest so a
@@ -703,6 +710,47 @@ def _run_timing_block(
     return rtnval
 
 
+def _outcome_reason(
+        *,
+        db_session: Any,
+        row: Any,
+        result_manifest: Optional[Dict[str, Any]]
+    ) -> Optional[str]:
+    """
+        Why the run is where it is, for the run detail view: the pod's
+        notes on its result manifest (why the job failed or was stopped),
+        else the reason recorded with the transition into the current
+        terminal state (a rejected dispatch, a passed deadline, ...),
+        else -- for a run awaiting a cancel -- the cancel reason.
+
+        :param db_session: Active SQLAlchemy session.
+        :param row: The :class:`Run` row.
+        :param result_manifest: The run's manifest block, if loaded.
+
+        :returns: The reason text, or ``None`` when there is none.
+    """
+    if isinstance(result_manifest, dict):
+        notes = result_manifest.get("notes", None)
+        if isinstance(notes, str) and len(notes.strip()) > 0:
+            rtnval: Optional[str] = notes.strip()
+            return rtnval
+    if row.state in TERMINAL_STATES:
+        audits = run_repo.list_state_audits(db_session=db_session, run_id=str(row.run_id))
+        entering = [audit for audit in audits if getattr(audit, "to_state", None) == row.state]
+        if len(entering) > 0:
+            reason = getattr(entering[-1], "reason", None)
+            if isinstance(reason, str) and len(reason.strip()) > 0:
+                rtnval = reason.strip()
+                return rtnval
+    if row.state == RunState.CANCEL_REQUESTED:
+        cancel_reason = getattr(row, "cancel_reason", None)
+        if isinstance(cancel_reason, str) and len(cancel_reason.strip()) > 0:
+            rtnval = "Cancel requested: {}".format(cancel_reason.strip())
+            return rtnval
+    rtnval = None
+    return rtnval
+
+
 def _run_to_dict(
         *,
         row: Run,
@@ -776,6 +824,11 @@ def _run_to_dict(
             db_session=db_session, run_id=run_id,
         )
 
+    outcome_reason: Optional[str] = None
+    if include_result_manifest is True:
+        outcome_reason = _outcome_reason(
+            db_session=db_session, row=row, result_manifest=result_manifest,
+        )
     rtnval: Dict[str, Any] = {
         "run_id": run_id,
         "project_id": str(row.project_id),
@@ -786,6 +839,7 @@ def _run_to_dict(
         "job_type": str(row.job_type) if row.job_type is not None else "",
         "state": _enum_value_or_none(row.state),
         "terminal_outcome": _enum_value_or_none(row.terminal_outcome),
+        "outcome_reason": outcome_reason,
         "current_dispatch_attempt_id": current_attempt_id,
         "progress_summary": progress_summary,
         "result_manifest": result_manifest,
@@ -1132,6 +1186,28 @@ def handle_dispatch_ack(request: Request) -> Response:
                 run_id,
                 xcpt,
             )
+
+        # A pod that refuses a dispatch (the envelope failed verification,
+        # it is shutting down) acks it with notes starting "REJECTED:". The
+        # run will never progress, so end it here with the pod's words as
+        # the reason instead of leaving it "dispatched" with no explanation.
+        ack_notes = payload.get("notes", None)
+        if isinstance(ack_notes, str) and ack_notes.strip().upper().startswith(DISPATCH_REJECTED_NOTE_PREFIX):
+            try:
+                _run_state_transition(
+                    db_session=db_session,
+                    run_id=run_id,
+                    event=RunEvent.FAILURE_OBSERVED,
+                    actor="system:dispatch-ack",
+                    reason=ack_notes.strip(),
+                )
+            except Exception as xcpt:
+                _LOGGER.warning(
+                    "pychestrate.runs.dispatch_ack.rejection_not_applied"
+                    " run_id=%s err=%s",
+                    run_id,
+                    xcpt,
+                )
 
         _LOGGER.info(
             "pychestrate.runs.dispatch_ack run_id=%s client_cn=%s",

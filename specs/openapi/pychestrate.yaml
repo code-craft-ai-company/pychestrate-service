@@ -7491,6 +7491,14 @@ components:
         terminal_outcome:
           nullable: true
           $ref: '#/components/schemas/TerminalOutcome'
+        outcome_reason:
+          type: string
+          nullable: true
+          description: |
+            Why the run ended as it did (run detail only): the pod's notes on its
+            result manifest, else the reason recorded with the transition into
+            the terminal state (a rejected dispatch, a passed hard deadline),
+            else, while a cancel is pending, the cancel reason.
         current_dispatch_attempt_id:
           type: string
           format: uuid
