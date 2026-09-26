@@ -766,6 +766,7 @@ else
     sed \
         -e "s|@USER@|${REMOTE_USER}|g" \
         -e "s|@PORT@|${REMOTE_PORT}|g" \
+        -e "s|@PUBLIC_HOSTNAME@|${PUBLIC_HOSTNAME}|g" \
         "${REPO_ROOT}/deployment/pychestrate.service.template" \
         > "${UNIT_LOCAL}"
 

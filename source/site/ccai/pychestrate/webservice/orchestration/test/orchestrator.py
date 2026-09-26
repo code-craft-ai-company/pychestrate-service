@@ -41,6 +41,7 @@ from ccai.errors.exceptions import ConfigurationError, SemanticError
 
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 
+from ccai.pychestrate.webservice.public_endpoint import run_forwarding_info, service_issuer
 from ccai.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
 )
@@ -57,7 +58,6 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
 )
 from ccai.pychestrate.webservice.jobs.envelope import (
     JobDeadline,
-    JobForwardingInfo,
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
@@ -108,7 +108,8 @@ class TriggerRunRequest:
         :param candidates: Eligible candidates the dispatcher
                            picks from. M1 takes them directly; M2
                            wires the registry-driven filter.
-        :param issuer: Service DNS-name + release string.
+        :param issuer: Service DNS-name + release string; ``None``
+                       uses :func:`public_endpoint.service_issuer`.
         :param soft_deadline_seconds / hard_deadline_seconds:
                            run deadlines (relative to trigger).
         :param results_backend: Optional override for the shared
@@ -121,7 +122,7 @@ class TriggerRunRequest:
     triggered_by: Optional[str]
     inputs: Mapping[str, Any]
     candidates: Sequence[DispatchCandidate]
-    issuer: str = "pychestrate.example.com/0.6.0"
+    issuer: Optional[str] = None
     soft_deadline_seconds: int = 1800
     hard_deadline_seconds: int = 3600
     results_backend: Optional[SharedResultsBackend] = None
@@ -353,7 +354,7 @@ class TestOrchestrator:
             job_id=snapshot.entry_id,
             job_name=snapshot.raw_metadata.get("display_name", snapshot.entry_id) or snapshot.entry_id,
             job_type=snapshot.runner_kind,
-            issuer=request.issuer,
+            issuer=request.issuer or service_issuer(),
             refs=JobRefs(
                 branch=str(snapshot.raw_metadata.get("branch", "main")),
                 build=str(snapshot.raw_metadata.get("build", "")),
@@ -367,11 +368,7 @@ class TestOrchestrator:
                 backend_key_prefix=allocation.backend_key_prefix,
                 backend_driver=allocation.backend_driver,
             ),
-            forwarding=JobForwardingInfo(
-                progress_url="https://pychestrate.example.com/api/v1/runs/{}/progress".format(run_id),
-                summary_url="https://pychestrate.example.com/api/v1/runs/{}/summary".format(run_id),
-                auth_method="bearer",
-            ),
+            forwarding=run_forwarding_info(run_id=run_id),
             deadline=JobDeadline(
                 soft_deadline_at=soft_deadline,
                 hard_deadline_at=hard_deadline,

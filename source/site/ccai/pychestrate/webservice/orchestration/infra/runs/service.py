@@ -56,6 +56,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 
+from ccai.pychestrate.webservice.public_endpoint import run_forwarding_info, service_issuer
 from ccai.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
 )
@@ -72,7 +73,6 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
 from ccai.pychestrate.webservice.jobs.envelope import (
     JOB_KIND_PROVISION,
     JobDeadline,
-    JobForwardingInfo,
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
@@ -126,7 +126,6 @@ TERMINAL_RUN_STATES: Tuple[InfraRunState, ...] = (
     InfraRunState.REJECTED_BY_GUARD,
 )
 PROVISION_JOB_TYPE_PREFIX: str = "provision-"
-DEFAULT_PROVISION_ISSUER: str = "pychestrate.example.com/0.6.0"
 DEFAULT_PROVISION_SOFT_DEADLINE_SECONDS: int = 1800
 DEFAULT_PROVISION_HARD_DEADLINE_SECONDS: int = 3600
 
@@ -250,7 +249,8 @@ class InfraTriggerAspects:
         :param project_slug: Project slug, sanitized into the
                              results-backend prefix.
         :param issuer: Service DNS-name + release string stamped on
-                       the provision job envelope.
+                       the provision job envelope; ``None`` uses
+                       :func:`public_endpoint.service_issuer`.
         :param soft_deadline_seconds: Provision soft deadline
                                       relative to trigger time.
         :param hard_deadline_seconds: Provision hard deadline
@@ -261,7 +261,7 @@ class InfraTriggerAspects:
     replay_of: Optional[str] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
     project_slug: str = ""
-    issuer: str = DEFAULT_PROVISION_ISSUER
+    issuer: Optional[str] = None
     soft_deadline_seconds: int = DEFAULT_PROVISION_SOFT_DEADLINE_SECONDS
     hard_deadline_seconds: int = DEFAULT_PROVISION_HARD_DEADLINE_SECONDS
 
@@ -599,7 +599,7 @@ def _dispatch_provision_job(
         ),
         job_type=job_type,
         job_kind=JOB_KIND_PROVISION,
-        issuer=aspects.issuer,
+        issuer=aspects.issuer or service_issuer(),
         refs=JobRefs(
             branch="main",
             build="",
@@ -613,15 +613,7 @@ def _dispatch_provision_job(
             backend_key_prefix=allocation.backend_key_prefix,
             backend_driver=allocation.backend_driver,
         ),
-        forwarding=JobForwardingInfo(
-            progress_url=(
-                "https://pychestrate.example.com/api/v1/runs/{}/progress"
-            ).format(run_id),
-            summary_url=(
-                "https://pychestrate.example.com/api/v1/runs/{}/summary"
-            ).format(run_id),
-            auth_method="bearer",
-        ),
+        forwarding=run_forwarding_info(run_id=run_id),
         deadline=JobDeadline(
             soft_deadline_at=soft_deadline,
             hard_deadline_at=hard_deadline,

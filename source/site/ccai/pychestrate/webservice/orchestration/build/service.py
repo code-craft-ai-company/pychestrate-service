@@ -44,6 +44,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 
+from ccai.pychestrate.webservice.public_endpoint import run_forwarding_info, service_issuer
 from ccai.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
 )
@@ -60,7 +61,6 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
 from ccai.pychestrate.webservice.jobs.envelope import (
     JOB_KIND_BUILD,
     JobDeadline,
-    JobForwardingInfo,
     JobPipelineRef,
     JobRefs,
     JobResultsLocator,
@@ -122,7 +122,6 @@ BUILD_JOB_TYPE_PREFIX: str = "build-"
 # Reserved annotations key the resolved source reference is mirrored
 # under so the build read / list routes can echo the ``source`` block.
 BUILD_SOURCE_ANNOTATION_KEY: str = "__source_integration__"
-DEFAULT_BUILD_ISSUER: str = "pychestrate.example.com/0.6.0"
 DEFAULT_BUILD_SOFT_DEADLINE_SECONDS: int = 1800
 DEFAULT_BUILD_HARD_DEADLINE_SECONDS: int = 3600
 
@@ -237,7 +236,8 @@ class BuildTriggerAspects:
         :param project_slug: Project slug, sanitized into the
                              results-backend prefix.
         :param issuer: Service DNS-name + release string stamped
-                       on the build job envelope.
+                       on the build job envelope; ``None`` uses
+                       :func:`public_endpoint.service_issuer`.
         :param soft_deadline_seconds: Build soft deadline relative
                                       to trigger time.
         :param hard_deadline_seconds: Build hard deadline relative
@@ -248,7 +248,7 @@ class BuildTriggerAspects:
     pipeline_step_run_id: Optional[str] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
     project_slug: str = ""
-    issuer: str = DEFAULT_BUILD_ISSUER
+    issuer: Optional[str] = None
     soft_deadline_seconds: int = DEFAULT_BUILD_SOFT_DEADLINE_SECONDS
     hard_deadline_seconds: int = DEFAULT_BUILD_HARD_DEADLINE_SECONDS
 
@@ -597,7 +597,7 @@ def _dispatch_build_job(
         job_name="build:{}".format(inputs.runner_kind),
         job_type=job_type,
         job_kind=JOB_KIND_BUILD,
-        issuer=aspects.issuer,
+        issuer=aspects.issuer or service_issuer(),
         refs=JobRefs(
             branch=branch,
             build=str(inputs.runner_inputs.get("build", "")),
@@ -612,15 +612,7 @@ def _dispatch_build_job(
             backend_key_prefix=allocation.backend_key_prefix,
             backend_driver=allocation.backend_driver,
         ),
-        forwarding=JobForwardingInfo(
-            progress_url=(
-                "https://pychestrate.example.com/api/v1/runs/{}/progress"
-            ).format(run_id),
-            summary_url=(
-                "https://pychestrate.example.com/api/v1/runs/{}/summary"
-            ).format(run_id),
-            auth_method="bearer",
-        ),
+        forwarding=run_forwarding_info(run_id=run_id),
         deadline=JobDeadline(
             soft_deadline_at=soft_deadline,
             hard_deadline_at=hard_deadline,

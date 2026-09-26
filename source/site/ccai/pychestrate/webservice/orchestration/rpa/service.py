@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import new_uuid, utc_now
 
+from ccai.pychestrate.webservice.public_endpoint import run_forwarding_info, service_issuer
 from ccai.pychestrate.webservice.extensions.registry import (
     list_factory_implementations,
 )
@@ -51,7 +52,6 @@ from ccai.pychestrate.webservice.jobs.dispatch.factories.strategy import (
 from ccai.pychestrate.webservice.jobs.envelope import (
     JOB_KIND_RPA,
     JobDeadline,
-    JobForwardingInfo,
     JobRefs,
     JobResultsLocator,
     JobSourceRef,
@@ -121,7 +121,6 @@ from ccai.pychestrate.webservice.orchestration.rpa.packet import (
 _LOGGER = logging.getLogger("pychestrate.rpa.service")
 
 RPA_JOB_TYPE_PREFIX: str = "rpa-"
-DEFAULT_RPA_ISSUER: str = "pychestrate.example.com/0.6.0"
 DEFAULT_RPA_SOFT_DEADLINE_SECONDS: int = 3600
 DEFAULT_RPA_HARD_DEADLINE_SECONDS: int = 7200
 DEFAULT_IDEMPOTENCY_WINDOW_SECONDS: int = 60
@@ -230,7 +229,7 @@ class RpaTriggerAspects:
     actor_id: Optional[str] = None
     candidates: Sequence[DispatchCandidate] = field(default_factory=tuple)
     project_slug: str = ""
-    issuer: str = DEFAULT_RPA_ISSUER
+    issuer: Optional[str] = None
     soft_deadline_seconds: int = DEFAULT_RPA_SOFT_DEADLINE_SECONDS
     hard_deadline_seconds: int = DEFAULT_RPA_HARD_DEADLINE_SECONDS
     trigger_cause: Mapping[str, Any] = field(default_factory=lambda: {"kind": "manual"})
@@ -1432,7 +1431,7 @@ def _dispatch_rpa_job(
         job_name="rpa:{}".format(type_row.type_id),
         job_type=job_type_string,
         job_kind=JOB_KIND_RPA,
-        issuer=aspects.issuer,
+        issuer=aspects.issuer or service_issuer(),
         refs=JobRefs(
             branch=source_ref.ref if source_ref is not None else "main",
             build="",
@@ -1447,11 +1446,7 @@ def _dispatch_rpa_job(
             backend_key_prefix=allocation.backend_key_prefix,
             backend_driver=allocation.backend_driver,
         ),
-        forwarding=JobForwardingInfo(
-            progress_url="https://pychestrate.example.com/api/v1/runs/{}/progress".format(job_id),
-            summary_url="https://pychestrate.example.com/api/v1/runs/{}/summary".format(job_id),
-            auth_method="bearer",
-        ),
+        forwarding=run_forwarding_info(run_id=job_id),
         deadline=JobDeadline(soft_deadline_at=soft_deadline, hard_deadline_at=hard_deadline),
         pipeline=None,
         extension_claims={},

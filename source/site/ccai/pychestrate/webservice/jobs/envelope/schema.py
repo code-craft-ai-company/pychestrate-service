@@ -141,8 +141,11 @@ class JobForwardingInfo:
         Where the client should POST live progress summaries.
         Matches testbase's ``ForwardingInfo`` shape.
 
-        :param progress_url: Absolute URL the client POSTs progress to.
-        :param summary_url: Absolute URL for the final summary POST.
+        :param progress_url: URL the client POSTs progress to: absolute
+                             under the configured public base URL, else
+                             service-relative (see :mod:`public_endpoint`).
+        :param summary_url: URL for the final result (``results/complete``),
+                            absolute or service-relative likewise.
         :param auth_method: Either ``"bearer"`` or ``"mtls"``.
     """
     progress_url: str
@@ -203,7 +206,8 @@ class JobEnvelope:
         :param issued_at: UTC timestamp the service built the
                           envelope.
         :param issuer: Service DNS name + release string, e.g.
-                       ``"pychestrate.example.com/0.3.1"``.
+                       ``"pychestrate.lab.internal/0.0.7"`` (see
+                       :func:`public_endpoint.service_issuer`).
         :param project_id: Owning project UUID.
         :param job_id: Job-catalog UUID.
         :param job_name: Human-readable job identifier.

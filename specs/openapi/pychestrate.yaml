@@ -52,8 +52,6 @@ info:
     url: https://www.apache.org/licenses/LICENSE-2.0.html
 
 servers:
-  - url: https://tc-app-server.tailb75ce6.ts.net/api/v1
-    description: Author's live alpha deployment (Tailscale-fronted).
   - url: https://{host}/api/v1
     description: Generic templated server; supply the deployment host.
     variables:
@@ -7290,8 +7288,20 @@ components:
       type: object
       required: [progress_url, summary_url, auth_method]
       properties:
-        progress_url: { type: string, format: uri }
-        summary_url: { type: string, format: uri }
+        progress_url:
+          type: string
+          format: uri-reference
+          description: |
+            Where the pod POSTs run progress. Absolute under the service's
+            configured public base URL (PYCHESTRATE_PUBLIC_BASE_URL);
+            a service-relative path when none is configured.
+        summary_url:
+          type: string
+          format: uri-reference
+          description: |
+            Where the pod reports the run's final result (the
+            `results/complete` route). Absolute or service-relative, as
+            for `progress_url`.
         auth_method:
           type: string
           enum: [bearer, mtls]

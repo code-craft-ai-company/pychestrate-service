@@ -322,6 +322,54 @@ def test_orchestrator_trigger_dispatches_and_persists_test_run():
     return
 
 
+def test_orchestrator_signs_the_configured_public_endpoint_into_the_envelope():
+    """
+    **Feature: 6-test-orchestration (M1), E2E-32**
+    **Property: the envelope's issuer and forwarding URLs come from
+    PYCHESTRATE_PUBLIC_BASE_URL -- no placeholder host -- and the
+    summary URL is the results/complete route.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    transport = InMemoryTransport()
+    orchestrator = TestOrchestrator(
+        dispatcher=JobDispatcher(transport=transport),
+        results_backend=SharedResultsBackend(backend_driver="local-test"),
+    )
+    entry = upsert_entry(
+        db_session=session,
+        project_id=PROJECT_UUID,
+        importer_tag="testbase-project",
+        payload=_testbase_payload(key="public-endpoint-demo"),
+    )
+    request = TriggerRunRequest(
+        project_id=PROJECT_UUID,
+        project_slug=PROJECT_SLUG,
+        catalog_entry_id=entry.entry_id,
+        triggered_by=None,
+        inputs={"includes": ["ccai.tests.singlehost"]},
+        candidates=_two_eligible_candidates(),
+    )
+
+    previous = os.environ.get("PYCHESTRATE_PUBLIC_BASE_URL")
+    os.environ["PYCHESTRATE_PUBLIC_BASE_URL"] = "https://pyc.lab.internal/"
+    try:
+        outcome = orchestrator.trigger_run(db_session=session, request=request)
+    finally:
+        if previous is None:
+            os.environ.pop("PYCHESTRATE_PUBLIC_BASE_URL", None)
+        else:
+            os.environ["PYCHESTRATE_PUBLIC_BASE_URL"] = previous
+
+    envelope = transport.calls()[0].signed.envelope
+    run_base = "https://pyc.lab.internal/api/v1/runs/{}".format(outcome.run_id)
+    testbase.assert_equal(
+        (envelope.issuer.split("/")[0], envelope.forwarding.progress_url, envelope.forwarding.summary_url),
+        ("pyc.lab.internal", run_base + "/progress", run_base + "/results/complete"),
+    )
+    return
+
+
 def test_orchestrator_capability_mismatch_rejects_before_dispatch():
     """
     **Feature: 6-test-orchestration (M1)**

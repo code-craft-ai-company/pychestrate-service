@@ -294,6 +294,17 @@ class PychestrateVariablesDesc(AppVarSet):
         default="8888",
     )
 
+    # The service's public base URL (scheme and host, e.g.
+    # ``https://pychestrate.lab.internal``): where pods and browsers
+    # reach it. Signed into job envelopes as the issuer and as the
+    # progress / summary URLs. Empty: envelopes carry a host-less
+    # issuer and service-relative URLs.
+    PYCHESTRATE_PUBLIC_BASE_URL = AppVarDesc(
+        section=SECTION_NETWORK,
+        source=VariableSource.BOTH,
+        default="",
+    )
+
     # ------------------------------------------------------------------
     # RUNTIME section -- runtime-environment + schema-create flag
     # ------------------------------------------------------------------
@@ -438,6 +449,9 @@ class PychestrateVariables:
     )
     PYCHESTRATE_BIND_PORT = AppVarAccessor(
         PychestrateVariablesDesc.PYCHESTRATE_BIND_PORT
+    )
+    PYCHESTRATE_PUBLIC_BASE_URL = AppVarAccessor(
+        PychestrateVariablesDesc.PYCHESTRATE_PUBLIC_BASE_URL
     )
 
     PYCHESTRATE_RUNTIME_ENVIRONMENT = AppVarAccessor(

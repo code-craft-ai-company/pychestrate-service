@@ -4,6 +4,7 @@
 # Placeholders:
 #   @USER@   -- the deploy user (e.g. myron)
 #   @PORT@   -- the loopback bind port (e.g. 8888)
+#   @PUBLIC_HOSTNAME@ -- the name on the TLS certificate (--public-hostname)
 #
 # After install:
 #   sudo systemctl daemon-reload
@@ -44,6 +45,10 @@ Environment="PYCHESTRATE_RUNTIME_ENVIRONMENT=staging"
 Environment="PYCHESTRATE_BIND_HOST=127.0.0.1"
 Environment="PYCHESTRATE_BIND_PORT=@PORT@"
 Environment="PYCHESTRATE_AUTO_CREATE_SCHEMA=false"
+# Where pods and browsers reach the service (nginx terminates TLS for
+# this name). Signed into job envelopes as the issuer and the
+# progress / result URLs.
+Environment="PYCHESTRATE_PUBLIC_BASE_URL=https://@PUBLIC_HOSTNAME@"
 # stdout goes to a file (StandardOutput=append:), where Python would
 # block-buffer it: without this, startup lines such as the
 # initial-admin token path can sit in the buffer indefinitely.

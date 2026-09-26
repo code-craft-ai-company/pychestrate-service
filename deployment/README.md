@@ -197,7 +197,9 @@ deployment/deploy-alpha-to-host.sh \
 
 `--host` and `--user` are required; there are no host-specific
 defaults. `--public-hostname` is the name on the TLS certificate
-(nginx redirects there) and defaults to `--host`; `--port` (8888) and
+(nginx redirects there) and defaults to `--host`. The service unit also
+gets it as `PYCHESTRATE_PUBLIC_BASE_URL=https://<name>`, which job
+envelopes carry as their issuer and progress / result URLs. `--port` (8888) and
 `--proxy-port` (80) keep their defaults. Values can be given as
 `--option VALUE` or `--option=VALUE`; `--help` lists every option.
 
