@@ -89,7 +89,10 @@ from ccai.pychestrate.webservice.extensions.registry import (
 )
 from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
 from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
-from ccai.pychestrate.webservice.pods.static_service import bind_enrolled_client
+from ccai.pychestrate.webservice.pods.static_service import (
+    bind_enrolled_client,
+    deregister_client,
+)
 
 
 DEFAULT_TOKEN_ENTROPY_BITS: int = 128
@@ -702,6 +705,16 @@ def revoke_client(
     client.status = ClientStatus.REVOKED
     client.revision_token = new_uuid()
     db_session.flush()
+
+    # A revoked client must stop being a dispatch candidate: its pod
+    # registration used to stay REGISTERED, so runs were dispatched to
+    # a pod whose certificate is now refused.
+    deregister_client(
+        db_session=db_session,
+        client_id=str(client.client_id),
+        reason="client revoked ({})".format(reason.value),
+        actor=revoked_by,
+    )
 
     revoked_payload = {
         "client_id": str(client.client_id),

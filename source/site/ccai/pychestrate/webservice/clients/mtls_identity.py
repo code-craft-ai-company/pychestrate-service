@@ -333,9 +333,11 @@ def install_client_certificate_identity(
     ) -> Callable:
     """
         Install client-certificate identity delivery: add
-        :class:`ClientCertificateIdentityMiddleware` to the webworks
-        dispatcher pipeline and return ``wsgi_app`` wrapped in
-        :class:`ClientCertificateIdentityWsgiMiddleware`.
+        :class:`ClientCertificateIdentityMiddleware` (and, at the end of
+        the pipeline, the
+        :class:`~clients.revoked_client_gate.RevokedClientGateMiddleware`)
+        to the webworks dispatcher pipeline and return ``wsgi_app``
+        wrapped in :class:`ClientCertificateIdentityWsgiMiddleware`.
 
         Must be called after ``app.startup()`` (the dispatcher exists
         from ``INFRASTRUCTURE_READY`` on), and the returned callable is
@@ -355,6 +357,15 @@ def install_client_certificate_identity(
 
     middleware = ClientCertificateIdentityMiddleware()
     app.dispatcher.pipeline.add(middleware, name=middleware.name, position="start")
+
+    # A revoked client's certificate still verifies, so refuse it once
+    # the database session is open (the gate runs at the end of the
+    # pipeline, after the session middleware).
+    from ccai.pychestrate.webservice.clients.revoked_client_gate import (  # noqa: E402
+        RevokedClientGateMiddleware,
+    )
+    gate = RevokedClientGateMiddleware()
+    app.dispatcher.pipeline.add(gate, name=gate.name, position="end")
 
     _LOGGER.info(
         "clients.mtls_identity.installed trusted_proxies=%s headers=%s,%s",

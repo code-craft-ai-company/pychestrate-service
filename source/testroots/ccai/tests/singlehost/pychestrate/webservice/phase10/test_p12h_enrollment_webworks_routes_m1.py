@@ -315,8 +315,8 @@ def test_handle_redeem_returns_503_when_session_missing():
 
 def test_handle_revoke_client_returns_503_when_session_missing():
     request = _FakeRequest(
-        path="/api/v1/enrollment-tokens/clients/c-1/revoke",
-        path_params={"client_id": "c-1"},
+        path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-000000000001/revoke",
+        path_params={"client_id": "0c1e0000-0000-4000-8000-000000000001"},
         body={"reason": "rotated"},
         db_session=None,
     )
@@ -1034,8 +1034,8 @@ def test_handle_revoke_client_under_enrollment_returns_200_on_success():
     patch = _patch_routes_attr(name="revoke_client", value=fake_revoke)
     try:
         request = _FakeRequest(
-            path="/api/v1/enrollment-tokens/clients/c-1/revoke",
-            path_params={"client_id": "c-1"},
+            path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-000000000001/revoke",
+            path_params={"client_id": "0c1e0000-0000-4000-8000-000000000001"},
             db_session=object(),
             actor_user_id="user-42",
             body={
@@ -1050,13 +1050,30 @@ def test_handle_revoke_client_under_enrollment_returns_200_on_success():
 
     testbase.assert_equal(response.status_code, 200)
     body = _decode_body(response)
-    testbase.assert_equal(body["client_id"], "c-1")
+    testbase.assert_equal(body["client_id"], "0c1e0000-0000-4000-8000-000000000001")
     testbase.assert_equal(body["status"], "revoked")
     testbase.assert_equal(body["cert_serial"], "aabb")
     testbase.assert_equal(body["reason"], "ROTATED")
     testbase.assert_equal(captured["reason"], RevocationReason.ROTATED)
     testbase.assert_equal(captured["revoked_by"], "user-42")
     testbase.assert_equal(captured["note"], "scheduled rotation")
+    return
+
+
+def test_handle_revoke_client_under_enrollment_returns_404_for_a_non_uuid_client_id():
+    """
+    **Feature: 3-client-enrollment T1.1 (webworks routes)**
+    **Property: a client id that is not a UUID names no client, so
+    revoke answers 404 instead of failing in the UUID column (500).**
+    """
+    request = _FakeRequest(
+        path="/api/v1/enrollment-tokens/clients/None/revoke",
+        db_session=object(),
+        path_params={"client_id": "None"},
+        body={"reason": "DECOMMISSIONED"},
+    )
+    response = enrollment_routes.handle_revoke_client_under_enrollment(request)
+    testbase.assert_equal(response.status_code, 404)
     return
 
 
@@ -1067,15 +1084,15 @@ def test_handle_revoke_client_under_enrollment_returns_400_when_reason_missing()
     client_id extension.**
     """
     request = _FakeRequest(
-        path="/api/v1/enrollment-tokens/clients/c-1/revoke",
-        path_params={"client_id": "c-1"},
+        path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-000000000001/revoke",
+        path_params={"client_id": "0c1e0000-0000-4000-8000-000000000001"},
         db_session=object(),
         body={},
     )
     response = enrollment_routes.handle_revoke_client_under_enrollment(request)
     testbase.assert_equal(response.status_code, 400)
     body = _decode_body(response)
-    testbase.assert_equal(body["client_id"], "c-1")
+    testbase.assert_equal(body["client_id"], "0c1e0000-0000-4000-8000-000000000001")
     return
 
 
@@ -1086,8 +1103,8 @@ def test_handle_revoke_client_under_enrollment_returns_400_on_unknown_reason():
     raw reason + accepted-list as extension members.**
     """
     request = _FakeRequest(
-        path="/api/v1/enrollment-tokens/clients/c-1/revoke",
-        path_params={"client_id": "c-1"},
+        path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-000000000001/revoke",
+        path_params={"client_id": "0c1e0000-0000-4000-8000-000000000001"},
         db_session=object(),
         body={"reason": "GARBAGE"},
     )
@@ -1112,8 +1129,8 @@ def test_handle_revoke_client_under_enrollment_returns_404_on_unknown_client():
     )
     try:
         request = _FakeRequest(
-            path="/api/v1/enrollment-tokens/clients/c-missing/revoke",
-            path_params={"client_id": "c-missing"},
+            path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-00000000dead/revoke",
+            path_params={"client_id": "0c1e0000-0000-4000-8000-00000000dead"},
             db_session=object(),
             body={"reason": "ROTATED"},
         )
@@ -1123,7 +1140,7 @@ def test_handle_revoke_client_under_enrollment_returns_404_on_unknown_client():
 
     testbase.assert_equal(response.status_code, 404)
     body = _decode_body(response)
-    testbase.assert_equal(body["client_id"], "c-missing")
+    testbase.assert_equal(body["client_id"], "0c1e0000-0000-4000-8000-00000000dead")
     return
 
 
@@ -1143,8 +1160,8 @@ def test_handle_revoke_client_under_enrollment_treats_empty_cert_serial_as_none(
     patch = _patch_routes_attr(name="revoke_client", value=fake_revoke)
     try:
         request = _FakeRequest(
-            path="/api/v1/enrollment-tokens/clients/c-1/revoke",
-            path_params={"client_id": "c-1"},
+            path="/api/v1/enrollment-tokens/clients/0c1e0000-0000-4000-8000-000000000001/revoke",
+            path_params={"client_id": "0c1e0000-0000-4000-8000-000000000001"},
             db_session=object(),
             body={"reason": "ROTATED", "cert_serial": ""},
         )

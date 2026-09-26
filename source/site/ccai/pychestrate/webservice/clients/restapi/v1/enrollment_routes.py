@@ -620,6 +620,18 @@ def handle_revoke_client_under_enrollment(request: Request) -> Response:
             request=request, raw=reason_raw
         )
 
+        # A client id that is not a UUID names no client; the lookup
+        # used to fail inside the UUID column type and answer 500.
+        try:
+            client_id = str(uuid.UUID(str(client_id)))
+        except ValueError:
+            _abort_problem(
+                request=request,
+                status=404,
+                detail="Client not found.",
+                extensions={"client_id": client_id},
+            )
+
         note = body.get("note", "") or ""
         cert_serial_in = body.get("cert_serial", None)
         if cert_serial_in is not None and len(cert_serial_in) == 0:

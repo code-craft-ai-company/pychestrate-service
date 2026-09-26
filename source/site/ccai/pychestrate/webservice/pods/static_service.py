@@ -371,6 +371,61 @@ def deregister_static_pod(
     return
 
 
+def deregister_client(
+        *,
+        db_session: DbSession,
+        client_id: str,
+        reason: str,
+        actor: Optional[str]
+    ) -> int:
+    """
+        Deregister every active registration (``REGISTERED`` or
+        ``CLIENT_LOST``) the client holds, so it stops being a dispatch
+        candidate. Used when a client is revoked: its registration used
+        to stay ``REGISTERED``, so the dispatcher kept choosing a pod
+        whose certificate is refused.
+
+        Nothing is committed: the caller commits (revocation commits
+        the client status, the revocation row and this together).
+
+        :param db_session: Active SQLAlchemy session.
+        :param client_id: The client UUID.
+        :param reason: Recorded as each registration's deregister reason.
+        :param actor: Actor recorded on the ``entity.pod.deregistered``
+                      events.
+
+        :returns: How many registrations were deregistered.
+    """
+    active_rows = (
+        db_session.query(PodRegistration)
+        .filter(PodRegistration.client_id == str(client_id))
+        .filter(PodRegistration.state.in_(_ACTIVE_REGISTRATION_STATES))
+        .all()
+    )
+    now = utc_now()
+    for row in active_rows:
+        row.state = RegistrationState.DEREGISTERED
+        row.deregistered_at = now
+        row.deregister_reason = reason
+        db_session.add(row)
+        enqueue_event(
+            db_session=db_session,
+            event=EntityEvent(
+                topic=StaticPodEventTopics.POD_DEREGISTERED,
+                payload={
+                    "pod_id": str(row.pod_id),
+                    "registration_id": str(row.registration_id),
+                    "reason": reason,
+                    "actor": actor,
+                },
+                source_event_id=new_uuid(),
+            ),
+        )
+    db_session.flush()
+    rtnval = len(active_rows)
+    return rtnval
+
+
 def mark_client_lost(*, db_session: DbSession, pod_id: str) -> None:
     """
         Transition the active registration for ``pod_id`` to ``CLIENT_LOST``.

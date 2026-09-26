@@ -278,8 +278,8 @@ def test_a_revoked_client_gives_up_its_pod_name_to_a_replacement():
     **Feature: re-enrolling a replaced pod (E2E-25)**
     **Property: while a client holds a pod name, a token minted for it
     carries a warning and redeeming it is refused without consuming the
-    token; once the client is revoked, that token enrolls a replacement
-    that takes over the pod.**
+    token; revoking the client removes it from dispatch, and that token
+    then enrolls a replacement that takes over the pod.**
     """
     _engine, session = _fresh_session()
     project_id = new_uuid()
@@ -300,6 +300,13 @@ def test_a_revoked_client_gives_up_its_pod_name_to_a_replacement():
     revoke_client(
         db_session=session, client_id=original,
         reason=RevocationReason.DECOMMISSIONED, revoked_by=None,
+    )
+    # Revocation deregisters the client, so it is no longer a dispatch
+    # candidate while the pod waits for its replacement.
+    testbase.assert_equal(
+        (len(_registered_rows(session=session, client_id=original)),
+         resolve_dispatch_candidates(db_session=session, project_id=project_id)),
+        (0, []),
     )
     after_revoke = _mint(session=session, project_id=project_id, pod_name="lab-pod-r")
     testbase.assert_equal(after_revoke.warnings, ())
