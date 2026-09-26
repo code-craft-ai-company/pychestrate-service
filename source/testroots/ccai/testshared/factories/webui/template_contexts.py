@@ -425,6 +425,10 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "run_errors": _by_mode(["/customer_id: required"], []),
     "run_selected_pod_id": _by_mode("11111111-1111-4000-8000-000000000001", ""),
     "replay_job": _by_mode(SimpleNamespace(job_id="0f6c2c1e-1111-4000-8000-000000000009"), None),
+    # The registry project a web-UI project is linked to (projects.bridge).
+    "registry_project": _by_mode(
+        SimpleNamespace(project_id="0f6c2c1e-2222-4000-8000-00000000000a", slug="demo-project"), None,
+    ),
     "replay_message": _by_mode("An identical run of this specification was submitted less than a minute ago, so no new job was started.", ""),
     "pod_choices": _by_mode(
         [{"pod_id": "11111111-1111-4000-8000-000000000001", "label": "lab-pod-01 (11111111)"}],

@@ -179,6 +179,21 @@ function trigger_message_for_status(status) {
   const rtnval = "Failed to trigger run (HTTP " + String(status) + ").";
   return rtnval;
 }
+function project_from_search() {
+  if (typeof window === "undefined") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const value = new URLSearchParams(window.location.search).get("project_id");
+  const rtnval = value === null ? "" : value.trim();
+  return rtnval;
+}
+function preferred_project_id(projects) {
+  const requested = project_from_search();
+  const match = projects.find((project) => project.project_id === requested || project.slug === requested);
+  const rtnval = match !== void 0 ? match.project_id : projects[0].project_id;
+  return rtnval;
+}
 var PycTestCatalog = class extends HTMLElement {
   _state;
   _entries;
@@ -392,7 +407,7 @@ var PycTestCatalog = class extends HTMLElement {
       this._projects = projects;
       this._projectsAvailable = true;
       this._projectsNoticeKind = "";
-      this._state.projectId = projects[0].project_id;
+      this._state.projectId = preferred_project_id(projects);
     } else {
       this._projects = [];
       this._projectsAvailable = false;

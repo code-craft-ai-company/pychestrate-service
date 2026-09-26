@@ -157,6 +157,17 @@ function has_previous_page(state) {
   const rtnval = state.page > 1;
   return rtnval;
 }
+// ?project_id=<uuid> preselects the project filter, so a project's page
+// can link straight to its runs (PRJ-06).
+function project_from_search() {
+  if (typeof window === "undefined") {
+    const rtnval2 = "";
+    return rtnval2;
+  }
+  const value = new URLSearchParams(window.location.search).get("project_id");
+  const rtnval = value === null ? "" : value.trim();
+  return rtnval;
+}
 class PycRunsList extends HTMLElement {
   _pager;
   _state;
@@ -182,7 +193,7 @@ class PycRunsList extends HTMLElement {
     super();
     this._state = {
       stateFilter: "",
-      projectFilter: "",
+      projectFilter: project_from_search(),
       page: 1,
       perPage: DEFAULT_PER_PAGE,
       total: 0,

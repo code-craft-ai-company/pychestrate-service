@@ -358,6 +358,49 @@ def _enumerate_project_role_values() -> List[str]:
 # ---------------------------------------------------------------------------
 
 
+def _legacy_id_for_registry_ref(*, db_session: Any, ref: Any) -> Optional[int]:
+    """
+        The web-UI project id of the registry project a slug or UUID
+        names (see :mod:`projects.bridge`), or None.
+
+        :param db_session: Open SQLAlchemy session.
+        :param ref: Registry slug or UUID.
+    """
+    from ccai.pychestrate.webservice.projects.repository import (  # noqa: E402
+        resolve_project_ref,
+    )
+    if ref is None or len(str(ref).strip()) == 0:
+        return None
+    try:
+        project = resolve_project_ref(db_session=db_session, ref=str(ref).strip())
+    except Exception:
+        project = None
+    if project is None or project.legacy_proj_id is None:
+        return None
+    rtnval = int(project.legacy_proj_id)
+    return rtnval
+
+
+def _registry_project_for_legacy(*, db_session: Any, legacy_proj_id: Optional[int]) -> Optional[Any]:
+    """
+        The registry project linked to a web-UI project (its UUID and
+        slug are what the global views and the REST API use), or None.
+
+        :param db_session: Open SQLAlchemy session.
+        :param legacy_proj_id: Web-UI project id.
+    """
+    from ccai.pychestrate.webservice.projects.repository import (  # noqa: E402
+        get_project_by_legacy_id,
+    )
+    if legacy_proj_id is None:
+        return None
+    try:
+        rtnval = get_project_by_legacy_id(db_session=db_session, legacy_proj_id=int(legacy_proj_id))
+    except Exception:
+        rtnval = None
+    return rtnval
+
+
 def _coerce_int(*, raw: Any) -> Optional[int]:
     if raw is None:
         return None
@@ -849,9 +892,19 @@ def handle_project_detail(request: Request) -> Response:
 
     db_session = auth.db_session
     try:
-        project_id = _coerce_int(
-            raw=request.path_params.get("project_id", None)
-        )
+        raw_project_ref = request.path_params.get("project_id", None)
+        project_id = _coerce_int(raw=raw_project_ref)
+        if project_id is None:
+            # A registry slug or UUID (how the REST API and the global
+            # views name a project): show its web-UI page (PRJ-06).
+            legacy_id = _legacy_id_for_registry_ref(db_session=db_session, ref=raw_project_ref)
+            if legacy_id is not None:
+                redirect = RedirectResponse(
+                    url=_url_for_module.url_for("projects.project_detail", project_id=legacy_id),
+                    status_code=302,
+                )
+                _attach_session_to_response(response=redirect, session=auth.session)
+                return redirect
 
         project_manager = _build_project_manager(db_session=db_session)
         resolved = _resolve_project_or_redirect(
@@ -927,6 +980,9 @@ def handle_project_detail(request: Request) -> Response:
         context["members"] = members
         context["can_edit"] = can_edit
         context["can_delete"] = can_delete
+        context["registry_project"] = _registry_project_for_legacy(
+            db_session=db_session, legacy_proj_id=project_id,
+        )
 
         response = _render(
             template_name="projects/projects/detail.html",

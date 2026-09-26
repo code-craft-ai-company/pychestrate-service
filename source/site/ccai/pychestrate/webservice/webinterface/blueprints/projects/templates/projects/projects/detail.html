@@ -33,6 +33,20 @@
     </div>
 </div>
 
+{% if registry_project is defined and registry_project %}
+{# The same project across the product (PRJ-06): the global views and the
+   REST API name it by its registry slug / UUID. #}
+<nav class="card mb" aria-label="This project elsewhere" data-role="project-elsewhere">
+    <span class="muted small">Slug</span> <code>{{ registry_project.slug }}</code>
+    <span class="muted small">&middot; Also in:</span>
+    <a href="/runs?project_id={{ registry_project.project_id }}">Runs</a> &middot;
+    <a href="/builds?project_id={{ registry_project.project_id }}">Builds</a> &middot;
+    <a href="/pipelines?project_id={{ registry_project.project_id }}">Pipelines</a> &middot;
+    <a href="/test-catalog?project_id={{ registry_project.project_id }}">Test catalog</a> &middot;
+    <a href="/pods?project_id={{ registry_project.project_id }}">Pods</a>
+</nav>
+{% endif %}
+
 <div class="stat-grid">
     <div class="card">
         <div class="muted">Owner</div>

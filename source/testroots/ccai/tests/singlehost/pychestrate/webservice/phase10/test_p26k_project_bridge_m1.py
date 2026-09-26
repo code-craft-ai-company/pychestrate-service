@@ -387,3 +387,28 @@ def test_reconcile_and_rest_create_mirror_memberships():
         ((["project-owner"], ["project-viewer"]), ["project-owner"]),
     )
     return
+
+
+def test_ui_resolves_registry_slugs_and_uuids_to_its_project_pages():
+    """
+    **Feature: project bridge (PRJ-06)**
+    **Property: /projects/<slug or UUID> finds the web-UI project the
+    registry project is linked to (the page then redirects to it), and
+    the project page knows its registry project.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.projects import routes as project_routes
+
+    session = _session()
+    owner = _user(session, login="xl-owner")
+    legacy_id = _legacy(session, name="Cross Link", owner=owner)
+    bridge.reconcile_project_links(db_session=session)
+    registry = _registry_for_legacy(session, legacy_id)
+
+    testbase.assert_equal(
+        (project_routes._legacy_id_for_registry_ref(db_session=session, ref="cross-link"),
+         project_routes._legacy_id_for_registry_ref(db_session=session, ref=str(registry.project_id)),
+         project_routes._legacy_id_for_registry_ref(db_session=session, ref="no-such-project"),
+         str(project_routes._registry_project_for_legacy(db_session=session, legacy_proj_id=legacy_id).project_id)),
+        (legacy_id, legacy_id, None, str(registry.project_id)),
+    )
+    return
