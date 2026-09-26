@@ -13,6 +13,8 @@
     </ol>
 </nav>
 
+{# Re-rendered in place every 10 s while the job is active (live-region.js). #}
+<div data-live-region="rpa-job" data-live-region-active="{{ 'true' if is_active else 'false' }}" data-live-region-refresh-seconds="10">
 <div class="page-header page-header--split">
     <div>
         <h1>RPA Job <span class="mono">{{ job.job_id[:8] }}</span></h1>
@@ -38,6 +40,7 @@
         <div class="muted">Status</div>
         <div>{{ ui.status_badge(job.status) }}</div>
         {% if job.run_state %}<div class="muted small">run state {{ job.run_state }}</div>{% endif %}
+        {% if is_active %}<div class="muted small" role="status">Updating every 10s while the job runs</div>{% endif %}
     </div>
     <div class="card">
         <div class="muted">Specification</div>
@@ -112,6 +115,7 @@
         </tr>
         {% endif %}
     </table></div>
+</div>
 </div>
 
 <div class="card mt">

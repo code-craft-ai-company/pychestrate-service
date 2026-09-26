@@ -490,8 +490,13 @@ async function refresh_once(viewer) {
   const still_running = fresh_viewer !== null && fresh_viewer.getAttribute("data-log-running") === "true";
   viewer.setAttribute("data-log-running", still_running ? "true" : "false");
   const status = viewer.querySelector("[data-log-status]");
+  const fresh_status = fresh_viewer !== null ? fresh_viewer.querySelector("[data-log-status]") : null;
   if (status !== null) {
-    status.textContent = still_running ? "Live: refreshing while the job runs" : "Finished: log is complete";
+    if (fresh_status !== null) {
+      status.textContent = fresh_status.textContent;
+    } else {
+      status.textContent = still_running ? "Live: refreshing while the job runs" : "Finished: log is complete";
+    }
   }
   return still_running;
 }
@@ -594,6 +599,89 @@ function install_log_viewer(root) {
   const scan = () => {
     target.querySelectorAll(VIEWER_SELECTOR).forEach((viewer) => {
       initialise_viewer(viewer);
+    });
+  };
+  scan();
+  if (typeof MutationObserver === "function" && target === document) {
+    const observer = new MutationObserver(() => {
+      scan();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+  return;
+}
+
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/live-region.js
+var REGION_SELECTOR = "[data-live-region]";
+var INSTALLED_FLAG4 = "__pycLiveRegionInstalled";
+var DEFAULT_REFRESH_SECONDS2 = 10;
+function is_active(region) {
+  return region.getAttribute("data-live-region-active") === "true";
+}
+async function refresh_once2(region) {
+  const name = region.getAttribute("data-live-region") || "";
+  let response;
+  try {
+    response = await fetch(window.location.href, { credentials: "same-origin", cache: "no-store", headers: { "Accept": "text/html" } });
+  } catch (error) {
+    return true;
+  }
+  if (response.ok !== true) {
+    return response.status >= 500;
+  }
+  const html = await response.text();
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  let fresh = null;
+  parsed.querySelectorAll(REGION_SELECTOR).forEach((candidate) => {
+    if (fresh === null && candidate.getAttribute("data-live-region") === name) {
+      fresh = candidate;
+    }
+  });
+  if (fresh === null) {
+    return false;
+  }
+  if (region.innerHTML !== fresh.innerHTML) {
+    region.innerHTML = fresh.innerHTML;
+  }
+  const still_active = is_active(fresh);
+  region.setAttribute("data-live-region-active", still_active ? "true" : "false");
+  return still_active;
+}
+function schedule2(region) {
+  if (is_active(region) !== true) {
+    return;
+  }
+  const seconds = Number.parseInt(region.getAttribute("data-live-region-refresh-seconds") || "", 10);
+  const delay = Number.isFinite(seconds) && seconds > 0 ? seconds * 1e3 : DEFAULT_REFRESH_SECONDS2 * 1e3;
+  window.setTimeout(() => {
+    if (document.body.contains(region) === false) {
+      return;
+    }
+    refresh_once2(region).then((still_active) => {
+      if (still_active === true) {
+        schedule2(region);
+      }
+    });
+  }, delay);
+  return;
+}
+function initialise_region(region) {
+  if (region.dataset.pycLiveRegionInitialised === "true") {
+    return;
+  }
+  region.dataset.pycLiveRegionInitialised = "true";
+  schedule2(region);
+  return;
+}
+function install_live_region(root) {
+  const target = root !== void 0 && root !== null ? root : document;
+  if (target[INSTALLED_FLAG4] === true) {
+    return;
+  }
+  target[INSTALLED_FLAG4] = true;
+  const scan = () => {
+    target.querySelectorAll(REGION_SELECTOR).forEach((region) => {
+      initialise_region(region);
     });
   };
   scan();
@@ -3052,6 +3140,7 @@ var PycSiteShell = class extends HTMLElement {
     install_confirm_delegate(document);
     install_reveal_toggle(document);
     install_log_viewer(document);
+    install_live_region(document);
     this._boot_started_perf_now = typeof performance !== "undefined" ? performance.now() : 0;
     this._metrics_lifecycle_detach = this._metrics.attachLifecycle();
     this._render_skeleton();
@@ -3466,8 +3555,8 @@ var PycSiteShell = class extends HTMLElement {
    * claimed the route.
    */
   _schedule_landing_state_check() {
-    const schedule2 = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
-    schedule2(() => {
+    const schedule3 = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+    schedule3(() => {
       this._apply_landing_state();
     });
     return;

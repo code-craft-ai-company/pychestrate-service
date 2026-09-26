@@ -62,9 +62,17 @@ async function refresh_once(viewer) {
     }
     const still_running = fresh_viewer !== null && fresh_viewer.getAttribute("data-log-running") === "true";
     viewer.setAttribute("data-log-running", still_running ? "true" : "false");
+    // Take the status line from the fresh page: the server knows whether
+    // a finished job left any log output ("log is complete" next to an
+    // empty log contradicted itself -- E2E-23).
     const status = viewer.querySelector("[data-log-status]");
+    const fresh_status = fresh_viewer !== null ? fresh_viewer.querySelector("[data-log-status]") : null;
     if (status !== null) {
-        status.textContent = still_running ? "Live: refreshing while the job runs" : "Finished: log is complete";
+        if (fresh_status !== null) {
+            status.textContent = fresh_status.textContent;
+        } else {
+            status.textContent = still_running ? "Live: refreshing while the job runs" : "Finished: log is complete";
+        }
     }
     return still_running;
 }

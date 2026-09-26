@@ -85,8 +85,11 @@ from ccai.pychestrate.webservice.jobs.envelope import models as _envelope_models
 from ccai.pychestrate.webservice.jobs.results import models as _results_models  # noqa: F401
 from ccai.pychestrate.webservice.orchestration.rpa import models as _rpa_models  # noqa: F401
 
+from ccai.pychestrate.webservice.jobs.run.state import RunEvent
+from ccai.pychestrate.webservice.jobs.run.state import transition as transition_run_state
 from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import (
     build_in_memory_session,
+    session_for,
 )
 
 
@@ -536,6 +539,92 @@ def test_apply_run_terminal_and_cancel():
         reason="rpa result manifest: outcome=cancelled",
     )
     testbase.assert_equal(cancelled.status, RpaJobStatus.CANCELLED)
+    return
+
+
+def test_run_state_mirror_settles_jobs_from_terminal_run_states():
+    """
+    **Feature: 6-rpa-orchestration, E2E-23**
+    **Property: a job follows its run into every terminal state -- a
+    deadline failure is TIMEOUT, any other failure FAILED -- while a
+    cancel *request* leaves it running, and a job the result upload
+    already settled keeps its exit code.**
+    """
+    _prepare_runtime()
+    _engine, session = build_in_memory_session()
+    _register_process_type(session)
+    _publish(session, version="1.0.0")
+    spec = _create_spec(session)
+    jobs = [
+        trigger_job(
+            db_session=session, project_id=CONSUMER_PROJECT_REF, spec_id=spec.spec_id,
+            work_packet={"customer_id": index}, aspects=_aspects(),
+        )
+        for index in range(3)
+    ]
+
+    def _mirror(job, to_state, actor="system:reconciler", reason=None):
+        rtnval = rpa_service.mirror_run_state(
+            db_session=session,
+            payload={"run_id": job.job_id, "to_state": to_state, "actor": actor, "reason": reason},
+        )
+        return rtnval
+
+    testbase.assert_equal(_mirror(jobs[0], "cancel_requested"), None)
+    testbase.assert_true(get_job(db_session=session, job_id=jobs[0].job_id).status
+                         not in rpa_service.TERMINAL_STATUSES)
+
+    timed_out = _mirror(jobs[0], "failed", actor=rpa_service.DEADLINE_ACTOR,
+                        reason="hard deadline passed")
+    failed = _mirror(jobs[1], "failed")
+
+    apply_run_terminal(
+        db_session=session, job_id=jobs[2].job_id, final_status=RpaJobStatus.SUCCEEDED, exit_code=0,
+    )
+    already = _mirror(jobs[2], "completed")
+    unknown = rpa_service.mirror_run_state(
+        db_session=session, payload={"run_id": "00000000-0000-4000-8000-00000000dead", "to_state": "failed"},
+    )
+
+    testbase.assert_equal(
+        (timed_out.status, "hard deadline passed" in timed_out.final_state_reason,
+         failed.status, already, get_job(db_session=session, job_id=jobs[2].job_id).exit_code, unknown),
+        (RpaJobStatus.TIMEOUT, True, RpaJobStatus.FAILED, None, 0, None),
+    )
+    return
+
+
+def test_run_state_mirror_follows_a_real_run_transition():
+    """
+    **Feature: 6-rpa-orchestration, E2E-23**
+    **Property: with the mirror subscribed, a run the reconciler fails
+    (not a result upload) settles its RPA job, so the job page and
+    /runs agree.**
+    """
+    _prepare_runtime()
+    engine, session = build_in_memory_session()
+    _register_process_type(session)
+    _publish(session, version="1.0.0")
+    spec = _create_spec(session)
+    rpa_service.RpaRunStateMirror(session_factory=lambda: session_for(engine=engine)).attach_bus_subscriber()
+
+    job = trigger_job(
+        db_session=session, project_id=CONSUMER_PROJECT_REF, spec_id=spec.spec_id,
+        work_packet={"customer_id": 9}, aspects=_aspects(),
+    )
+    # The in-memory transport leaves the run DISPATCHING; the reconciler
+    # aborts such a dispatch (-> dispatch_failed).
+    transition_run_state(
+        db_session=session, run_id=job.job_id, event=RunEvent.DISPATCH_ABORTED,
+        actor="system:reconciler", reason="pod stopped reporting",
+    )
+
+    fresh = session_for(engine=engine)
+    settled = get_job(db_session=fresh, job_id=job.job_id)
+    testbase.assert_equal(
+        (settled.status, "pod stopped reporting" in settled.final_state_reason),
+        (RpaJobStatus.FAILED, True),
+    )
     return
 
 

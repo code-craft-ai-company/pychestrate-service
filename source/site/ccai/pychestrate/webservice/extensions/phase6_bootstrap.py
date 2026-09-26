@@ -313,6 +313,10 @@ def _build_test_orchestrator(
     rpa_service.set_active_results_backend(
         backend=config.results_backend,
     )
+    # An RPA job shares its run's id; settle the job whenever the run
+    # reaches a terminal state, not only when a result is uploaded, so
+    # the job page and /runs agree (E2E-23).
+    rpa_service.RpaRunStateMirror(session_factory=config.session_factory).attach_bus_subscriber()
 
     # Construct the PipelineOrchestrator (6-pipeline-execution PR
     # p20q). It walks a pipeline definition's stage DAG and dispatches

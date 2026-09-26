@@ -905,6 +905,18 @@ function coerce_count(value) {
   const rtnval = 0;
   return rtnval;
 }
+var NON_TEST_JOB_TYPE_PREFIXES = ["rpa-", "build-", "provision-"];
+function is_test_run(run) {
+  const job_type = run !== null && run !== void 0 && typeof run.job_type === "string" ? run.job_type : "";
+  for (const prefix of NON_TEST_JOB_TYPE_PREFIXES) {
+    if (job_type.startsWith(prefix) === true) {
+      const rtnval2 = false;
+      return rtnval2;
+    }
+  }
+  const rtnval = true;
+  return rtnval;
+}
 function has_test_counts(progress) {
   const counter_keys = [
     "tests_total",
@@ -1734,7 +1746,7 @@ var PycRunDetail = class extends HTMLElement {
     heading.classList.add("pyc-run-detail__section-heading");
     heading.textContent = "Progress";
     section.replaceChildren(heading);
-    if (has_test_counts(progress) === true) {
+    if (is_test_run(this._run) === true && has_test_counts(progress) === true) {
       const total = progress.tests_total;
       const counts = document.createElement("div");
       counts.classList.add("pyc-run-detail__counts");
@@ -1830,11 +1842,15 @@ var PycRunDetail = class extends HTMLElement {
     const rollup = document.createElement("p");
     rollup.classList.add("pyc-run-detail__rollup");
     rollup.setAttribute("data-role", "artifacts-rollup");
-    const passed = manifest.tests_passed;
-    const failed = manifest.tests_failed;
-    const passed_text = passed === void 0 || passed === null ? 0 : passed;
-    const failed_text = failed === void 0 || failed === null ? 0 : failed;
-    rollup.textContent = "Outcome " + manifest.terminal_outcome + " \xB7 " + String(passed_text) + " passed \xB7 " + String(failed_text) + " failed";
+    if (is_test_run(this._run) === true) {
+      const passed = manifest.tests_passed;
+      const failed = manifest.tests_failed;
+      const passed_text = passed === void 0 || passed === null ? 0 : passed;
+      const failed_text = failed === void 0 || failed === null ? 0 : failed;
+      rollup.textContent = "Outcome " + manifest.terminal_outcome + " \xB7 " + String(passed_text) + " passed \xB7 " + String(failed_text) + " failed";
+    } else {
+      rollup.textContent = "Outcome " + manifest.terminal_outcome;
+    }
     const list = document.createElement("ul");
     list.classList.add("pyc-run-detail__artifact-list");
     list.setAttribute("data-role", "artifact-list");

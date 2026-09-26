@@ -27,7 +27,7 @@ import os
 
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -60,11 +60,13 @@ from ccai.pychestrate.webservice.jobs.results import SharedResultsBackend
 from ccai.pychestrate.webservice.jobs.run.state import (
     RunEvent,
     RunNotFoundError as RunStateNotFoundError,
+    RunStateEventTopics,
     create_run as create_run_state,
     get_snapshot as get_run_state_snapshot,
     transition as transition_run_state,
 )
-from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent
+from ccai.pychestrate.webservice.jobs.reconcile.reconciler import DEADLINE_ACTOR
+from ccai.pychestrate.webservice.messaging.event_bus import EntityEvent, subscribe
 from ccai.pychestrate.webservice.messaging.outbox import enqueue_event
 from ccai.pychestrate.webservice.orchestration.rpa import repository
 from ccai.pychestrate.webservice.orchestration.rpa.errors import (
@@ -1578,6 +1580,103 @@ def apply_run_terminal(
     db_session.commit()
     rtnval = get_job(db_session=db_session, job_id=job_id)
     return rtnval
+
+
+#: Run states whose commit settles the RPA job sharing the run's id,
+#: and the job status each one means. CANCEL_REQUESTED is deliberately
+#: absent: the run-state machine publishes the ``entity.run.cancelled``
+#: topic for a cancel *request* too, and mirroring that marked jobs
+#: cancelled while their run went on to complete (E2E-23).
+RUN_STATE_TO_JOB_STATUS: Dict[str, RpaJobStatus] = {
+    "completed": RpaJobStatus.SUCCEEDED,
+    "failed": RpaJobStatus.FAILED,
+    "cancelled": RpaJobStatus.CANCELLED,
+    "dispatch_failed": RpaJobStatus.FAILED,
+}
+
+def mirror_run_state(*, db_session: DbSession, payload: Mapping[str, Any]) -> Optional[RpaJobView]:
+    """
+        Settle the RPA job whose id is the run's id when the run reaches
+        a terminal state by any path -- deadline expiry, a rejected
+        dispatch, a failure the reconciler observed -- not only a result
+        upload. The job page and ``/runs`` used to disagree because only
+        the result-completion path updated the job (E2E-23).
+
+        :param db_session: Active SQLAlchemy session.
+        :param payload: An ``entity.run.state_changed`` payload.
+
+        :returns: The settled job view, or None when the run is not an
+                  RPA job, the new state is not terminal, or the job is
+                  already terminal (e.g. the result upload settled it
+                  first, with its exit code).
+    """
+    to_state = str(payload.get("to_state", "") or "")
+    final_status = RUN_STATE_TO_JOB_STATUS.get(to_state, None)
+    run_id = payload.get("run_id", None)
+    if final_status is None or run_id is None:
+        return None
+
+    row = repository.find_job(db_session=db_session, job_id=str(run_id))
+    if row is None or row.status in TERMINAL_STATUSES:
+        return None
+
+    if final_status == RpaJobStatus.FAILED and payload.get("actor", None) == DEADLINE_ACTOR:
+        final_status = RpaJobStatus.TIMEOUT
+    reason = "run {}".format(to_state)
+    run_reason = str(payload.get("reason", "") or "")
+    if len(run_reason) > 0:
+        reason = "{}: {}".format(reason, run_reason)
+
+    rtnval = apply_run_terminal(
+        db_session=db_session, job_id=str(run_id), final_status=final_status, reason=reason,
+    )
+    return rtnval
+
+
+class RpaRunStateMirror:
+    """
+        Bus subscriber applying :func:`mirror_run_state` to every
+        ``entity.run.state_changed`` event. Subscribers run outside a
+        request, so it opens its own session from ``session_factory``.
+    """
+
+    def __init__(self, *, session_factory: Callable[[], DbSession]) -> None:
+        self._session_factory = session_factory
+        self._subscribed = False
+        return
+
+    def attach_bus_subscriber(self) -> None:
+        """
+            Subscribe to ``entity.run.state_changed``. Idempotent.
+
+            :returns: None.
+        """
+        if self._subscribed is True:
+            return
+        subscribe(topic=RunStateEventTopics.STATE_CHANGED, subscriber=self.on_run_state_changed)
+        self._subscribed = True
+        return
+
+    def on_run_state_changed(self, event: EntityEvent) -> None:
+        """
+            :param event: The published ``entity.run.state_changed`` event.
+
+            :returns: None.
+        """
+        session = self._session_factory()
+        try:
+            mirror_run_state(db_session=session, payload=event.payload or {})
+        except BaseException as xcpt:
+            if isinstance(xcpt, (KeyboardInterrupt, SystemExit, GeneratorExit)):
+                raise
+            session.rollback()
+            _LOGGER.exception(
+                "pychestrate.rpa.run_state_mirror_failed run_id=%s",
+                (event.payload or {}).get("run_id", None),
+            )
+        finally:
+            session.close()
+        return
 
 
 def cancel_job(

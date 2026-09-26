@@ -212,12 +212,12 @@
 {% macro log_viewer(text, running=False, filename="log.txt", refresh_seconds=10) -%}
 <div class="pyc-log-viewer" data-log-running="{{ 'true' if running else 'false' }}" data-log-refresh-seconds="{{ refresh_seconds }}" data-log-filename="{{ filename }}">
     <div class="pyc-log-viewer__toolbar">
-        <span class="muted" data-log-status role="status">{% if running %}Live: refreshing every {{ refresh_seconds }}s while the job runs{% else %}Finished: log is complete{% endif %}</span>
+        <span class="muted" data-log-status role="status">{% if running %}Live: refreshing every {{ refresh_seconds }}s while the job runs{% elif text %}Finished: log is complete{% else %}Finished: no log output was recorded{% endif %}</span>
         <label class="pyc-log-viewer__follow"><input type="checkbox" data-log-follow checked> Follow output</label>
         <button type="button" class="btn btn-sm btn-secondary" data-log-action="refresh">Refresh now</button>
         <button type="button" class="btn btn-sm btn-secondary" data-log-action="copy">Copy</button>
         <button type="button" class="btn btn-sm btn-secondary" data-log-action="download">Download</button>
     </div>
-    <pre class="pyc-log-viewer__output" tabindex="0" aria-label="Log output">{% if text %}{{ text }}{% else %}No log output yet.{% endif %}</pre>
+    <pre class="pyc-log-viewer__output" tabindex="0" aria-label="Log output">{% if text %}{{ text }}{% elif running %}No log output yet.{% else %}The job finished without producing log output.{% endif %}</pre>
 </div>
 {%- endmacro %}
