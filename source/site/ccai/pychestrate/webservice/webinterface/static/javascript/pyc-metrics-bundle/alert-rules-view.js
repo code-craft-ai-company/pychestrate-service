@@ -6,6 +6,9 @@ import {
   extract_projects
 } from "./test-metrics-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 const ALERT_RULES_ROUTE = "/metric-alerts";
 const ALERT_RULE_KIND = "threshold";
 const COMPARISON_OPTIONS = [
@@ -420,7 +423,7 @@ class PycAlertRules extends HTMLElement {
   async _load_projects() {
     let projects = null;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

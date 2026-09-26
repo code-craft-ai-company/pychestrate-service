@@ -10,6 +10,9 @@ import {
   DASHBOARDS_ROUTE
 } from "./dashboards-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 const TILE_KIND_OPTIONS = [
   { value: "metric-line-chart", label: "Line chart" },
   { value: "metric-single-stat", label: "Single number" }
@@ -341,7 +344,7 @@ class PycDashboardEditor extends HTMLElement {
     }
     let project_id = "";
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

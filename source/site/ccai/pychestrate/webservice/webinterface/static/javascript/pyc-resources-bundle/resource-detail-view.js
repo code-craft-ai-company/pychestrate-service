@@ -15,6 +15,9 @@ import {
   section_error_message
 } from "./pool-detail-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function resource_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -280,7 +283,7 @@ class PycResourceDetail extends HTMLElement {
    */
   async _load_project_names() {
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

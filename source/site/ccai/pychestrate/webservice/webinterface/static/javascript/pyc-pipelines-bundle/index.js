@@ -1,6 +1,7 @@
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipelines-list-view.js
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_pipelines_query_url(state) {
   const params = new URLSearchParams();
   params.set("page", String(state.page));
@@ -441,7 +442,7 @@ var PycPipelinesList = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

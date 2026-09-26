@@ -1,5 +1,6 @@
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/test-metrics-view.js
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_test_metrics_url(project_id) {
   const rtnval = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/test-metrics";
   return rtnval;
@@ -200,7 +201,7 @@ var PycTestMetrics = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -981,6 +982,7 @@ function extract_catalog(body) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboards-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
+var PROJECTS_LIST_URL2 = PROJECTS_API_PATH2 + "?per_page=500";
 var DASHBOARDS_ROUTE = "/dashboards";
 function build_dashboards_collection_url(project_id) {
   const rtnval = PROJECTS_API_PATH2 + "/" + encodeURIComponent(project_id) + "/dashboards";
@@ -1194,7 +1196,7 @@ var PycDashboardsList = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH2, {
+      const response = await fetch(PROJECTS_LIST_URL2, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -1683,7 +1685,7 @@ var PycDashboardDetail = class extends HTMLElement {
     }
     let project_id = "";
     try {
-      const response = await fetch(PROJECTS_API_PATH2, {
+      const response = await fetch(PROJECTS_LIST_URL2, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -1917,6 +1919,7 @@ function extract_dashboards(body) {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/slos-view.js
 var PROJECTS_API_PATH3 = "/api/v1/projects";
+var PROJECTS_LIST_URL3 = PROJECTS_API_PATH3 + "?per_page=500";
 var DEFAULT_SLO_KIND = "availability_ratio";
 var SLO_CONFIG_EXAMPLE = '{"good_metric_name": "pychestrate_rpa_jobs_completed_total", "total_metric_name": "pychestrate_rpa_jobs_triggered_total"}';
 function build_slos_collection_url(project_id) {
@@ -2217,7 +2220,7 @@ var PycSlos = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH3, {
+      const response = await fetch(PROJECTS_LIST_URL3, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -2983,6 +2986,7 @@ var PycSlos = class extends HTMLElement {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/alert-rules-view.js
 var PROJECTS_API_PATH4 = "/api/v1/projects";
+var PROJECTS_LIST_URL4 = PROJECTS_API_PATH4 + "?per_page=500";
 var ALERT_RULES_ROUTE = "/metric-alerts";
 var ALERT_RULE_KIND = "threshold";
 var COMPARISON_OPTIONS = [
@@ -3397,7 +3401,7 @@ var PycAlertRules = class extends HTMLElement {
   async _load_projects() {
     let projects = null;
     try {
-      const response = await fetch(PROJECTS_API_PATH4, {
+      const response = await fetch(PROJECTS_LIST_URL4, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -4002,6 +4006,7 @@ var PycAlertRules = class extends HTMLElement {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-metrics-bundle/dashboard-editor-view.js
 var PROJECTS_API_PATH5 = "/api/v1/projects";
+var PROJECTS_LIST_URL5 = PROJECTS_API_PATH5 + "?per_page=500";
 var TILE_KIND_OPTIONS = [
   { value: "metric-line-chart", label: "Line chart" },
   { value: "metric-single-stat", label: "Single number" }
@@ -4333,7 +4338,7 @@ var PycDashboardEditor = class extends HTMLElement {
     }
     let project_id = "";
     try {
-      const response = await fetch(PROJECTS_API_PATH5, {
+      const response = await fetch(PROJECTS_LIST_URL5, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

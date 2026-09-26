@@ -15,6 +15,7 @@ var DRIFT_STATES = [
 ];
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 var ENVIRONMENTS_ROUTE = "/environments";
 function build_environment_page_href(project_id, environment_id) {
   const params = new URLSearchParams();
@@ -462,7 +463,7 @@ var PycEnvironments = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -1760,6 +1761,7 @@ var PROVISIONING_ACTIONS = [
 ];
 var DEFAULT_PER_PAGE2 = 25;
 var PROJECTS_API_PATH3 = "/api/v1/projects";
+var PROJECTS_LIST_URL2 = PROJECTS_API_PATH3 + "?per_page=500";
 function build_provisioning_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -2019,7 +2021,7 @@ var PycProvisioningList = class extends HTMLElement {
   async _load_projects() {
     let projects = null;
     try {
-      const response = await fetch(PROJECTS_API_PATH3, {
+      const response = await fetch(PROJECTS_LIST_URL2, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -3174,6 +3176,7 @@ var PycProvisioningDetail = class extends HTMLElement {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/guards-view.js
 var PROJECTS_API_PATH5 = "/api/v1/projects";
+var PROJECTS_LIST_URL3 = PROJECTS_API_PATH5 + "?per_page=500";
 function build_guards_collection_url(project_id, environment_id) {
   let url = PROJECTS_API_PATH5 + "/" + encodeURIComponent(project_id) + "/blast-radius-guards";
   if (typeof environment_id === "string" && environment_id.length > 0) {
@@ -3599,7 +3602,7 @@ var PycGuards = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH5, {
+      const response = await fetch(PROJECTS_LIST_URL3, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

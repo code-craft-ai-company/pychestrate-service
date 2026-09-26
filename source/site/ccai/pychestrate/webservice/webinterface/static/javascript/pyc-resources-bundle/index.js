@@ -2,6 +2,7 @@
 var DEFAULT_PER_PAGE = 50;
 var RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 var RESOURCE_POOLS_WRITE_PERMISSION = "system:resource_pools.write";
 var RESOURCES_WRITE_PERMISSION = "system:resources.write";
 function build_resource_pools_url(project_id, page, per_page) {
@@ -340,7 +341,7 @@ var PycResourcePools = class extends HTMLElement {
     let outcome = "error";
     let projects = [];
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -957,6 +958,7 @@ var ACTIVE_RESERVATION_STATES = [
   "granted"
 ];
 var PROJECTS_API_PATH2 = "/api/v1/projects";
+var PROJECTS_LIST_URL2 = PROJECTS_API_PATH2 + "?per_page=500";
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pool_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -1228,7 +1230,7 @@ var PycPoolDetail = class extends HTMLElement {
    */
   async _load_project_names() {
     try {
-      const response = await fetch(PROJECTS_API_PATH2, {
+      const response = await fetch(PROJECTS_LIST_URL2, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
@@ -2171,6 +2173,7 @@ var PycPoolDetail = class extends HTMLElement {
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/resource-detail-view.js
 var PROJECTS_API_PATH3 = "/api/v1/projects";
+var PROJECTS_LIST_URL3 = PROJECTS_API_PATH3 + "?per_page=500";
 function resource_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
     const rtnval2 = "";
@@ -2432,7 +2435,7 @@ var PycResourceDetail = class extends HTMLElement {
    */
   async _load_project_names() {
     try {
-      const response = await fetch(PROJECTS_API_PATH3, {
+      const response = await fetch(PROJECTS_LIST_URL3, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

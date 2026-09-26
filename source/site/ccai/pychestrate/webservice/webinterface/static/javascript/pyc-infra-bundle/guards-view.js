@@ -5,6 +5,9 @@ import {
   short_id
 } from "./environments-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_guards_collection_url(project_id, environment_id) {
   let url = PROJECTS_API_PATH + "/" + encodeURIComponent(project_id) + "/blast-radius-guards";
   if (typeof environment_id === "string" && environment_id.length > 0) {
@@ -448,7 +451,7 @@ class PycGuards extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

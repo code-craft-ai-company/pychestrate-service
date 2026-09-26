@@ -18,6 +18,9 @@ const RUN_STATES = [
 const DEFAULT_PER_PAGE = 25;
 const RUNS_API_PATH = "/api/v1/runs";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 const POLL_INTERVAL_MS = 5e3;
 const SESSION_EXPIRED_EVENT = "pyc-session-401";
 function emit_session_expired() {
@@ -40,7 +43,7 @@ function login_next_url() {
 async function fetch_projects() {
   let projects = null;
   try {
-    const response = await fetch(PROJECTS_API_PATH, {
+    const response = await fetch(PROJECTS_LIST_URL, {
       method: "GET",
       credentials: "same-origin",
       headers: { Accept: "application/json" }

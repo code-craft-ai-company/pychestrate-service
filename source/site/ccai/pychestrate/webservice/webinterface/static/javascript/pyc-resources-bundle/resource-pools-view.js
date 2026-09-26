@@ -1,6 +1,9 @@
 const DEFAULT_PER_PAGE = 50;
 const RESOURCE_POOLS_API_PATH = "/api/v1/resource-pools";
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 const RESOURCE_POOLS_WRITE_PERMISSION = "system:resource_pools.write";
 const RESOURCES_WRITE_PERMISSION = "system:resources.write";
 function build_resource_pools_url(project_id, page, per_page) {
@@ -357,7 +360,7 @@ class PycResourcePools extends HTMLElement {
     let outcome = "error";
     let projects = [];
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

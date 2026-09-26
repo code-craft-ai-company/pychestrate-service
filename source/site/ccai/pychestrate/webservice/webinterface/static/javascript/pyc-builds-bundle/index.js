@@ -13,6 +13,7 @@ var TERMINAL_BUILD_STATES = [
 ];
 var DEFAULT_PER_PAGE = 25;
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_builds_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -371,7 +372,7 @@ var PycBuildsList = class extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

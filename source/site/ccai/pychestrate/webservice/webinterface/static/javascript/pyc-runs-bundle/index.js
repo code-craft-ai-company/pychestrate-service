@@ -19,6 +19,7 @@ var RUN_STATES = [
 var DEFAULT_PER_PAGE = 25;
 var RUNS_API_PATH = "/api/v1/runs";
 var PROJECTS_API_PATH = "/api/v1/projects";
+var PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 var POLL_INTERVAL_MS = 5e3;
 var SESSION_EXPIRED_EVENT = "pyc-session-401";
 function emit_session_expired() {
@@ -41,7 +42,7 @@ function login_next_url() {
 async function fetch_projects() {
   let projects = null;
   try {
-    const response = await fetch(PROJECTS_API_PATH, {
+    const response = await fetch(PROJECTS_LIST_URL, {
       method: "GET",
       credentials: "same-origin",
       headers: { Accept: "application/json" }

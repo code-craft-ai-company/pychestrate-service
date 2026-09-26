@@ -14,6 +14,9 @@ const ACTIVE_RESERVATION_STATES = [
   "granted"
 ];
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function pool_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -285,7 +288,7 @@ class PycPoolDetail extends HTMLElement {
    */
   async _load_project_names() {
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

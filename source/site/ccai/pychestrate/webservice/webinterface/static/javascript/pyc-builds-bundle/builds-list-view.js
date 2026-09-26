@@ -12,6 +12,9 @@ const TERMINAL_BUILD_STATES = [
 ];
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_builds_query_url(state) {
   const params = new URLSearchParams();
   if (state.stateFilter.length > 0) {
@@ -383,7 +386,7 @@ class PycBuildsList extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }

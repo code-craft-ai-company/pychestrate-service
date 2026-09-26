@@ -1,5 +1,8 @@
 const DEFAULT_PER_PAGE = 25;
 const PROJECTS_API_PATH = "/api/v1/projects";
+// Project pickers need every project, not the API's default first page
+// of 50 (the registry holds every web-UI project too -- PRJ-06).
+const PROJECTS_LIST_URL = PROJECTS_API_PATH + "?per_page=500";
 function build_pipelines_query_url(state) {
   const params = new URLSearchParams();
   params.set("page", String(state.page));
@@ -453,7 +456,7 @@ class PycPipelinesList extends HTMLElement {
     let load_status = 0;
     let load_failed = false;
     try {
-      const response = await fetch(PROJECTS_API_PATH, {
+      const response = await fetch(PROJECTS_LIST_URL, {
         method: "GET",
         credentials: "same-origin",
         headers: { Accept: "application/json" }
