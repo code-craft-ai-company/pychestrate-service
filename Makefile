@@ -82,6 +82,11 @@ test: ## Run single-host tests: [SELECT="phase1 phase10.test_p26"] [EXCLUDE="pha
 	if ! grep -q '"result": "PASSED"' "$(TEST_OUTPUT)/testrun_summary.json" 2>/dev/null; then \
 	    $(TESTBASE) agents testresult failures --results-file "$(TEST_OUTPUT)/testrun_results_stream.jsos" | head -80; \
 	    echo "make test: FAILED (log: $(TEST_OUTPUT).log)" >&2; exit 1; \
+	fi; \
+	if [ -s "$(TEST_OUTPUT)/import_errors.jsos" ]; then \
+	    echo "make test: FAILED -- test module(s) could not be imported, so their tests did not run:" >&2; \
+	    grep -o '"module": "[^"]*"' "$(TEST_OUTPUT)/import_errors.jsos" | cut -d'"' -f4 | sed 's/^/  /' >&2; \
+	    echo "  details: $(TEST_OUTPUT)/import_errors.jsos" >&2; exit 1; \
 	fi
 
 lint: ## Static checks: Python syntax, testbase command traps, the OpenAPI contract

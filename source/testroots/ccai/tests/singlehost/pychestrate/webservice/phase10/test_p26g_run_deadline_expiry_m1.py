@@ -27,7 +27,7 @@ from ccai.pychestrate.webservice.jobs.run.state import (
     transition,
 )
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
-from ccai.pychestrate.webservice.messaging.event_bus import reset_event_bus
+from ccai.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
 
 # Side-effect imports so the dispatch, cancel and envelope tables exist.
 from ccai.pychestrate.webservice.jobs.cancel import models as _cancel_models  # noqa: F401
