@@ -25,6 +25,8 @@ on the legacy id; everything else uses the registry UUID.
   same transaction (:class:`LegacyProjectListener`,
   :func:`ensure_legacy_project`).
 * Renames, descriptions and deletions stay in step both ways.
+* A member's role on a web-UI project is mirrored as the matching RBAC
+  project role on the registry project (:func:`mirror_member_role`).
 * :func:`reconcile_project_links` links or creates the missing half for
   projects that predate the bridge. It runs at startup and is idempotent.
 
@@ -76,6 +78,19 @@ MAX_SLUG_LENGTH: int = 63
 
 #: Longest registry description.
 MAX_DESCRIPTION_LENGTH: int = 2048
+
+#: A web-UI project role -> the RBAC project role it grants on the
+#: registry project, so a member can use the project in the global views
+#: and REST API as well as in the UI.
+LEGACY_ROLE_TO_RBAC_ROLE = {
+    "owner": "project-owner",
+    "administrator": "project-owner",
+    "developer": "project-editor",
+    "viewer": "project-viewer",
+}
+
+#: The RBAC project roles membership mirroring manages.
+MIRRORED_RBAC_ROLES = ("project-owner", "project-editor", "project-viewer")
 
 _LEGACY_TABLE: str = "projects"
 _REGISTRY_TABLE: str = "projects_projects"
@@ -333,6 +348,7 @@ def delete_registry_project_for_legacy(
         return None
     project_id = str(project.project_id)
     slug = project.slug
+    revoke_project_bindings(db_session=db_session, project_id=project_id, actor_user_id=actor_user_id)
     (
         db_session.query(ProjectMemberBinding)
         .filter(ProjectMemberBinding.project_id == project.project_id)
@@ -352,6 +368,114 @@ def delete_registry_project_for_legacy(
     return project_id
 
 
+def mirror_member_role(
+        *,
+        db_session: DbSession,
+        legacy_proj_id: int,
+        user_id: Any,
+        legacy_role: Optional[str],
+        actor_user_id: Optional[str] = None
+    ) -> Optional[str]:
+    """
+        Make a user's RBAC project binding on a registry project match
+        their role on its web-UI project (:data:`LEGACY_ROLE_TO_RBAC_ROLE`):
+        bind the matching ``project-*`` role and remove any other one of
+        them. ``legacy_role=None`` (no longer a member) removes them all.
+        A no-op when the project is not linked or the roles were never
+        seeded. Nothing is committed.
+
+        :returns: The RBAC role now bound, or None.
+    """
+    from ccai.pychestrate.webservice.security.rbac import binding_service  # noqa: E402
+    from ccai.pychestrate.webservice.security.rbac.models import (  # noqa: E402
+        BindingScope,
+        PrincipalKind,
+        RbacRole,
+        RbacRoleBinding,
+    )
+
+    project = get_project_by_legacy_id(db_session=db_session, legacy_proj_id=int(legacy_proj_id))
+    if project is None:
+        return None
+    roles = {
+        row.role_name: row for row in
+        db_session.query(RbacRole).filter(RbacRole.role_name.in_(MIRRORED_RBAC_ROLES)).all()
+    }
+    if len(roles) == 0:
+        return None
+    target = LEGACY_ROLE_TO_RBAC_ROLE.get(str(legacy_role), None) if legacy_role is not None else None
+    if target not in roles:
+        target = None
+
+    principal_id = str(uuid.UUID(str(user_id)))
+    existing = (
+        db_session.query(RbacRoleBinding)
+        .filter(RbacRoleBinding.principal_kind == PrincipalKind.USER)
+        .filter(RbacRoleBinding.principal_id == principal_id)
+        .filter(RbacRoleBinding.scope_kind == BindingScope.PROJECT)
+        .filter(RbacRoleBinding.scope_id == str(project.project_id))
+        .filter(RbacRoleBinding.role_id.in_([row.role_id for row in roles.values()]))
+        .all()
+    )
+    already_bound = False
+    for binding in existing:
+        if target is not None and binding.role_id == roles[target].role_id:
+            already_bound = True
+            continue
+        binding_service.revoke_role(
+            db_session=db_session, binding_id=str(binding.binding_id),
+            actor_user_id=actor_user_id, commit=False,
+        )
+    if target is not None and already_bound is False:
+        binding_service.assign_role(
+            db_session=db_session, role_name=target, principal_kind=PrincipalKind.USER,
+            principal_id=principal_id, scope_kind=BindingScope.PROJECT,
+            scope_id=str(project.project_id), inherits_into_project=False,
+            actor_user_id=actor_user_id, commit=False,
+        )
+    return target
+
+
+def revoke_project_bindings(*, db_session: DbSession, project_id: str,
+                            actor_user_id: Optional[str] = None) -> int:
+    """
+        Remove every RBAC binding scoped to a registry project being
+        deleted. Nothing is committed.
+
+        :returns: How many bindings were removed.
+    """
+    from ccai.pychestrate.webservice.security.rbac import binding_service  # noqa: E402
+    from ccai.pychestrate.webservice.security.rbac.models import (  # noqa: E402
+        BindingScope,
+        RbacRoleBinding,
+    )
+
+    bindings = (
+        db_session.query(RbacRoleBinding)
+        .filter(RbacRoleBinding.scope_kind == BindingScope.PROJECT)
+        .filter(RbacRoleBinding.scope_id == str(project_id))
+        .all()
+    )
+    for binding in bindings:
+        binding_service.revoke_role(
+            db_session=db_session, binding_id=str(binding.binding_id),
+            actor_user_id=actor_user_id, commit=False,
+        )
+    rtnval = len(bindings)
+    return rtnval
+
+
+def _mirror_all_members(*, db_session: DbSession, legacy_proj_id: int) -> None:
+    from ccai.pychestrate.core.orm import ProjectMember  # noqa: E402
+
+    for member in db_session.query(ProjectMember).filter(ProjectMember.project_id == int(legacy_proj_id)).all():
+        mirror_member_role(
+            db_session=db_session, legacy_proj_id=legacy_proj_id,
+            user_id=member.user_id, legacy_role=member.role,
+        )
+    return
+
+
 class LegacyProjectListener:
     """
         The web UI's :class:`ProjectManager` lifecycle listener: keeps each
@@ -364,6 +488,7 @@ class LegacyProjectListener:
             ensure_registry_project(
                 db_session=db_session, legacy_project=legacy_project, actor_user_id=user_id,
             )
+            _mirror_all_members(db_session=db_session, legacy_proj_id=int(legacy_project.id))
         return
 
     def project_updated(self, db_session: DbSession, legacy_project: Any, user_id: Any) -> None:
@@ -378,6 +503,16 @@ class LegacyProjectListener:
         if bridge_tables_present(db_session=db_session) is True:
             delete_registry_project_for_legacy(
                 db_session=db_session, legacy_proj_id=legacy_proj_id, actor_user_id=user_id,
+            )
+        return
+
+    def member_changed(self, db_session: DbSession, legacy_proj_id: int, user_id: Any,
+                       role: Optional[str], actor_user_id: Any) -> None:
+        if bridge_tables_present(db_session=db_session) is True:
+            mirror_member_role(
+                db_session=db_session, legacy_proj_id=legacy_proj_id, user_id=user_id,
+                legacy_role=role,
+                actor_user_id=str(actor_user_id) if actor_user_id is not None else None,
             )
         return
 
@@ -513,6 +648,7 @@ def _link_or_create_legacy_project(
     )
     project.legacy_proj_id = int(created.id)
     db_session.flush()
+    _mirror_all_members(db_session=db_session, legacy_proj_id=int(created.id))
     legacy = db_session.query(LegacyProject).filter(LegacyProject.id == int(created.id)).first()
     return legacy, "created"
 
@@ -569,7 +705,8 @@ def delete_legacy_project_for_registry(
 def reconcile_project_links(*, db_session: DbSession) -> ReconcileReport:
     """
         Give every web-UI project a registry project and every registry
-        project a web-UI project, linking same-named pairs first.
+        project a web-UI project, linking same-named pairs first, and
+        mirror every web-UI membership onto its registry project.
         Idempotent; commits. Another process reconciling at the same time
         makes this pass stop early (the next start finishes it).
 
@@ -608,6 +745,9 @@ def reconcile_project_links(*, db_session: DbSession) -> ReconcileReport:
                 report.linked.append((int(legacy.id), project.slug))
             elif outcome == "skipped":
                 report.skipped.append(project.slug)
+
+        for (legacy_id,) in db_session.query(LegacyProject.id).all():
+            _mirror_all_members(db_session=db_session, legacy_proj_id=int(legacy_id))
         db_session.commit()
     except IntegrityError:
         db_session.rollback()
@@ -623,8 +763,10 @@ __all__ = [
     "delete_registry_project_for_legacy",
     "ensure_legacy_project",
     "ensure_registry_project",
+    "mirror_member_role",
     "reconcile_project_links",
     "registry_project_uuid_for_ref",
+    "revoke_project_bindings",
     "slug_for_legacy_name",
     "sync_legacy_from_registry",
     "sync_registry_from_legacy",

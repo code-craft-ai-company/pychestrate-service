@@ -34,6 +34,8 @@ from ccai import testbase
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.managers.project_manager import (
     ProjectCreateRequest,
+    ProjectManager,
+    ProjectRole,
     ProjectUpdateRequest,
 )
 from ccai.pychestrate.core.orm import (
@@ -42,20 +44,34 @@ from ccai.pychestrate.core.orm import (
     PychestrateModelBase,
     User,
 )
-from ccai.pychestrate.webservice.messaging.event_bus import reset_for_testing as reset_event_bus
 from ccai.pychestrate.webservice.persistence.schema import PychestratePhase1Base
 from ccai.pychestrate.webservice.projects import bridge
 from ccai.pychestrate.webservice.projects import service as project_service
 from ccai.pychestrate.webservice.projects.legacy_identity import derived_project_uuid
 from ccai.pychestrate.webservice.projects.models import Project, ProjectState
 from ccai.pychestrate.webservice.webinterface.blueprints.config import routes_enrollment
+from ccai.pychestrate.webservice.security.auth.models import AuthProviderKind
+from ccai.pychestrate.webservice.security.auth.session_service import AuthPrincipal
+from ccai.pychestrate.webservice.security.rbac import cache as rbac_cache
+from ccai.pychestrate.webservice.security.rbac import rbac_evaluator
+from ccai.pychestrate.webservice.security.rbac.models import (
+    BindingScope,
+    RbacRole,
+    RbacRoleBinding,
+    RoleSource,
+)
 from ccai.pychestrate.webservice.webinterface.blueprints.projects.project_access import (
     build_access_aware_project_manager,
 )
 
+from ccai.tests.singlehost.pychestrate.webservice.phase1.fixtures import reset_phase1_runtime
+
 
 def _session() -> Any:
-    reset_event_bus()
+    reset_phase1_runtime()
+    # As at runtime: role assigned / revoked events invalidate cached
+    # permission decisions.
+    rbac_cache.wire_cache_invalidation()
     engine = sa.create_engine("sqlite://")
     PychestrateModelBase.metadata.create_all(engine)
     PychestratePhase1Base.metadata.create_all(engine)
@@ -266,5 +282,108 @@ def test_slug_for_legacy_name_always_yields_a_valid_slug():
     testbase.assert_equal(
         ([re.match(pattern, slug) is not None for slug in slugs], slugs[:4]),
         ([True] * len(names), ["orchestrate", "my-app-v2", "project-9lives", "project-7"]),
+    )
+    return
+
+
+def _seed_project_roles(session: Any) -> None:
+    for role_name in ("project-owner", "project-editor", "project-viewer"):
+        session.add(RbacRole(
+            role_id=str(uuid.uuid4()), role_name=role_name, source=RoleSource.BUILTIN,
+            source_name="ProjectRoles", description="",
+        ))
+    session.commit()
+    return
+
+
+def _project_roles(session: Any, *, project_id: str, user_id: str) -> list:
+    rows = (
+        session.query(RbacRole.role_name)
+        .join(RbacRoleBinding, RbacRoleBinding.role_id == RbacRole.role_id)
+        .filter(RbacRoleBinding.scope_kind == BindingScope.PROJECT)
+        .filter(RbacRoleBinding.scope_id == project_id)
+        .filter(RbacRoleBinding.principal_id == user_id)
+        .all()
+    )
+    rtnval = sorted(row[0] for row in rows)
+    return rtnval
+
+
+def _allowed(session: Any, *, user_id: str, key: str) -> bool:
+    decision = rbac_evaluator.check_permission(
+        db_session=session,
+        principal=AuthPrincipal(user_id=user_id, session_id="bridge-test",
+                                provider_kind=AuthProviderKind.LOCAL, provider_name="local"),
+        permission_key=key,
+        now=utc_now(),
+    )
+    rtnval = decision.allowed
+    return rtnval
+
+
+def test_ui_membership_is_mirrored_as_rbac_project_roles():
+    """
+    **Feature: project bridge (PRJ-06)**
+    **Property: a UI project's owner holds project-owner on its registry
+    project; a developer holds project-editor (and may dispatch runs
+    there), becomes project-viewer when made a viewer, and loses the
+    binding when removed; deleting the project removes its bindings.**
+    """
+    session = _session()
+    _seed_project_roles(session)
+    owner = _user(session, login="m-owner")
+    dev = _user(session, login="m-dev")
+    manager = build_access_aware_project_manager(db_session=session)
+    created = manager.create_project(ProjectCreateRequest(name="members-demo"), owner)
+    project_id = str(_registry_for_legacy(session, created.id).project_id)
+    dispatch_key = "project:{}:runs.dispatch".format(project_id)
+
+    manager.add_member(created.id, dev, ProjectRole.DEVELOPER, owner)
+    as_developer = (_project_roles(session, project_id=project_id, user_id=dev),
+                    _allowed(session, user_id=dev, key=dispatch_key))
+    manager.update_member_role(created.id, dev, ProjectRole.VIEWER, owner)
+    as_viewer = (_project_roles(session, project_id=project_id, user_id=dev),
+                 _allowed(session, user_id=dev, key=dispatch_key))
+    manager.remove_member(created.id, dev, owner)
+    removed = _project_roles(session, project_id=project_id, user_id=dev)
+    owner_roles = _project_roles(session, project_id=project_id, user_id=owner)
+
+    manager.delete_project(created.id, owner)
+    remaining = session.query(RbacRoleBinding).filter(RbacRoleBinding.scope_id == project_id).count()
+
+    testbase.assert_equal(
+        (owner_roles, as_developer, as_viewer, removed, remaining),
+        (["project-owner"], (["project-editor"], True), (["project-viewer"], False), [], 0),
+    )
+    return
+
+
+def test_reconcile_and_rest_create_mirror_memberships():
+    """
+    **Feature: project bridge (PRJ-06)**
+    **Property: memberships of UI projects that predate the bridge are
+    mirrored by the reconcile, and a project created through the
+    registry service gives its creator project-owner.**
+    """
+    session = _session()
+    _seed_project_roles(session)
+    owner = _user(session, login="r-owner")
+    viewer = _user(session, login="r-viewer")
+    plain = ProjectManager(session)
+    legacy = plain.create_project(ProjectCreateRequest(name="old-project"), owner)
+    plain.add_member(legacy.id, viewer, ProjectRole.VIEWER, owner)
+
+    bridge.reconcile_project_links(db_session=session)
+    old_project_id = str(_registry_for_legacy(session, legacy.id).project_id)
+    reconciled = (_project_roles(session, project_id=old_project_id, user_id=owner),
+                  _project_roles(session, project_id=old_project_id, user_id=viewer))
+
+    created = project_service.create_project(
+        db_session=session, slug="api-made", display_name="API made", description="",
+        owning_group_id=None, template_id=None, template_version=None, actor_user_id=owner,
+    )
+    testbase.assert_equal(
+        (reconciled, _project_roles(session, project_id=str(created.project_id), user_id=owner)),
+        ((["project-owner"], ["project-viewer"]), ["project-owner"]),
     )
     return

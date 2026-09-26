@@ -521,7 +521,10 @@ class ProjectManager:
                                    ``project_updated`` ``(db_session,
                                    project, user_id)`` and
                                    ``project_deleting`` ``(db_session,
-                                   project_id, user_id)``. Supplied by the
+                                   project_id, user_id)`` and
+                                   ``member_changed`` ``(db_session,
+                                   project_id, user_id, role or None,
+                                   actor_user_id)``. Supplied by the
                                    web layer, which keeps the project
                                    registry (the owner of project
                                    identity) in step; if it raises, the
@@ -532,6 +535,20 @@ class ProjectManager:
         self._access_resolver = access_resolver
         self._lifecycle_listener = lifecycle_listener
         self._global_roles: Dict[str, Optional[ProjectRole]] = {}
+
+    def _notify_member_changed(self, project_id: int, user_id: Any, role: Optional[str],
+                               actor_user_id: Any) -> None:
+        """
+        Tell the lifecycle listener that ``user_id``'s role on the project
+        is now ``role`` (``None``: no longer a member); rolls the change
+        back if the listener fails.
+        """
+        try:
+            self._notify_listener("member_changed", project_id, user_id, role, actor_user_id)
+        except Exception:
+            self._db_session.rollback()
+            raise
+        return
 
     def _notify_listener(self, event_name: str, *args: Any) -> None:
         """
@@ -1083,6 +1100,8 @@ class ProjectManager:
         # Update project activity
         project.last_activity_at = now
         
+        self._db_session.flush()
+        self._notify_member_changed(project_id, user_id, role.value, added_by)
         self._db_session.commit()
         
         # Log the member addition event
@@ -1156,6 +1175,8 @@ class ProjectManager:
         # Update project activity
         project.last_activity_at = utc_now()
         
+        self._db_session.flush()
+        self._notify_member_changed(project_id, user_id, None, removed_by)
         self._db_session.commit()
         
         # Log the member removal event
@@ -1224,6 +1245,8 @@ class ProjectManager:
         # Update project activity
         project.last_activity_at = utc_now()
         
+        self._db_session.flush()
+        self._notify_member_changed(project_id, user_id, role.value, updated_by)
         self._db_session.commit()
         
         # Get user info for response

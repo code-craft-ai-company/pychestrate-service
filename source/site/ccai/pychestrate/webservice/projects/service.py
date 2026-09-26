@@ -338,6 +338,10 @@ def delete_project(
     project_bridge.delete_legacy_project_for_registry(
         db_session=db_session, project=project, actor_user_id=actor_user_id,
     )
+    # Role bindings scoped to the project would otherwise outlive it.
+    project_bridge.revoke_project_bindings(
+        db_session=db_session, project_id=project_id_str, actor_user_id=actor_user_id,
+    )
 
     # Explicitly cascade member bindings before removing the project
     # row. Per 2-projects design the DB FK ``ON DELETE CASCADE`` is the

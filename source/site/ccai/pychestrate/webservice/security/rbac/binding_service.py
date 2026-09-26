@@ -193,7 +193,8 @@ def assign_role(
         scope_kind: BindingScope,
         scope_id: Optional[str],
         inherits_into_project: bool,
-        actor_user_id: Optional[str]
+        actor_user_id: Optional[str],
+        commit: bool = True
     ) -> RbacRoleBinding:
     """
         Create a new role binding and publish ``entity.role.assigned``.
@@ -210,6 +211,8 @@ def assign_role(
         :param scope_id: Project UUID when scope_kind == PROJECT, else None.
         :param inherits_into_project: Only meaningful on ORGANIZATION scope.
         :param actor_user_id: Acting principal UUID, or None for system flows.
+        :param commit: Commit (the default); ``False`` leaves the binding
+                       in the caller's transaction.
 
         :returns: The persisted :class:`RbacRoleBinding`.
         :raises: RoleNotFoundError, InvalidBindingScopeError, SemanticError
@@ -268,7 +271,8 @@ def assign_role(
             source_event_id=new_uuid(),
         ),
     )
-    db_session.commit()
+    if commit is True:
+        db_session.commit()
 
     rtnval = binding
     return rtnval
@@ -278,7 +282,8 @@ def revoke_role(
         *,
         db_session: DbSession,
         binding_id: str,
-        actor_user_id: Optional[str]
+        actor_user_id: Optional[str],
+        commit: bool = True
     ) -> None:
     """
         Remove a role binding and publish ``entity.role.revoked``.
@@ -286,6 +291,8 @@ def revoke_role(
         :param db_session: Active SQLAlchemy session.
         :param binding_id: UUID of the binding to revoke.
         :param actor_user_id: Acting principal UUID, or None.
+        :param commit: Commit (the default); ``False`` leaves the removal
+                       in the caller's transaction.
 
         :returns: None.
         :raises: BindingNotFoundError
@@ -330,7 +337,8 @@ def revoke_role(
             source_event_id=new_uuid(),
         ),
     )
-    db_session.commit()
+    if commit is True:
+        db_session.commit()
 
     return
 
