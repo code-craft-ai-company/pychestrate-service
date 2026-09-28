@@ -260,7 +260,9 @@ def _secret_field_errors(*, exc: BaseException) -> Dict[str, str]:
 
         :returns: One entry, or an empty dict.
     """
-    field = _SECRET_ERROR_FIELDS.get(type(exc).__name__, None)
+    field = getattr(exc, "field", None)
+    if isinstance(field, str) is False or field not in SECRET_FIELD_LABELS:
+        field = _SECRET_ERROR_FIELDS.get(type(exc).__name__, None)
     rtnval: Dict[str, str] = {}
     if field is not None and isinstance(exc, _resolve_surfaceable_error_types()) is True:
         rtnval = {field: str(exc)}

@@ -289,9 +289,12 @@ def _scope_field_errors(*, exc: BaseException) -> Dict[str, str]:
         :returns: One entry, or an empty dict.
     """
     rtnval: Dict[str, str] = {}
+    field = getattr(exc, "field", None)
     is_duplicate = type(exc).__name__ == "DuplicateScopeError"
-    if (is_duplicate or isinstance(exc, ValueError)) and isinstance(exc, _resolve_surfaceable_error_types()):
-        rtnval = {"name": str(exc)}
+    if isinstance(field, str) is False or field not in SCOPE_FIELD_LABELS:
+        field = "name" if (is_duplicate or isinstance(exc, ValueError)) else None
+    if field is not None and isinstance(exc, _resolve_surfaceable_error_types()):
+        rtnval = {field: str(exc)}
     return rtnval
 
 

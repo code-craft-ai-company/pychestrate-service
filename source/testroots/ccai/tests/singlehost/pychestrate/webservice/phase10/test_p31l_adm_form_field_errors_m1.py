@@ -1090,3 +1090,57 @@ def test_create_scope_duplicate_name_is_shown_next_to_the_name_field():
         (400, True, "typed description"),
     )
     return
+
+
+def test_create_scope_with_a_blank_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a scope with a blank name is refused (400) with the
+    error on the name input and no banner; the typed description is
+    kept.**
+    """
+    setup = _setup()
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/scopes/create", cookies=setup["cookies"],
+        fields={"name": "", "description": "typed description"},
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         'data-role="error-summary"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, True, "typed description"),
+    )
+    return
+
+
+def test_create_secret_with_a_bad_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a secret whose name breaks the naming rule is refused
+    with the error on the name input, not the scope input.**
+    """
+    setup = _setup()
+    scope = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/scopes/create", cookies=setup["cookies"],
+        fields={"name": _unique("scp").replace("-", "_"), "description": ""},
+    )
+    testbase.assert_equal(scope.status_code in (302, 303), True)
+    page = drive_request(
+        wsgi_app=setup["wsgi_app"], method="GET", path="/admin/secrets/create", cookies=setup["cookies"],
+    ).text
+    scope_ids = re.findall(r'<option value="(\d+)"', page)
+    testbase.assert_true(len(scope_ids) > 0, "no scope offered")
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/secrets/create", cookies=setup["cookies"],
+        fields={
+            "scope_id": scope_ids[-1], "name": "1 bad name!", "secret_type": "generic",
+            "value": "s3cret", "description": "",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text, 'id="scope_id-error"' in response.text),
+        (400, True, False),
+    )
+    return

@@ -146,10 +146,17 @@ class SecretListResponse:
 # =============================================================================
 
 class SecretManagerError(Exception):
-    """Base exception for secret manager errors."""
-    
-    def __init__(self, message: str):
+    """
+    Base exception for secret manager errors.
+
+    ``field`` names the input the error is about (for example ``name`` or
+    ``value``), so a form can show the message next to it; it is None when
+    the error is about no single input.
+    """
+
+    def __init__(self, message: str, field: Optional[str] = None):
         self.message = message
+        self.field = field
         super().__init__(self.message)
 
 
@@ -357,13 +364,13 @@ class SecretManager:
         
         # Validate name
         if not request.name or len(request.name.strip()) == 0:
-            raise SecretManagerError("Scope name is required")
+            raise SecretManagerError("Scope name is required", field="name")
         
         if len(request.name) > 128:
-            raise SecretManagerError("Scope name must be 128 characters or less")
+            raise SecretManagerError("Scope name must be 128 characters or less", field="name")
 
         if SECRET_NAME_PATTERN.match(request.name) is None:
-            raise SecretManagerError("Scope names use " + SECRET_NAME_RULE + ".")
+            raise SecretManagerError("Scope names use " + SECRET_NAME_RULE + ".", field="name")
         
         # Check for duplicate name
         existing = self._db_session.query(SecretScope).filter(
@@ -625,17 +632,17 @@ class SecretManager:
         
         # Validate name
         if not request.name or len(request.name.strip()) == 0:
-            raise SecretManagerError("Secret name is required")
+            raise SecretManagerError("Secret name is required", field="name")
         
         if len(request.name) > 128:
-            raise SecretManagerError("Secret name must be 128 characters or less")
+            raise SecretManagerError("Secret name must be 128 characters or less", field="name")
 
         if SECRET_NAME_PATTERN.match(request.name) is None:
-            raise SecretManagerError("Secret names use " + SECRET_NAME_RULE + ".")
+            raise SecretManagerError("Secret names use " + SECRET_NAME_RULE + ".", field="name")
         
         # Validate value
         if not request.value:
-            raise SecretManagerError("Secret value is required")
+            raise SecretManagerError("Secret value is required", field="value")
         
         # Verify scope exists
         scope = self._db_session.query(SecretScope).filter(
