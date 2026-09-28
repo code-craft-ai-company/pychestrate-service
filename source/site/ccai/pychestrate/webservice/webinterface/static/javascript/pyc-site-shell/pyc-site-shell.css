@@ -587,6 +587,28 @@ pyc-site-shell:not(:defined)::before {
     font-size: var(--pyc-site-shell-font-size-small);
 }
 
+/*
+ * Bundle tables (ORC-25). <mj-data-table> keeps its header row outside
+ * the scroller that holds the rows, and hides overflow on itself. A
+ * table whose columns are wider than the page therefore lost its right
+ * hand columns (the header row was clipped with no way to reach it) and
+ * its rows scrolled sideways on their own scrollbar, at the bottom of a
+ * tall box, while the headers stayed put.
+ *
+ * The table's host is the one horizontal scroll container, and its grid
+ * is as wide as its columns (the header row's width), so the header and
+ * the rows scroll together and every column can be reached. The rows
+ * still scroll vertically under the fixed header. A table that fits is
+ * unchanged: the grid never gets narrower than the host.
+ */
+mj-data-table {
+    overflow-x: auto;
+}
+
+mj-data-table::part(grid-root) {
+    min-width: max-content;
+}
+
 .pyc-site-shell__empty-state {
     max-width: 32rem;
     margin: 4rem auto;
