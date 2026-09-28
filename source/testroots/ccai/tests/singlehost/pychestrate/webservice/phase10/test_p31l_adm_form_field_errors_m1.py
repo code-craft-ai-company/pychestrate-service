@@ -1062,3 +1062,31 @@ def test_create_pool_duplicate_name_is_shown_next_to_the_name_field():
         (400, True, "typed description"),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Secret scopes
+# ---------------------------------------------------------------------------
+
+
+def test_create_scope_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second secret scope with an existing name is refused
+    (400) with the error next to the name input, and the typed
+    description is kept.**
+    """
+    setup = _setup()
+    name = _unique("scope").replace("-", "_")
+    fields = {"name": name, "description": "typed description"}
+    post_form(wsgi_app=setup["wsgi_app"], path="/admin/scopes/create", cookies=setup["cookies"], fields=fields)
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/scopes/create", cookies=setup["cookies"], fields=fields,
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "typed description"),
+    )
+    return

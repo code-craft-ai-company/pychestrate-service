@@ -1287,8 +1287,8 @@ def test_handle_scope_create_post_manager_error_re_renders():
     """
     **Feature: webworks config scopes port T3.11**
     **Property: secret_manager.create_scope raising a curated
-    (surfaceable) error yields a 400 re-render with an error
-    flash carrying the curated message.**
+    (surfaceable) error yields a 400 re-render with the curated
+    message on the name field.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1321,10 +1321,9 @@ def test_handle_scope_create_post_manager_error_re_renders():
 
         testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "duplicate" in message
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(list(ctx["errors"].keys()), ["name"])
+        contains = "duplicate" in ctx["errors"]["name"]
         testbase.assert_equal(contains, True)
     finally:
         for p in (cr_patch, secret_patch, sm_patch):
@@ -1715,7 +1714,7 @@ def test_handle_scope_edit_post_unexpected_error_masks_message():
         )
         response = config_routes_scopes.handle_scope_edit(request)
 
-        testbase.assert_equal(response.status_code, 200)
+        testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
         testbase.assert_equal(len(ctx["flashes"]), 1)
         category, message = ctx["flashes"][0]

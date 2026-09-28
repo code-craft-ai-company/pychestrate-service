@@ -270,6 +270,31 @@ def _resolve_surfaceable_error_types() -> Tuple[type, ...]:
     return rtnval
 
 
+#: Visible labels of the scope form fields, for the error summary.
+SCOPE_FIELD_LABELS: Dict[str, str] = {
+    "name": "Scope Name",
+    "description": "Description",
+}
+
+
+def _scope_field_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused scope create form, or an
+        empty dict when the error is about no single input. A duplicate
+        scope and a name the request refuses (``ValueError``) are both
+        about the name; the message is the curated text.
+
+        :param exc: The error the operation raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    rtnval: Dict[str, str] = {}
+    is_duplicate = type(exc).__name__ == "DuplicateScopeError"
+    if (is_duplicate or isinstance(exc, ValueError)) and isinstance(exc, _resolve_surfaceable_error_types()):
+        rtnval = {"name": str(exc)}
+    return rtnval
+
+
 def _describe_scope_failure(*, exc: Exception, action: str) -> str:
     """
         Build the operator-facing flash message for a failed
@@ -404,6 +429,7 @@ def handle_scope_create(request: Request) -> Response:
         description = str(single_form.get("description", "")).strip()
 
         secret_manager = _build_secret_manager(db_session=db_session)
+        errors: Dict[str, str] = {}
 
         try:
             create_request = _build_scope_create_request(
@@ -418,15 +444,17 @@ def handle_scope_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=_describe_scope_failure(
-                    exc=exc, action="creating"
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+            errors = _scope_field_errors(exc=exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_scope_failure(
+                        exc=exc, action="creating"
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
-        # Re-render the form with the submitted values + flash.
+        # Re-render the form with the submitted values + errors.
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -435,6 +463,8 @@ def handle_scope_create(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = SCOPE_FIELD_LABELS
         response = _render(
             template_name="config/secrets/scope_create.html",
             context=context,
@@ -485,6 +515,8 @@ def handle_scope_edit(request: Request) -> Response:
 
         secret_manager = _build_secret_manager(db_session=db_session)
         method = request.method.upper()
+        submitted_description: Optional[str] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -505,6 +537,8 @@ def handle_scope_edit(request: Request) -> Response:
             description = str(
                 single_form.get("description", "")
             ).strip()
+            submitted_description = description
+            status_code = 400
 
             try:
                 _update_scope_description(
@@ -547,9 +581,13 @@ def handle_scope_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["scope"] = scope
+        context["submitted_description"] = submitted_description
+        context["errors"] = {}
+        context["error_labels"] = SCOPE_FIELD_LABELS
         response = _render(
             template_name="config/secrets/scope_edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
