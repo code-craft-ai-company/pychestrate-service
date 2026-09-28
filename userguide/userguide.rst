@@ -20,6 +20,9 @@ Using Pychestrate
   server, finish the setup wizard, and create your first project.
 * `RPA Jobs <19-00-rpa-jobs.rst>`_ -- register versioned automations and
   run them from a project.
+* `Managing the Lab <15-00-lab-administration.rst>`_ -- devices,
+  resource pools, IP pools, check-out and check-in, reservations, and
+  health checks.
 * `Choosing What the UI Shows <20-00-ui-profiles.rst>`_ -- hide the
   automation domains a deployment or a person does not use.
 * `The pyc Command Line <14-00-pyc-command-line.rst>`_ -- every REST
@@ -69,6 +72,7 @@ root. The standards and internals it refers to:
 
    01-00-overview
    02-00-getting-started
+   15-00-lab-administration
    19-00-rpa-jobs
    20-00-ui-profiles
    14-00-pyc-command-line
