@@ -46,6 +46,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -81,6 +82,16 @@ _ROUTE_PERMISSIONS = {
     "config.variable_edit": "system:ui.admin.view",
     "config.variable_delete": "system:ui.admin.view",
     "config.variable_history": "system:ui.admin.view",
+}
+
+
+#: Visible labels of the variable form fields, for the error summary.
+VARIABLE_FIELD_LABELS: Dict[str, str] = {
+    "name": "Variable Name",
+    "var_type": "Type",
+    "value": "Value",
+    "default_value": "Default Value",
+    "description": "Description",
 }
 
 
@@ -256,6 +267,42 @@ def _parse_pagination_params(
     return rtnval
 
 
+def _variable_field_errors(*, exc: BaseException, default_field: Optional[str] = None) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused variable form.
+
+        The store's validation, type and duplicate errors are about one
+        input: a validation error names it, a type mismatch is about the
+        value (or the default value when the message says so), and a
+        duplicate is about the name. A ``ValueError`` from parsing the
+        typed text is about the input being parsed (``default_field``).
+        Anything else has no field and stays a banner.
+
+        :param exc: The error the store or the parser raised.
+        :param default_field: The field a ``ValueError`` is about.
+
+        :returns: One entry, or an empty dict.
+    """
+    from ccai.pychestrate.core.managers.global_variable_store import (  # noqa: E402
+        DuplicateVariableError,
+        TypeValidationError,
+        VariableValidationError,
+    )
+
+    rtnval: Dict[str, str] = {}
+    if isinstance(exc, VariableValidationError) is True:
+        rtnval = form_errors.field_errors_from(exc)
+    elif isinstance(exc, TypeValidationError) is True:
+        message = form_errors.error_message(exc)
+        field = "default_value" if message.startswith("Default value") else "value"
+        rtnval = {field: message}
+    elif isinstance(exc, DuplicateVariableError) is True:
+        rtnval = {"name": form_errors.error_message(exc)}
+    elif isinstance(exc, ValueError) is True and default_field is not None:
+        rtnval = {default_field: form_errors.error_message(exc)}
+    return rtnval
+
+
 # ---------------------------------------------------------------------------
 # Handlers
 # ---------------------------------------------------------------------------
@@ -376,6 +423,8 @@ def handle_variable_create(request: Request) -> Response:
         default_value_raw = str(single_form.get("default_value", ""))
 
         variable_store = _build_variable_store(db_session=db_session)
+        errors: Dict[str, str] = {}
+        parsing_field = "value"
 
         try:
             var_type = _resolve_variable_type(var_type_str=var_type_str)
@@ -383,11 +432,13 @@ def handle_variable_create(request: Request) -> Response:
                 value_raw, var_type
             )
             if len(default_value_raw) > 0:
+                parsing_field = "default_value"
                 parsed_default = variable_store.parse_value_from_string(
                     default_value_raw, var_type
                 )
             else:
                 parsed_default = None
+            parsing_field = "value"
 
             create_request = _build_variable_create_request(
                 name=name,
@@ -405,20 +456,16 @@ def handle_variable_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except ValueError as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Invalid value: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
-            )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error creating variable: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
-            )
+            errors = _variable_field_errors(exc=exc, default_field=parsing_field)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error creating variable: {}".format(str(exc)),
+                    category=flash.CATEGORY_ERROR,
+                )
 
-        # Re-render the form with the submitted values + flash.
+        # Re-render the form with the submitted values + errors.
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
             session=auth.session,
@@ -427,6 +474,8 @@ def handle_variable_create(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = VARIABLE_FIELD_LABELS
         response = _render(
             template_name="config/variables/create.html",
             context=context,
@@ -504,6 +553,9 @@ def handle_variable_edit(request: Request) -> Response:
         name = str(request.path_params.get("name", ""))
         variable_store = _build_variable_store(db_session=db_session)
         method = request.method.upper()
+        errors: Dict[str, str] = {}
+        submitted: Optional[Dict[str, str]] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -534,6 +586,9 @@ def handle_variable_edit(request: Request) -> Response:
                 )
                 return response
 
+            submitted = {"value": value_raw, "description": description}
+            status_code = 400
+
             try:
                 parsed_value = variable_store.parse_value_from_string(
                     value_raw, variable.var_type
@@ -556,18 +611,14 @@ def handle_variable_edit(request: Request) -> Response:
                     category=flash.CATEGORY_SUCCESS,
                 )
                 return response
-            except ValueError as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Invalid value: {}".format(str(exc)),
-                    category=flash.CATEGORY_ERROR,
-                )
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Error updating variable: {}".format(str(exc)),
-                    category=flash.CATEGORY_ERROR,
-                )
+                errors = _variable_field_errors(exc=exc, default_field="value")
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message="Error updating variable: {}".format(str(exc)),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         # GET, or POST that fell through.
         variable = variable_store.get_variable(name)
@@ -589,9 +640,13 @@ def handle_variable_edit(request: Request) -> Response:
         )
         context["variable"] = variable
         context["format_value"] = format_variable_value
+        context["submitted"] = submitted
+        context["errors"] = errors
+        context["error_labels"] = VARIABLE_FIELD_LABELS
         response = _render(
             template_name="config/variables/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session

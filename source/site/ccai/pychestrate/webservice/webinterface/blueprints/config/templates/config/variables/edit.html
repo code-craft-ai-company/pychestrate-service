@@ -12,7 +12,8 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="ro-variable-name">Variable Name</label>
             <input type="text" class="form-control" value="{{ variable.name }}" id="ro-variable-name" disabled>
@@ -25,8 +26,9 @@
         
         <div class="form-group">
             <label for="value">Value *</label>
-            <textarea id="value" name="value" class="form-control" rows="4" required>{{ format_value(value=variable.value, var_type=variable.var_type) }}</textarea>
-            <p class="form-text">
+            <textarea id="value" name="value" class="form-control" rows="4" required{{ ui.invalid_attrs(errors, 'value', 'value-help') }}>{{ submitted.value if submitted else format_value(value=variable.value, var_type=variable.var_type) }}</textarea>
+            {{ ui.field_error(errors, 'value') }}
+            <p class="form-text" id="value-help">
                 {% if variable.var_type.value == 'boolean' %}
                 Use 'true' or 'false'
                 {% elif variable.var_type.value == 'json' %}
@@ -41,7 +43,7 @@
         
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" class="form-control" rows="2">{{ variable.description or '' }}</textarea>
+            <textarea id="description" name="description" class="form-control" rows="2">{{ submitted.description if submitted else (variable.description or '') }}</textarea>
         </div>
         
         <div class="actions-row">

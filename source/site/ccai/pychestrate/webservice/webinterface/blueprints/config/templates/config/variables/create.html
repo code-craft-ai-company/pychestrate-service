@@ -12,13 +12,15 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="name">Variable Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   pattern="[a-zA-Z][a-zA-Z0-9_]*">
-            <p class="form-text">Alphanumeric and underscores, must start with a letter</p>
+                   pattern="[a-zA-Z][a-zA-Z0-9_]*"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <p class="form-text" id="name-help">Alphanumeric and underscores, must start with a letter</p>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">
@@ -34,13 +36,15 @@
         
         <div class="form-group">
             <label for="value">Value *</label>
-            <textarea id="value" name="value" class="form-control" rows="3" required>{{ form_data.value if form_data else '' }}</textarea>
-            <p class="form-text">For boolean, use 'true' or 'false'. For JSON, enter valid JSON.</p>
+            <textarea id="value" name="value" class="form-control" rows="3" required{{ ui.invalid_attrs(errors, 'value', 'value-help') }}>{{ form_data.value if form_data else '' }}</textarea>
+            <p class="form-text" id="value-help">For boolean, use 'true' or 'false'. For JSON, enter valid JSON.</p>
+            {{ ui.field_error(errors, 'value') }}
         </div>
         
         <div class="form-group">
             <label for="default_value">Default Value</label>
-            <textarea id="default_value" name="default_value" class="form-control" rows="2">{{ form_data.default_value if form_data else '' }}</textarea>
+            <textarea id="default_value" name="default_value" class="form-control" rows="2"{{ ui.invalid_attrs(errors, 'default_value') }}>{{ form_data.default_value if form_data else '' }}</textarea>
+            {{ ui.field_error(errors, 'default_value') }}
         </div>
         
         <div class="form-group">

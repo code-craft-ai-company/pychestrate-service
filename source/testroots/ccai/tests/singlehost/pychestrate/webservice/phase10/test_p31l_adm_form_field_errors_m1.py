@@ -200,3 +200,107 @@ def test_edit_user_bad_email_keeps_the_typed_values_and_marks_the_field():
         (400, True, True, True),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Global variables
+# ---------------------------------------------------------------------------
+
+
+def _create_variable(setup: Dict[str, Any], **overrides: str) -> Any:
+    fields = {
+        "name": _unique("fev").replace("-", "_"),
+        "var_type": "integer",
+        "value": "5",
+        "default_value": "",
+        "description": "",
+    }
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/variables/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def _textarea_text(html: str, *, field_id: str) -> str:
+    match = re.search(r'<textarea[^>]*\bid="' + re.escape(field_id) + r'"[^>]*>(.*?)</textarea>', html, re.S)
+    rtnval = match.group(1) if match is not None else ""
+    return rtnval
+
+
+def test_create_variable_unparseable_value_is_shown_next_to_the_value_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: an integer variable with the value "forty-two" is
+    refused (400) with the error next to the value input, which keeps
+    what was typed.**
+    """
+    setup = _setup()
+    response = _create_variable(setup, value="forty-two")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="value-error"' in response.text,
+         'aria-invalid="true"' in re.search(r'<textarea[^>]*\bid="value"[^>]*>', response.text).group(0),
+         _textarea_text(response.text, field_id="value")),
+        (400, True, True, "forty-two"),
+    )
+    return
+
+
+def test_create_variable_unparseable_default_is_blamed_on_the_default_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a bad default value marks the default value input, not
+    the value input.**
+    """
+    setup = _setup()
+    response = _create_variable(setup, default_value="nope")
+
+    testbase.assert_equal(
+        ('id="default_value-error"' in response.text, 'id="value-error"' in response.text),
+        (True, False),
+    )
+    return
+
+
+def test_create_variable_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: creating a variable whose name exists is refused with
+    the error next to the name input.**
+    """
+    setup = _setup()
+    name = _unique("dupv").replace("-", "_")
+    _create_variable(setup, name=name)
+    response = _create_variable(setup, name=name)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text), (400, True),
+    )
+    return
+
+
+def test_edit_variable_bad_value_keeps_the_typed_text_and_marks_the_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: saving an integer variable with "seven" answers 400,
+    marks the value input, and shows "seven" and the typed description
+    instead of the stored ones.**
+    """
+    setup = _setup()
+    name = _unique("editv").replace("-", "_")
+    _create_variable(setup, name=name, value="7", description="stored description")
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/admin/variables/{}/edit".format(name),
+        cookies=setup["cookies"],
+        fields={"value": "seven", "description": "typed description"},
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="value-error"' in response.text,
+         _textarea_text(response.text, field_id="value"),
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "seven", "typed description"),
+    )
+    return
