@@ -161,8 +161,9 @@
 .pyc-admin-page-fragment .page-header h1,
 .pyc-admin-page-fragment .page-header h2 {
     margin: 0 0 0.25rem;
-    font-size: 1.75rem;
-    font-weight: 600;
+    font-size: var(--pyc-font-size-h1, 1.75rem);
+    font-weight: var(--pyc-font-weight-heading, 600);
+    line-height: var(--pyc-line-height-heading, 1.25);
     color: var(--pyc-color-on-surface);
 }
 
@@ -577,7 +578,9 @@
 }
 
 .pyc-error-page h1 {
-    font-size: 1.5rem;
+    font-size: var(--pyc-font-size-h1, 1.75rem);
+    font-weight: var(--pyc-font-weight-heading, 600);
+    line-height: var(--pyc-line-height-heading, 1.25);
     margin: 0 0 0.75rem;
 }
 

@@ -49,8 +49,9 @@ pyc-release-channels {
 
 .pyc-ops__heading {
     margin: 0;
-    font-size: var(--pyc-font-size-brand, 1.125rem);
-    font-weight: 600;
+    font-size: var(--pyc-font-size-h1, 1.75rem);
+    font-weight: var(--pyc-font-weight-heading, 600);
+    line-height: var(--pyc-line-height-heading, 1.25);
 }
 
 .pyc-ops__subheading {
