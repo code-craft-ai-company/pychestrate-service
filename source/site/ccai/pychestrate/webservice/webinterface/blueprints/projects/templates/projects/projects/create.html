@@ -19,14 +19,16 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="name">Project Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,127}"
                    value="{{ form_data.name if form_data else '' }}"
-                   placeholder="my-project">
-            <div class="form-text">Letters, digits, underscores, hyphens and periods, starting with a letter or digit; at most 128 characters.</div>
+                   placeholder="my-project"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <div class="form-text" id="name-help">Letters, digits, underscores, hyphens and periods, starting with a letter or digit; at most 128 characters.</div>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">
@@ -38,8 +40,9 @@
         <div class="form-group">
             <label for="metadata">Metadata (JSON)</label>
             <textarea id="metadata" name="metadata" class="form-control" rows="4"
-                      placeholder='{"key": "value"}'>{{ form_data.metadata if form_data else '{}' }}</textarea>
-            <div class="form-text">Optional JSON metadata for the project</div>
+                      placeholder='{"key": "value"}'{{ ui.invalid_attrs(errors, 'metadata', 'metadata-help') }}>{{ form_data.metadata if form_data else '{}' }}</textarea>
+            <div class="form-text" id="metadata-help">Optional JSON metadata for the project</div>
+            {{ ui.field_error(errors, 'metadata') }}
         </div>
         
         <div class="actions-row mt-lg">

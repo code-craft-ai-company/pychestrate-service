@@ -770,10 +770,42 @@ def handle_project_list(request: Request) -> Response:
             pass
 
 
+#: Inputs the project create and edit forms show errors for.
+_PROJECT_FORM_FIELDS = ("name", "description", "metadata")
+
+#: Visible labels of the project form fields, for the error summary.
+PROJECT_FIELD_LABELS: Dict[str, str] = {
+    "name": "Project Name",
+    "description": "Description",
+    "metadata": "Metadata (JSON)",
+}
+
+
+def _project_form_errors(*, exc: BaseException, parsing_field: str = "metadata") -> Dict[str, str]:
+    """
+        Inline errors for the project forms: the manager's field, or the
+        input a ``ValueError`` from parsing the typed text is about
+        (``parsing_field``, the metadata textarea). Empty when the error
+        is about no single input; the caller then shows the message above
+        the form so it is never lost.
+
+        :param exc: The error being handled.
+        :param parsing_field: The input a ``ValueError`` is about.
+
+        :returns: ``{input name: message}`` for ``ui.field_error``.
+    """
+    if isinstance(exc, ValueError) is True:
+        rtnval = {parsing_field: getattr(exc, "message", None) or str(exc)}
+    else:
+        rtnval = _field_errors_from(exc=exc, fields=_PROJECT_FORM_FIELDS)
+    return rtnval
+
+
 def _render_project_create_form(
         *, auth: _AuthResolution,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -783,6 +815,8 @@ def _render_project_create_form(
         csrf_token=auth.csrf_token,
     )
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = PROJECT_FIELD_LABELS
     response = _render(
         template_name="projects/projects/create.html",
         context=context,
@@ -834,6 +868,7 @@ def handle_project_create(request: Request) -> Response:
         name = str(single_form.get("name", "")).strip()
         description = str(single_form.get("description", "")).strip()
         metadata_str = str(single_form.get("metadata", "")).strip()
+        errors: Dict[str, str] = {}
 
         try:
             metadata = _parse_metadata_json_or_default(
@@ -857,21 +892,21 @@ def handle_project_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except ValueError as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
-                category=flash.CATEGORY_ERROR,
-            )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=_describe_failure(exc=exc, prefix="Error creating project: ", request_path=str(getattr(request, "path", ""))),
-                category=flash.CATEGORY_ERROR,
-            )
+            errors = _project_form_errors(exc=exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="" if isinstance(exc, ValueError) else "Error creating project: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
         return _render_project_create_form(
-            auth=auth, form_data=form_view, status_code=400
+            auth=auth, form_data=form_view, status_code=400, errors=errors
         )
     finally:
         try:
@@ -1042,6 +1077,7 @@ def handle_project_edit(request: Request) -> Response:
         # so the form shows the submitted values rather than the
         # stale database copy.
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -1091,18 +1127,18 @@ def handle_project_edit(request: Request) -> Response:
                     category=flash.CATEGORY_SUCCESS,
                 )
                 return response
-            except ValueError as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))),
-                    category=flash.CATEGORY_ERROR,
-                )
             except Exception as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=_describe_failure(exc=exc, prefix="Error updating project: ", request_path=str(getattr(request, "path", ""))),
-                    category=flash.CATEGORY_ERROR,
-                )
+                errors = _project_form_errors(exc=exc)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=_describe_failure(
+                            exc=exc,
+                            prefix="" if isinstance(exc, ValueError) else "Error updating project: ",
+                            request_path=str(getattr(request, "path", "")),
+                        ),
+                        category=flash.CATEGORY_ERROR,
+                    )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -1113,6 +1149,8 @@ def handle_project_edit(request: Request) -> Response:
         )
         context["project"] = project
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = PROJECT_FIELD_LABELS
         response = _render(
             template_name="projects/projects/edit.html",
             context=context,

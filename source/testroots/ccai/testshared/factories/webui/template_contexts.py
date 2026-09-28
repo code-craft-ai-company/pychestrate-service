@@ -410,6 +410,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "error_labels": _by_mode({"name": "Name"}, {}),
     # What the admin typed into a refused edit form (None on a fresh one).
     "submitted": _by_mode({"value": "typed value", "description": "typed description"}, None),
+    "submitted_description": _by_mode("typed description", None),
     "selected_pool_id": _by_mode(7, None),
     "selected_job_id": _by_mode(7, None),
     "selected_step": _by_mode("build", None),

@@ -33,6 +33,7 @@ from ccai.tests.singlehost.pychestrate.webservice.phase10._e2e_harness import (
     logged_in_cookies,
 )
 from ccai.tests.singlehost.pychestrate.webservice.phase10._projects_ui_helpers import (
+    create_project_via_ui,
     post_form,
 )
 
@@ -688,4 +689,144 @@ def test_create_reservation_ending_before_it_starts_marks_the_end_field():
          'aria-describedby="reservation-zone-note end_time-error"' in end_input),
         (400, True, True),
     )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
+
+
+def _create_project(setup: Dict[str, Any], **overrides: str) -> Any:
+    fields = {"name": _unique("prj"), "description": "", "metadata": ""}
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/projects/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_create_project_with_an_invalid_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a project named "not a valid name!" is refused (400)
+    with the error next to the name input, which keeps what was typed,
+    along with the typed description.**
+    """
+    setup = _setup()
+    response = _create_project(setup, name="not a valid name!", description="typed description")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         'aria-invalid="true"' in _input_tag(response.text, field_id="name"),
+         'value="not a valid name!"' in _input_tag(response.text, field_id="name"),
+         _textarea_text(response.text, field_id="description")),
+        (400, True, True, True, "typed description"),
+    )
+    return
+
+
+def test_create_project_with_bad_metadata_is_shown_next_to_the_metadata_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: project metadata that is not JSON is refused with the
+    error on the metadata input and none on the name.**
+    """
+    setup = _setup()
+    response = _create_project(setup, metadata="{oops")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="metadata-error"' in response.text, 'id="name-error"' in response.text),
+        (400, True, False),
+    )
+    return
+
+
+def test_create_project_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second project with an existing name is refused with
+    the error next to the name input.**
+    """
+    setup = _setup()
+    name = _unique("prjdup")
+    _create_project(setup, name=name)
+    response = _create_project(setup, name=name)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text), (400, True),
+    )
+    return
+
+
+def test_edit_project_with_an_invalid_name_keeps_the_typed_name_and_marks_it():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: saving a project's edit form with an invalid name
+    answers 400, marks the name input, and shows the typed name rather
+    than the stored one.**
+    """
+    setup = _setup()
+    project_id = create_project_via_ui(wsgi_app=setup["wsgi_app"], cookies=setup["cookies"], prefix="prjedit")
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/projects/{}/edit".format(project_id),
+        cookies=setup["cookies"],
+        fields={"name": "still not valid!", "description": "d", "metadata": ""},
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         'value="still not valid!"' in _input_tag(response.text, field_id="name")),
+        (400, True, True),
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Secrets
+# ---------------------------------------------------------------------------
+
+
+def test_create_secret_in_a_missing_scope_is_shown_next_to_the_scope_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a secret created in a scope that does not exist is
+    refused (400) with the error on the scope select, and the typed name
+    is kept.**
+    """
+    setup = _setup()
+    name = _unique("sec").replace("-", "_")
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/secrets/create", cookies=setup["cookies"],
+        fields={
+            "scope_id": "987654", "name": name, "secret_type": "generic",
+            "value": "s3cret-value-that-must-not-come-back", "description": "",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="scope_id-error"' in response.text,
+         'value="{}"'.format(name) in _input_tag(response.text, field_id="name")),
+        (400, True, True),
+    )
+    return
+
+
+def test_a_refused_secret_never_echoes_the_value_back():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: the re-rendered create-secret page does not contain the
+    secret value that was submitted.**
+    """
+    setup = _setup()
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/secrets/create", cookies=setup["cookies"],
+        fields={
+            "scope_id": "987654", "name": _unique("sec2").replace("-", "_"), "secret_type": "generic",
+            "value": "s3cret-value-that-must-not-come-back", "description": "",
+        },
+    )
+
+    testbase.assert_equal("s3cret-value-that-must-not-come-back" in response.text, False)
     return

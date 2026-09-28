@@ -230,6 +230,43 @@ def _resolve_surfaceable_error_types() -> Tuple[type, ...]:
     return rtnval
 
 
+#: Visible labels of the secret form fields, for the error summary.
+SECRET_FIELD_LABELS: Dict[str, str] = {
+    "scope_id": "Scope",
+    "name": "Secret Name",
+    "secret_type": "Type",
+    "value": "Value",
+    "description": "Description",
+}
+
+#: The input each secret manager error is about, by error class name.
+#: The manager's errors carry no field; their type says which input to
+#: change.
+_SECRET_ERROR_FIELDS: Dict[str, str] = {
+    "DuplicateSecretError": "name",
+    "ScopeNotFoundError": "scope_id",
+    "ScopeAccessDeniedError": "scope_id",
+}
+
+
+def _secret_field_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused secret form, or an empty
+        dict when the error is about no single input (the caller then
+        flashes it). Only the manager's curated errors are shown; their
+        text was written for people.
+
+        :param exc: The error the operation raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    field = _SECRET_ERROR_FIELDS.get(type(exc).__name__, None)
+    rtnval: Dict[str, str] = {}
+    if field is not None and isinstance(exc, _resolve_surfaceable_error_types()) is True:
+        rtnval = {field: str(exc)}
+    return rtnval
+
+
 def _describe_secret_failure(*, exc: Exception, action: str) -> str:
     """
         Build the operator-facing flash message for a failed
@@ -412,6 +449,7 @@ def handle_secret_create(request: Request) -> Response:
             raw=single_form.get("scope_id", None)
         )
         description = str(single_form.get("description", "")).strip()
+        errors: Dict[str, str] = {}
 
         try:
             secret_type = _resolve_secret_type(
@@ -433,15 +471,17 @@ def handle_secret_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=_describe_secret_failure(
-                    exc=exc, action="creating"
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+            errors = _secret_field_errors(exc=exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_secret_failure(
+                        exc=exc, action="creating"
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
-        # Re-render the form with the submitted values + flash.
+        # Re-render the form with the submitted values + errors.
         scopes = secret_manager.list_scopes(auth.user_id).scopes
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -453,6 +493,8 @@ def handle_secret_create(request: Request) -> Response:
         context["scopes"] = scopes
         context["form_data"] = form_view
         context["value_cleared"] = len(value) > 0
+        context["errors"] = errors
+        context["error_labels"] = SECRET_FIELD_LABELS
         response = _render(
             template_name="config/secrets/create.html",
             context=context,
@@ -496,6 +538,8 @@ def handle_secret_edit(request: Request) -> Response:
 
         secret_manager = _build_secret_manager(db_session=db_session)
         method = request.method.upper()
+        submitted_description: Optional[str] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -517,6 +561,8 @@ def handle_secret_edit(request: Request) -> Response:
 
             value = str(single_form.get("value", ""))
             description = str(single_form.get("description", "")).strip()
+            submitted_description = description
+            status_code = 400
 
             try:
                 update_request = _build_secret_update_request(
@@ -563,9 +609,13 @@ def handle_secret_edit(request: Request) -> Response:
             csrf_token=auth.csrf_token,
         )
         context["secret"] = secret
+        context["submitted_description"] = submitted_description
+        context["errors"] = {}
+        context["error_labels"] = SECRET_FIELD_LABELS
         response = _render(
             template_name="config/secrets/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
