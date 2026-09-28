@@ -12,7 +12,8 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="ro-resource">Resource</label>
             <input type="text" class="form-control" value="{{ reservation.resource_name }}" id="ro-resource" disabled>
@@ -21,15 +22,15 @@
         <div class="form-group">
             <label for="start_time">Start Time *</label>
             <input type="datetime-local" id="start_time" name="start_time" class="form-control" required
-                   aria-describedby="reservation-zone-note"
-                   value="{% if form_data %}{{ form_data.get('start_time', '') }}{% else %}{{ reservation.start_time | input_datetime(viewer_timezone) }}{% endif %}">
+                   value="{% if form_data %}{{ form_data.get('start_time', '') }}{% else %}{{ reservation.start_time | input_datetime(viewer_timezone) }}{% endif %}"{{ ui.invalid_attrs(errors, 'start_time', 'reservation-zone-note') }}>
+            {{ ui.field_error(errors, 'start_time') }}
         </div>
 
         <div class="form-group">
             <label for="end_time">End Time *</label>
             <input type="datetime-local" id="end_time" name="end_time" class="form-control" required
-                   aria-describedby="reservation-zone-note"
-                   value="{% if form_data %}{{ form_data.get('end_time', '') }}{% else %}{{ reservation.end_time | input_datetime(viewer_timezone) }}{% endif %}">
+                   value="{% if form_data %}{{ form_data.get('end_time', '') }}{% else %}{{ reservation.end_time | input_datetime(viewer_timezone) }}{% endif %}"{{ ui.invalid_attrs(errors, 'end_time', 'reservation-zone-note') }}>
+            {{ ui.field_error(errors, 'end_time') }}
             {% include "resources/reservations/_viewer_zone.html" %}
         </div>
         

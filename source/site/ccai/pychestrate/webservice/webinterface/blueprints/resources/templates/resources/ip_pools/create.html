@@ -12,42 +12,48 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="name">Pool Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
-                   value="{{ form_data.name if form_data else '' }}">
+                   value="{{ form_data.name if form_data else '' }}"{{ ui.invalid_attrs(errors, 'name') }}>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">
             <label for="cidr">CIDR Range *</label>
             <input type="text" id="cidr" name="cidr" class="form-control" required
                    value="{{ form_data.cidr if form_data else '' }}"
-                   placeholder="192.168.1.0/24 or 2001:db8::/32">
-            <p class="form-text">IPv4 or IPv6 CIDR notation (e.g., 192.168.1.0/24)</p>
+                   placeholder="192.168.1.0/24 or 2001:db8::/32"{{ ui.invalid_attrs(errors, 'cidr', 'cidr-help') }}>
+            <p class="form-text" id="cidr-help">IPv4 or IPv6 CIDR notation (e.g., 192.168.1.0/24)</p>
+            {{ ui.field_error(errors, 'cidr') }}
         </div>
         
         <div class="form-group">
             <label for="gateway">Gateway</label>
             <input type="text" id="gateway" name="gateway" class="form-control"
                    value="{{ form_data.gateway if form_data else '' }}"
-                   placeholder="192.168.1.1">
+                   placeholder="192.168.1.1"{{ ui.invalid_attrs(errors, 'gateway') }}>
+            {{ ui.field_error(errors, 'gateway') }}
         </div>
         
         <div class="form-group">
             <label for="dns_servers">DNS Servers</label>
             <input type="text" id="dns_servers" name="dns_servers" class="form-control"
                    value="{{ form_data.dns_servers if form_data else '' }}"
-                   placeholder="8.8.8.8, 8.8.4.4">
-            <p class="form-text">Comma-separated list of DNS server addresses</p>
+                   placeholder="8.8.8.8, 8.8.4.4"{{ ui.invalid_attrs(errors, 'dns_servers', 'dns_servers-help') }}>
+            <p class="form-text" id="dns_servers-help">Comma-separated list of DNS server addresses</p>
+            {{ ui.field_error(errors, 'dns_servers') }}
         </div>
         
         <div class="form-group">
             <label for="reserved_ips">Reserved IPs</label>
             <input type="text" id="reserved_ips" name="reserved_ips" class="form-control"
                    value="{{ form_data.reserved_ips if form_data else '' }}"
-                   placeholder="192.168.1.1, 192.168.1.2">
-            <p class="form-text">Comma-separated list of IPs to exclude from allocation. The gateway and any DNS servers inside the range are always reserved; you do not need to list them.</p>
+                   placeholder="192.168.1.1, 192.168.1.2"{{ ui.invalid_attrs(errors, 'reserved_ips', 'reserved_ips-help') }}>
+            <p class="form-text" id="reserved_ips-help">Comma-separated list of IPs to exclude from allocation. The gateway and any DNS servers inside the range are always reserved; you do not need to list them.</p>
+            {{ ui.field_error(errors, 'reserved_ips') }}
         </div>
         
         <div class="form-group">

@@ -442,6 +442,45 @@ def handle_reservation_list(request: Request) -> Response:
             pass
 
 
+#: Visible labels of the reservation form fields, for the error summary.
+RESERVATION_FIELD_LABELS: Dict[str, str] = {
+    "resource_id": "Resource",
+    "start_time": "Start Time",
+    "end_time": "End Time",
+}
+
+#: The input each allocation error is about, by error class name. The
+#: manager's errors carry no field, but their type says which input to
+#: change: a bad window is about the end, a clash about the start, and a
+#: missing or offline resource about the resource.
+_ALLOCATION_ERROR_FIELDS: Dict[str, str] = {
+    "InvalidTimeWindowError": "end_time",
+    "ReservationConflictError": "start_time",
+    "ResourceNotFoundError": "resource_id",
+    "ResourceOfflineError": "resource_id",
+    "ResourceUnavailableError": "resource_id",
+    "NoMatchingResourceError": "resource_id",
+}
+
+
+def _allocation_field_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused reservation form, or an
+        empty dict when the error is about no single input.
+
+        :param exc: The error the allocation manager raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    field = _ALLOCATION_ERROR_FIELDS.get(type(exc).__name__, None)
+    rtnval: Dict[str, str] = {}
+    if field is not None:
+        message = _describe_allocation_error(exc=exc)
+        if message is not None:
+            rtnval = {field: message}
+    return rtnval
+
+
 def _render_reservation_create_form(
         *,
         auth: Any,
@@ -450,7 +489,8 @@ def _render_reservation_create_form(
         selector_pool_id: Optional[int] = None,
         selector_resource_type: Optional[str] = None,
         viewer_timezone: str = "",
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     """
         Helper for both GET and POST-error re-render paths. The
@@ -492,6 +532,8 @@ def _render_reservation_create_form(
     context["selector_resource_type"] = selector_resource_type
     context["form_data"] = form_data
     context["viewer_timezone"] = viewer_timezone
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RESERVATION_FIELD_LABELS
     response = _render(
         template_name="resources/reservations/create.html",
         context=context,
@@ -602,29 +644,14 @@ def handle_reservation_create(request: Request) -> Response:
         start_time = _parse_form_datetime(raw=start_time_str, zone=zone)
         end_time = _parse_form_datetime(raw=end_time_str, zone=zone)
 
-        if start_time is None or end_time is None:
-            flash.add_flash(
-                session=auth.session,
-                message="Start time and end time are required.",
-                category=flash.CATEGORY_ERROR,
-            )
-            response = _render_reservation_create_form(
-                auth=auth,
-                resource_manager=resource_manager,
-                form_data=form_view,
-                selector_pool_id=selector_pool_id,
-                selector_resource_type=selector_resource_type,
-                viewer_timezone=viewer_timezone,
-                status_code=400,
-            )
-            return response
-
+        missing: Dict[str, str] = {}
         if resource_id is None:
-            flash.add_flash(
-                session=auth.session,
-                message="A resource must be selected.",
-                category=flash.CATEGORY_ERROR,
-            )
+            missing["resource_id"] = "A resource must be selected."
+        if start_time is None:
+            missing["start_time"] = "Enter a start time."
+        if end_time is None:
+            missing["end_time"] = "Enter an end time."
+        if len(missing) > 0:
             response = _render_reservation_create_form(
                 auth=auth,
                 resource_manager=resource_manager,
@@ -633,9 +660,11 @@ def handle_reservation_create(request: Request) -> Response:
                 selector_resource_type=selector_resource_type,
                 viewer_timezone=viewer_timezone,
                 status_code=400,
+                errors=missing,
             )
             return response
 
+        errors: Dict[str, str] = {}
         try:
             mode = _resolve_allocation_mode(mode_str=mode_str)
             reservation_request = _build_reservation_request(
@@ -660,20 +689,22 @@ def handle_reservation_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            message = _describe_allocation_error(exc=exc)
-            if message is None:
-                _LOGGER.exception(
-                    "Unexpected error creating reservation"
+            errors = _allocation_field_errors(exc=exc)
+            if len(errors) == 0:
+                message = _describe_allocation_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception(
+                        "Unexpected error creating reservation"
+                    )
+                    message = (
+                        "An unexpected error occurred while creating the"
+                        " reservation. The problem has been logged."
+                    )
+                flash.add_flash(
+                    session=auth.session,
+                    message=message,
+                    category=flash.CATEGORY_ERROR,
                 )
-                message = (
-                    "An unexpected error occurred while creating the"
-                    " reservation. The problem has been logged."
-                )
-            flash.add_flash(
-                session=auth.session,
-                message=message,
-                category=flash.CATEGORY_ERROR,
-            )
 
         response = _render_reservation_create_form(
             auth=auth,
@@ -683,6 +714,7 @@ def handle_reservation_create(request: Request) -> Response:
             selector_resource_type=selector_resource_type,
             viewer_timezone=viewer_timezone,
             status_code=400,
+            errors=errors,
         )
         return response
     finally:
@@ -806,8 +838,11 @@ def handle_reservation_edit(request: Request) -> Response:
         # A fresh form is pre-filled in UTC and says so; the page's
         # script moves it into the browser's zone.
         viewer_timezone = ""
+        errors: Dict[str, str] = {}
+        status_code = 200
 
         if method == "POST":
+            status_code = 400
             single_form = _parse_form_or_empty(request=request)
             multi_form = _parse_form_multi(request=request)
             form_view = MultiFormView(data=multi_form)
@@ -847,11 +882,10 @@ def handle_reservation_edit(request: Request) -> Response:
                     category=flash.CATEGORY_ERROR,
                 )
             elif start_time is None or end_time is None:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Start time and end time are required.",
-                    category=flash.CATEGORY_ERROR,
-                )
+                if start_time is None:
+                    errors["start_time"] = "Enter a start time."
+                if end_time is None:
+                    errors["end_time"] = "Enter an end time."
             else:
                 try:
                     allocation_manager.modify_reservation(
@@ -871,22 +905,24 @@ def handle_reservation_edit(request: Request) -> Response:
                     )
                     return response
                 except Exception as exc:
-                    message = _describe_allocation_error(exc=exc)
-                    if message is None:
-                        _LOGGER.exception(
-                            "Unexpected error updating reservation %s",
-                            reservation_id,
+                    errors = _allocation_field_errors(exc=exc)
+                    if len(errors) == 0:
+                        message = _describe_allocation_error(exc=exc)
+                        if message is None:
+                            _LOGGER.exception(
+                                "Unexpected error updating reservation %s",
+                                reservation_id,
+                            )
+                            message = (
+                                "An unexpected error occurred while updating"
+                                " the reservation. The problem has been"
+                                " logged."
+                            )
+                        flash.add_flash(
+                            session=auth.session,
+                            message=message,
+                            category=flash.CATEGORY_ERROR,
                         )
-                        message = (
-                            "An unexpected error occurred while updating"
-                            " the reservation. The problem has been"
-                            " logged."
-                        )
-                    flash.add_flash(
-                        session=auth.session,
-                        message=message,
-                        category=flash.CATEGORY_ERROR,
-                    )
 
         # GET, or POST that fell through -- re-render with the
         # submitted values (``form_data``) when a POST failed so
@@ -902,9 +938,12 @@ def handle_reservation_edit(request: Request) -> Response:
         context["reservation"] = reservation
         context["form_data"] = form_view
         context["viewer_timezone"] = viewer_timezone
+        context["errors"] = errors
+        context["error_labels"] = RESERVATION_FIELD_LABELS
         response = _render(
             template_name="resources/reservations/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session

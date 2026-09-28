@@ -769,7 +769,7 @@ def test_handle_variable_create_post_value_error_re_renders_with_flash():
     """
     **Feature: webworks config variables port T3.5**
     **Property: A ValueError from parse_value_from_string
-    re-renders the form (400) with an error-category flash.**
+    re-renders the form (400) with the error on the value field.**
     """
     _reset_global_state()
     sm_patch = None
@@ -807,10 +807,9 @@ def test_handle_variable_create_post_value_error_re_renders_with_flash():
 
         testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "not a valid integer" in message
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(list(ctx["errors"].keys()), ["value"])
+        contains = "not a valid integer" in ctx["errors"]["value"]
         testbase.assert_equal(contains, True)
     finally:
         for p in (rt_patch, cr_patch, vs_patch, sm_patch):

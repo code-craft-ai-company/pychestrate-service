@@ -12,6 +12,7 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {{ ui.error_summary(errors, error_labels) }}
 
         <div class="form-group">
             <label for="ro-resource-name">Resource Name</label>
@@ -33,8 +34,9 @@
         <div class="form-group">
             <label for="capacity">Capacity</label>
             <input type="number" id="capacity" name="capacity" class="form-control" min="1"
-                   value="{% if form_data %}{{ form_data.get('capacity', '') }}{% else %}{{ resource.capacity }}{% endif %}">
-            <p class="form-text">Number of concurrent allocations allowed</p>
+                   value="{% if form_data %}{{ form_data.get('capacity', '') }}{% else %}{{ resource.capacity }}{% endif %}"{{ ui.invalid_attrs(errors, 'capacity', 'capacity-help') }}>
+            <p class="form-text" id="capacity-help">Number of concurrent allocations allowed</p>
+            {{ ui.field_error(errors, 'capacity') }}
         </div>
 
         <div class="form-group">
@@ -60,12 +62,12 @@
         {% set listed_tag_names = all_tags | map(attribute='name') | list %}
         {% if all_tags or resource.tags %}
         <div class="form-group">
-            <label>Tags</label>
+            <label id="tags-label">Tags</label>
             {#- Unticked checkboxes are not submitted; this marker tells the
                 handler the tag list was on the form, so unticking every tag
                 removes them all instead of changing nothing (RES-07). #}
             <input type="hidden" name="tags_present" value="1">
-            <div class="actions-row">
+            <div class="actions-row" id="tags" role="group" aria-labelledby="tags-label"{% if errors and 'tags' in errors %} aria-describedby="tags-error"{% endif %} tabindex="-1">
                 {% for tag in all_tags %}
                 <label class="regular">
                     <input type="checkbox" name="tags" value="{{ tag.name }}"
@@ -83,14 +85,16 @@
                 </label>
                 {% endfor %}
             </div>
+            {{ ui.field_error(errors, 'tags') }}
         </div>
         {% endif %}
 
         <div class="form-group">
             <label for="metadata">Metadata (JSON)</label>
             <textarea id="metadata" name="metadata" class="form-control" rows="4"
-                      placeholder='{"key": "value"}'>{% if form_data %}{{ form_data.get('metadata', '') }}{% else %}{{ resource.metadata | tojson(indent=2) if resource.metadata else '{}' }}{% endif %}</textarea>
-            <p class="form-text">Optional key-value metadata in JSON format</p>
+                      placeholder='{"key": "value"}'{{ ui.invalid_attrs(errors, 'metadata', 'metadata-help') }}>{% if form_data %}{{ form_data.get('metadata', '') }}{% else %}{{ resource.metadata | tojson(indent=2) if resource.metadata else '{}' }}{% endif %}</textarea>
+            <p class="form-text" id="metadata-help">Optional key-value metadata in JSON format</p>
+            {{ ui.field_error(errors, 'metadata') }}
         </div>
 
         <div class="actions-row">

@@ -1271,8 +1271,8 @@ def test_handle_resource_create_post_invalid_metadata_json_re_renders():
     """
     **Feature: webworks resources port T5.7 (E1)**
     **Property: A POST with a non-JSON metadata field
-    re-renders the form (400) with an error flash and does NOT
-    invoke create_resource.**
+    re-renders the form (400) with the error on the metadata field
+    and does NOT invoke create_resource.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1305,10 +1305,9 @@ def test_handle_resource_create_post_invalid_metadata_json_re_renders():
 
         testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "Invalid JSON" in message
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(list(ctx["errors"].keys()), ["metadata"])
+        contains = "Invalid JSON" in ctx["errors"]["metadata"]
         testbase.assert_equal(contains, True)
         rm = _FakeResourceManager.last_instance
         testbase.assert_equal(rm.create_resource_calls, [])
@@ -1921,16 +1920,16 @@ def test_resource_edit_without_the_tag_list_leaves_tags_alone():
 def test_resource_edit_refuses_an_emptied_capacity():
     """
     **Feature: resources (RES-07 clearing fields on edit)**
-    **Property: an emptied capacity is refused with an error flash
-    instead of being ignored under a "Resource updated successfully"
-    message; nothing is saved.**
+    **Property: an emptied capacity is refused with an error on the
+    capacity field instead of being ignored under a "Resource updated
+    successfully" message; nothing is saved.**
     """
     env, rm = _post_resource_edit(body=b"csrf_token=csrf-fresh&description=kept&capacity=")
 
     ctx = env.last_template.render_calls[0]
     testbase.assert_equal(
-        (rm.update_resource_calls, ctx["flashes"]),
-        ([], [("error", "Capacity must be a whole number of at least 1.")]),
+        (rm.update_resource_calls, ctx["flashes"], ctx["errors"]),
+        ([], [], {"capacity": "Capacity must be a whole number of at least 1."}),
     )
     return
 

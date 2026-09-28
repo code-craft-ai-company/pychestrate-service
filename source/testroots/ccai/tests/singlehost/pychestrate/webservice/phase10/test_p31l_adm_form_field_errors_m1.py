@@ -397,3 +397,295 @@ def test_edit_role_removing_every_permission_unconfirmed_is_a_permissions_error(
         (400, True, True, "typed description"),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+
+
+def _create_resource(setup: Dict[str, Any], **overrides: str) -> Any:
+    fields = {
+        "name": _unique("res"),
+        "resource_type": "device",
+        "pool_id": "",
+        "description": "",
+        "capacity": "1",
+        "metadata": "{}",
+    }
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_create_resource_bad_metadata_is_shown_next_to_the_metadata_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a resource with metadata "{not json" is refused (400)
+    with the error next to the metadata input, which keeps the typed
+    text, and the typed name is kept.**
+    """
+    setup = _setup()
+    name = _unique("resmeta")
+    response = _create_resource(setup, name=name, metadata="{not json")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="metadata-error"' in response.text,
+         _textarea_text(response.text, field_id="metadata"),
+         'value="{}"'.format(name) in _input_tag(response.text, field_id="name")),
+        (400, True, "{not json", True),
+    )
+    return
+
+
+def test_create_resource_zero_capacity_is_shown_next_to_the_capacity_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a resource with capacity 0 is refused with the error on
+    the capacity input, not the metadata input.**
+    """
+    setup = _setup()
+    response = _create_resource(setup, capacity="0")
+    capacity_input = _input_tag(response.text, field_id="capacity")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="capacity-error"' in response.text,
+         'aria-invalid="true"' in capacity_input, 'id="metadata-error"' in response.text),
+        (400, True, True, False),
+    )
+    return
+
+
+def test_create_resource_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second resource with an existing name is refused with
+    the error next to the name input.**
+    """
+    setup = _setup()
+    name = _unique("resdup")
+    _create_resource(setup, name=name)
+    response = _create_resource(setup, name=name)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text), (400, True),
+    )
+    return
+
+
+def test_edit_resource_bad_metadata_answers_400_and_keeps_the_typed_description():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: saving a resource's edit form with metadata "[1, 2]"
+    answers 400 with the error on the metadata input and keeps the
+    description that was typed.**
+    """
+    setup = _setup()
+    created = _create_resource(setup, name=_unique("resedit"))
+    resource_id = (created.header("Location") or "").rstrip("/").split("/")[-1]
+    testbase.assert_true(resource_id.isdigit(), "create redirected to {}".format(created.header("Location")))
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/resources/{}/edit".format(resource_id),
+        cookies=setup["cookies"],
+        fields={"description": "typed description", "capacity": "1", "metadata": "[1, 2]"},
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="metadata-error"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "typed description"),
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# IP pools
+# ---------------------------------------------------------------------------
+
+
+def _create_ip_pool(setup: Dict[str, Any], **overrides: str) -> Any:
+    octet = uuid.uuid4().int % 200 + 20
+    fields = {
+        "name": _unique("ippool"),
+        "cidr": "10.{}.{}.0/29".format(octet, uuid.uuid4().int % 200 + 20),
+        "gateway": "",
+        "dns_servers": "",
+        "reserved_ips": "",
+        "description": "",
+    }
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/ip-pools/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_create_ip_pool_bad_cidr_is_shown_next_to_the_cidr_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: an IP pool with range "not-a-range" is refused (400)
+    with the error next to the CIDR input, and the typed name is
+    kept.**
+    """
+    setup = _setup()
+    name = _unique("ipbad")
+    response = _create_ip_pool(setup, name=name, cidr="not-a-range")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="cidr-error"' in response.text,
+         'aria-invalid="true"' in _input_tag(response.text, field_id="cidr"),
+         'value="{}"'.format(name) in _input_tag(response.text, field_id="name")),
+        (400, True, True, True),
+    )
+    return
+
+
+def test_create_ip_pool_bad_dns_server_is_shown_next_to_the_dns_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a DNS server "example" is refused with the error on the
+    DNS servers input and the CIDR input left unmarked.**
+    """
+    setup = _setup()
+    response = _create_ip_pool(setup, dns_servers="example")
+
+    testbase.assert_equal(
+        ('id="dns_servers-error"' in response.text, 'id="cidr-error"' in response.text),
+        (True, False),
+    )
+    return
+
+
+def test_create_ip_pool_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second IP pool with an existing name is refused with
+    the error next to the name input.**
+    """
+    setup = _setup()
+    name = _unique("ipdup")
+    _create_ip_pool(setup, name=name)
+    response = _create_ip_pool(setup, name=name)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text), (400, True),
+    )
+    return
+
+
+def test_edit_ip_pool_gateway_outside_the_range_answers_400_and_keeps_the_typed_text():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: saving an IP pool with a gateway outside its range
+    answers 400 with the error on the gateway input and keeps the
+    description that was typed.**
+    """
+    setup = _setup()
+    created = _create_ip_pool(setup, cidr="10.77.{}.0/29".format(uuid.uuid4().int % 200 + 20))
+    pool_id = (created.header("Location") or "").rstrip("/").split("/")[-1]
+    testbase.assert_true(pool_id.isdigit(), "create redirected to {}".format(created.header("Location")))
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/resources/ip-pools/{}/edit".format(pool_id),
+        cookies=setup["cookies"],
+        fields={
+            "gateway": "192.0.2.1", "dns_servers": "", "reserved_ips": "",
+            "description": "typed description",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="gateway-error"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "typed description"),
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Reservations
+# ---------------------------------------------------------------------------
+
+
+def _reservation_fields(resource_id: str, **overrides: str) -> Dict[str, str]:
+    fields = {
+        "resource_id": resource_id,
+        "start_time": "2031-03-01T10:00",
+        "end_time": "2031-03-01T11:00",
+        "tz": "UTC",
+        "mode": "exclusive",
+        "job_id": "",
+        "reason": "",
+    }
+    fields.update(overrides)
+    return fields
+
+
+def _new_resource_id(setup: Dict[str, Any]) -> str:
+    created = _create_resource(setup)
+    rtnval = (created.header("Location") or "").rstrip("/").split("/")[-1]
+    testbase.assert_true(rtnval.isdigit(), "create redirected to {}".format(created.header("Location")))
+    return rtnval
+
+
+def test_create_reservation_without_times_marks_both_time_fields():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a reservation submitted with no start or end time is
+    refused (400) with an error on each time input, and no banner.**
+    """
+    setup = _setup()
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/reservations/create", cookies=setup["cookies"],
+        fields=_reservation_fields(_new_resource_id(setup), start_time="", end_time=""),
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="start_time-error"' in response.text, 'id="end_time-error"' in response.text),
+        (400, True, True),
+    )
+    return
+
+
+def test_create_reservation_without_a_resource_marks_the_resource_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a reservation with no resource chosen is refused with
+    the error on the resource select, and the typed times are kept.**
+    """
+    setup = _setup()
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/reservations/create", cookies=setup["cookies"],
+        fields=_reservation_fields(""),
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="resource_id-error"' in response.text,
+         'value="2031-03-01T10:00"' in _input_tag(response.text, field_id="start_time")),
+        (400, True, True),
+    )
+    return
+
+
+def test_create_reservation_ending_before_it_starts_marks_the_end_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: an end time before the start time is refused with the
+    error on the end time input.**
+    """
+    setup = _setup()
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/reservations/create", cookies=setup["cookies"],
+        fields=_reservation_fields(_new_resource_id(setup), start_time="2031-03-01T12:00", end_time="2031-03-01T11:00"),
+    )
+    end_input = _input_tag(response.text, field_id="end_time")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="end_time-error"' in response.text,
+         'aria-describedby="reservation-zone-note end_time-error"' in end_input),
+        (400, True, True),
+    )
+    return

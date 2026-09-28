@@ -12,7 +12,8 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="ro-pool-name">Pool Name</label>
             <input type="text" class="form-control" value="{{ pool.name }}" id="ro-pool-name" disabled>
@@ -29,22 +30,25 @@
             <label for="gateway">Gateway</label>
             <input type="text" id="gateway" name="gateway" class="form-control"
                    value="{% if form_data %}{{ form_data.get('gateway', '') }}{% else %}{{ pool.gateway or '' }}{% endif %}"
-                   placeholder="192.168.1.1">
+                   placeholder="192.168.1.1"{{ ui.invalid_attrs(errors, 'gateway') }}>
+            {{ ui.field_error(errors, 'gateway') }}
         </div>
 
         <div class="form-group">
             <label for="dns_servers">DNS Servers</label>
             <input type="text" id="dns_servers" name="dns_servers" class="form-control"
                    value="{% if form_data %}{{ form_data.get('dns_servers', '') }}{% else %}{{ pool.dns_servers | join(', ') if pool.dns_servers else '' }}{% endif %}"
-                   placeholder="8.8.8.8, 8.8.4.4">
-            <p class="form-text">Comma-separated list of DNS server addresses</p>
+                   placeholder="8.8.8.8, 8.8.4.4"{{ ui.invalid_attrs(errors, 'dns_servers', 'dns_servers-help') }}>
+            <p class="form-text" id="dns_servers-help">Comma-separated list of DNS server addresses</p>
+            {{ ui.field_error(errors, 'dns_servers') }}
         </div>
 
         <div class="form-group">
             <label for="reserved_ips">Reserved IPs</label>
             <textarea id="reserved_ips" name="reserved_ips" class="form-control" rows="3"
-                      placeholder="192.168.1.1, 192.168.1.2">{% if form_data %}{{ form_data.get('reserved_ips', '') }}{% else %}{{ pool.reserved_ips | join(', ') if pool.reserved_ips else '' }}{% endif %}</textarea>
-            <p class="form-text">Comma-separated list of IPs to exclude from allocation. The gateway and any DNS servers inside the range are always reserved; you do not need to list them.</p>
+                      placeholder="192.168.1.1, 192.168.1.2"{{ ui.invalid_attrs(errors, 'reserved_ips', 'reserved_ips-help') }}>{% if form_data %}{{ form_data.get('reserved_ips', '') }}{% else %}{{ pool.reserved_ips | join(', ') if pool.reserved_ips else '' }}{% endif %}</textarea>
+            {{ ui.field_error(errors, 'reserved_ips') }}
+            <p class="form-text" id="reserved_ips-help">Comma-separated list of IPs to exclude from allocation. The gateway and any DNS servers inside the range are always reserved; you do not need to list them.</p>
         </div>
 
         <div class="form-group">

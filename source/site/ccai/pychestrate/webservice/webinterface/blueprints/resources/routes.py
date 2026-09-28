@@ -80,6 +80,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -548,6 +549,46 @@ def _describe_resource_manager_error(*, exc: Exception) -> Optional[str]:
     return rtnval
 
 
+#: Visible labels of the resource form fields, for the error summary.
+RESOURCE_FIELD_LABELS: Dict[str, str] = {
+    "name": "Resource Name",
+    "resource_type": "Resource Type",
+    "pool_id": "Resource Pool",
+    "description": "Description",
+    "capacity": "Capacity",
+    "tags": "Tags",
+    "metadata": "Metadata (JSON)",
+}
+
+
+def _resource_field_errors(
+        *, exc: BaseException, default_field: Optional[str] = None
+    ) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused resource form, or an
+        empty dict when the error is about no single input.
+
+        A typed manager validation or duplicate error names its field
+        (``exc.field``); its message is the one people are shown, not
+        the manager's log text. A ``ValueError`` from parsing the typed
+        text is about the input being parsed (``default_field``).
+
+        :param exc: The error the manager or the parser raised.
+        :param default_field: The field a ``ValueError`` is about.
+
+        :returns: One entry, or an empty dict.
+    """
+    rtnval: Dict[str, str] = {}
+    named = getattr(exc, "field", None)
+    if isinstance(exc, ValueError) is True and default_field is not None:
+        rtnval = {default_field: str(exc)}
+    elif isinstance(named, str) is True and len(named) > 0:
+        message = _describe_resource_manager_error(exc=exc)
+        if message is not None:
+            rtnval = {named: message}
+    return rtnval
+
+
 # User-facing copy for typed manager errors, by error code. The
 # managers' own messages name ids, fields and statuses for the logs;
 # these are what a person sees. A code not listed keeps the manager's
@@ -980,7 +1021,8 @@ def _render_resource_create_form(
         auth: Any,
         resource_manager: Any,
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     """
         Helper to render the create-form template for both GET
@@ -1002,6 +1044,8 @@ def _render_resource_create_form(
     context["pools"] = pools
     context["all_tags"] = all_tags
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RESOURCE_FIELD_LABELS
     response = _render(
         template_name="resources/resources/create.html",
         context=context,
@@ -1083,6 +1127,8 @@ def handle_resource_create(request: Request) -> Response:
         )
         tags = list(multi_form.get("tags", []))
         metadata_str = str(single_form.get("metadata", "")).strip()
+        errors: Dict[str, str] = {}
+        parsing_field = "metadata"
 
         try:
             metadata = _parse_metadata_json_or_default(
@@ -1090,9 +1136,11 @@ def handle_resource_create(request: Request) -> Response:
             )
             if metadata is None:
                 metadata = {}
+            parsing_field = "resource_type"
             resource_type = _resolve_resource_type(
                 resource_type_str=resource_type_str
             )
+            parsing_field = "name"
             create_request = _build_resource_create_request(
                 name=name,
                 resource_type=resource_type,
@@ -1117,25 +1165,23 @@ def handle_resource_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except ValueError as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=str(exc),
-                category=flash.CATEGORY_ERROR,
-            )
         except Exception as exc:
-            message = _describe_resource_manager_error(exc=exc)
-            if message is None:
-                _LOGGER.exception("Unexpected error creating resource")
-                message = (
-                    "An unexpected error occurred while creating the"
-                    " resource. The problem has been logged."
+            errors = _resource_field_errors(exc=exc, default_field=parsing_field)
+            if len(errors) == 0:
+                message = _describe_resource_manager_error(exc=exc)
+                if message is None and isinstance(exc, ValueError) is True:
+                    message = str(exc)
+                if message is None:
+                    _LOGGER.exception("Unexpected error creating resource")
+                    message = (
+                        "An unexpected error occurred while creating the"
+                        " resource. The problem has been logged."
+                    )
+                flash.add_flash(
+                    session=auth.session,
+                    message=message,
+                    category=flash.CATEGORY_ERROR,
                 )
-            flash.add_flash(
-                session=auth.session,
-                message=message,
-                category=flash.CATEGORY_ERROR,
-            )
 
         # Re-render the form with the submitted values.
         response = _render_resource_create_form(
@@ -1143,6 +1189,7 @@ def handle_resource_create(request: Request) -> Response:
             resource_manager=resource_manager,
             form_data=form_view,
             status_code=400,
+            errors=errors,
         )
         return response
     finally:
@@ -1268,8 +1315,11 @@ def handle_resource_edit(request: Request) -> Response:
 
         method = request.method.upper()
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
+        status_code = 200
 
         if method == "POST":
+            status_code = 400
             single_form = _parse_form_or_empty(request=request)
             multi_form = _parse_form_multi(request=request)
             form_view = MultiFormView(data=multi_form)
@@ -1312,6 +1362,7 @@ def handle_resource_edit(request: Request) -> Response:
             if "metadata" in multi_form:
                 metadata_str = str(single_form.get("metadata", "")).strip()
 
+            parsing_field = "capacity"
             try:
                 capacity: Optional[int] = None
                 if capacity_raw is not None:
@@ -1321,10 +1372,12 @@ def handle_resource_edit(request: Request) -> Response:
                             "Capacity must be a whole number of at least 1."
                         )
                 metadata: Optional[Dict[str, Any]] = None
+                parsing_field = "metadata"
                 if metadata_str is not None:
                     metadata = _parse_metadata_json_or_default(
                         raw=metadata_str, default={}
                     )
+                parsing_field = "description"
                 # Health status is deliberately NOT editable here:
                 # status changes must go through the health page,
                 # which records a reason in the audit trail.
@@ -1348,28 +1401,26 @@ def handle_resource_edit(request: Request) -> Response:
                     category=flash.CATEGORY_SUCCESS,
                 )
                 return response
-            except ValueError as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message=str(exc),
-                    category=flash.CATEGORY_ERROR,
-                )
             except Exception as exc:
-                message = _describe_resource_manager_error(exc=exc)
-                if message is None:
-                    _LOGGER.exception(
-                        "Unexpected error updating resource %s",
-                        resource_id,
+                errors = _resource_field_errors(exc=exc, default_field=parsing_field)
+                if len(errors) == 0:
+                    message = _describe_resource_manager_error(exc=exc)
+                    if message is None and isinstance(exc, ValueError) is True:
+                        message = str(exc)
+                    if message is None:
+                        _LOGGER.exception(
+                            "Unexpected error updating resource %s",
+                            resource_id,
+                        )
+                        message = (
+                            "An unexpected error occurred while updating"
+                            " the resource. The problem has been logged."
+                        )
+                    flash.add_flash(
+                        session=auth.session,
+                        message=message,
+                        category=flash.CATEGORY_ERROR,
                     )
-                    message = (
-                        "An unexpected error occurred while updating"
-                        " the resource. The problem has been logged."
-                    )
-                flash.add_flash(
-                    session=auth.session,
-                    message=message,
-                    category=flash.CATEGORY_ERROR,
-                )
 
         # GET, or POST that fell through. Re-render the edit form
         # -- with the submitted values (``form_data``) when a POST
@@ -1389,9 +1440,12 @@ def handle_resource_edit(request: Request) -> Response:
         context["pools"] = pools
         context["all_tags"] = all_tags
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = RESOURCE_FIELD_LABELS
         response = _render(
             template_name="resources/resources/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session

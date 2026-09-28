@@ -2028,7 +2028,8 @@ def test_handle_role_edit_post_empty_permissions_requires_confirmation():
     **Feature: silent-wipe guard T2.13b**
     **Property: A POST with no permission boxes ticked and no
     confirm_remove_all acknowledgement does NOT call the update
-    service and re-renders with an explanatory error flash.**
+    service and re-renders (400) with an explanatory error on the
+    permissions field.**
     """
     _reset_global_state()
     sm_patch = None
@@ -2089,11 +2090,11 @@ def test_handle_role_edit_post_empty_permissions_requires_confirmation():
         is_html = isinstance(response, HTMLResponse)
         testbase.assert_equal(is_html, True)
         testbase.assert_equal(update_calls, [])
+        testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "remove all permissions" in message
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(list(ctx["errors"].keys()), ["permission_keys"])
+        contains = "remove them all" in ctx["errors"]["permission_keys"]
         testbase.assert_equal(contains, True)
     finally:
         for p in (perms_patch, update_patch, get_patch, sm_patch):

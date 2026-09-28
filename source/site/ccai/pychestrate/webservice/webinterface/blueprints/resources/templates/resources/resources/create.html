@@ -12,24 +12,27 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="name">Resource Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]*">
-            <p class="form-text">Alphanumeric characters, underscores, hyphens, and periods only</p>
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]*"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <p class="form-text" id="name-help">Alphanumeric characters, underscores, hyphens, and periods only</p>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">
             <label for="resource_type">Resource Type *</label>
-            <select id="resource_type" name="resource_type" class="form-control" required>
+            <select id="resource_type" name="resource_type" class="form-control" required{{ ui.invalid_attrs(errors, 'resource_type') }}>
                 <option value="device" {% if form_data and form_data.resource_type == 'device' %}selected{% endif %}>Device</option>
                 <option value="ip_address" {% if form_data and form_data.resource_type == 'ip_address' %}selected{% endif %}>IP Address</option>
                 <option value="port" {% if form_data and form_data.resource_type == 'port' %}selected{% endif %}>Port</option>
                 <option value="credential" {% if form_data and form_data.resource_type == 'credential' %}selected{% endif %}>Credential</option>
                 <option value="generic" {% if not form_data or form_data.resource_type == 'generic' %}selected{% endif %}>Generic</option>
             </select>
+            {{ ui.field_error(errors, 'resource_type') }}
         </div>
         
         <div class="form-group">
@@ -52,15 +55,16 @@
         
         <div class="form-group">
             <label for="capacity">Capacity</label>
-            <input type="number" id="capacity" name="capacity" class="form-control" min="1" 
-                   value="{{ form_data.capacity if form_data else '1' }}">
-            <p class="form-text">Number of concurrent allocations allowed (1 for exclusive resources)</p>
+            <input type="number" id="capacity" name="capacity" class="form-control" min="1"
+                   value="{{ form_data.capacity if form_data else '1' }}"{{ ui.invalid_attrs(errors, 'capacity', 'capacity-help') }}>
+            <p class="form-text" id="capacity-help">Number of concurrent allocations allowed (1 for exclusive resources)</p>
+            {{ ui.field_error(errors, 'capacity') }}
         </div>
         
         {% if all_tags %}
         <div class="form-group">
-            <label>Tags</label>
-            <div class="actions-row">
+            <label id="tags-label">Tags</label>
+            <div class="actions-row" id="tags" role="group" aria-labelledby="tags-label"{% if errors and 'tags' in errors %} aria-describedby="tags-error"{% endif %} tabindex="-1">
                 {% for tag in all_tags %}
                 <label class="regular">
                     <input type="checkbox" name="tags" value="{{ tag.name }}"
@@ -69,14 +73,16 @@
                 </label>
                 {% endfor %}
             </div>
+            {{ ui.field_error(errors, 'tags') }}
         </div>
         {% endif %}
         
         <div class="form-group">
             <label for="metadata">Metadata (JSON)</label>
-            <textarea id="metadata" name="metadata" class="form-control" rows="4" 
-                      placeholder='{"key": "value"}'>{{ form_data.metadata if form_data else '{}' }}</textarea>
-            <p class="form-text">Optional key-value metadata in JSON format</p>
+            <textarea id="metadata" name="metadata" class="form-control" rows="4"
+                      placeholder='{"key": "value"}'{{ ui.invalid_attrs(errors, 'metadata', 'metadata-help') }}>{{ form_data.metadata if form_data else '{}' }}</textarea>
+            <p class="form-text" id="metadata-help">Optional key-value metadata in JSON format</p>
+            {{ ui.field_error(errors, 'metadata') }}
         </div>
         
         <div class="actions-row">

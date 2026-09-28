@@ -338,6 +338,42 @@ def _describe_ip_pool_error(*, exc: Exception) -> Optional[str]:
     return rtnval
 
 
+#: Visible labels of the IP pool form fields, for the error summary.
+IP_POOL_FIELD_LABELS: Dict[str, str] = {
+    "name": "Pool Name",
+    "cidr": "CIDR Range",
+    "gateway": "Gateway",
+    "dns_servers": "DNS Servers",
+    "reserved_ips": "Reserved IPs",
+    "description": "Description",
+}
+
+
+def _ip_pool_field_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused IP pool form, or an
+        empty dict when the error is about no single input.
+
+        The manager's validation and duplicate errors name their field
+        (``exc.field``: name, cidr, gateway, dns_servers, reserved_ips);
+        an overlap with another pool is about the range. The message is
+        the one people are shown, not the manager's log text.
+
+        :param exc: The error the manager raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    field = getattr(exc, "field", None)
+    if isinstance(field, str) is False or len(field) == 0:
+        field = "cidr" if type(exc).__name__ == "CIDROverlapError" else None
+    rtnval: Dict[str, str] = {}
+    if field is not None:
+        message = _describe_ip_pool_error(exc=exc)
+        if message is not None:
+            rtnval = {field: message}
+    return rtnval
+
+
 # User-facing copy for typed IPPoolManager errors, by error code (the
 # managers' own messages stay in the log).
 _IP_POOL_ERROR_COPY: Dict[str, str] = {
@@ -509,6 +545,7 @@ def handle_ip_pool_create(request: Request) -> Response:
 
         dns_servers = _parse_csv_string(raw=dns_servers_str)
         reserved_ips = _parse_csv_string(raw=reserved_ips_str)
+        errors: Dict[str, str] = {}
 
         try:
             create_request = _build_ip_pool_create_request(
@@ -541,18 +578,20 @@ def handle_ip_pool_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            message = _describe_ip_pool_error(exc=exc)
-            if message is None:
-                _LOGGER.exception("Unexpected error creating IP pool")
-                message = (
-                    "An unexpected error occurred while creating the"
-                    " IP pool. The problem has been logged."
+            errors = _ip_pool_field_errors(exc=exc)
+            if len(errors) == 0:
+                message = _describe_ip_pool_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception("Unexpected error creating IP pool")
+                    message = (
+                        "An unexpected error occurred while creating the"
+                        " IP pool. The problem has been logged."
+                    )
+                flash.add_flash(
+                    session=auth.session,
+                    message=message,
+                    category=flash.CATEGORY_ERROR,
                 )
-            flash.add_flash(
-                session=auth.session,
-                message=message,
-                category=flash.CATEGORY_ERROR,
-            )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -563,6 +602,8 @@ def handle_ip_pool_create(request: Request) -> Response:
         )
         context.update(_resources_permission_flags(auth=auth))
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = IP_POOL_FIELD_LABELS
         response = _render(
             template_name="resources/ip_pools/create.html",
             context=context,
@@ -701,8 +742,11 @@ def handle_ip_pool_edit(request: Request) -> Response:
 
         method = request.method.upper()
         form_view: Optional[MultiFormView] = None
+        errors: Dict[str, str] = {}
+        status_code = 200
 
         if method == "POST":
+            status_code = 400
             single_form = _parse_form_or_empty(request=request)
             multi_form = _parse_form_multi(request=request)
             form_view = MultiFormView(data=multi_form)
@@ -765,21 +809,23 @@ def handle_ip_pool_edit(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                message = _describe_ip_pool_error(exc=exc)
-                if message is None:
-                    _LOGGER.exception(
-                        "Unexpected error updating IP pool %s",
-                        pool_id,
+                errors = _ip_pool_field_errors(exc=exc)
+                if len(errors) == 0:
+                    message = _describe_ip_pool_error(exc=exc)
+                    if message is None:
+                        _LOGGER.exception(
+                            "Unexpected error updating IP pool %s",
+                            pool_id,
+                        )
+                        message = (
+                            "An unexpected error occurred while updating"
+                            " the IP pool. The problem has been logged."
+                        )
+                    flash.add_flash(
+                        session=auth.session,
+                        message=message,
+                        category=flash.CATEGORY_ERROR,
                     )
-                    message = (
-                        "An unexpected error occurred while updating"
-                        " the IP pool. The problem has been logged."
-                    )
-                flash.add_flash(
-                    session=auth.session,
-                    message=message,
-                    category=flash.CATEGORY_ERROR,
-                )
 
         # GET, or POST that fell through -- re-render with the
         # submitted values (``form_data``) when a POST failed so
@@ -794,9 +840,12 @@ def handle_ip_pool_edit(request: Request) -> Response:
         context.update(_resources_permission_flags(auth=auth))
         context["pool"] = pool
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = IP_POOL_FIELD_LABELS
         response = _render(
             template_name="resources/ip_pools/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
