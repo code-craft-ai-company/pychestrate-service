@@ -407,6 +407,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "selected_scope_id": _by_mode(7, None),
     "selected_channel_id": _by_mode(7, None),
     "errors": _by_mode({"name": "Name is required."}, {}),
+    "error_labels": _by_mode({"name": "Name"}, {}),
     "selected_pool_id": _by_mode(7, None),
     "selected_job_id": _by_mode(7, None),
     "selected_step": _by_mode("build", None),
