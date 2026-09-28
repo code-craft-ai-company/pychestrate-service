@@ -1057,7 +1057,8 @@ def test_handle_project_create_post_invalid_metadata_json_re_renders():
     """
     **Feature: webworks projects port T9.6 (F1)**
     **Property: A POST with non-JSON metadata yields a 400
-    re-render with an error flash; create_project not called.**
+    re-render with the error on the metadata field; create_project
+    not called.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1083,10 +1084,9 @@ def test_handle_project_create_post_invalid_metadata_json_re_renders():
 
         testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        testbase.assert_equal(len(ctx["flashes"]), 1)
-        category, message = ctx["flashes"][0]
-        testbase.assert_equal(category, "error")
-        contains = "Invalid JSON" in message
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(list(ctx["errors"].keys()), ["metadata"])
+        contains = "Invalid JSON" in ctx["errors"]["metadata"]
         testbase.assert_equal(contains, True)
         # ProjectManager construction is deferred until after the
         # metadata parse succeeds; on the JSON-error path the

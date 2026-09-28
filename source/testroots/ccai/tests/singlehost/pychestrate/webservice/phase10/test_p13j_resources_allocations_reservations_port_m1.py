@@ -1109,8 +1109,8 @@ def test_handle_reservation_create_post_missing_times_re_renders():
     """
     **Feature: webworks resources port T7.12 (E3)**
     **Property: A POST without start_time / end_time
-    re-renders the form (400) with an error flash and does
-    NOT call create_reservation.**
+    re-renders the form (400) with an error on each time field and
+    does NOT call create_reservation.**
     """
     _reset_global_state()
     sm_patch = None
@@ -1144,12 +1144,8 @@ def test_handle_reservation_create_post_missing_times_re_renders():
 
         testbase.assert_equal(response.status_code, 400)
         ctx = env.last_template.render_calls[0]
-        flashes = ctx["flashes"]
-        testbase.assert_equal(len(flashes), 1)
-        category, message = flashes[0]
-        testbase.assert_equal(category, "error")
-        contains = "Start time and end time" in message
-        testbase.assert_equal(contains, True)
+        testbase.assert_equal(ctx["flashes"], [])
+        testbase.assert_equal(sorted(ctx["errors"].keys()), ["end_time", "start_time"])
         am = _FakeAllocationManager.last_instance
         testbase.assert_equal(am.create_reservation_calls, [])
     finally:
@@ -1621,18 +1617,17 @@ def test_reservation_edit_with_a_cleared_time_is_refused():
     """
     **Feature: resources (RES-02 reservation times)**
     **Property: an edit POST with an empty end time is re-rendered with
-    "Start time and end time are required." instead of being passed on
-    as "no change".**
+    the error on the end time field instead of being passed on as "no
+    change".**
     """
     response, env, am = _run_reservation_edit(method="POST", body=(
         b"csrf_token=csrf-fresh&start_time=2026-05-05T09%3A00&end_time="
     ))
 
     ctx = env.last_template.render_calls[0]
-    category, message = ctx["flashes"][0]
     testbase.assert_equal(
-        (category, message, am.modify_reservation_calls),
-        ("error", "Start time and end time are required.", []),
+        (ctx["flashes"], ctx["errors"], am.modify_reservation_calls),
+        ([], {"end_time": "Enter an end time."}, []),
     )
     return
 
