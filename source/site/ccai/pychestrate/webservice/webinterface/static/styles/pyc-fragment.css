@@ -19,6 +19,28 @@
     font-family: var(--pyc-font-family-base, inherit);
 }
 
+/* ---- Links ---------------------------------------------------------
+   Plain links (entity names in tables, "Create your first project")
+   take the accent colour instead of the browser's #0000EE blue and
+   lavender visited / dark-mode shades (XC-23). :where() keeps this at
+   one-class specificity, so buttons and the sub-navigation, pager and
+   breadcrumb link rules below still win. Links stay underlined so
+   colour is not the only thing that marks them. */
+
+.pyc-admin-page-fragment :where(a:not(.btn)) {
+    color: var(--pyc-color-accent-on-surface);
+}
+
+.pyc-admin-page-fragment :where(a:not(.btn)):hover {
+    text-decoration-thickness: 0.125rem;
+}
+
+.pyc-admin-page-fragment :where(a:not(.btn)):focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 0.125rem;
+    border-radius: 0.125rem;
+}
+
 /* ---- Layout: sub-navigation beside content ------------------------ */
 
 .pyc-admin-page-fragment .pyc-subnav-layout {
