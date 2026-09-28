@@ -56,6 +56,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -83,6 +84,13 @@ _ROUTE_TABLE = (
 
 # Permission each route enforces server-side (see
 # ``routes._require_admin_permission_for``). Roles and their permission sets.
+#: Visible labels of the role form fields, for the error summary.
+ROLE_FIELD_LABELS: Dict[str, str] = {
+    "name": "Role Name",
+    "description": "Description",
+    "permission_keys": "Permissions",
+}
+
 _ROUTE_PERMISSIONS = {
     "config.role_list": "system:rbac.read",
     "config.role_create": "system:rbac.admin",
@@ -369,6 +377,7 @@ def handle_role_create(request: Request) -> Response:
         )
 
         exc_classes = _roles_exception_classes()
+        errors: Dict[str, str] = {}
 
         try:
             _svc_create_role(
@@ -386,18 +395,14 @@ def handle_role_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except exc_classes["AdminValidationError"] as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=getattr(exc, "message", str(exc)),
-                category=flash.CATEGORY_ERROR,
-            )
-        except exc_classes["AdminDuplicateError"] as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=getattr(exc, "message", str(exc)),
-                category=flash.CATEGORY_ERROR,
-            )
+        except (exc_classes["AdminValidationError"], exc_classes["AdminDuplicateError"]) as exc:
+            errors = form_errors.field_errors_from(exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=form_errors.error_message(exc),
+                    category=flash.CATEGORY_ERROR,
+                )
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
@@ -416,6 +421,8 @@ def handle_role_create(request: Request) -> Response:
         )
         context["permissions"] = permissions
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = ROLE_FIELD_LABELS
         response = _render(
             template_name="config/roles/create.html",
             context=context,
@@ -505,6 +512,9 @@ def handle_role_edit(request: Request) -> Response:
             return response
 
         method = request.method.upper()
+        errors: Dict[str, str] = {}
+        submitted: Optional[Dict[str, Any]] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -555,17 +565,21 @@ def handle_role_edit(request: Request) -> Response:
                 and len(permission_keys) == 0
             )
 
+            submitted = {
+                "description": description,
+                "permission_keys": list(permission_keys),
+            }
+            status_code = 400
+
             if removing_all_permissions is True and confirm_remove_all is False:
-                flash.add_flash(
-                    session=auth.session,
-                    message=(
-                        "No permissions are selected. Tick "
-                        '"I intend to remove all permissions from '
-                        'this role" to confirm, or select the '
-                        "permissions the role should keep."
+                errors = {
+                    "permission_keys": (
+                        "No permissions are selected. Select the "
+                        "permissions the role should keep, or tick "
+                        '"Yes, save this role with no permissions" '
+                        "to remove them all."
                     ),
-                    category=flash.CATEGORY_ERROR,
-                )
+                }
             else:
                 exc_classes = _roles_exception_classes()
                 try:
@@ -597,11 +611,13 @@ def handle_role_edit(request: Request) -> Response:
                     )
                     return response
                 except exc_classes["AdminValidationError"] as exc:
-                    flash.add_flash(
-                        session=auth.session,
-                        message=getattr(exc, "message", str(exc)),
-                        category=flash.CATEGORY_ERROR,
-                    )
+                    errors = form_errors.field_errors_from(exc)
+                    if len(errors) == 0:
+                        flash.add_flash(
+                            session=auth.session,
+                            message=form_errors.error_message(exc),
+                            category=flash.CATEGORY_ERROR,
+                        )
                 except Exception as exc:
                     flash.add_flash(
                         session=auth.session,
@@ -622,8 +638,11 @@ def handle_role_edit(request: Request) -> Response:
 
         permissions = _svc_list_catalog_permissions()
         current_permission_keys: List[str] = []
-        for entry in role.permissions:
-            current_permission_keys.append(entry.id)
+        if submitted is not None:
+            current_permission_keys = list(submitted["permission_keys"])
+        else:
+            for entry in role.permissions:
+                current_permission_keys.append(entry.id)
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -635,9 +654,13 @@ def handle_role_edit(request: Request) -> Response:
         context["role"] = role
         context["permissions"] = permissions
         context["current_permission_keys"] = current_permission_keys
+        context["submitted"] = submitted
+        context["errors"] = errors
+        context["error_labels"] = ROLE_FIELD_LABELS
         response = _render(
             template_name="config/roles/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session

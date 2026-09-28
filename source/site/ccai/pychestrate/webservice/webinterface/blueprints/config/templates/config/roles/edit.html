@@ -12,7 +12,8 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="ro-role-name">Role Name</label>
             <input type="text" class="form-control" value="{{ role.name }}" id="ro-role-name" disabled>
@@ -21,13 +22,13 @@
         
         <div class="form-group">
             <label for="description">Description</label>
-            <textarea id="description" name="description" class="form-control" rows="3">{{ role.description or '' }}</textarea>
+            <textarea id="description" name="description" class="form-control" rows="3">{{ submitted.description if submitted else (role.description or '') }}</textarea>
         </div>
         
         {% if permissions %}
         <div class="form-group">
-            <label>Permissions</label>
-            <div class="scroll-box">
+            <label id="permission_keys-label">Permissions</label>
+            <div class="scroll-box" id="permission_keys" role="group" aria-labelledby="permission_keys-label"{% if errors and 'permission_keys' in errors %} aria-describedby="permission_keys-error"{% endif %} tabindex="-1">
                 {% for permission in permissions %}
                 <div class="my-sm">
                     <label class="regular">
@@ -39,10 +40,11 @@
                 </div>
                 {% endfor %}
             </div>
+            {{ ui.field_error(errors, 'permission_keys') }}
         </div>
         {% endif %}
 
-        <details class="form-group">
+        <details class="form-group"{% if errors and 'permission_keys' in errors %} open{% endif %}>
             <summary class="muted">Removing every permission from this role?</summary>
             <label class="regular mt-sm">
                 <input type="checkbox" name="confirm_remove_all">

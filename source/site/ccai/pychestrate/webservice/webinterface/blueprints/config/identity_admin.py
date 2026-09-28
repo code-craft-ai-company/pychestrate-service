@@ -2048,7 +2048,7 @@ def _validate_permission_keys(*, permission_keys: List[str]) -> None:
         for key in unknown:
             err_msg_lines.append("    {}".format(key))
         err_msg = os.linesep.join(err_msg_lines)
-        raise AdminValidationError(err_msg)
+        raise AdminValidationError(err_msg, field="permission_keys")
     return
 
 

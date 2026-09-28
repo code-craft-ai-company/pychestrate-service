@@ -304,3 +304,96 @@ def test_edit_variable_bad_value_keeps_the_typed_text_and_marks_the_field():
         (400, True, "seven", "typed description"),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Roles
+# ---------------------------------------------------------------------------
+
+
+def _create_role(setup: Dict[str, Any], **overrides: Any) -> Any:
+    fields = {"name": _unique("role"), "description": "made by a test"}
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/roles/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_create_role_without_a_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: creating a role with a blank name is refused (400) with
+    the error next to the name input, and the typed description is
+    kept.**
+    """
+    setup = _setup()
+    response = _create_role(setup, name="", description="typed description")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "typed description"),
+    )
+    return
+
+
+def test_create_role_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second role with an existing name is refused with the
+    error next to the name input.**
+    """
+    setup = _setup()
+    name = _unique("duprole")
+    _create_role(setup, name=name)
+    response = _create_role(setup, name=name)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text), (400, True),
+    )
+    return
+
+
+def _role_id_for(setup: Dict[str, Any], *, name: str) -> str:
+    page = drive_request(
+        wsgi_app=setup["wsgi_app"], method="GET", path="/admin/roles",
+        query_string="search=" + name, cookies=setup["cookies"],
+    ).text
+    match = re.search(r'href="/admin/roles/([0-9a-f-]{36})"[^>]*>\s*' + re.escape(name), page)
+    testbase.assert_true(match is not None, "role {} not listed".format(name))
+    rtnval = match.group(1)
+    return rtnval
+
+
+def test_edit_role_removing_every_permission_unconfirmed_is_a_permissions_error():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: saving a role that has permissions with none selected
+    and no confirmation is refused (400) with the error on the
+    permissions group, the typed description kept, and the confirmation
+    disclosure open.**
+    """
+    setup = _setup()
+    name = _unique("editrole")
+    handle_permissions = re.findall(
+        r'name="permission_keys" value="([^"]+)"',
+        drive_request(wsgi_app=setup["wsgi_app"], method="GET", path="/admin/roles/create", cookies=setup["cookies"]).text,
+    )
+    testbase.assert_true(len(handle_permissions) > 0, "the catalog offered no permissions")
+    _create_role(setup, name=name, permission_keys=handle_permissions[0])
+    role_id = _role_id_for(setup, name=name)
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/admin/roles/{}/edit".format(role_id),
+        cookies=setup["cookies"],
+        fields={"description": "typed description"},
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="permission_keys-error"' in response.text,
+         '<details class="form-group" open>' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, True, "typed description"),
+    )
+    return
