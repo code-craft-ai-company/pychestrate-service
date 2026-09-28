@@ -20,6 +20,9 @@ Using Pychestrate
   server, finish the setup wizard, and create your first project.
 * `RPA Jobs <19-00-rpa-jobs.rst>`_ -- register versioned automations and
   run them from a project.
+* `Running and Reading Work <16-00-running-and-reading-work.rst>`_ --
+  start a test run or a build, follow it, read the result, cancel it, and
+  what each run state means.
 * `Managing the Lab <15-00-lab-administration.rst>`_ -- devices,
   resource pools, IP pools, check-out and check-in, reservations, and
   health checks.
@@ -72,6 +75,7 @@ root. The standards and internals it refers to:
 
    01-00-overview
    02-00-getting-started
+   16-00-running-and-reading-work
    15-00-lab-administration
    19-00-rpa-jobs
    20-00-ui-profiles
