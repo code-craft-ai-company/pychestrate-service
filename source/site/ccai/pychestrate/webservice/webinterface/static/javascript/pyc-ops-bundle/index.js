@@ -312,10 +312,33 @@ var PycWebhooks = class extends HTMLElement {
     const tabs = document.createElement("div");
     tabs.classList.add("pyc-ops__tabs");
     tabs.setAttribute("role", "tablist");
+    tabs.setAttribute("aria-label", "Webhook direction");
     const inbound_tab = this._build_tab_button("inbound", "Inbound");
     const outbound_tab = this._build_tab_button("outbound", "Outbound");
     tabs.appendChild(inbound_tab);
     tabs.appendChild(outbound_tab);
+    tabs.addEventListener("keydown", (event) => {
+      const order = ["inbound", "outbound"];
+      const current = order.indexOf(this._activeTab);
+      let next = current;
+      if (event.key === "ArrowRight") {
+        next = (current + 1) % order.length;
+      } else if (event.key === "ArrowLeft") {
+        next = (current - 1 + order.length) % order.length;
+      } else if (event.key === "Home") {
+        next = 0;
+      } else if (event.key === "End") {
+        next = order.length - 1;
+      } else {
+        return;
+      }
+      event.preventDefault();
+      this.selectTab(order[next]);
+      const focus_target = tabs.querySelector('[data-role="tab-' + order[next] + '"]');
+      if (focus_target !== null) {
+        focus_target.focus();
+      }
+    });
     root.appendChild(tabs);
     const toast_region = document.createElement("div");
     toast_region.classList.add("pyc-ops__toast-region");
@@ -325,6 +348,9 @@ var PycWebhooks = class extends HTMLElement {
     const panel_region = document.createElement("div");
     panel_region.classList.add("pyc-ops__panel-region");
     panel_region.setAttribute("data-role", "panel-region");
+    panel_region.id = "pyc-webhooks-panel";
+    panel_region.setAttribute("role", "tabpanel");
+    panel_region.setAttribute("aria-labelledby", "pyc-webhooks-tab-" + this._activeTab);
     root.appendChild(panel_region);
     this._panel_region = panel_region;
     this._root = root;
@@ -342,15 +368,16 @@ var PycWebhooks = class extends HTMLElement {
    * @returns The created tab button.
    */
   _build_tab_button(tab_id, label) {
-    const button = document.createElement("mj-button");
+    const button = document.createElement("button");
     button.classList.add("pyc-ops__tab");
     button.setAttribute("type", "button");
     button.setAttribute("role", "tab");
+    button.id = "pyc-webhooks-tab-" + tab_id;
+    button.setAttribute("aria-controls", "pyc-webhooks-panel");
     button.setAttribute("data-role", "tab-" + tab_id);
-    button.setAttribute(
-      "aria-selected",
-      this._activeTab === tab_id ? "true" : "false"
-    );
+    const selected = this._activeTab === tab_id;
+    button.setAttribute("aria-selected", selected === true ? "true" : "false");
+    button.tabIndex = selected === true ? 0 : -1;
     button.textContent = label;
     button.addEventListener("click", () => {
       this.selectTab(tab_id);
@@ -369,21 +396,16 @@ var PycWebhooks = class extends HTMLElement {
     }
     this._activeTab = tab_id;
     if (this._root !== null) {
-      const inbound = this._root.querySelector('[data-role="tab-inbound"]');
-      const outbound = this._root.querySelector(
-        '[data-role="tab-outbound"]'
-      );
-      if (inbound instanceof HTMLElement) {
-        inbound.setAttribute(
-          "aria-selected",
-          tab_id === "inbound" ? "true" : "false"
-        );
+      for (const candidate of ["inbound", "outbound"]) {
+        const tab = this._root.querySelector('[data-role="tab-' + candidate + '"]');
+        if (tab instanceof HTMLElement) {
+          const selected = candidate === tab_id;
+          tab.setAttribute("aria-selected", selected === true ? "true" : "false");
+          tab.tabIndex = selected === true ? 0 : -1;
+        }
       }
-      if (outbound instanceof HTMLElement) {
-        outbound.setAttribute(
-          "aria-selected",
-          tab_id === "outbound" ? "true" : "false"
-        );
+      if (this._panel_region !== null) {
+        this._panel_region.setAttribute("aria-labelledby", "pyc-webhooks-tab-" + tab_id);
       }
     }
     this._render_active_tab();

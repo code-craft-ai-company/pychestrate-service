@@ -390,8 +390,11 @@ class PycSecrets extends HTMLElement {
     table_region.classList.add("pyc-secrets__table-region");
     table_region.setAttribute("data-role", "table-region");
     table_region.id = "pyc-secrets-tabpanel";
-    table_region.setAttribute("role", "region");
-    table_region.setAttribute("aria-label", "Secrets in the selected scope");
+    table_region.setAttribute("role", "tabpanel");
+    table_region.setAttribute(
+      "aria-labelledby",
+      "pyc-secrets-tab-" + String(this._state.scopeKind).toLowerCase()
+    );
     // The region scrolls sideways when the table is wider than it;
     // a tab stop lets keyboard users scroll it.
     table_region.tabIndex = 0;
@@ -420,7 +423,7 @@ class PycSecrets extends HTMLElement {
   _build_scope_tabs() {
     const tabs = document.createElement("div");
     tabs.classList.add("pyc-secrets__tabs");
-    tabs.setAttribute("role", "group");
+    tabs.setAttribute("role", "tablist");
     tabs.setAttribute("aria-label", "Secret scope");
     const labels = {
       ORG: "Org",
@@ -428,14 +431,21 @@ class PycSecrets extends HTMLElement {
       USER: "User"
     };
     for (const kind of SECRET_SCOPE_KINDS) {
-      const tab = document.createElement("mj-button");
+      // A plain <button>: an <mj-button> host wraps the library's own
+      // <button>, and the selected state has to be on the element
+      // that has the tab role and that the stylesheet can reach.
+      const tab = document.createElement("button");
       tab.classList.add("pyc-secrets__tab");
       tab.setAttribute("type", "button");
+      tab.setAttribute("role", "tab");
       tab.id = "pyc-secrets-tab-" + kind.toLowerCase();
+      tab.setAttribute("aria-controls", "pyc-secrets-tabpanel");
       tab.setAttribute("data-role", "scope-tab");
       tab.setAttribute("data-scope-kind", kind);
       tab.textContent = labels[kind];
-      tab.setAttribute("aria-pressed", kind === this._state.scopeKind ? "true" : "false");
+      const selected = kind === this._state.scopeKind;
+      tab.setAttribute("aria-selected", selected === true ? "true" : "false");
+      tab.tabIndex = selected === true ? 0 : -1;
       tab.addEventListener("click", () => {
         this._select_scope(kind);
       });
@@ -577,12 +587,15 @@ class PycSecrets extends HTMLElement {
     if (this._root !== null) {
       const tabs = this._root.querySelectorAll('[data-role="scope-tab"]');
       for (const tab of Array.from(tabs)) {
-        const kind = tab.getAttribute("data-scope-kind");
-        if (kind === scope_kind) {
-          tab.setAttribute("aria-selected", "true");
-        } else {
-          tab.setAttribute("aria-selected", "false");
-        }
+        const selected = tab.getAttribute("data-scope-kind") === scope_kind;
+        tab.setAttribute("aria-selected", selected === true ? "true" : "false");
+        tab.tabIndex = selected === true ? 0 : -1;
+      }
+      if (this._table_region !== null) {
+        this._table_region.setAttribute(
+          "aria-labelledby",
+          "pyc-secrets-tab-" + String(scope_kind).toLowerCase()
+        );
       }
       const input = this._root.querySelector('[data-role="scope-ref-input"]');
       if (input instanceof HTMLElement) {
