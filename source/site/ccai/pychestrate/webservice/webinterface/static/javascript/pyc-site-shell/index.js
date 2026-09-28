@@ -781,6 +781,10 @@ function install_chip_tone() {
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-site-shell/chrome/home-view.js
+var PROJECTS_URL = "/api/v1/projects?per_page=1";
+var CLIENTS_URL = "/api/v1/clients?per_page=1";
+var RUNS_URL = "/api/v1/runs?per_page=5";
+var RECENT_RUN_LIMIT = 5;
 function build_home_view(options) {
   const panel = document.createElement("section");
   panel.classList.add("pyc-site-shell__home");
@@ -791,11 +795,282 @@ function build_home_view(options) {
   panel.appendChild(heading);
   const subtitle = document.createElement("p");
   subtitle.classList.add("pyc-site-shell__home-subtitle");
-  subtitle.textContent = "Choose a destination to get started.";
+  subtitle.textContent = "Checking what is set up\u2026";
   panel.appendChild(subtitle);
-  const grid = build_nav_link_grid(options.visible_sidebar);
-  panel.appendChild(grid);
+  const status = document.createElement("div");
+  status.classList.add("pyc-site-shell__home-status");
+  status.setAttribute("aria-live", "polite");
+  panel.appendChild(status);
+  const sections = document.createElement("details");
+  sections.classList.add("pyc-site-shell__home-sections");
+  sections.setAttribute("data-role", "all-sections");
+  const summary = document.createElement("summary");
+  summary.textContent = "All sections";
+  sections.appendChild(summary);
+  sections.appendChild(build_nav_link_grid(options.visible_sidebar));
+  panel.appendChild(sections);
+  void hydrate_home_view(panel, subtitle, status, sections, options);
   return panel;
+}
+async function hydrate_home_view(panel, subtitle, status, sections, options) {
+  const fetch_impl = typeof options.fetch_impl === "function" ? options.fetch_impl : window.fetch.bind(window);
+  const routes = visible_routes(options.visible_sidebar);
+  const wants_projects = routes.has("/projects");
+  const wants_clients = routes.has("/clients");
+  const wants_runs = routes.has("/runs");
+  const [projects, clients, runs] = await Promise.all([
+    wants_projects ? fetch_page(PROJECTS_URL, fetch_impl) : Promise.resolve(null),
+    wants_clients ? fetch_page(CLIENTS_URL, fetch_impl) : Promise.resolve(null),
+    wants_runs ? fetch_page(RUNS_URL, fetch_impl) : Promise.resolve(null)
+  ]);
+  const counts = {
+    projects: total_of(projects),
+    clients: total_of(clients),
+    runs: total_of(runs)
+  };
+  const steps = build_steps(counts, routes);
+  const readable = counts.projects !== null || counts.clients !== null || counts.runs !== null;
+  status.textContent = "";
+  if (readable === false) {
+    subtitle.textContent = "Choose a destination to get started.";
+    sections.open = true;
+  } else if (all_done(steps) === true) {
+    subtitle.textContent = "You are set up. Pick up where you left off.";
+    sections.open = false;
+  } else {
+    subtitle.textContent = "Three steps to your first run.";
+    status.appendChild(build_checklist(steps));
+    sections.open = false;
+  }
+  if (runs !== null && Array.isArray(runs.items) === true && runs.items.length > 0) {
+    status.appendChild(build_recent_runs(runs.items.slice(0, RECENT_RUN_LIMIT)));
+  }
+  panel.setAttribute("data-home-ready", "true");
+  panel.dispatchEvent(new CustomEvent("pyc-site-shell-home-hydrated", { bubbles: true }));
+  return;
+}
+async function fetch_page(url, fetch_impl) {
+  let rtnval = null;
+  try {
+    const response = await fetch_impl(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+    if (response.ok === true) {
+      rtnval = await response.json();
+    }
+  } catch (reason) {
+    console.warn("pychestrate.ui.shell.home_fetch_failed", { url, reason: String(reason) });
+  }
+  return rtnval;
+}
+function total_of(body) {
+  let rtnval = null;
+  if (Array.isArray(body) === true) {
+    rtnval = body.length;
+  } else if (body !== null && typeof body === "object") {
+    if (body.meta !== void 0 && body.meta !== null && typeof body.meta.total === "number") {
+      rtnval = body.meta.total;
+    } else if (Array.isArray(body.items) === true) {
+      rtnval = body.items.length;
+    }
+  }
+  return rtnval;
+}
+function visible_routes(visible_sidebar) {
+  const rtnval = /* @__PURE__ */ new Set();
+  for (const entry of visible_sidebar.ungrouped) {
+    rtnval.add(entry.route);
+  }
+  for (const bucket of visible_sidebar.groups) {
+    for (const entry of bucket.entries) {
+      rtnval.add(entry.route);
+    }
+  }
+  return rtnval;
+}
+function build_steps(counts, routes) {
+  const project_actions = [];
+  if (routes.has("/projects") === true) {
+    project_actions.push({ label: "Create a project", href: "/projects/create" });
+  }
+  const pod_actions = [];
+  let pod_detail = "A pod is a machine that runs your jobs. Mint an enrollment token, then run the client on the machine.";
+  if (routes.has("/admin/enrollment-tokens") === true) {
+    pod_actions.push({ label: "Mint an enrollment token", href: "/admin/enrollment-tokens" });
+  } else {
+    pod_detail = "A pod is a machine that runs your jobs. Ask an administrator to enroll one.";
+  }
+  const run_actions = [];
+  if (routes.has("/test-catalog") === true) {
+    run_actions.push({ label: "Import tests", href: "/test-catalog" });
+  }
+  if (routes.has("/builds") === true) {
+    run_actions.push({ label: "Start a build", href: "/builds" });
+  }
+  if (routes.has("/runs") === true) {
+    run_actions.push({ label: "See runs", href: "/runs" });
+  }
+  const rtnval = [
+    {
+      id: "project",
+      title: "Create a project",
+      detail: "Projects organize your jobs, pods and resources.",
+      done: done_from(counts.projects),
+      actions: project_actions
+    },
+    {
+      id: "pod",
+      title: "Enroll a pod",
+      detail: pod_detail,
+      done: done_from(counts.clients),
+      actions: pod_actions
+    },
+    {
+      id: "run",
+      title: "Run something",
+      detail: "Add tests, a build or an RPA job to a project, then start a run.",
+      done: done_from(counts.runs),
+      actions: run_actions
+    }
+  ];
+  return rtnval;
+}
+function done_from(count) {
+  let rtnval = null;
+  if (count !== null) {
+    rtnval = count > 0;
+  }
+  return rtnval;
+}
+function all_done(steps) {
+  let rtnval = true;
+  for (const step of steps) {
+    if (step.done !== true) {
+      rtnval = false;
+    }
+  }
+  return rtnval;
+}
+function build_checklist(steps) {
+  const section = document.createElement("section");
+  section.classList.add("pyc-site-shell__getting-started");
+  section.setAttribute("data-role", "getting-started");
+  section.setAttribute("aria-labelledby", "pyc-getting-started-heading");
+  const heading = document.createElement("h2");
+  heading.id = "pyc-getting-started-heading";
+  heading.classList.add("pyc-site-shell__home-section-heading");
+  heading.textContent = "Get started";
+  section.appendChild(heading);
+  const list = document.createElement("ol");
+  list.classList.add("pyc-site-shell__checklist");
+  for (const step of steps) {
+    list.appendChild(build_step(step));
+  }
+  section.appendChild(list);
+  return section;
+}
+function build_step(step) {
+  const item = document.createElement("li");
+  item.classList.add("pyc-site-shell__checklist-step");
+  item.setAttribute("data-step", step.id);
+  let state = "unknown";
+  if (step.done === true) {
+    state = "done";
+  } else if (step.done === false) {
+    state = "todo";
+  }
+  item.setAttribute("data-state", state);
+  const mark = document.createElement("span");
+  mark.classList.add("pyc-site-shell__checklist-mark");
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = state === "done" ? "\u2713" : "";
+  item.appendChild(mark);
+  const body = document.createElement("div");
+  body.classList.add("pyc-site-shell__checklist-body");
+  const title = document.createElement("p");
+  title.classList.add("pyc-site-shell__checklist-title");
+  title.textContent = step.title;
+  if (state === "done") {
+    const hidden = document.createElement("span");
+    hidden.classList.add("pyc-site-shell__visually-hidden");
+    hidden.textContent = " (done)";
+    title.appendChild(hidden);
+  }
+  body.appendChild(title);
+  const detail = document.createElement("p");
+  detail.classList.add("pyc-site-shell__checklist-detail");
+  detail.textContent = step.detail;
+  body.appendChild(detail);
+  if (state !== "done" && step.actions.length > 0) {
+    const actions = document.createElement("p");
+    actions.classList.add("pyc-site-shell__checklist-actions");
+    for (const action of step.actions) {
+      const link = document.createElement("a");
+      link.href = action.href;
+      link.textContent = action.label;
+      actions.appendChild(link);
+    }
+    body.appendChild(actions);
+  }
+  item.appendChild(body);
+  return item;
+}
+var RUN_ERROR_STATES = ["failed", "dispatch_failed", "dispatch_lost", "needs_investigation"];
+var RUN_WARN_STATES = ["progress_stalled", "dispatch_unconfirmed", "cancel_requested", "cancelling", "cancelled"];
+function run_tone(run_state) {
+  let rtnval = "neutral";
+  if (run_state === "completed") {
+    rtnval = "ok";
+  } else if (RUN_ERROR_STATES.indexOf(run_state) >= 0) {
+    rtnval = "error";
+  } else if (RUN_WARN_STATES.indexOf(run_state) >= 0) {
+    rtnval = "warn";
+  }
+  return rtnval;
+}
+function build_recent_runs(runs) {
+  const section = document.createElement("section");
+  section.classList.add("pyc-site-shell__recent-runs");
+  section.setAttribute("data-role", "recent-runs");
+  section.setAttribute("aria-labelledby", "pyc-recent-runs-heading");
+  const heading = document.createElement("h2");
+  heading.id = "pyc-recent-runs-heading";
+  heading.classList.add("pyc-site-shell__home-section-heading");
+  heading.textContent = "Recent runs";
+  section.appendChild(heading);
+  const list = document.createElement("ul");
+  list.classList.add("pyc-site-shell__recent-runs-list");
+  for (const run of runs) {
+    const item = document.createElement("li");
+    item.classList.add("pyc-site-shell__recent-run");
+    const link = document.createElement("a");
+    const run_id = String(run.run_id);
+    link.href = "/runs/" + run_id;
+    link.textContent = run_id.slice(0, 8);
+    item.appendChild(link);
+    const chip = document.createElement("mj-chip");
+    chip.setAttribute("data-tone", run_tone(run.state));
+    chip.textContent = String(run.state);
+    item.appendChild(chip);
+    const when = document.createElement("span");
+    when.classList.add("pyc-site-shell__recent-run-time");
+    const stamp = run.completed_at || run.started_at || run.created_at;
+    const parsed = stamp ? new Date(stamp) : null;
+    when.textContent = parsed !== null && Number.isNaN(parsed.getTime()) === false ? parsed.toLocaleString() : "";
+    item.appendChild(when);
+    list.appendChild(item);
+  }
+  section.appendChild(list);
+  const all = document.createElement("p");
+  all.classList.add("pyc-site-shell__recent-runs-all");
+  const all_link = document.createElement("a");
+  all_link.href = "/runs";
+  all_link.textContent = "All runs";
+  all.appendChild(all_link);
+  section.appendChild(all);
+  return section;
 }
 function build_nav_link_grid(visible_sidebar) {
   const grid = document.createElement("nav");
