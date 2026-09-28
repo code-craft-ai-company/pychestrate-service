@@ -51,7 +51,7 @@
 <p class="muted">This repository cannot be removed while build specifications build it: {{ repository_specs | join(', ') }}. Delete them or point them at another repository first.</p>
 {% endif %}
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 30px;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); gap: 20px; margin-bottom: 30px;">
     <div class="card">
         <div class="muted">URL</div>
         <div style="font-family: monospace; font-size: 0.9rem; word-break: break-all;">{{ repository.url }}</div>

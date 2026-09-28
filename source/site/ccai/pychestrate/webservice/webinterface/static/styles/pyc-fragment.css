@@ -62,10 +62,41 @@
 @media (max-width: 900px) {
     .pyc-admin-page-fragment .pyc-subnav-layout {
         flex-direction: column;
+        /* The row layout aligns to flex-start, which in a column sizes
+           each child to its content instead of to the column, so the
+           page ran wider than the screen inside a shell that hides
+           horizontal overflow (RES-15). Fill the column instead. */
+        align-items: stretch;
     }
     .pyc-admin-page-fragment .pyc-subnav {
         flex-basis: auto;
         width: 100%;
+    }
+
+    /* The sub-navigation has 10 to 16 links; stacked they filled the
+       first screen. One scrolling row keeps them all reachable. */
+    .pyc-admin-page-fragment .pyc-subnav ul {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 0.25rem;
+        overflow-x: auto;
+        padding-bottom: 0.25rem;
+    }
+    .pyc-admin-page-fragment .pyc-subnav li {
+        flex: 0 0 auto;
+    }
+    .pyc-admin-page-fragment .pyc-subnav a {
+        white-space: nowrap;
+    }
+
+    /* A long value with no break point (an id, a path, a hash) wrapped
+       nowhere and ran past the card. break-word only breaks it when it
+       cannot fit, and unlike "anywhere" it leaves table column sizing
+       alone, so tables scroll instead of being crushed. */
+    .pyc-admin-page-fragment .card,
+    .pyc-admin-page-fragment .page-header {
+        min-width: 0;
+        overflow-wrap: break-word;
     }
 }
 
@@ -826,15 +857,30 @@
     grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
 }
 
+/* minmax(0, 1fr): a bare 1fr track cannot shrink below its content, so
+   an unbreakable value widened the whole grid past the screen. */
 .pyc-admin-page-fragment .two-col {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1.25rem;
     margin-bottom: 1.25rem;
 }
 
 @media (max-width: 900px) {
-    .pyc-admin-page-fragment .two-col { grid-template-columns: 1fr; }
+    .pyc-admin-page-fragment .two-col { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* On a narrow screen a table can be wider than the page, and the shell
+   hides horizontal overflow, so its right-hand columns were cut off with
+   no way to reach them (RES-15, ORC-25). Give the table its own
+   horizontal scroll. Above the breakpoint it stays a normal full-width
+   table. */
+@media (max-width: 900px) {
+    .pyc-admin-page-fragment .data-table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+    }
 }
 
 .pyc-admin-page-fragment .data-table th[scope="row"] {
@@ -863,9 +909,9 @@
 .pyc-admin-page-fragment .field-label { display: block; margin-bottom: 0.3rem; font-size: var(--pyc-font-size-small, 0.875rem); }
 .pyc-admin-page-fragment .stat-value { font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .pyc-admin-page-fragment .stat-value--sm { font-size: 1.25rem; font-weight: 500; }
-.pyc-admin-page-fragment .detail-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1.25rem; }
+.pyc-admin-page-fragment .detail-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1.25rem; }
 @media (max-width: 900px) {
-    .pyc-admin-page-fragment .detail-grid { grid-template-columns: 1fr; }
+    .pyc-admin-page-fragment .detail-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 .pyc-admin-page-fragment .pyc-subnav__section { overflow-wrap: anywhere; }

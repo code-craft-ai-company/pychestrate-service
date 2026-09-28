@@ -9,7 +9,7 @@
     <p>Resource health status overview</p>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: 20px; margin-bottom: 30px;">
     <div class="stat-card">
         <span class="health-online pyc-icon-large" aria-hidden="true">{{ ui.icon("check_circle") }}</span>
         <div class="stat-value">{{ health_counts.online }}</div>

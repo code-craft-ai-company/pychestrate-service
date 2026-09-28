@@ -30,7 +30,7 @@
 
 <div class="card">
     <h2 class="card-header">Resource Health Status</h2>
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(9rem, 100%), 1fr)); gap: 20px;">
         <div class="center pad">
             <span class="health-online pyc-icon-large" aria-hidden="true">{{ ui.icon("check_circle") }}</span>
             <div class="stat-value">{{ health_counts.online }}</div>
