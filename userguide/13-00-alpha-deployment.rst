@@ -503,18 +503,138 @@ application in a subprocess, and probes it:
         --output=.output/smoke
 
 
+Back up and restore
+===================
+
+A backup is two files, written under the presence directory
+(``~/pychestrate`` unless ``PYCHESTRATE_PRESENCE_DIR`` says otherwise):
+
+.. list-table::
+   :header-rows: 1
+   :widths: 38 62
+
+   * - File
+     - Holds
+   * - ``backups/<id>.backup.tar.gz`` and its ``.sha256``
+     - A consistent snapshot of the database (SQLite's online backup, or
+       ``pg_dump`` for PostgreSQL) and every run artifact, with a manifest
+       of checksums and row counts.
+   * - ``backup-keys/<id>.keys.tar``
+     - The keys the database is useless without: the key-encryption key,
+       the password pepper, the cookie secret, the job-envelope signing key
+       and the enrollment CA.
+
+The archive holds **no key bytes**. Keep the two files in **different
+places**, so a copied archive alone cannot decrypt the secrets inside it, and
+copy both off the host after every run: a backup that stays on the host is
+lost with its disk.
+
+Run the commands from the service checkout, in the same environment as the
+service, so they find the same database and keys:
+
+.. code-block:: bash
+
+   python -m ccai.pychestrate.admin backup create --note "before upgrade"
+   python -m ccai.pychestrate.admin backup list
+
+A backup is safe to take while the service runs. To take one every night, run
+``backup create --keep 14`` from a systemd timer;
+``deployment/pychestrate-backup.service.template`` and ``.timer.template``
+are the reference, and the alpha deploy installs them. ``--keep 14`` deletes
+all but the newest 14 archives.
+
+Check that a backup can be restored, without touching the live system:
+
+.. code-block:: bash
+
+   python -m ccai.pychestrate.admin backup verify \
+       ~/pychestrate/backups/<id>.backup.tar.gz \
+       --keys ~/pychestrate/backup-keys/<id>.keys.tar
+
+It checks the archive checksum, the manifest, the database (an integrity
+check and the recorded row counts), the artifact count, the key
+fingerprints, and that the key-encryption key unwraps the stored data keys.
+A good backup ends with ``result: restorable``. Do this on a schedule, not
+only after an incident.
+
+A restore replaces the database, the artifacts and the key files, so the
+service must be **stopped**:
+
+.. code-block:: bash
+
+   sudo systemctl stop pychestrate.service
+   python -m ccai.pychestrate.admin backup restore \
+       /path/to/<id>.backup.tar.gz --keys /path/to/<id>.keys.tar --yes
+   sudo systemctl start pychestrate.service
+
+The restore verifies the backup first and changes nothing if a check fails.
+It keeps what it replaces (``pre-restore-<timestamp>`` next to the database,
+and ``artifacts.pre-restore-<timestamp>``); delete them when you are
+satisfied. Sign in and open a secret afterwards to confirm the keys are right.
+On a rebuilt host, deploy first, stop the service, and restore with
+``--overwrite-keys`` so the backed-up keys replace the fresh ones. The full
+procedure, including PostgreSQL client tools and every location setting, is
+in ``deployment/README.md`` ("Backup and restore").
+
+
+Monitor the service
+===================
+
+Two probes need no credentials and reveal nothing but a status word and check
+names, so they can sit behind a load balancer or a container orchestrator:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 24 76
+
+   * - Endpoint
+     - Answers
+   * - ``GET /livez``
+     - ``200`` with ``{"status": "live"}`` while the process serves HTTP. Use
+       it to decide whether to restart the process.
+   * - ``GET /readyz`` (also ``/healthz``)
+     - ``200`` with ``{"status": "ready"}``, or ``503`` when the database
+       does not answer within 3 seconds. Use it to decide whether to send
+       traffic.
+
+``GET /metrics`` serves Prometheus text and needs
+``Authorization: Bearer <token>``, where the token is the contents of the file
+named by ``PYCHESTRATE_METRICS_TOKEN_FILE``. Without it the answer is ``401``.
+Among the metrics is ``pychestrate_backup_last_success_timestamp_seconds``:
+alert when it is older than about 26 hours, so a backup that silently stopped
+does not go unnoticed. Counters and latency histograms are per gunicorn
+worker, so sum series across the ``pid`` label.
+
+.. code-block:: yaml
+
+   scrape_configs:
+     - job_name: pychestrate
+       scheme: https
+       authorization:
+         credentials_file: /etc/prometheus/pychestrate-metrics-token
+       static_configs:
+         - targets: ["pychestrate.example.com"]
+
+The service writes ``~/.pychestrate/server.log`` and, if you run the scheduled
+backup, ``~/.pychestrate/backup.log``; ``deployment/pychestrate.logrotate.template``
+rotates them daily.
+
+
 Upgrade
 =======
 
 #. Read the **Upgrade notes** of every `CHANGELOG.md
    <../CHANGELOG.md>`_ section between your version and the new one.
-#. Stop the service and back up the database (``pg_dump``, or a copy
-   of the SQLite file).
-#. Update the checkout (``git fetch`` and ``git checkout`` the new
-   tag), then run ``development/setup-environment`` to install changed
-   dependencies.
+#. Back up (see `Back up and restore`_): ``backup create --note "before
+   upgrade"``, then copy the two files off the host. A copy of the
+   database alone is not enough; the keys and artifacts are part of the
+   state.
+#. Stop the service, update the checkout (``git fetch`` and ``git checkout``
+   the new tag), then run ``development/setup-environment`` to install
+   changed dependencies.
 #. Load the configuration, run ``make db-upgrade``, and start the
-   service. Run the smoke test after setup.
+   service. Run the smoke test after setup, and confirm ``/readyz`` answers
+   ``200``.
 
 
 CI prerequisite: dependency access
