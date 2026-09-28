@@ -88,16 +88,20 @@ _module_logger = logging.getLogger(__name__)
 class IdentityAdminError(Exception):
     """
         Base class for the admin-page service errors. Carries a
-        ``message`` attribute the route handlers surface in flashes.
+        ``message`` attribute the route handlers surface, and the
+        ``field`` of the form input it is about (None when it is about
+        no single input), so the page can show it next to that input.
     """
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, field: Optional[str] = None) -> None:
         """
             Initialize with a user-facing message.
 
             :param message: Human-readable error description.
+            :param field: The form field the error is about, if any.
         """
         self.message = message
+        self.field = field
         super().__init__(message)
         return
 
@@ -286,14 +290,16 @@ def _validate_new_user_fields(
         raise AdminValidationError(
             "Username must be 3-64 characters, start with alphanumeric, "
             "and contain only alphanumeric characters, underscores, and "
-            "hyphens"
+            "hyphens",
+            field="username",
         )
     if _EMAIL_PATTERN.match(email) is None:
         raise AdminValidationError(
-            "Email address must conform to standard email format"
+            "Email address must conform to standard email format",
+            field="email",
         )
     if display_name is None or len(display_name.strip()) == 0:
-        raise AdminValidationError("Display name is required")
+        raise AdminValidationError("Display name is required", field="display_name")
     if password is not None:
         _validate_password_for_user(
             password=password, login_name=username, email=email
@@ -331,7 +337,8 @@ def _validate_password_for_user(
     )
     if len(problems) > 0:
         raise AdminValidationError(
-            describe_password_problems(problems=problems)
+            describe_password_problems(problems=problems),
+            field="password",
         )
     return
 
@@ -1119,7 +1126,8 @@ def _create_identity_user(
     )
     if existing_login is not None:
         raise AdminDuplicateError(
-            'A user with login "{}" already exists.'.format(normalized_login)
+            'A user with login "{}" already exists.'.format(normalized_login),
+            field="username",
         )
     existing_email = (
         db_session.query(IdentityUser)
@@ -1128,7 +1136,8 @@ def _create_identity_user(
     )
     if existing_email is not None:
         raise AdminDuplicateError(
-            'A user with email "{}" already exists.'.format(normalized_email)
+            'A user with email "{}" already exists.'.format(normalized_email),
+            field="email",
         )
 
     if role_names is None:
@@ -1306,10 +1315,11 @@ def update_identity_user(
     normalized_email = email.strip().lower()
     if _EMAIL_PATTERN.match(normalized_email) is None:
         raise AdminValidationError(
-            "Email address must conform to standard email format"
+            "Email address must conform to standard email format",
+            field="email",
         )
     if display_name is None or len(display_name.strip()) == 0:
-        raise AdminValidationError("Display name is required")
+        raise AdminValidationError("Display name is required", field="display_name")
 
     conflicting_email = (
         db_session.query(IdentityUser)
@@ -1319,7 +1329,8 @@ def update_identity_user(
     )
     if conflicting_email is not None:
         raise AdminDuplicateError(
-            'A user with email "{}" already exists.'.format(normalized_email)
+            'A user with email "{}" already exists.'.format(normalized_email),
+            field="email",
         )
 
     names_before = _read_legacy_names(
@@ -2072,10 +2083,11 @@ def create_rbac_role(
 
     stripped_name = name.strip() if name is not None else ""
     if len(stripped_name) == 0:
-        raise AdminValidationError("Role name is required.")
+        raise AdminValidationError("Role name is required.", field="name")
     if len(stripped_name) > 128:
         raise AdminValidationError(
-            "Role name must be 128 characters or fewer."
+            "Role name must be 128 characters or fewer.",
+            field="name",
         )
 
     existing = (
@@ -2085,7 +2097,8 @@ def create_rbac_role(
     )
     if existing is not None:
         raise AdminDuplicateError(
-            'Role "{}" already exists.'.format(stripped_name)
+            'Role "{}" already exists.'.format(stripped_name),
+            field="name",
         )
 
     if permission_keys is None:

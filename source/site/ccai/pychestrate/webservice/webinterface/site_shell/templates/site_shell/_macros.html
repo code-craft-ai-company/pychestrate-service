@@ -121,10 +121,38 @@
 {%- endif -%}
 {%- endmacro %}
 
-{#- invalid_attrs(errors, name) -- attributes to splice into an input
-    that has a validation error. #}
-{% macro invalid_attrs(errors, name) -%}
-{%- if errors is defined and errors and name in errors %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif -%}
+{#- invalid_attrs(errors, name, describedby="") -- attributes to splice
+    into an input that has a validation error. An input that already
+    points at help text passes that id as describedby instead of
+    writing its own aria-describedby, so the two are merged into one
+    attribute (a second aria-describedby would be ignored). #}
+{% macro invalid_attrs(errors, name, describedby="") -%}
+{%- set has_error = errors is defined and errors and name in errors -%}
+{%- set ids = ((describedby ~ " ") if describedby else "") ~ ((name ~ "-error") if has_error else "") -%}
+{%- if has_error %} aria-invalid="true"{% endif -%}
+{%- if ids | trim %} aria-describedby="{{ ids | trim }}"{% endif -%}
+{%- endmacro %}
+
+{#- error_summary(errors, labels) -- the list of problems at the top of
+    a form that failed validation, each linking to its field (the
+    field's id must equal its name). labels maps a field name to its
+    visible label, which prefixes the message unless the message
+    already starts with it. Renders nothing when there are no field
+    errors. #}
+{% macro error_summary(errors, labels) -%}
+{%- if errors is defined and errors -%}
+<div class="form-error-summary" data-role="error-summary" tabindex="-1" aria-labelledby="form-error-summary-title">
+    <h2 class="form-error-summary__title" id="form-error-summary-title">
+        {%- if errors | length == 1 %}Fix this problem to continue{% else %}Fix these {{ errors | length }} problems to continue{% endif -%}
+    </h2>
+    <ul class="form-error-summary__list">
+        {%- for name, message in errors.items() %}
+        {%- set label = labels[name] if (labels is defined and labels and name in labels) else "" %}
+        <li><a href="#{{ name }}">{% if label and not (message | lower).startswith(label | lower) %}{{ label }}: {% endif %}{{ message }}</a></li>
+        {%- endfor %}
+    </ul>
+</div>
+{%- endif -%}
 {%- endmacro %}
 
 {#- icon(name) -- inline 24x24 currentColor SVG, hidden from

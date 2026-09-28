@@ -59,6 +59,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from ccai.webworks.routing.request import Request
@@ -75,6 +76,7 @@ from ccai.pychestrate.webservice.webinterface.foundation import (
     auth_guard,
     csrf,
     flash,
+    form_errors,
     url_for as _url_for_module,
 )
 from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
@@ -123,6 +125,41 @@ ROLE_CHANGE_NOT_APPLIED_MESSAGE: str = (
     "Role changes were not applied: changing a user's roles requires "
     "the system:rbac.admin permission."
 )
+
+#: Visible labels of the user form fields, for the error summary.
+USER_FIELD_LABELS: Dict[str, str] = {
+    "username": "Username",
+    "email": "Email",
+    "password": "Password",
+    "display_name": "Display Name",
+    "firstname": "First Name",
+    "lastname": "Last Name",
+}
+
+
+def _user_with_submitted_values(
+        *, user: Any, email: str, display_name: str, firstname: str,
+        lastname: str, is_active: bool, role_names: List[str]
+    ) -> Any:
+    """
+        The user the edit form re-renders after a refused save: the
+        stored user with what was typed laid over it, so a validation
+        error does not throw the edits away.
+    """
+    fields = dict(vars(user)) if hasattr(user, "__dict__") else {}
+    for name in ("id", "username", "roles", "is_active"):
+        if name not in fields:
+            fields[name] = getattr(user, name, None)
+    fields.update(
+        email=email,
+        display_name=display_name,
+        firstname=firstname,
+        lastname=lastname,
+        is_active=is_active,
+        roles=list(role_names),
+    )
+    rtnval = SimpleNamespace(**fields)
+    return rtnval
 
 # Permission each route enforces server-side. Create and edit forms
 # need the write key even to display, since they exist only to write.
@@ -774,6 +811,7 @@ def handle_user_create(request: Request) -> Response:
             )
 
         exc_classes = _admin_exception_classes()
+        errors: Dict[str, str] = {}
 
         try:
             if password_setup == PASSWORD_SETUP_INVITE:
@@ -820,22 +858,16 @@ def handle_user_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except exc_classes["AdminValidationError"] as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Validation error: {}".format(
-                    getattr(exc, "message", str(exc))
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
-        except exc_classes["AdminDuplicateError"] as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Duplicate error: {}".format(
-                    getattr(exc, "message", str(exc))
-                ),
-                category=flash.CATEGORY_ERROR,
-            )
+        except (exc_classes["AdminValidationError"], exc_classes["AdminDuplicateError"]) as exc:
+            # A problem with one input is shown next to it; anything
+            # else stays a banner above the form.
+            errors = form_errors.field_errors_from(exc)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=form_errors.error_message(exc),
+                    category=flash.CATEGORY_ERROR,
+                )
         except Exception as exc:
             flash.add_flash(
                 session=auth.session,
@@ -843,7 +875,7 @@ def handle_user_create(request: Request) -> Response:
                 category=flash.CATEGORY_ERROR,
             )
 
-        # Re-render the form with the submitted values + flashes.
+        # Re-render the form with the submitted values + errors.
         roles = _svc_list_role_options(db_session=db_session)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -854,6 +886,8 @@ def handle_user_create(request: Request) -> Response:
         )
         context["roles"] = roles
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = USER_FIELD_LABELS
         context.update(password_policy_template_context())
         response = _render(
             template_name="config/users/create.html",
@@ -935,6 +969,9 @@ def handle_user_edit(request: Request) -> Response:
         user_id = str(request.path_params.get("user_id", ""))
         method = request.method.upper()
         is_self = user_id == str(auth.user_id)
+        errors: Dict[str, str] = {}
+        submitted: Optional[Dict[str, Any]] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -990,6 +1027,15 @@ def handle_user_edit(request: Request) -> Response:
                     )
 
             exc_classes = _admin_exception_classes()
+            submitted = {
+                "email": email,
+                "display_name": display_name,
+                "firstname": firstname,
+                "lastname": lastname,
+                "is_active": is_active,
+                "role_names": role_names,
+            }
+            status_code = 400
 
             try:
                 _svc_update_user(
@@ -1026,22 +1072,14 @@ def handle_user_edit(request: Request) -> Response:
                     message=getattr(exc, "message", str(exc)),
                     category=flash.CATEGORY_ERROR,
                 )
-            except exc_classes["AdminValidationError"] as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Validation error: {}".format(
-                        getattr(exc, "message", str(exc))
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
-            except exc_classes["AdminDuplicateError"] as exc:
-                flash.add_flash(
-                    session=auth.session,
-                    message="Duplicate error: {}".format(
-                        getattr(exc, "message", str(exc))
-                    ),
-                    category=flash.CATEGORY_ERROR,
-                )
+            except (exc_classes["AdminValidationError"], exc_classes["AdminDuplicateError"]) as exc:
+                errors = form_errors.field_errors_from(exc)
+                if len(errors) == 0:
+                    flash.add_flash(
+                        session=auth.session,
+                        message=form_errors.error_message(exc),
+                        category=flash.CATEGORY_ERROR,
+                    )
             except Exception as exc:
                 flash.add_flash(
                     session=auth.session,
@@ -1060,6 +1098,9 @@ def handle_user_edit(request: Request) -> Response:
             )
             return response
 
+        if submitted is not None:
+            user = _user_with_submitted_values(user=user, **submitted)
+
         roles = _svc_list_role_options(db_session=db_session)
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -1072,9 +1113,12 @@ def handle_user_edit(request: Request) -> Response:
         context["roles"] = roles
         context["current_user_id"] = auth.user_id
         context["is_self"] = is_self
+        context["errors"] = errors
+        context["error_labels"] = USER_FIELD_LABELS
         response = _render(
             template_name="config/users/edit.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session

@@ -407,6 +407,39 @@
     color: var(--pyc-color-on-error-surface);
 }
 
+/* Problems at the top of a form that failed validation (ADM-11), each
+   linking to its field. */
+.pyc-admin-page-fragment .form-error-summary {
+    margin: 0 0 1rem 0;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--pyc-color-on-error-surface);
+    border-left-width: 4px;
+    border-radius: 6px;
+    background: var(--pyc-color-error-surface);
+    color: var(--pyc-color-on-surface);
+}
+
+.pyc-admin-page-fragment .form-error-summary:focus-visible {
+    outline: var(--pyc-focus-ring);
+    outline-offset: 2px;
+}
+
+.pyc-admin-page-fragment .form-error-summary__title {
+    margin: 0 0 0.4rem 0;
+    font-size: var(--pyc-font-size-body, 1rem);
+    font-weight: 600;
+    color: var(--pyc-color-on-error-surface);
+}
+
+.pyc-admin-page-fragment .form-error-summary__list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+
+.pyc-admin-page-fragment .form-error-summary__list a {
+    color: var(--pyc-color-on-error-surface);
+}
+
 .pyc-admin-page-fragment .filter-bar {
     display: flex;
     flex-wrap: wrap;

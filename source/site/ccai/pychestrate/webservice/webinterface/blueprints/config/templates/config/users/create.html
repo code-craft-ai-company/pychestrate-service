@@ -12,19 +12,22 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="username">Username *</label>
             <input type="text" id="username" name="username" class="form-control" required
                    value="{{ form_data.username if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}">
-            <p class="form-text">3-64 characters, alphanumeric, underscores, and hyphens only</p>
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]{2,63}"{{ ui.invalid_attrs(errors, 'username', 'username-help') }}>
+            <p class="form-text" id="username-help">3-64 characters, alphanumeric, underscores, and hyphens only</p>
+            {{ ui.field_error(errors, 'username') }}
         </div>
         
         <div class="form-group">
             <label for="email">Email *</label>
             <input type="email" id="email" name="email" class="form-control" required
-                   value="{{ form_data.email if form_data else '' }}">
+                   value="{{ form_data.email if form_data else '' }}"{{ ui.invalid_attrs(errors, 'email') }}>
+            {{ ui.field_error(errors, 'email') }}
         </div>
         
         <fieldset class="form-group">
@@ -48,9 +51,10 @@
                 <input type="password" id="password" name="password" class="form-control" required
                        minlength="{{ password_min_length }}" maxlength="{{ password_max_length }}"
                        pattern="{{ password_pattern }}" title="{{ password_title }}"
-                       aria-describedby="password-rules" autocomplete="new-password">
+                       autocomplete="new-password"{{ ui.invalid_attrs(errors, 'password', 'password-rules') }}>
                 <button type="button" class="btn btn-secondary btn-sm" data-reveal-for="password" aria-pressed="false" aria-controls="password">Show</button>
             </div>
+            {{ ui.field_error(errors, 'password') }}
             {% with password_input_id="password" %}
                 {% include "config/_password_rules.html" %}
             {% endwith %}
@@ -59,7 +63,8 @@
         <div class="form-group">
             <label for="display_name">Display Name *</label>
             <input type="text" id="display_name" name="display_name" class="form-control" required
-                   value="{{ form_data.display_name if form_data else '' }}">
+                   value="{{ form_data.display_name if form_data else '' }}"{{ ui.invalid_attrs(errors, 'display_name') }}>
+            {{ ui.field_error(errors, 'display_name') }}
         </div>
         
         <div class="form-group">

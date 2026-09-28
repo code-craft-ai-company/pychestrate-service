@@ -12,7 +12,8 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="ro-username">Username</label>
             <input type="text" class="form-control" value="{{ user.username }}" id="ro-username" disabled>
@@ -22,13 +23,15 @@
         <div class="form-group">
             <label for="email">Email *</label>
             <input type="email" id="email" name="email" class="form-control" required
-                   value="{{ user.email }}">
+                   value="{{ user.email }}"{{ ui.invalid_attrs(errors, 'email') }}>
+            {{ ui.field_error(errors, 'email') }}
         </div>
         
         <div class="form-group">
             <label for="display_name">Display Name *</label>
             <input type="text" id="display_name" name="display_name" class="form-control" required
-                   value="{{ user.display_name }}">
+                   value="{{ user.display_name }}"{{ ui.invalid_attrs(errors, 'display_name') }}>
+            {{ ui.field_error(errors, 'display_name') }}
         </div>
         
         <div class="form-group">
