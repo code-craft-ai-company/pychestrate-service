@@ -369,6 +369,10 @@ The service believes them only from a trusted proxy, like
 (``deployment/pychestrate.nginx.conf.template``) is the reference for
 that part of the setup.
 
+The machines themselves are set up from the client's own guide, ``userguide/01-00-quickstart.rst`` in the
+``pychestrate-client`` repository: installing the client, enrolling it with a token from **Admin**,
+**Enrollment Tokens**, running it as a service, and upgrading it.
+
 
 Create the first administrator
 ==============================
