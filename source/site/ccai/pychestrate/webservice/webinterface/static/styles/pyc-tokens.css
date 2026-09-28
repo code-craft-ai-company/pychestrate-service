@@ -180,3 +180,36 @@
         --pyc-shadow-toast: 0 12px 32px rgba(0, 0, 0, 0.55);
     }
 }
+
+/*
+ * Complete the vendored mj pack's OS-preference dark block.
+ *
+ * codecraftai-webworks 1.3.0 (/mj/styles/tokens.css) flips --mj-text
+ * to near-white under ``prefers-color-scheme: dark`` but leaves the
+ * status surfaces, the accent hover / active shades and the
+ * elevations at their light values; only its explicit
+ * ``[data-theme="dark"]`` block sets them. The shell removes
+ * data-theme when the user picks the "system" theme, so an OS-dark
+ * user got near-white text on the pale light-mode surfaces: every
+ * <mj-alert> flash message read at about 1.07:1 (ADM-12).
+ *
+ * This sheet loads after the mj pack, so the same selector here wins.
+ * The values repeat the mj pack's own ``[data-theme="dark"]`` block.
+ * Remove this block once the mj pack sets these tokens itself.
+ */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --mj-text-on-accent: #ffffff;
+        --mj-accent-hover: var(--mj-color-accent-300);
+        --mj-accent-active: var(--mj-color-accent-200);
+
+        --mj-color-info-surface: #16243f;
+        --mj-color-success-surface: #15301f;
+        --mj-color-warning-surface: #3a2a12;
+        --mj-color-danger-surface: #3a1b1b;
+
+        --mj-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+        --mj-elevation-2: 0 2px 8px rgba(0, 0, 0, 0.55);
+        --mj-elevation-3: 0 8px 24px rgba(0, 0, 0, 0.6);
+    }
+}
