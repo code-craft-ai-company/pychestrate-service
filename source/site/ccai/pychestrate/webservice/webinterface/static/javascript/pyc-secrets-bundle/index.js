@@ -505,7 +505,8 @@ var PycSecrets = class extends HTMLElement {
     value_label.appendChild(value_input);
     form.appendChild(value_label);
     const submit = document.createElement("mj-button");
-    submit.classList.add("pyc-secrets__button", "pyc-secrets__button--primary");
+    submit.classList.add("pyc-secrets__button");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "create-submit");
     submit.textContent = "Create Secret";
@@ -1207,7 +1208,8 @@ var PycSecrets = class extends HTMLElement {
     confirm_label.appendChild(confirm_input);
     form.appendChild(confirm_label);
     const submit = document.createElement("mj-button");
-    submit.classList.add("pyc-secrets__button", "pyc-secrets__button--primary");
+    submit.classList.add("pyc-secrets__button");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "rotate-submit");
     submit.textContent = "Rotate Secret";

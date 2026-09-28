@@ -583,6 +583,7 @@ class PycReleaseChannels extends HTMLElement {
     );
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "publish-submit");
     submit.textContent = "Publish Release";

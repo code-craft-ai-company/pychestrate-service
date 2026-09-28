@@ -909,6 +909,7 @@ var PycWebhooks = class extends HTMLElement {
     form.appendChild(secret_note);
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "inbound-submit");
     submit.textContent = "Create Integration";
@@ -1589,6 +1590,7 @@ var PycWebhooks = class extends HTMLElement {
     );
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "outbound-submit");
     submit.textContent = "Create Subscription";
@@ -2454,6 +2456,7 @@ var PycReleaseChannels = class extends HTMLElement {
     );
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "publish-submit");
     submit.textContent = "Publish Release";

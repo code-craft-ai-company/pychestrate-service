@@ -739,6 +739,7 @@ class PycProvisioningList extends HTMLElement {
     form.appendChild(inputs_label);
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
+    submit_button.setAttribute("variant", "primary");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "trigger-submit");
     submit_button.textContent = "Trigger Provisioning";

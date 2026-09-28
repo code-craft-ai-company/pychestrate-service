@@ -90,28 +90,15 @@ pyc-client-detail {
 .pyc-pods-list__input,
 .pyc-clients-list__select,
 .pyc-clients-list__input {
-    padding: 0.375rem 0.5rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-fleet-fg);
-    background-color: var(--pyc-fleet-surface);
-    border: 0.0625rem solid var(--pyc-fleet-border);
-    border-radius: 0.375rem;
 }
 
 .pyc-pods-list__button,
 .pyc-clients-list__button {
-    padding: 0.375rem 0.875rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-fleet-accent-on-surface);
-    background-color: var(--pyc-fleet-surface);
-    border: 0.0625rem solid var(--pyc-fleet-border);
-    border-radius: 0.375rem;
     cursor: pointer;
-}
-
-.pyc-pods-list__button:hover,
-.pyc-clients-list__button:hover {
-    background-color: var(--pyc-fleet-surface-hover);
 }
 
 .pyc-pods-list__button:disabled,
@@ -403,18 +390,9 @@ pyc-client-detail {
 
 .pyc-pod-detail__button,
 .pyc-client-detail__button {
-    padding: 0.375rem 0.875rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-fleet-accent-on-surface);
-    background-color: var(--pyc-fleet-surface);
-    border: 0.0625rem solid var(--pyc-fleet-border);
-    border-radius: 0.375rem;
     cursor: pointer;
-}
-
-.pyc-pod-detail__button:hover,
-.pyc-client-detail__button:hover {
-    background-color: var(--pyc-fleet-surface-hover);
 }
 
 .pyc-pod-detail__button:disabled,

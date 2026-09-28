@@ -80,12 +80,8 @@ pyc-pipeline-detail {
 .pyc-pipelines__select,
 .pyc-pipelines__input,
 .pyc-pipelines__textarea {
-    padding: 0.375rem 0.5rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-pipelines-fg);
-    background-color: var(--pyc-pipelines-surface);
-    border: 0.0625rem solid var(--pyc-pipelines-border);
-    border-radius: 0.375rem;
 }
 
 .pyc-pipelines__textarea {
@@ -95,17 +91,9 @@ pyc-pipeline-detail {
 }
 
 .pyc-pipelines__button {
-    padding: 0.375rem 0.875rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-pipelines-accent-on-surface);
-    background-color: var(--pyc-pipelines-surface);
-    border: 0.0625rem solid var(--pyc-pipelines-border);
-    border-radius: 0.375rem;
     cursor: pointer;
-}
-
-.pyc-pipelines__button:hover {
-    background-color: var(--pyc-pipelines-surface-hover);
 }
 
 .pyc-pipelines__button:disabled {
@@ -115,18 +103,10 @@ pyc-pipeline-detail {
 }
 
 .pyc-pipelines__primary {
-    padding: 0.375rem 0.875rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
-    color: var(--pyc-pipelines-surface);
-    background-color: var(--pyc-pipelines-accent);
-    border: 0.0625rem solid var(--pyc-pipelines-accent);
-    border-radius: 0.375rem;
     cursor: pointer;
 }
 
-.pyc-pipelines__primary:hover {
-    opacity: 0.9;
-}
 
 .pyc-pipelines__panel {
     display: flex;
@@ -291,12 +271,8 @@ pyc-pipeline-detail {
 .pyc-pipeline-detail__retry {
     display: block;
     margin: 0 auto;
-    padding: 0.375rem 0.875rem;
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-pipelines-accent-on-surface);
-    background-color: var(--pyc-pipelines-surface);
-    border: 0.0625rem solid var(--pyc-pipelines-border);
-    border-radius: 0.375rem;
     cursor: pointer;
 }
 

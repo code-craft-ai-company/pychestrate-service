@@ -930,6 +930,7 @@ class PycWebhooks extends HTMLElement {
     form.appendChild(secret_note);
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "inbound-submit");
     submit.textContent = "Create Integration";
@@ -1611,6 +1612,7 @@ class PycWebhooks extends HTMLElement {
     );
     const submit = document.createElement("mj-button");
     submit.classList.add("pyc-ops__submit");
+    submit.setAttribute("variant", "primary");
     submit.setAttribute("type", "submit");
     submit.setAttribute("data-role", "outbound-submit");
     submit.textContent = "Create Subscription";

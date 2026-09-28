@@ -353,6 +353,7 @@ var PycPipelinesList = class extends HTMLElement {
     actions.appendChild(validate_button);
     const save_button = document.createElement("mj-button");
     save_button.classList.add("pyc-pipelines__primary");
+    save_button.setAttribute("variant", "primary");
     save_button.setAttribute("type", "submit");
     save_button.setAttribute("data-role", "save-submit");
     save_button.textContent = "Save";

@@ -1049,6 +1049,7 @@ class PycGuards extends HTMLElement {
     form.appendChild(rule_label);
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
+    submit_button.setAttribute("variant", "primary");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "attach-submit");
     submit_button.textContent = "Attach Guard";
@@ -1237,6 +1238,7 @@ class PycGuards extends HTMLElement {
     form.appendChild(roles_label);
     const submit_button = document.createElement("mj-button");
     submit_button.classList.add("pyc-infra__submit");
+    submit_button.setAttribute("variant", "primary");
     submit_button.setAttribute("type", "submit");
     submit_button.setAttribute("data-role", "evaluate-submit");
     submit_button.textContent = "Evaluate";
