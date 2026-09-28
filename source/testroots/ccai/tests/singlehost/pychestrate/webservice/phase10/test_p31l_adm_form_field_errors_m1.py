@@ -974,3 +974,91 @@ def test_create_rpa_spec_with_a_bad_default_packet_is_shown_next_to_it():
         (400, True, "{nope", True),
     )
     return
+
+
+# ---------------------------------------------------------------------------
+# Health check configuration
+# ---------------------------------------------------------------------------
+
+
+def _configure_health(setup: Dict[str, Any], resource_id: str, **overrides: str) -> Any:
+    fields = {
+        "enabled": "on",
+        "probe_url": "http://93.184.216.34/health",
+        "interval_seconds": "60",
+        "timeout_seconds": "10",
+        "failure_threshold": "3",
+        "success_threshold": "1",
+    }
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/health/{}/config".format(resource_id),
+        cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_health_config_with_a_loopback_probe_url_is_shown_next_to_the_url_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a probe URL that targets the loopback address is refused
+    (400) with the error on the probe URL input, and the typed interval
+    is kept rather than reverted to the stored one.**
+    """
+    setup = _setup()
+    resource_id = _new_resource_id(setup)
+    response = _configure_health(setup, resource_id, probe_url="http://127.0.0.1/health", interval_seconds="45")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="probe_url-error"' in response.text,
+         'aria-describedby="probe_url_help probe_url-error"' in _input_tag(response.text, field_id="probe_url"),
+         'value="45"' in _input_tag(response.text, field_id="interval_seconds")),
+        (400, True, True, True),
+    )
+    return
+
+
+def test_health_config_with_a_long_timeout_marks_the_timeout_field_only():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a probe timeout above the limit is refused with the
+    error on the timeout input and none on the URL input.**
+    """
+    setup = _setup()
+    resource_id = _new_resource_id(setup)
+    response = _configure_health(setup, resource_id, timeout_seconds="600")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="timeout_seconds-error"' in response.text,
+         'id="probe_url-error"' in response.text),
+        (400, True, False),
+    )
+    return
+
+
+# ---------------------------------------------------------------------------
+# Resource pools
+# ---------------------------------------------------------------------------
+
+
+def test_create_pool_duplicate_name_is_shown_next_to_the_name_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a second resource pool with an existing name is refused
+    (400) with the error next to the name input, and the typed
+    description is kept.**
+    """
+    setup = _setup()
+    name = _unique("pool")
+    fields = {"name": name, "description": "typed description"}
+    post_form(wsgi_app=setup["wsgi_app"], path="/resources/pools/create", cookies=setup["cookies"], fields=fields)
+    response = post_form(
+        wsgi_app=setup["wsgi_app"], path="/resources/pools/create", cookies=setup["cookies"], fields=fields,
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="name-error"' in response.text,
+         _textarea_text(response.text, field_id="description")),
+        (400, True, "typed description"),
+    )
+    return

@@ -12,13 +12,15 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label for="name">Pool Name *</label>
             <input type="text" id="name" name="name" class="form-control" required
                    value="{{ form_data.name if form_data else '' }}"
-                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]*">
-            <p class="form-text">Alphanumeric characters, underscores, and hyphens only</p>
+                   pattern="[a-zA-Z0-9][a-zA-Z0-9_\-]*"{{ ui.invalid_attrs(errors, 'name', 'name-help') }}>
+            <p class="form-text" id="name-help">Alphanumeric characters, underscores, and hyphens only</p>
+            {{ ui.field_error(errors, 'name') }}
         </div>
         
         <div class="form-group">

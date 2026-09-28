@@ -12,10 +12,11 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        
+        {{ ui.error_summary(errors, error_labels) }}
+
         <div class="form-group">
             <label>
-                <input type="checkbox" name="enabled" {% if config and config.enabled %}checked{% endif %}>
+                <input type="checkbox" name="enabled" {% if health_form %}{% if health_form.enabled %}checked{% endif %}{% elif config and config.enabled %}checked{% endif %}>
                 Enable Health Checks
             </label>
         </div>
@@ -31,36 +32,40 @@
         <div class="form-group">
             <label for="probe_url">Probe URL</label>
             <input type="url" id="probe_url" name="probe_url" class="form-control" required
-                   aria-describedby="probe_url_help"
-                   value="{{ (config.probe_url or '') if config else '' }}"
-                   placeholder="http://10.0.4.21/health">
+                   value="{{ health_form.probe_url if health_form else ((config.probe_url or '') if config else '') }}"
+                   placeholder="http://10.0.4.21/health"{{ ui.invalid_attrs(errors, 'probe_url', 'probe_url_help') }}>
             <p class="form-text" id="probe_url_help">The device's HTTP(S) health endpoint; a 2xx response counts as healthy. The Pychestrate server calls it directly, so loopback and link-local addresses are refused.</p>
+            {{ ui.field_error(errors, 'probe_url') }}
         </div>
 
         <div class="form-group">
             <label for="interval_seconds">Check Interval (seconds)</label>
             <input type="number" id="interval_seconds" name="interval_seconds" class="form-control" min="10"
-                   value="{{ config.interval_seconds if config else 60 }}">
+                   value="{{ health_form.interval_seconds if health_form else (config.interval_seconds if config else 60) }}"{{ ui.invalid_attrs(errors, 'interval_seconds') }}>
+            {{ ui.field_error(errors, 'interval_seconds') }}
         </div>
 
         <div class="form-group">
             <label for="timeout_seconds">Timeout (seconds)</label>
             <input type="number" id="timeout_seconds" name="timeout_seconds" class="form-control" min="1" max="30"
-                   value="{{ config.timeout_seconds if config else 10 }}">
+                   value="{{ health_form.timeout_seconds if health_form else (config.timeout_seconds if config else 10) }}"{{ ui.invalid_attrs(errors, 'timeout_seconds') }}>
+            {{ ui.field_error(errors, 'timeout_seconds') }}
         </div>
         
         <div class="form-group">
             <label for="failure_threshold">Failure Threshold</label>
             <input type="number" id="failure_threshold" name="failure_threshold" class="form-control" min="1"
-                   value="{{ config.failure_threshold if config else 3 }}">
-            <p class="form-text">Number of consecutive failures before marking unhealthy</p>
+                   value="{{ health_form.failure_threshold if health_form else (config.failure_threshold if config else 3) }}"{{ ui.invalid_attrs(errors, 'failure_threshold', 'failure_threshold-help') }}>
+            <p class="form-text" id="failure_threshold-help">Number of consecutive failures before marking unhealthy</p>
+            {{ ui.field_error(errors, 'failure_threshold') }}
         </div>
         
         <div class="form-group">
             <label for="success_threshold">Success Threshold</label>
             <input type="number" id="success_threshold" name="success_threshold" class="form-control" min="1"
-                   value="{{ config.success_threshold if config else 1 }}">
-            <p class="form-text">Number of consecutive successes before marking healthy</p>
+                   value="{{ health_form.success_threshold if health_form else (config.success_threshold if config else 1) }}"{{ ui.invalid_attrs(errors, 'success_threshold', 'success_threshold-help') }}>
+            <p class="form-text" id="success_threshold-help">Number of consecutive successes before marking healthy</p>
+            {{ ui.field_error(errors, 'success_threshold') }}
         </div>
         
         <div class="actions-row">

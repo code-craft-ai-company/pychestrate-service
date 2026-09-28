@@ -411,6 +411,12 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     # What the admin typed into a refused edit form (None on a fresh one).
     "submitted": _by_mode({"value": "typed value", "description": "typed description"}, None),
     "submitted_description": _by_mode("typed description", None),
+    # What the admin typed into a refused health check form (None on a fresh one).
+    "health_form": _by_mode(
+        {"probe_url": "http://10.0.4.21/health", "interval_seconds": "60", "timeout_seconds": "10",
+         "failure_threshold": "3", "success_threshold": "1", "enabled": True},
+        None,
+    ),
     "selected_pool_id": _by_mode(7, None),
     "selected_job_id": _by_mode(7, None),
     "selected_step": _by_mode("build", None),

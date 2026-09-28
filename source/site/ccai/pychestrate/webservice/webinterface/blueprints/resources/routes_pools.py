@@ -64,6 +64,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import
     _build_page_window,
     _calculate_total_pages,
     _describe_resource_manager_error,
+    _resource_field_errors,
 )
 
 
@@ -294,6 +295,7 @@ def handle_pool_create(request: Request) -> Response:
 
         name = str(single_form.get("name", "")).strip()
         description = str(single_form.get("description", "")).strip()
+        errors: Dict[str, str] = {}
 
         try:
             create_request = _build_pool_create_request(
@@ -312,18 +314,22 @@ def handle_pool_create(request: Request) -> Response:
             )
             return response
         except Exception as exc:
-            message = _describe_resource_manager_error(exc=exc)
-            if message is None:
-                _LOGGER.exception("Unexpected error creating pool")
-                message = (
-                    "An unexpected error occurred while creating the"
-                    " pool. The problem has been logged."
+            errors = _resource_field_errors(exc=exc)
+            if "name" not in errors:
+                errors = {}
+            if len(errors) == 0:
+                message = _describe_resource_manager_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception("Unexpected error creating pool")
+                    message = (
+                        "An unexpected error occurred while creating the"
+                        " pool. The problem has been logged."
+                    )
+                flash.add_flash(
+                    session=auth.session,
+                    message=message,
+                    category=flash.CATEGORY_ERROR,
                 )
-            flash.add_flash(
-                session=auth.session,
-                message=message,
-                category=flash.CATEGORY_ERROR,
-            )
 
         flashes = flash.consume_flashes(session=auth.session)
         context = _build_default_template_context(
@@ -334,6 +340,8 @@ def handle_pool_create(request: Request) -> Response:
         )
         context.update(_resources_permission_flags(auth=auth))
         context["form_data"] = form_view
+        context["errors"] = errors
+        context["error_labels"] = {"name": "Pool Name", "description": "Description"}
         response = _render(
             template_name="resources/pools/create.html",
             context=context,

@@ -188,10 +188,21 @@ class HealthCheckConfigNotFoundError(HealthMonitorError):
 
 
 class InvalidHealthCheckConfigError(HealthMonitorError):
-    """Exception raised when health check configuration is invalid."""
+    """
+    Exception raised when health check configuration is invalid.
 
-    def __init__(self, message: str, error_code: str = "INVALID_HEALTH_CHECK_CONFIG"):
+    ``field`` names the configuration field the error is about (for
+    example ``probe_url`` or ``timeout_seconds``), so a form can show the
+    message next to that input; it is None when the error is about no
+    single field.
+    """
+
+    def __init__(
+            self, message: str, error_code: str = "INVALID_HEALTH_CHECK_CONFIG",
+            field: Optional[str] = None
+        ):
         super().__init__(message, error_code)
+        self.field = field
 
 
 class ProbeTargetRejectedError(HealthMonitorError):
@@ -542,36 +553,42 @@ class HealthMonitor:
 
         if not config.probe_url:
             raise InvalidHealthCheckConfigError(
-                "A probe URL is required (for example http://10.0.4.21/health)."
+                "A probe URL is required (for example http://10.0.4.21/health).",
+                field="probe_url",
             )
 
         url_problem = validate_probe_url(config.probe_url, resolve=False)
         if url_problem is not None:
-            raise InvalidHealthCheckConfigError(url_problem)
+            raise InvalidHealthCheckConfigError(url_problem, field="probe_url")
 
         if config.timeout_seconds > MAX_PROBE_TIMEOUT_SECONDS:
             raise InvalidHealthCheckConfigError(
-                "The probe timeout may be at most {} seconds.".format(MAX_PROBE_TIMEOUT_SECONDS)
+                "The probe timeout may be at most {} seconds.".format(MAX_PROBE_TIMEOUT_SECONDS),
+                field="timeout_seconds",
             )
 
         if config.interval_seconds < 1:
             raise InvalidHealthCheckConfigError(
-                "interval_seconds must be at least 1", error_code="INTERVAL_TOO_SHORT"
+                "interval_seconds must be at least 1", error_code="INTERVAL_TOO_SHORT",
+                field="interval_seconds"
             )
         
         if config.timeout_seconds < 1:
             raise InvalidHealthCheckConfigError(
-                "timeout_seconds must be at least 1", error_code="TIMEOUT_TOO_SHORT"
+                "timeout_seconds must be at least 1", error_code="TIMEOUT_TOO_SHORT",
+                field="timeout_seconds"
             )
         
         if config.failure_threshold < 1:
             raise InvalidHealthCheckConfigError(
-                "failure_threshold must be at least 1", error_code="FAILURE_THRESHOLD_TOO_LOW"
+                "failure_threshold must be at least 1", error_code="FAILURE_THRESHOLD_TOO_LOW",
+                field="failure_threshold"
             )
         
         if config.success_threshold < 1:
             raise InvalidHealthCheckConfigError(
-                "success_threshold must be at least 1", error_code="SUCCESS_THRESHOLD_TOO_LOW"
+                "success_threshold must be at least 1", error_code="SUCCESS_THRESHOLD_TOO_LOW",
+                field="success_threshold"
             )
         
         # Get the resource

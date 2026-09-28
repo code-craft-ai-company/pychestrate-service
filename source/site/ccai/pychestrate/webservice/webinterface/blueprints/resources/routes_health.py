@@ -261,6 +261,36 @@ def _describe_health_monitor_error(*, exc: Exception) -> Optional[str]:
     return rtnval
 
 
+#: Visible labels of the health check form fields, for the error summary.
+HEALTH_FIELD_LABELS: Dict[str, str] = {
+    "probe_url": "Probe URL",
+    "interval_seconds": "Check Interval",
+    "timeout_seconds": "Timeout",
+    "failure_threshold": "Failure Threshold",
+    "success_threshold": "Success Threshold",
+}
+
+
+def _health_field_errors(*, exc: BaseException) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused health check form, or an
+        empty dict when the error is about no single input. The monitor's
+        configuration errors name their field (``exc.field``); the message
+        is the one people are shown.
+
+        :param exc: The error the monitor raised.
+
+        :returns: One entry, or an empty dict.
+    """
+    field = getattr(exc, "field", None)
+    rtnval: Dict[str, str] = {}
+    if isinstance(field, str) is True and field in HEALTH_FIELD_LABELS:
+        message = _describe_health_monitor_error(exc=exc)
+        if message is not None:
+            rtnval = {field: message}
+    return rtnval
+
+
 # User-facing copy for typed HealthMonitor errors, by error code (the
 # managers' own messages stay in the log).
 _HEALTH_ERROR_COPY: Dict[str, str] = {
@@ -486,6 +516,9 @@ def handle_health_config(request: Request) -> Response:
 
         health_monitor = _build_health_monitor(db_session=db_session)
         method = request.method.upper()
+        errors: Dict[str, str] = {}
+        health_form: Optional[Dict[str, Any]] = None
+        status_code = 200
 
         if method == "POST":
             single_form = _parse_form_or_empty(request=request)
@@ -525,6 +558,15 @@ def handle_health_config(request: Request) -> Response:
                 default=1,
             )
             enabled = single_form.get("enabled", "") == "on"
+            status_code = 400
+            health_form = {
+                "probe_url": probe_url,
+                "interval_seconds": str(single_form.get("interval_seconds", "")),
+                "timeout_seconds": str(single_form.get("timeout_seconds", "")),
+                "failure_threshold": str(single_form.get("failure_threshold", "")),
+                "success_threshold": str(single_form.get("success_threshold", "")),
+                "enabled": enabled,
+            }
 
             try:
                 config_request = _build_health_check_config(
@@ -553,23 +595,25 @@ def handle_health_config(request: Request) -> Response:
                 )
                 return response
             except Exception as exc:
-                message = _describe_health_monitor_error(exc=exc)
-                if message is None:
-                    _LOGGER.exception(
-                        "Unexpected error saving health check config"
-                        " for resource %s",
-                        resource_id,
+                errors = _health_field_errors(exc=exc)
+                if len(errors) == 0:
+                    message = _describe_health_monitor_error(exc=exc)
+                    if message is None:
+                        _LOGGER.exception(
+                            "Unexpected error saving health check config"
+                            " for resource %s",
+                            resource_id,
+                        )
+                        message = (
+                            "An unexpected error occurred while saving"
+                            " the configuration. The problem has been"
+                            " logged."
+                        )
+                    flash.add_flash(
+                        session=auth.session,
+                        message=message,
+                        category=flash.CATEGORY_ERROR,
                     )
-                    message = (
-                        "An unexpected error occurred while saving"
-                        " the configuration. The problem has been"
-                        " logged."
-                    )
-                flash.add_flash(
-                    session=auth.session,
-                    message=message,
-                    category=flash.CATEGORY_ERROR,
-                )
 
         # GET, or POST that fell through.
         config = health_monitor.get_health_check_config(resource_id)
@@ -584,9 +628,13 @@ def handle_health_config(request: Request) -> Response:
         context.update(_resources_permission_flags(auth=auth))
         context["resource"] = resource
         context["config"] = config
+        context["health_form"] = health_form
+        context["errors"] = errors
+        context["error_labels"] = HEALTH_FIELD_LABELS
         response = _render(
             template_name="resources/health/config.html",
             context=context,
+            status_code=status_code,
         )
         _attach_session_to_response(
             response=response, session=auth.session
