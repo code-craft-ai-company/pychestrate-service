@@ -830,3 +830,147 @@ def test_a_refused_secret_never_echoes_the_value_back():
 
     testbase.assert_equal("s3cret-value-that-must-not-come-back" in response.text, False)
     return
+
+
+# ---------------------------------------------------------------------------
+# RPA job types
+# ---------------------------------------------------------------------------
+
+
+def _register_rpa_type(setup: Dict[str, Any], **overrides: str) -> Any:
+    fields = {
+        "type_id": "fe-{}".format(uuid.uuid4().hex[:8]),
+        "display_name": "Field Errors",
+        "execution_mode": "process",
+        "capability_requirements": "",
+        "secret_fields": "",
+        "packet_schema": "",
+        "description": "",
+    }
+    fields.update(overrides)
+    rtnval = post_form(
+        wsgi_app=setup["wsgi_app"], path="/admin/rpa-job-types/create", cookies=setup["cookies"], fields=fields,
+    )
+    return rtnval
+
+
+def test_register_rpa_type_with_bad_schema_json_is_shown_next_to_the_schema_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a job type whose packet schema is not JSON is refused
+    (400) with the error on the schema input, which keeps the typed
+    text, and the typed type ID is kept.**
+    """
+    setup = _setup()
+    type_id = "fe-{}".format(uuid.uuid4().hex[:8])
+    response = _register_rpa_type(setup, type_id=type_id, packet_schema="{not json")
+
+    testbase.assert_equal(
+        (response.status_code, 'id="packet_schema-error"' in response.text,
+         _textarea_text(response.text, field_id="packet_schema"),
+         'value="{}"'.format(type_id) in _input_tag(response.text, field_id="type_id")),
+        (400, True, "{not json", True),
+    )
+    return
+
+
+def test_register_rpa_type_duplicate_type_id_is_shown_next_to_the_type_id_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: registering a job type whose ID exists is refused with
+    the error next to the type ID input.**
+    """
+    setup = _setup()
+    type_id = "fe-{}".format(uuid.uuid4().hex[:8])
+    _register_rpa_type(setup, type_id=type_id)
+    response = _register_rpa_type(setup, type_id=type_id)
+
+    testbase.assert_equal(
+        (response.status_code, 'id="type_id-error"' in response.text), (400, True),
+    )
+    return
+
+
+def test_publish_rpa_version_with_a_non_object_entrypoint_is_shown_next_to_it():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: publishing a version whose entrypoint is a JSON list is
+    refused (400) with the error on the entrypoint input, and the typed
+    version is kept.**
+    """
+    setup = _setup()
+    type_id = "fe-{}".format(uuid.uuid4().hex[:8])
+    _register_rpa_type(setup, type_id=type_id)
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/admin/rpa-job-types/{}/versions".format(type_id),
+        cookies=setup["cookies"],
+        fields={
+            "version": "1.2.3", "source_kind": "git", "source_ref": "", "entrypoint": "[1]",
+            "environment": "", "timeout_minutes": "60",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="entrypoint-error"' in response.text,
+         'value="1.2.3"' in _input_tag(response.text, field_id="version")),
+        (400, True, True),
+    )
+    return
+
+
+def test_publish_rpa_version_with_a_bad_timeout_marks_the_timeout_field():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: a timeout of "soon" is refused with the error on the
+    timeout input and none on the entrypoint.**
+    """
+    setup = _setup()
+    type_id = "fe-{}".format(uuid.uuid4().hex[:8])
+    _register_rpa_type(setup, type_id=type_id)
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/admin/rpa-job-types/{}/versions".format(type_id),
+        cookies=setup["cookies"],
+        fields={
+            "version": "1.2.3", "source_kind": "git", "source_ref": "",
+            "entrypoint": '{"command": ["true"]}', "environment": "", "timeout_minutes": "soon",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="timeout_minutes-error"' in response.text,
+         'id="entrypoint-error"' in response.text),
+        (400, True, False),
+    )
+    return
+
+
+def test_create_rpa_spec_with_a_bad_default_packet_is_shown_next_to_it():
+    """
+    **Feature: admin form field errors (ADM-11)**
+    **Property: an RPA specification whose default packet is not JSON is
+    refused (400) with the error on the packet input, which keeps the
+    typed text, and the typed name is kept.**
+    """
+    setup = _setup()
+    project_id = create_project_via_ui(wsgi_app=setup["wsgi_app"], cookies=setup["cookies"], prefix="rpafe")
+    name = _unique("spec")
+    response = post_form(
+        wsgi_app=setup["wsgi_app"],
+        path="/projects/{}/rpa/specs/create".format(project_id),
+        cookies=setup["cookies"],
+        fields={
+            "name": name, "type_id": "", "version_selector": "latest-active",
+            "default_packet": "{nope", "required_capabilities": "", "target_pod_id": "",
+            "timeout_minutes": "", "description": "",
+        },
+    )
+
+    testbase.assert_equal(
+        (response.status_code, 'id="default_packet-error"' in response.text,
+         _textarea_text(response.text, field_id="default_packet"),
+         'value="{}"'.format(name) in _input_tag(response.text, field_id="name")),
+        (400, True, "{nope", True),
+    )
+    return

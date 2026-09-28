@@ -180,7 +180,56 @@ def handle_rpa_type_list(request: Request) -> Response:
             pass
 
 
-def _render_create_form(*, auth: Any, form_data: Optional[MultiFormView], status_code: int = 200) -> HTMLResponse:
+#: Visible labels of the job type and version form fields, for the
+#: error summary.
+RPA_TYPE_FIELD_LABELS: Dict[str, str] = {
+    "type_id": "Type ID",
+    "display_name": "Display Name",
+    "packet_schema": "Packet Schema",
+    "version": "Version",
+    "entrypoint": "Entrypoint",
+    "environment": "Environment",
+    "timeout_minutes": "Timeout",
+}
+
+
+def _rpa_field_errors(*, exc: BaseException, parsing_field: Optional[str] = None) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused job type or version form,
+        or an empty dict when the error is about no single input (the
+        caller then flashes it).
+
+        A duplicate slug is about the type ID and a duplicate version
+        about the version. A ``ValueError`` from parsing typed text
+        (JSON, the timeout) is about the input being parsed
+        (``parsing_field``). Other RPA errors can be about several
+        inputs, so they stay a banner.
+
+        :param exc: The error being handled.
+        :param parsing_field: The input a ``ValueError`` is about.
+
+        :returns: One entry, or an empty dict.
+    """
+    from ccai.pychestrate.webservice.orchestration.rpa.errors import (  # noqa: E402
+        DuplicateRpaJobTypeError,
+        DuplicateVersionError,
+    )
+
+    first_line = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+    rtnval: Dict[str, str] = {}
+    if isinstance(exc, DuplicateRpaJobTypeError) is True:
+        rtnval = {"type_id": first_line}
+    elif isinstance(exc, DuplicateVersionError) is True:
+        rtnval = {"version": first_line}
+    elif isinstance(exc, ValueError) is True and parsing_field is not None:
+        rtnval = {parsing_field: first_line}
+    return rtnval
+
+
+def _render_create_form(
+        *, auth: Any, form_data: Optional[MultiFormView], status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
+    ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
         session=auth.session,
@@ -190,6 +239,8 @@ def _render_create_form(*, auth: Any, form_data: Optional[MultiFormView], status
     )
     context["form_data"] = form_data
     context["execution_modes"] = _execution_modes()
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RPA_TYPE_FIELD_LABELS
     response = _render(template_name="config/rpa_types/create.html", context=context, status_code=status_code)
     _attach_session_to_response(response=response, session=auth.session)
     return response
@@ -223,10 +274,13 @@ def handle_rpa_type_create(request: Request) -> Response:
 
         rpa = _build_rpa_service()
         type_id = str(single_form.get("type_id", "")).strip()
+        errors: Dict[str, str] = {}
+        parsing_field = "packet_schema"
         try:
             packet_schema = _parse_json_or_default(
                 raw=str(single_form.get("packet_schema", "")), default=None, field_label="Packet schema",
             )
+            parsing_field = "type_id"
             inputs = rpa.RpaJobTypeInputs(
                 type_id=type_id,
                 display_name=str(single_form.get("display_name", "")).strip(),
@@ -244,15 +298,12 @@ def handle_rpa_type_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except ValueError as exc:
-            flash.add_flash(session=auth.session, message=str(exc), category=flash.CATEGORY_ERROR)
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error registering RPA job type: {}".format(str(exc)),
-                category=flash.CATEGORY_ERROR,
-            )
-        return _render_create_form(auth=auth, form_data=form_view, status_code=400)
+            errors = _rpa_field_errors(exc=exc, parsing_field=parsing_field if parsing_field == "packet_schema" else None)
+            if len(errors) == 0:
+                message = str(exc) if isinstance(exc, ValueError) else "Error registering RPA job type: {}".format(str(exc))
+                flash.add_flash(session=auth.session, message=message, category=flash.CATEGORY_ERROR)
+        return _render_create_form(auth=auth, form_data=form_view, status_code=400, errors=errors)
     finally:
         try:
             db_session.close()
@@ -280,7 +331,8 @@ def _render_detail(
         auth: Any,
         job_type: Any,
         form_data: Optional[MultiFormView] = None,
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     """
         Render the job type page. A failed publish re-renders it with the
@@ -298,6 +350,8 @@ def _render_detail(
     context["can_manage"] = _has_permission(auth=auth, permission=RPA_TYPES_MANAGE_PERMISSION)
     context["packet_schema_json"] = _pretty_json(dict(job_type.packet_schema)) if job_type.packet_schema else ""
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RPA_TYPE_FIELD_LABELS
     response = _render(template_name="config/rpa_types/detail.html", context=context, status_code=status_code)
     _attach_session_to_response(response=response, session=auth.session)
     return response
@@ -348,7 +402,8 @@ def _render_edit_form(
         auth: Any,
         job_type: Any,
         form_data: Dict[str, str],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -359,6 +414,8 @@ def _render_edit_form(
     )
     context["job_type"] = job_type
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RPA_TYPE_FIELD_LABELS
     response = _render(template_name="config/rpa_types/edit.html", context=context, status_code=status_code)
     _attach_session_to_response(response=response, session=auth.session)
     return response
@@ -399,10 +456,12 @@ def handle_rpa_type_edit(request: Request) -> Response:
             key: str(single_form.get(key, "") or "")
             for key in ("display_name", "description", "capability_requirements", "secret_fields", "packet_schema")
         }
+        parsing_field = "packet_schema"
         try:
             packet_schema = _parse_json_or_default(
                 raw=submitted["packet_schema"], default=None, field_label="Packet schema",
             )
+            parsing_field = ""
             rpa.update_job_type(
                 db_session=db_session,
                 type_id=type_id,
@@ -414,12 +473,16 @@ def handle_rpa_type_edit(request: Request) -> Response:
                 actor_id=auth.user_id,
             )
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message="Error saving the job type: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
-                category=flash.CATEGORY_ERROR,
+            errors = _rpa_field_errors(exc=exc, parsing_field=parsing_field or None)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error saving the job type: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
+                    category=flash.CATEGORY_ERROR,
+                )
+            return _render_edit_form(
+                auth=auth, job_type=job_type, form_data=submitted, status_code=400, errors=errors,
             )
-            return _render_edit_form(auth=auth, job_type=job_type, form_data=submitted, status_code=400)
         response = _redirect_with_flash(
             session=auth.session,
             url=_url_for_module.url_for("config.rpa_type_detail", type_id=type_id),
@@ -458,19 +521,26 @@ def handle_rpa_type_publish(request: Request) -> Response:
 
         rpa = _build_rpa_service()
         form_view = MultiFormView(data=_parse_form_multi(request=request))
+        parsing_field = "entrypoint"
         try:
             entrypoint = _parse_json_or_default(
                 raw=str(single_form.get("entrypoint", "")), default={}, field_label="Entrypoint",
             )
+            if not isinstance(entrypoint, dict):
+                raise ValueError("Entrypoint must be a JSON object.")
+            parsing_field = "environment"
             environment = _parse_json_or_default(
                 raw=str(single_form.get("environment", "")), default={}, field_label="Environment",
             )
-            if not isinstance(entrypoint, dict):
-                raise ValueError("Entrypoint must be a JSON object.")
             if not isinstance(environment, dict):
                 raise ValueError("Environment must be a JSON object.")
+            parsing_field = "timeout_minutes"
             timeout_raw = str(single_form.get("timeout_minutes", "")).strip()
-            timeout_minutes = int(timeout_raw) if len(timeout_raw) > 0 else 60
+            try:
+                timeout_minutes = int(timeout_raw) if len(timeout_raw) > 0 else 60
+            except ValueError:
+                raise ValueError("Timeout must be a whole number of minutes.") from None
+            parsing_field = ""
             inputs = rpa.RpaVersionInputs(
                 version=str(single_form.get("version", "")).strip(),
                 source_kind=str(single_form.get("source_kind", "git")).strip() or "git",
@@ -494,12 +564,16 @@ def handle_rpa_type_publish(request: Request) -> Response:
             job_type = _resolve_type_or_redirect(auth=auth, rpa=rpa, type_id=type_id)
             if isinstance(job_type, Response):
                 return job_type
-            flash.add_flash(
-                session=auth.session,
-                message="Error publishing version: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
-                category=flash.CATEGORY_ERROR,
+            errors = _rpa_field_errors(exc=exc, parsing_field=parsing_field or None)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message="Error publishing version: {}".format(str(exc).splitlines()[0] if str(exc) else exc),
+                    category=flash.CATEGORY_ERROR,
+                )
+            return _render_detail(
+                auth=auth, job_type=job_type, form_data=form_view, status_code=400, errors=errors,
             )
-            return _render_detail(auth=auth, job_type=job_type, form_data=form_view, status_code=400)
     finally:
         try:
             db_session.close()

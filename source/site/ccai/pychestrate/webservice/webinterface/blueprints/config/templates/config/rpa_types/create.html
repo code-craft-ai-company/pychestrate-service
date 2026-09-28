@@ -19,12 +19,14 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {{ ui.error_summary(errors, error_labels) }}
 
         <div class="form-group">
             <label for="type_id">Type ID *</label>
             <input type="text" id="type_id" name="type_id" class="form-control mono" required pattern="[a-z][a-z0-9\-]{2,63}"
-                   placeholder="invoice-import" value="{{ form_data.type_id if form_data else '' }}">
-            <div class="form-text">Lowercase slug, 3 to 64 characters. Stable identifier used by specifications and pods.</div>
+                   placeholder="invoice-import" value="{{ form_data.type_id if form_data else '' }}"{{ ui.invalid_attrs(errors, 'type_id', 'type_id-help') }}>
+            <div class="form-text" id="type_id-help">Lowercase slug, 3 to 64 characters. Stable identifier used by specifications and pods.</div>
+            {{ ui.field_error(errors, 'type_id') }}
         </div>
 
         <div class="form-group">
@@ -59,7 +61,8 @@
         <div class="form-group">
             <label for="packet_schema">Packet Schema (JSON Schema, optional)</label>
             <textarea id="packet_schema" name="packet_schema" class="form-control mono" rows="8" spellcheck="false"
-                      placeholder='{"type": "object", "required": ["customer_id"], "properties": {"customer_id": {"type": "integer"}}}'>{{ form_data.packet_schema if form_data else '' }}</textarea>
+                      placeholder='{"type": "object", "required": ["customer_id"], "properties": {"customer_id": {"type": "integer"}}}'{{ ui.invalid_attrs(errors, 'packet_schema') }}>{{ form_data.packet_schema if form_data else '' }}</textarea>
+            {{ ui.field_error(errors, 'packet_schema') }}
         </div>
 
         <div class="form-group">

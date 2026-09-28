@@ -428,13 +428,58 @@ def handle_rpa_spec_list(request: Request) -> Response:
             pass
 
 
+#: Visible labels of the specification form fields, for the error summary.
+RPA_SPEC_FIELD_LABELS: Dict[str, str] = {
+    "name": "Specification Name",
+    "type_id": "Job Type",
+    "version_selector": "Version",
+    "default_packet": "Default Work Packet",
+    "required_capabilities": "Required Pod Capabilities",
+    "target_pod_id": "Target Pod",
+    "timeout_minutes": "Timeout",
+}
+
+
+def _rpa_spec_field_errors(*, exc: BaseException, parsing_field: Optional[str] = None) -> Dict[str, str]:
+    """
+        The ``{field: message}`` for a refused specification form, or an
+        empty dict when the error is about no single input (the caller
+        then flashes it).
+
+        A duplicate name is about the name, a version that is not active
+        about the version, and a form error from parsing typed text
+        about the input being parsed (``parsing_field``). Other RPA
+        errors can be about several inputs and stay a banner.
+
+        :param exc: The error being handled.
+        :param parsing_field: The input a form error is about.
+
+        :returns: One entry, or an empty dict.
+    """
+    from ccai.pychestrate.webservice.orchestration.rpa.errors import (  # noqa: E402
+        DuplicateRpaSpecError,
+        RpaVersionNotActiveError,
+    )
+
+    message = getattr(exc, "message", None) or str(exc)
+    rtnval: Dict[str, str] = {}
+    if isinstance(exc, DuplicateRpaSpecError) is True:
+        rtnval = {"name": message}
+    elif isinstance(exc, RpaVersionNotActiveError) is True:
+        rtnval = {"version_selector": message}
+    elif isinstance(exc, ProjectsFormError) is True and parsing_field is not None:
+        rtnval = {parsing_field: message}
+    return rtnval
+
+
 def _render_rpa_spec_create_form(
         *,
         auth: _AuthResolution,
         project: Any,
         job_types: List[Any],
         form_data: Optional[MultiFormView],
-        status_code: int = 200
+        status_code: int = 200,
+        errors: Optional[Dict[str, str]] = None
     ) -> HTMLResponse:
     flashes = flash.consume_flashes(session=auth.session)
     context = _build_default_template_context(
@@ -446,6 +491,8 @@ def _render_rpa_spec_create_form(
     context["project"] = project
     context["job_types"] = job_types
     context["form_data"] = form_data
+    context["errors"] = errors if errors is not None else {}
+    context["error_labels"] = RPA_SPEC_FIELD_LABELS
     context["pod_choices"] = _pod_choices(db_session=auth.db_session)
     response = _render(
         template_name="projects/rpa/spec_create.html", context=context, status_code=status_code,
@@ -519,11 +566,14 @@ def handle_rpa_spec_create(request: Request) -> Response:
         target_pod_id = str(single_form.get("target_pod_id", "")).strip() or None
         timeout_raw = str(single_form.get("timeout_minutes", "")).strip()
         description = str(single_form.get("description", "")).strip()
+        errors: Dict[str, str] = {}
+        parsing_field: Optional[str] = "default_packet"
 
         try:
             default_packet = _parse_json_object(
                 raw=str(single_form.get("default_packet", "")), field_label="Default packet",
             )
+            parsing_field = None
             required_capabilities = [
                 c.strip() for c in str(single_form.get("required_capabilities", "")).split(",")
                 if len(c.strip()) > 0
@@ -552,17 +602,22 @@ def handle_rpa_spec_create(request: Request) -> Response:
                 category=flash.CATEGORY_SUCCESS,
             )
             return response
-        except ValueError as exc:
-            flash.add_flash(session=auth.session, message=_describe_failure(exc=exc, prefix="", request_path=str(getattr(request, "path", ""))), category=flash.CATEGORY_ERROR)
         except Exception as exc:
-            flash.add_flash(
-                session=auth.session,
-                message=_describe_failure(exc=exc, prefix="Error creating RPA specification: ", request_path=str(getattr(request, "path", ""))),
-                category=flash.CATEGORY_ERROR,
-            )
+            errors = _rpa_spec_field_errors(exc=exc, parsing_field=parsing_field)
+            if len(errors) == 0:
+                flash.add_flash(
+                    session=auth.session,
+                    message=_describe_failure(
+                        exc=exc,
+                        prefix="" if isinstance(exc, ValueError) else "Error creating RPA specification: ",
+                        request_path=str(getattr(request, "path", "")),
+                    ),
+                    category=flash.CATEGORY_ERROR,
+                )
 
         return _render_rpa_spec_create_form(
             auth=auth, project=project, job_types=job_types, form_data=form_view, status_code=400,
+            errors=errors,
         )
     finally:
         try:

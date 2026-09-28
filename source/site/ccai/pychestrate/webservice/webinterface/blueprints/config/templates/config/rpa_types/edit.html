@@ -20,6 +20,7 @@
 <div class="card narrow">
     <form method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {{ ui.error_summary(errors, error_labels) }}
 
         <div class="form-group">
             <label for="display_name">Display Name *</label>
@@ -44,8 +45,9 @@
         <div class="form-group">
             <label for="packet_schema">Packet Schema (JSON Schema, optional)</label>
             <textarea id="packet_schema" name="packet_schema" class="form-control mono" rows="10" spellcheck="false"
-                      aria-describedby="packet-schema-help">{{ form_data.packet_schema if form_data else '' }}</textarea>
+                      {{ ui.invalid_attrs(errors, 'packet_schema', 'packet-schema-help') | trim }}>{{ form_data.packet_schema if form_data else '' }}</textarea>
             <div id="packet-schema-help" class="form-text">Leave empty to accept any packet. Runs already started keep the schema they were checked against.</div>
+            {{ ui.field_error(errors, 'packet_schema') }}
         </div>
 
         <div class="form-group">

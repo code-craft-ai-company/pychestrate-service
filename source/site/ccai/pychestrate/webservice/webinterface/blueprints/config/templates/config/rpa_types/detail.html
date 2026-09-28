@@ -110,10 +110,12 @@
     <h2 class="card-header">Publish a version</h2>
     <form action="{{ url_for('config.rpa_type_publish', type_id=job_type.type_id) }}" method="post">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        {{ ui.error_summary(errors, error_labels) }}
         <div class="form-group">
             <label for="version">Version *</label>
-            <input type="text" id="version" name="version" class="form-control mono" required placeholder="1.0.0" value="{{ form_data.get('version', '') if form_data else '' }}">
-            <div class="form-text">Semantic versions sort highest for <code>latest-active</code>; other labels sort after them.</div>
+            <input type="text" id="version" name="version" class="form-control mono" required placeholder="1.0.0" value="{{ form_data.get('version', '') if form_data else '' }}"{{ ui.invalid_attrs(errors, 'version', 'version-help') }}>
+            <div class="form-text" id="version-help">Semantic versions sort highest for <code>latest-active</code>; other labels sort after them.</div>
+            {{ ui.field_error(errors, 'version') }}
         </div>
         <div class="form-group">
             <label for="source_kind">Source</label>
@@ -130,16 +132,19 @@
         <div class="form-group">
             <label for="entrypoint">Entrypoint (JSON) *</label>
             <textarea id="entrypoint" name="entrypoint" class="form-control mono" rows="4" spellcheck="false" required
-                      placeholder='{% if job_type.execution_mode.value == "tasker" %}{"workflow": "workflows/job.yaml"} or {"tasking": "jobs.flow@JobFlow"}{% else %}{"command": ["python", "-m", "jobs.invoice_import"], "packet_delivery": "file"}{% endif %}' aria-describedby="entrypoint-help">{{ form_data.get('entrypoint', '') if form_data else '' }}</textarea>
+                      placeholder='{% if job_type.execution_mode.value == "tasker" %}{"workflow": "workflows/job.yaml"} or {"tasking": "jobs.flow@JobFlow"}{% else %}{"command": ["python", "-m", "jobs.invoice_import"], "packet_delivery": "file"}{% endif %}' {{ ui.invalid_attrs(errors, 'entrypoint', 'entrypoint-help') | trim }}>{{ form_data.get('entrypoint', '') if form_data else '' }}</textarea>
             <div id="entrypoint-help" class="form-text">{% if job_type.execution_mode.value == 'tasker' %}A JSON object naming a taskplus workflow path inside the source (<code>workflow</code>) or a <code>module@Class</code> tasking (<code>tasking</code>).{% else %}A JSON object: <code>command</code> is the argv list to run, and <code>packet_delivery</code> is <code>file</code> (default), <code>stdin</code>, or <code>env</code>.{% endif %}</div>
+            {{ ui.field_error(errors, 'entrypoint') }}
         </div>
         <div class="form-group">
             <label for="environment">Environment (JSON)</label>
-            <textarea id="environment" name="environment" class="form-control mono" rows="3" spellcheck="false" placeholder='{"LOG_LEVEL": "info"}'>{{ form_data.get('environment', '') if form_data else '' }}</textarea>
+            <textarea id="environment" name="environment" class="form-control mono" rows="3" spellcheck="false" placeholder='{"LOG_LEVEL": "info"}'{{ ui.invalid_attrs(errors, 'environment') }}>{{ form_data.get('environment', '') if form_data else '' }}</textarea>
+            {{ ui.field_error(errors, 'environment') }}
         </div>
         <div class="form-group">
             <label for="timeout_minutes">Timeout (minutes)</label>
-            <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" value="{{ form_data.get('timeout_minutes', '60') if form_data else '60' }}" min="1" max="1440">
+            <input type="number" id="timeout_minutes" name="timeout_minutes" class="form-control" value="{{ form_data.get('timeout_minutes', '60') if form_data else '60' }}" min="1" max="1440"{{ ui.invalid_attrs(errors, 'timeout_minutes') }}>
+            {{ ui.field_error(errors, 'timeout_minutes') }}
         </div>
         <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Publish version</button>
     </form>
