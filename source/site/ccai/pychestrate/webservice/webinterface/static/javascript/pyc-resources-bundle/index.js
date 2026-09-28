@@ -1337,7 +1337,7 @@ var PycPoolDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-resources", "pyc-pool-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Resource pool detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-resources__heading");
@@ -2527,7 +2527,7 @@ var PycResourceDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-resources", "pyc-resource-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Resource detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-resources__heading");

@@ -1298,7 +1298,7 @@ var PycPodDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-pod-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Pod detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-pod-detail__heading");
@@ -3261,7 +3261,7 @@ var PycClientDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-client-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Client detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-client-detail__heading");

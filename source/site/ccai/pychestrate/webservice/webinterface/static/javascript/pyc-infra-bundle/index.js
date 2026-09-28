@@ -2914,7 +2914,7 @@ var PycProvisioningDetail = class extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-provisioning-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Provisioning run detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-provisioning-detail__heading");

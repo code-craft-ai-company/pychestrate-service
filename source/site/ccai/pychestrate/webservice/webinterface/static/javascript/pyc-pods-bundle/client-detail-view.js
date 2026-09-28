@@ -391,7 +391,7 @@ class PycClientDetail extends HTMLElement {
   _render_chrome() {
     const root = document.createElement("section");
     root.classList.add("pyc-client-detail");
-    root.setAttribute("role", "main");
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Client detail");
     const heading = document.createElement("h1");
     heading.classList.add("pyc-client-detail__heading");
