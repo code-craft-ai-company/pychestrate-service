@@ -62,7 +62,7 @@ def _guide_dir(*, with_index: bool = True) -> str:
     """A throwaway directory shaped like a built site."""
     root = tempfile.mkdtemp(prefix="pyc-guide-")
     if with_index:
-        with open(os.path.join(root, "index.html"), "w", encoding="utf-8") as handle:
+        with open(os.path.join(root, user_guide_route.USER_GUIDE_INDEX_FILE), "w", encoding="utf-8") as handle:
             handle.write("<!doctype html><title>Guide</title><h1>Guide</h1>")
         os.makedirs(os.path.join(root, "_static"))
         with open(os.path.join(root, "_static", "site.css"), "w", encoding="utf-8") as handle:
@@ -143,8 +143,8 @@ class _Request:
 def test_the_guide_is_mounted_at_docs_and_the_bare_address_goes_to_its_first_page():
     """
     **Feature: the service serves its user guide (DOC-20)**
-    **Property: with a built guide, ``/docs`` and ``/docs/`` answer 302 to
-    ``/docs/index.html`` and the files are served (200, right content type)
+    **Property: with a built guide, ``/docs`` and ``/docs/`` answer 302 to the
+    guide's front page (``/docs/userguide.html``) and the files are served (200, right content type)
     under ``/docs/{filepath}``; a path that climbs out of the directory is
     refused.**
     """
@@ -169,7 +169,7 @@ def test_the_guide_is_mounted_at_docs_and_the_bare_address_goes_to_its_first_pag
             served._headers.get("Content-Type", "").split(";")[0],
             climbing.status_code,
         ),
-        ((302, "/docs/index.html"), (302, "/docs/index.html"), 1, 200, "text/css", 404),
+        ((302, "/docs/userguide.html"), (302, "/docs/userguide.html"), 1, 200, "text/css", 404),
     )
     return
 
@@ -289,9 +289,10 @@ print("DOCS_URLS_JSON=" + json.dumps(sorted(entry.metadata.docs_url for entry in
 def test_every_published_plugin_address_names_a_page_a_real_build_produces():
     """
     **Feature: the service serves its user guide (DOC-20)**
-    **Property: after a real ``-W`` build of the site, every ``docs_url`` in
-    the plugin catalog is a ``/docs/...`` path whose file exists in the built
-    site, and no catalog page links to the host nothing publishes.**
+    **Property: after a real ``-W`` build of the site, the front page the
+    ``/docs`` redirect names exists, every ``docs_url`` in the plugin catalog
+    is a ``/docs/...`` path whose file exists in the built site, and no catalog
+    page links to the host nothing publishes.**
     """
     repo_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *([".."] * 8)))
     env = dict(os.environ)
@@ -311,6 +312,7 @@ def test_every_published_plugin_address_names_a_page_a_real_build_produces():
             cwd=repo_root, env=env, capture_output=True, text=True, timeout=600,
         )
         testbase.assert_equal(built.returncode, 0, (built.stdout + built.stderr)[-2000:])
+        front_page_built = os.path.isfile(os.path.join(output, user_guide_route.USER_GUIDE_INDEX_FILE))
         missing = [url for url in urls if not os.path.isfile(os.path.join(output, url[len("/docs/"):]))]
         outside = [url for url in urls if not url.startswith("/docs/")]
         old_host = []
@@ -323,5 +325,5 @@ def test_every_published_plugin_address_names_a_page_a_real_build_produces():
     finally:
         shutil.rmtree(output, ignore_errors=True)
 
-    testbase.assert_equal((len(urls) >= 20, missing, outside, old_host), (True, [], [], []))
+    testbase.assert_equal((front_page_built, len(urls) >= 20, missing, outside, old_host), (True, True, [], [], []))
     return

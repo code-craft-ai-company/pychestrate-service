@@ -41,7 +41,8 @@ from ccai.pychestrate.webservice.webinterface.foundation.static_files import reg
 
 
 USER_GUIDE_URL_PREFIX: str = "/docs"
-USER_GUIDE_INDEX_FILE: str = "index.html"
+#: The guide's front page: Sphinx's root document (``root_doc`` in ``userguide/conf.py``).
+USER_GUIDE_INDEX_FILE: str = "userguide.html"
 
 
 #: Directory, at the root of the checkout, where ``make docs-into-service``
@@ -102,7 +103,7 @@ def user_guide_url(*, docs_root: Optional[str] = None) -> str:
 def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> None:
     """
         Mount the user guide at ``/docs`` and send ``/docs`` and ``/docs/`` to
-        its first page. The two redirect routes are registered even when the
+        its first page (``userguide.html``). The two redirect routes are registered even when the
         guide is not installed, so a bookmarked address answers the site's own
         "not installed" page; the files are mounted only when the directory
         exists (the guide is installed before the service starts).
@@ -145,6 +146,7 @@ def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> 
 
 
 __all__ = [
+    "USER_GUIDE_INDEX_FILE",
     "USER_GUIDE_INSTALL_DIRECTORY",
     "USER_GUIDE_URL_PREFIX",
     "register_user_guide_routes",
