@@ -167,13 +167,13 @@
                             {% endif %}
                         </td>
                         <td>{{ transition.reason or '-' }}</td>
-                        <td>{{ transition.triggered_by }}</td>
+                        <td>{{ transition.triggered_by }}{% if transition.username %} <span class="muted" data-role="triggered-by-user">({{ transition.username }})</span>{% endif %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table></div>
             
-            {{ ui.pagination('resources.health_detail', page, total_pages, {'resource_id': resource.id, 'per_page': per_page}) }}
+            {{ ui.pagination('resources.health_detail', page, total_pages, {'resource_id': resource.id, 'per_page': per_page}, total=total) }}
             {% else %}
             <p class="muted">No health transitions recorded</p>
             {% endif %}

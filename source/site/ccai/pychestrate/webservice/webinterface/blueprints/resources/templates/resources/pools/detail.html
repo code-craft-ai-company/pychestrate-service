@@ -42,7 +42,7 @@
                 </tr>
                 <tr>
                     <th scope="row">Created By</th>
-                    <td>{{ pool.created_by or '-' }}</td>
+                    <td data-role="pool-created-by">{{ pool.created_by_name or ('a user who no longer exists' if pool.created_by else '-') }}</td>
                 </tr>
             </table></div>
         </div>
@@ -87,7 +87,7 @@
                 </tbody>
             </table></div>
 
-            {{ ui.pagination('resources.pool_detail', page, total_pages, {'pool_id': pool.id, 'per_page': per_page}, total=None) }}
+            {{ ui.pagination('resources.pool_detail', page, total_pages, {'pool_id': pool.id, 'per_page': per_page}, total=resource_total) }}
             {% else %}
             <p class="muted">No resources in this pool</p>
             {% endif %}

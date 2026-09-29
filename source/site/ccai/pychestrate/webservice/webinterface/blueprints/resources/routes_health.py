@@ -548,6 +548,7 @@ def handle_health_detail(request: Request) -> Response:
         context["page"] = page
         context["per_page"] = per_page
         context["total_pages"] = total_pages
+        context["total"] = history.total
         context["page_window"] = page_window
         errors, typed = form_errors.take_form_errors(session=auth.session, form="health_status")
         context["errors"] = errors

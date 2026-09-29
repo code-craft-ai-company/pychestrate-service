@@ -208,7 +208,7 @@
         {% else %}
         <div class="card">
             <h2 class="card-header">Checkout IP</h2>
-            <p class="muted">This pool is at capacity: every usable address is reserved or checked out. Check an address back in, or extend the pool, to make room.</p>
+            <p class="muted">This pool is at capacity: every usable address is reserved or checked out. Check an address back in{% if can_manage %}, or <a href="{{ url_for('resources.ip_pool_create') }}">create another pool</a>{% else %}, or ask a lab manager to add another pool{% endif %}, to make room. A pool's range cannot be changed once it is made.</p>
         </div>
         {% endif %}
         

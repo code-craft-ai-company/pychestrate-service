@@ -60,16 +60,22 @@ Resource** form:
 * **Reason**, optional: what you are using it for.
 
 Choose **Checkout**. You are told the allocation ID. The form appears only
-while the device is *Online* or *Degraded* and has capacity left; at capacity
-the page says so and the form comes back when someone checks in. A device that
-is *Offline* or in *Maintenance* cannot be checked out.
+while the device is *Online* or *Degraded* and has capacity left. The card
+always says what is true instead: that you already have it checked out (with a
+link to your allocation), who has it and until when, or, for a device that is
+*Offline* or in *Maintenance*, that checkout is blocked, since when, why and
+who set it. The form comes back when someone checks in or the device is
+brought back online.
 
 To give a device back, open it, find your entry under **Active Allocations**
 and choose **Check in**. You cannot check in someone else's allocation that
 way. An administrator can: choose **Force check in**, enter the reason
 (required, so it is on record), and confirm. The allocation is then marked
-*Forced*. **Resources**, **Active Allocations** lists everything now checked
-out and **Allocation History** what has been returned.
+*Forced*, and its page names who forced it and gives their reason.
+**Resources**, **Active Allocations** lists everything now checked out and
+**Allocation History** what has been returned; both show the reason given at
+checkout under the holder's name, and the lists say how many rows there are and
+keep their filters from page to page.
 
 
 Reserve a device for later

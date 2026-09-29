@@ -162,5 +162,5 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.resource_list', page, total_pages, {'per_page': per_page, 'pool_id': selected_pool_id, 'resource_type': (selected_resource_type or none), 'health_status': (selected_health_status or none), 'availability': (selected_availability or none), 'search': (search or none)}, total=None) }}
+{{ ui.pagination('resources.resource_list', page, total_pages, {'per_page': per_page, 'pool_id': selected_pool_id, 'resource_type': (selected_resource_type or none), 'health_status': (selected_health_status or none), 'availability': (selected_availability or none), 'search': (search or none), 'tags': (selected_tags or none)}, total=total) }}
 {% endblock %}

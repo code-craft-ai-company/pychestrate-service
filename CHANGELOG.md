@@ -376,6 +376,32 @@ preview tag.
   wins), and a week with a daylight-saving change is 167 or 169 hours
   long. Allocation pages, health pages and the audit log still show UTC.
 
+- **Reasons and actors are shown.** The reason given at check-out, a
+  reservation's reason, who force-checked an allocation in and why, who made
+  a pool (by name, not a UUID) and who made a manual health change were
+  stored and never displayed. They now appear on the allocation and
+  reservation pages, under the holder in the allocation lists, beside the
+  Forced badge in the history, on the pool page and in the health history.
+  The allocation pages show their times in the viewer's zone as the
+  reservation pages do.
+
+- **The Checkout card says why checkout is not offered.** On an offline or
+  maintenance device the card disappeared, and someone who already held a
+  device was told it was "at capacity". The card now says checkout is
+  blocked, since when, why and by whom (with a link to change it for a lab
+  manager), that you have it checked out (with a link to your allocation),
+  or who has it and until when.
+
+- **Pagers keep their filters and show totals.** The allocation history
+  dropped its end date and the resource list its tag filter when paging.
+  Every paged list now says "Page 1 of N · T total". `url_for` writes a
+  list value once per item.
+
+- **Small fixes.** The disabled Mode field on the reservation edit page
+  has a label that points at it (an axe critical). A full IP pool no longer
+  says to "extend the pool", which cannot be done: it links to create
+  another pool.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

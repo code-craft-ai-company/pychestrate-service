@@ -35,10 +35,10 @@
         </div>
         
         <div class="form-group">
-            <label>Mode</label>
+            <label for="reservation-mode-readonly">Mode</label>
             {% set mode = reservation.mode %}
-            <input type="text" class="form-control" value="{{ mode }}" disabled>
-            <p class="form-text">Allocation mode cannot be changed</p>
+            <input type="text" class="form-control" id="reservation-mode-readonly" value="{{ mode }}" disabled aria-describedby="reservation-mode-help">
+            <p class="form-text" id="reservation-mode-help">Allocation mode cannot be changed</p>
         </div>
 
         {% if acting_for_other %}

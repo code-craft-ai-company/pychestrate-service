@@ -227,16 +227,36 @@
                 </button>
             </form>
         </div>
+        {% elif my_allocation %}
+        <div class="card">
+            <h2 class="card-header">Checkout Resource</h2>
+            <p class="alert alert-info" role="status" data-role="checkout-held-by-you">
+                You have this checked out, since {{ my_allocation.checkout_time | local_datetime(false, '-') }}{% if my_allocation.expected_checkin %}, until {{ my_allocation.expected_checkin | local_datetime(false, '-') }}{% endif %}.
+                <a href="{{ url_for('resources.allocation_detail', allocation_id=my_allocation.id) }}">Open your allocation</a> to check it in.
+            </p>
+            {% if resource.current_allocations > 1 %}
+            <p class="muted" style="margin: 0;">{{ resource.current_allocations - 1 }} other allocation{{ 's' if resource.current_allocations != 2 else '' }} {{ 'are' if resource.current_allocations != 2 else 'is' }} also active.</p>
+            {% endif %}
+        </div>
         {% else %}
         <div class="card">
             <h2 class="card-header">Checkout Resource</h2>
-            <p style="color: var(--pyc-color-on-surface-muted); margin: 0;">
-                At capacity &mdash; {{ resource.current_allocations }} active
-                allocation{{ 's' if resource.current_allocations != 1 else '' }}.
+            <p style="color: var(--pyc-color-on-surface-muted); margin: 0;" data-role="checkout-at-capacity">
+                At capacity: held by
+                {% for allocation in active_allocations %}{{ allocation.username or 'someone' }}{% if allocation.expected_checkin %} (until {{ allocation.expected_checkin | local_datetime(false, '-') }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}.
                 Checkout becomes available when an allocation is checked in.
             </p>
         </div>
         {% endif %}
+        {% else %}
+        <div class="card">
+            <h2 class="card-header">Checkout Resource</h2>
+            <p class="alert alert-warning" role="status" data-role="checkout-blocked">
+                Checkout is blocked: this resource is {% if status == 'maintenance' %}in maintenance{% else %}{{ status }}{% endif %}{% if blocking_transition %} since {{ blocking_transition.timestamp | local_datetime(false, '-') }}{% if blocking_transition.username %} (set by {{ blocking_transition.username }}){% endif %}{% endif %}.
+                {% if blocking_transition and blocking_transition.reason %}Reason: {{ blocking_transition.reason }}.{% endif %}
+                {% if can_manage %}Change its status under <a href="{{ url_for('resources.health_detail', resource_id=resource.id) }}">Health</a> to allow checkouts again.{% else %}Ask a lab manager to bring it back online.{% endif %}
+            </p>
+        </div>
         {% endif %}
     </div>
 </div>

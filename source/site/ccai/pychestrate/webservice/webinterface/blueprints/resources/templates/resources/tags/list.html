@@ -88,7 +88,7 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.tag_list', page, total_pages, {'per_page': per_page, 'search': (search or none)}, total=None) }}
+{{ ui.pagination('resources.tag_list', page, total_pages, {'per_page': per_page, 'search': (search or none)}, total=total) }}
 
 <p class="muted mt">
     Tags are made here, or by typing a new one in a resource's Tags field.

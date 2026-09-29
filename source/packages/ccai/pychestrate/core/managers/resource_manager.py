@@ -113,6 +113,7 @@ class ResourcePoolResponse:
     resource_count: int
     created_at: datetime
     created_by: Optional[str]
+    created_by_name: Optional[str] = None
 
 
 @dataclass
@@ -963,7 +964,7 @@ class ResourceManager:
         if not pool:
             return None
         
-        return self._pool_to_response(pool)
+        return self._pool_to_response(pool, resolve_creator=True)
     
     def list_pools(self, user_id: str = None, offset: int = 0, limit: int = 50) -> ResourcePoolListResponse:
         """
@@ -1644,15 +1645,23 @@ class ResourceManager:
             updated_at=resource.updated_at
         )
     
-    def _pool_to_response(self, pool) -> ResourcePoolResponse:
+    def _pool_to_response(self, pool, resolve_creator: bool = False) -> ResourcePoolResponse:
         """
         Convert a ResourcePool ORM object to a ResourcePoolResponse dataclass.
         
         :param pool: The ResourcePool ORM object
+        :param resolve_creator: Look up the creator's login for ``created_by_name``
+            (one query, so only a single pool's page asks for it)
         :returns: ResourcePoolResponse dataclass
         """
         resource_count = len(pool.resources) if pool.resources else 0
         created_by = str(pool.created_by_id) if pool.created_by_id else None
+        created_by_name = None
+        if resolve_creator and pool.created_by_id:
+            from ccai.pychestrate.core.orm import User
+
+            creator = self._db_session.query(User).filter(User.id == pool.created_by_id).first()
+            created_by_name = creator.login if creator else None
         
         return ResourcePoolResponse(
             id=pool.id,
@@ -1661,7 +1670,8 @@ class ResourceManager:
             is_default=pool.is_default,
             resource_count=resource_count,
             created_at=pool.created_at,
-            created_by=created_by
+            created_by=created_by,
+            created_by_name=created_by_name
         )
     
     def _tag_to_response(self, tag) -> TagResponse:

@@ -579,6 +579,7 @@ def handle_ip_pool_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = pools_response.total
         context["page_window"] = page_window
         response = _render(
             template_name="resources/ip_pools/list.html",

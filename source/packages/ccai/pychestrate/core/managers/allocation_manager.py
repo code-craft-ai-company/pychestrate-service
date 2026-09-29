@@ -56,6 +56,9 @@ class AllocationResponse:
     actual_checkin: Optional[datetime]
     duration_minutes: Optional[int]
     metadata: Dict[str, Any]
+    reason: Optional[str] = None
+    forced_by: Optional[str] = None
+    force_reason: Optional[str] = None
 
 
 @dataclass
@@ -92,6 +95,7 @@ class ReservationResponse:
     mode: str
     status: str
     created_at: datetime
+    reason: Optional[str] = None
 
 
 @dataclass
@@ -1570,7 +1574,8 @@ class AllocationManager:
                 end_time=reservation.end_time,
                 mode=reservation.mode,
                 status=reservation.status,
-                created_at=reservation.created_at
+                created_at=reservation.created_at,
+                reason=reservation.reason
             ))
         return rtnval
 
@@ -1800,6 +1805,13 @@ class AllocationManager:
         user = self._db_session.query(User).filter(
             User.id == allocation.user_id
         ).first()
+
+        forced_by = None
+        if allocation.forced_by_id:
+            forcer = self._db_session.query(User).filter(
+                User.id == allocation.forced_by_id
+            ).first()
+            forced_by = forcer.login if forcer else None
         
         return AllocationResponse(
             id=allocation.id,
@@ -1815,7 +1827,10 @@ class AllocationManager:
             expected_checkin=allocation.expected_checkin,
             actual_checkin=allocation.actual_checkin,
             duration_minutes=allocation.duration_minutes,
-            metadata=allocation.metadata_snapshot or {}
+            metadata=allocation.metadata_snapshot or {},
+            reason=allocation.reason,
+            forced_by=forced_by,
+            force_reason=allocation.force_reason
         )
     
     def _reservation_to_response(self, reservation) -> ReservationResponse:
@@ -1846,5 +1861,6 @@ class AllocationManager:
             end_time=reservation.end_time,
             mode=reservation.mode,
             status=reservation.status,
-            created_at=reservation.created_at
+            created_at=reservation.created_at,
+            reason=reservation.reason
         )

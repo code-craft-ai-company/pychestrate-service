@@ -139,6 +139,6 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.reservation_list', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'start_after': (start_after or none), 'end_before': (end_before or none), 'status': selected_reservation_status, 'tz': (viewer_timezone or none)}, total=None) }}
+{{ ui.pagination('resources.reservation_list', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'start_after': (start_after or none), 'end_before': (end_before or none), 'status': selected_reservation_status, 'tz': (viewer_timezone or none)}, total=total) }}
 {% include "resources/reservations/_local_times.html" %}
 {% endblock %}

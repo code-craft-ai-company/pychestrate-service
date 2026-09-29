@@ -1080,6 +1080,7 @@ def handle_resource_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = resources_response.total
         context["page_window"] = page_window
         context["filters_active"] = filters_active
         context["selected_pool_id"] = pool_id
@@ -1291,6 +1292,39 @@ def handle_resource_create(request: Request) -> Response:
             pass
 
 
+def _blocking_transition(*, db_session: Any, resource_id: int, status: str) -> Any:
+    """
+        The health change that put a resource into the status that blocks
+        checkouts (offline or maintenance): when, by whom and why. None
+        for a resource that is not blocked, or when the history has
+        nothing that matches.
+
+        :param db_session: The request's session.
+        :param resource_id: The resource.
+        :param status: The resource's current health status.
+
+        :returns: The latest transition when it led to ``status``, else None.
+    """
+    if status not in ("offline", "maintenance"):
+        return None
+    try:
+        from ccai.pychestrate.core.managers.health_monitor import (  # noqa: E402
+            HealthMonitor,
+        )
+
+        history = HealthMonitor(db_session).get_health_history(
+            resource_id, offset=0, limit=1
+        )
+    except Exception:  # the card is still useful without the history
+        return None
+    if len(history.transitions) == 0:
+        return None
+    latest = history.transitions[0]
+    if latest.new_status != status:
+        return None
+    return latest
+
+
 def handle_resource_detail(request: Request) -> Response:
     """
         ``GET /resources/{resource_id}`` -- detail page including
@@ -1346,6 +1380,19 @@ def handle_resource_detail(request: Request) -> Response:
         context["resource"] = resource
         context["active_allocations"] = active_allocations
         context["upcoming_reservations"] = upcoming_reservations
+        # The checkout card tells a person why they cannot check the
+        # resource out: they already hold it, or it is blocked and since when.
+        context["my_allocation"] = next(
+            (
+                item for item in active_allocations
+                if str(getattr(item, "user_id", "")) == str(auth.user_id)
+            ),
+            None,
+        )
+        context["blocking_transition"] = _blocking_transition(
+            db_session=db_session, resource_id=resource_id,
+            status=str(getattr(resource, "health_status", "")),
+        )
         # The first reservation of someone else: a check-out that runs into
         # it is refused, so the checkout card says so up front.
         context["next_reservation_by_other"] = next(

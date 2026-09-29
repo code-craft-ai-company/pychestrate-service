@@ -104,7 +104,8 @@ def url_for(endpoint: str, **kwargs: Any) -> str:
         are substituted into the path, and every remaining kwarg
         is appended as a URL-encoded query string. Kwargs whose
         value is ``None`` are skipped; insertion order is
-        preserved.
+        preserved. A list or tuple value is written once per item
+        (``tags=a&tags=b``); an empty one writes nothing.
 
         :param endpoint: Registered endpoint name.
         :param kwargs: Path-param substitutions + query-string
@@ -144,6 +145,12 @@ def url_for(endpoint: str, **kwargs: Any) -> str:
         if name in placeholder_names:
             continue
         if value is None:
+            continue
+        if isinstance(value, (list, tuple, set, frozenset)):
+            # A multi-valued parameter (the tags of a filter) is written
+            # once per value, the way a form submits it.
+            for item in value:
+                query_items.append((name, str(item)))
             continue
         query_items.append((name, str(value)))
 

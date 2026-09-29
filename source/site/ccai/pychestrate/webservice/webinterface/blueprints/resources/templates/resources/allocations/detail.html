@@ -35,6 +35,10 @@
                     <td>{{ allocation.job_id or '-' }}</td>
                 </tr>
                 <tr>
+                    <th scope="row">Reason</th>
+                    <td data-role="allocation-reason">{{ allocation.reason or '-' }}</td>
+                </tr>
+                <tr>
                     <th scope="row">Mode</th>
                     <td>
                         {% set mode = allocation.mode %}
@@ -62,17 +66,27 @@
                         {% endif %}
                     </td>
                 </tr>
+                {% if allocation.forced_by or allocation.force_reason %}
+                <tr>
+                    <th scope="row">Forced by</th>
+                    <td data-role="forced-by">{{ allocation.forced_by or '-' }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Reason given</th>
+                    <td data-role="force-reason">{{ allocation.force_reason or '-' }}</td>
+                </tr>
+                {% endif %}
                 <tr>
                     <th scope="row">Checkout Time</th>
-                    <td>{{ allocation.checkout_time | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ allocation.checkout_time | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Expected Checkin</th>
-                    <td>{{ allocation.expected_checkin | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ allocation.expected_checkin | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Actual Checkin</th>
-                    <td>{{ allocation.actual_checkin | format_datetime('%Y-%m-%d %H:%M:%S', '-') }}</td>
+                    <td>{{ allocation.actual_checkin | local_datetime(true, '-') }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Duration</th>
@@ -134,4 +148,5 @@
         </div>
     </div>
 </div>
+{% include "resources/reservations/_local_times.html" %}
 {% endblock %}

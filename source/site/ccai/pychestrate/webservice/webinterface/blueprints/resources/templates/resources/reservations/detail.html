@@ -66,6 +66,10 @@
                     </td>
                 </tr>
                 <tr>
+                    <th scope="row">Reason</th>
+                    <td data-role="reservation-reason">{{ reservation.reason or '-' }}</td>
+                </tr>
+                <tr>
                     <th scope="row">Created</th>
                     <td>{{ reservation.created_at | local_datetime(true, '-') }}</td>
                 </tr>

@@ -120,6 +120,7 @@ class HealthTransitionResponse:
     triggered_by: str
     user_id: Optional[str]
     timestamp: datetime
+    username: Optional[str] = None
 
 
 @dataclass
@@ -510,6 +511,15 @@ class HealthMonitor:
         # Apply pagination
         transitions = query.offset(offset).limit(limit).all()
         
+        # The people behind the manual changes, in one query for the page
+        logins: Dict[str, str] = {}
+        person_ids = [t.user_id for t in transitions if t.user_id]
+        if len(person_ids) > 0:
+            from ccai.pychestrate.core.orm import User
+
+            for person in self._db_session.query(User).filter(User.id.in_(person_ids)).all():
+                logins[str(person.id)] = person.login
+
         return HealthTransitionListResponse(
             transitions=[
                 HealthTransitionResponse(
@@ -521,7 +531,8 @@ class HealthMonitor:
                     reason=t.reason,
                     triggered_by=t.triggered_by,
                     user_id=str(t.user_id) if t.user_id else None,
-                    timestamp=t.timestamp
+                    timestamp=t.timestamp,
+                    username=logins.get(str(t.user_id)) if t.user_id else None
                 )
                 for t in transitions
             ],

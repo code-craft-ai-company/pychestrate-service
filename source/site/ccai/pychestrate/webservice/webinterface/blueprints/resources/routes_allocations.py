@@ -286,6 +286,7 @@ def handle_allocation_list(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = allocations_response.total
         context["page_window"] = page_window
         context["filters_active"] = filters_active
         context["selected_resource_id"] = resource_id
@@ -384,6 +385,7 @@ def handle_allocation_history(request: Request) -> Response:
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
+        context["total"] = allocations_response.total
         context["page_window"] = page_window
         context["filters_active"] = filters_active
         context["selected_resource_id"] = resource_id

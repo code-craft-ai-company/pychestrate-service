@@ -62,7 +62,7 @@
         <tr>
             <td><a href="{{ url_for('resources.allocation_detail', allocation_id=alloc.id) }}">{{ alloc.id }}</a></td>
             <td><a href="{{ url_for('resources.resource_detail', resource_id=alloc.resource_id) }}">{{ alloc.resource_name }}</a></td>
-            <td>{{ alloc.username or '-' }}</td>
+            <td>{{ alloc.username or '-' }}{% if alloc.reason %}<div class="muted" data-role="allocation-reason">{{ alloc.reason }}</div>{% endif %}</td>
             <td>{{ alloc.job_id or '-' }}</td>
             <td>
                 {% set mode = alloc.mode %}
@@ -82,12 +82,13 @@
                 <span class="badge badge-warning">Expired</span>
                 {% elif status == 'forced' %}
                 <span class="badge badge-danger">Forced</span>
+                {% if alloc.forced_by %}<div class="muted" data-role="forced-by">by {{ alloc.forced_by }}{% if alloc.force_reason %}: {{ alloc.force_reason }}{% endif %}</div>{% endif %}
                 {% else %}
                 <span class="badge badge-secondary">{{ status }}</span>
                 {% endif %}
             </td>
-            <td>{{ alloc.checkout_time | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
-            <td>{{ alloc.actual_checkin | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+            <td>{{ alloc.checkout_time | local_datetime(false, '-') }}</td>
+            <td>{{ alloc.actual_checkin | local_datetime(false, '-') }}</td>
             <td>{% if alloc.duration_minutes is not none %}{{ alloc.duration_minutes }} min{% else %}-{% endif %}</td>
         </tr>
         {% else %}
@@ -105,5 +106,6 @@
     </tbody>
 </table></div>
 
-{{ ui.pagination('resources.allocation_history', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'user_id': selected_user_id, 'start_date': (start_date or none)}, total=None) }}
+{{ ui.pagination('resources.allocation_history', page, total_pages, {'per_page': per_page, 'resource_id': selected_resource_id, 'user_id': selected_user_id, 'start_date': (start_date or none), 'end_date': (end_date or none)}, total=total) }}
+{% include "resources/reservations/_local_times.html" %}
 {% endblock %}

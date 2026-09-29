@@ -339,6 +339,22 @@ def _availability_bookings(mode: str) -> Any:
     return rtnval
 
 
+def _my_allocation(mode: str) -> Any:
+    """The current person's own active allocation of the resource, or None."""
+    if mode == MODE_SPARSE:
+        return None
+    rtnval = build_fixture(AllocationResponse, mode=mode)
+    return rtnval
+
+
+def _blocking_transition(mode: str) -> Any:
+    """The health change that blocked a resource, or None."""
+    if mode == MODE_SPARSE:
+        return None
+    rtnval = build_fixture(HealthTransitionResponse, mode=mode)
+    return rtnval
+
+
 def _health_groups(mode: str) -> Any:
     groups = {"online": [], "degraded": [], "maintenance": [], "offline": []}
     if mode == MODE_POPULATED:
@@ -940,6 +956,11 @@ TEMPLATE_PREFIX_OVERRIDES: Dict[str, Dict[str, Builder]] = {
     },
     # Resources audit fixes (RES-02 / RES-17): the IANA zone a
     # reservation form's times are typed in ("" = fresh form, UTC).
+    # The resource page's checkout card (RES-30): why checkout is not offered.
+    "resources/resources/": {
+        "my_allocation": _my_allocation,
+        "blocking_transition": _blocking_transition,
+    },
     "resources/reservations/": {
         "viewer_timezone": _by_mode("America/Los_Angeles", ""),
         # Reservation list status filter and the availability week (RES-43).
