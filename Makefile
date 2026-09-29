@@ -120,9 +120,10 @@ docs: docs-html ## Same as docs-html
 docs-html: ## Build the whole site (manual, REST API reference, plugin catalog) into .output/docs/site
 	$(SPHINXBUILD) -W --keep-going -t reference -b html userguide .output/docs/site
 
-# Where the service serves the built user guide from (/docs): a directory beside
-# its other static assets, kept out of git and carried by the deploy's rsync.
-DOCS_INSTALL_DIR := source/site/ccai/pychestrate/webservice/webinterface/static/docs
+# Where the service serves the built user guide from (/docs): a directory at the
+# root of the checkout, kept out of git and carried by the deploy's rsync. It is
+# outside the web interface's source tree so the invariant tests do not scan it.
+DOCS_INSTALL_DIR := docs-site
 
 docs-into-service: docs-html ## Build the user guide and install it where the service serves it (/docs)
 	rm -fr $(DOCS_INSTALL_DIR)

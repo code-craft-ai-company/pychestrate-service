@@ -75,10 +75,11 @@ def test_catalog_validator_resolves_resource_kind_reference():
 def test_resource_kind_published_docs_url_is_documented_path():
     """
     **Feature: 8-plugin-api integration**
-    **Property: The published docs URL points under
-    docs.pychestrate.io/plugin-api/resource_kind.**
+    **Property: The published docs URL is the guide's own catalog page,
+    /docs/extensions/protocols/resource_kind.html (DOC-20).**
     """
     testbase.assert_equal(
-        ResourceKindProtocol.published_docs_url.endswith("/resource_kind"), True
+        ResourceKindProtocol.published_docs_url,
+        "/docs/extensions/protocols/resource_kind.html",
     )
     return

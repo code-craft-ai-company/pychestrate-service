@@ -87,7 +87,7 @@ docs/_build/
 userguide/extensions/
 userguide/_reference/
 # The built user guide the service serves at /docs (make docs-into-service).
-source/site/ccai/pychestrate/webservice/webinterface/static/docs/
+/docs-site/
 
 # PyBuilder
 target/

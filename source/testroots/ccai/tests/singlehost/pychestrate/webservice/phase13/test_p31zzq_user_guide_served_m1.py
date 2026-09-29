@@ -95,6 +95,27 @@ def test_the_link_is_offered_only_when_the_guide_is_installed():
     return
 
 
+def test_the_guide_is_installed_at_the_checkout_root_outside_the_web_interface_tree():
+    """
+    **Feature: the service serves its user guide (DOC-20)**
+    **Property: ``user_guide_root`` is ``docs-site`` beside ``pyproject.toml``,
+    not under the web interface's source tree: the invariant tests scan every
+    file under that tree (storage use, colour literals, inline-script nonces)
+    and a generated Sphinx site fails them.**
+    """
+    from ccai.pychestrate.webservice.metadata import SITE_DIRECTORIES
+
+    root = os.path.realpath(user_guide_route.user_guide_root())
+    web_interface = os.path.realpath(os.path.join(SITE_DIRECTORIES.DIR_STATIC, os.pardir))
+    repo_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), *([".."] * 8)))
+
+    testbase.assert_equal(
+        (os.path.basename(root), os.path.dirname(root) == os.path.realpath(repo_root), root.startswith(web_interface + os.sep)),
+        ("docs-site", True, False),
+    )
+    return
+
+
 class _FakeApp:
     """Records the routes attached to it."""
 

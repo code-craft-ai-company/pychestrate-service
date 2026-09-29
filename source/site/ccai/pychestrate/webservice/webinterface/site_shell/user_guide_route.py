@@ -11,8 +11,8 @@ describe a different release from the one that is running. The service
 therefore serves the user guide it shipped with:
 
 * ``make docs-into-service`` builds the Sphinx site (``make docs``) and copies
-  it into ``static/docs`` beside the other static assets; the deploy script
-  runs it before it syncs the tree.
+  it into ``docs-site`` at the root of the checkout; the deploy script runs it
+  before it syncs the tree.
 * This module mounts that directory at ``/docs`` and answers ``/docs`` and
   ``/docs/`` with a redirect to the guide's first page.
 * The shell shows a "User guide" link in the account menu only when the guide
@@ -44,13 +44,30 @@ USER_GUIDE_URL_PREFIX: str = "/docs"
 USER_GUIDE_INDEX_FILE: str = "index.html"
 
 
+#: Directory, at the root of the checkout, where ``make docs-into-service``
+#: installs the built guide. It is outside the web interface's tree on
+#: purpose: the invariant tests scan every file under that tree (storage use,
+#: colour literals, inline-script nonces), and a generated Sphinx site is not
+#: source they should judge.
+USER_GUIDE_INSTALL_DIRECTORY: str = "docs-site"
+
+
 def user_guide_root() -> str:
     """
-        Where the built user guide is installed: ``static/docs`` under the
-        web interface.
+        Where the built user guide is installed: ``docs-site`` at the root of
+        the checkout (the directory holding ``pyproject.toml``). A service that
+        is not run from a checkout keeps it beside its static assets.
 
         :returns: Absolute directory path (it may not exist).
     """
+    current = os.path.dirname(os.path.abspath(__file__))
+    for _level in range(12):
+        if os.path.isfile(os.path.join(current, "pyproject.toml")):
+            return os.path.join(current, USER_GUIDE_INSTALL_DIRECTORY)
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
     rtnval = os.path.join(SITE_DIRECTORIES.DIR_STATIC, "docs")
     return rtnval
 
@@ -128,6 +145,7 @@ def register_user_guide_routes(*, app: Any, docs_root: Optional[str] = None) -> 
 
 
 __all__ = [
+    "USER_GUIDE_INSTALL_DIRECTORY",
     "USER_GUIDE_URL_PREFIX",
     "register_user_guide_routes",
     "user_guide_is_installed",

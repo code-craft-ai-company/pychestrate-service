@@ -256,7 +256,7 @@ preview tag.
   pages (`/docs/extensions/protocols/<name>.html`, `/docs/extensions/resources/<name>.html`;
   they named `docs.pychestrate.io`, a host nothing publishes) and become
   absolute when `PYCHESTRATE_PUBLIC_BASE_URL` is set. `make docs-into-service`
-  builds the Sphinx site and installs it beside the static assets; the deploy
+  builds the Sphinx site and installs it in `docs-site/` at the root of the checkout; the deploy
   script runs it (a guide that does not build is skipped with a warning) and
   the app mounts the directory at `/docs`, with the files' safe path handling,
   gzip and ETags of the other static assets. Without a built guide the link
