@@ -155,7 +155,3 @@ dmypy.json
 .output
 .output*
 .DS_Store
-
-# Pages the Sphinx build generates into the source tree (make docs-clean removes them)
-/userguide/extensions/
-/userguide/_reference/
