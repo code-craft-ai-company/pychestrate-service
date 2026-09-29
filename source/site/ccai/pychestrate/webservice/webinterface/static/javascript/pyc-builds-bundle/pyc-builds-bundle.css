@@ -418,3 +418,45 @@ pyc-build-detail {
     font-size: var(--pyc-font-size-meta, 0.75rem);
     font-variant-numeric: tabular-nums;
 }
+
+/* A build's log tail and its artifact rows that need room for long paths (ORC-12) */
+.pyc-build-detail__log {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pyc-build-detail__log-text {
+    margin: 0;
+    max-height: 24rem;
+    overflow: auto;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    background-color: var(--pyc-builds-neutral-surface);
+    font-family: var(--pyc-font-family-mono, monospace);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.pyc-build-detail__log-note {
+    margin: 0;
+    font-size: var(--pyc-font-size-small, 0.875rem);
+    color: var(--pyc-builds-fg-muted);
+}
+
+.pyc-build-detail__artifact-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pyc-build-detail__artifact-size,
+.pyc-build-detail__artifact-stored {
+    color: var(--pyc-builds-fg-muted);
+    font-size: var(--pyc-font-size-meta, 0.75rem);
+}
+
+.pyc-build-detail__artifact-stored {
+    font-family: var(--pyc-font-family-mono, monospace);
+    overflow-wrap: anywhere;
+}

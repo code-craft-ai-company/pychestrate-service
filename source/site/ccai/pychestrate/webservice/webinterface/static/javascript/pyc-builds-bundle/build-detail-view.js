@@ -1,5 +1,6 @@
 import { set_entity_title } from "../shared/page-title.js";
 import { project_of_run } from "../shared/run-project.js";
+import { format_bytes, opens_in_browser, run_artifact_url, served_artifact_path, tail_lines } from "../shared/run-artifacts.js";
 import { keep_list_state_on_back, mirror_to_query } from "../shared/view-state.js";
 import {
   announce_session_expired,
@@ -10,6 +11,11 @@ import {
 } from "./builds-list-view.js";
 const PROJECTS_API_PATH = "/api/v1/projects";
 const POLL_INTERVAL_MS = 5e3;
+// The build log is read into the page only when it is small; a bigger one is
+// linked. Only its tail is shown.
+const LOG_INLINE_MAX_BYTES = 512 * 1024;
+const LOG_TAIL_LINES = 200;
+const LOG_TAIL_MAX_CHARS = 20000;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function build_id_from_path(path) {
   if (typeof path !== "string" || path.length === 0) {
@@ -96,6 +102,7 @@ class PycBuildDetail extends HTMLElement {
   _poll_status;
   _poll_timer;
   _root;
+  _log;
   constructor() {
     super();
     this._build_id = "";
@@ -110,6 +117,7 @@ class PycBuildDetail extends HTMLElement {
     this._poll_status = "idle";
     this._poll_timer = null;
     this._root = null;
+    this._log = { path: "", status: "idle", text: "", cut: false, total: 0, size: null };
   }
   /**
    * Observed attributes -- ``build-id`` and ``project-id`` may be
@@ -294,6 +302,7 @@ class PycBuildDetail extends HTMLElement {
       );
     }
     this._render_artifacts();
+    void this._maybe_load_log();
     return;
   }
   /**
@@ -451,6 +460,12 @@ class PycBuildDetail extends HTMLElement {
         fragment.appendChild(this._build_toolchain(this._build.toolchain));
       }
     }
+    const log_section = document.createElement("section");
+    log_section.classList.add("pyc-build-detail__log");
+    log_section.setAttribute("data-role", "log-section");
+    log_section.setAttribute("role", "region");
+    log_section.setAttribute("aria-label", "Build log");
+    fragment.appendChild(log_section);
     const artifacts_section = document.createElement("section");
     artifacts_section.classList.add("pyc-build-detail__artifacts");
     artifacts_section.setAttribute("data-role", "artifacts-section");
@@ -459,6 +474,7 @@ class PycBuildDetail extends HTMLElement {
     fragment.appendChild(artifacts_section);
     body.replaceChildren(fragment);
     this._render_artifacts();
+    this._render_log();
     return;
   }
   /**
@@ -611,18 +627,38 @@ class PycBuildDetail extends HTMLElement {
         const display = artifact.artifact_name;
         name.textContent = display !== void 0 && display !== null && display.length > 0 ? display : artifact.artifact_id;
         item.appendChild(name);
-        const type_chip = document.createElement("span");
-        type_chip.classList.add("pyc-build-detail__artifact-type");
-        type_chip.textContent = artifact.artifact_type;
-        item.appendChild(type_chip);
-        const storage = artifact.storage_uri;
-        if (storage !== void 0 && storage !== null && storage.length > 0) {
+        const payload = artifact.payload !== null && typeof artifact.payload === "object" ? artifact.payload : {};
+        const size = format_bytes(payload.size_bytes);
+        if (size.length > 0) {
+          const size_el = document.createElement("span");
+          size_el.classList.add("pyc-build-detail__artifact-size");
+          size_el.textContent = size;
+          item.appendChild(size_el);
+        }
+        // A stored path is served from the run's result tree; a stored address
+        // with a scheme (s3://, oci://) is not served here, so it is shown as
+        // text instead of a link that opens nothing (ORC-12).
+        const served = served_artifact_path(artifact);
+        if (served.length > 0) {
           const link = document.createElement("a");
           link.classList.add("pyc-build-detail__artifact-link");
-          link.setAttribute("href", storage);
+          link.setAttribute("href", run_artifact_url(this._build_id, served));
           link.setAttribute("rel", "noopener noreferrer");
-          link.textContent = "Download";
+          if (opens_in_browser(served) === true) {
+            link.setAttribute("target", "_blank");
+            link.textContent = "Open";
+          } else {
+            link.setAttribute("download", "");
+            link.textContent = "Download";
+          }
           item.appendChild(link);
+        } else if (typeof artifact.storage_uri === "string" && artifact.storage_uri.length > 0) {
+          const stored = document.createElement("span");
+          stored.classList.add("pyc-build-detail__artifact-stored");
+          stored.setAttribute("data-role", "artifact-stored-at");
+          stored.textContent = "Stored at " + artifact.storage_uri;
+          stored.title = "This service does not serve files from that storage; fetch it with the storage's own tools.";
+          item.appendChild(stored);
         }
         const digest = document.createElement("span");
         digest.classList.add("pyc-build-detail__artifact-digest");
@@ -633,6 +669,140 @@ class PycBuildDetail extends HTMLElement {
       }
     }
     section.replaceChildren(heading, list);
+    return;
+  }
+  // The file to show as the build's log: a ".log" file this service serves,
+  // preferring one whose name says "build".
+  _pick_log_path() {
+    const candidates = [];
+    for (const artifact of this._artifacts) {
+      const served = served_artifact_path(artifact);
+      if (served.toLowerCase().endsWith(".log") === true) {
+        candidates.push({ path: served, size: artifact.payload !== null && typeof artifact.payload === "object" && typeof artifact.payload.size_bytes === "number" ? artifact.payload.size_bytes : null });
+      }
+    }
+    if (candidates.length === 0) {
+      return null;
+    }
+    const preferred = candidates.find((candidate) => candidate.path.toLowerCase().indexOf("build") >= 0);
+    return preferred !== void 0 ? preferred : candidates[0];
+  }
+  async _maybe_load_log() {
+    if (this._terminal === false || this._build === null) {
+      return;
+    }
+    const pick = this._pick_log_path();
+    if (pick === null) {
+      this._render_log();
+      return;
+    }
+    if (this._log.path === pick.path && this._log.status !== "idle") {
+      this._render_log();
+      return;
+    }
+    this._log = { path: pick.path, status: "loading", text: "", cut: false, total: 0, size: pick.size };
+    this._render_log();
+    if (pick.size !== null && pick.size > LOG_INLINE_MAX_BYTES) {
+      this._log.status = "large";
+      this._render_log();
+      return;
+    }
+    try {
+      const response = await fetch(run_artifact_url(this._build_id, pick.path), {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "text/plain" }
+      });
+      if (response.ok === false) {
+        if (response.status === 401) {
+          announce_session_expired();
+        }
+        this._log.status = "error";
+        this._render_log();
+        return;
+      }
+      const length = Number(response.headers.get("Content-Length"));
+      if (Number.isFinite(length) === true && length > LOG_INLINE_MAX_BYTES) {
+        this._log.status = "large";
+        this._log.size = length;
+        this._render_log();
+        return;
+      }
+      const text = await response.text();
+      const tail = tail_lines(text, LOG_TAIL_LINES);
+      this._log.text = tail.text.length > LOG_TAIL_MAX_CHARS ? tail.text.slice(tail.text.length - LOG_TAIL_MAX_CHARS) : tail.text;
+      this._log.cut = tail.cut || tail.text.length > LOG_TAIL_MAX_CHARS;
+      this._log.total = tail.total;
+      this._log.status = "ok";
+    } catch (reason) {
+      console.warn(
+        "pychestrate.ui.builds.log_fetch_failed",
+        { reason: String(reason) }
+      );
+      this._log.status = "error";
+    }
+    this._render_log();
+    return;
+  }
+  _render_log() {
+    if (this._root === null) {
+      return;
+    }
+    const section = this._root.querySelector('[data-role="log-section"]');
+    if (section === null) {
+      return;
+    }
+    if (this._terminal === false || this._build === null) {
+      section.replaceChildren();
+      return;
+    }
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-build-detail__section-heading");
+    heading.textContent = "Build log";
+    const state = this._log;
+    const note = (text, role) => {
+      const p = document.createElement("p");
+      p.classList.add("pyc-build-detail__log-note");
+      p.setAttribute("data-role", role);
+      p.textContent = text;
+      return p;
+    };
+    if (state.path.length === 0) {
+      section.replaceChildren(heading, note("This build uploaded no log file.", "log-none"));
+      return;
+    }
+    const open_link = document.createElement("a");
+    open_link.classList.add("pyc-build-detail__artifact-link");
+    open_link.setAttribute("data-role", "log-open");
+    open_link.setAttribute("href", run_artifact_url(this._build_id, state.path));
+    open_link.setAttribute("target", "_blank");
+    open_link.setAttribute("rel", "noopener noreferrer");
+    open_link.textContent = "Open the full log";
+    if (state.status === "loading") {
+      section.replaceChildren(heading, note("Loading the build log\u2026", "log-loading"));
+      return;
+    }
+    if (state.status === "large") {
+      const size = format_bytes(state.size);
+      section.replaceChildren(heading, note("The log is " + (size.length > 0 ? size : "large") + ", too big to show here.", "log-large"), open_link);
+      return;
+    }
+    if (state.status === "error") {
+      section.replaceChildren(heading, note("Couldn't load the build log.", "log-error"), open_link);
+      return;
+    }
+    const pre = document.createElement("pre");
+    pre.classList.add("pyc-build-detail__log-text");
+    pre.setAttribute("data-role", "build-log");
+    pre.setAttribute("tabindex", "0");
+    pre.setAttribute("aria-label", "Build log, last lines");
+    pre.textContent = state.text.length > 0 ? state.text : "(the log is empty)";
+    const children = [heading];
+    if (state.cut === true) {
+      children.push(note("Showing the last " + String(LOG_TAIL_LINES) + " lines of " + String(state.total) + ".", "log-cut"));
+    }
+    children.push(pre, open_link);
+    section.replaceChildren(...children);
     return;
   }
   /**

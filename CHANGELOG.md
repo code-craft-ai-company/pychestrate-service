@@ -194,6 +194,21 @@ preview tag.
 
 ### Changed
 
+- A build's files open in the browser and its log is on the page (ORC-12).
+  The manifest stores each uploaded file's path in the run's result tree, and
+  the build page linked that path as it stood, so "Download" opened nothing.
+  It now links `GET /api/v1/runs/{build id}/artifacts/{path}` (the address the
+  run page already uses): text, JSON and images open in a new tab ("Open"),
+  other files download ("Download"), and the size is shown. An entry whose
+  storage address has a scheme (`s3://`, `oci://`) is shown as "Stored at ..."
+  with no link, since this service does not serve that storage. A finished
+  build with a `.log` file (the one named for the build when there are several)
+  shows the last 200 lines of it with a link to the whole file; a log over
+  512 KiB is linked instead of fetched, and a build with no log says so. Log
+  text is shown as text. Not done: a log for a build that is still running (the
+  manifest, and so the link, exists only once the build finishes), a live log
+  stream, and serving files that live in object storage.
+
 - A finished test run's page says which tests failed and why (ORC-10). The
   ingest tables kept every test's result and its raw record but nothing
   exposed them, so the page showed counts and artifact links. New
