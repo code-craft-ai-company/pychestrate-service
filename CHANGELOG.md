@@ -537,6 +537,15 @@ preview tag.
 
 ### Fixed
 
+- Browser tabs tell pages apart and use one separator (PRJ-39). The Projects
+  dashboard and the project list were both "Projects", and an IP pool and a
+  resource pool of the same name had the same title; they are now "Project
+  Dashboard", "All Projects", "IP Pool · <name>" and "Resource Pool · <name>".
+  The templates joined the page and the entity with " - " and the shell added
+  " · ", so a project page read "Members - demo · Pychestrate"; it now reads
+  "Members · demo · Pychestrate". The Resources dashboard is "Resources
+  Dashboard".
+
 - Admin lists are compact and their forms line up (ADM-42). Edit and
   Delete/Deactivate sit side by side in the users, variables, roles, secrets
   and secret-scope lists instead of one over the other, and the per-row

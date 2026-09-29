@@ -375,7 +375,7 @@ def test_authenticated_projects_dashboard_renders_inside_site_shell():
     testbase.assert_equal(body.count("<!DOCTYPE html>"), 1)
     testbase.assert_equal("<pyc-site-shell" in body, True)
     testbase.assert_equal(
-        "<title>Projects · Pychestrate</title>" in body, True
+        "<title>Project Dashboard · Pychestrate</title>" in body, True
     )
 
     # The projects page rides inside as a fragment.

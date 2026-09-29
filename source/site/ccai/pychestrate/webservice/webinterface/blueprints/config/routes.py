@@ -655,7 +655,8 @@ def extract_fragment_title(*, html: str) -> "Tuple[str, Optional[str]]":
 
         The legacy blocks end in " - Pychestrate Configuration" and the
         like; the suffix is normalised to the shell's "· Pychestrate"
-        convention so a user page reads "jdoe - User · Pychestrate".
+        convention, and the " - " between the parts of the title becomes
+        " · " too, so a user page reads "jdoe · User · Pychestrate".
 
         :param html: Rendered fragment HTML.
 
@@ -675,6 +676,9 @@ def extract_fragment_title(*, html: str) -> "Tuple[str, Optional[str]]":
             break
     if len(raw_title) == 0 or raw_title == _DEFAULT_PAGE_TITLE:
         return cleaned, None
+    # The blocks join page and entity with " - " ("Members - demo"); the shell's
+    # separator is " · " (PRJ-39), so a tab reads "Members · demo · Pychestrate".
+    raw_title = raw_title.replace(" - ", " · ")
     rtnval = "{} · {}".format(raw_title, _DEFAULT_PAGE_TITLE)
     return cleaned, rtnval
 
