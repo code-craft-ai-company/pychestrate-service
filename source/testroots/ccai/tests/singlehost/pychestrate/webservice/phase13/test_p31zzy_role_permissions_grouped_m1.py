@@ -181,27 +181,40 @@ def test_the_filter_narrows_the_list_by_words_and_the_count_follows_the_ticks(br
 
 
 
-def test_an_actions_name_sits_above_its_description_not_run_into_it(browser: Browser):
+def test_a_permission_row_reads_checkbox_then_name_over_description(browser: Browser):
     """
     **Feature: roles built by area (ADM-06)**
-    **Property: in a permission row the action's name and its description are on
-    separate lines (the description starts below the name), so "View" and "Read
-    build runs" do not read as one word.**
+    **Property: inside the real form's ``.form-group`` (whose generic label rule
+    is display: block) a permission row keeps its checkbox beside the text, and
+    the description starts below the name.**
     """
     stylesheet = '<link rel="stylesheet" href="/static/styles/pyc-tokens.css"><link rel="stylesheet" href="/static/styles/pyc-fragment.css">'
-    page = open_fixture_page(browser, body_html=stylesheet + '<section class="pyc-admin-page-fragment"><form>' + _picker_html([]) + "</form></section>", **DESKTOP)
+    page = open_fixture_page(
+        browser,
+        body_html=stylesheet + '<section class="pyc-admin-page-fragment"><form><div class="form-group">' + _picker_html([]) + "</div></form></section>",
+        **DESKTOP,
+    )
     try:
         page.wait_for_timeout(500)
         boxes = page.evaluate(
             """() => {
                 const row = document.querySelector('[data-permission-text*="builds"]');
+                const check = row.querySelector('input').getBoundingClientRect();
                 const name = row.querySelector('.pyc-permissions__name').getBoundingClientRect();
                 const description = row.querySelector('.pyc-permissions__description').getBoundingClientRect();
-                return {name_bottom: name.bottom, description_top: description.top};
+                return {check_right: check.right, check_top: check.top, name_left: name.left, name_top: name.top,
+                        name_bottom: name.bottom, description_top: description.top};
             }"""
         )
     finally:
         page.context.close()
 
-    testbase.assert_equal(boxes["description_top"] >= boxes["name_bottom"] - 1, True)
+    testbase.assert_equal(
+        (
+            boxes["check_right"] <= boxes["name_left"] + 1,
+            abs(boxes["check_top"] - boxes["name_top"]) < 12,
+            boxes["description_top"] >= boxes["name_bottom"] - 1,
+        ),
+        (True, True, True),
+    )
     return
