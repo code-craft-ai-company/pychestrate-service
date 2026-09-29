@@ -150,6 +150,9 @@ def test_the_resources_page_lists_the_projects_resources_and_registers_a_device(
     try:
         page = site.page
         page.wait_for_selector('[data-role="inventory-list"] mj-data-table')
+        # A short table, not the full-page one the pools use: the form and the
+        # pools must stay in reach.
+        table_height = page.locator('[data-role="inventory-list"] mj-data-table').bounding_box()["height"]
         page.locator('[data-role="register-section"] summary').click()
         _fill(page, "Name", "Bench tablet")
         _fill(page, "Hostname", "tablet-02")
@@ -165,11 +168,13 @@ def test_the_resources_page_lists_the_projects_resources_and_registers_a_device(
 
     testbase.assert_equal(
         (
+            table_height <= 320,
             site.posts,
             status,
             after_rows,
         ),
         (
+            True,
             [{
                 "project_id": PROJECT_ID, "kind": "device", "display_name": "Bench tablet",
                 "attributes": {"hostname": "tablet-02", "mac_address": "aa:bb:cc:dd:ee:02"}, "tags": ["android", "lab"],

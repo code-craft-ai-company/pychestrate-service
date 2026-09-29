@@ -114,7 +114,8 @@ pyc-resource-detail {
     gap: 0.5rem;
 }
 
-.pyc-resources__table--inventory {
+/* Two classes, so it beats the full-page table rule that comes later. */
+.pyc-resources__table.pyc-resources__table--inventory {
     min-height: 10rem;
     height: 16rem;
 }
