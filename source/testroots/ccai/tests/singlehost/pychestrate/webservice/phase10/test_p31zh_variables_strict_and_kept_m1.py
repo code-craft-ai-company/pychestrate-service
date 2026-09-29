@@ -178,3 +178,72 @@ def test_a_deleted_variables_values_are_formatted_without_its_type():
         ('{\n  "a": 1\n}', "true", "plain", ""),
     )
     return
+
+
+def test_integers_and_floats_are_read_strictly():
+    """
+    **Feature: variables (ADM-36)**
+    **Property: an integer variable takes digits with an optional sign (and
+    trims spaces) but not "1_000" or "4.5"; a float takes decimals and
+    exponents but not "inf", "nan" or "1_0.5".**
+    """
+    store = GlobalVariableStore(None)
+
+    def outcome(text: str, kind: VariableType) -> object:
+        try:
+            return store.parse_value_from_string(text, kind)
+        except ValueError:
+            return "refused"
+
+    testbase.assert_equal(
+        [outcome(text, VariableType.INTEGER) for text in ("42", "-7", " 5 ", "+3", "1_000", "4.5", "")]
+        + [outcome(text, VariableType.FLOAT) for text in ("3.14", ".5", "1e3", "inf", "nan", "1_0.5")],
+        [42, -7, 5, 3, "refused", "refused", "refused", 3.14, 0.5, 1000.0, "refused", "refused", "refused"],
+    )
+    return
+
+
+def test_a_change_is_summarised_and_a_multiline_change_is_shown_as_a_diff():
+    """
+    **Feature: variables (ADM-36)**
+    **Property: the diff function gives the removed and added lines with a
+    line of context and a gap marker between distant changes; a one-line
+    value gives its old and new line.**
+    """
+    from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import change_diff_lines
+
+    single = change_diff_lines(old="30", new="45")
+    multi = change_diff_lines(old='{\n  "a": 1,\n  "b": 2,\n  "c": 3\n}', new='{\n  "a": 1,\n  "b": 20,\n  "c": 3\n}')
+
+    testbase.assert_equal(
+        (single, [(line["kind"], line["text"].strip()) for line in multi if line["kind"] in ("add", "remove")],
+         [line["kind"] for line in multi][:1]),
+        ([{"kind": "gap", "text": "\u2026"}, {"kind": "remove", "text": "30"}, {"kind": "add", "text": "45"}],
+         [("remove", '"b": 2,'), ("add", '"b": 20,')], ["gap"]),
+    )
+    return
+
+
+def test_the_history_says_what_kind_of_change_each_row_is_and_hides_the_diff():
+    """
+    **Feature: variables (ADM-36)**
+    **Property: the history's Change column says Created, Changed or
+    Deleted for each row; a change carries a diff that is hidden behind the
+    same mask as the values, with the removed line and the added line
+    marked.**
+    """
+    admin = admin_cookies()
+    name = _name()
+    _create(admin, name, "integer", "30")
+    post_form(path="/admin/variables/{}/edit".format(name), fields={"value": "45", "default_value": "", "description": ""}, cookies=admin)
+    post_form(path="/admin/variables/{}/delete".format(name), fields={}, cookies=admin)
+    page = html.unescape(get(path="/admin/variables/{}/history".format(name), cookies=admin).text)
+    changes = re.findall(r'<td data-role="change">\s*<span class="badge badge-[a-z]+">([A-Za-z]+)</span>', page)
+    diff = re.search(r'<span data-role="secret" hidden><span class="diff-block" data-role="diff">(.*?)</span></span>\s*</td>', page, re.S)
+    diff_text = diff.group(1) if diff is not None else ""
+
+    testbase.assert_equal(
+        (sorted(changes), '<span class="diff-remove">30</span>' in diff_text, '<span class="diff-add">45</span>' in diff_text),
+        (["Changed", "Created", "Deleted"], True, True),
+    )
+    return

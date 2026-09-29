@@ -696,6 +696,15 @@ def _format_variable_value_builder() -> Builder:
     return _build
 
 
+def _change_diff_builder() -> Builder:
+    def _build(mode: str) -> Any:
+        from ccai.pychestrate.webservice.webinterface.blueprints.config.routes_variables import (  # noqa: E402
+            change_diff_lines,
+        )
+        return change_diff_lines
+    return _build
+
+
 _FIXTURE_UI_PROJECT_UUID: str = "5a0c2e62-8f7a-5d16-9f4e-3c1b2a0d9e11"
 _FIXTURE_API_PROJECT_UUID: str = "0b6f3c1e-2d4a-4e8b-9c7d-1a2b3c4d5e6f"
 
@@ -776,6 +785,7 @@ DEFAULT_REGISTRY.update({
     "password_input_id": _const("password"),
     "value_cleared": _by_mode(True, False),
     "format_value": _format_variable_value_builder(),
+    "change_diff": _change_diff_builder(),
     "project_choices": _project_choices,
     "project_choice_groups": _project_choice_groups,
     "project_labels": _by_mode({_FIXTURE_UI_PROJECT_UUID: "alpha"}, {}),

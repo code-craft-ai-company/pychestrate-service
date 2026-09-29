@@ -31,6 +31,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import difflib
 import json
 import re
 
@@ -240,6 +241,35 @@ def format_variable_value(*, value: Any, var_type: Any) -> str:
 
     rtnval = str(value)
     return rtnval
+
+
+def change_diff_lines(*, old: str, new: str) -> List[Dict[str, str]]:
+    """
+        What changed between two renderings of a variable's value, line by
+        line, for the history page: removed lines, added lines and one line
+        of context around them. A one-line value gives its old line and its
+        new line.
+
+        :param old: The value before, as the page writes it.
+        :param new: The value after.
+
+        :returns: ``[{"kind": "add" | "remove" | "context" | "gap", "text": ...}]``.
+    """
+    lines: List[Dict[str, str]] = []
+    for line in difflib.unified_diff(
+            old.splitlines(), new.splitlines(), lineterm="", n=1
+        ):
+        if line.startswith(("---", "+++")):
+            continue
+        if line.startswith("@@"):
+            lines.append({"kind": "gap", "text": "\u2026"})
+        elif line.startswith("+"):
+            lines.append({"kind": "add", "text": line[1:]})
+        elif line.startswith("-"):
+            lines.append({"kind": "remove", "text": line[1:]})
+        else:
+            lines.append({"kind": "context", "text": line[1:]})
+    return lines
 
 
 def _parse_pagination_params(
@@ -788,6 +818,7 @@ def handle_variable_history(request: Request) -> Response:
         context["variable_name"] = name
         context["variable_deleted"] = variable is None
         context["format_value"] = format_variable_value
+        context["change_diff"] = change_diff_lines
         context["history"] = history
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]

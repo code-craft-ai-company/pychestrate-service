@@ -13,6 +13,7 @@ __version__ = "1.0.0"
 
 
 import json
+import re
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -22,6 +23,9 @@ from sqlalchemy.orm import Session as DbSession
 
 from ccai.pychestrate.core.defaults import utc_now
 from ccai.pychestrate.core.orm import VariableType
+
+_INTEGER_TEXT = re.compile(r"^[+-]?\d+\Z")
+_FLOAT_TEXT = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?\Z")
 
 
 # =============================================================================
@@ -279,16 +283,19 @@ class GlobalVariableStore:
             return value_str
         
         elif var_type == VariableType.INTEGER:
-            try:
-                return int(value_str)
-            except ValueError:
+            # Digits with an optional sign: Python's int() also takes "1_000"
+            # and surrounding spaces, which are not what a person typing a
+            # number means to store.
+            if _INTEGER_TEXT.match(value_str.strip()) is None:
                 raise ValueError(f"'{value_str}' is not a valid integer")
+            return int(value_str.strip())
         
         elif var_type == VariableType.FLOAT:
-            try:
-                return float(value_str)
-            except ValueError:
+            # A decimal number with an optional sign and exponent; "inf",
+            # "nan" and "1_0.5", which float() accepts, are refused.
+            if _FLOAT_TEXT.match(value_str.strip()) is None:
                 raise ValueError(f"'{value_str}' is not a valid float")
+            return float(value_str.strip())
         
         elif var_type == VariableType.BOOLEAN:
             # Only the two words the form's help text names: "yes", "on"

@@ -443,7 +443,10 @@ preview tag.
   delete message says where to find it. The list masked values behind a
   Show button while the detail and history pages printed them; all three
   now hide values until asked (the detail and history pages have one Show
-  values button each).
+  values button each). The history has a Change column (Created, Changed,
+  Deleted) and, for a change, a line diff behind the same mask. Integer
+  and float values are read strictly: `1_000`, `inf`, `nan` and `1_0.5`,
+  which Python accepts, are refused.
 
 ### Removed
 

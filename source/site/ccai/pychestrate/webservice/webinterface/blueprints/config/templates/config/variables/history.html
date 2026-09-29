@@ -3,6 +3,18 @@
 
 {% block title %}{{ variable_name }} History - Pychestrate Configuration{% endblock %}
 
+{% block extra_css %}
+<style>
+    .pyc-admin-page-fragment .diff-block { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--pyc-font-family-mono, ui-monospace, monospace); font-size: var(--pyc-font-size-small, 0.875rem); }
+    .pyc-admin-page-fragment .diff-add { display: block; background: var(--pyc-color-success-surface); color: var(--pyc-color-on-success-surface); }
+    .pyc-admin-page-fragment .diff-add::before { content: "+ "; }
+    .pyc-admin-page-fragment .diff-remove { display: block; background: var(--pyc-color-error-surface); color: var(--pyc-color-on-error-surface); }
+    .pyc-admin-page-fragment .diff-remove::before { content: "\2212  "; }
+    .pyc-admin-page-fragment .diff-context, .pyc-admin-page-fragment .diff-gap { display: block; color: var(--pyc-color-on-surface-muted); }
+    .pyc-admin-page-fragment .diff-context::before { content: "  "; white-space: pre; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h1>Variable History: {{ variable_name }}</h1>
@@ -20,6 +32,7 @@
         <tr>
             <th scope="col">Changed At</th>
             <th scope="col">Changed By</th>
+            <th scope="col">Change</th>
             <th scope="col">Old Value</th>
             <th scope="col">New Value</th>
         </tr>
@@ -29,6 +42,13 @@
         <tr>
             <td>{{ entry.changed_at | format_datetime('%Y-%m-%d %H:%M:%S') }}</td>
             <td>{{ entry.changed_by or '-' }}</td>
+            <td data-role="change">
+                {% if entry.old_value is none %}<span class="badge badge-success">Created</span>
+                {% elif entry.new_value is none %}<span class="badge badge-danger">Deleted</span>
+                {% else %}<span class="badge badge-info">Changed</span>
+                <span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><span data-role="secret" hidden><span class="diff-block" data-role="diff">{% for line in change_diff(old=format_value(value=entry.old_value, var_type=(variable.var_type if variable else none)), new=format_value(value=entry.new_value, var_type=(variable.var_type if variable else none))) %}<span class="diff-{{ line.kind }}">{{ line.text }}</span>{% endfor %}</span></span>
+                {% endif %}
+            </td>
             <td class="truncate">
                 {% if entry.old_value is not none %}<span data-role="mask" class="masked">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</span><span data-role="secret" hidden>{{ format_value(value=entry.old_value, var_type=(variable.var_type if variable else none)) }}</span>{% else %}-{% endif %}
             </td>
@@ -38,7 +58,7 @@
         </tr>
         {% else %}
         <tr>
-            {{ ui.empty_state("No history found", colspan=4) }}
+            {{ ui.empty_state("No history found", colspan=5) }}
         </tr>
         {% endfor %}
     </tbody>
