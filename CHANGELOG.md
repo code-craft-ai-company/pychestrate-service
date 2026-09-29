@@ -542,6 +542,15 @@ preview tag.
 
 ### Fixed
 
+- Every bundle page shows the "session expired" notice when the session has
+  ended (XC-12). Only some views turned a 401 from the API into the shell's
+  notice (`/runs` did; creating a secret after the session ended said "Failed
+  to create the secret. Try again."). The shell now wraps `fetch` once and
+  announces the expiry for any 401 from this site's own `/api/`, whichever view
+  made the request; the response is handed back unchanged, so a view still shows
+  its own message too, and repeated 401s share one notice with its "Sign in"
+  link back to the page.
+
 - Two more accessibility fixes in the bundle views (ORC-24). The run's progress
   bar had the `progressbar` role and its numbers but no name (a screen reader
   announced an unnamed progress bar); it is now "Run progress", with a value

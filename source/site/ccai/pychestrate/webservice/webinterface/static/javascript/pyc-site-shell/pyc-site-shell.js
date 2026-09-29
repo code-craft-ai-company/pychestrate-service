@@ -155,6 +155,7 @@ class PycSiteShell extends HTMLElement {
     this._wire_permission_listeners();
     this._wire_global_keydown();
     this._wire_global_session_401();
+    this._install_fetch_session_watch();
     this._wire_window_registry();
     queueMicrotask(() => {
       this._boot().catch((reason) => {
@@ -481,6 +482,38 @@ class PycSiteShell extends HTMLElement {
     };
     window.addEventListener("keydown", handler);
     this._global_keydown = handler;
+    return;
+  }
+  /**
+   * Every bundle view calls the REST API with fetch, and only some of them
+   * turned a 401 into the shell's "session expired" notice; creating a
+   * secret after the session ended said "Failed to create the secret. Try
+   * again." (XC-12). One wrapper on fetch, installed once by the shell,
+   * announces `pyc-session-401` whenever a request to this site's own /api/
+   * is refused with 401, whichever view made it, and hands the response back
+   * unchanged so the view still shows its own message as well.
+   */
+  _install_fetch_session_watch() {
+    if (typeof window.fetch !== "function" || window.fetch.__pycSessionWatch === true) {
+      return;
+    }
+    const original = window.fetch.bind(window);
+    const watched = async (input, init) => {
+      const response = await original(input, init);
+      if (response.status === 401) {
+        try {
+          const target = new URL(typeof input === "string" ? input : input.url, window.location.href);
+          if (target.origin === window.location.origin && target.pathname.startsWith("/api/") === true) {
+            window.dispatchEvent(new CustomEvent("pyc-session-401", { bubbles: false, detail: {} }));
+          }
+        } catch (error) {
+          // A request whose address cannot be read is not announced.
+        }
+      }
+      return response;
+    };
+    watched.__pycSessionWatch = true;
+    window.fetch = watched;
     return;
   }
   _wire_global_session_401() {
