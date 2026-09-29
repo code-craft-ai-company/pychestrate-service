@@ -23,6 +23,8 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
+import ast
+
 from typing import Any, Dict, List, Optional
 
 
@@ -53,6 +55,30 @@ def _text(value: Any, limit: int) -> str:
     text = "" if value is None else str(value)
     if len(text) > limit:
         return text[: limit - 1] + "…"
+    return text
+
+
+def _readable(part: Any) -> str:
+    """
+        One exception argument as a person reads it. testbase stores a message
+        as the ``repr`` of a string, so a two-line message arrives as
+        ``'first\\nsecond'`` with the quotes and the backslash sequences in
+        it. When the whole argument is one quoted string literal it is decoded
+        (``ast.literal_eval`` accepts literals only and runs nothing); anything
+        else is returned as it was.
+
+        :param part: An entry of the record's ``exargs``.
+
+        :returns: The text to show.
+    """
+    text = str(part)
+    if 2 <= len(text) <= MAX_MESSAGE_CHARS * 2 and text[0] == text[-1] and text[0] in "'\"" and "\\" in text:
+        try:
+            decoded = ast.literal_eval(text)
+        except (ValueError, SyntaxError, MemoryError, RecursionError):
+            return text
+        if isinstance(decoded, str):
+            return decoded
     return text
 
 
@@ -92,7 +118,7 @@ def _problem(kind: str, entry: Any) -> Dict[str, Any]:
     if not isinstance(entry, dict):
         return {"kind": kind, "type": "", "message": _text(entry, MAX_MESSAGE_CHARS), "frames": []}
     arguments = entry.get("exargs")
-    message = "\n".join(str(part) for part in arguments) if isinstance(arguments, list) else _text(arguments, MAX_MESSAGE_CHARS)
+    message = "\n".join(_readable(part) for part in arguments) if isinstance(arguments, list) else _text(arguments, MAX_MESSAGE_CHARS)
     traces = entry.get("traces")
     frames: List[Dict[str, Any]] = []
     if isinstance(traces, list):

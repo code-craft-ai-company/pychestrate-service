@@ -221,3 +221,34 @@ def test_the_endpoint_is_read_guarded_and_answers_problems_for_bad_requests():
 
     testbase.assert_equal(statuses, (401, 403, 404, 400, 400))
     return
+
+
+def test_a_message_stored_as_a_quoted_string_is_decoded_and_anything_else_is_left_alone():
+    """
+    **Feature: run results (ORC-10)**
+    **Property: testbase stores a message as the repr of a string; when the
+    whole argument is one quoted string literal its line breaks come back and
+    the quotes go; an argument that is not a plain literal (a concatenation, an
+    unterminated quote, ordinary text, a number) is returned unchanged.**
+    """
+    readable = task_results._readable
+    quoted = "'Result verification failed:\\nEXPECTED: 2\\nFOUND: 1'"
+    testbase.assert_equal(
+        (
+            readable(quoted),
+            readable("'a\\nb' + 'c'"),
+            readable("'unterminated\\n"),
+            readable("plain text\\n"),
+            readable(7),
+            readable('"double \\"quoted\\" \\t tab"'),
+        ),
+        (
+            "Result verification failed:\nEXPECTED: 2\nFOUND: 1",
+            "'a\\nb' + 'c'",
+            "'unterminated\\n",
+            "plain text\\n",
+            "7",
+            'double "quoted" \t tab',
+        ),
+    )
+    return
