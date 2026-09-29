@@ -542,6 +542,13 @@ preview tag.
 
 ### Fixed
 
+- Sortable table headers sort from the keyboard (ORC-24, WCAG 2.1.1). The
+  vendored `mj-data-table` sorts a column only when its header is clicked (its
+  keyboard handling covers the arrows, Home, End and Escape), so Enter and
+  Space on a focused header did nothing. The shell now gives every table in
+  every bundle the standard behaviour: Enter or Space on a focused sortable
+  header does what a click does.
+
 - Primary buttons in the bundle views are readable in the dark theme (WCAG
   1.4.3). The mj token pack keeps the text on the accent white, which is 3.55:1
   on the dark theme's light-blue accent (below the 4.5:1 AA asks for at 14px);

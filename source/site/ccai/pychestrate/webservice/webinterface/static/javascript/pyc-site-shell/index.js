@@ -3575,6 +3575,7 @@ var PycSiteShell = class extends HTMLElement {
     _apply_theme_preference(_read_stored_theme());
     this._wire_color_scheme_listener();
     this._install_skip_link();
+    this._install_sortable_header_keys();
     install_confirm_delegate(document);
     install_reveal_toggle(document);
     install_log_viewer(document);
@@ -4118,6 +4119,37 @@ var PycSiteShell = class extends HTMLElement {
    * nav-open attribute drives its grid track width and its
    * overlay behavior on narrow viewports).
    */
+  /**
+   * The vendored <mj-data-table> sorts a column only when its header cell is
+   * clicked: its keyboard handling covers the arrows, Home, End and Escape,
+   * so Enter and Space on a focused header did nothing and a keyboard user
+   * could not sort (ORC-24). One document-level handler gives every table in
+   * every bundle the standard behaviour: Enter or Space on a focused
+   * sortable header cell does what a click does. It looks through the
+   * table's shadow root with the event's composed path.
+   */
+  _install_sortable_header_keys() {
+    if (document.documentElement.hasAttribute("data-pyc-sort-keys") === true) {
+      return;
+    }
+    document.documentElement.setAttribute("data-pyc-sort-keys", "");
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      for (const node of path) {
+        if (node instanceof HTMLElement && node.classList.contains("header-cell") === true) {
+          if (node.getAttribute("data-sortable") === "true") {
+            event.preventDefault();
+            node.click();
+          }
+          return;
+        }
+      }
+    });
+    return;
+  }
   _install_skip_link() {
     if (document.querySelector(".pyc-site-shell__skip-link") !== null) {
       return;
