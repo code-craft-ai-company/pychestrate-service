@@ -542,6 +542,12 @@ preview tag.
 
 ### Fixed
 
+- The two native checkboxes in the bundle views follow the theme (ORC-48): the
+  test catalog's "Include retired" and the alert-rule editor's "Enabled" use
+  the theme's accent colour and an 18px box instead of the browser's default
+  blue at its default size. (The component library has only a checkbox group,
+  so this is done in the bundles' stylesheets.)
+
 - Bundle detail pages are titled by what they show (ORC-35). A run, a build, a
   provisioning run, a pipeline, an environment, a pod, a client, a resource
   pool and a resource were all just their section in the tab ("Runs ·

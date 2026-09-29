@@ -78,6 +78,16 @@ pyc-test-catalog {
     color: var(--pyc-catalog-fg-muted);
 }
 
+/* The browser's own checkbox, in the theme's accent and a size a finger can
+   hit (ORC-48). */
+.pyc-catalog__checkbox input[type="checkbox"] {
+    flex: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    accent-color: var(--pyc-color-accent, #2563eb);
+}
+
 .pyc-catalog__button {
     font-size: var(--pyc-font-size-small, 0.875rem);
     color: var(--pyc-catalog-accent-on-surface);

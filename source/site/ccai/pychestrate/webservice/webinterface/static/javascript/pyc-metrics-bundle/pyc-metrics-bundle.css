@@ -272,6 +272,14 @@ pyc-alert-rules {
     gap: 0.375rem;
 }
 
+.pyc-metrics__field--inline input[type="checkbox"] {
+    flex: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin: 0;
+    accent-color: var(--pyc-color-accent, #2563eb);
+}
+
 /* SLO view -- burn-rate badge, toast, inline form region */
 .pyc-metrics__badge::part(chip) {
     display: inline-block;
