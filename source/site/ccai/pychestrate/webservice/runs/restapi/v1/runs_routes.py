@@ -77,6 +77,7 @@ from ccai.pychestrate.webservice.ingest.result import (
     classification as result_classification,
 )
 from ccai.pychestrate.webservice.ingest.result import scanner as result_scanner
+from ccai.pychestrate.webservice.ingest.result import repositories as task_result_repo
 from ccai.pychestrate.webservice.ingest.result import (
     completion as result_completion,
 )
@@ -117,6 +118,7 @@ from ccai.pychestrate.webservice.jobs.results.errors import (
     ArtifactPathInvalidError,
 )
 from ccai.pychestrate.webservice.jobs.run.state import repository as run_repo
+from ccai.pychestrate.webservice.runs.restapi.v1.task_results import task_result_to_dict
 from ccai.pychestrate.webservice.jobs.run.state.enums import (
     RunEvent,
     RunState,
@@ -196,6 +198,10 @@ TERMINAL_OUTCOME_CANCELLED = "cancelled"
 DEFAULT_PAGE_SIZE = 50
 MIN_PAGE_SIZE = 1
 MAX_PAGE_SIZE = 500
+
+#: Page size of the per-test results list (a failing test carries its frames).
+DEFAULT_RESULTS_PAGE_SIZE = 100
+MAX_RESULTS_PAGE_SIZE = 200
 
 _LOGGER = logging.getLogger("pychestrate.runs.routes")
 
@@ -1119,6 +1125,78 @@ def handle_read_run(request: Request) -> Response:
             db_session=db_session,
             include_result_manifest=True,
         )
+        rtnval: Response = JSONResponse(content=body, status_code=200)
+    except _ProblemAbort as xcpt:
+        rtnval = xcpt.response
+    return rtnval
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/runs/{run_id}/results
+# ---------------------------------------------------------------------------
+
+
+def handle_list_run_results(request: Request) -> Response:
+    """
+        ``GET /api/v1/runs/{run_id}/results`` -- the run's test results,
+        failing tests first (ORC-10).
+
+        Query params: ``failed=true`` (leave out passed, skipped and unset
+        tests), ``page``, ``per_page`` (at most 200).
+
+        :param request: Incoming webworks request.
+
+        :returns: JSON response (200) carrying ``{items, meta}`` where
+                  ``meta.by_result`` counts every test in the run per result,
+                  or a problem response.
+    """
+    run_id = request.path_params.get("run_id", "")
+    try:
+        db_session = _require_session(request=request)
+        _require_runs_read_permission(
+            request=request, db_session=db_session,
+        )
+        _require_run_exists(request=request, db_session=db_session, run_id=run_id)
+
+        page = _parse_positive_int(
+            request=request,
+            name="page",
+            raw=request.query_params.get("page", None),
+            default=1,
+            minimum=1,
+        )
+        per_page = _parse_positive_int(
+            request=request,
+            name="per_page",
+            raw=request.query_params.get("per_page", None),
+            default=DEFAULT_RESULTS_PAGE_SIZE,
+            minimum=MIN_PAGE_SIZE,
+            maximum=MAX_RESULTS_PAGE_SIZE,
+        )
+        problems_only = str(request.query_params.get("failed", "") or "").strip().lower() in ("1", "true", "yes")
+
+        by_result = task_result_repo.count_tasks_by_result(db_session=db_session, run_id=run_id)
+        total = sum(
+            count for result, count in by_result.items()
+            if problems_only is False or result not in task_result_repo.QUIET_RESULTS
+        )
+        rows = task_result_repo.page_tasks(
+            db_session=db_session,
+            run_id=run_id,
+            problems_only=problems_only,
+            offset=(page - 1) * per_page,
+            limit=per_page,
+        )
+        body = {
+            "items": [task_result_to_dict(row) for row in rows],
+            "meta": {
+                "page": page,
+                "per_page": per_page,
+                "total": int(total),
+                "by_result": by_result,
+                "next_cursor": None,
+            },
+        }
         rtnval: Response = JSONResponse(content=body, status_code=200)
     except _ProblemAbort as xcpt:
         rtnval = xcpt.response
@@ -2449,6 +2527,9 @@ def register_runs_routes(*, app: Any, version_prefix: str) -> None:
         base + "/{run_id}", methods=["GET"],
     )(handle_read_run)
     app.attach_route(
+        base + "/{run_id}/results", methods=["GET"],
+    )(handle_list_run_results)
+    app.attach_route(
         base + "/{run_id}/dispatch-ack", methods=["POST"],
     )(handle_dispatch_ack)
     app.attach_route(
@@ -2474,6 +2555,7 @@ __all__ = [
     "register_runs_routes",
     "handle_list_runs",
     "handle_read_run",
+    "handle_list_run_results",
     "handle_dispatch_ack",
     "handle_post_progress",
     "handle_post_results_complete",

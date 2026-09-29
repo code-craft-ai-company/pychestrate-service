@@ -223,6 +223,60 @@ function artifact_url(run_id, artifact_path) {
   const rtnval = RUNS_API_PATH + "/" + encoded_run + "/artifacts/" + encoded_path;
   return rtnval;
 }
+// ---- Test results (ORC-10): why a run failed, not only how many ----
+const RESULTS_PAGE_SIZE = 50;
+const RESULT_LABELS = { FAILED: "failed", ERRORED: "errored", PASSED: "passed", SKIPPED: "skipped", UNSET: "not run" };
+const RESULT_ORDER = ["FAILED", "ERRORED", "PASSED", "SKIPPED", "UNSET"];
+function result_tone(result) {
+  if (result === "PASSED") {
+    return "ok";
+  }
+  if (result === "SKIPPED" || result === "UNSET") {
+    return "neutral";
+  }
+  return "error";
+}
+// "1 failed \xB7 31 passed" -- every result the run reported, problems first.
+function results_summary_text(by_result) {
+  const counts = by_result !== null && typeof by_result === "object" ? by_result : {};
+  const keys = Object.keys(counts).filter((key) => Number(counts[key]) > 0);
+  keys.sort((left, right) => {
+    const a = RESULT_ORDER.indexOf(left);
+    const b = RESULT_ORDER.indexOf(right);
+    return (a < 0 ? -1 : a) - (b < 0 ? -1 : b);
+  });
+  const rtnval = keys.map((key) => String(counts[key]) + " " + (RESULT_LABELS[key] !== void 0 ? RESULT_LABELS[key] : key.toLowerCase())).join(" \xB7 ");
+  return rtnval;
+}
+function count_problem_results(by_result) {
+  let problems = 0;
+  let quiet = 0;
+  for (const key of Object.keys(by_result)) {
+    const count = Number(by_result[key]);
+    if (Number.isFinite(count) === false) {
+      continue;
+    }
+    if (key === "PASSED" || key === "SKIPPED" || key === "UNSET") {
+      quiet += count;
+    } else {
+      problems += count;
+    }
+  }
+  return { problems, quiet };
+}
+function format_test_duration(seconds) {
+  if (typeof seconds !== "number" || Number.isFinite(seconds) === false) {
+    return "";
+  }
+  if (seconds < 1) {
+    return String(Math.round(seconds * 1000)) + " ms";
+  }
+  if (seconds < 60) {
+    return (Math.round(seconds * 100) / 100) + " s";
+  }
+  const whole = Math.round(seconds);
+  return String(Math.floor(whole / 60)) + " min " + String(whole % 60) + " s";
+}
 class PycRunDetail extends HTMLElement {
   _run_id;
   _run;
@@ -239,6 +293,7 @@ class PycRunDetail extends HTMLElement {
   _project_names;
   _latest_progress;
   _latest_manifest;
+  _results;
   constructor() {
     super();
     this._run_id = "";
@@ -256,6 +311,7 @@ class PycRunDetail extends HTMLElement {
     this._project_names = {};
     this._latest_progress = null;
     this._latest_manifest = null;
+    this._results = { items: [], by_result: {}, total: 0, page: 0, loading: false, loaded: false, error_status: 0, error_network: false, failed_only: false };
   }
   /**
    * Observed attributes -- ``run-id`` may be supplied explicitly
@@ -405,7 +461,67 @@ class PycRunDetail extends HTMLElement {
     this._render_body();
     if (this._terminal === false) {
       this._open_stream();
+    } else {
+      void this._maybe_load_results();
     }
+    return;
+  }
+  // The per-test results exist once the run has finished and its result
+  // tree has been read; a test run that has not finished shows none yet.
+  async _maybe_load_results() {
+    if (is_test_run(this._run) === false || this._terminal === false || this._results.loaded === true || this._results.loading === true) {
+      return;
+    }
+    await this._load_results(true);
+    return;
+  }
+  async _load_results(reset) {
+    const state = this._results;
+    if (state.loading === true) {
+      return;
+    }
+    if (reset === true) {
+      state.items = [];
+      state.page = 0;
+      state.total = 0;
+    }
+    state.error_status = 0;
+    state.error_network = false;
+    state.loading = true;
+    this._render_results();
+    const next_page = state.page + 1;
+    const url = RUNS_API_PATH + "/" + encodeURIComponent(this._run_id) + "/results?per_page=" + String(RESULTS_PAGE_SIZE) + "&page=" + String(next_page) + (state.failed_only === true ? "&failed=true" : "");
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" }
+      });
+      if (response.ok === true) {
+        const body = await response.json();
+        const items = body !== null && Array.isArray(body.items) ? body.items : [];
+        const meta = body !== null && body.meta !== null && typeof body.meta === "object" ? body.meta : {};
+        state.items = state.items.concat(items);
+        state.total = typeof meta.total === "number" ? meta.total : state.items.length;
+        state.by_result = meta.by_result !== null && typeof meta.by_result === "object" ? meta.by_result : {};
+        state.page = next_page;
+      } else {
+        state.error_status = response.status;
+        if (response.status === 401) {
+          emit_session_expired();
+        }
+      }
+    } catch (reason) {
+      state.error_status = 0;
+      state.error_network = true;
+      console.warn(
+        "pychestrate.ui.runs.results_fetch_failed",
+        { reason: String(reason) }
+      );
+    }
+    state.loading = false;
+    state.loaded = true;
+    this._render_results();
     return;
   }
   /**
@@ -595,6 +711,7 @@ class PycRunDetail extends HTMLElement {
         this._close_stream();
         this._stream_status = "closed";
         this._render_stream_banner();
+        void this._maybe_load_results();
       }
       return;
     }
@@ -724,6 +841,12 @@ class PycRunDetail extends HTMLElement {
     progress_section.setAttribute("role", "region");
     progress_section.setAttribute("aria-label", "Progress");
     fragment.appendChild(progress_section);
+    const results_section = document.createElement("section");
+    results_section.classList.add("pyc-run-detail__results");
+    results_section.setAttribute("data-role", "results-section");
+    results_section.setAttribute("role", "region");
+    results_section.setAttribute("aria-label", "Test results");
+    fragment.appendChild(results_section);
     const artifacts_section = document.createElement("section");
     artifacts_section.classList.add("pyc-run-detail__artifacts");
     artifacts_section.setAttribute("data-role", "artifacts-section");
@@ -731,6 +854,7 @@ class PycRunDetail extends HTMLElement {
     artifacts_section.setAttribute("aria-label", "Artifacts");
     fragment.appendChild(artifacts_section);
     body.replaceChildren(fragment);
+    this._render_results();
     let progress = this._latest_progress;
     if (progress === null) {
       const summary = this._run.progress_summary;
@@ -751,6 +875,169 @@ class PycRunDetail extends HTMLElement {
       this._render_artifacts_placeholder();
     }
     return;
+  }
+  _render_results() {
+    if (this._root === null) {
+      return;
+    }
+    const section = this._root.querySelector('[data-role="results-section"]');
+    if (section === null) {
+      return;
+    }
+    const state = this._results;
+    if (is_test_run(this._run) === false || this._terminal === false || (state.loaded === false && state.loading === false)) {
+      section.replaceChildren();
+      return;
+    }
+    const heading = document.createElement("h2");
+    heading.classList.add("pyc-run-detail__section-heading");
+    heading.textContent = "Test results";
+    section.replaceChildren(heading);
+    if (state.error_status !== 0 || state.error_network === true) {
+      const failed = document.createElement("p");
+      failed.classList.add("pyc-run-detail__status", "pyc-run-detail__status--error");
+      failed.setAttribute("data-role", "results-error");
+      failed.textContent = state.error_status === 403 ? "You don't have access to test results." : "Couldn't load the test results.";
+      section.appendChild(failed);
+      return;
+    }
+    if (state.loading === true && state.items.length === 0) {
+      const loading = document.createElement("p");
+      loading.classList.add("pyc-run-detail__rollup");
+      loading.setAttribute("data-role", "results-loading");
+      loading.textContent = "Loading test results\u2026";
+      section.appendChild(loading);
+      return;
+    }
+    const counted = count_problem_results(state.by_result);
+    if (counted.problems + counted.quiet === 0) {
+      const none = document.createElement("p");
+      none.classList.add("pyc-run-detail__rollup");
+      none.setAttribute("data-role", "results-empty");
+      none.textContent = "No individual test results were recorded for this run.";
+      section.appendChild(none);
+      return;
+    }
+    const summary = document.createElement("p");
+    summary.classList.add("pyc-run-detail__rollup");
+    summary.setAttribute("data-role", "results-summary");
+    summary.textContent = results_summary_text(state.by_result);
+    section.appendChild(summary);
+    if (counted.problems > 0 && counted.quiet > 0) {
+      const toggle = document.createElement("mj-button");
+      toggle.classList.add("pyc-run-detail__results-toggle");
+      toggle.setAttribute("type", "button");
+      toggle.setAttribute("data-role", "results-filter");
+      toggle.textContent = state.failed_only === true ? "Show all tests" : "Show failed tests only";
+      toggle.addEventListener("click", () => {
+        state.failed_only = state.failed_only === false;
+        void this._load_results(true);
+      });
+      section.appendChild(toggle);
+    }
+    const list = document.createElement("ul");
+    list.classList.add("pyc-run-detail__result-list");
+    list.setAttribute("data-role", "results-list");
+    let opened = false;
+    for (const item of state.items) {
+      const row = this._build_result_row(item, opened === false);
+      if (item.problems.length > 0) {
+        opened = true;
+      }
+      list.appendChild(row);
+    }
+    section.appendChild(list);
+    if (state.items.length < state.total) {
+      const more = document.createElement("mj-button");
+      more.classList.add("pyc-run-detail__results-more");
+      more.setAttribute("type", "button");
+      more.setAttribute("data-role", "results-more");
+      more.textContent = "Show more (" + String(state.total - state.items.length) + " left)";
+      if (state.loading === true) {
+        more.toggleAttribute("disabled", true);
+      }
+      more.addEventListener("click", () => {
+        void this._load_results(false);
+      });
+      section.appendChild(more);
+    }
+    return;
+  }
+  // One test: a plain row when it left nothing to read, otherwise a
+  // disclosure whose first failing test starts open.
+  _build_result_row(item, open_first_problem) {
+    const result = typeof item.result === "string" ? item.result : "UNSET";
+    const problems = Array.isArray(item.problems) ? item.problems : [];
+    const line = document.createElement(problems.length > 0 ? "summary" : "div");
+    line.classList.add("pyc-run-detail__result-line");
+    const chip = document.createElement("span");
+    chip.classList.add("pyc-run-detail__result-chip");
+    chip.setAttribute("data-tone", result_tone(result));
+    chip.textContent = RESULT_LABELS[result] !== void 0 ? RESULT_LABELS[result] : result.toLowerCase();
+    line.appendChild(chip);
+    const name = document.createElement("span");
+    name.classList.add("pyc-run-detail__result-name");
+    name.textContent = String(item.test_name);
+    line.appendChild(name);
+    const took = format_test_duration(item.duration_seconds);
+    if (took.length > 0) {
+      const duration = document.createElement("span");
+      duration.classList.add("pyc-run-detail__result-duration");
+      duration.textContent = took;
+      line.appendChild(duration);
+    }
+    const row = document.createElement("li");
+    row.classList.add("pyc-run-detail__result");
+    row.setAttribute("data-result", result);
+    if (problems.length === 0) {
+      row.appendChild(line);
+      return row;
+    }
+    const details = document.createElement("details");
+    details.classList.add("pyc-run-detail__result-details");
+    details.setAttribute("data-role", "result-details");
+    if (open_first_problem === true) {
+      details.open = true;
+    }
+    details.appendChild(line);
+    for (const problem of problems) {
+      details.appendChild(this._build_problem(problem));
+    }
+    row.appendChild(details);
+    return row;
+  }
+  _build_problem(problem) {
+    const block = document.createElement("div");
+    block.classList.add("pyc-run-detail__problem");
+    block.setAttribute("data-kind", String(problem.kind));
+    const message = document.createElement("pre");
+    message.classList.add("pyc-run-detail__problem-message");
+    message.setAttribute("data-role", "problem-message");
+    const kind_word = problem.kind === "warning" ? "Warning" : problem.kind === "error" ? "Error" : "Failure";
+    message.textContent = (String(problem.type).length > 0 ? String(problem.type) : kind_word) + (String(problem.message).length > 0 ? ": " + String(problem.message) : "");
+    block.appendChild(message);
+    const frames = Array.isArray(problem.frames) ? problem.frames : [];
+    if (frames.length > 0) {
+      const stack = document.createElement("details");
+      stack.classList.add("pyc-run-detail__stack");
+      const label = document.createElement("summary");
+      label.textContent = "Stack (" + String(frames.length) + (frames.length === 1 ? " frame)" : " frames)");
+      stack.appendChild(label);
+      for (const frame of frames) {
+        const where = document.createElement("div");
+        where.classList.add("pyc-run-detail__frame-where");
+        where.textContent = String(frame.file) + (typeof frame.line === "number" ? ":" + String(frame.line) : "") + (String(frame.scope).length > 0 ? " \xB7 " + String(frame.scope) : "");
+        stack.appendChild(where);
+        if (Array.isArray(frame.code) && frame.code.length > 0) {
+          const code = document.createElement("pre");
+          code.classList.add("pyc-run-detail__frame-code");
+          code.textContent = frame.code.join("\n");
+          stack.appendChild(code);
+        }
+      }
+      block.appendChild(stack);
+    }
+    return block;
   }
   /**
    * Render the artifacts section for a terminal run whose
@@ -1151,6 +1438,9 @@ export {
   PycRunDetail,
   TERMINAL_RUN_STATES,
   artifact_url,
+  count_problem_results,
+  format_test_duration,
+  results_summary_text,
   is_terminal_state,
   is_test_run,
   is_valid_run_id,

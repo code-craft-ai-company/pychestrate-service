@@ -3021,6 +3021,85 @@ paths:
                 labels: {}
               schema: { $ref: '#/components/schemas/Run' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /runs/{run_id}/results:
+    parameters:
+      - $ref: '#/components/parameters/RunIdParam'
+    get:
+      tags: [runs]
+      summary: List a run's test results, failing tests first.
+      description: |
+        The tests the run reported, with the reason for each one that did not
+        pass: the exception type, its message, and the stack frames with the
+        source lines around them. Failed and errored tests (and any result
+        that is not passed, skipped or unset) come first, then skipped and
+        unset, then passed, each group by test name. The record is pod output,
+        so messages, frames and source lines are cut at fixed limits (4000
+        characters, 12 frames, 10 lines per frame, 10 problems per test).
+        Requires `system:runs.read`.
+      operationId: runs_list_results
+      parameters:
+        - name: failed
+          in: query
+          description: When `true`, leave out passed, skipped and unset tests.
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/PageParam'
+        - name: per_page
+          in: query
+          description: Tests per page (default 100, at most 200).
+          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
+      responses:
+        '200':
+          description: One page of test results.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, meta]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [task_id, test_name, result, problems]
+                      properties:
+                        task_id: { type: string }
+                        test_name: { type: string }
+                        result: { type: string, description: 'PASSED, FAILED, ERRORED, SKIPPED or UNSET.' }
+                        started_at: { type: string, format: date-time, nullable: true }
+                        finished_at: { type: string, format: date-time, nullable: true }
+                        duration_seconds: { type: number, nullable: true }
+                        problems:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              kind: { type: string, enum: [failure, error, warning] }
+                              type: { type: string, description: 'Exception type, e.g. `AssertionError`.' }
+                              message: { type: string }
+                              frames:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    file: { type: string }
+                                    line: { type: integer, nullable: true }
+                                    scope: { type: string }
+                                    code: { type: array, items: { type: string } }
+                  meta:
+                    type: object
+                    properties:
+                      page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer, description: 'Tests matching the filter.' }
+                      by_result:
+                        type: object
+                        additionalProperties: { type: integer }
+                        description: 'Every test in the run counted per result, whatever the filter.'
+                      next_cursor: { type: string, nullable: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
   /runs/{run_id}/cancel:
     parameters:
       - $ref: '#/components/parameters/RunIdParam'

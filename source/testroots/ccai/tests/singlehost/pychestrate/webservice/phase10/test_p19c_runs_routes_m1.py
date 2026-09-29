@@ -369,18 +369,20 @@ def _deactivate_all(patches: List[Any]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_register_runs_routes_attaches_six_endpoints():
+def test_register_runs_routes_attaches_seven_endpoints():
     """
     **Feature: 5-run-state-machine PR p19c**
-    **Property: register_runs_routes attaches the six planned
+    **Property: register_runs_routes attaches the seven planned
     method+path pairs from the OpenAPI spec (the five read/ingest
-    endpoints plus the operator cancel endpoint).**
+    endpoints, the operator cancel endpoint, and the per-test
+    results list -- ORC-10).**
     """
     app = _FakeApp()
     runs_routes.register_runs_routes(app=app, version_prefix="/api/v1")
     expected_pairs = (
         ("/api/v1/runs", ("GET",)),
         ("/api/v1/runs/{run_id}", ("GET",)),
+        ("/api/v1/runs/{run_id}/results", ("GET",)),
         ("/api/v1/runs/{run_id}/dispatch-ack", ("POST",)),
         ("/api/v1/runs/{run_id}/progress", ("POST",)),
         ("/api/v1/runs/{run_id}/results/complete", ("POST",)),

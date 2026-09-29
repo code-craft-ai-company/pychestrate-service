@@ -194,6 +194,22 @@ preview tag.
 
 ### Changed
 
+- A finished test run's page says which tests failed and why (ORC-10). The
+  ingest tables kept every test's result and its raw record but nothing
+  exposed them, so the page showed counts and artifact links. New
+  `GET /api/v1/runs/{run_id}/results` (`system:runs.read`) lists the run's
+  tests, failed and errored first, each with its duration and, for a test that
+  did not pass, the exception type, its message and the stack frames with the
+  source lines; `failed=true`, `page` and `per_page` (at most 200) narrow it,
+  and `meta.by_result` counts every test whatever the filter. The record is pod
+  output, so messages (4000 characters), frames (12), lines per frame (10) and
+  problems per test (10) are bounded. The run page gets a "Test results"
+  section: the totals, the failing tests first with the first one open and a
+  collapsible stack, "Show failed tests only", and "Show more". Test output is
+  shown as text. Not done: comparing with the previous run, a test's history
+  and a flake flag, re-running the failed tests, and filing an issue from a
+  failure.
+
 - A person refused access is told whom to ask (XC-21). "Ask an administrator"
   never said who that is. `PYCHESTRATE_ADMIN_CONTACT` names a contact (an
   email address, a team, a chat channel; described in the environment

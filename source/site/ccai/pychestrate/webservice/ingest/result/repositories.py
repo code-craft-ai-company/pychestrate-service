@@ -13,7 +13,9 @@ __version__ = "1.0.0"
 
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+import sqlalchemy as sa
 
 from sqlalchemy.orm import Session as DbSession
 
@@ -270,6 +272,73 @@ def list_tasks(
         db_session.query(TaskResult)
         .filter(TaskResult.run_id == run_id)
         .order_by(TaskResult.test_name.asc())
+        .all()
+    )
+    rtnval = list(rows)
+    return rtnval
+
+
+#: Results that are not a problem: a passed test, and one that did not run.
+QUIET_RESULTS = ("PASSED", "SKIPPED", "UNSET")
+
+
+def count_tasks_by_result(
+        *,
+        db_session: DbSession,
+        run_id: str
+    ) -> Dict[str, int]:
+    """
+        Count a run's task rows per result string, without loading the
+        payloads.
+
+        :param db_session: Active session.
+        :param run_id: Run UUID.
+
+        :returns: ``{"PASSED": 31, "FAILED": 1}``.
+    """
+    rows = (
+        db_session.query(TaskResult.result, sa.func.count(TaskResult.task_id))
+        .filter(TaskResult.run_id == run_id)
+        .group_by(TaskResult.result)
+        .all()
+    )
+    rtnval = {str(result): int(count) for result, count in rows}
+    return rtnval
+
+
+def page_tasks(
+        *,
+        db_session: DbSession,
+        run_id: str,
+        problems_only: bool,
+        offset: int,
+        limit: int
+    ) -> List[TaskResult]:
+    """
+        One page of a run's task rows, problems first: anything that is not
+        passed, skipped or unset (failures, errors, unfamiliar results), then
+        skipped and unset, then passed; by test name within each group.
+
+        :param db_session: Active session.
+        :param run_id: Run UUID.
+        :param problems_only: Leave out the quiet results.
+        :param offset: Rows to skip.
+        :param limit: Rows to return.
+
+        :returns: The page's rows.
+    """
+    rank = sa.case(
+        (TaskResult.result == "PASSED", 2),
+        (TaskResult.result.in_(("SKIPPED", "UNSET")), 1),
+        else_=0,
+    )
+    query = db_session.query(TaskResult).filter(TaskResult.run_id == run_id)
+    if problems_only is True:
+        query = query.filter(TaskResult.result.notin_(QUIET_RESULTS))
+    rows = (
+        query.order_by(rank.asc(), TaskResult.test_name.asc(), TaskResult.task_id.asc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
     rtnval = list(rows)

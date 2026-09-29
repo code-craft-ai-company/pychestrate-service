@@ -113,6 +113,13 @@ Open a run from the list. The page shows:
   "hard deadline ... passed".
 * **Progress**: tiles for **Passed**, **Failed**, **Errored**, **Skipped** and
   **Total**, and a bar, updated live while the run is going.
+* **Test results**: for a test run that has ended, the totals ("1 failed - 31
+  passed") and the tests themselves, failing ones first. A failing test opens to
+  show the exception and its message; **Stack** lists the frames with the
+  source lines around each. **Show failed tests only** narrows the list, and
+  **Show more** loads the next fifty tests. This is what the pod reported for
+  each test; a run that failed before any test ran says no individual results
+  were recorded. The same list is ``GET /api/v1/runs/{run_id}/results``.
 * **Artifacts**: a one-line outcome, for example "Outcome failure - 0 passed -
   1 failed", and every file the run produced, each a link. For a test run
   these include the summary and the full results (``testrun_results.json``),
