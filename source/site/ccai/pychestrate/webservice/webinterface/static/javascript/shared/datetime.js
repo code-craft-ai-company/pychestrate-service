@@ -101,10 +101,10 @@ export function format_timestamp(value) {
 }
 
 /*
- * How long something ran, for a list row (ORC-11): "45s", "3m 12s",
+ * How long something ran, for a list row (ORC-11): "< 1s", "45s", "3m 12s",
  * "2h 5m", "1d 4h". A run with no start has no duration ("—"). One that is
  * still running (``still_running``) is measured up to ``now`` and says so
- * ("3m 12s so far"); one that has ended without a recorded finish has none.
+ * ("3m 12s so far"); under a second is "< 1s"; one that has ended without a recorded finish has none.
  */
 export function format_duration(started, finished, still_running, now) {
   const start = parse_timestamp(started);
@@ -122,7 +122,9 @@ export function format_duration(started, finished, still_running, now) {
   }
   const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1000));
   let text;
-  if (total < 60) {
+  if (total < 1) {
+    text = "< 1s";
+  } else if (total < 60) {
     text = String(total) + "s";
   } else if (total < 3600) {
     text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";

@@ -99,8 +99,10 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
             # A test run's job name is its catalog entry's id: not a name a person can read.
             {"run_id": "dddddddd-4444-4000-8000-000000000004", "project_id": PROJECT_ID, "job_name": "823e8e6f-2c4d-48c7-977b-bfb390a5a059", "job_type": "testbase",
              "state": "running", "created_at": "2026-09-29T08:00:00+00:00", "started_at": "2026-09-29T08:00:00+00:00", "completed_at": None},
+            {"run_id": "eeeeeeee-5555-4000-8000-000000000005", "project_id": PROJECT_ID, "job_name": "smoke", "job_type": "testbase",
+             "state": "completed", "created_at": "2026-09-29T07:00:00+00:00", "started_at": "2026-09-29T07:00:00+00:00", "completed_at": "2026-09-29T07:00:00+00:00"},
         ],
-        "meta": PAGE_META,
+        "meta": {"page": 1, "per_page": 50, "total": 5},
     }
     page = open_shell_page(
         browser, path="/runs?project_id=" + PROJECT_ID, bundle_names=["pyc-site-shell", "pyc-runs-bundle"],
@@ -116,7 +118,7 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
         page.context.close()
 
     testbase.assert_equal(
-        (fits, headers, [row[:2] for row in text], [row[-1] if index < 3 else None for index, row in enumerate(text)]),
+        (fits, headers, [row[:2] for row in text], [row[-1] if index != 3 else None for index, row in enumerate(text)]),
         (
             True,
             ["Job", "Type", "Project", "State", "Created", "Duration"],
@@ -125,8 +127,9 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
                 ["Build run bbbbbbbb", "Build · makefile"],
                 ["RPA run cccccccc", "RPA · process"],
                 ["Test run dddddddd", "Test · testbase"],
+                ["smoke eeeeeeee", "Test · testbase"],
             ],
-            ["3m 12s", "—", "45s", None],
+            ["3m 12s", "—", "45s", None, "< 1s"],
         ),
     )
     return

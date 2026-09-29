@@ -103,7 +103,9 @@ function format_duration(started, finished, still_running, now) {
   }
   const total = Math.max(0, Math.round((end.getTime() - start.getTime()) / 1e3));
   let text;
-  if (total < 60) {
+  if (total < 1) {
+    text = "< 1s";
+  } else if (total < 60) {
     text = String(total) + "s";
   } else if (total < 3600) {
     text = String(Math.floor(total / 60)) + "m " + String(total % 60) + "s";
