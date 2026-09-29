@@ -1,3 +1,4 @@
+import { format_timestamp } from "../shared/datetime.js";
 import { load_failure_message, read_required_permission } from "./feature-flags-view.js";
 const SYSTEM_HEALTH_PATH = "/api/v1/system/health";
 function health_status_tone(status) {
@@ -196,7 +197,7 @@ class PycSystemHealth extends HTMLElement {
     summary.appendChild(summary_head);
     const generated = document.createElement("p");
     generated.classList.add("pyc-admin__card-detail");
-    generated.textContent = "Generated " + this._document.generated_at;
+    generated.textContent = "Checked " + format_timestamp(this._document.generated_at);
     summary.appendChild(generated);
     children.push(summary);
     if (this._document.subsystems.length === 0) {
@@ -264,7 +265,7 @@ class PycSystemHealth extends HTMLElement {
         {
           key: "reason",
           label: "Reason",
-          width: "16rem",
+          width: "44rem",
           sortable: false,
           render: (backend) => backend.reason.length > 0 ? backend.reason : "\u2014"
         }

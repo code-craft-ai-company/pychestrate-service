@@ -40,6 +40,67 @@ function message_with_detail(prefix, detail, generic) {
   return generic;
 }
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/datetime.js
+var ISO_DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/;
+var ZONE_DESIGNATOR_PATTERN = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+function pad_two(number) {
+  const rtnval = (number < 10 ? "0" : "") + String(number);
+  return rtnval;
+}
+function parse_timestamp(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  let text = value.trim();
+  if (ISO_DATE_TIME_PATTERN.test(text) === true && ZONE_DESIGNATOR_PATTERN.test(text) === false) {
+    text = text.replace(" ", "T") + "Z";
+  }
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime()) === true) {
+    const rtnval2 = null;
+    return rtnval2;
+  }
+  const rtnval = parsed;
+  return rtnval;
+}
+function zone_label(instant) {
+  try {
+    const parts = new Intl.DateTimeFormat(void 0, { timeZoneName: "short" }).formatToParts(instant);
+    for (const part of parts) {
+      if (part.type === "timeZoneName" && part.value.length > 0) {
+        const rtnval2 = part.value;
+        return rtnval2;
+      }
+    }
+  } catch (error) {
+  }
+  const offset_minutes = -instant.getTimezoneOffset();
+  const sign = offset_minutes >= 0 ? "+" : "-";
+  const magnitude = Math.abs(offset_minutes);
+  const rtnval = "UTC" + sign + pad_two(Math.floor(magnitude / 60)) + ":" + pad_two(magnitude % 60);
+  return rtnval;
+}
+function format_instant(instant) {
+  const date_part = instant.getFullYear() + "-" + pad_two(instant.getMonth() + 1) + "-" + pad_two(instant.getDate());
+  const time_part = pad_two(instant.getHours()) + ":" + pad_two(instant.getMinutes());
+  const rtnval = date_part + " " + time_part + " " + zone_label(instant);
+  return rtnval;
+}
+function format_timestamp(value) {
+  if (value === null || value === void 0 || value.length === 0) {
+    const rtnval2 = "\u2014";
+    return rtnval2;
+  }
+  const parsed = parse_timestamp(value);
+  if (parsed === null) {
+    const rtnval2 = value;
+    return rtnval2;
+  }
+  const rtnval = format_instant(parsed);
+  return rtnval;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-admin-bundle/feature-flags-view.js
 var FLAGS_PATH = "/api/v1/flags";
 var FLAG_STATE_ENABLED = "enabled";
@@ -293,7 +354,7 @@ var PycFeatureFlags = class extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-admin__notice");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No feature flags registered.";
+      empty.textContent = "No feature flags are registered. A flag switches an optional behaviour on or off without a release; flags are created through the REST API (POST /api/v1/flags) or by an extension, and appear here for you to toggle.";
       region.replaceChildren(empty);
       return;
     }
@@ -681,7 +742,7 @@ var PycSystemHealth = class extends HTMLElement {
     summary.appendChild(summary_head);
     const generated = document.createElement("p");
     generated.classList.add("pyc-admin__card-detail");
-    generated.textContent = "Generated " + this._document.generated_at;
+    generated.textContent = "Checked " + format_timestamp(this._document.generated_at);
     summary.appendChild(generated);
     children.push(summary);
     if (this._document.subsystems.length === 0) {
@@ -749,7 +810,7 @@ var PycSystemHealth = class extends HTMLElement {
         {
           key: "reason",
           label: "Reason",
-          width: "16rem",
+          width: "44rem",
           sortable: false,
           render: (backend) => backend.reason.length > 0 ? backend.reason : "\u2014"
         }

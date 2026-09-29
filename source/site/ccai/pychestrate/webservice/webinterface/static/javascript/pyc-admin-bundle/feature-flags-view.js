@@ -266,7 +266,9 @@ class PycFeatureFlags extends HTMLElement {
       const empty = document.createElement("p");
       empty.classList.add("pyc-admin__notice");
       empty.setAttribute("data-role", "empty-state");
-      empty.textContent = "No feature flags registered.";
+      // Say what a flag is and where one comes from, not just that there is none (ADM-30).
+      empty.textContent = "No feature flags are registered. A flag switches an optional behaviour on or off without a release; " +
+        "flags are created through the REST API (POST /api/v1/flags) or by an extension, and appear here for you to toggle.";
       region.replaceChildren(empty);
       return;
     }

@@ -332,6 +332,15 @@ preview tag.
   follows in a muted style, and "Cached" reads "Saved". Arrowheads on the DAG
   edges are not done.
 
+- Two admin pages explain themselves (ADM-30). System Health printed its time
+  as ISO text with microseconds and cut a health check's reason off after
+  sixteen characters; it now reads "Checked 2026-09-29 12:49 PDT" like every
+  other time and the reason column is wide enough for a real reason. The empty
+  Feature Flags page says what a flag is (it switches an optional behaviour on
+  or off without a release) and where one comes from (the REST API or an
+  extension). The boxed Refresh buttons, the header pattern shared with other
+  pages and plain-language names for each health check are not done.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a
