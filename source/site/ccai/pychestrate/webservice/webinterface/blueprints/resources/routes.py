@@ -66,6 +66,7 @@ __version__ = "1.0.0"
 
 import json
 import logging
+import re
 
 from typing import Any, Callable, Dict, List, Optional
 
@@ -571,8 +572,60 @@ RESOURCE_FIELD_LABELS: Dict[str, str] = {
     "description": "Description",
     "capacity": "Capacity",
     "tags": "Tags",
+    "new_tags": "New tags",
     "metadata": "Metadata (JSON)",
 }
+
+
+def _split_new_tags(*, raw: Any) -> List[str]:
+    """
+        The tag names typed into the "New tags" input: separated by
+        commas or spaces, without repeats, in the order typed.
+
+        :param raw: What was typed (or ``None``).
+
+        :returns: The names, not yet validated.
+    """
+    rtnval: List[str] = []
+    for piece in re.split(r"[\s,]+", str(raw or "")):
+        name = piece.strip()
+        if len(name) > 0 and name not in rtnval:
+            rtnval.append(name)
+    return rtnval
+
+
+def _checked_new_tags(*, raw: Any) -> List[str]:
+    """
+        The names typed into the "New tags" input, refused when one is
+        not a valid tag name.
+
+        :param raw: What was typed.
+
+        :returns: The valid names.
+        :raises ValueError: Naming the first invalid one; the caller
+                            shows it beside the input.
+    """
+    from ccai.pychestrate.core.managers.resource_manager import validate_tag_name  # noqa: E402
+
+    names = _split_new_tags(raw=raw)
+    for name in names:
+        if validate_tag_name(name) is not True:
+            raise ValueError(
+                "'{}' is not a valid tag name. Use letters, digits, '_' and '-', starting with a"
+                " letter or digit, at most 64 characters.".format(name)
+            )
+    return names
+
+
+def _merged_tags(*, ticked: List[str], typed: List[str]) -> List[str]:
+    """
+        The ticked tags followed by the newly typed ones, without repeats.
+    """
+    rtnval = list(ticked)
+    for name in typed:
+        if name not in rtnval:
+            rtnval.append(name)
+    return rtnval
 
 
 def _resource_field_errors(
@@ -1143,9 +1196,11 @@ def handle_resource_create(request: Request) -> Response:
         tags = list(multi_form.get("tags", []))
         metadata_str = str(single_form.get("metadata", "")).strip()
         errors: Dict[str, str] = {}
-        parsing_field = "metadata"
+        parsing_field = "new_tags"
 
         try:
+            tags = _merged_tags(ticked=tags, typed=_checked_new_tags(raw=single_form.get("new_tags", "")))
+            parsing_field = "metadata"
             metadata = _parse_metadata_json_or_default(
                 raw=metadata_str, default={}
             )
@@ -1374,12 +1429,16 @@ def handle_resource_edit(request: Request) -> Response:
             tags: Optional[List[str]] = None
             if "tags_present" in multi_form or "tags" in multi_form:
                 tags = list(multi_form.get("tags", []))
+            typed_tags = str(single_form.get("new_tags", "") or "")
             metadata_str: Optional[str] = None
             if "metadata" in multi_form:
                 metadata_str = str(single_form.get("metadata", "")).strip()
 
-            parsing_field = "capacity"
+            parsing_field = "new_tags"
             try:
+                if tags is not None:
+                    tags = _merged_tags(ticked=tags, typed=_checked_new_tags(raw=typed_tags))
+                parsing_field = "capacity"
                 capacity: Optional[int] = None
                 if capacity_raw is not None:
                     capacity = _coerce_int(raw=capacity_raw)

@@ -4,10 +4,36 @@
 {% block title %}Tags - Pychestrate Resources{% endblock %}
 
 {% block content %}
+{% set typed = form_data or {} %}
 <div class="page-header">
     <h1>Tags</h1>
     <p>Resource tags for filtering and organization</p>
 </div>
+
+{% if can_manage %}
+<div class="card narrow mb">
+    <h2 class="card-header">Create a tag</h2>
+    {{ ui.error_summary(errors, error_labels) }}
+    <form method="post" action="{{ url_for('resources.tag_create') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-group">
+            <label for="name">Name *</label>
+            <input type="text" id="name" name="name" class="form-control" required maxlength="64"
+                   pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,63}" placeholder="e.g. rack-3"
+                   value="{{ typed.get('name', '') }}"{{ ui.invalid_attrs(errors, "name", "name-help") }}>
+            {{ ui.field_error(errors, "name") }}
+            <p class="form-text" id="name-help">Letters, digits, '_' and '-', starting with a letter or digit.</p>
+        </div>
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" class="form-control" maxlength="255"
+                   placeholder="What the tag is for" value="{{ typed.get('description', '') }}"{{ ui.invalid_attrs(errors, "description") }}>
+            {{ ui.field_error(errors, "description") }}
+        </div>
+        <button type="submit" class="btn btn-primary">{{ ui.icon("add") }} Create tag</button>
+    </form>
+</div>
+{% endif %}
 
 
 <div class="filter-bar">
@@ -28,6 +54,7 @@
             <th scope="col">Name</th>
             <th scope="col">Description</th>
             <th scope="col">Created</th>
+            {% if can_manage %}<th scope="col">Actions</th>{% endif %}
         </tr>
     </thead>
     <tbody>
@@ -36,16 +63,25 @@
             <td><span class="badge badge-info">{{ tag.name }}</span></td>
             <td>{{ tag.description or '-' }}</td>
             <td>{{ tag.created_at | format_datetime('%Y-%m-%d %H:%M', '-') }}</td>
+            {% if can_manage %}
+            <td>
+                <a href="{{ url_for('resources.tag_edit', tag_id=tag.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+                <form action="{{ url_for('resources.tag_delete', tag_id=tag.id) }}" method="post" data-confirm="Delete the tag &quot;{{ tag.name }}&quot;? It is taken off every resource that carries it; the resources stay.">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+            </td>
+            {% endif %}
         </tr>
         {% else %}
         <tr>
             {% if search %}
-            <td colspan="3" class="muted center">
+            <td colspan="{{ 4 if can_manage else 3 }}" class="muted center">
                 No tags match "{{ search }}".
                 <a href="{{ url_for('resources.tag_list') }}">Clear filter</a>
             </td>
             {% else %}
-            {{ ui.empty_state("No tags found", colspan=3) }}
+            {{ ui.empty_state("No tags found", colspan=(4 if can_manage else 3)) }}
             {% endif %}
         </tr>
         {% endfor %}
@@ -55,7 +91,7 @@
 {{ ui.pagination('resources.tag_list', page, total_pages, {'per_page': per_page, 'search': (search or none)}, total=None) }}
 
 <p class="muted mt">
-    Tags are created automatically when assigned to resources.
-    <a href="{{ url_for('resources.resource_list') }}">Manage resources</a> to add or remove tags.
+    Tags are made here, or by typing a new one in a resource's Tags field.
+    {% if can_manage %}<a href="{{ url_for('resources.resource_list') }}">Manage resources</a> to tag or untag them.{% endif %}
 </p>
 {% endblock %}

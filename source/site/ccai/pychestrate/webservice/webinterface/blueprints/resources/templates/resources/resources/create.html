@@ -61,9 +61,9 @@
             {{ ui.field_error(errors, 'capacity') }}
         </div>
         
-        {% if all_tags %}
         <div class="form-group">
             <label id="tags-label">Tags</label>
+            {% if all_tags %}
             <div class="actions-row" id="tags" role="group" aria-labelledby="tags-label"{% if errors and 'tags' in errors %} aria-describedby="tags-error"{% endif %} tabindex="-1">
                 {% for tag in all_tags %}
                 <label class="regular">
@@ -74,8 +74,16 @@
                 {% endfor %}
             </div>
             {{ ui.field_error(errors, 'tags') }}
+            {% endif %}
         </div>
-        {% endif %}
+
+        <div class="form-group">
+            <label for="new_tags">New tags</label>
+            <input type="text" id="new_tags" name="new_tags" class="form-control" placeholder="e.g. rack-3, gpu"
+                   value="{{ form_data.get('new_tags', '') if form_data else '' }}"{{ ui.invalid_attrs(errors, 'new_tags', 'new_tags-help') }}>
+            {{ ui.field_error(errors, 'new_tags') }}
+            <p class="form-text" id="new_tags-help">Tags that do not exist yet, separated by commas or spaces. They are created with the resource.</p>
+        </div>
         
         <div class="form-group">
             <label for="metadata">Metadata (JSON)</label>

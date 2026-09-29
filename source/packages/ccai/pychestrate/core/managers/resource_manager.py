@@ -1195,6 +1195,161 @@ class ResourceManager:
                 }
             )
     
+    def create_tag(self, name: str, description: str = None, user_id: str = None) -> TagResponse:
+        """
+        Create a tag that no resource carries yet.
+
+        Tags used to come into being only when they were first assigned to
+        a resource, which left the Tags page and the resource forms with no
+        way to make one.
+
+        :param name: The tag name (letters, digits, ``_`` and ``-``,
+                     starting with a letter or digit, at most 64)
+        :param description: What the tag is for (optional, at most 255)
+        :param user_id: The ID of the user creating the tag
+        :returns: TagResponse for the new tag
+        :raises ResourceValidationError: If the name or description is
+                                         invalid, or the name is taken
+        """
+        from ccai.pychestrate.core.orm import Tag
+
+        tag_name = (name or "").strip()
+        if not self.validate_tag_name(tag_name):
+            raise ResourceValidationError(
+                f"Tag name '{tag_name}' is invalid",
+                field="name",
+                error_code="INVALID_TAG_NAME"
+            )
+        tag_description = (description or "").strip() or None
+        if tag_description is not None and len(tag_description) > 255:
+            raise ResourceValidationError(
+                "A tag description may be at most 255 characters",
+                field="description",
+                error_code="TAG_DESCRIPTION_TOO_LONG"
+            )
+        existing = self._db_session.query(Tag).filter(Tag.name == tag_name).first()
+        if existing:
+            raise ResourceValidationError(
+                f"A tag named '{tag_name}' already exists",
+                field="name",
+                error_code="TAG_NAME_EXISTS"
+            )
+
+        tag = Tag(name=tag_name, description=tag_description, created_at=utc_now())
+        self._db_session.add(tag)
+        self._db_session.commit()
+
+        if self._audit_logger:
+            self._audit_logger.log_event(
+                event_type='resource_tag_created',
+                user_id=str(user_id) if user_id else None,
+                details={"tag_id": tag.id, "tag_name": tag_name}
+            )
+        return self._tag_to_response(tag)
+
+    def get_tag(self, tag_id: int) -> Optional[TagResponse]:
+        """
+        Get one tag.
+
+        :param tag_id: The tag's unique identifier
+        :returns: TagResponse, or ``None`` when there is no such tag
+        """
+        from ccai.pychestrate.core.orm import Tag
+
+        tag = self._db_session.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            return None
+        return self._tag_to_response(tag)
+
+    def update_tag(self, tag_id: int, name: str = None, description: str = None, user_id: str = None) -> TagResponse:
+        """
+        Rename a tag and/or change its description. Renaming keeps every
+        resource that carries it.
+
+        :param tag_id: The tag's unique identifier
+        :param name: The new name, or ``None`` to keep it
+        :param description: The new description, or ``None`` to keep it
+                            (an empty string clears it)
+        :param user_id: The ID of the user changing the tag
+        :returns: TagResponse for the updated tag
+        :raises ResourceNotFoundError: If the tag does not exist
+        :raises ResourceValidationError: If the name or description is
+                                         invalid, or the name is taken
+        """
+        from ccai.pychestrate.core.orm import Tag
+
+        tag = self._db_session.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise ResourceNotFoundError(
+                f"Tag with ID '{tag_id}' not found", error_code="TAG_NOT_FOUND"
+            )
+        if name is not None:
+            new_name = name.strip()
+            if not self.validate_tag_name(new_name):
+                raise ResourceValidationError(
+                    f"Tag name '{new_name}' is invalid",
+                    field="name",
+                    error_code="INVALID_TAG_NAME"
+                )
+            other = self._db_session.query(Tag).filter(Tag.name == new_name, Tag.id != tag_id).first()
+            if other:
+                raise ResourceValidationError(
+                    f"A tag named '{new_name}' already exists",
+                    field="name",
+                    error_code="TAG_NAME_EXISTS"
+                )
+            tag.name = new_name
+        if description is not None:
+            new_description = description.strip() or None
+            if new_description is not None and len(new_description) > 255:
+                raise ResourceValidationError(
+                    "A tag description may be at most 255 characters",
+                    field="description",
+                    error_code="TAG_DESCRIPTION_TOO_LONG"
+                )
+            tag.description = new_description
+        self._db_session.commit()
+
+        if self._audit_logger:
+            self._audit_logger.log_event(
+                event_type='resource_tag_updated',
+                user_id=str(user_id) if user_id else None,
+                details={"tag_id": tag.id, "tag_name": tag.name}
+            )
+        return self._tag_to_response(tag)
+
+    def delete_tag(self, tag_id: int, user_id: str = None) -> int:
+        """
+        Delete a tag. It is taken off every resource that carries it;
+        the resources stay.
+
+        :param tag_id: The tag's unique identifier
+        :param user_id: The ID of the user deleting the tag
+        :returns: How many resources carried it
+        :raises ResourceNotFoundError: If the tag does not exist
+        """
+        from ccai.pychestrate.core.orm import Tag
+
+        tag = self._db_session.query(Tag).filter(Tag.id == tag_id).first()
+        if not tag:
+            raise ResourceNotFoundError(
+                f"Tag with ID '{tag_id}' not found", error_code="TAG_NOT_FOUND"
+            )
+        carried_by = len(tag.resources)
+        tag_name = tag.name
+        for resource in list(tag.resources):
+            resource.tags.remove(tag)
+        self._db_session.delete(tag)
+        self._db_session.commit()
+
+        if self._audit_logger:
+            self._audit_logger.log_event(
+                event_type='resource_tag_deleted',
+                user_id=str(user_id) if user_id else None,
+                details={"tag_id": tag_id, "tag_name": tag_name, "resources": carried_by}
+            )
+        return carried_by
+
     def list_tags(self, offset: int = 0, limit: int = 50, search: str = None) -> TagListResponse:
         """
         List all tags.

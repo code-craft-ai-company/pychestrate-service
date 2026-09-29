@@ -561,8 +561,8 @@ def test_register_health_routes_attaches_documented_routes():
 def test_register_tags_routes_attaches_documented_routes():
     """
     **Feature: webworks resources port T8.2 (E4)**
-    **Property: register_tags_routes attaches the single
-    /resources/tags route.**
+    **Property: register_tags_routes attaches the tag list and the
+    manager routes that create, edit and delete a tag.**
     """
     _reset_global_state()
     try:
@@ -573,6 +573,9 @@ def test_register_tags_routes_attaches_documented_routes():
         )
         expected = {
             ("/resources/tags", ("GET",)),
+            ("/resources/tags/create", ("POST",)),
+            ("/resources/tags/{tag_id}/edit", ("GET", "POST")),
+            ("/resources/tags/{tag_id}/delete", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:

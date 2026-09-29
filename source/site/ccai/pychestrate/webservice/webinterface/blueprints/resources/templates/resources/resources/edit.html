@@ -60,7 +60,6 @@
         </div>
 
         {% set listed_tag_names = all_tags | map(attribute='name') | list %}
-        {% if all_tags or resource.tags %}
         <div class="form-group">
             <label id="tags-label">Tags</label>
             {#- Unticked checkboxes are not submitted; this marker tells the
@@ -86,8 +85,14 @@
                 {% endfor %}
             </div>
             {{ ui.field_error(errors, 'tags') }}
+            <div class="mt">
+                <label for="new_tags">New tags</label>
+                <input type="text" id="new_tags" name="new_tags" class="form-control" placeholder="e.g. rack-3, gpu"
+                       value="{{ form_data.get('new_tags', '') if form_data else '' }}"{{ ui.invalid_attrs(errors, 'new_tags', 'new_tags-help') }}>
+                {{ ui.field_error(errors, 'new_tags') }}
+                <p class="form-text" id="new_tags-help">Tags that do not exist yet, separated by commas or spaces. They are created when you save.</p>
+            </div>
         </div>
-        {% endif %}
 
         <div class="form-group">
             <label for="metadata">Metadata (JSON)</label>

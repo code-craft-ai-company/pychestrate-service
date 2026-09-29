@@ -524,6 +524,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "secret": _one(SecretMetadataResponse),
     "scopes": _many(SecretScopeResponse),
     "scope": _one(SecretScopeResponse),
+    "tag": _one(TagResponse),
 
     # Projects
     "projects": _many(ProjectResponse),

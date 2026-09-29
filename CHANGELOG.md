@@ -295,6 +295,15 @@ preview tag.
   next to the button; it is audited with the holder's name. Anyone else
   is refused as before, and the holder is not notified.
 
+- **Tags can be made in the interface.** The Tags page said tags were
+  "created automatically when assigned" while nothing could assign a
+  new one. It now has a form that makes a tag (name and description),
+  an Edit page that renames it (resources that carry it keep it), and a
+  Delete that takes it off every resource and leaves the resources. The
+  resource create and edit forms have a "New tags" input for tags that
+  do not exist yet, with a refused name shown beside it. Managing tags
+  needs the resource-management permission; anyone can read the list.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder
