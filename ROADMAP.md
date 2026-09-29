@@ -243,6 +243,25 @@ Known remaining items:
   fragments (calendar grid rows, a few form widths); all colours and
   font sizes flow through tokens.
 
+Re-verified 2026-09-29 (staging, Chromium, axe-core 4.10.2): the 39
+navigation pages plus the home page and the error-types page report no
+axe violation of any impact at page load, in the light theme, the OS dark
+theme and the explicitly chosen dark theme; and the accessibility tree of
+those pages has a name on every one of its 56 form controls. The
+`mj-select` item above no longer reproduces there (the `label` on the host
+names its trigger). Fixed since the 2026-09-04 record, each with a test:
+the skip link's target existed only after the link was used, a skipped
+heading level on Enrollment Tokens, white text on the dark theme's
+light-blue primary buttons (3.55:1), six `mj-text-field` / `mj-textarea`
+controls with no name, the run progress bar's name, focusable chart points
+inside the `aria-hidden` SVG, and sortable headers that answered only the
+mouse. Four of these work around defects in `codecraftai-webworks` (its
+`mj-data-table` sorts on click only, `mj-chart` makes points tabbable
+inside an `aria-hidden` SVG, `mj-text-field` takes its name only from its
+own `label`, and the dark `--mj-text-on-accent` is white); the workarounds
+can go when the library fixes them. Not covered: a screen reader, and
+pages behind a click.
+
 Also done after the phase table above: the duplicate sidebar tables in
 the admin and secrets bundle entries are gone (S-22), release templates
 show repository names with links (P-53), and every fragment's
