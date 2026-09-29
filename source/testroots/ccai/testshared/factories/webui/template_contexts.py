@@ -490,6 +490,7 @@ DEFAULT_REGISTRY: Dict[str, Builder] = {
     "title": _const("Page not found"),
     "message": _const("The address may be mistyped, or the page may have moved."),
     "back_url": _by_mode("/admin/users", None),
+    "back_link": _by_mode(("Back to Users", "/admin/users"), None),
     "initial_route": _const("/"),
     "next_target": _const("/"),
 

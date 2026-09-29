@@ -51,6 +51,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _AuthResolution,
     _attach_session_to_response,
     _build_default_template_context,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -255,36 +256,33 @@ def _resolve_owned_resource_or_redirect(
         not_found_message: str
     ) -> Any:
     if target_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     getter = getattr(manager, getter_name)
     target = getter(target_id)
     if target is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     if getattr(target, "project_id", None) != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return target

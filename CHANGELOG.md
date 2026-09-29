@@ -194,6 +194,20 @@ preview tag.
 
 ### Changed
 
+- A missing thing is a 404 page, not a redirect (ADM-22). `/projects/999`,
+  `/admin/users/<no such id>` and the other server-rendered pages that look
+  a thing up used to answer 303 to the list with a "... not found." flash;
+  they now answer 404 with the site's error page inside the shell. It says
+  what was not found ("Project not found"), keeps the address, and offers
+  "Back to <the list>" as its main action. The rewrite covers 101 places in
+  the admin, projects and resources pages; they call one helper, and a test
+  keeps them from building their own flash redirect again. An unknown path
+  under `/admin` (`/admin/nope`), which answered 200 with an empty page, is a
+  404 too: the shell serves only the five paths its admin bundle handles.
+  Unknown ids under the other bundle prefixes (`/runs/<id>`) still show the
+  bundle's own not-found view with a 200, because the page's script looks the
+  id up.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

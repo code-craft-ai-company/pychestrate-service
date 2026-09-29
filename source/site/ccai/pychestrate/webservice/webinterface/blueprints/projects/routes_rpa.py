@@ -63,6 +63,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -270,9 +271,10 @@ def _resolve_spec_or_redirect(*, auth: _AuthResolution, rpa: Any, project_id: in
     except Exception:
         spec = None
     if spec is None or str(spec.project_id) != str(project_id):
-        rtnval = _redirect_with_flash(
-            session=auth.session, url=not_found,
-            message="RPA specification not found.", category=flash.CATEGORY_ERROR,
+        rtnval = _not_found_redirect(
+            session=auth.session,
+            url=not_found,
+            message="RPA specification not found.",
         )
         return rtnval
     return spec
@@ -285,9 +287,10 @@ def _resolve_job_or_redirect(*, auth: _AuthResolution, rpa: Any, project_id: int
     except Exception:
         job = None
     if job is None or str(job.project_id) != str(project_id):
-        rtnval = _redirect_with_flash(
-            session=auth.session, url=not_found,
-            message="RPA job not found.", category=flash.CATEGORY_ERROR,
+        rtnval = _not_found_redirect(
+            session=auth.session,
+            url=not_found,
+            message="RPA job not found.",
         )
         return rtnval
     return job
@@ -834,11 +837,10 @@ def handle_rpa_run(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),
                 message="Project not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1109,11 +1111,10 @@ def handle_rpa_cancel(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None or len(job_id) == 0:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),
                 message="RPA job not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

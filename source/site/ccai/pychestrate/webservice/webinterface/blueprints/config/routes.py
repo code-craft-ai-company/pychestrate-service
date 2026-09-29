@@ -722,6 +722,11 @@ def _wrap_fragment_handler_in_shell(handler: Any, *, title_resolver: Any) -> Any
     def _wrapped(request: Request) -> Response:
         with _ui_profile_scope.request_profile_scope():
             inner = handler(request)
+        not_found = _not_found_page_for(
+            request=request, inner=inner, title_resolver=title_resolver
+        )
+        if not_found is not None:
+            return not_found
         if isinstance(inner, HTMLResponse) is False:
             return inner
 
@@ -1346,6 +1351,95 @@ def _redirect_with_flash(
     response = RedirectResponse(url=url, status_code=status_code)
     _attach_session_to_response(response=response, session=session)
     return response
+
+
+class EntityNotFoundResponse(RedirectResponse):
+    """
+        The response a handler returns when the thing its address names does
+        not exist (a user, a project, a build ...). The shell wrapper turns it
+        into a 404 page inside the shell that names the thing and links back
+        to ``list_url``; a handler that is not wrapped still redirects to the
+        list with the message as a flash, as before.
+    """
+
+    def __init__(self, *, url: str, status_code: int, message: str) -> None:
+        super().__init__(url=url, status_code=status_code)
+        self.not_found_message: str = message
+        self.list_url: str = url
+        return
+
+
+def _not_found_redirect(
+        *,
+        session: Dict[str, Any],
+        url: str,
+        message: str
+    ) -> EntityNotFoundResponse:
+    """
+        Answer a request for something that does not exist. ``message`` reads
+        "<Thing> not found."; ``url`` is the list the person can go back to.
+
+        :param session: Session dict.
+        :param url: The list the missing thing belongs to.
+        :param message: What was not found, as a sentence.
+
+        :returns: :class:`EntityNotFoundResponse`, which the shell wrapper
+                  renders as a 404 page.
+    """
+    flash.add_flash(
+        session=session, message=message, category=flash.CATEGORY_ERROR
+    )
+    response = EntityNotFoundResponse(url=url, status_code=303, message=message)
+    _attach_session_to_response(response=response, session=session)
+    return response
+
+
+def _not_found_page_for(
+        *,
+        request: Request,
+        inner: Any,
+        title_resolver: Any
+    ) -> Optional[Response]:
+    """
+        Render the 404 page for an :class:`EntityNotFoundResponse`.
+
+        The page keeps the address (so a typo can be corrected), says what was
+        not found, and links back to the list under that list's own name
+        ("Back to Users"). It carries no session cookie, so the flash the
+        redirect form queued is not shown on the next page.
+
+        :param request: The incoming request.
+        :param inner: What the handler returned.
+        :param title_resolver: The blueprint's ``path -> "Section · Pychestrate"``
+                               function, used to name the list.
+
+        :returns: The 404 response, or ``None`` when ``inner`` is not an
+                  :class:`EntityNotFoundResponse`.
+    """
+    if isinstance(inner, EntityNotFoundResponse) is False:
+        return None
+
+    from ccai.pychestrate.webservice.webinterface.site_shell.error_pages import (  # noqa: E402
+        render_error_response,
+    )
+    what = inner.not_found_message.strip().rstrip(".")
+    list_path = inner.list_url.split("?", 1)[0]
+    try:
+        list_name = title_resolver(path=list_path).split(" · ", 1)[0].strip()
+    except Exception:
+        list_name = ""
+    if len(list_name) == 0 or list_name == _DEFAULT_PAGE_TITLE:
+        back_label = "Back to the list"
+    else:
+        back_label = "Back to {}".format(list_name)
+    rtnval = render_error_response(
+        request=request,
+        status_code=404,
+        title=what,
+        message="It may have been deleted, or the address may be mistyped.",
+        back_link=(back_label, inner.list_url),
+    )
+    return rtnval
 
 
 def _require_permission_or_redirect(

@@ -36,7 +36,7 @@ __version__ = "1.0.0"
 
 import logging
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 _module_logger = logging.getLogger(__name__)
@@ -46,6 +46,22 @@ _module_logger = logging.getLogger(__name__)
 # one accessor, one mutator. A more elaborate registry can grow
 # later if PR4-6 surfaces need richer routing.
 _REGISTERED_BUNDLES: Dict[str, List[str]] = {}
+
+#: Prefixes whose bundle serves only a fixed set of paths. Under most
+#: prefixes the bundle owns every path beneath it (``/runs/<id>``), so an
+#: unknown id is the bundle's to report. Blueprints own nearly everything
+#: under ``/admin``, and its bundle serves five exact paths (the list
+#: ``pyc-admin-bundle/index.entry.js`` classifies), so any other path there
+#: is a mistyped address and gets a real 404 (ADM-22).
+EXACT_BUNDLE_ROUTES: Dict[str, Tuple[str, ...]] = {
+    "/admin": (
+        "/admin",
+        "/admin/overview",
+        "/admin/feature-flags",
+        "/admin/extensions",
+        "/admin/system-health",
+    ),
+}
 
 
 def reset_for_testing() -> None:
@@ -149,6 +165,27 @@ def registered_route_prefixes() -> List[str]:
         :returns: List of prefixes.
     """
     rtnval = list(_REGISTERED_BUNDLES.keys())
+    return rtnval
+
+
+def is_path_served_by_bundle(*, path: str, prefix: str) -> bool:
+    """
+        Whether the bundle registered under ``prefix`` serves ``path``: any
+        path beneath the prefix, except under a prefix in
+        :data:`EXACT_BUNDLE_ROUTES`, where only its listed paths count.
+
+        :param path: Request path.
+        :param prefix: A registered route prefix that ``path`` lies under.
+
+        :returns: ``True`` when the bundle serves the path.
+    """
+    exact = EXACT_BUNDLE_ROUTES.get(prefix, None)
+    if exact is None:
+        return True
+    working = path
+    if len(working) > 1 and working.endswith("/"):
+        working = working[:-1]
+    rtnval = working in exact
     return rtnval
 
 
@@ -325,6 +362,8 @@ def get_registered_bundles_snapshot() -> Dict[str, List[str]]:
 
 
 __all__ = [
+    "EXACT_BUNDLE_ROUTES",
+    "is_path_served_by_bundle",
     "registered_route_prefixes",
     "register_bundle",
     "bundles_for",

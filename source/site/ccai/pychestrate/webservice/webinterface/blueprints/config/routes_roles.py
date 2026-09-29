@@ -66,6 +66,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -453,11 +454,10 @@ def handle_role_detail(request: Request) -> Response:
         role_id = str(request.path_params.get("role_id", ""))
         role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.role_list"),
                 message="Role not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -503,11 +503,10 @@ def handle_role_edit(request: Request) -> Response:
         role_id = str(request.path_params.get("role_id", ""))
         role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.role_list"),
                 message="Role not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -628,11 +627,10 @@ def handle_role_edit(request: Request) -> Response:
         # GET, or POST that fell through after a recoverable error.
         role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.role_list"),
                 message="Role not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -703,11 +701,10 @@ def handle_role_delete(request: Request) -> Response:
 
         role = _svc_get_role(db_session=db_session, role_id=role_id)
         if role is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.role_list"),
                 message="Role not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -734,11 +731,10 @@ def handle_role_delete(request: Request) -> Response:
             )
             return response
         except exc_classes["AdminNotFoundError"]:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.role_list"),
                 message="Role not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except exc_classes["BuiltinRoleProtectedError"] as exc:

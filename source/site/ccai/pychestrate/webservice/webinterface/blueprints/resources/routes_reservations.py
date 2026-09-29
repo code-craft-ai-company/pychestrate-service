@@ -69,6 +69,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -842,13 +843,12 @@ def handle_reservation_detail(request: Request) -> Response:
             raw=request.path_params.get("reservation_id", None)
         )
         if reservation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
                 message="Reservation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -860,13 +860,12 @@ def handle_reservation_detail(request: Request) -> Response:
             reservation_id=reservation_id,
         )
         if reservation is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
                 message="Reservation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -909,13 +908,12 @@ def handle_reservation_edit(request: Request) -> Response:
             raw=request.path_params.get("reservation_id", None)
         )
         if reservation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
                 message="Reservation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -927,13 +925,12 @@ def handle_reservation_edit(request: Request) -> Response:
             reservation_id=reservation_id,
         )
         if reservation is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
                 message="Reservation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1110,13 +1107,12 @@ def handle_reservation_cancel(request: Request) -> Response:
             return csrf_redirect
 
         if reservation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.reservation_list"
                 ),
                 message="Reservation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

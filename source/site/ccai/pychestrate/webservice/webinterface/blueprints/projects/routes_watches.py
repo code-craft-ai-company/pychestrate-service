@@ -75,6 +75,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -687,29 +688,26 @@ def _resolve_owned_watch_or_redirect(
         "projects.watch_list", project_id=project_id
     )
     if watch_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Watch not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     watch = watch_manager.get_watch(watch_id)
     if watch is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Watch not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     if getattr(watch, "project_id", None) != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Watch not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return watch
@@ -1499,11 +1497,10 @@ def _handle_watch_action(
             return csrf_redirect
 
         if project_id is None or watch_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=list_fallback_url,
                 message="Watch not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

@@ -25,7 +25,7 @@ __credits__ = []
 __version__ = "1.0.0"
 
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from ccai.webworks.routing.response import HTMLResponse, Response
 
@@ -97,7 +97,8 @@ def render_error_response(
         status_code: int,
         title: Optional[str] = None,
         message: Optional[str] = None,
-        force_chromeless: bool = False
+        force_chromeless: bool = False,
+        back_link: Optional[Tuple[str, str]] = None
     ) -> Response:
     """
         Render the error page for ``status_code``.
@@ -112,6 +113,9 @@ def render_error_response(
                                  an authenticated browser (used when
                                  the shell itself cannot be trusted,
                                  e.g. a templating failure).
+        :param back_link: Optional ``(label, url)`` for a link back to the
+                          list the missing page belongs to; it replaces
+                          the referer-based "Go back" link.
 
         :returns: :class:`Response` carrying the page with the
                   requested status code.
@@ -125,6 +129,7 @@ def render_error_response(
         "title": resolved_title,
         "message": resolved_message,
         "back_url": _same_origin_referer(request=request),
+        "back_link": back_link,
     }
 
     if force_chromeless is False and _request_is_authenticated(request=request) is True:

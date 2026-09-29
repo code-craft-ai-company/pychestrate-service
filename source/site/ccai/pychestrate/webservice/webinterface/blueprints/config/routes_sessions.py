@@ -67,6 +67,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _attach_session_to_response,
     _build_default_template_context,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -737,11 +738,10 @@ def handle_session_terminate(request: Request) -> Response:
         return_url = _session_list_url(state=_list_state_from_form(form=single_form))
 
         if session_id is None or len(session_id) == 0:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=return_url,
                 message="Session not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -817,11 +817,10 @@ def handle_session_terminate_user(request: Request) -> Response:
         try:
             user_uuid = uuid.UUID(str(request.path_params.get("user_id", "")))
         except (TypeError, ValueError):
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=return_url,
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

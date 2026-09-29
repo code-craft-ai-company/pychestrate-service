@@ -69,6 +69,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -444,36 +445,33 @@ def _resolve_owned_resource_or_redirect(
         shape.
     """
     if target_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     getter = getattr(manager, getter_name)
     target = getter(target_id)
     if target is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     if getattr(target, "project_id", None) != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 list_endpoint, project_id=project_id
             ),
             message=not_found_message,
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return target
@@ -1350,13 +1348,12 @@ def handle_build_trigger(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.project_list"
                 ),
                 message="Project not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1472,13 +1469,12 @@ def handle_build_cancel(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None or build_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.project_list"
                 ),
                 message="Build not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

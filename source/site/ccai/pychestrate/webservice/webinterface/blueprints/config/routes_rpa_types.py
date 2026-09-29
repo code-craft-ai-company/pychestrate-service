@@ -49,6 +49,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_admin_permission_for,
@@ -317,11 +318,10 @@ def _resolve_type_or_redirect(*, auth: Any, rpa: Any, type_id: str) -> Any:
         return rtnval
     except Exception:
         pass
-    rtnval = _redirect_with_flash(
+    rtnval = _not_found_redirect(
         session=auth.session,
         url=_url_for_module.url_for("config.rpa_type_list"),
         message="RPA job type not found.",
-        category=flash.CATEGORY_ERROR,
     )
     return rtnval
 

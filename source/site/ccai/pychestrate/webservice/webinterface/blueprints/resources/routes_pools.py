@@ -52,6 +52,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_permission_or_redirect,
@@ -391,22 +392,20 @@ def handle_pool_detail(request: Request) -> Response:
             raw=request.path_params.get("pool_id", None)
         )
         if pool_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.pool_list"),
                 message="Pool not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
         resource_manager = _build_resource_manager(db_session=db_session)
         pool = resource_manager.get_pool(pool_id)
         if pool is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.pool_list"),
                 message="Pool not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -504,11 +503,10 @@ def handle_pool_delete(request: Request) -> Response:
             return csrf_redirect
 
         if pool_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.pool_list"),
                 message="Pool not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -589,11 +587,10 @@ def _pool_action_preamble(
     pool_id = _coerce_int(raw=request.path_params.get("pool_id", None))
     if pool_id is None:
         return (
-            _redirect_with_flash(
+            _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.pool_list"),
                 message="Pool not found.",
-                category=flash.CATEGORY_ERROR,
             ),
             None,
             None,

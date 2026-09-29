@@ -125,16 +125,20 @@ def test_the_history_of_a_deleted_variable_is_still_readable():
     return
 
 
-def test_a_name_that_never_existed_still_redirects_away_from_history():
+def test_a_name_that_never_existed_has_no_history_page():
     """
     **Feature: variables (ADM-36)**
-    **Property: the history of a name with no variable and no history
-    redirects to the list, as before.**
+    **Property: the history of a name with no variable and no history is a
+    404 page that says the variable was not found and links back to the
+    variables (it used to redirect to the list).**
     """
     admin = admin_cookies()
     response = get(path="/admin/variables/{}/history".format(_name()), cookies=admin)
 
-    testbase.assert_equal(response.status_code in (302, 303), True)
+    testbase.assert_equal(
+        (response.status_code, "not found" in response.text, 'href="/admin/variables"' in response.text),
+        (404, True, True),
+    )
     return
 
 

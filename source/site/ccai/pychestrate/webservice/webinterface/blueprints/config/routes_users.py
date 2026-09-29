@@ -88,6 +88,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_admin_permission_for,
@@ -922,11 +923,10 @@ def handle_user_detail(request: Request) -> Response:
         user = _svc_get_user(db_session=db_session, user_id=user_id)
 
         if user is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1062,11 +1062,10 @@ def handle_user_edit(request: Request) -> Response:
                 )
                 return response
             except exc_classes["AdminNotFoundError"]:
-                response = _redirect_with_flash(
+                response = _not_found_redirect(
                     session=auth.session,
                     url=_url_for_module.url_for("config.user_list"),
                     message="User not found.",
-                    category=flash.CATEGORY_ERROR,
                 )
                 return response
             except exc_classes["SelfLockoutError"] as exc:
@@ -1093,11 +1092,10 @@ def handle_user_edit(request: Request) -> Response:
         # GET, or POST that fell through after a recoverable error.
         user = _svc_get_user(db_session=db_session, user_id=user_id)
         if user is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1179,11 +1177,10 @@ def handle_user_deactivate(request: Request) -> Response:
             )
             return response
         except exc_classes["AdminNotFoundError"]:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except exc_classes["SelfLockoutError"] as exc:
@@ -1247,11 +1244,10 @@ def handle_user_reactivate(request: Request) -> Response:
                 actor_user_id=auth.user_id,
             )
         except exc_classes["AdminNotFoundError"]:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except exc_classes["AdminValidationError"] as exc:
@@ -1312,11 +1308,10 @@ def handle_user_password(request: Request) -> Response:
         user_id = str(request.path_params.get("user_id", ""))
         user = _svc_get_user(db_session=db_session, user_id=user_id)
         if user is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1409,11 +1404,10 @@ def handle_user_password_link(request: Request) -> Response:
 
         user = _svc_get_user(db_session=db_session, user_id=user_id)
         if user is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.user_list"),
                 message="User not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

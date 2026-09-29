@@ -394,6 +394,7 @@ def _is_known_shell_route(*, path: str) -> bool:
         return True
     from ccai.pychestrate.webservice.webinterface.site_shell.bundle_registry import (  # noqa: E402
         install_default_bundles,
+        is_path_served_by_bundle,
         registered_route_prefixes,
     )
     prefixes = [prefix for prefix in registered_route_prefixes() if len(prefix) > 0]
@@ -404,7 +405,8 @@ def _is_known_shell_route(*, path: str) -> bool:
         prefixes = [prefix for prefix in registered_route_prefixes() if len(prefix) > 0]
     for prefix in prefixes:
         if path == prefix or path.startswith(prefix + "/"):
-            return True
+            if is_path_served_by_bundle(path=path, prefix=prefix) is True:
+                return True
     return False
 __all__ = [
     "register_shell_catchall",

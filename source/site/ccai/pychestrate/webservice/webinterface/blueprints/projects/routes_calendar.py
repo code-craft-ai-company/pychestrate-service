@@ -50,6 +50,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _AuthResolution,
     _attach_session_to_response,
     _build_default_template_context,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -374,28 +375,25 @@ def _resolve_owned_event_or_redirect(
         "projects.release_event_list", project_id=project_id
     )
     if event_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Release event not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     event = release_manager.get_release_event(event_id)
     if event is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Release event not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     if getattr(event, "project_id", None) != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=list_url,
             message="Release event not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return event

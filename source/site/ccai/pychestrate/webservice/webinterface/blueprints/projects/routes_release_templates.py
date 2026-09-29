@@ -56,6 +56,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -311,39 +312,36 @@ def _resolve_template_or_redirect(
                   on failure.
     """
     if template_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.release_template_list",
                 project_id=project_id,
             ),
             message="Release template not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     template = template_manager.get(template_id)
     if template is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.release_template_list",
                 project_id=project_id,
             ),
             message="Release template not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     if template.project_id != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.release_template_list",
                 project_id=project_id,
             ),
             message="Release template not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return template
@@ -1223,11 +1221,10 @@ def handle_release_template_delete(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None or template_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),
                 message="Release template not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1247,14 +1244,13 @@ def handle_release_template_delete(request: Request) -> Response:
         template_manager = _build_template_manager(db_session=db_session)
         existing = template_manager.get(template_id)
         if existing is None or existing.project_id != project_id:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.release_template_list",
                     project_id=project_id,
                 ),
                 message="Release template not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

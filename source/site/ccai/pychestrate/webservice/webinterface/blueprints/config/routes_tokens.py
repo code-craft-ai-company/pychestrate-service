@@ -63,6 +63,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _has_permission,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_admin_permission_for,
@@ -632,11 +633,10 @@ def handle_account_token_revoke(request: Request) -> Response:
                 owner_user_id=str(auth.user_id),
             )
         except LookupError:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.account_api_tokens"),
                 message="Token not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except Exception as exc:
@@ -815,11 +815,10 @@ def handle_service_account_token_create(request: Request) -> Response:
                 actor_user_id=str(auth.user_id),
             )
         except LookupError:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.admin_api_tokens"),
                 message="Service account not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except Exception as exc:
@@ -875,11 +874,10 @@ def handle_admin_token_revoke(request: Request) -> Response:
                 owner_user_id=None,
             )
         except LookupError:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.admin_api_tokens"),
                 message="Token not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         except Exception as exc:

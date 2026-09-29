@@ -62,6 +62,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -387,38 +388,35 @@ def _resolve_repository_or_redirect(
                   on any failure.
     """
     if repository_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.repository_list", project_id=project_id
             ),
             message="Repository not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     repository = repository_manager.get_repository(repository_id)
     if repository is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.repository_list", project_id=project_id
             ),
             message="Repository not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     # Repository belongs to a different project -- treat as not
     # found rather than leak existence.
     if getattr(repository, "project_id", None) != project_id:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for(
                 "projects.repository_list", project_id=project_id
             ),
             message="Repository not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return repository
@@ -1053,13 +1051,12 @@ def handle_repository_delete(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None or repository_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.project_list"
                 ),
                 message="Repository not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1190,13 +1187,12 @@ def _handle_repository_action(
             return csrf_redirect
 
         if project_id is None or repository_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.project_list"
                 ),
                 message="Repository not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

@@ -64,6 +64,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _attach_session_to_response,
     _build_default_template_context,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_permission_or_redirect,
@@ -422,13 +423,12 @@ def handle_allocation_detail(request: Request) -> Response:
             raw=request.path_params.get("allocation_id", None)
         )
         if allocation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
                 message="Allocation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -437,13 +437,12 @@ def handle_allocation_detail(request: Request) -> Response:
         )
         allocation = allocation_manager.get_allocation(allocation_id)
         if allocation is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
                 message="Allocation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -503,13 +502,12 @@ def handle_allocation_checkin(request: Request) -> Response:
             return csrf_redirect
 
         if allocation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
                 message="Allocation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -596,13 +594,12 @@ def handle_allocation_force_checkin(request: Request) -> Response:
             return csrf_redirect
 
         if allocation_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "resources.allocation_list"
                 ),
                 message="Allocation not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

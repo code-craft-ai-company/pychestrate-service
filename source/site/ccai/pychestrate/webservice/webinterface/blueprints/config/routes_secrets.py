@@ -53,6 +53,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -530,11 +531,10 @@ def handle_secret_edit(request: Request) -> Response:
         name = str(request.path_params.get("name", ""))
 
         if scope_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.secret_list"),
                 message="Secret not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -595,11 +595,10 @@ def handle_secret_edit(request: Request) -> Response:
         # GET, or POST that fell through.
         secret = secret_manager.get_secret_metadata(name, scope_id)
         if secret is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.secret_list"),
                 message="Secret not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -658,11 +657,10 @@ def handle_secret_delete(request: Request) -> Response:
             return csrf_redirect
 
         if scope_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.secret_list"),
                 message="Secret not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

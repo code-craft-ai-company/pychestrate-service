@@ -58,6 +58,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -560,11 +561,10 @@ def handle_variable_detail(request: Request) -> Response:
         variable = variable_store.get_variable(name)
 
         if variable is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.variable_list"),
                 message="Variable not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -631,11 +631,10 @@ def handle_variable_edit(request: Request) -> Response:
 
             variable = variable_store.get_variable(name)
             if variable is None:
-                response = _redirect_with_flash(
+                response = _not_found_redirect(
                     session=auth.session,
                     url=_url_for_module.url_for("config.variable_list"),
                     message="Variable not found.",
-                    category=flash.CATEGORY_ERROR,
                 )
                 return response
 
@@ -676,11 +675,10 @@ def handle_variable_edit(request: Request) -> Response:
         # GET, or POST that fell through.
         variable = variable_store.get_variable(name)
         if variable is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.variable_list"),
                 message="Variable not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -797,11 +795,10 @@ def handle_variable_history(request: Request) -> Response:
         # keyed by name), so it can still be read: only a name that never
         # existed has nothing to show.
         if variable is None and history_total == 0:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.variable_list"),
                 message="Variable not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
         per_page = params["per_page"]

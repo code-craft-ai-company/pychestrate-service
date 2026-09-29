@@ -85,6 +85,8 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_page_for,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -604,21 +606,19 @@ def _resolve_project_or_redirect(
                   failure.
     """
     if project_id is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for("projects.project_list"),
             message="Project not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
 
     project = project_manager.get_project(project_id)
     if project is None:
-        rtnval = _redirect_with_flash(
+        rtnval = _not_found_redirect(
             session=auth.session,
             url=_url_for_module.url_for("projects.project_list"),
             message="Project not found.",
-            category=flash.CATEGORY_ERROR,
         )
         return rtnval
     return project
@@ -1322,11 +1322,10 @@ def handle_project_delete(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("projects.project_list"),
                 message="Project not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1681,13 +1680,12 @@ def handle_member_edit(request: Request) -> Response:
             return deny_response
 
         if target_user_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.member_list", project_id=project_id
                 ),
                 message="Member not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1752,13 +1750,12 @@ def handle_member_edit(request: Request) -> Response:
                 member = m
                 break
         if member is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.member_list", project_id=project_id
                 ),
                 message="Member not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1827,13 +1824,12 @@ def handle_member_remove(request: Request) -> Response:
             return csrf_redirect
 
         if project_id is None or target_user_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for(
                     "projects.project_list"
                 ),
                 message="Member not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -2209,6 +2205,11 @@ def _wrap_projects_handler_in_shell(handler: Any) -> Any:
                 action=getattr(handler, "__name__", "projects_handler"),
             )
             return rtnval
+        not_found = _not_found_page_for(
+            request=request, inner=inner, title_resolver=_resolve_projects_page_title
+        )
+        if not_found is not None:
+            return not_found
         if isinstance(inner, HTMLResponse) is False:
             return inner
 

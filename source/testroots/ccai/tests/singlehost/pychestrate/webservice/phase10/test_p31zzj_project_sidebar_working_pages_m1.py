@@ -192,7 +192,7 @@ def test_the_open_link_sends_a_project_to_the_site_wide_page_filtered_to_it():
     ``test-catalog`` redirect to ``/runs``, ``/pipelines`` and
     ``/test-catalog`` with ``?project_id=`` set to the project's registry
     id; an unknown destination goes back to the project with a notice;
-    an unknown project goes to the project list.**
+    an unknown project is a 404 page.**
     """
     handle = ensure_app()
     wsgi_app = handle.wsgi_app
@@ -224,7 +224,7 @@ def test_the_open_link_sends_a_project_to_the_site_wide_page_filtered_to_it():
                 (302, "/test-catalog?project_id=" + registry_id),
             ],
             (303, "/projects/{}".format(project_id)),
-            (303, "/projects/list"),
+            (404, None),
         ),
     )
     return

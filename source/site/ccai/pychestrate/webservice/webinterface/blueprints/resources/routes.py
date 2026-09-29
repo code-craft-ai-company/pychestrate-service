@@ -91,6 +91,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _has_permission,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _require_permission_or_redirect,
@@ -1356,22 +1357,20 @@ def handle_resource_detail(request: Request) -> Response:
             raw=request.path_params.get("resource_id", None)
         )
         if resource_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
         resource_manager = _build_resource_manager(db_session=db_session)
         resource = resource_manager.get_resource(resource_id)
         if resource is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1459,22 +1458,20 @@ def handle_resource_edit(request: Request) -> Response:
             raw=request.path_params.get("resource_id", None)
         )
         if resource_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
         resource_manager = _build_resource_manager(db_session=db_session)
         resource = resource_manager.get_resource(resource_id)
         if resource is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1684,11 +1681,10 @@ def handle_resource_delete(request: Request) -> Response:
             return csrf_redirect
 
         if resource_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -1756,11 +1752,10 @@ def handle_resource_checkout(request: Request) -> Response:
             return csrf_redirect
 
         if resource_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("resources.resource_list"),
                 message="Resource not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

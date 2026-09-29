@@ -54,6 +54,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     _build_default_template_context,
     _parse_form_multi,
     _parse_form_or_empty,
+    _not_found_redirect,
     _redirect_with_flash,
     _render,
     _resolve_authenticated_request,
@@ -508,11 +509,10 @@ def handle_scope_edit(request: Request) -> Response:
             raw=request.path_params.get("scope_id", None)
         )
         if scope_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.scope_list"),
                 message="Scope not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -568,11 +568,10 @@ def handle_scope_edit(request: Request) -> Response:
         # GET, or POST that fell through.
         scope = secret_manager.get_scope(scope_id)
         if scope is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.scope_list"),
                 message="Scope not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 
@@ -630,11 +629,10 @@ def handle_scope_delete(request: Request) -> Response:
             return csrf_redirect
 
         if scope_id is None:
-            response = _redirect_with_flash(
+            response = _not_found_redirect(
                 session=auth.session,
                 url=_url_for_module.url_for("config.scope_list"),
                 message="Scope not found.",
-                category=flash.CATEGORY_ERROR,
             )
             return response
 

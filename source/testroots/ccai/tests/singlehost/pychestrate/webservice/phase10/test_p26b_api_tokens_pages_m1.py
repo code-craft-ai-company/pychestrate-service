@@ -388,7 +388,8 @@ def test_self_service_revoke_cannot_touch_another_users_token():
     """
     **Feature: API token pages (ORG-F02)**
     **Property: POST /account/api-tokens/{id}/revoke naming another
-    user's token reports it as not found and leaves it active.**
+    user's token reports it as not found (a 404 page) and leaves it
+    active.**
     """
     harness = _PageHarness(permission_predicate=_deny_everything)
     try:
@@ -407,8 +408,8 @@ def test_self_service_revoke_cannot_touch_another_users_token():
         )
         view = token_service.read_api_token(db_session=harness.session, token_id=issued.view.token_id)
         testbase.assert_equal(
-            ("Token not found." in str(_cookie_payload(response)), view.status),
-            (True, "active"),
+            (response.status_code, harness.page_context(template_name="site_shell/error_page.html")["title"], view.status),
+            (404, "Token not found", "active"),
         )
     finally:
         harness.close()
@@ -509,8 +510,8 @@ def test_admin_cannot_issue_a_token_that_acts_as_a_person():
     """
     **Feature: API token pages (ORG-F02)**
     **Property: the service-account token form refuses a person's
-    user id, so no administrator can mint a token that impersonates
-    a user.**
+    user id (a 404 "Service account not found"), so no administrator
+    can mint a token that impersonates a user.**
     """
     harness = _PageHarness(permission_predicate=_allow_everything)
     try:
@@ -520,9 +521,9 @@ def test_admin_cannot_issue_a_token_that_acts_as_a_person():
             path_params={"user_id": harness.user_id},
         )
         testbase.assert_equal(
-            ("Service account not found." in str(_cookie_payload(response)),
+            (response.status_code, harness.page_context(template_name="site_shell/error_page.html")["title"],
              harness.session.query(AuthApiToken).count()),
-            (True, 0),
+            (404, "Service account not found", 0),
         )
     finally:
         harness.close()
