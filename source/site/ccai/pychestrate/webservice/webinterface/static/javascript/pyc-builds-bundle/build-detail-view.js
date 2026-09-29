@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
   announce_session_expired,
   build_state_tone,
@@ -366,6 +367,7 @@ class PycBuildDetail extends HTMLElement {
     back.classList.add("pyc-build-detail__back-link");
     back.setAttribute("href", "/builds");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/builds");
     back.textContent = "Back to builds";
     root.appendChild(back);
     const banner = document.createElement("p");

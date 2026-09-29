@@ -298,8 +298,10 @@ preview tag.
   `page` from the address when they load (`/runs?state=failed` was ignored)
   and write them back whenever they refresh, replacing the history entry so
   Back still leaves the page. A filtered view can be shared or bookmarked, and
-  an unknown state in the address is ignored. The detail pages' "Back to ..."
-  links and the other bundle lists (test catalog, environments, pods,
+  an unknown state in the address is ignored. On the run, build, provisioning
+  run and pipeline pages, "Back to ..." returns to the list as it was left
+  (filters and page) when the page was opened from that list, and to the bare
+  list otherwise. The other bundle lists (test catalog, environments, pods,
   dashboards) do not do this yet.
 
 - A project's sidebar lists only sections that can hold data (PRJ-08).

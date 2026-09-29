@@ -55,3 +55,25 @@ export function mirror_to_query(values) {
     window.history.replaceState(window.history.state, "", next);
   }
 }
+
+/*
+ * Make a detail page's "Back to <list>" link return to the list as the person
+ * left it, with its filters and page (ORC-27). The link still points at the
+ * bare list (so it works when the page was opened from a bookmark or a
+ * message); but when the page was opened from that same list, following it
+ * goes back in history instead, and the list's address comes back with it.
+ */
+export function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+      // No usable referrer: follow the plain link.
+    }
+  });
+}
+

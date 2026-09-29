@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
   emit_session_expired,
   fetch_projects,
@@ -630,6 +631,7 @@ class PycRunDetail extends HTMLElement {
     back.classList.add("pyc-run-detail__back-link");
     back.setAttribute("href", "/runs");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/runs");
     back.textContent = "Back to runs";
     root.appendChild(back);
     const banner = document.createElement("p");

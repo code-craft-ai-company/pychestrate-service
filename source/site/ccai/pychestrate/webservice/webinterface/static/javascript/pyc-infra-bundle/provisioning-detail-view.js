@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
   is_terminal_provisioning_state,
   provisioning_state_tone
@@ -281,6 +282,7 @@ class PycProvisioningDetail extends HTMLElement {
     back.classList.add("pyc-provisioning-detail__back-link");
     back.setAttribute("href", "/provisioning-runs");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/provisioning-runs");
     back.textContent = "Back to provisioning runs";
     root.appendChild(back);
     const banner = document.createElement("p");

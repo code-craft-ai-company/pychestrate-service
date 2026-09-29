@@ -1,4 +1,5 @@
 import { set_entity_title } from "../shared/page-title.js";
+import { keep_list_state_on_back } from "../shared/view-state.js";
 import {
   announce_session_expired,
   short_id,
@@ -361,6 +362,7 @@ class PycPipelineDetail extends HTMLElement {
     back.classList.add("pyc-pipeline-detail__back-link");
     back.setAttribute("href", "/pipelines");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/pipelines");
     back.textContent = "Back to pipelines";
     root.appendChild(back);
     const body = document.createElement("div");

@@ -172,3 +172,56 @@ def test_the_pipelines_list_keeps_its_page_and_project_in_the_address(browser: B
         ("2", "2", PROJECT_ID, False),
     )
     return
+
+
+RUN_ID: str = "aaaaaaaa-1111-4000-8000-000000000001"
+
+ONE_RUN = {
+    "items": [{
+        "run_id": RUN_ID, "project_id": PROJECT_ID, "job_name": "nightly", "job_type": "testbase", "state": "failed",
+        "created_at": "2026-09-29T10:00:00+00:00", "started_at": "2026-09-29T10:00:05+00:00", "completed_at": "2026-09-29T10:03:17+00:00",
+    }],
+    "meta": {"page": 1, "per_page": 25, "total": 1},
+}
+
+
+def test_back_to_the_list_from_a_detail_page_restores_the_filters(browser: Browser):
+    """
+    **Feature: view state in the address (ORC-27)**
+    **Property: from ``/runs?state=failed`` a person opens a run and follows
+    "Back to runs": the list comes back with ``state=failed`` in its address
+    (the link went back in history); the same link on a page opened without
+    coming from the list (no referrer) goes to the bare ``/runs``.**
+    """
+    context = browser.new_context(**DESKTOP)
+    install_site_routes(
+        context, bundle_names=["pyc-site-shell", "pyc-runs-bundle"],
+        api_stubs={"/api/v1/projects": PROJECTS, "/api/v1/runs": ONE_RUN, "/api/v1/runs/" + RUN_ID: ONE_RUN["items"][0]},
+    )
+    page = context.new_page()
+    page.set_default_timeout(READY_TIMEOUT_MS)
+    try:
+        page.goto(FAKE_ORIGIN + "/runs?project_id={}&state=failed".format(PROJECT_ID))
+        page.wait_for_selector("a.pyc-runs-list__run-link")
+        page.locator("a.pyc-runs-list__run-link").first.click()
+        page.wait_for_selector('[data-role="back-link"]')
+        opened = urllib.parse.urlparse(page.url).path
+        page.locator('[data-role="back-link"]').click()
+        page.wait_for_selector("mj-select")
+        page.wait_for_timeout(800)
+        returned = _query(page)
+        direct = context.new_page()
+        direct.set_default_timeout(READY_TIMEOUT_MS)
+        direct.goto(FAKE_ORIGIN + "/runs/" + RUN_ID)
+        direct.wait_for_selector('[data-role="back-link"]')
+        direct.locator('[data-role="back-link"]').click()
+        direct.wait_for_selector("mj-select")
+        bare = urllib.parse.urlparse(direct.url)
+    finally:
+        context.close()
+
+    testbase.assert_equal(
+        (opened, returned.get("state"), returned.get("project_id"), bare.path, bare.query),
+        ("/runs/" + RUN_ID, "failed", PROJECT_ID, "/runs", ""),
+    )
+    return

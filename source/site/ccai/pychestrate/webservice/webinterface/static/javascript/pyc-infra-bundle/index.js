@@ -1922,6 +1922,18 @@ function mirror_to_query(values) {
     window.history.replaceState(window.history.state, "", next);
   }
 }
+function keep_list_state_on_back(anchor, list_path) {
+  anchor.addEventListener("click", (event) => {
+    try {
+      const from = new URL(document.referrer);
+      if (from.origin === window.location.origin && from.pathname === list_path && window.history.length > 1) {
+        event.preventDefault();
+        window.history.back();
+      }
+    } catch (reason) {
+    }
+  });
+}
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/provisioning-list-view.js
 var PROVISIONING_STATES = [
@@ -3123,6 +3135,7 @@ var PycProvisioningDetail = class extends HTMLElement {
     back.classList.add("pyc-provisioning-detail__back-link");
     back.setAttribute("href", "/provisioning-runs");
     back.setAttribute("data-role", "back-link");
+    keep_list_state_on_back(back, "/provisioning-runs");
     back.textContent = "Back to provisioning runs";
     root.appendChild(back);
     const banner = document.createElement("p");
