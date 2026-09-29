@@ -274,7 +274,7 @@ def test_a_viewer_who_cannot_change_dashboards_is_told_so_instead_of_getting_a_d
 def test_a_long_metric_name_stays_inside_its_tile_card(browser: Browser):
     """
     **Feature: the dashboard editor (ORC-16)**
-    **Property: a tile's title (a metric name is one long unbroken word) wraps
+    **Property: a tile's title (a metric name with a very long single word) wraps
     inside the card instead of running past its border.**
     """
     page, _requested, _patched = _open(browser, "/dashboards/{}/edit?project_id={}".format(BOARD, BETA))
@@ -285,7 +285,7 @@ def test_a_long_metric_name_stays_inside_its_tile_card(browser: Browser):
             """() => {
                 const select = document.querySelector('[data-role="add-metric"]');
                 const option = document.createElement('mj-option');
-                option.setAttribute('value', 'pychestrate_resource_reservation_granted_total_by_pool_and_lab');
+                option.setAttribute('value', 'pychestrate_' + 'averylongsingleword'.repeat(6));
                 option.textContent = option.getAttribute('value');
                 select.appendChild(option);
                 select.value = option.getAttribute('value');
@@ -305,7 +305,7 @@ def test_a_long_metric_name_stays_inside_its_tile_card(browser: Browser):
         page.context.close()
 
     testbase.assert_equal(
-        ("granted_total_by_pool_and_lab" in boxes["text"], boxes["title_right"] <= boxes["card_right"] + 1, boxes["overflow"] <= 1),
+        (("Averylongsingleword" + "averylongsingleword" * 5) in boxes["text"], boxes["title_right"] <= boxes["card_right"] + 1, boxes["overflow"] <= 1),
         (True, True, True),
     )
     return

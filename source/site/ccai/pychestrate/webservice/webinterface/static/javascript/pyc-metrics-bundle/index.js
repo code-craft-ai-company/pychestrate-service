@@ -2189,7 +2189,7 @@ function format_stat_value(value) {
   if (typeof value !== "number" || Number.isFinite(value) === false) {
     return String(value);
   }
-  return value.toLocaleString(void 0, { maximumFractionDigits: 3 });
+  return new Intl.NumberFormat(void 0, { maximumFractionDigits: 3 }).format(value);
 }
 function build_single_stat(points) {
   let latest = null;

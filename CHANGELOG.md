@@ -208,7 +208,8 @@ preview tag.
   storage name on hover and the tile kind by name ("Line chart"). Not done:
   units on the axes (the metric catalog records none), a legend, the tile
   layout (position and size are still ignored), and the Test Metrics page's
-  chart (I could not find the chart the report describes there).
+  chart (the report describes one there, but the page's rollup is cards, not a
+  chart component).
 
 - SLOs and pipelines can be deleted from their pages (ORC-26, XC-15). The API
   has always allowed it and nothing in the UI did. The SLO list has a Delete

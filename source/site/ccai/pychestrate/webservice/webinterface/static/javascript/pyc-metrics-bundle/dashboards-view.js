@@ -993,7 +993,8 @@ function format_stat_value(value) {
   if (typeof value !== "number" || Number.isFinite(value) === false) {
     return String(value);
   }
-  return value.toLocaleString(void 0, { maximumFractionDigits: 3 });
+  // A number, not a time: the viewer's digit grouping, at most three decimals.
+  return new Intl.NumberFormat(void 0, { maximumFractionDigits: 3 }).format(value);
 }
 // A "single number" tile shows the latest value, not a chart of the series.
 function build_single_stat(points) {
