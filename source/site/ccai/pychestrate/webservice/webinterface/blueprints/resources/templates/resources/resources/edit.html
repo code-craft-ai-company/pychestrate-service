@@ -27,6 +27,21 @@
         </div>
 
         <div class="form-group">
+            <label for="pool_id">Resource Pool</label>
+            {% set chosen_pool = (form_data.get('pool_id') if form_data else '') or (resource.pool_id | string) %}
+            <select id="pool_id" name="pool_id" class="form-control"{{ ui.invalid_attrs(errors, 'pool_id', 'pool_id-help') }}>
+                {% if resource.pool_id is none %}
+                <option value="" selected>No pool</option>
+                {% endif %}
+                {% for pool in pools %}
+                <option value="{{ pool.id }}" {% if (pool.id | string) == (chosen_pool | string) %}selected{% endif %}>{{ pool.name }}{% if pool.is_default %} (default){% endif %}</option>
+                {% endfor %}
+            </select>
+            {{ ui.field_error(errors, 'pool_id') }}
+            <p class="form-text" id="pool_id-help">Moving a resource keeps its history and its current check-outs.</p>
+        </div>
+
+        <div class="form-group">
             <label for="description">Description</label>
             <textarea id="description" name="description" class="form-control" rows="3">{% if form_data %}{{ form_data.get('description', '') }}{% else %}{{ resource.description or '' }}{% endif %}</textarea>
         </div>

@@ -1438,6 +1438,23 @@ def handle_resource_edit(request: Request) -> Response:
             try:
                 if tags is not None:
                     tags = _merged_tags(ticked=tags, typed=_checked_new_tags(raw=typed_tags))
+                # Moving the resource to another pool is applied first: a
+                # name that already exists in that pool stops the save
+                # with the error beside the pool select.
+                if "pool_id" in multi_form:
+                    parsing_field = "pool_id"
+                    chosen_pool = _coerce_int(raw=single_form.get("pool_id", None))
+                    if chosen_pool is not None and chosen_pool != getattr(resource, "pool_id", None):
+                        try:
+                            resource_manager.assign_resource_to_pool(
+                                resource_id, chosen_pool, auth.user_id
+                            )
+                        except Exception as move_exc:
+                            if getattr(move_exc, "error_code", "") == "RESOURCE_NAME_EXISTS":
+                                raise ValueError(
+                                    "A resource with this name is already in that pool."
+                                ) from None
+                            raise
                 parsing_field = "capacity"
                 capacity: Optional[int] = None
                 if capacity_raw is not None:

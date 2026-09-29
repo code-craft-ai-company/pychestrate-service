@@ -645,7 +645,7 @@ def _register_url_for_endpoints() -> None:
 def test_register_pools_routes_attaches_documented_routes():
     """
     **Feature: webworks resources port T6.1 (E2)**
-    **Property: register_pools_routes attaches the four pool
+    **Property: register_pools_routes attaches the six pool
     routes at /resources/pools*.**
     """
     _reset_global_state()
@@ -660,6 +660,8 @@ def test_register_pools_routes_attaches_documented_routes():
             ("/resources/pools/create", ("GET", "POST")),
             ("/resources/pools/{pool_id}", ("GET",)),
             ("/resources/pools/{pool_id}/delete", ("POST",)),
+            ("/resources/pools/{pool_id}/add-resources", ("POST",)),
+            ("/resources/pools/{pool_id}/move-resources", ("POST",)),
         }
         testbase.assert_equal(actual, expected)
     finally:

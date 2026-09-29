@@ -304,6 +304,15 @@ preview tag.
   do not exist yet, with a refused name shown beside it. Managing tags
   needs the resource-management permission; anyone can read the list.
 
+- **Resources can move between pools.** The edit form had no pool field,
+  the pool page's "Add Resource" made a new resource, and deleting a pool
+  meant deleting every device in it. The edit form now has a pool select;
+  a pool's page has "Add existing resources" and "Move resources out" (to
+  another pool, so the pool can then be deleted). A name already in the
+  target pool stops the move and is named; nothing moves in a bulk move
+  unless every resource can. Moving needs the resource-management
+  permission.
+
 ### Removed
 
 - The `public` blueprint (an empty `endpoints.py` and a Vue placeholder

@@ -991,6 +991,66 @@ class ResourceManager:
                 }
             )
     
+    def move_pool_resources(self, source_pool_id: int, target_pool_id: int, user_id: str = None) -> int:
+        """
+        Move every resource of one pool into another, so the first can be
+        deleted without deleting its devices.
+
+        Nothing moves unless every resource can: a resource whose name
+        already exists in the target pool stops the whole move.
+
+        :param source_pool_id: The pool to empty
+        :param target_pool_id: The pool that takes its resources
+        :param user_id: The ID of the user moving them
+        :returns: How many resources moved
+        :raises PoolNotFoundError: If either pool is not found
+        :raises ResourceValidationError: If the two pools are the same
+        :raises DuplicateResourceError: If a name is already in the target
+        """
+        from ccai.pychestrate.core.orm import Resource, ResourcePool
+
+        if source_pool_id == target_pool_id:
+            raise ResourceValidationError(
+                "Choose a different pool to move the resources to",
+                field="target_pool_id",
+                error_code="SAME_POOL"
+            )
+        source = self._db_session.query(ResourcePool).filter(ResourcePool.id == source_pool_id).first()
+        if not source:
+            raise PoolNotFoundError(f"Pool with ID '{source_pool_id}' not found")
+        target = self._db_session.query(ResourcePool).filter(ResourcePool.id == target_pool_id).first()
+        if not target:
+            raise PoolNotFoundError(f"Pool with ID '{target_pool_id}' not found")
+
+        moving = self._db_session.query(Resource).filter(Resource.pool_id == source_pool_id).all()
+        taken = {
+            row.name for row in self._db_session.query(Resource).filter(Resource.pool_id == target_pool_id).all()
+        }
+        clashes = sorted(resource.name for resource in moving if resource.name in taken)
+        if len(clashes) > 0:
+            raise DuplicateResourceError(
+                f"Pool '{target.name}' already has a resource named {', '.join(repr(name) for name in clashes)}",
+                field="target_pool_id"
+            )
+
+        now = utc_now()
+        for resource in moving:
+            resource.pool_id = target_pool_id
+            resource.updated_at = now
+        self._db_session.commit()
+
+        if self._audit_logger and len(moving) > 0:
+            self._audit_logger.log_event(
+                event_type='pool_resources_moved',
+                user_id=str(user_id) if user_id else None,
+                details={
+                    "source_pool_id": source_pool_id,
+                    "target_pool_id": target_pool_id,
+                    "resource_count": len(moving)
+                }
+            )
+        return len(moving)
+
     def assign_resource_to_pool(self, resource_id: int, pool_id: int, user_id: str = None) -> None:
         """
         Assign a resource to a pool.

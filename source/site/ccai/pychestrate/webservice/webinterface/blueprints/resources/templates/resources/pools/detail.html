@@ -95,6 +95,46 @@
     </div>
 
     <div>
+        {% if can_manage and addable_resources %}
+        <div class="card">
+            <h2 class="card-header">Add existing resources</h2>
+            <form method="post" action="{{ url_for('resources.pool_add_resources', pool_id=pool.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-group">
+                    <label for="resource_ids">Resources to move into this pool</label>
+                    <select id="resource_ids" name="resource_ids" class="form-control" multiple size="8">
+                        {% for item in addable_resources %}
+                        <option value="{{ item.id }}">{{ item.name }} ({{ item.pool_name or 'no pool' }})</option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-text">Hold Ctrl or Cmd to choose several. A resource keeps its history and its check-outs; one whose name is already in this pool stays where it is.</p>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-block">{{ ui.icon("add") }} Add to this pool</button>
+            </form>
+        </div>
+        {% endif %}
+
+        {% if can_manage and resource_total > 0 and other_pools %}
+        <div class="card">
+            <h2 class="card-header">Move resources out</h2>
+            <form method="post" action="{{ url_for('resources.pool_move_resources', pool_id=pool.id) }}"
+                  data-confirm="Move all {{ resource_total }} resource(s) of this pool to the pool you chose?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="form-group">
+                    <label for="target_pool_id">Move all {{ resource_total }} resource(s) to</label>
+                    <select id="target_pool_id" name="target_pool_id" class="form-control" required>
+                        <option value="">Choose a pool...</option>
+                        {% for other in other_pools %}
+                        <option value="{{ other.id }}">{{ other.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-text">Empty this pool without deleting its devices, so it can be deleted.</p>
+                </div>
+                <button type="submit" class="btn btn-secondary btn-block">{{ ui.icon("arrow_forward") }} Move resources</button>
+            </form>
+        </div>
+        {% endif %}
+
         {% if can_manage %}
         <div class="card">
             <h2 class="card-header">Actions</h2>

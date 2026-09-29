@@ -50,6 +50,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
     MultiFormView,
     _attach_session_to_response,
     _build_default_template_context,
+    _parse_form_multi,
     _parse_form_or_empty,
     _redirect_with_flash,
     _render,
@@ -59,6 +60,7 @@ from ccai.pychestrate.webservice.webinterface.blueprints.config.routes import (
 from ccai.pychestrate.webservice.webinterface.blueprints.resources.routes import (
     RESOURCES_MAX_PER_PAGE,
     RESOURCES_PATH,
+    _ADMIN_PERMISSION,
     _denial_message,
     _resources_permission_flags,
     _wrap_resources_handler_in_shell,
@@ -81,7 +83,20 @@ _ROUTE_TABLE = (
         "/pools/{pool_id}/delete",
         ("POST",),
     ),
+    (
+        "resources.pool_add_resources",
+        "/pools/{pool_id}/add-resources",
+        ("POST",),
+    ),
+    (
+        "resources.pool_move_resources",
+        "/pools/{pool_id}/move-resources",
+        ("POST",),
+    ),
 )
+
+#: How many resources outside the pool the "Add existing resources" list offers.
+ADDABLE_RESOURCES_LIMIT: int = 200
 
 
 _ADMIN_PERMISSION = "system:resources.manage"
@@ -421,6 +436,16 @@ def handle_pool_detail(request: Request) -> Response:
         context["pool"] = pool
         context["resources"] = resources
         context["resource_total"] = resources_response.total
+        context["addable_resources"] = []
+        context["other_pools"] = []
+        if context["can_manage"] is True:
+            everything = resource_manager.list_resources(limit=ADDABLE_RESOURCES_LIMIT).resources
+            context["addable_resources"] = [
+                item for item in everything if getattr(item, "pool_id", None) != pool_id
+            ]
+            context["other_pools"] = [
+                item for item in resource_manager.list_pools(auth.user_id).pools if item.id != pool_id
+            ]
         context["page"] = params["page"]
         context["per_page"] = params["per_page"]
         context["total_pages"] = total_pages
@@ -525,11 +550,182 @@ def handle_pool_delete(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
+def _pool_gate(*, auth: Any, action: str, pool_id: Optional[int]) -> Optional[Response]:
+    """
+        The redirect for someone who may not manage pools, naming the
+        action, or ``None`` for a manager.
+    """
+    rtnval = _require_permission_or_redirect(
+        auth=auth,
+        permission=_ADMIN_PERMISSION,
+        deny_message=_denial_message(action=action),
+        deny_redirect_url=_url_for_module.url_for("resources.pool_list"),
+    )
+    return rtnval
+
+
+def _pool_action_preamble(
+        *, request: Request, auth: Any, action: str
+    ) -> Any:
+    """
+        The checks every pool action shares: the permission, the CSRF
+        token and the pool id. Returns ``(response, pool_id, form)`` where
+        ``response`` is a redirect to send back instead of acting, or
+        ``None`` to go on.
+    """
+    deny = _pool_gate(auth=auth, action=action, pool_id=None)
+    if deny is not None:
+        return (deny, None, None)
+    single_form = _parse_form_or_empty(request=request)
+    csrf_redirect = auth_guard.enforce_csrf_or_redirect(
+        form=single_form,
+        session=auth.session,
+        fallback_url=_url_for_module.url_for("resources.pool_list"),
+    )
+    if csrf_redirect is not None:
+        _attach_session_to_response(response=csrf_redirect, session=auth.session)
+        return (csrf_redirect, None, None)
+    pool_id = _coerce_int(raw=request.path_params.get("pool_id", None))
+    if pool_id is None:
+        return (
+            _redirect_with_flash(
+                session=auth.session,
+                url=_url_for_module.url_for("resources.pool_list"),
+                message="Pool not found.",
+                category=flash.CATEGORY_ERROR,
+            ),
+            None,
+            None,
+        )
+    return (None, pool_id, single_form)
+
+
+def handle_pool_add_resources(request: Request) -> Response:
+    """
+        ``POST /resources/pools/{pool_id}/add-resources`` (manager) --
+        move the chosen existing resources into this pool. A resource
+        whose name is already in the pool stays where it is, and the
+        message names it.
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        early, pool_id, _single = _pool_action_preamble(
+            request=request, auth=auth, action="add resources to a resource pool",
+        )
+        if early is not None:
+            return early
+        chosen = [
+            _coerce_int(raw=value) for value in _parse_form_multi(request=request).get("resource_ids", [])
+        ]
+        resource_ids = [value for value in chosen if value is not None]
+        detail_url = _url_for_module.url_for("resources.pool_detail", pool_id=pool_id)
+        if len(resource_ids) == 0:
+            return _redirect_with_flash(
+                session=auth.session, url=detail_url,
+                message="Choose at least one resource to add.", category=flash.CATEGORY_ERROR,
+            )
+        resource_manager = _build_resource_manager(db_session=db_session)
+        moved = 0
+        refused: List[str] = []
+        for resource_id in resource_ids:
+            try:
+                resource_manager.assign_resource_to_pool(resource_id, pool_id, auth.user_id)
+                moved += 1
+            except Exception as exc:
+                message = _describe_resource_manager_error(exc=exc)
+                if message is None:
+                    _LOGGER.exception("Unexpected error adding resource %s to pool %s", resource_id, pool_id)
+                    message = "An unexpected error occurred. The problem has been logged."
+                refused.append(message)
+        if moved > 0:
+            flash.add_flash(
+                session=auth.session,
+                message="Added {} resource{} to the pool.".format(moved, "" if moved == 1 else "s"),
+                category=flash.CATEGORY_SUCCESS,
+            )
+        for message in refused:
+            flash.add_flash(session=auth.session, message=message, category=flash.CATEGORY_ERROR)
+        return _plain_redirect(auth=auth, url=detail_url)
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
+def _plain_redirect(*, auth: Any, url: str) -> Response:
+    """
+        Redirect (303) with the session cookie re-signed, after the
+        messages have already been queued as flashes.
+    """
+    from ccai.webworks.routing.response import RedirectResponse  # noqa: E402
+
+    response = RedirectResponse(url=url, status_code=303)
+    _attach_session_to_response(response=response, session=auth.session)
+    return response
+
+
+def handle_pool_move_resources(request: Request) -> Response:
+    """
+        ``POST /resources/pools/{pool_id}/move-resources`` (manager) --
+        move every resource of this pool into another, so the pool can
+        be deleted without deleting its devices. Nothing moves unless
+        every resource can (a name already in the target stops it).
+    """
+    auth = _resolve_authenticated_request(request=request)
+    if auth.redirect_response is not None:
+        return auth.redirect_response
+
+    db_session = auth.db_session
+    try:
+        early, pool_id, single_form = _pool_action_preamble(
+            request=request, auth=auth, action="move resources between pools",
+        )
+        if early is not None:
+            return early
+        detail_url = _url_for_module.url_for("resources.pool_detail", pool_id=pool_id)
+        target = _coerce_int(raw=single_form.get("target_pool_id", None))
+        if target is None:
+            return _redirect_with_flash(
+                session=auth.session, url=detail_url,
+                message="Choose the pool to move the resources to.", category=flash.CATEGORY_ERROR,
+            )
+        resource_manager = _build_resource_manager(db_session=db_session)
+        try:
+            moved = resource_manager.move_pool_resources(pool_id, target, auth.user_id)
+        except Exception as exc:
+            message = _describe_resource_manager_error(exc=exc)
+            if message is None:
+                _LOGGER.exception("Unexpected error moving the resources of pool %s", pool_id)
+                message = "An unexpected error occurred. The problem has been logged."
+            return _redirect_with_flash(
+                session=auth.session, url=detail_url, message=message, category=flash.CATEGORY_ERROR,
+            )
+        return _redirect_with_flash(
+            session=auth.session, url=detail_url,
+            message="Moved {} resource{}. The pool is empty and can be deleted.".format(
+                moved, "" if moved == 1 else "s"
+            ),
+            category=flash.CATEGORY_SUCCESS,
+        )
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+
+
 _HANDLERS_BY_ENDPOINT: Dict[str, Callable[[Request], Response]] = {
     "resources.pool_list": handle_pool_list,
     "resources.pool_create": handle_pool_create,
     "resources.pool_detail": handle_pool_detail,
     "resources.pool_delete": handle_pool_delete,
+    "resources.pool_add_resources": handle_pool_add_resources,
+    "resources.pool_move_resources": handle_pool_move_resources,
 }
 
 
@@ -550,6 +746,8 @@ def register_pools_routes(*, app: Any) -> None:
 
 
 __all__ = [
+    "handle_pool_add_resources",
+    "handle_pool_move_resources",
     "register_pools_routes",
     "handle_pool_list",
     "handle_pool_create",
