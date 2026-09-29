@@ -52,7 +52,7 @@ class K8sClusterEnvironmentKind(EnvironmentKindProtocol):
              "hint": "prod-east-1"},
             {"name": "region", "label": "Region", "type": "text", "required": True, "hint": "us-east-1"},
             {"name": "api_endpoint", "label": "API endpoint", "type": "url", "required": True,
-             "hint": "https://k8s.example.com:6443"},
+             "hint": "https://k8s.example.com"},
             {"name": "node_pool_count", "label": "Node pools", "type": "number", "required": False, "hint": "0"},
             {"name": "capability_tags", "label": "Capability tags", "type": "tags", "required": False,
              "hint": "gpu, arm64"},
