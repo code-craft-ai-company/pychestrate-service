@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
   build_pod_definition_url,
@@ -785,6 +786,7 @@ class PycPodDetail extends HTMLElement {
     id_value.classList.add("pyc-pod-detail__pod-id");
     id_value.setAttribute("data-role", "pod-id");
     id_value.textContent = short_id(definition.pod_id);
+    set_entity_title("Pod " + short_id(definition.pod_id));
     id_value.title = definition.pod_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

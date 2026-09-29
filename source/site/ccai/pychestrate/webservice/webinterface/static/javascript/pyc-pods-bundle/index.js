@@ -725,6 +725,23 @@ var PycPodsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
+var SECTION_TITLE_KEY = "pycSectionTitle";
+var ENTITY_TITLE_KEY = "pycEntityTitle";
+function set_entity_title(entity_label) {
+  if (typeof entity_label !== "string" || entity_label.trim().length === 0) {
+    return;
+  }
+  const root = document.documentElement;
+  if (root.dataset[ENTITY_TITLE_KEY] === void 0 || document.title !== root.dataset[ENTITY_TITLE_KEY]) {
+    root.dataset[SECTION_TITLE_KEY] = document.title;
+  }
+  const title = entity_label.trim() + " \xB7 " + root.dataset[SECTION_TITLE_KEY];
+  root.dataset[ENTITY_TITLE_KEY] = title;
+  document.title = title;
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pods-bundle/pod-detail-view.js
 var POD_STATES = [
   "DEFINED",
@@ -1497,6 +1514,7 @@ var PycPodDetail = class extends HTMLElement {
     id_value.classList.add("pyc-pod-detail__pod-id");
     id_value.setAttribute("data-role", "pod-id");
     id_value.textContent = short_id(definition.pod_id);
+    set_entity_title("Pod " + short_id(definition.pod_id));
     id_value.title = definition.pod_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");
@@ -3434,6 +3452,7 @@ var PycClientDetail = class extends HTMLElement {
     id_value.classList.add("pyc-client-detail__client-id");
     id_value.setAttribute("data-role", "client-id");
     id_value.textContent = short_id2(client.client_id);
+    set_entity_title("Client " + short_id2(client.client_id));
     id_value.title = client.client_id;
     id_row.appendChild(id_value);
     const status_badge = document.createElement("mj-chip");

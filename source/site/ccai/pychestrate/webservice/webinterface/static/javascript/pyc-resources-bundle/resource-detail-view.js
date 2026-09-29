@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCES_WRITE_PERMISSION,
   extract_projects,
@@ -480,6 +481,7 @@ class PycResourceDetail extends HTMLElement {
     id_value.classList.add("pyc-resources__id");
     id_value.setAttribute("data-role", "resource-id");
     id_value.textContent = short_id(resource.resource_id);
+    set_entity_title(String(resource.name ?? "") || "Resource " + short_id(resource.resource_id));
     id_value.title = resource.resource_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("span");

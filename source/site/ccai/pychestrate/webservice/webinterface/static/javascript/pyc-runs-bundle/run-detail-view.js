@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   emit_session_expired,
   fetch_projects,
@@ -815,6 +816,7 @@ class PycRunDetail extends HTMLElement {
     id_value.classList.add("pyc-run-detail__run-id");
     id_value.setAttribute("data-role", "run-id");
     id_value.textContent = short_run_id(run.run_id);
+    set_entity_title("Run " + short_run_id(run.run_id));
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

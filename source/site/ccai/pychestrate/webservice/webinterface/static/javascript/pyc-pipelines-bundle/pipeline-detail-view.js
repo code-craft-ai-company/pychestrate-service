@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
   short_id,
@@ -453,6 +454,7 @@ class PycPipelineDetail extends HTMLElement {
     name_value.classList.add("pyc-pipeline-detail__name");
     name_value.setAttribute("data-role", "pipeline-name");
     name_value.textContent = pipeline.name;
+    set_entity_title(String(pipeline.name ?? "") || "Pipeline " + short_id(pipeline.pipeline_id));
     id_row.appendChild(name_value);
     section.appendChild(id_row);
     const grid = document.createElement("dl");

@@ -542,6 +542,15 @@ preview tag.
 
 ### Fixed
 
+- Bundle detail pages are titled by what they show (ORC-35). A run, a build, a
+  provisioning run, a pipeline, an environment, a pod, a client, a resource
+  pool and a resource were all just their section in the tab ("Runs ·
+  Pychestrate"). Once the page has loaded its entity the tab reads "Run
+  3f2a1b7c · Runs · Pychestrate" (the name for pipelines, environments, pools
+  and resources; the short id for the rest), and a page that renders again
+  replaces the entity instead of stacking a second one. The headings on the
+  pages are unchanged.
+
 - Bundle pages show times the way the glossary says (XC-14). The runs, builds,
   pipelines, pods, clients, environments, guards, catalog, secrets, webhooks
   and release-channel views (and the home page's recent runs) printed the

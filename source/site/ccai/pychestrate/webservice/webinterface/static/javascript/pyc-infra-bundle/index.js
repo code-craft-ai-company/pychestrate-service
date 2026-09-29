@@ -1313,6 +1313,23 @@ var PycEnvironments = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
+var SECTION_TITLE_KEY = "pycSectionTitle";
+var ENTITY_TITLE_KEY = "pycEntityTitle";
+function set_entity_title(entity_label) {
+  if (typeof entity_label !== "string" || entity_label.trim().length === 0) {
+    return;
+  }
+  const root = document.documentElement;
+  if (root.dataset[ENTITY_TITLE_KEY] === void 0 || document.title !== root.dataset[ENTITY_TITLE_KEY]) {
+    root.dataset[SECTION_TITLE_KEY] = document.title;
+  }
+  const title = entity_label.trim() + " \xB7 " + root.dataset[SECTION_TITLE_KEY];
+  root.dataset[ENTITY_TITLE_KEY] = title;
+  document.title = title;
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-infra-bundle/environment-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -1553,6 +1570,7 @@ var PycEnvironmentDetail = class extends HTMLElement {
     const heading = this._root !== null ? this._root.querySelector('[data-role="environment-heading"]') : null;
     if (heading instanceof HTMLElement) {
       heading.textContent = "Environment \u2014 " + String(environment.name ?? "");
+      set_entity_title(String(environment.name ?? "") || "Environment");
     }
     body.replaceChildren(
       this._summary(environment),
@@ -3050,6 +3068,7 @@ var PycProvisioningDetail = class extends HTMLElement {
     id_value.classList.add("pyc-provisioning-detail__run-id");
     id_value.setAttribute("data-role", "run-id");
     id_value.textContent = short_id(run.run_id);
+    set_entity_title("Provisioning run " + short_id(run.run_id));
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

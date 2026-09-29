@@ -1150,6 +1150,23 @@ var PycBuildsList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
+var SECTION_TITLE_KEY = "pycSectionTitle";
+var ENTITY_TITLE_KEY = "pycEntityTitle";
+function set_entity_title(entity_label) {
+  if (typeof entity_label !== "string" || entity_label.trim().length === 0) {
+    return;
+  }
+  const root = document.documentElement;
+  if (root.dataset[ENTITY_TITLE_KEY] === void 0 || document.title !== root.dataset[ENTITY_TITLE_KEY]) {
+    root.dataset[SECTION_TITLE_KEY] = document.title;
+  }
+  const title = entity_label.trim() + " \xB7 " + root.dataset[SECTION_TITLE_KEY];
+  root.dataset[ENTITY_TITLE_KEY] = title;
+  document.title = title;
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-builds-bundle/build-detail-view.js
 var PROJECTS_API_PATH2 = "/api/v1/projects";
 var POLL_INTERVAL_MS = 5e3;
@@ -1615,6 +1632,7 @@ var PycBuildDetail = class extends HTMLElement {
     id_value.classList.add("pyc-build-detail__build-id");
     id_value.setAttribute("data-role", "build-id");
     id_value.textContent = short_id(build.run_id);
+    set_entity_title("Build " + short_id(build.run_id));
     id_value.title = build.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

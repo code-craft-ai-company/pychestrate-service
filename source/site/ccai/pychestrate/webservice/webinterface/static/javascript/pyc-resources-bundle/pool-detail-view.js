@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   RESOURCE_POOLS_WRITE_PERMISSION,
   extract_projects,
@@ -498,6 +499,7 @@ class PycPoolDetail extends HTMLElement {
     id_value.classList.add("pyc-resources__id");
     id_value.setAttribute("data-role", "pool-id");
     id_value.textContent = short_id(pool.pool_id);
+    set_entity_title(String(pool.name ?? "") || "Resource pool " + short_id(pool.pool_id));
     id_value.title = pool.pool_id;
     id_row.appendChild(id_value);
     if (write_allowed === true) {

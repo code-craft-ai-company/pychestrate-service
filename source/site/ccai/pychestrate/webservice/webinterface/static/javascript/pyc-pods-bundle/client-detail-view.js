@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
   build_pod_definitions_url,
@@ -516,6 +517,7 @@ class PycClientDetail extends HTMLElement {
     id_value.classList.add("pyc-client-detail__client-id");
     id_value.setAttribute("data-role", "client-id");
     id_value.textContent = short_id(client.client_id);
+    set_entity_title("Client " + short_id(client.client_id));
     id_value.title = client.client_id;
     id_row.appendChild(id_value);
     const status_badge = document.createElement("mj-chip");

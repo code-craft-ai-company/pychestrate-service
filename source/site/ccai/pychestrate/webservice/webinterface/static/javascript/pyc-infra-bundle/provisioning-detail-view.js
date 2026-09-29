@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   is_terminal_provisioning_state,
   provisioning_state_tone
@@ -356,6 +357,7 @@ class PycProvisioningDetail extends HTMLElement {
     id_value.classList.add("pyc-provisioning-detail__run-id");
     id_value.setAttribute("data-role", "run-id");
     id_value.textContent = short_id(run.run_id);
+    set_entity_title("Provisioning run " + short_id(run.run_id));
     id_value.title = run.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   announce_session_expired,
   build_state_tone,
@@ -469,6 +470,7 @@ class PycBuildDetail extends HTMLElement {
     id_value.classList.add("pyc-build-detail__build-id");
     id_value.setAttribute("data-role", "build-id");
     id_value.textContent = short_id(build.run_id);
+    set_entity_title("Build " + short_id(build.run_id));
     id_value.title = build.run_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("mj-chip");

@@ -958,6 +958,23 @@ var PycResourcePools = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
+var SECTION_TITLE_KEY = "pycSectionTitle";
+var ENTITY_TITLE_KEY = "pycEntityTitle";
+function set_entity_title(entity_label) {
+  if (typeof entity_label !== "string" || entity_label.trim().length === 0) {
+    return;
+  }
+  const root = document.documentElement;
+  if (root.dataset[ENTITY_TITLE_KEY] === void 0 || document.title !== root.dataset[ENTITY_TITLE_KEY]) {
+    root.dataset[SECTION_TITLE_KEY] = document.title;
+  }
+  const title = entity_label.trim() + " \xB7 " + root.dataset[SECTION_TITLE_KEY];
+  root.dataset[ENTITY_TITLE_KEY] = title;
+  document.title = title;
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-resources-bundle/pool-detail-view.js
 var ACTIVE_RESERVATION_STATES = [
   "pending",
@@ -1446,6 +1463,7 @@ var PycPoolDetail = class extends HTMLElement {
     id_value.classList.add("pyc-resources__id");
     id_value.setAttribute("data-role", "pool-id");
     id_value.textContent = short_id(pool.pool_id);
+    set_entity_title(String(pool.name ?? "") || "Resource pool " + short_id(pool.pool_id));
     id_value.title = pool.pool_id;
     id_row.appendChild(id_value);
     if (write_allowed === true) {
@@ -2638,6 +2656,7 @@ var PycResourceDetail = class extends HTMLElement {
     id_value.classList.add("pyc-resources__id");
     id_value.setAttribute("data-role", "resource-id");
     id_value.textContent = short_id(resource.resource_id);
+    set_entity_title(String(resource.name ?? "") || "Resource " + short_id(resource.resource_id));
     id_value.title = resource.resource_id;
     id_row.appendChild(id_value);
     const badge = document.createElement("span");

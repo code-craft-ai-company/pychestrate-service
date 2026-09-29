@@ -1304,6 +1304,23 @@ var PycPipelinesList = class extends HTMLElement {
   }
 };
 
+// source/site/ccai/pychestrate/webservice/webinterface/static/javascript/shared/page-title.js
+var SECTION_TITLE_KEY = "pycSectionTitle";
+var ENTITY_TITLE_KEY = "pycEntityTitle";
+function set_entity_title(entity_label) {
+  if (typeof entity_label !== "string" || entity_label.trim().length === 0) {
+    return;
+  }
+  const root = document.documentElement;
+  if (root.dataset[ENTITY_TITLE_KEY] === void 0 || document.title !== root.dataset[ENTITY_TITLE_KEY]) {
+    root.dataset[SECTION_TITLE_KEY] = document.title;
+  }
+  const title = entity_label.trim() + " \xB7 " + root.dataset[SECTION_TITLE_KEY];
+  root.dataset[ENTITY_TITLE_KEY] = title;
+  document.title = title;
+  return;
+}
+
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-pipelines-bundle/pipeline-detail-view.js
 var NODE_WIDTH = 140;
 var NODE_HEIGHT = 44;
@@ -1755,6 +1772,7 @@ var PycPipelineDetail = class extends HTMLElement {
     name_value.classList.add("pyc-pipeline-detail__name");
     name_value.setAttribute("data-role", "pipeline-name");
     name_value.textContent = pipeline.name;
+    set_entity_title(String(pipeline.name ?? "") || "Pipeline " + short_id(pipeline.pipeline_id));
     id_row.appendChild(name_value);
     section.appendChild(id_row);
     const grid = document.createElement("dl");

@@ -1,3 +1,4 @@
+import { set_entity_title } from "../shared/page-title.js";
 import {
   ENVIRONMENTS_ROUTE,
   build_drift_check_url,
@@ -246,6 +247,7 @@ class PycEnvironmentDetail extends HTMLElement {
     const heading = this._root !== null ? this._root.querySelector('[data-role="environment-heading"]') : null;
     if (heading instanceof HTMLElement) {
       heading.textContent = "Environment — " + String(environment.name ?? "");
+      set_entity_title(String(environment.name ?? "") || "Environment");
     }
     body.replaceChildren(
       this._summary(environment),
