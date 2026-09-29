@@ -30,14 +30,30 @@ export function job_type_label(job_type) {
   return "Test · " + text;
 }
 
-/* What to call a run in a list: its job name, else its kind. */
+// A job name that is only an identifier says nothing a person can read (test
+// runs are named by their catalog entry's id), so it is treated as no name.
+const IDENTIFIER_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$|^[0-9a-f]{16,}$/i;
+
+// What an unnamed run is called, by its kind.
+const KIND_TITLES = [
+  ["rpa-", "RPA run"],
+  ["build-", "Build run"],
+  ["provision-", "Provisioning run"],
+];
+
+/* What to call a run in a list: its job name when it is readable, else its kind ("Test run"). */
 export function run_title(run) {
   const name = typeof run.job_name === "string" ? run.job_name.trim() : "";
-  if (name.length > 0) {
+  if (name.length > 0 && IDENTIFIER_PATTERN.test(name) === false) {
     return name;
   }
-  const label = job_type_label(run.job_type);
-  return label === "—" ? "Run" : label;
+  const job_type = typeof run.job_type === "string" ? run.job_type.trim() : "";
+  for (const [prefix, title] of KIND_TITLES) {
+    if (job_type.startsWith(prefix) === true) {
+      return title;
+    }
+  }
+  return "Test run";
 }
 
 /*

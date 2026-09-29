@@ -786,7 +786,7 @@ class PycBuildsList extends HTMLElement {
         // What ran comes first (runner and target); the short id follows.
         key: "run_id",
         label: "Build",
-        width: "20rem",
+        width: "14rem",
         render: (build) => {
           const cell = document.createElement("span");
           const link = document.createElement("a");
@@ -808,7 +808,7 @@ class PycBuildsList extends HTMLElement {
       {
         key: "source",
         label: "Source",
-        width: "18rem",
+        width: "14rem",
         sortable: false,
         render: (build) => {
           const label = build_source_label(build);
@@ -830,7 +830,7 @@ class PycBuildsList extends HTMLElement {
       {
         key: "repro_digest_sha256",
         label: "Inputs digest",
-        width: "12rem",
+        width: "9rem",
         render: (build) => {
           const digest = document.createElement("span");
           digest.classList.add("pyc-builds__digest");
@@ -842,13 +842,13 @@ class PycBuildsList extends HTMLElement {
       {
         key: "started_at",
         label: "Started",
-        width: "12rem",
+        width: "11rem",
         render: (build) => format_timestamp(build.started_at)
       },
       {
         key: "duration",
         label: "Duration",
-        width: "10rem",
+        width: "8rem",
         sortable: false,
         render: (build) => format_duration(build.started_at, build.finished_at, build.state === "running")
       }

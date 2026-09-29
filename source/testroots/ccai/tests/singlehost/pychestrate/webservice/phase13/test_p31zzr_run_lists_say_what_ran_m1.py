@@ -41,7 +41,7 @@ testbase.originate.parameter(
 )
 
 
-DESKTOP: Dict[str, Any] = {"viewport": {"width": 1600, "height": 900}}
+DESKTOP: Dict[str, Any] = {"viewport": {"width": 1440, "height": 900}}
 
 PROJECT_ID: str = "0f6c2c1e-6666-4000-8000-000000000001"
 
@@ -53,6 +53,18 @@ PAGE_META = {"page": 1, "per_page": 50, "total": 3}
 def _rows_of(page: Any, selector: str) -> List[Dict[str, Any]]:
     """The rows the table was given (what a person reads), by column key."""
     return page.evaluate("(sel) => document.querySelector(sel).rows", selector)
+
+
+def _last_column_in_view(page: Any, selector: str) -> bool:
+    """Whether the table's last header cell lies inside the table (the columns fit)."""
+    return page.evaluate(
+        """(sel) => {
+            const table = document.querySelector(sel);
+            const cells = table.shadowRoot.querySelectorAll('[part~="header-cell"]');
+            return cells[cells.length - 1].getBoundingClientRect().right <= table.getBoundingClientRect().right + 1;
+        }""",
+        selector,
+    )
 
 
 def _cells_text(page: Any, selector: str) -> List[List[str]]:
@@ -70,10 +82,11 @@ def _cells_text(page: Any, selector: str) -> List[List[str]]:
 def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(browser: Browser):
     """
     **Feature: run lists say what ran (ORC-11)**
-    **Property: each run row starts with its job name (its kind when it has
-    none) followed by the short id, then the type spelled out ("Test ·
+    **Property: each run row starts with its job name ("Test run", "Build run"
+    ... when it has none, or when the name is only an identifier) followed by the short id, then the type spelled out ("Test ·
     testbase", "Build · makefile"), the project, the state, the creation time
-    and how long it ran ("3m 12s"; "—" when it never started).**
+    and how long it ran ("3m 12s"; "—" when it never started); all six columns
+    fit at 1440 px, so Duration is not scrolled out of sight.**
     """
     runs = {
         "items": [
@@ -83,6 +96,9 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
              "state": "pending", "created_at": "2026-09-29T11:00:00+00:00", "started_at": None, "completed_at": None},
             {"run_id": "cccccccc-3333-4000-8000-000000000003", "project_id": PROJECT_ID, "job_name": "", "job_type": "rpa-process",
              "state": "failed", "created_at": "2026-09-29T09:00:00+00:00", "started_at": "2026-09-29T09:00:00+00:00", "completed_at": "2026-09-29T09:00:45+00:00"},
+            # A test run's job name is its catalog entry's id: not a name a person can read.
+            {"run_id": "dddddddd-4444-4000-8000-000000000004", "project_id": PROJECT_ID, "job_name": "823e8e6f-2c4d-48c7-977b-bfb390a5a059", "job_type": "testbase",
+             "state": "running", "created_at": "2026-09-29T08:00:00+00:00", "started_at": "2026-09-29T08:00:00+00:00", "completed_at": None},
         ],
         "meta": PAGE_META,
     }
@@ -95,15 +111,22 @@ def test_the_runs_list_leads_with_the_job_name_then_type_and_shows_the_duration(
         page.wait_for_timeout(600)
         text = _cells_text(page, "mj-data-table")
         headers = page.evaluate("() => [...document.querySelector('mj-data-table').columns].map((c) => c.label)")
+        fits = _last_column_in_view(page, "mj-data-table")
     finally:
         page.context.close()
 
     testbase.assert_equal(
-        (headers, [row[:2] for row in text], [row[-1] for row in text]),
+        (fits, headers, [row[:2] for row in text], [row[-1] if index < 3 else None for index, row in enumerate(text)]),
         (
+            True,
             ["Job", "Type", "Project", "State", "Created", "Duration"],
-            [["nightly-regression aaaaaaaa", "Test · testbase"], ["Build · makefile bbbbbbbb", "Build · makefile"], ["RPA · process cccccccc", "RPA · process"]],
-            ["3m 12s", "—", "45s"],
+            [
+                ["nightly-regression aaaaaaaa", "Test · testbase"],
+                ["Build run bbbbbbbb", "Build · makefile"],
+                ["RPA run cccccccc", "RPA · process"],
+                ["Test run dddddddd", "Test · testbase"],
+            ],
+            ["3m 12s", "—", "45s", None],
         ),
     )
     return
@@ -135,12 +158,14 @@ def test_the_builds_list_leads_with_the_runner_and_target_and_shows_the_source(b
         page.wait_for_timeout(600)
         text = _cells_text(page, "mj-data-table")
         headers = page.evaluate("() => [...document.querySelector('mj-data-table').columns].map((c) => c.label)")
+        fits = _last_column_in_view(page, "mj-data-table")
     finally:
         page.context.close()
 
     testbase.assert_equal(
-        (headers, [row[0] for row in text], [row[1] for row in text], [row[-1] for row in text]),
+        (fits, headers, [row[0] for row in text], [row[1] for row in text], [row[-1] for row in text]),
         (
+            True,
             ["Build", "Source", "State", "Inputs digest", "Started", "Duration"],
             ["makefile · docs dddddddd", "makefile eeeeeeee"],
             ["main @ github.com/acme/widgets", "—"],

@@ -96,13 +96,24 @@ function job_type_label(job_type) {
   }
   return "Test \xB7 " + text;
 }
+var IDENTIFIER_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$|^[0-9a-f]{16,}$/i;
+var KIND_TITLES = [
+  ["rpa-", "RPA run"],
+  ["build-", "Build run"],
+  ["provision-", "Provisioning run"]
+];
 function run_title(run) {
   const name = typeof run.job_name === "string" ? run.job_name.trim() : "";
-  if (name.length > 0) {
+  if (name.length > 0 && IDENTIFIER_PATTERN.test(name) === false) {
     return name;
   }
-  const label = job_type_label(run.job_type);
-  return label === "\u2014" ? "Run" : label;
+  const job_type = typeof run.job_type === "string" ? run.job_type.trim() : "";
+  for (const [prefix, title] of KIND_TITLES) {
+    if (job_type.startsWith(prefix) === true) {
+      return title;
+    }
+  }
+  return "Test run";
 }
 
 // source/site/ccai/pychestrate/webservice/webinterface/static/javascript/pyc-runs-bundle/runs-list-view.js
@@ -914,7 +925,7 @@ var PycRunsList = class extends HTMLElement {
         // What ran comes first; the short id follows for anyone who must quote it.
         key: "job_name",
         label: "Job",
-        width: "20rem",
+        width: "15rem",
         render: (run) => {
           const cell = document.createElement("span");
           const link = document.createElement("a");
@@ -933,13 +944,13 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "job_type",
         label: "Type",
-        width: "12rem",
+        width: "11rem",
         render: (run) => job_type_label(run.job_type)
       },
       {
         key: "project_id",
         label: "Project",
-        width: "14rem",
+        width: "10rem",
         render: (run) => {
           const project = document.createElement("span");
           project.classList.add("pyc-runs-list__project");
@@ -953,7 +964,7 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "state",
         label: "State",
-        width: "10rem",
+        width: "8rem",
         render: (run) => {
           const badge = document.createElement("mj-chip");
           badge.classList.add("pyc-runs-list__badge");
@@ -965,13 +976,13 @@ var PycRunsList = class extends HTMLElement {
       {
         key: "created_at",
         label: "Created",
-        width: "12rem",
+        width: "11rem",
         render: (run) => format_timestamp(run.created_at)
       },
       {
         key: "duration",
         label: "Duration",
-        width: "10rem",
+        width: "8rem",
         sortable: false,
         render: (run) => format_duration(run.started_at, run.completed_at, run.state === "running")
       }
