@@ -39,11 +39,11 @@ from ccai.testshared.test_config import BASE_URL
 NAVIGATION_TIMEOUT_MS: int = 15_000
 
 
-def test_login_page_renders_with_login_in_title(browser: Browser):
+def test_login_page_renders_with_sign_in_in_title(browser: Browser):
     """
     **Feature: consumer-ui-login**
     **Property: GET /login rendered in a real browser
-    produces a page whose ``<title>`` contains "Login" --
+    produces a page whose ``<title>`` says "Sign in" (XC-08) --
     validates the template inheritance chain end-to-end.**
     """
     context = browser.new_context()
@@ -56,7 +56,7 @@ def test_login_page_renders_with_login_in_title(browser: Browser):
 
         testbase.assert_true(response is not None)
         testbase.assert_equal(response.status, 200)
-        testbase.assert_true("Login" in page_title)
+        testbase.assert_true("Sign in" in page_title)
     finally:
         context.close()
     return
