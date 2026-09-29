@@ -15,7 +15,7 @@ labelled "(preview)" and explain what is missing:
 * Alert Rules -- evaluated, but no notification is sent;
 * Webhooks -- inbound deliveries start nothing, outbound subscriptions
   receive test events only;
-* Pod Resource Pools -- dispatch does not allocate from them;
+* Resources and Pools -- dispatch does not allocate from them;
 * project release Channels and Schedules -- nothing can create them
   and nothing runs a schedule (their empty states pointed to an API
   that does not exist).
@@ -96,16 +96,16 @@ def test_webhooks_entry_is_labelled_preview():
     return
 
 
-def test_resource_pools_entry_names_pod_pools_and_is_labelled_preview():
+def test_resource_pools_entry_names_resources_and_pools_and_is_labelled_preview():
     """
-    **Feature: honest surfaces -- audit ORG-F14**
-    **Property: the /resource-pools entry says what it manages (pod
-    resource pools) and that it is a preview (dispatch does not
-    allocate from the pools).**
+    **Feature: honest surfaces -- audit ORG-F14, RES-05**
+    **Property: the /resource-pools entry says what it manages (resources
+    and pools) and that it is a preview (dispatch does not allocate from
+    the pools).**
     """
     testbase.assert_equal(
         _labels_by_route()["/resource-pools"],
-        "Pod Resource Pools" + PREVIEW_LABEL_SUFFIX,
+        "Resources and Pools" + PREVIEW_LABEL_SUFFIX,
     )
     return
 

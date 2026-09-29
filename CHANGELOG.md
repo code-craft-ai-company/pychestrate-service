@@ -240,6 +240,16 @@ preview tag.
   the first step of the plan in `specs/model-convergence.md`; jobs do not use
   resources yet (RES-04 stays open).
 
+- The two sets of resource records are named and told apart (RES-05). Fleet
+  now has "Resources and Pools (preview)" for the newer records (it was "Pod
+  Resource Pools (preview)") and "Older Resources" for the older ones, whose list
+  no menu reached before. The older pages' sub-navigation uses the sidebar's
+  names ("Resource Health", it said "Health Status"), its first section is headed
+  "Older resource records", and the older resources, pools and tags pages carry
+  a notice that they hold the older set, that jobs do not use it, and where the
+  newer set is. They are still two sets: merging them is step 3 of
+  `specs/model-convergence.md`.
+
 - A project's sidebar lists only sections that can hold data (PRJ-08).
   Infrastructure, Tests, Pipelines, Channels, Schedules and Calendar are
   gone from it: nothing creates a test or infrastructure specification, a

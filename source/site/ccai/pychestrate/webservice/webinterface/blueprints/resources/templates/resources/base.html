@@ -38,7 +38,7 @@
     <div class="pyc-subnav-layout pyc-subnav-layout--top">
         <nav class="pyc-subnav" aria-label="Resource management">
             <ul>
-                <li class="pyc-subnav__section">Resources</li>
+                <li class="pyc-subnav__section">Older resource records</li>
                 <li><a href="{{ url_for('resources.dashboard') }}" {% if request_endpoint in ('resources.dashboard', 'resources.dashboard_root') %}class="active" aria-current="page"{% endif %}>
                     {{ ui.icon("dashboard") }} Overview
                 </a></li>
@@ -73,11 +73,22 @@
 
                 <li class="pyc-subnav__section">Monitoring</li>
                 <li><a href="{{ url_for('resources.health_dashboard') }}" {% if request_endpoint.startswith('resources.health_') %}class="active" aria-current="page"{% endif %}>
-                    {{ ui.icon("monitor_heart") }} Health Status
+                    {{ ui.icon("monitor_heart") }} Resource Health
                 </a></li>
             </ul>
         </nav>
         <div class="pyc-subnav-layout__content">
+            {#- Two sets of resource records exist (RES-05): these pages hold the older
+                set, the newer one is under Fleet -> Resources and Pools. #}
+            {% if request_endpoint.startswith('resources.resource_') or request_endpoint.startswith('resources.pool_') or request_endpoint.startswith('resources.tag_') or request_endpoint in ('resources.dashboard', 'resources.dashboard_root') %}
+            {% call ui.preview_notice() %}
+                These pages hold the older set of resource records, which jobs do not use.
+                The newer set, which the REST API serves and which is being built out to
+                replace this one, is under
+                <a href="/resource-pools">Resources and Pools</a>. A device registered on one
+                does not appear on the other.
+            {% endcall %}
+            {% endif %}
             {% block content %}{% endblock %}
         </div>
     </div>

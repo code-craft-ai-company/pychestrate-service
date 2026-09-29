@@ -310,7 +310,7 @@ NAV_ENTRIES: List[NavEntry] = [
     ),
     NavEntry(
         entry_id="fleet.resources",
-        label="Pod Resource Pools" + PREVIEW_LABEL_SUFFIX,
+        label="Resources and Pools" + PREVIEW_LABEL_SUFFIX,
         route="/resource-pools",
         group_id=GROUP_FLEET,
         # The /resource-pools surface enforces
@@ -323,9 +323,18 @@ NAV_ENTRIES: List[NavEntry] = [
             "system:resource_pools.read",
         ],
     ),
-    # The server-rendered /resources/* pages cover what the
-    # /resource-pools bundle does not yet: IP pools, reservations,
-    # and health monitoring. They render inside the shell.
+    # The server-rendered /resources/* pages hold the older resource
+    # records (RES-05): their list was reachable only through another
+    # page's sub-navigation. They also cover what the /resource-pools
+    # bundle does not yet: IP pools, reservations, and health
+    # monitoring. They render inside the shell.
+    NavEntry(
+        entry_id="fleet.older-resources",
+        label="Older Resources",
+        route="/resources/list",
+        group_id=GROUP_FLEET,
+        required_permissions=["system:resources.read"],
+    ),
     NavEntry(
         entry_id="fleet.ip-pools",
         label="IP Pools",

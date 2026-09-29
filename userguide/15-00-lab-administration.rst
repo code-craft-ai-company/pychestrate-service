@@ -11,15 +11,18 @@ project, start with `Getting Started <02-00-getting-started.rst>`_; the
 concepts (a resource, a pool, a check-out, a reservation) are in the
 `Overview <01-00-overview.rst>`_.
 
-All of it lives under **Fleet** in the sidebar, or on the **Resources** pages
-that open from it. Creating and changing devices, pools and IP pools needs the
+All of it lives under **Fleet** in the sidebar: **Older Resources** opens the
+list of devices this chapter describes, and **IP Pools**, **Reservations** and
+**Resource Health** open the other pages that go with it. (There is a newer set
+of resource records under **Resources and Pools**; the next section says how the
+two differ.) Creating and changing devices, pools and IP pools needs the
 resource-management permission that the built-in **system-admin** role holds.
 
 
 Project resources and their pools (preview)
 ===========================================
 
-Fleet also has **Pod Resource Pools**. Its page is scoped to a project: choose
+Fleet also has **Resources and Pools**. Its page is scoped to a project: choose
 the project at the top and the page lists that project's **Resources** and,
 below them, its **Pools**. These are a newer set of records than the Resources
 pages described in the rest of this chapter, and the two are not connected yet:
@@ -261,7 +264,7 @@ refused with a message saying what to configure. If a queued check is still
 waiting after two minutes, the page says the housekeeping worker is not picking
 it up.
 
-The health dashboard (**Resources**, **Health Status**) counts devices in each
+The health dashboard (**Resources**, **Resource Health**) counts devices in each
 state and lists the first twenty of each. **View all** opens one state, a page
 at a time.
 
